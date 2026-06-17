@@ -6493,86 +6493,6 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 	assertListOperations("/api/v1/apps/notion/operations?_connection=OAuth&_instance=OAuth")
 }
 
-func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
-	t.Parallel()
-
-	stub := &stubIntegrationWithSessionCatalog{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
-		},
-		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
-			switch token {
-			case "catalog-token":
-				return &catalog.Catalog{
-					Name: "sample-int",
-					Operations: []catalog.CatalogOperation{
-						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
-					},
-				}, nil
-			case "rest-token":
-				return &catalog.Catalog{Name: "sample-int"}, nil
-			default:
-				return nil, fmt.Errorf("unexpected token %q", token)
-			}
-		},
-	}
-
-	providers := testutil.NewProviderRegistry(t, stub)
-	svc := testutil.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	seedToken(t, svc, &core.ExternalCredential{
-		ID:        "tok-catalog",
-		Subject:   principal.UserSubjectID(u.ID),
-		Audience:  "sample-int:catalog-conn",
-		Qualifier: "default",
-		Grant:     &core.ExternalCredentialGrant{AccessToken: "catalog-token"},
-	})
-	seedToken(t, svc, &core.ExternalCredential{
-		ID:        "tok-rest",
-		Subject:   principal.UserSubjectID(u.ID),
-		Audience:  "sample-int:rest-conn",
-		Qualifier: "default",
-		Grant:     &core.ExternalCredentialGrant{AccessToken: "rest-token"},
-	})
-
-	broker := invocation.NewBroker(
-		providers,
-		svc.Users,
-		svc.ExternalCredentials,
-		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
-		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "catalog-conn"})),
-	)
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = providers
-		cfg.Services = svc
-		cfg.Invoker = broker
-		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
-		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/sample-int/operations", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-	}
-
-	var ops []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
-		t.Fatalf("decoding response: %v", err)
-	}
-	if len(ops) != 1 || ops[0]["id"] != "run" {
-		t.Fatalf("operations = %+v, want only run", ops)
-	}
-}
-
 func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testing.T) {
 	t.Parallel()
 
@@ -7790,23 +7710,9 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	if resp.StatusCode != http.StatusPreconditionFailed {
 		t.Fatalf("expected 412, got %d", resp.StatusCode)
 	}
-
-	sessionStub := &stubIntegrationWithSessionCatalog{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
-		},
-	}
-
-	ts = newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
-		cfg.MCPConnection = map[string]string{"test-int": testCatalogConnection}
-		cfg.Services = testutil.NewStubServices(t)
-	})
-	testutil.CloseOnCleanup(t, ts)
-
 }
 
-func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(t *testing.T) {
+func TestExecuteOperation_DoesNotFallbackToDefaultWhenBrokerMCPConnectionConfigured(t *testing.T) {
 	t.Parallel()
 
 	var gotToken string
