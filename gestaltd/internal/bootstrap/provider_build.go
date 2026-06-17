@@ -465,8 +465,8 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			pluginProv.DisplayName(),
 			pluginProv.Description(),
 			firstProviderIconSVG(pluginProv, apiProv),
-			composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, plan.APIConnection()), Surface: core.CatalogSurfaceAPI},
-			composite.BoundProvider{Provider: apiProv, FallbackConnection: plan.RESTConnection(), Surface: core.CatalogSurfaceAPI},
+			composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, plan.APIConnection())},
+			composite.BoundProvider{Provider: apiProv, FallbackConnection: plan.RESTConnection()},
 		)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)
@@ -499,8 +499,8 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 		pluginProv.DisplayName(),
 		pluginProv.Description(),
 		firstProviderIconSVG(pluginProv, specProv),
-		composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, configuredSpecConnection(plan)), Surface: core.CatalogSurfaceAPI},
-		composite.BoundProvider{Provider: specProv, Surface: core.CatalogSurfaceAll},
+		composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, configuredSpecConnection(plan))},
+		composite.BoundProvider{Provider: specProv},
 	)
 	if err != nil {
 		closeIfPossible(specProv, pluginProv)
@@ -748,7 +748,6 @@ func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.St
 		boundProviders = append(boundProviders, composite.BoundProvider{
 			Provider:   specSurface.provider,
 			Connection: specSurface.resolved.ConnectionName,
-			Surface:    catalogSurfaceForSpec(specSurface.resolved.Surface),
 		})
 		providers = append(providers, specSurface.provider)
 	}
@@ -774,13 +773,6 @@ func closeBuiltSpecSurfaces(surfaces []builtSpecSurface) {
 	for i := range surfaces {
 		closeIfPossible(surfaces[i].provider)
 	}
-}
-
-func catalogSurfaceForSpec(surface config.SpecSurface) core.CatalogSurface {
-	if surface == config.SpecSurfaceMCP {
-		return core.CatalogSurfaceMCP
-	}
-	return core.CatalogSurfaceAPI
 }
 
 func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*declarative.Definition, error) {

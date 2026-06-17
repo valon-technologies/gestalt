@@ -97,7 +97,7 @@ func (p *Provider) Execute(ctx context.Context, operation string, params map[str
 	case operationOwnerMCP:
 		return p.mcp.Execute(ctx, operation, params, token)
 	}
-	owner, err := sessionProviderForOperation(ctx, p.sessionProvidersForSurface(core.CatalogSurfaceFromContext(ctx)), operation, token)
+	owner, err := sessionProviderForOperation(ctx, []core.Provider{p.api, p.mcp}, operation, token)
 	if err != nil {
 		return nil, err
 	}
@@ -116,42 +116,27 @@ func (p *Provider) InvokeGraphQL(ctx context.Context, request core.GraphQLReques
 }
 
 func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	surface := core.CatalogSurfaceFromContext(ctx)
-
 	var apiCat *catalog.Catalog
-	if surface == core.CatalogSurfaceAll || surface == core.CatalogSurfaceAPI {
-		if core.SupportsSessionCatalog(p.api) {
-			var err error
-			apiCat, _, err = core.CatalogForRequest(ctx, p.api, token)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	var mcpCat *catalog.Catalog
-	if surface == core.CatalogSurfaceAll || surface == core.CatalogSurfaceMCP {
+	if core.SupportsSessionCatalog(p.api) {
 		var err error
-		mcpCat, err = p.mcp.CatalogForRequest(ctx, token)
+		apiCat, _, err = core.CatalogForRequest(ctx, p.api, token)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	switch surface {
-	case core.CatalogSurfaceAPI:
+	if core.CatalogSurfaceFromContext(ctx) == core.CatalogSurfaceAPI {
 		if apiCat != nil {
 			return tagRESTCatalog(apiCat), nil
 		}
 		return tagRESTCatalog(p.api.Catalog()), nil
-	case core.CatalogSurfaceMCP:
-		if mcpCat != nil {
-			return tagMCPTransportCatalog(mcpCat), nil
-		}
-		return tagMCPTransportCatalog(p.mcp.Catalog()), nil
-	default:
-		return p.buildCatalogFromSources(apiCat, mcpCat), nil
 	}
+
+	mcpCat, err := p.mcp.CatalogForRequest(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return p.buildCatalogFromSources(apiCat, mcpCat), nil
 }
 
 func (p *Provider) ConnectionForOperation(operation string) string {
@@ -319,17 +304,6 @@ func providerConnectionOverrideAllowed(prov core.Provider, operation string, par
 		return policy.OperationConnectionOverrideAllowed(operation, params)
 	}
 	return false
-}
-
-func (p *Provider) sessionProvidersForSurface(surface core.CatalogSurface) []core.Provider {
-	switch surface {
-	case core.CatalogSurfaceAPI:
-		return []core.Provider{p.api}
-	case core.CatalogSurfaceMCP:
-		return []core.Provider{p.mcp}
-	default:
-		return []core.Provider{p.api, p.mcp}
-	}
 }
 
 func sessionProviderForOperation(ctx context.Context, providers []core.Provider, operation, token string) (core.Provider, error) {

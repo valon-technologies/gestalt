@@ -646,14 +646,14 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	} else if core.SupportsSessionCatalog(prov) {
 		strictCatalog = true
 	}
-	ctx := r.Context()
+	ctx := core.WithCatalogSurface(r.Context(), core.CatalogSurfaceAPI)
 	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
 		ctx,
 		prov,
 		name,
 		resolver,
 		p,
-		s.catalogSelectorConfig().HTTPListCatalogTargets(name, requestedConnection, requestedInstance),
+		s.catalogSelectorConfig().APICatalogTargets(name, requestedConnection, requestedInstance),
 		strictCatalog,
 	)
 	discoveryFailed = metadata.SessionFailed

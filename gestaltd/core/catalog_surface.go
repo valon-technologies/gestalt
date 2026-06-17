@@ -2,14 +2,13 @@ package core
 
 import "context"
 
-// CatalogSurface scopes session catalog discovery to a provider surface.
-// An empty value means all surfaces (legacy compatibility).
+// CatalogSurface scopes session catalog discovery for composite providers.
+// An empty value means all surfaces, preserving legacy behavior.
 type CatalogSurface string
 
 const (
 	CatalogSurfaceAll CatalogSurface = ""
 	CatalogSurfaceAPI CatalogSurface = "api"
-	CatalogSurfaceMCP CatalogSurface = "mcp"
 )
 
 type catalogSurfaceContextKey struct{}

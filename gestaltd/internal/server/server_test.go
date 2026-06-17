@@ -6520,13 +6520,6 @@ func TestListOperations_SessionCatalogAuthFailureReturnsReconnectRequired(t *tes
 		Qualifier: "default",
 		Grant:     &core.ExternalCredentialGrant{AccessToken: "oauth-token"},
 	})
-	seedToken(t, svc, &core.ExternalCredential{
-		ID:        "tok-mcp",
-		Subject:   principal.UserSubjectID(u.ID),
-		Audience:  "notion:MCP",
-		Qualifier: "default",
-		Grant:     &core.ExternalCredentialGrant{AccessToken: "stale-mcp-token"},
-	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
@@ -6536,7 +6529,7 @@ func TestListOperations_SessionCatalogAuthFailureReturnsReconnectRequired(t *tes
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/notion/operations?_connection=MCP", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/notion/operations", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)

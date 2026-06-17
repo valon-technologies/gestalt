@@ -333,7 +333,6 @@ func (h *StatelessHTTPHandler) resolveCatalog(ctx context.Context, provName stri
 	targets := []invocation.CatalogResolutionTarget{{
 		Connection: h.cfg.MCPConnection[provName],
 		Instance:   instance,
-		Surface:    core.CatalogSurfaceAll,
 	}}
 	cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(ctx, prov, provName, h.cfg.TokenResolver, principal.FromContext(ctx), targets, strict)
 	return cat, err
