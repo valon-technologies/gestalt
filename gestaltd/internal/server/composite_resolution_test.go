@@ -240,8 +240,8 @@ func TestExecuteOperation_CompositeMCPAuthFailureReturnsReconnectRequired(t *tes
 	t.Parallel()
 
 	env := setupCompositeNotion(t, compositeNotionConfig{
-		seedMCP:   true,
-		mcpToken:  "stale-mcp-token",
+		seedMCP:  true,
+		mcpToken: "stale-mcp-token",
 		mcpCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			return nil, fmt.Errorf("mcpupstream notion: initialize: transport error: unauthorized (401) for %q", token)
 		},
