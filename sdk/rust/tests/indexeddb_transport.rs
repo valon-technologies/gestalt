@@ -7,8 +7,8 @@ use std::process::{Command, Stdio};
 
 use gestalt::ENV_HOST_SERVICE_SOCKET;
 use gestalt::{
-    CursorDirection, IndexSchema, IndexedDB, IndexedDBError, KeyRange, ObjectStoreSchema, Record,
-    TransactionMode, TransactionOptions,
+    CursorDirection, IndexSchema, IndexedDB, IndexedDBError, Key, KeyRange, ObjectStoreSchema,
+    Query, Record, TransactionMode, TransactionOptions,
 };
 
 struct Harness {
@@ -251,16 +251,19 @@ async fn object_store_bulk_helpers() {
     let key = store.get_key("b").await.expect("get_key");
     assert_eq!(key, "b");
 
-    let all = store.get_all(None).await.expect("get_all");
+    let all = store.get_all(Query::all(), None).await.expect("get_all");
     assert_eq!(all.len(), 4);
 
     let ranged = store
-        .get_all(Some(KeyRange {
-            lower: Some(serde_json::json!("b")),
-            upper: Some(serde_json::json!("c")),
-            lower_open: false,
-            upper_open: false,
-        }))
+        .get_all(
+            KeyRange {
+                lower: Some("b".into()),
+                upper: Some("c".into()),
+                lower_open: false,
+                upper_open: false,
+            },
+            None,
+        )
         .await
         .expect("get_all with range");
     let ranged_ids: Vec<_> = ranged
@@ -269,16 +272,19 @@ async fn object_store_bulk_helpers() {
         .collect();
     assert_eq!(ranged_ids, vec!["b", "c"]);
 
-    let all_keys = store.get_all_keys(None).await.expect("get_all_keys");
+    let all_keys = store
+        .get_all_keys(Query::all(), None)
+        .await
+        .expect("get_all_keys");
     assert_eq!(all_keys, vec!["a", "b", "c", "d"]);
 
-    let count = store.count(None).await.expect("count");
+    let count = store.count(Query::all()).await.expect("count");
     assert_eq!(count, 4);
 
     let deleted = store
         .delete_range(KeyRange {
-            lower: Some(serde_json::json!("b")),
-            upper: Some(serde_json::json!("c")),
+            lower: Some("b".into()),
+            upper: Some("c".into()),
             lower_open: false,
             upper_open: false,
         })
@@ -286,11 +292,17 @@ async fn object_store_bulk_helpers() {
         .expect("delete_range");
     assert_eq!(deleted, 2);
     assert_eq!(
-        store.count(None).await.expect("count after delete_range"),
+        store
+            .count(Query::all())
+            .await
+            .expect("count after delete_range"),
         2
     );
     assert_eq!(
-        store.get_all_keys(None).await.expect("remaining keys"),
+        store
+            .get_all_keys(Query::all(), None)
+            .await
+            .expect("remaining keys"),
         vec!["a", "d"]
     );
 }
@@ -331,7 +343,13 @@ async fn transaction_readwrite_commits_and_reads_own_writes() {
             ]))
             .await
             .expect("transaction update");
-        assert_eq!(tx_store.count(None).await.expect("transaction count"), 1);
+        assert_eq!(
+            tx_store
+                .count(Query::all())
+                .await
+                .expect("transaction count"),
+            1
+        );
     }
     tx.commit().await.expect("commit");
 
@@ -519,14 +537,9 @@ async fn transaction_index_operations_and_bulk_deletes_roll_back() {
         let mut tx_store = tx.object_store("transaction_index_bulk_rollback");
         {
             let mut idx = tx_store.index("by_status");
+            assert_eq!(idx.count("active").await.expect("index count"), 3);
             assert_eq!(
-                idx.count(&[serde_json::json!("active")], None)
-                    .await
-                    .expect("index count"),
-                3
-            );
-            assert_eq!(
-                idx.get_all_keys(&[serde_json::json!("active")], None)
+                idx.get_all_keys("active", None)
                     .await
                     .expect("index keys")
                     .len(),
@@ -536,8 +549,8 @@ async fn transaction_index_operations_and_bulk_deletes_roll_back() {
         assert_eq!(
             tx_store
                 .delete_range(KeyRange {
-                    lower: Some(serde_json::json!("b")),
-                    upper: Some(serde_json::json!("c")),
+                    lower: Some("b".into()),
+                    upper: Some("c".into()),
                     lower_open: false,
                     upper_open: false,
                 })
@@ -547,23 +560,24 @@ async fn transaction_index_operations_and_bulk_deletes_roll_back() {
         );
         {
             let mut idx = tx_store.index("by_status");
-            assert_eq!(
-                idx.delete(&[serde_json::json!("active")])
-                    .await
-                    .expect("index delete"),
-                2
-            );
+            assert_eq!(idx.delete("active").await.expect("index delete"), 2);
         }
         tx_store.clear().await.expect("clear");
-        assert_eq!(tx_store.count(None).await.expect("count after clear"), 0);
+        assert_eq!(
+            tx_store
+                .count(Query::all())
+                .await
+                .expect("count after clear"),
+            0
+        );
     }
     tx.abort("rollback").await.expect("abort");
 
-    assert_eq!(store.count(None).await.expect("public count"), 4);
+    assert_eq!(store.count(Query::all()).await.expect("public count"), 4);
     assert_eq!(
         store
             .index("by_status")
-            .count(&[serde_json::json!("inactive")], None)
+            .count("inactive")
             .await
             .expect("public inactive count"),
         1
@@ -615,7 +629,7 @@ async fn cursor_happy_path() {
     }
 
     let mut cursor = store
-        .open_cursor(None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
@@ -639,7 +653,7 @@ async fn empty_cursor() {
 
     let mut store = db.object_store("empty_cursor");
     let mut cursor = store
-        .open_cursor(None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
@@ -668,7 +682,7 @@ async fn keys_only_cursor() {
         .expect("put");
 
     let mut cursor = store
-        .open_key_cursor(None, CursorDirection::Next)
+        .open_key_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open key cursor");
 
@@ -696,7 +710,7 @@ async fn cursor_exhaustion() {
         .expect("put");
 
     let mut cursor = store
-        .open_cursor(None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
@@ -722,13 +736,13 @@ async fn continue_to_key_beyond_end() {
         .expect("put");
 
     let mut cursor = store
-        .open_cursor(None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
     assert!(cursor.continue_next().await.expect("position"));
     let ok = cursor
-        .continue_to_key(serde_json::json!("zzz"))
+        .continue_to_key("zzz")
         .await
         .expect("continue_to_key beyond end");
     assert!(!ok);
@@ -751,7 +765,7 @@ async fn advance_past_end() {
         .expect("put");
 
     let mut cursor = store
-        .open_cursor(None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
@@ -780,7 +794,7 @@ async fn advance_rejects_non_positive_counts() {
         .expect("put");
 
     let mut cursor = store
-        .open_cursor(None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
@@ -812,7 +826,7 @@ async fn post_exhaustion() {
         .expect("put");
 
     let mut cursor = store
-        .open_cursor(None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
@@ -871,10 +885,7 @@ async fn index_cursor() {
     }
 
     let mut idx = store.index("by_status");
-    let all_active = idx
-        .get_all(&[serde_json::json!("active")], None)
-        .await
-        .expect("get_all active");
+    let all_active = idx.get_all("active", None).await.expect("get_all active");
     assert_eq!(all_active.len(), 3, "expected 3 active records");
     for rec in &all_active {
         assert_eq!(rec["status"], serde_json::json!("active"));
@@ -912,40 +923,91 @@ async fn index_query_helpers() {
     }
 
     let mut idx = store.index("by_num");
-    let key = idx
-        .get_key(&[serde_json::json!(2)])
-        .await
-        .expect("index get_key");
+    let key = idx.get_key(2).await.expect("index get_key");
     assert_eq!(key, "b");
 
     let keys = idx
-        .get_all_keys(&[], None)
+        .get_all_keys(Query::all(), None)
         .await
         .expect("index get_all_keys");
     assert_eq!(keys, vec!["a", "b", "c", "d"]);
 
     let ranged_keys = idx
         .get_all_keys(
-            &[],
-            Some(KeyRange {
-                lower: Some(serde_json::json!(2)),
-                upper: Some(serde_json::json!(2)),
+            KeyRange {
+                lower: Some(2.into()),
+                upper: Some(2.into()),
                 lower_open: false,
                 upper_open: false,
-            }),
+            },
+            None,
         )
         .await
         .expect("index get_all_keys with range");
     assert_eq!(ranged_keys, vec!["b", "c"]);
 
-    let count = idx.count(&[], None).await.expect("index count");
+    let count = idx.count(Query::all()).await.expect("index count");
     assert_eq!(count, 4);
 
-    let exact_count = idx
-        .count(&[serde_json::json!(2)], None)
-        .await
-        .expect("index count exact");
+    let exact_count = idx.count(2).await.expect("index count exact");
     assert_eq!(exact_count, 2);
+}
+
+#[tokio::test]
+async fn index_compound_array_range_parity() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-compound-range.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "events",
+        ObjectStoreSchema {
+            indexes: vec![IndexSchema {
+                name: "by_vendor_date".to_string(),
+                key_path: vec!["vendor".to_string(), "date".to_string()],
+                unique: false,
+            }],
+        },
+    )
+    .await
+    .expect("create store");
+
+    let mut store = db.object_store("events");
+    for (id, vendor, date) in [
+        ("1", "claude_code", "2026-03-15"),
+        ("2", "claude_code", "2026-04-10"),
+        ("3", "claude_code", "2026-04-30"),
+        ("4", "claude_code", "2026-05-01"),
+        ("5", "other", "2026-04-15"),
+    ] {
+        store
+            .put(make_record(&[
+                ("id", serde_json::json!(id)),
+                ("vendor", serde_json::json!(vendor)),
+                ("date", serde_json::json!(date)),
+            ]))
+            .await
+            .expect("put");
+    }
+
+    let range_query = KeyRange::bound(
+        vec!["claude_code", "2026-04-01"],
+        vec!["claude_code", "2026-04-30"],
+        false,
+        false,
+    );
+
+    let records = store
+        .index("by_vendor_date")
+        .get_all(range_query, None)
+        .await
+        .expect("get_all compound range");
+    assert_eq!(records.len(), 2, "April claude_code rows");
+    let ids: Vec<_> = records
+        .iter()
+        .map(|record| record["id"].as_str().expect("id").to_string())
+        .collect();
+    assert_eq!(ids, vec!["2", "3"]);
 }
 
 #[tokio::test]
@@ -980,12 +1042,12 @@ async fn index_continue_to_key_round_trip() {
 
     let mut cursor = store
         .index("by_num")
-        .open_cursor(&[], None, CursorDirection::Next)
+        .open_cursor(Query::all(), CursorDirection::Next)
         .await
         .expect("open cursor");
 
     assert!(cursor.continue_next().await.expect("first"));
-    assert_eq!(cursor.key(), Some(serde_json::json!([1])));
+    assert_eq!(cursor.key(), Some(Key::Int(1)));
     assert!(
         cursor
             .continue_to_key(cursor.key().expect("cursor key"))
@@ -1023,4 +1085,48 @@ async fn error_mapping() {
         Err(IndexedDBError::AlreadyExists) => {}
         other => panic!("expected AlreadyExists for duplicate add, got: {:?}", other),
     }
+}
+
+#[tokio::test]
+async fn date_and_bytes_key_queries_encode_on_wire() {
+    use std::time::{Duration, UNIX_EPOCH};
+
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-date-bytes.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store("date_bytes_store", ObjectStoreSchema { indexes: vec![] })
+        .await
+        .expect("create store");
+
+    let mut store = db.object_store("date_bytes_store");
+    store
+        .put(make_record(&[("id", serde_json::json!("row-1"))]))
+        .await
+        .expect("put");
+
+    let date = Key::Date(UNIX_EPOCH + Duration::from_secs(1_700_000_000));
+    let bytes = Key::Bytes(vec![0x01, 0x02, 0xff]);
+
+    assert_eq!(
+        store
+            .count(KeyRange::only(date.clone()))
+            .await
+            .expect("count date key"),
+        0
+    );
+    assert_eq!(
+        store
+            .count(KeyRange::only(bytes))
+            .await
+            .expect("count bytes key"),
+        0
+    );
+    assert!(
+        store
+            .get_all(Query::Key(date.clone()), None)
+            .await
+            .expect("get_all date key")
+            .is_empty()
+    );
 }

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import unittest
 
+from gestalt import KeyRange, only
 from gestalt._indexeddb import (
     CURSOR_NEXT_UNIQUE,
     Cursor,
     IndexedDBCursorSnapshotEntry,
     IndexedDBOpenCursorRequest,
-    KeyRange,
     new_indexeddb_cursor_snapshot,
 )
 
@@ -91,7 +91,7 @@ class TestIndexedDBCursorSnapshot(unittest.TestCase):
                     key="active", primary_key="issue-1", primary_key_value="issue-1"
                 ),
             ],
-            KeyRange(lower="active", upper="active"),
+            only("active"),
         )
 
         first = snapshot.next()

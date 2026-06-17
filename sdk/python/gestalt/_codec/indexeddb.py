@@ -179,7 +179,7 @@ def from_wire_cursor_command_command(value: Any) -> native.CursorCommandCommand:
 
 def to_wire_cursor_entry(value: native.CursorEntry) -> Any:
     return _indexeddb_pb2.CursorEntry(
-        key=[to_wire_key_value(item) for item in value.key],
+        key=None if value.key is None else to_wire_key_value(value.key),
         primary_key=value.primary_key,
         record=None if value.record is None else to_wire_record(value.record),
     )
@@ -187,7 +187,7 @@ def to_wire_cursor_entry(value: native.CursorEntry) -> Any:
 
 def from_wire_cursor_entry(value: Any) -> native.CursorEntry:
     return native.CursorEntry(
-        key=[from_wire_key_value(item) for item in value.key],
+        key=from_wire_key_value(value.key) if value.HasField("key") else None,
         primary_key=value.primary_key,
         record=from_wire_record(value.record) if value.HasField("record") else None,
     )
@@ -195,13 +195,13 @@ def from_wire_cursor_entry(value: Any) -> native.CursorEntry:
 
 def to_wire_cursor_key_target(value: native.CursorKeyTarget) -> Any:
     return _indexeddb_pb2.CursorKeyTarget(
-        key=[to_wire_key_value(item) for item in value.key],
+        key=None if value.key is None else to_wire_key_value(value.key),
     )
 
 
 def from_wire_cursor_key_target(value: Any) -> native.CursorKeyTarget:
     return native.CursorKeyTarget(
-        key=[from_wire_key_value(item) for item in value.key],
+        key=from_wire_key_value(value.key) if value.HasField("key") else None,
     )
 
 
@@ -266,8 +266,8 @@ def to_wire_index_query_request(value: native.IndexQueryRequest) -> Any:
     return _indexeddb_pb2.IndexQueryRequest(
         store=value.store,
         index=value.index,
-        values=[to_wire_typed_value(item) for item in value.values],
-        range=None if value.range is None else to_wire_key_range(value.range),
+        query=None if value.query is None else to_wire_indexed_db_query(value.query),
+        count=value.count,
     )
 
 
@@ -275,8 +275,10 @@ def from_wire_index_query_request(value: Any) -> native.IndexQueryRequest:
     return native.IndexQueryRequest(
         store=value.store,
         index=value.index,
-        values=[from_wire_typed_value(item) for item in value.values],
-        range=from_wire_key_range(value.range) if value.HasField("range") else None,
+        query=from_wire_indexed_db_query(value.query)
+        if value.HasField("query")
+        else None,
+        count=value.count if value.HasField("count") else None,
     )
 
 
@@ -296,10 +298,39 @@ def from_wire_index_schema(value: Any) -> native.IndexSchema:
     )
 
 
+def to_wire_indexed_db_query(value: native.IndexedDBQuery) -> Any:
+    return _indexeddb_pb2.IndexedDBQuery(
+        **to_wire_indexed_db_query_query(value.query),
+    )
+
+
+def from_wire_indexed_db_query(value: Any) -> native.IndexedDBQuery:
+    return native.IndexedDBQuery(
+        query=from_wire_indexed_db_query_query(value),
+    )
+
+
+def to_wire_indexed_db_query_query(value: native.IndexedDBQueryQuery) -> dict[str, Any]:
+    if isinstance(value, native.IndexedDBQueryKey):
+        return {"key": to_wire_key_value(value.value)}
+    if isinstance(value, native.IndexedDBQueryRange):
+        return {"range": to_wire_key_range(value.value)}
+    return {}
+
+
+def from_wire_indexed_db_query_query(value: Any) -> native.IndexedDBQueryQuery:
+    case = value.WhichOneof("query")
+    if case == "key":
+        return native.IndexedDBQueryKey(value=from_wire_key_value(value.key))
+    if case == "range":
+        return native.IndexedDBQueryRange(value=from_wire_key_range(value.range))
+    return None
+
+
 def to_wire_key_range(value: native.KeyRange) -> Any:
     return _indexeddb_pb2.KeyRange(
-        lower=None if value.lower is None else to_wire_typed_value(value.lower),
-        upper=None if value.upper is None else to_wire_typed_value(value.upper),
+        lower=None if value.lower is None else to_wire_key_value(value.lower),
+        upper=None if value.upper is None else to_wire_key_value(value.upper),
         lower_open=value.lower_open,
         upper_open=value.upper_open,
     )
@@ -307,8 +338,8 @@ def to_wire_key_range(value: native.KeyRange) -> Any:
 
 def from_wire_key_range(value: Any) -> native.KeyRange:
     return native.KeyRange(
-        lower=from_wire_typed_value(value.lower) if value.HasField("lower") else None,
-        upper=from_wire_typed_value(value.upper) if value.HasField("upper") else None,
+        lower=from_wire_key_value(value.lower) if value.HasField("lower") else None,
+        upper=from_wire_key_value(value.upper) if value.HasField("upper") else None,
         lower_open=value.lower_open,
         upper_open=value.upper_open,
     )
@@ -394,14 +425,18 @@ def from_wire_object_store_name_request(value: Any) -> native.ObjectStoreNameReq
 def to_wire_object_store_range_request(value: native.ObjectStoreRangeRequest) -> Any:
     return _indexeddb_pb2.ObjectStoreRangeRequest(
         store=value.store,
-        range=None if value.range is None else to_wire_key_range(value.range),
+        query=None if value.query is None else to_wire_indexed_db_query(value.query),
+        count=value.count,
     )
 
 
 def from_wire_object_store_range_request(value: Any) -> native.ObjectStoreRangeRequest:
     return native.ObjectStoreRangeRequest(
         store=value.store,
-        range=from_wire_key_range(value.range) if value.HasField("range") else None,
+        query=from_wire_indexed_db_query(value.query)
+        if value.HasField("query")
+        else None,
+        count=value.count if value.HasField("count") else None,
     )
 
 
@@ -436,22 +471,22 @@ def from_wire_object_store_schema(value: Any) -> native.ObjectStoreSchema:
 def to_wire_open_cursor_request(value: native.OpenCursorRequest) -> Any:
     return _indexeddb_pb2.OpenCursorRequest(
         store=value.store,
-        range=None if value.range is None else to_wire_key_range(value.range),
+        index=value.index,
+        query=None if value.query is None else to_wire_indexed_db_query(value.query),
         direction=to_wire_enum(value.direction),
         keys_only=value.keys_only,
-        index=value.index,
-        values=[to_wire_typed_value(item) for item in value.values],
     )
 
 
 def from_wire_open_cursor_request(value: Any) -> native.OpenCursorRequest:
     return native.OpenCursorRequest(
         store=value.store,
-        range=from_wire_key_range(value.range) if value.HasField("range") else None,
+        index=value.index,
+        query=from_wire_indexed_db_query(value.query)
+        if value.HasField("query")
+        else None,
         direction=value.direction,
         keys_only=value.keys_only,
-        index=value.index,
-        values=[from_wire_typed_value(item) for item in value.values],
     )
 
 

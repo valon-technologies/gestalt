@@ -24,6 +24,7 @@ type agentTransportHarness struct {
 	turnRequests       []*proto.CreateAgentProviderTurnRequest
 	getTurnRequests    []*proto.GetAgentProviderTurnRequest
 	cancelTurnRequests []*proto.CancelAgentProviderTurnRequest
+	listSessionsRequests []*proto.ListAgentProviderSessionsRequest
 	tokens             []string
 	requireAuthContext bool
 }
@@ -99,6 +100,27 @@ func (h *agentTransportHarness) CancelTurn(ctx context.Context, req *proto.Cance
 		Id:        req.GetTurnId(),
 		SessionId: "session-1",
 		Status:    proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED,
+	}, nil
+}
+
+func (h *agentTransportHarness) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+
+	h.mu.Lock()
+	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
+		h.tokens = append(h.tokens, values...)
+	}
+	h.listSessionsRequests = append(h.listSessionsRequests, gproto.Clone(req).(*proto.ListAgentProviderSessionsRequest))
+	h.mu.Unlock()
+
+	return &proto.ListAgentProviderSessionsResponse{
+		Sessions: []*proto.AgentSession{{
+			Id:           "session-listed",
+			ProviderName: req.GetProviderName(),
+			Model:        "gpt-test",
+			ClientRef:    "cli-session-listed",
+			State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+		}},
 	}, nil
 }
 
@@ -435,5 +457,54 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	}
 	if got.GetTimeoutSeconds() != 120 {
 		t.Fatalf("timeout_seconds = %d, want 120", got.GetTimeoutSeconds())
+	}
+}
+
+func TestTransport_AgentListSessionsOptionsOnly(t *testing.T) {
+	harness, address := startAgentTransportHarness(t)
+
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
+
+	agent, err := client.ConnectAgent(context.Background(), "", client.WithRequestContext(agentTransportRequestContext()))
+	if err != nil {
+		t.Fatalf("Agent: %v", err)
+	}
+
+	sessions, err := agent.ListSessions(context.Background(), &client.AgentListSessionsOptions{
+		Limit:        10,
+		ProviderName: "managed",
+		SummaryOnly:  true,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("sessions len = %d, want 1", len(sessions))
+	}
+	if sessions[0].Id != "session-listed" {
+		t.Fatalf("session id = %q, want session-listed", sessions[0].Id)
+	}
+	if sessions[0].ProviderName != "managed" {
+		t.Fatalf("provider_name = %q, want managed", sessions[0].ProviderName)
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.listSessionsRequests) != 1 {
+		t.Fatalf("list sessions requests len = %d, want 1", len(harness.listSessionsRequests))
+	}
+	got := harness.listSessionsRequests[0]
+	if got.GetLimit() != 10 {
+		t.Fatalf("limit = %d, want 10", got.GetLimit())
+	}
+	if got.GetProviderName() != "managed" {
+		t.Fatalf("provider_name = %q, want managed", got.GetProviderName())
+	}
+	if !got.GetSummaryOnly() {
+		t.Fatal("summary_only = false, want true")
+	}
+	if subject := got.GetContext().GetSubject().GetId(); subject != "user:transport" {
+		t.Fatalf("subject = %q, want user:transport", subject)
 	}
 }

@@ -4698,8 +4698,6 @@ pub mod indexed_db_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        /** Lifecycle
-        */
         pub async fn create_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectStoreRequest>,
@@ -4815,7 +4813,7 @@ pub mod indexed_db_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Delete"));
             self.inner.unary(req, path, codec).await
         }
-        /** Bulk operations (with optional key range)
+        /** Bulk operations (with optional query)
         */
         pub async fn clear(
             &mut self,
@@ -5066,8 +5064,6 @@ pub mod indexed_db_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
-        /** Lifecycle
-        */
         async fn create_object_store(
             &self,
             request: tonic::Request<super::CreateObjectStoreRequest>,
@@ -5103,7 +5099,7 @@ pub mod indexed_db_server {
             &self,
             request: tonic::Request<super::ObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
-        /** Bulk operations (with optional key range)
+        /** Bulk operations (with optional query)
         */
         async fn clear(
             &self,

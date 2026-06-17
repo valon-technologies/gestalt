@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 )
 
 type stubObjectStore struct {
@@ -157,51 +158,67 @@ func (o *stubObjectStore) Clear(_ context.Context) error {
 	return nil
 }
 
-func (o *stubObjectStore) GetAll(_ context.Context, r *idb.KeyRange) ([]idb.Record, error) {
+func (o *stubObjectStore) GetAll(_ context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
 	c := o.newCursor(idb.CursorNext, false)
-	c.applyKeyRange(r)
+	c.applyQuery(query)
+	if c.err != nil {
+		return nil, c.err
+	}
 	out := make([]idb.Record, 0, len(c.keys))
 	for _, key := range c.keys {
 		out = append(out, c.snapshot[key])
 	}
-	return out, nil
+	return applyCountLimit(out, count...), nil
 }
 
-func (o *stubObjectStore) GetAllKeys(_ context.Context, r *idb.KeyRange) ([]string, error) {
+func (o *stubObjectStore) GetAllKeys(_ context.Context, query any, count ...uint32) ([]string, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
 	c := o.newCursor(idb.CursorNext, true)
-	c.applyKeyRange(r)
-	return append([]string(nil), c.keys...), nil
+	c.applyQuery(query)
+	if c.err != nil {
+		return nil, c.err
+	}
+	keys := append([]string(nil), c.keys...)
+	return applyCountLimit(keys, count...), nil
 }
 
-func (o *stubObjectStore) Count(_ context.Context, r *idb.KeyRange) (int64, error) {
+func (o *stubObjectStore) Count(_ context.Context, query any) (int64, error) {
 	if o.db.Err != nil {
 		return 0, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
 	c := o.newCursor(idb.CursorNext, true)
-	c.applyKeyRange(r)
+	c.applyQuery(query)
+	if c.err != nil {
+		return 0, c.err
+	}
 	return int64(len(c.keys)), nil
 }
 
-func (o *stubObjectStore) DeleteRange(_ context.Context, r idb.KeyRange) (int64, error) {
+func (o *stubObjectStore) DeleteRange(_ context.Context, query any) (int64, error) {
 	if o.db.Err != nil {
 		return 0, o.db.Err
+	}
+	if query == nil {
+		return 0, idb.ErrInvalidTransaction
 	}
 	done := o.writeSchedule()
 	defer done()
 	c := o.newCursor(idb.CursorNext, true)
-	c.applyKeyRange(&r)
+	c.applyQuery(query)
+	if c.err != nil {
+		return 0, c.err
+	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for _, key := range c.keys {
@@ -214,25 +231,31 @@ func (o *stubObjectStore) Index(name string) idb.Index {
 	return &stubIndex{store: o, name: name, schema: o.schema}
 }
 
-func (o *stubObjectStore) OpenCursor(_ context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
+func (o *stubObjectStore) OpenCursor(_ context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
 	c := o.newCursor(dir, false)
-	c.applyKeyRange(r)
+	c.applyQuery(query)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return c, nil
 }
 
-func (o *stubObjectStore) OpenKeyCursor(_ context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
+func (o *stubObjectStore) OpenKeyCursor(_ context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
 	c := o.newCursor(dir, true)
-	c.applyKeyRange(r)
+	c.applyQuery(query)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return c, nil
 }
 
@@ -246,9 +269,13 @@ func (o *stubObjectStore) newCursor(dir idb.CursorDirection, keysOnly bool) *stu
 	}
 	o.mu.RUnlock()
 
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		return indexeddbcodec.CompareKeys(keys[i], keys[j]) < 0
+	})
 	if dir == idb.CursorPrev || dir == idb.CursorPrevUnique {
-		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
+		sort.Slice(keys, func(i, j int) bool {
+			return indexeddbcodec.CompareKeys(keys[i], keys[j]) > 0
+		})
 	}
 
 	reverse := dir == idb.CursorPrev || dir == idb.CursorPrevUnique

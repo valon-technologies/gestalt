@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -209,7 +210,7 @@ func (s indexedDBProviderServer) OpenCursor(stream grpc.BidiStreamingServer[prot
 				return err
 			}
 		case *proto.CursorCommand_ContinueToKey:
-			target, err := cursorTargetFromProto(v.ContinueToKey.GetKey(), req.Index != "")
+			target, err := cursorTargetFromProto(v.ContinueToKey.GetKey())
 			if err != nil {
 				return status.Errorf(codes.InvalidArgument, "unmarshal cursor target: %v", err)
 			}
@@ -370,44 +371,35 @@ func objectStoreRequestFromProto(req *proto.ObjectStoreRequest) IndexedDBObjectS
 }
 
 func objectStoreRangeRequestFromProto(req *proto.ObjectStoreRangeRequest) IndexedDBObjectStoreRangeRequest {
-	return IndexedDBObjectStoreRangeRequest{Store: req.GetStore(), Range: keyRangeFromProto(req.GetRange())}
+	out := IndexedDBObjectStoreRangeRequest{Store: req.GetStore(), Query: client.FromWireIndexedDBQuery(req.GetQuery())}
+	if req.Count != nil {
+		count := req.GetCount()
+		out.Count = &count
+	}
+	return out
 }
 
 func indexQueryRequestFromProto(req *proto.IndexQueryRequest) (IndexedDBIndexQueryRequest, error) {
-	values, err := anyFromTypedValues(req.GetValues())
-	if err != nil {
-		return IndexedDBIndexQueryRequest{}, fmt.Errorf("unmarshal index values: %w", err)
+	out := IndexedDBIndexQueryRequest{
+		Store: req.GetStore(),
+		Index: req.GetIndex(),
+		Query: client.FromWireIndexedDBQuery(req.GetQuery()),
 	}
-	return IndexedDBIndexQueryRequest{Store: req.GetStore(), Index: req.GetIndex(), Values: values, Range: keyRangeFromProto(req.GetRange())}, nil
+	if req.Count != nil {
+		count := req.GetCount()
+		out.Count = &count
+	}
+	return out, nil
 }
 
 func openCursorRequestFromProto(req *proto.OpenCursorRequest) (IndexedDBOpenCursorRequest, error) {
-	values, err := anyFromTypedValues(req.GetValues())
-	if err != nil {
-		return IndexedDBOpenCursorRequest{}, fmt.Errorf("unmarshal cursor values: %w", err)
-	}
 	return IndexedDBOpenCursorRequest{
 		Store:     req.GetStore(),
-		Range:     keyRangeFromProto(req.GetRange()),
+		Query:     client.FromWireIndexedDBQuery(req.GetQuery()),
 		Direction: cursorDirectionFromProto(req.GetDirection()),
 		KeysOnly:  req.GetKeysOnly(),
 		Index:     req.GetIndex(),
-		Values:    values,
 	}, nil
-}
-
-func keyRangeFromProto(r *proto.KeyRange) *KeyRange {
-	if r == nil {
-		return nil
-	}
-	out := &KeyRange{LowerOpen: r.GetLowerOpen(), UpperOpen: r.GetUpperOpen()}
-	if r.GetLower() != nil {
-		out.Lower, _ = anyFromTypedValue(r.GetLower())
-	}
-	if r.GetUpper() != nil {
-		out.Upper, _ = anyFromTypedValue(r.GetUpper())
-	}
-	return out
 }
 
 func recordResponseToProto(operation string, record Record, err error) (*proto.RecordResponse, error) {
@@ -439,15 +431,15 @@ func sendCursorResult(stream grpc.BidiStreamingServer[proto.CursorClientMessage,
 	if entry == nil {
 		return stream.Send(cursorDoneResponse(true))
 	}
-	pbEntry, err := cursorEntryToProto(entry, indexCursor)
+	pbEntry, err := cursorEntryToProto(entry)
 	if err != nil {
 		return status.Errorf(codes.Internal, "marshal cursor entry: %v", err)
 	}
 	return stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Entry{Entry: pbEntry}})
 }
 
-func cursorEntryToProto(entry *IndexedDBCursorEntry, indexCursor bool) (*proto.CursorEntry, error) {
-	key, err := cursorKeyToProto(entry.Key, indexCursor)
+func cursorEntryToProto(entry *IndexedDBCursorEntry) (*proto.CursorEntry, error) {
+	key, err := cursorKeyToProto(entry.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -466,21 +458,11 @@ func cursorDoneResponse(done bool) *proto.CursorResponse {
 	return &proto.CursorResponse{Result: &proto.CursorResponse_Done{Done: done}}
 }
 
-func cursorTargetFromProto(kvs []*proto.KeyValue, indexCursor bool) (any, error) {
-	if len(kvs) == 0 {
+func cursorTargetFromProto(kv *proto.KeyValue) (any, error) {
+	if kv == nil {
 		return nil, fmt.Errorf("continue key is required")
 	}
-	parts, err := keyValuesToAny(kvs)
-	if err != nil {
-		return nil, err
-	}
-	if indexCursor {
-		return parts, nil
-	}
-	if len(parts) == 1 {
-		return parts[0], nil
-	}
-	return parts, nil
+	return keyValueToAny(kv)
 }
 
 func cursorDirectionFromProto(dir proto.CursorDirection) CursorDirection {

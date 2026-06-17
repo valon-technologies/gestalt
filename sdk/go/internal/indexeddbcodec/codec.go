@@ -134,19 +134,6 @@ func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 	}
 }
 
-// TypedValuesFromAny converts a native value slice to wire TypedValues.
-func TypedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
-	out := make([]*proto.TypedValue, len(values))
-	for i, value := range values {
-		pbValue, err := TypedValueFromAny(value)
-		if err != nil {
-			return nil, fmt.Errorf("marshal value %d: %w", i, err)
-		}
-		out[i] = pbValue
-	}
-	return out, nil
-}
-
 // AnyFromTypedValues converts wire TypedValues to native values.
 func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	out := make([]any, len(values))
@@ -261,27 +248,9 @@ func AnyToKeyValue(v any) (*proto.KeyValue, error) {
 	return &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: tv}}, nil
 }
 
-// CursorKeyToProto converts a native cursor key to its wire key values,
-// splitting composite index keys into their parts.
-func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	if indexCursor {
-		if parts, ok := KeyValueArrayParts(key); ok {
-			kvs := make([]*proto.KeyValue, len(parts))
-			for i, part := range parts {
-				kv, err := AnyToKeyValue(part)
-				if err != nil {
-					return nil, err
-				}
-				kvs[i] = kv
-			}
-			return kvs, nil
-		}
-	}
-	kv, err := AnyToKeyValue(key)
-	if err != nil {
-		return nil, err
-	}
-	return []*proto.KeyValue{kv}, nil
+// CursorKeyToProto converts a native cursor key to its wire KeyValue.
+func CursorKeyToProto(key any) (*proto.KeyValue, error) {
+	return AnyToKeyValue(key)
 }
 
 // EncodeKey serializes a native key for storage.
@@ -318,41 +287,6 @@ func DecodeRecord(data []byte) (Record, error) {
 		return nil, err
 	}
 	return RecordFromProto(pbRecord)
-}
-
-// EncodeIndexValues serializes the extracted index key values for storage.
-func EncodeIndexValues(values []any) ([]byte, error) {
-	typedValues, err := TypedValuesFromAny(values)
-	if err != nil {
-		return nil, err
-	}
-	record := &proto.Record{Fields: make(map[string]*proto.TypedValue, len(typedValues))}
-	for i, value := range typedValues {
-		record.Fields[fmt.Sprintf("%d", i)] = gproto.Clone(value).(*proto.TypedValue)
-	}
-	return gproto.MarshalOptions{Deterministic: true}.Marshal(record)
-}
-
-// DecodeIndexValues deserializes stored index key values, keyParts of which
-// form the index key.
-func DecodeIndexValues(data []byte, keyParts int) ([]any, error) {
-	record := &proto.Record{}
-	if err := gproto.Unmarshal(data, record); err != nil {
-		return nil, err
-	}
-	out := make([]any, keyParts)
-	for i := 0; i < keyParts; i++ {
-		value, ok := record.Fields[fmt.Sprintf("%d", i)]
-		if !ok || value == nil {
-			return nil, fmt.Errorf("missing index key part %d", i)
-		}
-		decoded, err := AnyFromTypedValue(value)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = decoded
-	}
-	return out, nil
 }
 
 // KeyValueArrayParts reports a native composite key's parts when the value

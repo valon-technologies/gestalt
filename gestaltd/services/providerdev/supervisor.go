@@ -216,12 +216,6 @@ func (p *managedProc) reverseProxy() (*httputil.ReverseProxy, error) {
 	return p.proxy, nil
 }
 
-func (p *managedProc) currentPort() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.port
-}
-
 func (p *managedProc) start(ctx context.Context, logger *slog.Logger) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()

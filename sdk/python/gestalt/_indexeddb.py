@@ -8,7 +8,7 @@ import queue
 from dataclasses import dataclass, field
 from functools import cmp_to_key
 from numbers import Real
-from typing import Any, Iterator, Protocol, cast
+from typing import Any, Iterator, Protocol, Sequence, cast
 
 import grpc as _grpc
 from google.protobuf import struct_pb2 as _struct_pb2
@@ -60,10 +60,15 @@ class TransactionError(Exception):
 class KeyRange:
     """Lower and upper bounds for a cursor or range query."""
 
-    lower: Any = None
-    upper: Any = None
+    lower: Key | None = None
+    upper: Key | None = None
     lower_open: bool = False
     upper_open: bool = False
+
+
+KeyScalar = int | float | str | bytes | _dt.datetime
+Key = KeyScalar | Sequence["Key"]
+Query = Key | KeyRange | None
 
 
 @dataclass
@@ -130,28 +135,28 @@ class ObjectStoreProtocol(Protocol):
     def clear(self) -> None:
         """Delete every record in the store."""
 
-    def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
-        """Return all records that fall within ``key_range``."""
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+        """Return all records that match ``query``."""
 
-    def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
-        """Return all primary keys that fall within ``key_range``."""
+    def get_all_keys(self, query: Query = None) -> list[str]:
+        """Return all primary keys that match ``query``."""
 
-    def count(self, key_range: KeyRange | None = None) -> int:
+    def count(self, query: Query = None) -> int:
         """Return the number of matching records."""
 
-    def delete_range(self, key_range: KeyRange) -> int:
-        """Delete all records within ``key_range``."""
+    def delete_range(self, query: Query) -> int:
+        """Delete all records that match ``query``."""
 
     def open_cursor(
         self,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a record cursor over the store."""
 
     def open_key_cursor(
         self,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a key-only cursor over the store."""
@@ -163,43 +168,37 @@ class ObjectStoreProtocol(Protocol):
 class IndexProtocol(Protocol):
     """Fakeable IndexedDB secondary-index contract."""
 
-    def get(self, *values: Any) -> dict[str, Any]:
-        """Fetch the first matching record for the indexed values."""
+    def get(self, query: Query = None) -> dict[str, Any]:
+        """Fetch the first matching record for ``query``."""
 
-    def get_key(self, *values: Any) -> str:
-        """Fetch the first matching primary key for the indexed values."""
+    def get_key(self, query: Query = None) -> str:
+        """Fetch the first matching primary key for ``query``."""
 
-    def get_all(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[dict[str, Any]]:
-        """Return all records matching the indexed values and key range."""
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+        """Return all records matching ``query``."""
 
-    def get_all_keys(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[str]:
-        """Return all primary keys matching the indexed values and key range."""
+    def get_all_keys(self, query: Query = None) -> list[str]:
+        """Return all primary keys matching ``query``."""
 
-    def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
-        """Return the number of records matching the indexed values."""
+    def count(self, query: Query = None) -> int:
+        """Return the number of records matching ``query``."""
 
-    def delete(self, *values: Any) -> int:
-        """Delete records matching the indexed values."""
+    def delete(self, query: Query = None) -> int:
+        """Delete records matching ``query``."""
 
-    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
-        """Delete records matching the indexed values and key range."""
+    def delete_range(self, query: Query) -> int:
+        """Delete records matching ``query``."""
 
     def open_cursor(
         self,
-        *values: Any,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a record cursor over the indexed results."""
 
     def open_key_cursor(
         self,
-        *values: Any,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a key-only cursor over the indexed results."""
@@ -239,17 +238,17 @@ class TransactionObjectStoreProtocol(Protocol):
     def clear(self) -> None:
         """Delete every record in the store."""
 
-    def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
-        """Return all records that fall within ``key_range``."""
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+        """Return all records that match ``query``."""
 
-    def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
-        """Return all primary keys that fall within ``key_range``."""
+    def get_all_keys(self, query: Query = None) -> list[str]:
+        """Return all primary keys that match ``query``."""
 
-    def count(self, key_range: KeyRange | None = None) -> int:
+    def count(self, query: Query = None) -> int:
         """Return the number of matching records."""
 
-    def delete_range(self, key_range: KeyRange) -> int:
-        """Delete all records within ``key_range``."""
+    def delete_range(self, query: Query) -> int:
+        """Delete all records that match ``query``."""
 
     def index(self, name: str) -> TransactionIndex:
         """Return a transaction-scoped secondary index."""
@@ -258,37 +257,33 @@ class TransactionObjectStoreProtocol(Protocol):
 class TransactionIndexProtocol(Protocol):
     """Fakeable transaction-scoped secondary-index contract."""
 
-    def get(self, *values: Any) -> dict[str, Any]:
-        """Fetch the first matching record for the indexed values."""
+    def get(self, query: Query = None) -> dict[str, Any]:
+        """Fetch the first matching record for ``query``."""
 
-    def get_key(self, *values: Any) -> str:
-        """Fetch the first matching primary key for the indexed values."""
+    def get_key(self, query: Query = None) -> str:
+        """Fetch the first matching primary key for ``query``."""
 
-    def get_all(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[dict[str, Any]]:
-        """Return all records matching the indexed values and key range."""
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+        """Return all records matching ``query``."""
 
-    def get_all_keys(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[str]:
-        """Return all primary keys matching the indexed values and key range."""
+    def get_all_keys(self, query: Query = None) -> list[str]:
+        """Return all primary keys matching ``query``."""
 
-    def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
-        """Return the number of records matching the indexed values."""
+    def count(self, query: Query = None) -> int:
+        """Return the number of records matching ``query``."""
 
-    def delete(self, *values: Any) -> int:
-        """Delete records matching the indexed values."""
+    def delete(self, query: Query = None) -> int:
+        """Delete records matching ``query``."""
 
-    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
-        """Delete records matching the indexed values and key range."""
+    def delete_range(self, query: Query) -> int:
+        """Delete records matching ``query``."""
 
 
 class CursorProtocol(Protocol):
     """Fakeable IndexedDB cursor contract."""
 
     @property
-    def key(self) -> Any:
+    def key(self) -> Key | None:
         """Current key for the cursor entry."""
 
     @property
@@ -302,7 +297,7 @@ class CursorProtocol(Protocol):
     def continue_(self) -> bool:
         """Advance to the next matching cursor entry."""
 
-    def continue_to_key(self, key: Any) -> bool:
+    def continue_to_key(self, key: Key) -> bool:
         """Advance the cursor to ``key`` or the next greater entry."""
 
     def advance(self, count: int) -> bool:
@@ -328,11 +323,10 @@ class IndexedDBOpenCursorRequest:
     """
 
     store: str = ""
-    key_range: KeyRange | None = None
+    query: Query = None
     direction: int = CURSOR_NEXT
     keys_only: bool = False
     index: str = ""
-    values: tuple[Any, ...] = ()
 
 
 @dataclass
@@ -376,44 +370,41 @@ class IndexedDBCursorSnapshot:
     def load(
         self,
         entries: list[IndexedDBCursorSnapshotEntry],
-        key_range: KeyRange | None = None,
+        query: Query = None,
     ) -> None:
-        """Sort and range-filter entries into this snapshot."""
+        """Sort and query-filter entries into this snapshot."""
 
         ordered = sorted(
             entries,
             key=cmp_to_key(self._compare_entries),
             reverse=self.reverse,
         )
-        self.entries = self.apply_range(ordered, key_range)
+        self.entries = self.apply_query(ordered, query)
         self.pos = -1
 
     def apply_range(
         self,
         entries: list[IndexedDBCursorSnapshotEntry],
-        key_range: KeyRange | None = None,
+        query: Query = None,
     ) -> list[IndexedDBCursorSnapshotEntry]:
-        """Return entries that satisfy ``key_range`` without mutating state."""
+        """Return entries that satisfy ``query`` without mutating state."""
 
-        if key_range is None:
+        return self.apply_query(entries, query)
+
+    def apply_query(
+        self,
+        entries: list[IndexedDBCursorSnapshotEntry],
+        query: Query | None = None,
+    ) -> list[IndexedDBCursorSnapshotEntry]:
+        """Return entries that satisfy ``query`` without mutating state."""
+
+        query = _coerce_query(query)
+        if query is None:
             return entries
-        lower, upper = indexeddb_range_bounds(key_range, self.index_cursor)
         filtered: list[IndexedDBCursorSnapshotEntry] = []
         for entry in entries:
-            key = _normalize_indexeddb_bound(entry.key, self.index_cursor)
-            if lower is not None:
-                cmp = compare_indexeddb_values(key, lower)
-                if key_range.lower_open and cmp <= 0:
-                    continue
-                if not key_range.lower_open and cmp < 0:
-                    continue
-            if upper is not None:
-                cmp = compare_indexeddb_values(key, upper)
-                if key_range.upper_open and cmp >= 0:
-                    continue
-                if not key_range.upper_open and cmp > 0:
-                    continue
-            filtered.append(entry)
+            if match_query(entry.key, query):
+                filtered.append(entry)
         return filtered
 
     def next(self) -> IndexedDBCursorSnapshotEntry | None:
@@ -423,7 +414,7 @@ class IndexedDBCursorSnapshot:
             prev = self.entries[self.pos].key
             self.pos += 1
             while self.pos < len(self.entries):
-                if compare_indexeddb_values(self.entries[self.pos].key, prev) != 0:
+                if compare_keys(self.entries[self.pos].key, prev) != 0:
                     return self.current()
                 self.pos += 1
             return None
@@ -433,7 +424,7 @@ class IndexedDBCursorSnapshot:
             return None
         return self.current()
 
-    def continue_to_key(self, target: Any) -> IndexedDBCursorSnapshotEntry | None:
+    def continue_to_key(self, target: Key) -> IndexedDBCursorSnapshotEntry | None:
         """Advance to ``target`` or the next entry past it for this direction."""
 
         prev = None
@@ -446,11 +437,11 @@ class IndexedDBCursorSnapshot:
                 prev is not None
                 and self.unique
                 and self.index_cursor
-                and compare_indexeddb_values(cur, prev) == 0
+                and compare_keys(cur, prev) == 0
             ):
                 self.pos += 1
                 continue
-            cmp = compare_indexeddb_values(cur, target)
+            cmp = compare_keys(cur, target)
             if self.reverse:
                 if cmp <= 0:
                     return self.current()
@@ -483,9 +474,9 @@ class IndexedDBCursorSnapshot:
         left: IndexedDBCursorSnapshotEntry,
         right: IndexedDBCursorSnapshotEntry,
     ) -> int:
-        cmp = compare_indexeddb_values(left.key, right.key)
+        cmp = compare_keys(left.key, right.key)
         if cmp == 0:
-            cmp = compare_indexeddb_values(
+            cmp = compare_keys(
                 left.primary_key_value, right.primary_key_value
             )
         return cmp
@@ -503,28 +494,45 @@ def indexeddb_range_bounds(
     key_range: KeyRange | None,
     index_cursor: bool,
 ) -> tuple[Any, Any]:
-    """Normalize object-store or index cursor range bounds.
+    """Return raw lower/upper bounds from a KeyRange (legacy helper)."""
 
-    Scalar index bounds are compared as one-part composite keys so providers can
-    share the same comparison path for scalar and compound indexes.
-    """
-
+    del index_cursor
     if key_range is None:
         return None, None
-    lower = (
-        _normalize_indexeddb_bound(key_range.lower, index_cursor)
-        if key_range.lower is not None
-        else None
-    )
-    upper = (
-        _normalize_indexeddb_bound(key_range.upper, index_cursor)
-        if key_range.upper is not None
-        else None
-    )
-    return lower, upper
+    return key_range.lower, key_range.upper
 
 
-def compare_indexeddb_values(left: Any, right: Any) -> int:
+def key_in_range(key: Key, kr: KeyRange) -> bool:
+    """Return whether ``key`` satisfies a KeyRange."""
+
+    if kr.lower is not None:
+        cmp = compare_keys(key, kr.lower)
+        if kr.lower_open:
+            if cmp <= 0:
+                return False
+        elif cmp < 0:
+            return False
+    if kr.upper is not None:
+        cmp = compare_keys(key, kr.upper)
+        if kr.upper_open:
+            if cmp >= 0:
+                return False
+        elif cmp > 0:
+            return False
+    return True
+
+
+def match_query(key: Key, query: Query) -> bool:
+    """Return whether ``key`` satisfies a query (key, KeyRange, or all)."""
+
+    if query is None:
+        return True
+    if isinstance(query, KeyRange):
+        return key_in_range(key, query)
+    return compare_keys(key, query) == 0
+
+
+def compare_keys(left: Key, right: Key) -> int:
     """Compare native IndexedDB key values."""
 
     left_parts = _sequence_parts(left)
@@ -533,7 +541,7 @@ def compare_indexeddb_values(left: Any, right: Any) -> int:
         for i, left_part in enumerate(left_parts):
             if i >= len(right_parts):
                 return 1
-            cmp = compare_indexeddb_values(left_part, right_parts[i])
+            cmp = compare_keys(left_part, right_parts[i])
             if cmp != 0:
                 return cmp
         if len(left_parts) < len(right_parts):
@@ -561,21 +569,54 @@ def compare_indexeddb_values(left: Any, right: Any) -> int:
     return _cmp(str(left), str(right))
 
 
-def _normalize_indexeddb_bound(value: Any, index_cursor: bool) -> Any:
-    if not index_cursor:
-        return value
-    parts = _sequence_parts(value)
-    if parts is not None:
-        return parts
-    return [value]
+compare_indexeddb_values = compare_keys
 
 
-def _sequence_parts(value: Any) -> list[Any] | None:
-    if isinstance(value, (bytes, bytearray, memoryview, str)):
-        return None
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    return None
+def only(v: Key) -> KeyRange:
+    """Return a range containing only ``v``."""
+
+    _python_to_key_value(v)
+    return KeyRange(lower=v, upper=v)
+
+
+def bound(
+    lower: Key | None,
+    upper: Key | None,
+    lower_open: bool = False,
+    upper_open: bool = False,
+) -> KeyRange:
+    """Return a range between ``lower`` and ``upper``."""
+
+    if lower is not None:
+        _python_to_key_value(lower)
+    if upper is not None:
+        _python_to_key_value(upper)
+    return KeyRange(
+        lower=lower,
+        upper=upper,
+        lower_open=lower_open,
+        upper_open=upper_open,
+    )
+
+
+def lower_bound(v: Key, open: bool = False) -> KeyRange:
+    """Return a range with only a lower bound."""
+
+    _python_to_key_value(v)
+    return KeyRange(lower=v, lower_open=open)
+
+
+def upper_bound(v: Key, open: bool = False) -> KeyRange:
+    """Return a range with only an upper bound."""
+
+    _python_to_key_value(v)
+    return KeyRange(upper=v, upper_open=open)
+
+
+def _key_value_to_any(kv: Any) -> Any:
+    if kv.HasField("array"):
+        return [_key_value_to_any(elem) for elem in kv.array.elements]
+    return _typed_value_to_python(kv.scalar)
 
 
 def _cmp(left: Any, right: Any) -> int:
@@ -584,6 +625,14 @@ def _cmp(left: Any, right: Any) -> int:
     if left > right:
         return 1
     return 0
+
+
+def _sequence_parts(value: Any) -> list[Any] | None:
+    if isinstance(value, (bytes, bytearray, memoryview, str)):
+        return None
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return None
 
 
 class IndexedDB:
@@ -704,62 +753,62 @@ class ObjectStore:
 
         _grpc_call(self._stub.Clear, pb.ObjectStoreNameRequest(store=self._store))
 
-    def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
-        """Return all records that fall within ``key_range``."""
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+        """Return all records that match ``query``."""
 
         resp = _grpc_call(
             self._stub.GetAll,
             pb.ObjectStoreRangeRequest(
-                store=self._store, range=_kr_to_proto(key_range)
+                store=self._store, query=_query_to_proto(query)
             ),
         )
         return [_record_to_dict(r) for r in resp.records]
 
-    def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
-        """Return all primary keys that fall within ``key_range``."""
+    def get_all_keys(self, query: Query = None) -> list[str]:
+        """Return all primary keys that match ``query``."""
 
         resp = _grpc_call(
             self._stub.GetAllKeys,
             pb.ObjectStoreRangeRequest(
-                store=self._store, range=_kr_to_proto(key_range)
+                store=self._store, query=_query_to_proto(query)
             ),
         )
         return list(resp.keys)
 
-    def count(self, key_range: KeyRange | None = None) -> int:
+    def count(self, query: Query = None) -> int:
         """Return the number of matching records."""
 
         resp = _grpc_call(
             self._stub.Count,
             pb.ObjectStoreRangeRequest(
-                store=self._store, range=_kr_to_proto(key_range)
+                store=self._store, query=_query_to_proto(query)
             ),
         )
         return resp.count
 
-    def delete_range(self, key_range: KeyRange) -> int:
-        """Delete all records within ``key_range``."""
+    def delete_range(self, query: Query) -> int:
+        """Delete all records that match ``query``."""
 
         resp = _grpc_call(
             self._stub.DeleteRange,
             pb.ObjectStoreRangeRequest(
-                store=self._store, range=_kr_to_proto(key_range)
+                store=self._store, query=_query_to_proto(query)
             ),
         )
         return resp.deleted
 
     def open_cursor(
         self,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a record cursor over the store."""
 
-        return Cursor(self._stub, self._store, key_range=key_range, direction=direction)
+        return Cursor(self._stub, self._store, query=query, direction=direction)
 
     def open_key_cursor(
         self,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a key-only cursor over the store."""
@@ -767,7 +816,7 @@ class ObjectStore:
         return Cursor(
             self._stub,
             self._store,
-            key_range=key_range,
+            query=query,
             direction=direction,
             keys_only=True,
         )
@@ -786,56 +835,51 @@ class Index:
         self._store = store
         self._index = index
 
-    def get(self, *values: Any) -> dict[str, Any]:
-        """Fetch the first matching record for the indexed values."""
+    def get(self, query: Query = None) -> dict[str, Any]:
+        """Fetch the first matching record for ``query``."""
 
-        resp = _grpc_call(self._stub.IndexGet, self._req(values))
+        resp = _grpc_call(self._stub.IndexGet, self._req(query))
         return _record_to_dict(resp.record)
 
-    def get_key(self, *values: Any) -> str:
-        """Fetch the first matching primary key for the indexed values."""
+    def get_key(self, query: Query = None) -> str:
+        """Fetch the first matching primary key for ``query``."""
 
-        resp = _grpc_call(self._stub.IndexGetKey, self._req(values))
+        resp = _grpc_call(self._stub.IndexGetKey, self._req(query))
         return resp.key
 
-    def get_all(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[dict[str, Any]]:
-        """Return all records matching the indexed values and key range."""
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+        """Return all records matching ``query``."""
 
-        resp = _grpc_call(self._stub.IndexGetAll, self._req(values, key_range))
+        resp = _grpc_call(self._stub.IndexGetAll, self._req(query))
         return [_record_to_dict(r) for r in resp.records]
 
-    def get_all_keys(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[str]:
-        """Return all primary keys matching the indexed values and key range."""
+    def get_all_keys(self, query: Query = None) -> list[str]:
+        """Return all primary keys matching ``query``."""
 
-        resp = _grpc_call(self._stub.IndexGetAllKeys, self._req(values, key_range))
+        resp = _grpc_call(self._stub.IndexGetAllKeys, self._req(query))
         return list(resp.keys)
 
-    def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
-        """Return the number of records matching the indexed values."""
+    def count(self, query: Query = None) -> int:
+        """Return the number of records matching ``query``."""
 
-        resp = _grpc_call(self._stub.IndexCount, self._req(values, key_range))
+        resp = _grpc_call(self._stub.IndexCount, self._req(query))
         return resp.count
 
-    def delete(self, *values: Any) -> int:
-        """Delete records matching the indexed values."""
+    def delete(self, query: Query = None) -> int:
+        """Delete records matching ``query``."""
 
-        resp = _grpc_call(self._stub.IndexDelete, self._req(values))
+        resp = _grpc_call(self._stub.IndexDelete, self._req(query))
         return resp.deleted
 
-    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
-        """Delete records matching the indexed values and key range."""
+    def delete_range(self, query: Query) -> int:
+        """Delete records matching ``query``."""
 
-        resp = _grpc_call(self._stub.IndexDelete, self._req(values, key_range))
+        resp = _grpc_call(self._stub.IndexDelete, self._req(query))
         return resp.deleted
 
     def open_cursor(
         self,
-        *values: Any,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a record cursor over the indexed results."""
@@ -843,16 +887,14 @@ class Index:
         return Cursor(
             self._stub,
             self._store,
-            key_range=key_range,
+            query=query,
             direction=direction,
             index=self._index,
-            values=values,
         )
 
     def open_key_cursor(
         self,
-        *values: Any,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
         """Open a key-only cursor over the indexed results."""
@@ -860,19 +902,17 @@ class Index:
         return Cursor(
             self._stub,
             self._store,
-            key_range=key_range,
+            query=query,
             direction=direction,
             keys_only=True,
             index=self._index,
-            values=values,
         )
 
-    def _req(self, values: tuple[Any, ...], key_range: KeyRange | None = None) -> Any:
+    def _req(self, query: Query = None) -> Any:
         return pb.IndexQueryRequest(
             store=self._store,
             index=self._index,
-            values=[_to_typed_value(v) for v in values],
-            range=_kr_to_proto(key_range),
+            query=_query_to_proto(query),
         )
 
 
@@ -1059,41 +1099,41 @@ class TransactionObjectStore:
             pb.TransactionOperation(clear=pb.ObjectStoreNameRequest(store=self._store))
         )
 
-    def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
         resp = self._tx._send_operation(
             pb.TransactionOperation(
                 get_all=pb.ObjectStoreRangeRequest(
-                    store=self._store, range=_kr_to_proto(key_range)
+                    store=self._store, query=_query_to_proto(query)
                 )
             )
         )
         return [_record_to_dict(r) for r in resp.records.records]
 
-    def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
+    def get_all_keys(self, query: Query = None) -> list[str]:
         resp = self._tx._send_operation(
             pb.TransactionOperation(
                 get_all_keys=pb.ObjectStoreRangeRequest(
-                    store=self._store, range=_kr_to_proto(key_range)
+                    store=self._store, query=_query_to_proto(query)
                 )
             )
         )
         return list(resp.keys.keys)
 
-    def count(self, key_range: KeyRange | None = None) -> int:
+    def count(self, query: Query = None) -> int:
         resp = self._tx._send_operation(
             pb.TransactionOperation(
                 count=pb.ObjectStoreRangeRequest(
-                    store=self._store, range=_kr_to_proto(key_range)
+                    store=self._store, query=_query_to_proto(query)
                 )
             )
         )
         return int(resp.count.count)
 
-    def delete_range(self, key_range: KeyRange) -> int:
+    def delete_range(self, query: Query) -> int:
         resp = self._tx._send_operation(
             pb.TransactionOperation(
                 delete_range=pb.ObjectStoreRangeRequest(
-                    store=self._store, range=_kr_to_proto(key_range)
+                    store=self._store, query=_query_to_proto(query)
                 )
             )
         )
@@ -1111,58 +1151,53 @@ class TransactionIndex:
         self._store = store
         self._index = index
 
-    def get(self, *values: Any) -> dict[str, Any]:
+    def get(self, query: Query = None) -> dict[str, Any]:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_get=self._req(values))
+            pb.TransactionOperation(index_get=self._req(query))
         )
         return _record_to_dict(resp.record.record)
 
-    def get_key(self, *values: Any) -> str:
+    def get_key(self, query: Query = None) -> str:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_get_key=self._req(values))
+            pb.TransactionOperation(index_get_key=self._req(query))
         )
         return resp.key.key
 
-    def get_all(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_get_all=self._req(values, key_range))
+            pb.TransactionOperation(index_get_all=self._req(query))
         )
         return [_record_to_dict(r) for r in resp.records.records]
 
-    def get_all_keys(
-        self, *values: Any, key_range: KeyRange | None = None
-    ) -> list[str]:
+    def get_all_keys(self, query: Query = None) -> list[str]:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_get_all_keys=self._req(values, key_range))
+            pb.TransactionOperation(index_get_all_keys=self._req(query))
         )
         return list(resp.keys.keys)
 
-    def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
+    def count(self, query: Query = None) -> int:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_count=self._req(values, key_range))
+            pb.TransactionOperation(index_count=self._req(query))
         )
         return int(resp.count.count)
 
-    def delete(self, *values: Any) -> int:
+    def delete(self, query: Query = None) -> int:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_delete=self._req(values))
+            pb.TransactionOperation(index_delete=self._req(query))
         )
         return int(resp.delete.deleted)
 
-    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
+    def delete_range(self, query: Query) -> int:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_delete=self._req(values, key_range))
+            pb.TransactionOperation(index_delete=self._req(query))
         )
         return int(resp.delete.deleted)
 
-    def _req(self, values: tuple[Any, ...], key_range: KeyRange | None = None) -> Any:
+    def _req(self, query: Query = None) -> Any:
         return pb.IndexQueryRequest(
             store=self._store,
             index=self._index,
-            values=[_to_typed_value(v) for v in values],
-            range=_kr_to_proto(key_range),
+            query=_query_to_proto(query),
         )
 
 
@@ -1194,17 +1229,16 @@ class Cursor:
         stub: Any,
         store: str,
         *,
-        key_range: KeyRange | None = None,
+        query: Query = None,
         direction: int = CURSOR_NEXT,
         keys_only: bool = False,
         index: str = "",
-        values: tuple[Any, ...] = (),
     ) -> None:
         self._keys_only = keys_only
         self._closed = False
         self._exhausted = False
         self._index_cursor = bool(index)
-        self._key: Any = None
+        self._key: Key | None = None
         self._primary_key: str | None = None
         self._record: dict[str, Any] | None = None
 
@@ -1212,11 +1246,10 @@ class Cursor:
 
         open_req = pb.OpenCursorRequest(
             store=store,
-            range=_kr_to_proto(key_range),
+            query=_query_to_proto(query),
             direction=direction,
             keys_only=keys_only,
             index=index,
-            values=[_to_typed_value(v) for v in values],
         )
         self._request_iter.send(pb.CursorClientMessage(open=open_req))
 
@@ -1266,11 +1299,8 @@ class Cursor:
             return False
 
         entry = resp.entry
-        keys = list(entry.key)
-        if not self._index_cursor and len(keys) == 1:
-            self._key = _key_value_to_python(keys[0])
-        elif len(keys) > 0:
-            self._key = [_key_value_to_python(k) for k in keys]
+        if entry.HasField("key"):
+            self._key = _key_value_to_python(entry.key)
         else:
             self._key = None
         self._primary_key = entry.primary_key
@@ -1286,14 +1316,14 @@ class Cursor:
         self._send_command(next=True)
         return self._advance_to_next()
 
-    def continue_to_key(self, key: Any) -> bool:
+    def continue_to_key(self, key: Key) -> bool:
         """Advance the cursor to ``key`` or the next greater entry."""
 
         if self._closed or self._exhausted:
             return False
         self._send_command(
             continue_to_key=pb.CursorKeyTarget(
-                key=_cursor_key_to_proto(key, self._index_cursor),
+                key=_cursor_key_to_proto(key),
             )
         )
         return self._advance_to_next()
@@ -1307,7 +1337,7 @@ class Cursor:
         return self._advance_to_next()
 
     @property
-    def key(self) -> Any:
+    def key(self) -> Key | None:
         """Current key for the cursor entry."""
 
         return self._key
@@ -1329,11 +1359,8 @@ class Cursor:
         return self._record
 
     def _refresh_from_entry(self, entry: Any) -> None:
-        keys = list(entry.key)
-        if not self._index_cursor and len(keys) == 1:
-            self._key = _key_value_to_python(keys[0])
-        elif len(keys) > 0:
-            self._key = [_key_value_to_python(k) for k in keys]
+        if entry.HasField("key"):
+            self._key = _key_value_to_python(entry.key)
         else:
             self._key = None
         self._primary_key = entry.primary_key
@@ -1577,18 +1604,49 @@ def _python_to_key_value(v: Any) -> Any:
     return pb.KeyValue(scalar=_to_typed_value(v))
 
 
-def _cursor_key_to_proto(key: Any, index_cursor: bool) -> list[Any]:
-    if index_cursor and isinstance(key, (list, tuple)):
-        return [_python_to_key_value(part) for part in key]
-    return [_python_to_key_value(key)]
+def _cursor_key_to_proto(key: Any) -> Any:
+    return _python_to_key_value(key)
+
+
+def _query_to_proto(query: Query) -> Any:
+    if query is None:
+        return None
+    if isinstance(query, KeyRange):
+        return pb.IndexedDBQuery(range=_kr_to_proto(query))
+    return pb.IndexedDBQuery(key=_python_to_key_value(query))
+
+
+def _query_from_proto(q: pb.IndexedDBQuery) -> Query:
+    if q.HasField("key"):
+        return _key_value_to_any(q.key)
+    if q.HasField("range"):
+        return _kr_from_proto(q.range)
+    return None
+
+
+def _kr_from_proto(kr: pb.KeyRange) -> KeyRange:
+    return KeyRange(
+        lower=_key_value_to_any(kr.lower) if kr.HasField("lower") else None,
+        upper=_key_value_to_any(kr.upper) if kr.HasField("upper") else None,
+        lower_open=kr.lower_open,
+        upper_open=kr.upper_open,
+    )
+
+
+def _coerce_query(query: Query | pb.IndexedDBQuery | None) -> Query:
+    if query is None:
+        return None
+    if isinstance(query, pb.IndexedDBQuery):
+        return _query_from_proto(query)
+    return query
 
 
 def _kr_to_proto(kr: KeyRange | None) -> Any:
     if kr is None:
         return None
-    return pb.KeyRange(
-        lower=_to_typed_value(kr.lower) if kr.lower is not None else None,
-        upper=_to_typed_value(kr.upper) if kr.upper is not None else None,
-        lower_open=kr.lower_open,
-        upper_open=kr.upper_open,
-    )
+    proto_kr = pb.KeyRange(lower_open=kr.lower_open, upper_open=kr.upper_open)
+    if kr.lower is not None:
+        proto_kr.lower.CopyFrom(_python_to_key_value(kr.lower))
+    if kr.upper is not None:
+        proto_kr.upper.CopyFrom(_python_to_key_value(kr.upper))
+    return proto_kr

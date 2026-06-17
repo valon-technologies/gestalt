@@ -174,10 +174,9 @@ class CursorCommand:
 class CursorEntry:
     """CursorEntry is one streamed cursor row."""
 
-    #: Key components per index KeyPath field. Each component is a KeyValue
-    #: that can be a scalar or a nested array, preserving the full W3C IndexedDB
-    #: key structure including array-valued keys.
-    key: list[KeyValue] = field(default_factory=list)
+    #: One full IndexedDB key (scalar or array).
+    #: https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key
+    key: KeyValue | None = None
     primary_key: str = ""
     record: Record | None = None
 
@@ -186,7 +185,7 @@ class CursorEntry:
 class CursorKeyTarget:
     """CursorKeyTarget addresses a specific cursor position."""
 
-    key: list[KeyValue] = field(default_factory=list)
+    key: KeyValue | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,14 +224,12 @@ class DeleteResponse:
 
 @dataclass(frozen=True, slots=True)
 class IndexQueryRequest:
-    """IndexQueryRequest addresses a secondary index plus optional key values and
-    range constraints.
-    """
+    """IndexQueryRequest addresses a secondary index plus an optional query."""
 
     store: str = ""
     index: str = ""
-    values: list[TypedValue] = field(default_factory=list)
-    range: KeyRange | None = None
+    query: IndexedDBQuery | None = None
+    count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,11 +242,38 @@ class IndexSchema:
 
 
 @dataclass(frozen=True, slots=True)
-class KeyRange:
-    """KeyRange constrains a query or cursor by lower and upper bounds."""
+class IndexedDBQueryKey:
+    value: KeyValue
 
-    lower: TypedValue | None = None
-    upper: TypedValue | None = None
+
+@dataclass(frozen=True, slots=True)
+class IndexedDBQueryRange:
+    value: KeyRange
+
+
+IndexedDBQueryQuery = IndexedDBQueryKey | IndexedDBQueryRange | None
+
+
+@dataclass(frozen=True, slots=True)
+class IndexedDBQuery:
+    """IndexedDBQuery is a single IndexedDB query argument: an exact key or a key
+    range. An absent IndexedDBQuery (or an unset oneof) means "all records",
+    matching a W3C query argument of undefined/null.
+    """
+
+    query: IndexedDBQueryQuery = None
+
+
+@dataclass(frozen=True, slots=True)
+class KeyRange:
+    """KeyRange constrains a query or cursor by lower and upper bounds. Bounds are
+    full IndexedDB keys (scalar or array), matching W3C IDBKeyRange. An absent
+    lower/upper means unbounded on that side.
+    https://www.w3.org/TR/IndexedDB/#keyrange
+    """
+
+    lower: KeyValue | None = None
+    upper: KeyValue | None = None
     lower_open: bool = False
     upper_open: bool = False
 
@@ -276,8 +300,9 @@ KeyValueKind = KeyValueKindScalar | KeyValueKindArray | None
 
 @dataclass(frozen=True, slots=True)
 class KeyValue:
-    """KeyValue represents a single IndexedDB key, which can be a scalar
-    (string, number, date, binary) or a nested array of keys per the W3C spec.
+    """KeyValue represents one IndexedDB key: a scalar (string, number, date,
+    binary) or a nested array of keys, per the W3C spec.
+    https://www.w3.org/TR/IndexedDB/#key-construct
     """
 
     kind: KeyValueKind = None
@@ -304,10 +329,11 @@ class ObjectStoreNameRequest:
 
 @dataclass(frozen=True, slots=True)
 class ObjectStoreRangeRequest:
-    """ObjectStoreRangeRequest addresses an object store plus an optional key range."""
+    """ObjectStoreRangeRequest addresses an object store plus an optional query."""
 
     store: str = ""
-    range: KeyRange | None = None
+    query: IndexedDBQuery | None = None
+    count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,14 +359,11 @@ class OpenCursorRequest:
     """OpenCursorRequest starts a streaming cursor over an object store or index."""
 
     store: str = ""
-    range: KeyRange | None = None
+    index: str = ""
+    query: IndexedDBQuery | None = None
     direction: CursorDirection = 0
     #: keys_only suppresses row payloads and returns only keys.
     keys_only: bool = False
-    #: index selects a secondary index when non-empty.
-    index: str = ""
-    #: values selects a compound index key prefix when index is set.
-    values: list[TypedValue] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -905,7 +928,7 @@ class IndexedDB:
     def clear(
         self, request: ObjectStoreNameRequest | None = None, *, store: str | None = None
     ) -> None:
-        """Bulk operations (with optional key range)"""
+        """Bulk operations (with optional query)"""
         if request is None:
             request = ObjectStoreNameRequest(store=store or "")
         elif store is not None:
@@ -921,7 +944,11 @@ class IndexedDB:
 
     @overload
     def get_all(
-        self, *, store: str = ..., range: KeyRange | None = ...
+        self,
+        *,
+        store: str = ...,
+        query: IndexedDBQuery | None = ...,
+        count: int | None = ...,
     ) -> RecordsResponse: ...
 
     def get_all(
@@ -929,11 +956,14 @@ class IndexedDB:
         request: ObjectStoreRangeRequest | None = None,
         *,
         store: str | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
+        count: int | None = None,
     ) -> RecordsResponse:
         if request is None:
-            request = ObjectStoreRangeRequest(store=store or "", range=range)
-        elif store is not None or range is not None:
+            request = ObjectStoreRangeRequest(
+                store=store or "", query=query, count=count
+            )
+        elif store is not None or query is not None or count is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.GetAll(
@@ -948,7 +978,11 @@ class IndexedDB:
 
     @overload
     def get_all_keys(
-        self, *, store: str = ..., range: KeyRange | None = ...
+        self,
+        *,
+        store: str = ...,
+        query: IndexedDBQuery | None = ...,
+        count: int | None = ...,
     ) -> KeysResponse: ...
 
     def get_all_keys(
@@ -956,11 +990,14 @@ class IndexedDB:
         request: ObjectStoreRangeRequest | None = None,
         *,
         store: str | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
+        count: int | None = None,
     ) -> KeysResponse:
         if request is None:
-            request = ObjectStoreRangeRequest(store=store or "", range=range)
-        elif store is not None or range is not None:
+            request = ObjectStoreRangeRequest(
+                store=store or "", query=query, count=count
+            )
+        elif store is not None or query is not None or count is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.GetAllKeys(
@@ -971,24 +1008,33 @@ class IndexedDB:
         return _codec.from_wire_keys_response(response)
 
     @overload
-    def count(self, request: ObjectStoreRangeRequest) -> CountResponse: ...
+    def count(self, request: ObjectStoreRangeRequest) -> int: ...
 
     @overload
-    def count(
-        self, *, store: str = ..., range: KeyRange | None = ...
-    ) -> CountResponse: ...
+    def count(self, *, store: str = ..., query: IndexedDBQuery | None = ...) -> int: ...
 
     def count(
         self,
         request: ObjectStoreRangeRequest | None = None,
         *,
         store: str | None = None,
-        range: KeyRange | None = None,
-    ) -> CountResponse:
+        query: IndexedDBQuery | None = None,
+    ) -> int:
         if request is None:
-            request = ObjectStoreRangeRequest(store=store or "", range=range)
-        elif store is not None or range is not None:
+            request = ObjectStoreRangeRequest(store=store or "", query=query)
+        elif store is not None or query is not None:
             raise ValueError("pass either request or keyword arguments, not both")
+        response = _codec.from_wire_count_response(
+            _support.call_unary(
+                lambda: self._stub.Count(
+                    _codec.to_wire_object_store_range_request(request),
+                    timeout=self._timeout,
+                )
+            )
+        )
+        return response.count
+
+    def count_raw(self, request: ObjectStoreRangeRequest) -> CountResponse:
         response = _support.call_unary(
             lambda: self._stub.Count(
                 _codec.to_wire_object_store_range_request(request),
@@ -1002,7 +1048,7 @@ class IndexedDB:
 
     @overload
     def delete_range(
-        self, *, store: str = ..., range: KeyRange | None = ...
+        self, *, store: str = ..., query: IndexedDBQuery | None = ...
     ) -> DeleteResponse: ...
 
     def delete_range(
@@ -1010,11 +1056,11 @@ class IndexedDB:
         request: ObjectStoreRangeRequest | None = None,
         *,
         store: str | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
     ) -> DeleteResponse:
         if request is None:
-            request = ObjectStoreRangeRequest(store=store or "", range=range)
-        elif store is not None or range is not None:
+            request = ObjectStoreRangeRequest(store=store or "", query=query)
+        elif store is not None or query is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.DeleteRange(
@@ -1029,12 +1075,7 @@ class IndexedDB:
 
     @overload
     def index_get(
-        self,
-        *,
-        store: str = ...,
-        index: str = ...,
-        values: list[TypedValue] = ...,
-        range: KeyRange | None = ...,
+        self, *, store: str = ..., index: str = ..., query: IndexedDBQuery | None = ...
     ) -> RecordResponse: ...
 
     def index_get(
@@ -1043,23 +1084,14 @@ class IndexedDB:
         *,
         store: str | None = None,
         index: str | None = None,
-        values: list[TypedValue] | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
     ) -> RecordResponse:
         """Index queries"""
         if request is None:
             request = IndexQueryRequest(
-                store=store or "",
-                index=index or "",
-                values=values if values is not None else [],
-                range=range,
+                store=store or "", index=index or "", query=query
             )
-        elif (
-            store is not None
-            or index is not None
-            or values is not None
-            or range is not None
-        ):
+        elif store is not None or index is not None or query is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.IndexGet(
@@ -1073,12 +1105,7 @@ class IndexedDB:
 
     @overload
     def index_get_key(
-        self,
-        *,
-        store: str = ...,
-        index: str = ...,
-        values: list[TypedValue] = ...,
-        range: KeyRange | None = ...,
+        self, *, store: str = ..., index: str = ..., query: IndexedDBQuery | None = ...
     ) -> KeyResponse: ...
 
     def index_get_key(
@@ -1087,22 +1114,13 @@ class IndexedDB:
         *,
         store: str | None = None,
         index: str | None = None,
-        values: list[TypedValue] | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
     ) -> KeyResponse:
         if request is None:
             request = IndexQueryRequest(
-                store=store or "",
-                index=index or "",
-                values=values if values is not None else [],
-                range=range,
+                store=store or "", index=index or "", query=query
             )
-        elif (
-            store is not None
-            or index is not None
-            or values is not None
-            or range is not None
-        ):
+        elif store is not None or index is not None or query is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.IndexGetKey(
@@ -1120,8 +1138,8 @@ class IndexedDB:
         *,
         store: str = ...,
         index: str = ...,
-        values: list[TypedValue] = ...,
-        range: KeyRange | None = ...,
+        query: IndexedDBQuery | None = ...,
+        count: int | None = ...,
     ) -> RecordsResponse: ...
 
     def index_get_all(
@@ -1130,21 +1148,18 @@ class IndexedDB:
         *,
         store: str | None = None,
         index: str | None = None,
-        values: list[TypedValue] | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
+        count: int | None = None,
     ) -> RecordsResponse:
         if request is None:
             request = IndexQueryRequest(
-                store=store or "",
-                index=index or "",
-                values=values if values is not None else [],
-                range=range,
+                store=store or "", index=index or "", query=query, count=count
             )
         elif (
             store is not None
             or index is not None
-            or values is not None
-            or range is not None
+            or query is not None
+            or count is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
@@ -1163,8 +1178,8 @@ class IndexedDB:
         *,
         store: str = ...,
         index: str = ...,
-        values: list[TypedValue] = ...,
-        range: KeyRange | None = ...,
+        query: IndexedDBQuery | None = ...,
+        count: int | None = ...,
     ) -> KeysResponse: ...
 
     def index_get_all_keys(
@@ -1173,21 +1188,18 @@ class IndexedDB:
         *,
         store: str | None = None,
         index: str | None = None,
-        values: list[TypedValue] | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
+        count: int | None = None,
     ) -> KeysResponse:
         if request is None:
             request = IndexQueryRequest(
-                store=store or "",
-                index=index or "",
-                values=values if values is not None else [],
-                range=range,
+                store=store or "", index=index or "", query=query, count=count
             )
         elif (
             store is not None
             or index is not None
-            or values is not None
-            or range is not None
+            or query is not None
+            or count is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
@@ -1198,17 +1210,12 @@ class IndexedDB:
         return _codec.from_wire_keys_response(response)
 
     @overload
-    def index_count(self, request: IndexQueryRequest) -> CountResponse: ...
+    def index_count(self, request: IndexQueryRequest) -> int: ...
 
     @overload
     def index_count(
-        self,
-        *,
-        store: str = ...,
-        index: str = ...,
-        values: list[TypedValue] = ...,
-        range: KeyRange | None = ...,
-    ) -> CountResponse: ...
+        self, *, store: str = ..., index: str = ..., query: IndexedDBQuery | None = ...
+    ) -> int: ...
 
     def index_count(
         self,
@@ -1216,23 +1223,24 @@ class IndexedDB:
         *,
         store: str | None = None,
         index: str | None = None,
-        values: list[TypedValue] | None = None,
-        range: KeyRange | None = None,
-    ) -> CountResponse:
+        query: IndexedDBQuery | None = None,
+    ) -> int:
         if request is None:
             request = IndexQueryRequest(
-                store=store or "",
-                index=index or "",
-                values=values if values is not None else [],
-                range=range,
+                store=store or "", index=index or "", query=query
             )
-        elif (
-            store is not None
-            or index is not None
-            or values is not None
-            or range is not None
-        ):
+        elif store is not None or index is not None or query is not None:
             raise ValueError("pass either request or keyword arguments, not both")
+        response = _codec.from_wire_count_response(
+            _support.call_unary(
+                lambda: self._stub.IndexCount(
+                    _codec.to_wire_index_query_request(request), timeout=self._timeout
+                )
+            )
+        )
+        return response.count
+
+    def index_count_raw(self, request: IndexQueryRequest) -> CountResponse:
         response = _support.call_unary(
             lambda: self._stub.IndexCount(
                 _codec.to_wire_index_query_request(request), timeout=self._timeout
@@ -1245,12 +1253,7 @@ class IndexedDB:
 
     @overload
     def index_delete(
-        self,
-        *,
-        store: str = ...,
-        index: str = ...,
-        values: list[TypedValue] = ...,
-        range: KeyRange | None = ...,
+        self, *, store: str = ..., index: str = ..., query: IndexedDBQuery | None = ...
     ) -> DeleteResponse: ...
 
     def index_delete(
@@ -1259,22 +1262,13 @@ class IndexedDB:
         *,
         store: str | None = None,
         index: str | None = None,
-        values: list[TypedValue] | None = None,
-        range: KeyRange | None = None,
+        query: IndexedDBQuery | None = None,
     ) -> DeleteResponse:
         if request is None:
             request = IndexQueryRequest(
-                store=store or "",
-                index=index or "",
-                values=values if values is not None else [],
-                range=range,
+                store=store or "", index=index or "", query=query
             )
-        elif (
-            store is not None
-            or index is not None
-            or values is not None
-            or range is not None
-        ):
+        elif store is not None or index is not None or query is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.IndexDelete(

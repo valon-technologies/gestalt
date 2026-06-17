@@ -6,35 +6,35 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireAgentCatalogToolConfig(value *AgentCatalogToolConfig) *proto.AgentCatalogToolConfig {
+func ToWireAgentCatalogToolConfig(value *AgentCatalogToolConfig) *proto.AgentCatalogToolConfig {
 	if value == nil {
 		return nil
 	}
 	out := &proto.AgentCatalogToolConfig{}
 	for _, item := range value.Refs {
-		out.Refs = append(out.Refs, toWireAgentToolRef(item))
+		out.Refs = append(out.Refs, ToWireAgentToolRef(item))
 	}
 	for _, item := range value.Tools {
-		out.Tools = append(out.Tools, toWireListedAgentTool(item))
+		out.Tools = append(out.Tools, ToWireListedAgentTool(item))
 	}
 	return out
 }
 
-func fromWireAgentCatalogToolConfig(value *proto.AgentCatalogToolConfig) *AgentCatalogToolConfig {
+func FromWireAgentCatalogToolConfig(value *proto.AgentCatalogToolConfig) *AgentCatalogToolConfig {
 	if value == nil {
 		return nil
 	}
 	out := &AgentCatalogToolConfig{}
 	for _, item := range value.Refs {
-		out.Refs = append(out.Refs, fromWireAgentToolRef(item))
+		out.Refs = append(out.Refs, FromWireAgentToolRef(item))
 	}
 	for _, item := range value.Tools {
-		out.Tools = append(out.Tools, fromWireListedAgentTool(item))
+		out.Tools = append(out.Tools, FromWireListedAgentTool(item))
 	}
 	return out
 }
 
-func toWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
+func ToWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
 	if value == nil {
 		return nil
 	}
@@ -54,7 +54,7 @@ func toWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
 	return out
 }
 
-func fromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
+func FromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
 	if value == nil {
 		return nil
 	}
@@ -74,7 +74,7 @@ func fromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
 	return out
 }
 
-func toWireAgentMessage(value *AgentMessage) *proto.AgentMessage {
+func ToWireAgentMessage(value *AgentMessage) *proto.AgentMessage {
 	if value == nil {
 		return nil
 	}
@@ -84,12 +84,12 @@ func toWireAgentMessage(value *AgentMessage) *proto.AgentMessage {
 		Metadata: toWireStruct(value.Metadata),
 	}
 	for _, item := range value.Parts {
-		out.Parts = append(out.Parts, toWireAgentMessagePart(item))
+		out.Parts = append(out.Parts, ToWireAgentMessagePart(item))
 	}
 	return out
 }
 
-func fromWireAgentMessage(value *proto.AgentMessage) *AgentMessage {
+func FromWireAgentMessage(value *proto.AgentMessage) *AgentMessage {
 	if value == nil {
 		return nil
 	}
@@ -99,12 +99,12 @@ func fromWireAgentMessage(value *proto.AgentMessage) *AgentMessage {
 		Metadata: fromWireStruct(value.Metadata),
 	}
 	for _, item := range value.Parts {
-		out.Parts = append(out.Parts, fromWireAgentMessagePart(item))
+		out.Parts = append(out.Parts, FromWireAgentMessagePart(item))
 	}
 	return out
 }
 
-func toWireAgentMessagePart(value *AgentMessagePart) *proto.AgentMessagePart {
+func ToWireAgentMessagePart(value *AgentMessagePart) *proto.AgentMessagePart {
 	if value == nil {
 		return nil
 	}
@@ -112,14 +112,14 @@ func toWireAgentMessagePart(value *AgentMessagePart) *proto.AgentMessagePart {
 		Type:       proto.AgentMessagePartType(value.Type),
 		Text:       value.Text,
 		Json:       toWireStruct(value.Json),
-		ToolCall:   toWireAgentMessagePartToolCall(value.ToolCall),
-		ToolResult: toWireAgentMessagePartToolResult(value.ToolResult),
-		ImageRef:   toWireAgentMessagePartImageRef(value.ImageRef),
+		ToolCall:   ToWireAgentMessagePartToolCall(value.ToolCall),
+		ToolResult: ToWireAgentMessagePartToolResult(value.ToolResult),
+		ImageRef:   ToWireAgentMessagePartImageRef(value.ImageRef),
 	}
 	return out
 }
 
-func fromWireAgentMessagePart(value *proto.AgentMessagePart) *AgentMessagePart {
+func FromWireAgentMessagePart(value *proto.AgentMessagePart) *AgentMessagePart {
 	if value == nil {
 		return nil
 	}
@@ -127,14 +127,14 @@ func fromWireAgentMessagePart(value *proto.AgentMessagePart) *AgentMessagePart {
 		Type:       AgentMessagePartType(value.Type),
 		Text:       value.Text,
 		Json:       fromWireStruct(value.Json),
-		ToolCall:   fromWireAgentMessagePartToolCall(value.ToolCall),
-		ToolResult: fromWireAgentMessagePartToolResult(value.ToolResult),
-		ImageRef:   fromWireAgentMessagePartImageRef(value.ImageRef),
+		ToolCall:   FromWireAgentMessagePartToolCall(value.ToolCall),
+		ToolResult: FromWireAgentMessagePartToolResult(value.ToolResult),
+		ImageRef:   FromWireAgentMessagePartImageRef(value.ImageRef),
 	}
 	return out
 }
 
-func toWireAgentMessagePartImageRef(value *AgentMessagePartImageRef) *proto.AgentMessagePartImageRef {
+func ToWireAgentMessagePartImageRef(value *AgentMessagePartImageRef) *proto.AgentMessagePartImageRef {
 	if value == nil {
 		return nil
 	}
@@ -145,7 +145,7 @@ func toWireAgentMessagePartImageRef(value *AgentMessagePartImageRef) *proto.Agen
 	return out
 }
 
-func fromWireAgentMessagePartImageRef(value *proto.AgentMessagePartImageRef) *AgentMessagePartImageRef {
+func FromWireAgentMessagePartImageRef(value *proto.AgentMessagePartImageRef) *AgentMessagePartImageRef {
 	if value == nil {
 		return nil
 	}
@@ -156,7 +156,7 @@ func fromWireAgentMessagePartImageRef(value *proto.AgentMessagePartImageRef) *Ag
 	return out
 }
 
-func toWireAgentMessagePartToolCall(value *AgentMessagePartToolCall) *proto.AgentMessagePartToolCall {
+func ToWireAgentMessagePartToolCall(value *AgentMessagePartToolCall) *proto.AgentMessagePartToolCall {
 	if value == nil {
 		return nil
 	}
@@ -168,7 +168,7 @@ func toWireAgentMessagePartToolCall(value *AgentMessagePartToolCall) *proto.Agen
 	return out
 }
 
-func fromWireAgentMessagePartToolCall(value *proto.AgentMessagePartToolCall) *AgentMessagePartToolCall {
+func FromWireAgentMessagePartToolCall(value *proto.AgentMessagePartToolCall) *AgentMessagePartToolCall {
 	if value == nil {
 		return nil
 	}
@@ -180,7 +180,7 @@ func fromWireAgentMessagePartToolCall(value *proto.AgentMessagePartToolCall) *Ag
 	return out
 }
 
-func toWireAgentMessagePartToolResult(value *AgentMessagePartToolResult) *proto.AgentMessagePartToolResult {
+func ToWireAgentMessagePartToolResult(value *AgentMessagePartToolResult) *proto.AgentMessagePartToolResult {
 	if value == nil {
 		return nil
 	}
@@ -193,7 +193,7 @@ func toWireAgentMessagePartToolResult(value *AgentMessagePartToolResult) *proto.
 	return out
 }
 
-func fromWireAgentMessagePartToolResult(value *proto.AgentMessagePartToolResult) *AgentMessagePartToolResult {
+func FromWireAgentMessagePartToolResult(value *proto.AgentMessagePartToolResult) *AgentMessagePartToolResult {
 	if value == nil {
 		return nil
 	}
@@ -206,7 +206,7 @@ func fromWireAgentMessagePartToolResult(value *proto.AgentMessagePartToolResult)
 	return out
 }
 
-func toWireAgentNoTools(value *AgentNoTools) *proto.AgentNoTools {
+func ToWireAgentNoTools(value *AgentNoTools) *proto.AgentNoTools {
 	if value == nil {
 		return nil
 	}
@@ -214,7 +214,7 @@ func toWireAgentNoTools(value *AgentNoTools) *proto.AgentNoTools {
 	return out
 }
 
-func fromWireAgentNoTools(value *proto.AgentNoTools) *AgentNoTools {
+func FromWireAgentNoTools(value *proto.AgentNoTools) *AgentNoTools {
 	if value == nil {
 		return nil
 	}
@@ -222,35 +222,35 @@ func fromWireAgentNoTools(value *proto.AgentNoTools) *AgentNoTools {
 	return out
 }
 
-func toWireAgentOutput(value *AgentOutput) *proto.AgentOutput {
+func ToWireAgentOutput(value *AgentOutput) *proto.AgentOutput {
 	if value == nil {
 		return nil
 	}
 	out := &proto.AgentOutput{}
 	switch variant := value.Kind.(type) {
 	case *AgentOutputKindText:
-		out.Kind = &proto.AgentOutput_Text{Text: toWireAgentTextOutput(variant.Value)}
+		out.Kind = &proto.AgentOutput_Text{Text: ToWireAgentTextOutput(variant.Value)}
 	case *AgentOutputKindStructured:
-		out.Kind = &proto.AgentOutput_Structured{Structured: toWireAgentStructuredOutput(variant.Value)}
+		out.Kind = &proto.AgentOutput_Structured{Structured: ToWireAgentStructuredOutput(variant.Value)}
 	}
 	return out
 }
 
-func fromWireAgentOutput(value *proto.AgentOutput) *AgentOutput {
+func FromWireAgentOutput(value *proto.AgentOutput) *AgentOutput {
 	if value == nil {
 		return nil
 	}
 	out := &AgentOutput{}
 	switch variant := value.Kind.(type) {
 	case *proto.AgentOutput_Text:
-		out.Kind = &AgentOutputKindText{Value: fromWireAgentTextOutput(variant.Text)}
+		out.Kind = &AgentOutputKindText{Value: FromWireAgentTextOutput(variant.Text)}
 	case *proto.AgentOutput_Structured:
-		out.Kind = &AgentOutputKindStructured{Value: fromWireAgentStructuredOutput(variant.Structured)}
+		out.Kind = &AgentOutputKindStructured{Value: FromWireAgentStructuredOutput(variant.Structured)}
 	}
 	return out
 }
 
-func toWireAgentProviderCapabilities(value *AgentProviderCapabilities) *proto.AgentProviderCapabilities {
+func ToWireAgentProviderCapabilities(value *AgentProviderCapabilities) *proto.AgentProviderCapabilities {
 	if value == nil {
 		return nil
 	}
@@ -271,7 +271,7 @@ func toWireAgentProviderCapabilities(value *AgentProviderCapabilities) *proto.Ag
 	return out
 }
 
-func fromWireAgentProviderCapabilities(value *proto.AgentProviderCapabilities) *AgentProviderCapabilities {
+func FromWireAgentProviderCapabilities(value *proto.AgentProviderCapabilities) *AgentProviderCapabilities {
 	if value == nil {
 		return nil
 	}
@@ -292,7 +292,7 @@ func fromWireAgentProviderCapabilities(value *proto.AgentProviderCapabilities) *
 	return out
 }
 
-func toWireAgentSession(value *AgentSession) *proto.AgentSession {
+func ToWireAgentSession(value *AgentSession) *proto.AgentSession {
 	if value == nil {
 		return nil
 	}
@@ -311,7 +311,7 @@ func toWireAgentSession(value *AgentSession) *proto.AgentSession {
 	return out
 }
 
-func fromWireAgentSession(value *proto.AgentSession) *AgentSession {
+func FromWireAgentSession(value *proto.AgentSession) *AgentSession {
 	if value == nil {
 		return nil
 	}
@@ -330,29 +330,29 @@ func fromWireAgentSession(value *proto.AgentSession) *AgentSession {
 	return out
 }
 
-func toWireAgentSessionStartConfig(value *AgentSessionStartConfig) *proto.AgentSessionStartConfig {
+func ToWireAgentSessionStartConfig(value *AgentSessionStartConfig) *proto.AgentSessionStartConfig {
 	if value == nil {
 		return nil
 	}
 	out := &proto.AgentSessionStartConfig{}
 	for _, item := range value.Hooks {
-		out.Hooks = append(out.Hooks, toWireAgentSessionStartHook(item))
+		out.Hooks = append(out.Hooks, ToWireAgentSessionStartHook(item))
 	}
 	return out
 }
 
-func fromWireAgentSessionStartConfig(value *proto.AgentSessionStartConfig) *AgentSessionStartConfig {
+func FromWireAgentSessionStartConfig(value *proto.AgentSessionStartConfig) *AgentSessionStartConfig {
 	if value == nil {
 		return nil
 	}
 	out := &AgentSessionStartConfig{}
 	for _, item := range value.Hooks {
-		out.Hooks = append(out.Hooks, fromWireAgentSessionStartHook(item))
+		out.Hooks = append(out.Hooks, FromWireAgentSessionStartHook(item))
 	}
 	return out
 }
 
-func toWireAgentSessionStartHook(value *AgentSessionStartHook) *proto.AgentSessionStartHook {
+func ToWireAgentSessionStartHook(value *AgentSessionStartHook) *proto.AgentSessionStartHook {
 	if value == nil {
 		return nil
 	}
@@ -363,12 +363,12 @@ func toWireAgentSessionStartHook(value *AgentSessionStartHook) *proto.AgentSessi
 		Cwd:     value.Cwd,
 		Timeout: value.Timeout,
 		Env:     value.Env,
-		Output:  toWireAgentSessionStartHookOutput(value.Output),
+		Output:  ToWireAgentSessionStartHookOutput(value.Output),
 	}
 	return out
 }
 
-func fromWireAgentSessionStartHook(value *proto.AgentSessionStartHook) *AgentSessionStartHook {
+func FromWireAgentSessionStartHook(value *proto.AgentSessionStartHook) *AgentSessionStartHook {
 	if value == nil {
 		return nil
 	}
@@ -379,12 +379,12 @@ func fromWireAgentSessionStartHook(value *proto.AgentSessionStartHook) *AgentSes
 		Cwd:     value.Cwd,
 		Timeout: value.Timeout,
 		Env:     value.Env,
-		Output:  fromWireAgentSessionStartHookOutput(value.Output),
+		Output:  FromWireAgentSessionStartHookOutput(value.Output),
 	}
 	return out
 }
 
-func toWireAgentSessionStartHookOutput(value *AgentSessionStartHookOutput) *proto.AgentSessionStartHookOutput {
+func ToWireAgentSessionStartHookOutput(value *AgentSessionStartHookOutput) *proto.AgentSessionStartHookOutput {
 	if value == nil {
 		return nil
 	}
@@ -395,7 +395,7 @@ func toWireAgentSessionStartHookOutput(value *AgentSessionStartHookOutput) *prot
 	return out
 }
 
-func fromWireAgentSessionStartHookOutput(value *proto.AgentSessionStartHookOutput) *AgentSessionStartHookOutput {
+func FromWireAgentSessionStartHookOutput(value *proto.AgentSessionStartHookOutput) *AgentSessionStartHookOutput {
 	if value == nil {
 		return nil
 	}
@@ -406,7 +406,7 @@ func fromWireAgentSessionStartHookOutput(value *proto.AgentSessionStartHookOutpu
 	return out
 }
 
-func toWireAgentStructuredOutput(value *AgentStructuredOutput) *proto.AgentStructuredOutput {
+func ToWireAgentStructuredOutput(value *AgentStructuredOutput) *proto.AgentStructuredOutput {
 	if value == nil {
 		return nil
 	}
@@ -416,7 +416,7 @@ func toWireAgentStructuredOutput(value *AgentStructuredOutput) *proto.AgentStruc
 	return out
 }
 
-func fromWireAgentStructuredOutput(value *proto.AgentStructuredOutput) *AgentStructuredOutput {
+func FromWireAgentStructuredOutput(value *proto.AgentStructuredOutput) *AgentStructuredOutput {
 	if value == nil {
 		return nil
 	}
@@ -426,7 +426,7 @@ func fromWireAgentStructuredOutput(value *proto.AgentStructuredOutput) *AgentStr
 	return out
 }
 
-func toWireAgentTextOutput(value *AgentTextOutput) *proto.AgentTextOutput {
+func ToWireAgentTextOutput(value *AgentTextOutput) *proto.AgentTextOutput {
 	if value == nil {
 		return nil
 	}
@@ -434,7 +434,7 @@ func toWireAgentTextOutput(value *AgentTextOutput) *proto.AgentTextOutput {
 	return out
 }
 
-func fromWireAgentTextOutput(value *proto.AgentTextOutput) *AgentTextOutput {
+func FromWireAgentTextOutput(value *proto.AgentTextOutput) *AgentTextOutput {
 	if value == nil {
 		return nil
 	}
@@ -442,35 +442,35 @@ func fromWireAgentTextOutput(value *proto.AgentTextOutput) *AgentTextOutput {
 	return out
 }
 
-func toWireAgentToolConfig(value *AgentToolConfig) *proto.AgentToolConfig {
+func ToWireAgentToolConfig(value *AgentToolConfig) *proto.AgentToolConfig {
 	if value == nil {
 		return nil
 	}
 	out := &proto.AgentToolConfig{}
 	switch variant := value.Source.(type) {
 	case *AgentToolConfigSourceNone:
-		out.Source = &proto.AgentToolConfig_None{None: toWireAgentNoTools(variant.Value)}
+		out.Source = &proto.AgentToolConfig_None{None: ToWireAgentNoTools(variant.Value)}
 	case *AgentToolConfigSourceCatalog:
-		out.Source = &proto.AgentToolConfig_Catalog{Catalog: toWireAgentCatalogToolConfig(variant.Value)}
+		out.Source = &proto.AgentToolConfig_Catalog{Catalog: ToWireAgentCatalogToolConfig(variant.Value)}
 	}
 	return out
 }
 
-func fromWireAgentToolConfig(value *proto.AgentToolConfig) *AgentToolConfig {
+func FromWireAgentToolConfig(value *proto.AgentToolConfig) *AgentToolConfig {
 	if value == nil {
 		return nil
 	}
 	out := &AgentToolConfig{}
 	switch variant := value.Source.(type) {
 	case *proto.AgentToolConfig_None:
-		out.Source = &AgentToolConfigSourceNone{Value: fromWireAgentNoTools(variant.None)}
+		out.Source = &AgentToolConfigSourceNone{Value: FromWireAgentNoTools(variant.None)}
 	case *proto.AgentToolConfig_Catalog:
-		out.Source = &AgentToolConfigSourceCatalog{Value: fromWireAgentCatalogToolConfig(variant.Catalog)}
+		out.Source = &AgentToolConfigSourceCatalog{Value: FromWireAgentCatalogToolConfig(variant.Catalog)}
 	}
 	return out
 }
 
-func toWireAgentTurn(value *AgentTurn) *proto.AgentTurn {
+func ToWireAgentTurn(value *AgentTurn) *proto.AgentTurn {
 	if value == nil {
 		return nil
 	}
@@ -488,18 +488,18 @@ func toWireAgentTurn(value *AgentTurn) *proto.AgentTurn {
 		ExecutionRef:       value.ExecutionRef,
 	}
 	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, toWireAgentMessage(item))
+		out.Messages = append(out.Messages, ToWireAgentMessage(item))
 	}
 	switch variant := value.Output.(type) {
 	case *AgentTurnOutputText:
-		out.Output = &proto.AgentTurn_Text{Text: toWireAgentTurnTextOutput(variant.Value)}
+		out.Output = &proto.AgentTurn_Text{Text: ToWireAgentTurnTextOutput(variant.Value)}
 	case *AgentTurnOutputStructured:
-		out.Output = &proto.AgentTurn_Structured{Structured: toWireAgentTurnStructuredOutput(variant.Value)}
+		out.Output = &proto.AgentTurn_Structured{Structured: ToWireAgentTurnStructuredOutput(variant.Value)}
 	}
 	return out
 }
 
-func fromWireAgentTurn(value *proto.AgentTurn) *AgentTurn {
+func FromWireAgentTurn(value *proto.AgentTurn) *AgentTurn {
 	if value == nil {
 		return nil
 	}
@@ -517,18 +517,18 @@ func fromWireAgentTurn(value *proto.AgentTurn) *AgentTurn {
 		ExecutionRef:       value.ExecutionRef,
 	}
 	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, fromWireAgentMessage(item))
+		out.Messages = append(out.Messages, FromWireAgentMessage(item))
 	}
 	switch variant := value.Output.(type) {
 	case *proto.AgentTurn_Text:
-		out.Output = &AgentTurnOutputText{Value: fromWireAgentTurnTextOutput(variant.Text)}
+		out.Output = &AgentTurnOutputText{Value: FromWireAgentTurnTextOutput(variant.Text)}
 	case *proto.AgentTurn_Structured:
-		out.Output = &AgentTurnOutputStructured{Value: fromWireAgentTurnStructuredOutput(variant.Structured)}
+		out.Output = &AgentTurnOutputStructured{Value: FromWireAgentTurnStructuredOutput(variant.Structured)}
 	}
 	return out
 }
 
-func toWireAgentTurnDisplay(value *AgentTurnDisplay) *proto.AgentTurnDisplay {
+func ToWireAgentTurnDisplay(value *AgentTurnDisplay) *proto.AgentTurnDisplay {
 	if value == nil {
 		return nil
 	}
@@ -549,7 +549,7 @@ func toWireAgentTurnDisplay(value *AgentTurnDisplay) *proto.AgentTurnDisplay {
 	return out
 }
 
-func fromWireAgentTurnDisplay(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
+func FromWireAgentTurnDisplay(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
 	if value == nil {
 		return nil
 	}
@@ -570,7 +570,7 @@ func fromWireAgentTurnDisplay(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
 	return out
 }
 
-func toWireAgentTurnEvent(value *AgentTurnEvent) *proto.AgentTurnEvent {
+func ToWireAgentTurnEvent(value *AgentTurnEvent) *proto.AgentTurnEvent {
 	if value == nil {
 		return nil
 	}
@@ -583,12 +583,12 @@ func toWireAgentTurnEvent(value *AgentTurnEvent) *proto.AgentTurnEvent {
 		Visibility: value.Visibility,
 		Data:       toWireStruct(value.Data),
 		CreatedAt:  toWireTimestamp(value.CreatedAt),
-		Display:    toWireAgentTurnDisplay(value.Display),
+		Display:    ToWireAgentTurnDisplay(value.Display),
 	}
 	return out
 }
 
-func fromWireAgentTurnEvent(value *proto.AgentTurnEvent) *AgentTurnEvent {
+func FromWireAgentTurnEvent(value *proto.AgentTurnEvent) *AgentTurnEvent {
 	if value == nil {
 		return nil
 	}
@@ -601,12 +601,12 @@ func fromWireAgentTurnEvent(value *proto.AgentTurnEvent) *AgentTurnEvent {
 		Visibility: value.Visibility,
 		Data:       fromWireStruct(value.Data),
 		CreatedAt:  fromWireTimestamp(value.CreatedAt),
-		Display:    fromWireAgentTurnDisplay(value.Display),
+		Display:    FromWireAgentTurnDisplay(value.Display),
 	}
 	return out
 }
 
-func toWireAgentTurnStructuredOutput(value *AgentTurnStructuredOutput) *proto.AgentTurnStructuredOutput {
+func ToWireAgentTurnStructuredOutput(value *AgentTurnStructuredOutput) *proto.AgentTurnStructuredOutput {
 	if value == nil {
 		return nil
 	}
@@ -617,7 +617,7 @@ func toWireAgentTurnStructuredOutput(value *AgentTurnStructuredOutput) *proto.Ag
 	return out
 }
 
-func fromWireAgentTurnStructuredOutput(value *proto.AgentTurnStructuredOutput) *AgentTurnStructuredOutput {
+func FromWireAgentTurnStructuredOutput(value *proto.AgentTurnStructuredOutput) *AgentTurnStructuredOutput {
 	if value == nil {
 		return nil
 	}
@@ -628,7 +628,7 @@ func fromWireAgentTurnStructuredOutput(value *proto.AgentTurnStructuredOutput) *
 	return out
 }
 
-func toWireAgentTurnTextOutput(value *AgentTurnTextOutput) *proto.AgentTurnTextOutput {
+func ToWireAgentTurnTextOutput(value *AgentTurnTextOutput) *proto.AgentTurnTextOutput {
 	if value == nil {
 		return nil
 	}
@@ -638,7 +638,7 @@ func toWireAgentTurnTextOutput(value *AgentTurnTextOutput) *proto.AgentTurnTextO
 	return out
 }
 
-func fromWireAgentTurnTextOutput(value *proto.AgentTurnTextOutput) *AgentTurnTextOutput {
+func FromWireAgentTurnTextOutput(value *proto.AgentTurnTextOutput) *AgentTurnTextOutput {
 	if value == nil {
 		return nil
 	}
@@ -648,7 +648,7 @@ func fromWireAgentTurnTextOutput(value *proto.AgentTurnTextOutput) *AgentTurnTex
 	return out
 }
 
-func toWireAgentWorkspace(value *AgentWorkspace) *proto.AgentWorkspace {
+func ToWireAgentWorkspace(value *AgentWorkspace) *proto.AgentWorkspace {
 	if value == nil {
 		return nil
 	}
@@ -656,12 +656,12 @@ func toWireAgentWorkspace(value *AgentWorkspace) *proto.AgentWorkspace {
 		Cwd: value.Cwd,
 	}
 	for _, item := range value.Checkouts {
-		out.Checkouts = append(out.Checkouts, toWireAgentWorkspaceGitCheckout(item))
+		out.Checkouts = append(out.Checkouts, ToWireAgentWorkspaceGitCheckout(item))
 	}
 	return out
 }
 
-func fromWireAgentWorkspace(value *proto.AgentWorkspace) *AgentWorkspace {
+func FromWireAgentWorkspace(value *proto.AgentWorkspace) *AgentWorkspace {
 	if value == nil {
 		return nil
 	}
@@ -669,12 +669,12 @@ func fromWireAgentWorkspace(value *proto.AgentWorkspace) *AgentWorkspace {
 		Cwd: value.Cwd,
 	}
 	for _, item := range value.Checkouts {
-		out.Checkouts = append(out.Checkouts, fromWireAgentWorkspaceGitCheckout(item))
+		out.Checkouts = append(out.Checkouts, FromWireAgentWorkspaceGitCheckout(item))
 	}
 	return out
 }
 
-func toWireAgentWorkspaceGitCheckout(value *AgentWorkspaceGitCheckout) *proto.AgentWorkspaceGitCheckout {
+func ToWireAgentWorkspaceGitCheckout(value *AgentWorkspaceGitCheckout) *proto.AgentWorkspaceGitCheckout {
 	if value == nil {
 		return nil
 	}
@@ -686,7 +686,7 @@ func toWireAgentWorkspaceGitCheckout(value *AgentWorkspaceGitCheckout) *proto.Ag
 	return out
 }
 
-func fromWireAgentWorkspaceGitCheckout(value *proto.AgentWorkspaceGitCheckout) *AgentWorkspaceGitCheckout {
+func FromWireAgentWorkspaceGitCheckout(value *proto.AgentWorkspaceGitCheckout) *AgentWorkspaceGitCheckout {
 	if value == nil {
 		return nil
 	}
@@ -698,35 +698,35 @@ func fromWireAgentWorkspaceGitCheckout(value *proto.AgentWorkspaceGitCheckout) *
 	return out
 }
 
-func toWireCancelAgentProviderTurnRequest(value *CancelAgentProviderTurnRequest) *proto.CancelAgentProviderTurnRequest {
+func ToWireCancelAgentProviderTurnRequest(value *CancelAgentProviderTurnRequest) *proto.CancelAgentProviderTurnRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CancelAgentProviderTurnRequest{
 		TurnId:       value.TurnId,
 		Reason:       value.Reason,
-		Subject:      toWireSubjectContext(value.Subject),
-		Context:      toWireRequestContext(value.Context),
+		Subject:      ToWireSubjectContext(value.Subject),
+		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func fromWireCancelAgentProviderTurnRequest(value *proto.CancelAgentProviderTurnRequest) *CancelAgentProviderTurnRequest {
+func FromWireCancelAgentProviderTurnRequest(value *proto.CancelAgentProviderTurnRequest) *CancelAgentProviderTurnRequest {
 	if value == nil {
 		return nil
 	}
 	out := &CancelAgentProviderTurnRequest{
 		TurnId:       value.TurnId,
 		Reason:       value.Reason,
-		Subject:      fromWireSubjectContext(value.Subject),
-		Context:      fromWireRequestContext(value.Context),
+		Subject:      FromWireSubjectContext(value.Subject),
+		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func toWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRequest) *proto.CreateAgentProviderSessionRequest {
+func ToWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRequest) *proto.CreateAgentProviderSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -736,18 +736,18 @@ func toWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRe
 		ClientRef:          value.ClientRef,
 		Metadata:           toWireStruct(value.Metadata),
 		CreatedBySubjectId: value.CreatedBySubjectId,
-		Subject:            toWireSubjectContext(value.Subject),
-		SessionStart:       toWireAgentSessionStartConfig(value.SessionStart),
-		PreparedWorkspace:  toWirePreparedAgentWorkspace(value.PreparedWorkspace),
+		Subject:            ToWireSubjectContext(value.Subject),
+		SessionStart:       ToWireAgentSessionStartConfig(value.SessionStart),
+		PreparedWorkspace:  ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
 		ProviderName:       value.ProviderName,
-		Workspace:          toWireAgentWorkspace(value.Workspace),
-		Context:            toWireRequestContext(value.Context),
-		Tools:              toWireAgentToolConfig(value.Tools),
+		Workspace:          ToWireAgentWorkspace(value.Workspace),
+		Context:            ToWireRequestContext(value.Context),
+		Tools:              ToWireAgentToolConfig(value.Tools),
 	}
 	return out
 }
 
-func fromWireCreateAgentProviderSessionRequest(value *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
+func FromWireCreateAgentProviderSessionRequest(value *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -757,18 +757,18 @@ func fromWireCreateAgentProviderSessionRequest(value *proto.CreateAgentProviderS
 		ClientRef:          value.ClientRef,
 		Metadata:           fromWireStruct(value.Metadata),
 		CreatedBySubjectId: value.CreatedBySubjectId,
-		Subject:            fromWireSubjectContext(value.Subject),
-		SessionStart:       fromWireAgentSessionStartConfig(value.SessionStart),
-		PreparedWorkspace:  fromWirePreparedAgentWorkspace(value.PreparedWorkspace),
+		Subject:            FromWireSubjectContext(value.Subject),
+		SessionStart:       FromWireAgentSessionStartConfig(value.SessionStart),
+		PreparedWorkspace:  FromWirePreparedAgentWorkspace(value.PreparedWorkspace),
 		ProviderName:       value.ProviderName,
-		Workspace:          fromWireAgentWorkspace(value.Workspace),
-		Context:            fromWireRequestContext(value.Context),
-		Tools:              fromWireAgentToolConfig(value.Tools),
+		Workspace:          FromWireAgentWorkspace(value.Workspace),
+		Context:            FromWireRequestContext(value.Context),
+		Tools:              FromWireAgentToolConfig(value.Tools),
 	}
 	return out
 }
 
-func toWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest) *proto.CreateAgentProviderTurnRequest {
+func ToWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest) *proto.CreateAgentProviderTurnRequest {
 	if value == nil {
 		return nil
 	}
@@ -780,20 +780,20 @@ func toWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest)
 		Metadata:           toWireStruct(value.Metadata),
 		CreatedBySubjectId: value.CreatedBySubjectId,
 		ExecutionRef:       value.ExecutionRef,
-		Subject:            toWireSubjectContext(value.Subject),
+		Subject:            ToWireSubjectContext(value.Subject),
 		ModelOptions:       toWireStruct(value.ModelOptions),
 		TimeoutSeconds:     value.TimeoutSeconds,
-		Output:             toWireAgentOutput(value.Output),
-		Context:            toWireRequestContext(value.Context),
+		Output:             ToWireAgentOutput(value.Output),
+		Context:            ToWireRequestContext(value.Context),
 		ProviderName:       value.ProviderName,
 	}
 	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, toWireAgentMessage(item))
+		out.Messages = append(out.Messages, ToWireAgentMessage(item))
 	}
 	return out
 }
 
-func fromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
+func FromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
 	if value == nil {
 		return nil
 	}
@@ -805,20 +805,20 @@ func fromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurn
 		Metadata:           fromWireStruct(value.Metadata),
 		CreatedBySubjectId: value.CreatedBySubjectId,
 		ExecutionRef:       value.ExecutionRef,
-		Subject:            fromWireSubjectContext(value.Subject),
+		Subject:            FromWireSubjectContext(value.Subject),
 		ModelOptions:       fromWireStruct(value.ModelOptions),
 		TimeoutSeconds:     value.TimeoutSeconds,
-		Output:             fromWireAgentOutput(value.Output),
-		Context:            fromWireRequestContext(value.Context),
+		Output:             FromWireAgentOutput(value.Output),
+		Context:            FromWireRequestContext(value.Context),
 		ProviderName:       value.ProviderName,
 	}
 	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, fromWireAgentMessage(item))
+		out.Messages = append(out.Messages, FromWireAgentMessage(item))
 	}
 	return out
 }
 
-func toWireGetAgentProviderCapabilitiesRequest(value *GetAgentProviderCapabilitiesRequest) *proto.GetAgentProviderCapabilitiesRequest {
+func ToWireGetAgentProviderCapabilitiesRequest(value *GetAgentProviderCapabilitiesRequest) *proto.GetAgentProviderCapabilitiesRequest {
 	if value == nil {
 		return nil
 	}
@@ -826,7 +826,7 @@ func toWireGetAgentProviderCapabilitiesRequest(value *GetAgentProviderCapabiliti
 	return out
 }
 
-func fromWireGetAgentProviderCapabilitiesRequest(value *proto.GetAgentProviderCapabilitiesRequest) *GetAgentProviderCapabilitiesRequest {
+func FromWireGetAgentProviderCapabilitiesRequest(value *proto.GetAgentProviderCapabilitiesRequest) *GetAgentProviderCapabilitiesRequest {
 	if value == nil {
 		return nil
 	}
@@ -834,185 +834,185 @@ func fromWireGetAgentProviderCapabilitiesRequest(value *proto.GetAgentProviderCa
 	return out
 }
 
-func toWireGetAgentProviderInteractionRequest(value *GetAgentProviderInteractionRequest) *proto.GetAgentProviderInteractionRequest {
+func ToWireGetAgentProviderInteractionRequest(value *GetAgentProviderInteractionRequest) *proto.GetAgentProviderInteractionRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.GetAgentProviderInteractionRequest{
 		InteractionId: value.InteractionId,
-		Subject:       toWireSubjectContext(value.Subject),
-		Context:       toWireRequestContext(value.Context),
+		Subject:       ToWireSubjectContext(value.Subject),
+		Context:       ToWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func fromWireGetAgentProviderInteractionRequest(value *proto.GetAgentProviderInteractionRequest) *GetAgentProviderInteractionRequest {
+func FromWireGetAgentProviderInteractionRequest(value *proto.GetAgentProviderInteractionRequest) *GetAgentProviderInteractionRequest {
 	if value == nil {
 		return nil
 	}
 	out := &GetAgentProviderInteractionRequest{
 		InteractionId: value.InteractionId,
-		Subject:       fromWireSubjectContext(value.Subject),
-		Context:       fromWireRequestContext(value.Context),
+		Subject:       FromWireSubjectContext(value.Subject),
+		Context:       FromWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func toWireGetAgentProviderSessionRequest(value *GetAgentProviderSessionRequest) *proto.GetAgentProviderSessionRequest {
+func ToWireGetAgentProviderSessionRequest(value *GetAgentProviderSessionRequest) *proto.GetAgentProviderSessionRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.GetAgentProviderSessionRequest{
 		SessionId:    value.SessionId,
-		Subject:      toWireSubjectContext(value.Subject),
-		Context:      toWireRequestContext(value.Context),
+		Subject:      ToWireSubjectContext(value.Subject),
+		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func fromWireGetAgentProviderSessionRequest(value *proto.GetAgentProviderSessionRequest) *GetAgentProviderSessionRequest {
+func FromWireGetAgentProviderSessionRequest(value *proto.GetAgentProviderSessionRequest) *GetAgentProviderSessionRequest {
 	if value == nil {
 		return nil
 	}
 	out := &GetAgentProviderSessionRequest{
 		SessionId:    value.SessionId,
-		Subject:      fromWireSubjectContext(value.Subject),
-		Context:      fromWireRequestContext(value.Context),
+		Subject:      FromWireSubjectContext(value.Subject),
+		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func toWireGetAgentProviderTurnRequest(value *GetAgentProviderTurnRequest) *proto.GetAgentProviderTurnRequest {
+func ToWireGetAgentProviderTurnRequest(value *GetAgentProviderTurnRequest) *proto.GetAgentProviderTurnRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.GetAgentProviderTurnRequest{
 		TurnId:       value.TurnId,
-		Subject:      toWireSubjectContext(value.Subject),
-		Context:      toWireRequestContext(value.Context),
+		Subject:      ToWireSubjectContext(value.Subject),
+		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func fromWireGetAgentProviderTurnRequest(value *proto.GetAgentProviderTurnRequest) *GetAgentProviderTurnRequest {
+func FromWireGetAgentProviderTurnRequest(value *proto.GetAgentProviderTurnRequest) *GetAgentProviderTurnRequest {
 	if value == nil {
 		return nil
 	}
 	out := &GetAgentProviderTurnRequest{
 		TurnId:       value.TurnId,
-		Subject:      fromWireSubjectContext(value.Subject),
-		Context:      fromWireRequestContext(value.Context),
+		Subject:      FromWireSubjectContext(value.Subject),
+		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func toWireListAgentProviderInteractionsRequest(value *ListAgentProviderInteractionsRequest) *proto.ListAgentProviderInteractionsRequest {
+func ToWireListAgentProviderInteractionsRequest(value *ListAgentProviderInteractionsRequest) *proto.ListAgentProviderInteractionsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListAgentProviderInteractionsRequest{
 		TurnId:       value.TurnId,
-		Subject:      toWireSubjectContext(value.Subject),
-		Context:      toWireRequestContext(value.Context),
+		Subject:      ToWireSubjectContext(value.Subject),
+		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func fromWireListAgentProviderInteractionsRequest(value *proto.ListAgentProviderInteractionsRequest) *ListAgentProviderInteractionsRequest {
+func FromWireListAgentProviderInteractionsRequest(value *proto.ListAgentProviderInteractionsRequest) *ListAgentProviderInteractionsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ListAgentProviderInteractionsRequest{
 		TurnId:       value.TurnId,
-		Subject:      fromWireSubjectContext(value.Subject),
-		Context:      fromWireRequestContext(value.Context),
+		Subject:      FromWireSubjectContext(value.Subject),
+		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func toWireListAgentProviderInteractionsResponse(value *ListAgentProviderInteractionsResponse) *proto.ListAgentProviderInteractionsResponse {
+func ToWireListAgentProviderInteractionsResponse(value *ListAgentProviderInteractionsResponse) *proto.ListAgentProviderInteractionsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListAgentProviderInteractionsResponse{}
 	for _, item := range value.Interactions {
-		out.Interactions = append(out.Interactions, toWireAgentInteraction(item))
+		out.Interactions = append(out.Interactions, ToWireAgentInteraction(item))
 	}
 	return out
 }
 
-func fromWireListAgentProviderInteractionsResponse(value *proto.ListAgentProviderInteractionsResponse) *ListAgentProviderInteractionsResponse {
+func FromWireListAgentProviderInteractionsResponse(value *proto.ListAgentProviderInteractionsResponse) *ListAgentProviderInteractionsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &ListAgentProviderInteractionsResponse{}
 	for _, item := range value.Interactions {
-		out.Interactions = append(out.Interactions, fromWireAgentInteraction(item))
+		out.Interactions = append(out.Interactions, FromWireAgentInteraction(item))
 	}
 	return out
 }
 
-func toWireListAgentProviderSessionsRequest(value *ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
+func ToWireListAgentProviderSessionsRequest(value *ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListAgentProviderSessionsRequest{
-		Subject:      toWireSubjectContext(value.Subject),
+		Subject:      ToWireSubjectContext(value.Subject),
 		SessionIds:   value.SessionIds,
 		State:        proto.AgentSessionState(value.State),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
 		ProviderName: value.ProviderName,
-		Context:      toWireRequestContext(value.Context),
+		Context:      ToWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func fromWireListAgentProviderSessionsRequest(value *proto.ListAgentProviderSessionsRequest) *ListAgentProviderSessionsRequest {
+func FromWireListAgentProviderSessionsRequest(value *proto.ListAgentProviderSessionsRequest) *ListAgentProviderSessionsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ListAgentProviderSessionsRequest{
-		Subject:      fromWireSubjectContext(value.Subject),
+		Subject:      FromWireSubjectContext(value.Subject),
 		SessionIds:   value.SessionIds,
 		State:        AgentSessionState(value.State),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
 		ProviderName: value.ProviderName,
-		Context:      fromWireRequestContext(value.Context),
+		Context:      FromWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func toWireListAgentProviderSessionsResponse(value *ListAgentProviderSessionsResponse) *proto.ListAgentProviderSessionsResponse {
+func ToWireListAgentProviderSessionsResponse(value *ListAgentProviderSessionsResponse) *proto.ListAgentProviderSessionsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListAgentProviderSessionsResponse{}
 	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, toWireAgentSession(item))
+		out.Sessions = append(out.Sessions, ToWireAgentSession(item))
 	}
 	return out
 }
 
-func fromWireListAgentProviderSessionsResponse(value *proto.ListAgentProviderSessionsResponse) *ListAgentProviderSessionsResponse {
+func FromWireListAgentProviderSessionsResponse(value *proto.ListAgentProviderSessionsResponse) *ListAgentProviderSessionsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &ListAgentProviderSessionsResponse{}
 	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, fromWireAgentSession(item))
+		out.Sessions = append(out.Sessions, FromWireAgentSession(item))
 	}
 	return out
 }
 
-func toWireListAgentProviderTurnEventsRequest(value *ListAgentProviderTurnEventsRequest) *proto.ListAgentProviderTurnEventsRequest {
+func ToWireListAgentProviderTurnEventsRequest(value *ListAgentProviderTurnEventsRequest) *proto.ListAgentProviderTurnEventsRequest {
 	if value == nil {
 		return nil
 	}
@@ -1020,14 +1020,14 @@ func toWireListAgentProviderTurnEventsRequest(value *ListAgentProviderTurnEvents
 		TurnId:       value.TurnId,
 		AfterSeq:     value.AfterSeq,
 		Limit:        value.Limit,
-		Subject:      toWireSubjectContext(value.Subject),
-		Context:      toWireRequestContext(value.Context),
+		Subject:      ToWireSubjectContext(value.Subject),
+		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func fromWireListAgentProviderTurnEventsRequest(value *proto.ListAgentProviderTurnEventsRequest) *ListAgentProviderTurnEventsRequest {
+func FromWireListAgentProviderTurnEventsRequest(value *proto.ListAgentProviderTurnEventsRequest) *ListAgentProviderTurnEventsRequest {
 	if value == nil {
 		return nil
 	}
@@ -1035,92 +1035,92 @@ func fromWireListAgentProviderTurnEventsRequest(value *proto.ListAgentProviderTu
 		TurnId:       value.TurnId,
 		AfterSeq:     value.AfterSeq,
 		Limit:        value.Limit,
-		Subject:      fromWireSubjectContext(value.Subject),
-		Context:      fromWireRequestContext(value.Context),
+		Subject:      FromWireSubjectContext(value.Subject),
+		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func toWireListAgentProviderTurnEventsResponse(value *ListAgentProviderTurnEventsResponse) *proto.ListAgentProviderTurnEventsResponse {
+func ToWireListAgentProviderTurnEventsResponse(value *ListAgentProviderTurnEventsResponse) *proto.ListAgentProviderTurnEventsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListAgentProviderTurnEventsResponse{}
 	for _, item := range value.Events {
-		out.Events = append(out.Events, toWireAgentTurnEvent(item))
+		out.Events = append(out.Events, ToWireAgentTurnEvent(item))
 	}
 	return out
 }
 
-func fromWireListAgentProviderTurnEventsResponse(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentProviderTurnEventsResponse {
+func FromWireListAgentProviderTurnEventsResponse(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentProviderTurnEventsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &ListAgentProviderTurnEventsResponse{}
 	for _, item := range value.Events {
-		out.Events = append(out.Events, fromWireAgentTurnEvent(item))
+		out.Events = append(out.Events, FromWireAgentTurnEvent(item))
 	}
 	return out
 }
 
-func toWireListAgentProviderTurnsRequest(value *ListAgentProviderTurnsRequest) *proto.ListAgentProviderTurnsRequest {
+func ToWireListAgentProviderTurnsRequest(value *ListAgentProviderTurnsRequest) *proto.ListAgentProviderTurnsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListAgentProviderTurnsRequest{
 		SessionId:    value.SessionId,
-		Subject:      toWireSubjectContext(value.Subject),
+		Subject:      ToWireSubjectContext(value.Subject),
 		TurnIds:      value.TurnIds,
 		Status:       proto.AgentExecutionStatus(value.Status),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
-		Context:      toWireRequestContext(value.Context),
+		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func fromWireListAgentProviderTurnsRequest(value *proto.ListAgentProviderTurnsRequest) *ListAgentProviderTurnsRequest {
+func FromWireListAgentProviderTurnsRequest(value *proto.ListAgentProviderTurnsRequest) *ListAgentProviderTurnsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ListAgentProviderTurnsRequest{
 		SessionId:    value.SessionId,
-		Subject:      fromWireSubjectContext(value.Subject),
+		Subject:      FromWireSubjectContext(value.Subject),
 		TurnIds:      value.TurnIds,
 		Status:       AgentExecutionStatus(value.Status),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
-		Context:      fromWireRequestContext(value.Context),
+		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func toWireListAgentProviderTurnsResponse(value *ListAgentProviderTurnsResponse) *proto.ListAgentProviderTurnsResponse {
+func ToWireListAgentProviderTurnsResponse(value *ListAgentProviderTurnsResponse) *proto.ListAgentProviderTurnsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListAgentProviderTurnsResponse{}
 	for _, item := range value.Turns {
-		out.Turns = append(out.Turns, toWireAgentTurn(item))
+		out.Turns = append(out.Turns, ToWireAgentTurn(item))
 	}
 	return out
 }
 
-func fromWireListAgentProviderTurnsResponse(value *proto.ListAgentProviderTurnsResponse) *ListAgentProviderTurnsResponse {
+func FromWireListAgentProviderTurnsResponse(value *proto.ListAgentProviderTurnsResponse) *ListAgentProviderTurnsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &ListAgentProviderTurnsResponse{}
 	for _, item := range value.Turns {
-		out.Turns = append(out.Turns, fromWireAgentTurn(item))
+		out.Turns = append(out.Turns, FromWireAgentTurn(item))
 	}
 	return out
 }
 
-func toWireListedAgentTool(value *ListedAgentTool) *proto.ListedAgentTool {
+func ToWireListedAgentTool(value *ListedAgentTool) *proto.ListedAgentTool {
 	if value == nil {
 		return nil
 	}
@@ -1131,15 +1131,15 @@ func toWireListedAgentTool(value *ListedAgentTool) *proto.ListedAgentTool {
 		Description:  value.Description,
 		InputSchema:  value.InputSchema,
 		OutputSchema: value.OutputSchema,
-		Annotations:  toWireOperationAnnotations(value.Annotations),
-		Ref:          toWireAgentToolRef(value.Ref),
+		Annotations:  ToWireOperationAnnotations(value.Annotations),
+		Ref:          ToWireAgentToolRef(value.Ref),
 		Tags:         value.Tags,
 		SearchText:   value.SearchText,
 	}
 	return out
 }
 
-func fromWireListedAgentTool(value *proto.ListedAgentTool) *ListedAgentTool {
+func FromWireListedAgentTool(value *proto.ListedAgentTool) *ListedAgentTool {
 	if value == nil {
 		return nil
 	}
@@ -1150,15 +1150,15 @@ func fromWireListedAgentTool(value *proto.ListedAgentTool) *ListedAgentTool {
 		Description:  value.Description,
 		InputSchema:  value.InputSchema,
 		OutputSchema: value.OutputSchema,
-		Annotations:  fromWireOperationAnnotations(value.Annotations),
-		Ref:          fromWireAgentToolRef(value.Ref),
+		Annotations:  FromWireOperationAnnotations(value.Annotations),
+		Ref:          FromWireAgentToolRef(value.Ref),
 		Tags:         value.Tags,
 		SearchText:   value.SearchText,
 	}
 	return out
 }
 
-func toWirePreparedAgentWorkspace(value *PreparedAgentWorkspace) *proto.PreparedAgentWorkspace {
+func ToWirePreparedAgentWorkspace(value *PreparedAgentWorkspace) *proto.PreparedAgentWorkspace {
 	if value == nil {
 		return nil
 	}
@@ -1169,7 +1169,7 @@ func toWirePreparedAgentWorkspace(value *PreparedAgentWorkspace) *proto.Prepared
 	return out
 }
 
-func fromWirePreparedAgentWorkspace(value *proto.PreparedAgentWorkspace) *PreparedAgentWorkspace {
+func FromWirePreparedAgentWorkspace(value *proto.PreparedAgentWorkspace) *PreparedAgentWorkspace {
 	if value == nil {
 		return nil
 	}
@@ -1180,37 +1180,37 @@ func fromWirePreparedAgentWorkspace(value *proto.PreparedAgentWorkspace) *Prepar
 	return out
 }
 
-func toWireResolveAgentProviderInteractionRequest(value *ResolveAgentProviderInteractionRequest) *proto.ResolveAgentProviderInteractionRequest {
+func ToWireResolveAgentProviderInteractionRequest(value *ResolveAgentProviderInteractionRequest) *proto.ResolveAgentProviderInteractionRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ResolveAgentProviderInteractionRequest{
 		InteractionId: value.InteractionId,
 		Resolution:    toWireStruct(value.Resolution),
-		Subject:       toWireSubjectContext(value.Subject),
+		Subject:       ToWireSubjectContext(value.Subject),
 		TurnId:        value.TurnId,
-		Context:       toWireRequestContext(value.Context),
+		Context:       ToWireRequestContext(value.Context),
 		ProviderName:  value.ProviderName,
 	}
 	return out
 }
 
-func fromWireResolveAgentProviderInteractionRequest(value *proto.ResolveAgentProviderInteractionRequest) *ResolveAgentProviderInteractionRequest {
+func FromWireResolveAgentProviderInteractionRequest(value *proto.ResolveAgentProviderInteractionRequest) *ResolveAgentProviderInteractionRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ResolveAgentProviderInteractionRequest{
 		InteractionId: value.InteractionId,
 		Resolution:    fromWireStruct(value.Resolution),
-		Subject:       fromWireSubjectContext(value.Subject),
+		Subject:       FromWireSubjectContext(value.Subject),
 		TurnId:        value.TurnId,
-		Context:       fromWireRequestContext(value.Context),
+		Context:       FromWireRequestContext(value.Context),
 		ProviderName:  value.ProviderName,
 	}
 	return out
 }
 
-func toWireUpdateAgentProviderSessionRequest(value *UpdateAgentProviderSessionRequest) *proto.UpdateAgentProviderSessionRequest {
+func ToWireUpdateAgentProviderSessionRequest(value *UpdateAgentProviderSessionRequest) *proto.UpdateAgentProviderSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -1219,14 +1219,14 @@ func toWireUpdateAgentProviderSessionRequest(value *UpdateAgentProviderSessionRe
 		ClientRef:    value.ClientRef,
 		State:        proto.AgentSessionState(value.State),
 		Metadata:     toWireStruct(value.Metadata),
-		Subject:      toWireSubjectContext(value.Subject),
-		Context:      toWireRequestContext(value.Context),
+		Subject:      ToWireSubjectContext(value.Subject),
+		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out
 }
 
-func fromWireUpdateAgentProviderSessionRequest(value *proto.UpdateAgentProviderSessionRequest) *UpdateAgentProviderSessionRequest {
+func FromWireUpdateAgentProviderSessionRequest(value *proto.UpdateAgentProviderSessionRequest) *UpdateAgentProviderSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -1235,8 +1235,8 @@ func fromWireUpdateAgentProviderSessionRequest(value *proto.UpdateAgentProviderS
 		ClientRef:    value.ClientRef,
 		State:        AgentSessionState(value.State),
 		Metadata:     fromWireStruct(value.Metadata),
-		Subject:      fromWireSubjectContext(value.Subject),
-		Context:      fromWireRequestContext(value.Context),
+		Subject:      FromWireSubjectContext(value.Subject),
+		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
 	return out

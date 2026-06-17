@@ -211,9 +211,9 @@ func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {
 }
 
 func toWireFunc(messageGoName string) string {
-	return "toWire" + messageGoName
+	return "ToWire" + messageGoName
 }
 
 func fromWireFunc(messageGoName string) string {
-	return "fromWire" + messageGoName
+	return "FromWire" + messageGoName
 }

@@ -79,7 +79,7 @@ func (s *ManagedSubjectService) ListManagedSubjects(ctx context.Context, kind st
 	if kind != ManagedSubjectKindServiceAccount {
 		return nil, fmt.Errorf("list managed subjects: unsupported kind %q", kind)
 	}
-	recs, err := s.store.Index("by_kind_deleted").GetAll(ctx, nil, kind, false)
+	recs, err := s.store.Index("by_kind_deleted").GetAll(ctx, []any{kind, false})
 	if err != nil {
 		return nil, fmt.Errorf("list managed subjects: %w", err)
 	}

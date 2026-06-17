@@ -171,4 +171,20 @@ describe("Cache transport", () => {
       }
     }
   });
+
+  test("getMany omits misses and delete methods unwrap responses", async () => {
+    const cache = Cache.connect();
+    await cache.set("alpha", encoder.encode("one"));
+    await cache.setMany([{ key: "beta", value: encoder.encode("two") }]);
+
+    const values = await cache.getMany(["alpha", "beta", "missing"]);
+    expect(values.alpha).toEqual(encoder.encode("one"));
+    expect(values.beta).toEqual(encoder.encode("two"));
+    expect(values.missing).toBeUndefined();
+    expect(await cache.get("missing")).toBeUndefined();
+
+    expect(await cache.delete("alpha")).toBe(true);
+    expect(await cache.delete("alpha")).toBe(false);
+    expect(await cache.deleteMany(["beta", "missing"])).toBe(1n);
+  });
 });

@@ -131,18 +131,6 @@ func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 	}
 }
 
-func TypedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
-	out := make([]*proto.TypedValue, len(values))
-	for i, value := range values {
-		pbValue, err := TypedValueFromAny(value)
-		if err != nil {
-			return nil, fmt.Errorf("marshal value %d: %w", i, err)
-		}
-		out[i] = pbValue
-	}
-	return out, nil
-}
-
 func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	out := make([]any, len(values))
 	for i, value := range values {
@@ -249,25 +237,8 @@ func AnyToKeyValue(v any) (*proto.KeyValue, error) {
 	return &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: tv}}, nil
 }
 
-func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	if indexCursor {
-		if parts, ok := KeyValueArrayParts(key); ok {
-			kvs := make([]*proto.KeyValue, len(parts))
-			for i, part := range parts {
-				kv, err := AnyToKeyValue(part)
-				if err != nil {
-					return nil, err
-				}
-				kvs[i] = kv
-			}
-			return kvs, nil
-		}
-	}
-	kv, err := AnyToKeyValue(key)
-	if err != nil {
-		return nil, err
-	}
-	return []*proto.KeyValue{kv}, nil
+func CursorKeyToProto(key any) (*proto.KeyValue, error) {
+	return AnyToKeyValue(key)
 }
 
 func EncodeKey(value any) ([]byte, error) {
@@ -300,38 +271,6 @@ func DecodeRecord(data []byte) (Record, error) {
 		return nil, err
 	}
 	return RecordFromProto(pbRecord)
-}
-
-func EncodeIndexValues(values []any) ([]byte, error) {
-	typedValues, err := TypedValuesFromAny(values)
-	if err != nil {
-		return nil, err
-	}
-	record := &proto.Record{Fields: make(map[string]*proto.TypedValue, len(typedValues))}
-	for i, value := range typedValues {
-		record.Fields[fmt.Sprintf("%d", i)] = gproto.Clone(value).(*proto.TypedValue)
-	}
-	return gproto.MarshalOptions{Deterministic: true}.Marshal(record)
-}
-
-func DecodeIndexValues(data []byte, keyParts int) ([]any, error) {
-	record := &proto.Record{}
-	if err := gproto.Unmarshal(data, record); err != nil {
-		return nil, err
-	}
-	out := make([]any, keyParts)
-	for i := 0; i < keyParts; i++ {
-		value, ok := record.Fields[fmt.Sprintf("%d", i)]
-		if !ok || value == nil {
-			return nil, fmt.Errorf("missing index key part %d", i)
-		}
-		decoded, err := AnyFromTypedValue(value)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = decoded
-	}
-	return out, nil
 }
 
 func KeyValueArrayParts(v any) ([]any, bool) {

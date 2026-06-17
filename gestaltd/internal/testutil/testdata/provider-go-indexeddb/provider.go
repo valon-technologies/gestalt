@@ -3,9 +3,11 @@ package provider
 import (
 	"context"
 	"reflect"
+	"sort"
 	"sync"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
 type Provider struct {
@@ -126,22 +128,30 @@ func (p *Provider) GetAll(_ context.Context, req gestalt.IndexedDBObjectStoreRan
 		return nil, nil
 	}
 	recs := make([]gestalt.Record, 0, len(s.records))
-	for _, r := range s.records {
+	for id, r := range s.records {
+		ok, err := indexeddb.MatchQuery(id, req.Query)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
 		recs = append(recs, cloneRecord(r))
 	}
-	return recs, nil
+	sort.SliceStable(recs, func(i, j int) bool {
+		return indexeddb.CompareKeys(recs[i]["id"], recs[j]["id"]) < 0
+	})
+	return limitRecords(recs, req.Count), nil
 }
 
-func (p *Provider) GetAllKeys(_ context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) ([]string, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	s, ok := p.stores[req.Store]
-	if !ok {
-		return nil, nil
+func (p *Provider) GetAllKeys(ctx context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) ([]string, error) {
+	records, err := p.GetAll(ctx, req)
+	if err != nil {
+		return nil, err
 	}
-	keys := make([]string, 0, len(s.records))
-	for k := range s.records {
-		keys = append(keys, k)
+	keys := make([]string, len(records))
+	for i, rec := range records {
+		keys[i] = fieldString(rec, "id")
 	}
 	return keys, nil
 }
@@ -153,7 +163,17 @@ func (p *Provider) Count(_ context.Context, req gestalt.IndexedDBObjectStoreRang
 	if !ok {
 		return 0, nil
 	}
-	return int64(len(s.records)), nil
+	var count int64
+	for id := range s.records {
+		ok, err := indexeddb.MatchQuery(id, req.Query)
+		if err != nil {
+			return 0, err
+		}
+		if ok {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (p *Provider) DeleteRange(context.Context, gestalt.IndexedDBObjectStoreRangeRequest) (int64, error) {
@@ -167,12 +187,14 @@ func (p *Provider) IndexGet(_ context.Context, req gestalt.IndexedDBIndexQueryRe
 	if !ok {
 		return nil, gestalt.NotFound("not found")
 	}
-	for _, rec := range s.records {
-		if indexMatches(rec, s.schema, req.Index, req.Values) {
-			return cloneRecord(rec), nil
-		}
+	recs, err := sortedIndexMatches(s, req.Index, req.Query)
+	if err != nil {
+		return nil, err
 	}
-	return nil, gestalt.NotFound("not found")
+	if len(recs) == 0 {
+		return nil, gestalt.NotFound("not found")
+	}
+	return recs[0], nil
 }
 
 func (p *Provider) IndexGetKey(ctx context.Context, req gestalt.IndexedDBIndexQueryRequest) (string, error) {
@@ -190,13 +212,11 @@ func (p *Provider) IndexGetAll(_ context.Context, req gestalt.IndexedDBIndexQuer
 	if !ok {
 		return nil, nil
 	}
-	var recs []gestalt.Record
-	for _, rec := range s.records {
-		if indexMatches(rec, s.schema, req.Index, req.Values) {
-			recs = append(recs, cloneRecord(rec))
-		}
+	recs, err := sortedIndexMatches(s, req.Index, req.Query)
+	if err != nil {
+		return nil, err
 	}
-	return recs, nil
+	return limitRecords(recs, req.Count), nil
 }
 
 func (p *Provider) IndexGetAllKeys(ctx context.Context, req gestalt.IndexedDBIndexQueryRequest) ([]string, error) {
@@ -211,12 +231,24 @@ func (p *Provider) IndexGetAllKeys(ctx context.Context, req gestalt.IndexedDBInd
 	return keys, nil
 }
 
-func (p *Provider) IndexCount(ctx context.Context, req gestalt.IndexedDBIndexQueryRequest) (int64, error) {
-	records, err := p.IndexGetAll(ctx, req)
-	if err != nil {
-		return 0, err
+func (p *Provider) IndexCount(_ context.Context, req gestalt.IndexedDBIndexQueryRequest) (int64, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	s, ok := p.stores[req.Store]
+	if !ok {
+		return 0, nil
 	}
-	return int64(len(records)), nil
+	var count int64
+	for _, rec := range s.records {
+		match, err := indexMatches(rec, s.schema, req.Index, req.Query)
+		if err != nil {
+			return 0, err
+		}
+		if match {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (p *Provider) IndexDelete(_ context.Context, req gestalt.IndexedDBIndexQueryRequest) (int64, error) {
@@ -225,7 +257,11 @@ func (p *Provider) IndexDelete(_ context.Context, req gestalt.IndexedDBIndexQuer
 	s := p.getStoreLocked(req.Store)
 	var toDelete []string
 	for id, rec := range s.records {
-		if indexMatches(rec, s.schema, req.Index, req.Values) {
+		match, err := indexMatches(rec, s.schema, req.Index, req.Query)
+		if err != nil {
+			return 0, err
+		}
+		if match {
 			toDelete = append(toDelete, id)
 		}
 	}
@@ -260,7 +296,7 @@ func fieldString(rec gestalt.Record, key string) string {
 	return value
 }
 
-func indexMatches(rec gestalt.Record, schema gestalt.ObjectStoreOptions, indexName string, values []any) bool {
+func indexKey(rec gestalt.Record, schema gestalt.ObjectStoreOptions, indexName string) (any, bool) {
 	var keyPath []string
 	for _, idx := range schema.Indexes {
 		if idx.Name == indexName {
@@ -269,18 +305,50 @@ func indexMatches(rec gestalt.Record, schema gestalt.ObjectStoreOptions, indexNa
 		}
 	}
 	if keyPath == nil {
-		return false
+		return nil, false
 	}
+	parts := make([]any, len(keyPath))
 	for i, field := range keyPath {
-		if i >= len(values) {
-			break
-		}
 		recordValue, ok := rec[field]
-		if !ok || !reflect.DeepEqual(recordValue, values[i]) {
-			return false
+		if !ok {
+			return nil, false
+		}
+		parts[i] = recordValue
+	}
+	if len(parts) == 1 {
+		return parts[0], true
+	}
+	return parts, true
+}
+
+func indexMatches(rec gestalt.Record, schema gestalt.ObjectStoreOptions, indexName string, query *gestalt.IndexedDBQuery) (bool, error) {
+	key, ok := indexKey(rec, schema, indexName)
+	if !ok {
+		return false, nil
+	}
+	return indexeddb.MatchQuery(key, query)
+}
+
+func sortedIndexMatches(s *objectStore, indexName string, query *gestalt.IndexedDBQuery) ([]gestalt.Record, error) {
+	var recs []gestalt.Record
+	for _, rec := range s.records {
+		match, err := indexMatches(rec, s.schema, indexName, query)
+		if err != nil {
+			return nil, err
+		}
+		if match {
+			recs = append(recs, cloneRecord(rec))
 		}
 	}
-	return true
+	sort.SliceStable(recs, func(i, j int) bool {
+		ki, _ := indexKey(recs[i], s.schema, indexName)
+		kj, _ := indexKey(recs[j], s.schema, indexName)
+		if c := indexeddb.CompareKeys(ki, kj); c != 0 {
+			return c < 0
+		}
+		return indexeddb.CompareKeys(recs[i]["id"], recs[j]["id"]) < 0
+	})
+	return recs, nil
 }
 
 func fieldsMatch(a, b gestalt.Record, keyPath []string) bool {
@@ -303,4 +371,11 @@ func cloneRecord(record gestalt.Record) gestalt.Record {
 		cloned[k] = v
 	}
 	return cloned
+}
+
+func limitRecords(recs []gestalt.Record, count *uint32) []gestalt.Record {
+	if count == nil || *count == 0 || int(*count) >= len(recs) {
+		return recs
+	}
+	return recs[:*count]
 }

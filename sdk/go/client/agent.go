@@ -614,11 +614,11 @@ func (c *Agent) CreateSession(ctx context.Context, idempotencyKey string, model 
 		opts = &AgentCreateSessionOptions{}
 	}
 	request := &CreateAgentProviderSessionRequest{IdempotencyKey: idempotencyKey, Model: model, ProviderName: opts.ProviderName, ClientRef: opts.ClientRef, Metadata: opts.Metadata, Workspace: opts.Workspace, Tools: opts.Tools, Context: c.context}
-	response, err := c.client.CreateSession(ctx, toWireCreateAgentProviderSessionRequest(request))
+	response, err := c.client.CreateSession(ctx, ToWireCreateAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentSession(response), nil
+	return FromWireAgentSession(response), nil
 }
 
 // CreateSessionRaw is the faithful form of [Agent.CreateSession].
@@ -628,11 +628,11 @@ func (c *Agent) CreateSessionRaw(ctx context.Context, request *CreateAgentProvid
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.CreateSession(ctx, toWireCreateAgentProviderSessionRequest(request))
+	response, err := c.client.CreateSession(ctx, ToWireCreateAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentSession(response), nil
+	return FromWireAgentSession(response), nil
 }
 
 // AgentGetSessionOptions carries the optional parameters of [Agent.GetSession].
@@ -647,11 +647,11 @@ func (c *Agent) GetSession(ctx context.Context, sessionId string, opts *AgentGet
 		opts = &AgentGetSessionOptions{}
 	}
 	request := &GetAgentProviderSessionRequest{SessionId: sessionId, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.GetSession(ctx, toWireGetAgentProviderSessionRequest(request))
+	response, err := c.client.GetSession(ctx, ToWireGetAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentSession(response), nil
+	return FromWireAgentSession(response), nil
 }
 
 // GetSessionRaw is the faithful form of [Agent.GetSession].
@@ -661,11 +661,11 @@ func (c *Agent) GetSessionRaw(ctx context.Context, request *GetAgentProviderSess
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.GetSession(ctx, toWireGetAgentProviderSessionRequest(request))
+	response, err := c.client.GetSession(ctx, ToWireGetAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentSession(response), nil
+	return FromWireAgentSession(response), nil
 }
 
 // AgentListSessionsOptions carries the optional parameters of [Agent.ListSessions].
@@ -689,11 +689,11 @@ func (c *Agent) ListSessions(ctx context.Context, opts *AgentListSessionsOptions
 		opts = &AgentListSessionsOptions{}
 	}
 	request := &ListAgentProviderSessionsRequest{SessionIds: opts.SessionIds, State: opts.State, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.ListSessions(ctx, toWireListAgentProviderSessionsRequest(request))
+	response, err := c.client.ListSessions(ctx, ToWireListAgentProviderSessionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderSessionsResponse(response).Sessions, nil
+	return FromWireListAgentProviderSessionsResponse(response).Sessions, nil
 }
 
 // ListSessionsRaw is the faithful form of [Agent.ListSessions].
@@ -703,11 +703,11 @@ func (c *Agent) ListSessionsRaw(ctx context.Context, request *ListAgentProviderS
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.ListSessions(ctx, toWireListAgentProviderSessionsRequest(request))
+	response, err := c.client.ListSessions(ctx, ToWireListAgentProviderSessionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderSessionsResponse(response), nil
+	return FromWireListAgentProviderSessionsResponse(response), nil
 }
 
 // AgentUpdateSessionOptions carries the optional parameters of [Agent.UpdateSession].
@@ -725,11 +725,11 @@ func (c *Agent) UpdateSession(ctx context.Context, sessionId string, opts *Agent
 		opts = &AgentUpdateSessionOptions{}
 	}
 	request := &UpdateAgentProviderSessionRequest{SessionId: sessionId, ClientRef: opts.ClientRef, State: opts.State, ProviderName: opts.ProviderName, Metadata: opts.Metadata, Context: c.context}
-	response, err := c.client.UpdateSession(ctx, toWireUpdateAgentProviderSessionRequest(request))
+	response, err := c.client.UpdateSession(ctx, ToWireUpdateAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentSession(response), nil
+	return FromWireAgentSession(response), nil
 }
 
 // UpdateSessionRaw is the faithful form of [Agent.UpdateSession].
@@ -739,11 +739,11 @@ func (c *Agent) UpdateSessionRaw(ctx context.Context, request *UpdateAgentProvid
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.UpdateSession(ctx, toWireUpdateAgentProviderSessionRequest(request))
+	response, err := c.client.UpdateSession(ctx, ToWireUpdateAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentSession(response), nil
+	return FromWireAgentSession(response), nil
 }
 
 // AgentCreateTurnOptions carries the optional parameters of [Agent.CreateTurn].
@@ -766,11 +766,11 @@ func (c *Agent) CreateTurn(ctx context.Context, sessionId string, idempotencyKey
 		opts = &AgentCreateTurnOptions{}
 	}
 	request := &CreateAgentProviderTurnRequest{SessionId: sessionId, IdempotencyKey: idempotencyKey, Model: model, Messages: messages, ExecutionRef: opts.ExecutionRef, TimeoutSeconds: opts.TimeoutSeconds, ProviderName: opts.ProviderName, Metadata: opts.Metadata, ModelOptions: opts.ModelOptions, Output: opts.Output, Context: c.context}
-	response, err := c.client.CreateTurn(ctx, toWireCreateAgentProviderTurnRequest(request))
+	response, err := c.client.CreateTurn(ctx, ToWireCreateAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentTurn(response), nil
+	return FromWireAgentTurn(response), nil
 }
 
 // CreateTurnRaw is the faithful form of [Agent.CreateTurn].
@@ -780,11 +780,11 @@ func (c *Agent) CreateTurnRaw(ctx context.Context, request *CreateAgentProviderT
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.CreateTurn(ctx, toWireCreateAgentProviderTurnRequest(request))
+	response, err := c.client.CreateTurn(ctx, ToWireCreateAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentTurn(response), nil
+	return FromWireAgentTurn(response), nil
 }
 
 // AgentGetTurnOptions carries the optional parameters of [Agent.GetTurn].
@@ -799,11 +799,11 @@ func (c *Agent) GetTurn(ctx context.Context, turnId string, opts *AgentGetTurnOp
 		opts = &AgentGetTurnOptions{}
 	}
 	request := &GetAgentProviderTurnRequest{TurnId: turnId, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.GetTurn(ctx, toWireGetAgentProviderTurnRequest(request))
+	response, err := c.client.GetTurn(ctx, ToWireGetAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentTurn(response), nil
+	return FromWireAgentTurn(response), nil
 }
 
 // GetTurnRaw is the faithful form of [Agent.GetTurn].
@@ -813,11 +813,11 @@ func (c *Agent) GetTurnRaw(ctx context.Context, request *GetAgentProviderTurnReq
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.GetTurn(ctx, toWireGetAgentProviderTurnRequest(request))
+	response, err := c.client.GetTurn(ctx, ToWireGetAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentTurn(response), nil
+	return FromWireAgentTurn(response), nil
 }
 
 // AgentListTurnsOptions carries the optional parameters of [Agent.ListTurns].
@@ -842,11 +842,11 @@ func (c *Agent) ListTurns(ctx context.Context, sessionId string, opts *AgentList
 		opts = &AgentListTurnsOptions{}
 	}
 	request := &ListAgentProviderTurnsRequest{SessionId: sessionId, TurnIds: opts.TurnIds, Status: opts.Status, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.ListTurns(ctx, toWireListAgentProviderTurnsRequest(request))
+	response, err := c.client.ListTurns(ctx, ToWireListAgentProviderTurnsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderTurnsResponse(response).Turns, nil
+	return FromWireListAgentProviderTurnsResponse(response).Turns, nil
 }
 
 // ListTurnsRaw is the faithful form of [Agent.ListTurns].
@@ -856,11 +856,11 @@ func (c *Agent) ListTurnsRaw(ctx context.Context, request *ListAgentProviderTurn
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.ListTurns(ctx, toWireListAgentProviderTurnsRequest(request))
+	response, err := c.client.ListTurns(ctx, ToWireListAgentProviderTurnsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderTurnsResponse(response), nil
+	return FromWireListAgentProviderTurnsResponse(response), nil
 }
 
 // AgentCancelTurnOptions carries the optional parameters of [Agent.CancelTurn].
@@ -876,11 +876,11 @@ func (c *Agent) CancelTurn(ctx context.Context, turnId string, opts *AgentCancel
 		opts = &AgentCancelTurnOptions{}
 	}
 	request := &CancelAgentProviderTurnRequest{TurnId: turnId, Reason: opts.Reason, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.CancelTurn(ctx, toWireCancelAgentProviderTurnRequest(request))
+	response, err := c.client.CancelTurn(ctx, ToWireCancelAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentTurn(response), nil
+	return FromWireAgentTurn(response), nil
 }
 
 // CancelTurnRaw is the faithful form of [Agent.CancelTurn].
@@ -890,11 +890,11 @@ func (c *Agent) CancelTurnRaw(ctx context.Context, request *CancelAgentProviderT
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.CancelTurn(ctx, toWireCancelAgentProviderTurnRequest(request))
+	response, err := c.client.CancelTurn(ctx, ToWireCancelAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentTurn(response), nil
+	return FromWireAgentTurn(response), nil
 }
 
 // AgentListTurnEventsOptions carries the optional parameters of [Agent.ListTurnEvents].
@@ -912,11 +912,11 @@ func (c *Agent) ListTurnEvents(ctx context.Context, turnId string, opts *AgentLi
 		opts = &AgentListTurnEventsOptions{}
 	}
 	request := &ListAgentProviderTurnEventsRequest{TurnId: turnId, AfterSeq: opts.AfterSeq, Limit: opts.Limit, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.ListTurnEvents(ctx, toWireListAgentProviderTurnEventsRequest(request))
+	response, err := c.client.ListTurnEvents(ctx, ToWireListAgentProviderTurnEventsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderTurnEventsResponse(response).Events, nil
+	return FromWireListAgentProviderTurnEventsResponse(response).Events, nil
 }
 
 // ListTurnEventsRaw is the faithful form of [Agent.ListTurnEvents].
@@ -926,21 +926,21 @@ func (c *Agent) ListTurnEventsRaw(ctx context.Context, request *ListAgentProvide
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.ListTurnEvents(ctx, toWireListAgentProviderTurnEventsRequest(request))
+	response, err := c.client.ListTurnEvents(ctx, ToWireListAgentProviderTurnEventsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderTurnEventsResponse(response), nil
+	return FromWireListAgentProviderTurnEventsResponse(response), nil
 }
 
 // GetInteraction is the ergonomic form of [Agent.GetInteractionRaw].
 func (c *Agent) GetInteraction(ctx context.Context, interactionId string) (*AgentInteraction, error) {
 	request := &GetAgentProviderInteractionRequest{InteractionId: interactionId, Context: c.context}
-	response, err := c.client.GetInteraction(ctx, toWireGetAgentProviderInteractionRequest(request))
+	response, err := c.client.GetInteraction(ctx, ToWireGetAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentInteraction(response), nil
+	return FromWireAgentInteraction(response), nil
 }
 
 // GetInteractionRaw is the faithful form of [Agent.GetInteraction].
@@ -950,11 +950,11 @@ func (c *Agent) GetInteractionRaw(ctx context.Context, request *GetAgentProvider
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.GetInteraction(ctx, toWireGetAgentProviderInteractionRequest(request))
+	response, err := c.client.GetInteraction(ctx, ToWireGetAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentInteraction(response), nil
+	return FromWireAgentInteraction(response), nil
 }
 
 // AgentListInteractionsOptions carries the optional parameters of [Agent.ListInteractions].
@@ -970,11 +970,11 @@ func (c *Agent) ListInteractions(ctx context.Context, turnId string, opts *Agent
 		opts = &AgentListInteractionsOptions{}
 	}
 	request := &ListAgentProviderInteractionsRequest{TurnId: turnId, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.ListInteractions(ctx, toWireListAgentProviderInteractionsRequest(request))
+	response, err := c.client.ListInteractions(ctx, ToWireListAgentProviderInteractionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderInteractionsResponse(response).Interactions, nil
+	return FromWireListAgentProviderInteractionsResponse(response).Interactions, nil
 }
 
 // ListInteractionsRaw is the faithful form of [Agent.ListInteractions].
@@ -984,11 +984,11 @@ func (c *Agent) ListInteractionsRaw(ctx context.Context, request *ListAgentProvi
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.ListInteractions(ctx, toWireListAgentProviderInteractionsRequest(request))
+	response, err := c.client.ListInteractions(ctx, ToWireListAgentProviderInteractionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListAgentProviderInteractionsResponse(response), nil
+	return FromWireListAgentProviderInteractionsResponse(response), nil
 }
 
 // AgentResolveInteractionOptions carries the optional parameters of [Agent.ResolveInteraction].
@@ -1004,11 +1004,11 @@ func (c *Agent) ResolveInteraction(ctx context.Context, interactionId string, re
 		opts = &AgentResolveInteractionOptions{}
 	}
 	request := &ResolveAgentProviderInteractionRequest{InteractionId: interactionId, Resolution: resolution, TurnId: opts.TurnId, ProviderName: opts.ProviderName, Context: c.context}
-	response, err := c.client.ResolveInteraction(ctx, toWireResolveAgentProviderInteractionRequest(request))
+	response, err := c.client.ResolveInteraction(ctx, ToWireResolveAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentInteraction(response), nil
+	return FromWireAgentInteraction(response), nil
 }
 
 // ResolveInteractionRaw is the faithful form of [Agent.ResolveInteraction].
@@ -1018,18 +1018,18 @@ func (c *Agent) ResolveInteractionRaw(ctx context.Context, request *ResolveAgent
 		shallow.Context = c.context
 		request = &shallow
 	}
-	response, err := c.client.ResolveInteraction(ctx, toWireResolveAgentProviderInteractionRequest(request))
+	response, err := c.client.ResolveInteraction(ctx, ToWireResolveAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentInteraction(response), nil
+	return FromWireAgentInteraction(response), nil
 }
 
 // GetCapabilities calls the GetCapabilities RPC of Agent.
 func (c *Agent) GetCapabilities(ctx context.Context, request *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
-	response, err := c.client.GetCapabilities(ctx, toWireGetAgentProviderCapabilitiesRequest(request))
+	response, err := c.client.GetCapabilities(ctx, ToWireGetAgentProviderCapabilitiesRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAgentProviderCapabilities(response), nil
+	return FromWireAgentProviderCapabilities(response), nil
 }

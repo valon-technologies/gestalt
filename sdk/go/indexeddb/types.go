@@ -75,11 +75,3 @@ type ObjectStoreOptions struct {
 	Indexes []IndexSchema
 	Columns []ColumnDef
 }
-
-// KeyRange represents a range over keys (maps to IDBKeyRange).
-type KeyRange struct {
-	Lower     any
-	Upper     any
-	LowerOpen bool
-	UpperOpen bool
-}

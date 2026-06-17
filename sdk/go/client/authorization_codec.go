@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireAction(value *Action) *proto.Action {
+func ToWireAction(value *Action) *proto.Action {
 	if value == nil {
 		return nil
 	}
@@ -17,7 +17,7 @@ func toWireAction(value *Action) *proto.Action {
 	return out
 }
 
-func fromWireAction(value *proto.Action) *Action {
+func FromWireAction(value *proto.Action) *Action {
 	if value == nil {
 		return nil
 	}
@@ -28,47 +28,47 @@ func fromWireAction(value *proto.Action) *Action {
 	return out
 }
 
-func toWireAddRelationshipRequest(value *AddRelationshipRequest) *proto.AddRelationshipRequest {
+func ToWireAddRelationshipRequest(value *AddRelationshipRequest) *proto.AddRelationshipRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.AddRelationshipRequest{
-		Relationship: toWireRelationship(value.Relationship),
+		Relationship: ToWireRelationship(value.Relationship),
 	}
 	return out
 }
 
-func fromWireAddRelationshipRequest(value *proto.AddRelationshipRequest) *AddRelationshipRequest {
+func FromWireAddRelationshipRequest(value *proto.AddRelationshipRequest) *AddRelationshipRequest {
 	if value == nil {
 		return nil
 	}
 	out := &AddRelationshipRequest{
-		Relationship: fromWireRelationship(value.Relationship),
+		Relationship: FromWireRelationship(value.Relationship),
 	}
 	return out
 }
 
-func toWireAddRelationshipResponse(value *AddRelationshipResponse) *proto.AddRelationshipResponse {
+func ToWireAddRelationshipResponse(value *AddRelationshipResponse) *proto.AddRelationshipResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.AddRelationshipResponse{
-		Relationship: toWireRelationship(value.Relationship),
+		Relationship: ToWireRelationship(value.Relationship),
 	}
 	return out
 }
 
-func fromWireAddRelationshipResponse(value *proto.AddRelationshipResponse) *AddRelationshipResponse {
+func FromWireAddRelationshipResponse(value *proto.AddRelationshipResponse) *AddRelationshipResponse {
 	if value == nil {
 		return nil
 	}
 	out := &AddRelationshipResponse{
-		Relationship: fromWireRelationship(value.Relationship),
+		Relationship: FromWireRelationship(value.Relationship),
 	}
 	return out
 }
 
-func toWireAuthorizationModel(value *AuthorizationModel) *proto.AuthorizationModel {
+func ToWireAuthorizationModel(value *AuthorizationModel) *proto.AuthorizationModel {
 	if value == nil {
 		return nil
 	}
@@ -77,12 +77,12 @@ func toWireAuthorizationModel(value *AuthorizationModel) *proto.AuthorizationMod
 		Version: value.Version,
 	}
 	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, toWireAuthorizationModelResourceType(item))
+		out.ResourceTypes = append(out.ResourceTypes, ToWireAuthorizationModelResourceType(item))
 	}
 	return out
 }
 
-func fromWireAuthorizationModel(value *proto.AuthorizationModel) *AuthorizationModel {
+func FromWireAuthorizationModel(value *proto.AuthorizationModel) *AuthorizationModel {
 	if value == nil {
 		return nil
 	}
@@ -91,12 +91,12 @@ func fromWireAuthorizationModel(value *proto.AuthorizationModel) *AuthorizationM
 		Version: value.Version,
 	}
 	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, fromWireAuthorizationModelResourceType(item))
+		out.ResourceTypes = append(out.ResourceTypes, FromWireAuthorizationModelResourceType(item))
 	}
 	return out
 }
 
-func toWireAuthorizationModelRef(value *AuthorizationModelRef) *proto.AuthorizationModelRef {
+func ToWireAuthorizationModelRef(value *AuthorizationModelRef) *proto.AuthorizationModelRef {
 	if value == nil {
 		return nil
 	}
@@ -108,7 +108,7 @@ func toWireAuthorizationModelRef(value *AuthorizationModelRef) *proto.Authorizat
 	return out
 }
 
-func fromWireAuthorizationModelRef(value *proto.AuthorizationModelRef) *AuthorizationModelRef {
+func FromWireAuthorizationModelRef(value *proto.AuthorizationModelRef) *AuthorizationModelRef {
 	if value == nil {
 		return nil
 	}
@@ -120,7 +120,7 @@ func fromWireAuthorizationModelRef(value *proto.AuthorizationModelRef) *Authoriz
 	return out
 }
 
-func toWireAuthorizationModelResourceType(value *AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
+func ToWireAuthorizationModelResourceType(value *AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
 	if value == nil {
 		return nil
 	}
@@ -130,15 +130,15 @@ func toWireAuthorizationModelResourceType(value *AuthorizationModelResourceType)
 		DefaultAccessPolicy: proto.DefaultAccessPolicy(value.DefaultAccessPolicy),
 	}
 	for _, item := range value.Relations {
-		out.Relations = append(out.Relations, toWireModelRelation(item))
+		out.Relations = append(out.Relations, ToWireModelRelation(item))
 	}
 	for _, item := range value.Actions {
-		out.Actions = append(out.Actions, toWireModelAction(item))
+		out.Actions = append(out.Actions, ToWireModelAction(item))
 	}
 	return out
 }
 
-func fromWireAuthorizationModelResourceType(value *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
+func FromWireAuthorizationModelResourceType(value *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
 	if value == nil {
 		return nil
 	}
@@ -148,15 +148,15 @@ func fromWireAuthorizationModelResourceType(value *proto.AuthorizationModelResou
 		DefaultAccessPolicy: DefaultAccessPolicy(value.DefaultAccessPolicy),
 	}
 	for _, item := range value.Relations {
-		out.Relations = append(out.Relations, fromWireModelRelation(item))
+		out.Relations = append(out.Relations, FromWireModelRelation(item))
 	}
 	for _, item := range value.Actions {
-		out.Actions = append(out.Actions, fromWireModelAction(item))
+		out.Actions = append(out.Actions, FromWireModelAction(item))
 	}
 	return out
 }
 
-func toWireAuthorizationModelResourceTypeFilter(value *AuthorizationModelResourceTypeFilter) *proto.AuthorizationModelResourceTypeFilter {
+func ToWireAuthorizationModelResourceTypeFilter(value *AuthorizationModelResourceTypeFilter) *proto.AuthorizationModelResourceTypeFilter {
 	if value == nil {
 		return nil
 	}
@@ -167,7 +167,7 @@ func toWireAuthorizationModelResourceTypeFilter(value *AuthorizationModelResourc
 	return out
 }
 
-func fromWireAuthorizationModelResourceTypeFilter(value *proto.AuthorizationModelResourceTypeFilter) *AuthorizationModelResourceTypeFilter {
+func FromWireAuthorizationModelResourceTypeFilter(value *proto.AuthorizationModelResourceTypeFilter) *AuthorizationModelResourceTypeFilter {
 	if value == nil {
 		return nil
 	}
@@ -178,75 +178,75 @@ func fromWireAuthorizationModelResourceTypeFilter(value *proto.AuthorizationMode
 	return out
 }
 
-func toWireCheckAccessManyRequest(value *CheckAccessManyRequest) *proto.CheckAccessManyRequest {
+func ToWireCheckAccessManyRequest(value *CheckAccessManyRequest) *proto.CheckAccessManyRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CheckAccessManyRequest{}
 	for _, item := range value.Requests {
-		out.Requests = append(out.Requests, toWireCheckAccessRequest(item))
+		out.Requests = append(out.Requests, ToWireCheckAccessRequest(item))
 	}
 	return out
 }
 
-func fromWireCheckAccessManyRequest(value *proto.CheckAccessManyRequest) *CheckAccessManyRequest {
+func FromWireCheckAccessManyRequest(value *proto.CheckAccessManyRequest) *CheckAccessManyRequest {
 	if value == nil {
 		return nil
 	}
 	out := &CheckAccessManyRequest{}
 	for _, item := range value.Requests {
-		out.Requests = append(out.Requests, fromWireCheckAccessRequest(item))
+		out.Requests = append(out.Requests, FromWireCheckAccessRequest(item))
 	}
 	return out
 }
 
-func toWireCheckAccessManyResponse(value *CheckAccessManyResponse) *proto.CheckAccessManyResponse {
+func ToWireCheckAccessManyResponse(value *CheckAccessManyResponse) *proto.CheckAccessManyResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CheckAccessManyResponse{}
 	for _, item := range value.Decisions {
-		out.Decisions = append(out.Decisions, toWireCheckAccessResponse(item))
+		out.Decisions = append(out.Decisions, ToWireCheckAccessResponse(item))
 	}
 	return out
 }
 
-func fromWireCheckAccessManyResponse(value *proto.CheckAccessManyResponse) *CheckAccessManyResponse {
+func FromWireCheckAccessManyResponse(value *proto.CheckAccessManyResponse) *CheckAccessManyResponse {
 	if value == nil {
 		return nil
 	}
 	out := &CheckAccessManyResponse{}
 	for _, item := range value.Decisions {
-		out.Decisions = append(out.Decisions, fromWireCheckAccessResponse(item))
+		out.Decisions = append(out.Decisions, FromWireCheckAccessResponse(item))
 	}
 	return out
 }
 
-func toWireCheckAccessRequest(value *CheckAccessRequest) *proto.CheckAccessRequest {
+func ToWireCheckAccessRequest(value *CheckAccessRequest) *proto.CheckAccessRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CheckAccessRequest{
-		Subject:  toWireSubject(value.Subject),
-		Action:   toWireAction(value.Action),
-		Resource: toWireResource(value.Resource),
+		Subject:  ToWireSubject(value.Subject),
+		Action:   ToWireAction(value.Action),
+		Resource: ToWireResource(value.Resource),
 	}
 	return out
 }
 
-func fromWireCheckAccessRequest(value *proto.CheckAccessRequest) *CheckAccessRequest {
+func FromWireCheckAccessRequest(value *proto.CheckAccessRequest) *CheckAccessRequest {
 	if value == nil {
 		return nil
 	}
 	out := &CheckAccessRequest{
-		Subject:  fromWireSubject(value.Subject),
-		Action:   fromWireAction(value.Action),
-		Resource: fromWireResource(value.Resource),
+		Subject:  FromWireSubject(value.Subject),
+		Action:   FromWireAction(value.Action),
+		Resource: FromWireResource(value.Resource),
 	}
 	return out
 }
 
-func toWireCheckAccessResponse(value *CheckAccessResponse) *proto.CheckAccessResponse {
+func ToWireCheckAccessResponse(value *CheckAccessResponse) *proto.CheckAccessResponse {
 	if value == nil {
 		return nil
 	}
@@ -257,7 +257,7 @@ func toWireCheckAccessResponse(value *CheckAccessResponse) *proto.CheckAccessRes
 	return out
 }
 
-func fromWireCheckAccessResponse(value *proto.CheckAccessResponse) *CheckAccessResponse {
+func FromWireCheckAccessResponse(value *proto.CheckAccessResponse) *CheckAccessResponse {
 	if value == nil {
 		return nil
 	}
@@ -268,27 +268,27 @@ func fromWireCheckAccessResponse(value *proto.CheckAccessResponse) *CheckAccessR
 	return out
 }
 
-func toWireDeleteRelationshipRequest(value *DeleteRelationshipRequest) *proto.DeleteRelationshipRequest {
+func ToWireDeleteRelationshipRequest(value *DeleteRelationshipRequest) *proto.DeleteRelationshipRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.DeleteRelationshipRequest{
-		RelationshipTuple: toWireRelationshipTuple(value.RelationshipTuple),
+		RelationshipTuple: ToWireRelationshipTuple(value.RelationshipTuple),
 	}
 	return out
 }
 
-func fromWireDeleteRelationshipRequest(value *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
+func FromWireDeleteRelationshipRequest(value *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
 	if value == nil {
 		return nil
 	}
 	out := &DeleteRelationshipRequest{
-		RelationshipTuple: fromWireRelationshipTuple(value.RelationshipTuple),
+		RelationshipTuple: FromWireRelationshipTuple(value.RelationshipTuple),
 	}
 	return out
 }
 
-func toWireDeleteRelationshipResponse(value *DeleteRelationshipResponse) *proto.DeleteRelationshipResponse {
+func ToWireDeleteRelationshipResponse(value *DeleteRelationshipResponse) *proto.DeleteRelationshipResponse {
 	if value == nil {
 		return nil
 	}
@@ -296,7 +296,7 @@ func toWireDeleteRelationshipResponse(value *DeleteRelationshipResponse) *proto.
 	return out
 }
 
-func fromWireDeleteRelationshipResponse(value *proto.DeleteRelationshipResponse) *DeleteRelationshipResponse {
+func FromWireDeleteRelationshipResponse(value *proto.DeleteRelationshipResponse) *DeleteRelationshipResponse {
 	if value == nil {
 		return nil
 	}
@@ -304,51 +304,51 @@ func fromWireDeleteRelationshipResponse(value *proto.DeleteRelationshipResponse)
 	return out
 }
 
-func toWireGetActiveModelRefResponse(value *GetActiveModelRefResponse) *proto.GetActiveModelRefResponse {
+func ToWireGetActiveModelRefResponse(value *GetActiveModelRefResponse) *proto.GetActiveModelRefResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.GetActiveModelRefResponse{
-		Model: toWireAuthorizationModelRef(value.Model),
+		Model: ToWireAuthorizationModelRef(value.Model),
 	}
 	return out
 }
 
-func fromWireGetActiveModelRefResponse(value *proto.GetActiveModelRefResponse) *GetActiveModelRefResponse {
+func FromWireGetActiveModelRefResponse(value *proto.GetActiveModelRefResponse) *GetActiveModelRefResponse {
 	if value == nil {
 		return nil
 	}
 	out := &GetActiveModelRefResponse{
-		Model: fromWireAuthorizationModelRef(value.Model),
+		Model: FromWireAuthorizationModelRef(value.Model),
 	}
 	return out
 }
 
-func toWireListActiveModelResourceTypesRequest(value *ListActiveModelResourceTypesRequest) *proto.ListActiveModelResourceTypesRequest {
+func ToWireListActiveModelResourceTypesRequest(value *ListActiveModelResourceTypesRequest) *proto.ListActiveModelResourceTypesRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListActiveModelResourceTypesRequest{
-		Filter:    toWireAuthorizationModelResourceTypeFilter(value.Filter),
+		Filter:    ToWireAuthorizationModelResourceTypeFilter(value.Filter),
 		PageSize:  value.PageSize,
 		PageToken: value.PageToken,
 	}
 	return out
 }
 
-func fromWireListActiveModelResourceTypesRequest(value *proto.ListActiveModelResourceTypesRequest) *ListActiveModelResourceTypesRequest {
+func FromWireListActiveModelResourceTypesRequest(value *proto.ListActiveModelResourceTypesRequest) *ListActiveModelResourceTypesRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ListActiveModelResourceTypesRequest{
-		Filter:    fromWireAuthorizationModelResourceTypeFilter(value.Filter),
+		Filter:    FromWireAuthorizationModelResourceTypeFilter(value.Filter),
 		PageSize:  value.PageSize,
 		PageToken: value.PageToken,
 	}
 	return out
 }
 
-func toWireListActiveModelResourceTypesResponse(value *ListActiveModelResourceTypesResponse) *proto.ListActiveModelResourceTypesResponse {
+func ToWireListActiveModelResourceTypesResponse(value *ListActiveModelResourceTypesResponse) *proto.ListActiveModelResourceTypesResponse {
 	if value == nil {
 		return nil
 	}
@@ -357,12 +357,12 @@ func toWireListActiveModelResourceTypesResponse(value *ListActiveModelResourceTy
 		ModelId:       value.ModelId,
 	}
 	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, toWireAuthorizationModelResourceType(item))
+		out.ResourceTypes = append(out.ResourceTypes, ToWireAuthorizationModelResourceType(item))
 	}
 	return out
 }
 
-func fromWireListActiveModelResourceTypesResponse(value *proto.ListActiveModelResourceTypesResponse) *ListActiveModelResourceTypesResponse {
+func FromWireListActiveModelResourceTypesResponse(value *proto.ListActiveModelResourceTypesResponse) *ListActiveModelResourceTypesResponse {
 	if value == nil {
 		return nil
 	}
@@ -371,36 +371,36 @@ func fromWireListActiveModelResourceTypesResponse(value *proto.ListActiveModelRe
 		ModelId:       value.ModelId,
 	}
 	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, fromWireAuthorizationModelResourceType(item))
+		out.ResourceTypes = append(out.ResourceTypes, FromWireAuthorizationModelResourceType(item))
 	}
 	return out
 }
 
-func toWireListRelationshipsRequest(value *ListRelationshipsRequest) *proto.ListRelationshipsRequest {
+func ToWireListRelationshipsRequest(value *ListRelationshipsRequest) *proto.ListRelationshipsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListRelationshipsRequest{
-		Filter:    toWireRelationshipFilter(value.Filter),
+		Filter:    ToWireRelationshipFilter(value.Filter),
 		PageSize:  value.PageSize,
 		PageToken: value.PageToken,
 	}
 	return out
 }
 
-func fromWireListRelationshipsRequest(value *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
+func FromWireListRelationshipsRequest(value *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ListRelationshipsRequest{
-		Filter:    fromWireRelationshipFilter(value.Filter),
+		Filter:    FromWireRelationshipFilter(value.Filter),
 		PageSize:  value.PageSize,
 		PageToken: value.PageToken,
 	}
 	return out
 }
 
-func toWireListRelationshipsResponse(value *ListRelationshipsResponse) *proto.ListRelationshipsResponse {
+func ToWireListRelationshipsResponse(value *ListRelationshipsResponse) *proto.ListRelationshipsResponse {
 	if value == nil {
 		return nil
 	}
@@ -408,12 +408,12 @@ func toWireListRelationshipsResponse(value *ListRelationshipsResponse) *proto.Li
 		NextPageToken: value.NextPageToken,
 	}
 	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, toWireRelationship(item))
+		out.Relationships = append(out.Relationships, ToWireRelationship(item))
 	}
 	return out
 }
 
-func fromWireListRelationshipsResponse(value *proto.ListRelationshipsResponse) *ListRelationshipsResponse {
+func FromWireListRelationshipsResponse(value *proto.ListRelationshipsResponse) *ListRelationshipsResponse {
 	if value == nil {
 		return nil
 	}
@@ -421,12 +421,12 @@ func fromWireListRelationshipsResponse(value *proto.ListRelationshipsResponse) *
 		NextPageToken: value.NextPageToken,
 	}
 	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, fromWireRelationship(item))
+		out.Relationships = append(out.Relationships, FromWireRelationship(item))
 	}
 	return out
 }
 
-func toWireModelAction(value *ModelAction) *proto.ModelAction {
+func ToWireModelAction(value *ModelAction) *proto.ModelAction {
 	if value == nil {
 		return nil
 	}
@@ -437,7 +437,7 @@ func toWireModelAction(value *ModelAction) *proto.ModelAction {
 	return out
 }
 
-func fromWireModelAction(value *proto.ModelAction) *ModelAction {
+func FromWireModelAction(value *proto.ModelAction) *ModelAction {
 	if value == nil {
 		return nil
 	}
@@ -448,7 +448,7 @@ func fromWireModelAction(value *proto.ModelAction) *ModelAction {
 	return out
 }
 
-func toWireModelAllowedTarget(value *ModelAllowedTarget) *proto.ModelAllowedTarget {
+func ToWireModelAllowedTarget(value *ModelAllowedTarget) *proto.ModelAllowedTarget {
 	if value == nil {
 		return nil
 	}
@@ -459,12 +459,12 @@ func toWireModelAllowedTarget(value *ModelAllowedTarget) *proto.ModelAllowedTarg
 	case *ModelAllowedTargetKindResourceType:
 		out.Kind = &proto.ModelAllowedTarget_ResourceType{ResourceType: variant.Value}
 	case *ModelAllowedTargetKindSubjectSetType:
-		out.Kind = &proto.ModelAllowedTarget_SubjectSetType{SubjectSetType: toWireSubjectSetType(variant.Value)}
+		out.Kind = &proto.ModelAllowedTarget_SubjectSetType{SubjectSetType: ToWireSubjectSetType(variant.Value)}
 	}
 	return out
 }
 
-func fromWireModelAllowedTarget(value *proto.ModelAllowedTarget) *ModelAllowedTarget {
+func FromWireModelAllowedTarget(value *proto.ModelAllowedTarget) *ModelAllowedTarget {
 	if value == nil {
 		return nil
 	}
@@ -475,12 +475,12 @@ func fromWireModelAllowedTarget(value *proto.ModelAllowedTarget) *ModelAllowedTa
 	case *proto.ModelAllowedTarget_ResourceType:
 		out.Kind = &ModelAllowedTargetKindResourceType{Value: variant.ResourceType}
 	case *proto.ModelAllowedTarget_SubjectSetType:
-		out.Kind = &ModelAllowedTargetKindSubjectSetType{Value: fromWireSubjectSetType(variant.SubjectSetType)}
+		out.Kind = &ModelAllowedTargetKindSubjectSetType{Value: FromWireSubjectSetType(variant.SubjectSetType)}
 	}
 	return out
 }
 
-func toWireModelRelation(value *ModelRelation) *proto.ModelRelation {
+func ToWireModelRelation(value *ModelRelation) *proto.ModelRelation {
 	if value == nil {
 		return nil
 	}
@@ -488,12 +488,12 @@ func toWireModelRelation(value *ModelRelation) *proto.ModelRelation {
 		Name: value.Name,
 	}
 	for _, item := range value.AllowedTargets {
-		out.AllowedTargets = append(out.AllowedTargets, toWireModelAllowedTarget(item))
+		out.AllowedTargets = append(out.AllowedTargets, ToWireModelAllowedTarget(item))
 	}
 	return out
 }
 
-func fromWireModelRelation(value *proto.ModelRelation) *ModelRelation {
+func FromWireModelRelation(value *proto.ModelRelation) *ModelRelation {
 	if value == nil {
 		return nil
 	}
@@ -501,43 +501,43 @@ func fromWireModelRelation(value *proto.ModelRelation) *ModelRelation {
 		Name: value.Name,
 	}
 	for _, item := range value.AllowedTargets {
-		out.AllowedTargets = append(out.AllowedTargets, fromWireModelAllowedTarget(item))
+		out.AllowedTargets = append(out.AllowedTargets, FromWireModelAllowedTarget(item))
 	}
 	return out
 }
 
-func toWireRelationship(value *Relationship) *proto.Relationship {
+func ToWireRelationship(value *Relationship) *proto.Relationship {
 	if value == nil {
 		return nil
 	}
 	out := &proto.Relationship{
-		Tuple:       toWireRelationshipTuple(value.Tuple),
+		Tuple:       ToWireRelationshipTuple(value.Tuple),
 		Properties:  toWireStruct(value.Properties),
 		SourceLayer: proto.SourceLayer(value.SourceLayer),
 	}
 	return out
 }
 
-func fromWireRelationship(value *proto.Relationship) *Relationship {
+func FromWireRelationship(value *proto.Relationship) *Relationship {
 	if value == nil {
 		return nil
 	}
 	out := &Relationship{
-		Tuple:       fromWireRelationshipTuple(value.Tuple),
+		Tuple:       FromWireRelationshipTuple(value.Tuple),
 		Properties:  fromWireStruct(value.Properties),
 		SourceLayer: SourceLayer(value.SourceLayer),
 	}
 	return out
 }
 
-func toWireRelationshipFilter(value *RelationshipFilter) *proto.RelationshipFilter {
+func ToWireRelationshipFilter(value *RelationshipFilter) *proto.RelationshipFilter {
 	if value == nil {
 		return nil
 	}
 	out := &proto.RelationshipFilter{
-		Target:           toWireRelationshipTarget(value.Target),
+		Target:           ToWireRelationshipTarget(value.Target),
 		Relation:         value.Relation,
-		Resource:         toWireResource(value.Resource),
+		Resource:         ToWireResource(value.Resource),
 		TargetType:       proto.RelationshipTargetType(value.TargetType),
 		TargetEntityType: value.TargetEntityType,
 		ResourceType:     value.ResourceType,
@@ -546,14 +546,14 @@ func toWireRelationshipFilter(value *RelationshipFilter) *proto.RelationshipFilt
 	return out
 }
 
-func fromWireRelationshipFilter(value *proto.RelationshipFilter) *RelationshipFilter {
+func FromWireRelationshipFilter(value *proto.RelationshipFilter) *RelationshipFilter {
 	if value == nil {
 		return nil
 	}
 	out := &RelationshipFilter{
-		Target:           fromWireRelationshipTarget(value.Target),
+		Target:           FromWireRelationshipTarget(value.Target),
 		Relation:         value.Relation,
-		Resource:         fromWireResource(value.Resource),
+		Resource:         FromWireResource(value.Resource),
 		TargetType:       RelationshipTargetType(value.TargetType),
 		TargetEntityType: value.TargetEntityType,
 		ResourceType:     value.ResourceType,
@@ -562,63 +562,63 @@ func fromWireRelationshipFilter(value *proto.RelationshipFilter) *RelationshipFi
 	return out
 }
 
-func toWireRelationshipTarget(value *RelationshipTarget) *proto.RelationshipTarget {
+func ToWireRelationshipTarget(value *RelationshipTarget) *proto.RelationshipTarget {
 	if value == nil {
 		return nil
 	}
 	out := &proto.RelationshipTarget{}
 	switch variant := value.Kind.(type) {
 	case *RelationshipTargetKindSubject:
-		out.Kind = &proto.RelationshipTarget_Subject{Subject: toWireSubject(variant.Value)}
+		out.Kind = &proto.RelationshipTarget_Subject{Subject: ToWireSubject(variant.Value)}
 	case *RelationshipTargetKindResource:
-		out.Kind = &proto.RelationshipTarget_Resource{Resource: toWireResource(variant.Value)}
+		out.Kind = &proto.RelationshipTarget_Resource{Resource: ToWireResource(variant.Value)}
 	case *RelationshipTargetKindSubjectSet:
-		out.Kind = &proto.RelationshipTarget_SubjectSet{SubjectSet: toWireSubjectSet(variant.Value)}
+		out.Kind = &proto.RelationshipTarget_SubjectSet{SubjectSet: ToWireSubjectSet(variant.Value)}
 	}
 	return out
 }
 
-func fromWireRelationshipTarget(value *proto.RelationshipTarget) *RelationshipTarget {
+func FromWireRelationshipTarget(value *proto.RelationshipTarget) *RelationshipTarget {
 	if value == nil {
 		return nil
 	}
 	out := &RelationshipTarget{}
 	switch variant := value.Kind.(type) {
 	case *proto.RelationshipTarget_Subject:
-		out.Kind = &RelationshipTargetKindSubject{Value: fromWireSubject(variant.Subject)}
+		out.Kind = &RelationshipTargetKindSubject{Value: FromWireSubject(variant.Subject)}
 	case *proto.RelationshipTarget_Resource:
-		out.Kind = &RelationshipTargetKindResource{Value: fromWireResource(variant.Resource)}
+		out.Kind = &RelationshipTargetKindResource{Value: FromWireResource(variant.Resource)}
 	case *proto.RelationshipTarget_SubjectSet:
-		out.Kind = &RelationshipTargetKindSubjectSet{Value: fromWireSubjectSet(variant.SubjectSet)}
+		out.Kind = &RelationshipTargetKindSubjectSet{Value: FromWireSubjectSet(variant.SubjectSet)}
 	}
 	return out
 }
 
-func toWireRelationshipTuple(value *RelationshipTuple) *proto.RelationshipTuple {
+func ToWireRelationshipTuple(value *RelationshipTuple) *proto.RelationshipTuple {
 	if value == nil {
 		return nil
 	}
 	out := &proto.RelationshipTuple{
-		Target:   toWireRelationshipTarget(value.Target),
+		Target:   ToWireRelationshipTarget(value.Target),
 		Relation: value.Relation,
-		Resource: toWireResource(value.Resource),
+		Resource: ToWireResource(value.Resource),
 	}
 	return out
 }
 
-func fromWireRelationshipTuple(value *proto.RelationshipTuple) *RelationshipTuple {
+func FromWireRelationshipTuple(value *proto.RelationshipTuple) *RelationshipTuple {
 	if value == nil {
 		return nil
 	}
 	out := &RelationshipTuple{
-		Target:   fromWireRelationshipTarget(value.Target),
+		Target:   FromWireRelationshipTarget(value.Target),
 		Relation: value.Relation,
-		Resource: fromWireResource(value.Resource),
+		Resource: FromWireResource(value.Resource),
 	}
 	return out
 }
 
-func toWireResource(value *Resource) *proto.Resource {
+func ToWireResource(value *Resource) *proto.Resource {
 	if value == nil {
 		return nil
 	}
@@ -630,7 +630,7 @@ func toWireResource(value *Resource) *proto.Resource {
 	return out
 }
 
-func fromWireResource(value *proto.Resource) *Resource {
+func FromWireResource(value *proto.Resource) *Resource {
 	if value == nil {
 		return nil
 	}
@@ -642,93 +642,93 @@ func fromWireResource(value *proto.Resource) *Resource {
 	return out
 }
 
-func toWireSetActiveModelRequest(value *SetActiveModelRequest) *proto.SetActiveModelRequest {
+func ToWireSetActiveModelRequest(value *SetActiveModelRequest) *proto.SetActiveModelRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.SetActiveModelRequest{
-		Model: toWireAuthorizationModel(value.Model),
+		Model: ToWireAuthorizationModel(value.Model),
 	}
 	return out
 }
 
-func fromWireSetActiveModelRequest(value *proto.SetActiveModelRequest) *SetActiveModelRequest {
+func FromWireSetActiveModelRequest(value *proto.SetActiveModelRequest) *SetActiveModelRequest {
 	if value == nil {
 		return nil
 	}
 	out := &SetActiveModelRequest{
-		Model: fromWireAuthorizationModel(value.Model),
+		Model: FromWireAuthorizationModel(value.Model),
 	}
 	return out
 }
 
-func toWireSetActiveModelResponse(value *SetActiveModelResponse) *proto.SetActiveModelResponse {
+func ToWireSetActiveModelResponse(value *SetActiveModelResponse) *proto.SetActiveModelResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.SetActiveModelResponse{
-		Model: toWireAuthorizationModelRef(value.Model),
+		Model: ToWireAuthorizationModelRef(value.Model),
 	}
 	return out
 }
 
-func fromWireSetActiveModelResponse(value *proto.SetActiveModelResponse) *SetActiveModelResponse {
+func FromWireSetActiveModelResponse(value *proto.SetActiveModelResponse) *SetActiveModelResponse {
 	if value == nil {
 		return nil
 	}
 	out := &SetActiveModelResponse{
-		Model: fromWireAuthorizationModelRef(value.Model),
+		Model: FromWireAuthorizationModelRef(value.Model),
 	}
 	return out
 }
 
-func toWireSetAuthorizationStateRequest(value *SetAuthorizationStateRequest) *proto.SetAuthorizationStateRequest {
+func ToWireSetAuthorizationStateRequest(value *SetAuthorizationStateRequest) *proto.SetAuthorizationStateRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.SetAuthorizationStateRequest{
-		Model: toWireAuthorizationModel(value.Model),
+		Model: ToWireAuthorizationModel(value.Model),
 	}
 	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, toWireRelationship(item))
+		out.Relationships = append(out.Relationships, ToWireRelationship(item))
 	}
 	return out
 }
 
-func fromWireSetAuthorizationStateRequest(value *proto.SetAuthorizationStateRequest) *SetAuthorizationStateRequest {
+func FromWireSetAuthorizationStateRequest(value *proto.SetAuthorizationStateRequest) *SetAuthorizationStateRequest {
 	if value == nil {
 		return nil
 	}
 	out := &SetAuthorizationStateRequest{
-		Model: fromWireAuthorizationModel(value.Model),
+		Model: FromWireAuthorizationModel(value.Model),
 	}
 	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, fromWireRelationship(item))
+		out.Relationships = append(out.Relationships, FromWireRelationship(item))
 	}
 	return out
 }
 
-func toWireSetAuthorizationStateResponse(value *SetAuthorizationStateResponse) *proto.SetAuthorizationStateResponse {
+func ToWireSetAuthorizationStateResponse(value *SetAuthorizationStateResponse) *proto.SetAuthorizationStateResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.SetAuthorizationStateResponse{
-		ActiveModel: toWireAuthorizationModelRef(value.ActiveModel),
+		ActiveModel: ToWireAuthorizationModelRef(value.ActiveModel),
 	}
 	return out
 }
 
-func fromWireSetAuthorizationStateResponse(value *proto.SetAuthorizationStateResponse) *SetAuthorizationStateResponse {
+func FromWireSetAuthorizationStateResponse(value *proto.SetAuthorizationStateResponse) *SetAuthorizationStateResponse {
 	if value == nil {
 		return nil
 	}
 	out := &SetAuthorizationStateResponse{
-		ActiveModel: fromWireAuthorizationModelRef(value.ActiveModel),
+		ActiveModel: FromWireAuthorizationModelRef(value.ActiveModel),
 	}
 	return out
 }
 
-func toWireSubject(value *Subject) *proto.Subject {
+func ToWireSubject(value *Subject) *proto.Subject {
 	if value == nil {
 		return nil
 	}
@@ -740,7 +740,7 @@ func toWireSubject(value *Subject) *proto.Subject {
 	return out
 }
 
-func fromWireSubject(value *proto.Subject) *Subject {
+func FromWireSubject(value *proto.Subject) *Subject {
 	if value == nil {
 		return nil
 	}
@@ -752,29 +752,29 @@ func fromWireSubject(value *proto.Subject) *Subject {
 	return out
 }
 
-func toWireSubjectSet(value *SubjectSet) *proto.SubjectSet {
+func ToWireSubjectSet(value *SubjectSet) *proto.SubjectSet {
 	if value == nil {
 		return nil
 	}
 	out := &proto.SubjectSet{
-		Resource: toWireResource(value.Resource),
+		Resource: ToWireResource(value.Resource),
 		Relation: value.Relation,
 	}
 	return out
 }
 
-func fromWireSubjectSet(value *proto.SubjectSet) *SubjectSet {
+func FromWireSubjectSet(value *proto.SubjectSet) *SubjectSet {
 	if value == nil {
 		return nil
 	}
 	out := &SubjectSet{
-		Resource: fromWireResource(value.Resource),
+		Resource: FromWireResource(value.Resource),
 		Relation: value.Relation,
 	}
 	return out
 }
 
-func toWireSubjectSetType(value *SubjectSetType) *proto.SubjectSetType {
+func ToWireSubjectSetType(value *SubjectSetType) *proto.SubjectSetType {
 	if value == nil {
 		return nil
 	}
@@ -785,7 +785,7 @@ func toWireSubjectSetType(value *SubjectSetType) *proto.SubjectSetType {
 	return out
 }
 
-func fromWireSubjectSetType(value *proto.SubjectSetType) *SubjectSetType {
+func FromWireSubjectSetType(value *proto.SubjectSetType) *SubjectSetType {
 	if value == nil {
 		return nil
 	}

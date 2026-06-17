@@ -79,7 +79,7 @@ func normalizeEmail(email string) string {
 }
 
 func (s *UserService) findUserByNormalizedEmail(ctx context.Context, normalizedEmail string) (*core.User, error) {
-	recs, err := s.store.Index("by_normalized_email").GetAll(ctx, nil, normalizedEmail)
+	recs, err := s.store.Index("by_normalized_email").GetAll(ctx, normalizedEmail)
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
 	}

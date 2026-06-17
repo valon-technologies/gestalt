@@ -91,58 +91,58 @@ func NewAuthentication(conn grpc.ClientConnInterface) *Authentication {
 // BeginLogin is the ergonomic form of [Authentication.BeginLoginRaw].
 func (c *Authentication) BeginLogin(ctx context.Context, callbackUrl string, hostState string, scopes []string) (*BeginLoginResponse, error) {
 	request := &BeginLoginRequest{CallbackUrl: callbackUrl, HostState: hostState, Scopes: scopes}
-	response, err := c.client.BeginLogin(ctx, toWireBeginLoginRequest(request))
+	response, err := c.client.BeginLogin(ctx, ToWireBeginLoginRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireBeginLoginResponse(response), nil
+	return FromWireBeginLoginResponse(response), nil
 }
 
 // BeginLoginRaw is the faithful form of [Authentication.BeginLogin].
 func (c *Authentication) BeginLoginRaw(ctx context.Context, request *BeginLoginRequest) (*BeginLoginResponse, error) {
-	response, err := c.client.BeginLogin(ctx, toWireBeginLoginRequest(request))
+	response, err := c.client.BeginLogin(ctx, ToWireBeginLoginRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireBeginLoginResponse(response), nil
+	return FromWireBeginLoginResponse(response), nil
 }
 
 // CompleteLogin is the ergonomic form of [Authentication.CompleteLoginRaw].
 func (c *Authentication) CompleteLogin(ctx context.Context, providerState []byte, callbackUrl string, query map[string]string) (*AuthenticatedUser, error) {
 	request := &CompleteLoginRequest{ProviderState: providerState, CallbackUrl: callbackUrl, Query: query}
-	response, err := c.client.CompleteLogin(ctx, toWireCompleteLoginRequest(request))
+	response, err := c.client.CompleteLogin(ctx, ToWireCompleteLoginRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAuthenticatedUser(response), nil
+	return FromWireAuthenticatedUser(response), nil
 }
 
 // CompleteLoginRaw is the faithful form of [Authentication.CompleteLogin].
 func (c *Authentication) CompleteLoginRaw(ctx context.Context, request *CompleteLoginRequest) (*AuthenticatedUser, error) {
-	response, err := c.client.CompleteLogin(ctx, toWireCompleteLoginRequest(request))
+	response, err := c.client.CompleteLogin(ctx, ToWireCompleteLoginRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAuthenticatedUser(response), nil
+	return FromWireAuthenticatedUser(response), nil
 }
 
 // ValidateExternalToken is the ergonomic form of [Authentication.ValidateExternalTokenRaw].
 func (c *Authentication) ValidateExternalToken(ctx context.Context, token string) (*AuthenticatedUser, error) {
 	request := &ValidateExternalTokenRequest{Token: token}
-	response, err := c.client.ValidateExternalToken(ctx, toWireValidateExternalTokenRequest(request))
+	response, err := c.client.ValidateExternalToken(ctx, ToWireValidateExternalTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAuthenticatedUser(response), nil
+	return FromWireAuthenticatedUser(response), nil
 }
 
 // ValidateExternalTokenRaw is the faithful form of [Authentication.ValidateExternalToken].
 func (c *Authentication) ValidateExternalTokenRaw(ctx context.Context, request *ValidateExternalTokenRequest) (*AuthenticatedUser, error) {
-	response, err := c.client.ValidateExternalToken(ctx, toWireValidateExternalTokenRequest(request))
+	response, err := c.client.ValidateExternalToken(ctx, ToWireValidateExternalTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAuthenticatedUser(response), nil
+	return FromWireAuthenticatedUser(response), nil
 }
 
 // GetSessionSettings calls the GetSessionSettings RPC of Authentication.
@@ -151,5 +151,5 @@ func (c *Authentication) GetSessionSettings(ctx context.Context) (*AuthSessionSe
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAuthSessionSettings(response), nil
+	return FromWireAuthSessionSettings(response), nil
 }

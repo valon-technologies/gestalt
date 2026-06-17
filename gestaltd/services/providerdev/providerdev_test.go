@@ -88,11 +88,11 @@ func TestSupervisorProbeStopsOnRestart(t *testing.T) {
 	t.Cleanup(cancel)
 
 	sup, err := providerdev.Start(ctx, nil, []providerdev.Target{{
-		Name:         "flaky",
-		Kind:         "ui",
-		BasePath:     "/flaky",
-		Workdir:      workdir,
-		Command:      []string{fakeServerBin},
+		Name:     "flaky",
+		Kind:     "ui",
+		BasePath: "/flaky",
+		Workdir:  workdir,
+		Command:  []string{fakeServerBin},
 		Env: map[string]string{
 			"GESTALT_FAKE_ATTEMPTS_FILE": attemptsFile,
 			"GESTALT_FAKE_FAIL_UNTIL":    "2",

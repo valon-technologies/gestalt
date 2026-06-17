@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireAuthSessionSettings(value *AuthSessionSettings) *proto.AuthSessionSettings {
+func ToWireAuthSessionSettings(value *AuthSessionSettings) *proto.AuthSessionSettings {
 	if value == nil {
 		return nil
 	}
@@ -16,7 +16,7 @@ func toWireAuthSessionSettings(value *AuthSessionSettings) *proto.AuthSessionSet
 	return out
 }
 
-func fromWireAuthSessionSettings(value *proto.AuthSessionSettings) *AuthSessionSettings {
+func FromWireAuthSessionSettings(value *proto.AuthSessionSettings) *AuthSessionSettings {
 	if value == nil {
 		return nil
 	}
@@ -26,7 +26,7 @@ func fromWireAuthSessionSettings(value *proto.AuthSessionSettings) *AuthSessionS
 	return out
 }
 
-func toWireAuthenticatedUser(value *AuthenticatedUser) *proto.AuthenticatedUser {
+func ToWireAuthenticatedUser(value *AuthenticatedUser) *proto.AuthenticatedUser {
 	if value == nil {
 		return nil
 	}
@@ -41,7 +41,7 @@ func toWireAuthenticatedUser(value *AuthenticatedUser) *proto.AuthenticatedUser 
 	return out
 }
 
-func fromWireAuthenticatedUser(value *proto.AuthenticatedUser) *AuthenticatedUser {
+func FromWireAuthenticatedUser(value *proto.AuthenticatedUser) *AuthenticatedUser {
 	if value == nil {
 		return nil
 	}
@@ -56,7 +56,7 @@ func fromWireAuthenticatedUser(value *proto.AuthenticatedUser) *AuthenticatedUse
 	return out
 }
 
-func toWireBeginLoginRequest(value *BeginLoginRequest) *proto.BeginLoginRequest {
+func ToWireBeginLoginRequest(value *BeginLoginRequest) *proto.BeginLoginRequest {
 	if value == nil {
 		return nil
 	}
@@ -69,7 +69,7 @@ func toWireBeginLoginRequest(value *BeginLoginRequest) *proto.BeginLoginRequest 
 	return out
 }
 
-func fromWireBeginLoginRequest(value *proto.BeginLoginRequest) *BeginLoginRequest {
+func FromWireBeginLoginRequest(value *proto.BeginLoginRequest) *BeginLoginRequest {
 	if value == nil {
 		return nil
 	}
@@ -82,7 +82,7 @@ func fromWireBeginLoginRequest(value *proto.BeginLoginRequest) *BeginLoginReques
 	return out
 }
 
-func toWireBeginLoginResponse(value *BeginLoginResponse) *proto.BeginLoginResponse {
+func ToWireBeginLoginResponse(value *BeginLoginResponse) *proto.BeginLoginResponse {
 	if value == nil {
 		return nil
 	}
@@ -93,7 +93,7 @@ func toWireBeginLoginResponse(value *BeginLoginResponse) *proto.BeginLoginRespon
 	return out
 }
 
-func fromWireBeginLoginResponse(value *proto.BeginLoginResponse) *BeginLoginResponse {
+func FromWireBeginLoginResponse(value *proto.BeginLoginResponse) *BeginLoginResponse {
 	if value == nil {
 		return nil
 	}
@@ -104,7 +104,7 @@ func fromWireBeginLoginResponse(value *proto.BeginLoginResponse) *BeginLoginResp
 	return out
 }
 
-func toWireCompleteLoginRequest(value *CompleteLoginRequest) *proto.CompleteLoginRequest {
+func ToWireCompleteLoginRequest(value *CompleteLoginRequest) *proto.CompleteLoginRequest {
 	if value == nil {
 		return nil
 	}
@@ -116,7 +116,7 @@ func toWireCompleteLoginRequest(value *CompleteLoginRequest) *proto.CompleteLogi
 	return out
 }
 
-func fromWireCompleteLoginRequest(value *proto.CompleteLoginRequest) *CompleteLoginRequest {
+func FromWireCompleteLoginRequest(value *proto.CompleteLoginRequest) *CompleteLoginRequest {
 	if value == nil {
 		return nil
 	}
@@ -128,7 +128,7 @@ func fromWireCompleteLoginRequest(value *proto.CompleteLoginRequest) *CompleteLo
 	return out
 }
 
-func toWireValidateExternalTokenRequest(value *ValidateExternalTokenRequest) *proto.ValidateExternalTokenRequest {
+func ToWireValidateExternalTokenRequest(value *ValidateExternalTokenRequest) *proto.ValidateExternalTokenRequest {
 	if value == nil {
 		return nil
 	}
@@ -138,7 +138,7 @@ func toWireValidateExternalTokenRequest(value *ValidateExternalTokenRequest) *pr
 	return out
 }
 
-func fromWireValidateExternalTokenRequest(value *proto.ValidateExternalTokenRequest) *ValidateExternalTokenRequest {
+func FromWireValidateExternalTokenRequest(value *proto.ValidateExternalTokenRequest) *ValidateExternalTokenRequest {
 	if value == nil {
 		return nil
 	}

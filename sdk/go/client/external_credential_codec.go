@@ -6,27 +6,27 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireCreateExternalCredentialRequest(value *CreateExternalCredentialRequest) *proto.CreateExternalCredentialRequest {
+func ToWireCreateExternalCredentialRequest(value *CreateExternalCredentialRequest) *proto.CreateExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CreateExternalCredentialRequest{
-		Credential: toWireExternalCredential(value.Credential),
+		Credential: ToWireExternalCredential(value.Credential),
 	}
 	return out
 }
 
-func fromWireCreateExternalCredentialRequest(value *proto.CreateExternalCredentialRequest) *CreateExternalCredentialRequest {
+func FromWireCreateExternalCredentialRequest(value *proto.CreateExternalCredentialRequest) *CreateExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
 	out := &CreateExternalCredentialRequest{
-		Credential: fromWireExternalCredential(value.Credential),
+		Credential: FromWireExternalCredential(value.Credential),
 	}
 	return out
 }
 
-func toWireDeleteExternalCredentialRequest(value *DeleteExternalCredentialRequest) *proto.DeleteExternalCredentialRequest {
+func ToWireDeleteExternalCredentialRequest(value *DeleteExternalCredentialRequest) *proto.DeleteExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func toWireDeleteExternalCredentialRequest(value *DeleteExternalCredentialReques
 	return out
 }
 
-func fromWireDeleteExternalCredentialRequest(value *proto.DeleteExternalCredentialRequest) *DeleteExternalCredentialRequest {
+func FromWireDeleteExternalCredentialRequest(value *proto.DeleteExternalCredentialRequest) *DeleteExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -46,7 +46,7 @@ func fromWireDeleteExternalCredentialRequest(value *proto.DeleteExternalCredenti
 	return out
 }
 
-func toWireExchangeExternalCredentialRequest(value *ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
+func ToWireExchangeExternalCredentialRequest(value *ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -57,14 +57,14 @@ func toWireExchangeExternalCredentialRequest(value *ExchangeExternalCredentialRe
 		CredentialSubjectId: value.CredentialSubjectId,
 		ActorSubjectId:      value.ActorSubjectId,
 		Instance:            value.Instance,
-		Auth:                toWireExternalCredentialAuthConfig(value.Auth),
+		Auth:                ToWireExternalCredentialAuthConfig(value.Auth),
 		CredentialJson:      value.CredentialJson,
 		ConnectionParams:    value.ConnectionParams,
 	}
 	return out
 }
 
-func fromWireExchangeExternalCredentialRequest(value *proto.ExchangeExternalCredentialRequest) *ExchangeExternalCredentialRequest {
+func FromWireExchangeExternalCredentialRequest(value *proto.ExchangeExternalCredentialRequest) *ExchangeExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -75,34 +75,34 @@ func fromWireExchangeExternalCredentialRequest(value *proto.ExchangeExternalCred
 		CredentialSubjectId: value.CredentialSubjectId,
 		ActorSubjectId:      value.ActorSubjectId,
 		Instance:            value.Instance,
-		Auth:                fromWireExternalCredentialAuthConfig(value.Auth),
+		Auth:                FromWireExternalCredentialAuthConfig(value.Auth),
 		CredentialJson:      value.CredentialJson,
 		ConnectionParams:    value.ConnectionParams,
 	}
 	return out
 }
 
-func toWireExchangeExternalCredentialResponse(value *ExchangeExternalCredentialResponse) *proto.ExchangeExternalCredentialResponse {
+func ToWireExchangeExternalCredentialResponse(value *ExchangeExternalCredentialResponse) *proto.ExchangeExternalCredentialResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ExchangeExternalCredentialResponse{
-		TokenResponse: toWireExternalCredentialTokenResponse(value.TokenResponse),
+		TokenResponse: ToWireExternalCredentialTokenResponse(value.TokenResponse),
 	}
 	return out
 }
 
-func fromWireExchangeExternalCredentialResponse(value *proto.ExchangeExternalCredentialResponse) *ExchangeExternalCredentialResponse {
+func FromWireExchangeExternalCredentialResponse(value *proto.ExchangeExternalCredentialResponse) *ExchangeExternalCredentialResponse {
 	if value == nil {
 		return nil
 	}
 	out := &ExchangeExternalCredentialResponse{
-		TokenResponse: fromWireExternalCredentialTokenResponse(value.TokenResponse),
+		TokenResponse: FromWireExternalCredentialTokenResponse(value.TokenResponse),
 	}
 	return out
 }
 
-func toWireExternalCredential(value *ExternalCredential) *proto.ExternalCredential {
+func ToWireExternalCredential(value *ExternalCredential) *proto.ExternalCredential {
 	if value == nil {
 		return nil
 	}
@@ -117,16 +117,16 @@ func toWireExternalCredential(value *ExternalCredential) *proto.ExternalCredenti
 	}
 	switch variant := value.Credential.(type) {
 	case *ExternalCredentialCredentialGrant:
-		out.Credential = &proto.ExternalCredential_Grant{Grant: toWireExternalCredentialGrant(variant.Value)}
+		out.Credential = &proto.ExternalCredential_Grant{Grant: ToWireExternalCredentialGrant(variant.Value)}
 	case *ExternalCredentialCredentialClient:
-		out.Credential = &proto.ExternalCredential_Client{Client: toWireExternalCredentialClientInfo(variant.Value)}
+		out.Credential = &proto.ExternalCredential_Client{Client: ToWireExternalCredentialClientInfo(variant.Value)}
 	case *ExternalCredentialCredentialOpaque:
-		out.Credential = &proto.ExternalCredential_Opaque{Opaque: toWireExternalCredentialOpaque(variant.Value)}
+		out.Credential = &proto.ExternalCredential_Opaque{Opaque: ToWireExternalCredentialOpaque(variant.Value)}
 	}
 	return out
 }
 
-func fromWireExternalCredential(value *proto.ExternalCredential) *ExternalCredential {
+func FromWireExternalCredential(value *proto.ExternalCredential) *ExternalCredential {
 	if value == nil {
 		return nil
 	}
@@ -141,16 +141,16 @@ func fromWireExternalCredential(value *proto.ExternalCredential) *ExternalCreden
 	}
 	switch variant := value.Credential.(type) {
 	case *proto.ExternalCredential_Grant:
-		out.Credential = &ExternalCredentialCredentialGrant{Value: fromWireExternalCredentialGrant(variant.Grant)}
+		out.Credential = &ExternalCredentialCredentialGrant{Value: FromWireExternalCredentialGrant(variant.Grant)}
 	case *proto.ExternalCredential_Client:
-		out.Credential = &ExternalCredentialCredentialClient{Value: fromWireExternalCredentialClientInfo(variant.Client)}
+		out.Credential = &ExternalCredentialCredentialClient{Value: FromWireExternalCredentialClientInfo(variant.Client)}
 	case *proto.ExternalCredential_Opaque:
-		out.Credential = &ExternalCredentialCredentialOpaque{Value: fromWireExternalCredentialOpaque(variant.Opaque)}
+		out.Credential = &ExternalCredentialCredentialOpaque{Value: FromWireExternalCredentialOpaque(variant.Opaque)}
 	}
 	return out
 }
 
-func toWireExternalCredentialAuthConfig(value *ExternalCredentialAuthConfig) *proto.ExternalCredentialAuthConfig {
+func ToWireExternalCredentialAuthConfig(value *ExternalCredentialAuthConfig) *proto.ExternalCredentialAuthConfig {
 	if value == nil {
 		return nil
 	}
@@ -174,12 +174,12 @@ func toWireExternalCredentialAuthConfig(value *ExternalCredentialAuthConfig) *pr
 		RefreshToken:    value.RefreshToken,
 	}
 	for _, item := range value.TokenExchangeDrivers {
-		out.TokenExchangeDrivers = append(out.TokenExchangeDrivers, toWireExternalCredentialTokenExchangeDriver(item))
+		out.TokenExchangeDrivers = append(out.TokenExchangeDrivers, ToWireExternalCredentialTokenExchangeDriver(item))
 	}
 	return out
 }
 
-func fromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthConfig) *ExternalCredentialAuthConfig {
+func FromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthConfig) *ExternalCredentialAuthConfig {
 	if value == nil {
 		return nil
 	}
@@ -203,12 +203,12 @@ func fromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthCon
 		RefreshToken:    value.RefreshToken,
 	}
 	for _, item := range value.TokenExchangeDrivers {
-		out.TokenExchangeDrivers = append(out.TokenExchangeDrivers, fromWireExternalCredentialTokenExchangeDriver(item))
+		out.TokenExchangeDrivers = append(out.TokenExchangeDrivers, FromWireExternalCredentialTokenExchangeDriver(item))
 	}
 	return out
 }
 
-func toWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *proto.ExternalCredentialClientInfo {
+func ToWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *proto.ExternalCredentialClientInfo {
 	if value == nil {
 		return nil
 	}
@@ -220,7 +220,7 @@ func toWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *pr
 	return out
 }
 
-func fromWireExternalCredentialClientInfo(value *proto.ExternalCredentialClientInfo) *ExternalCredentialClientInfo {
+func FromWireExternalCredentialClientInfo(value *proto.ExternalCredentialClientInfo) *ExternalCredentialClientInfo {
 	if value == nil {
 		return nil
 	}
@@ -232,7 +232,7 @@ func fromWireExternalCredentialClientInfo(value *proto.ExternalCredentialClientI
 	return out
 }
 
-func toWireExternalCredentialGrant(value *ExternalCredentialGrant) *proto.ExternalCredentialGrant {
+func ToWireExternalCredentialGrant(value *ExternalCredentialGrant) *proto.ExternalCredentialGrant {
 	if value == nil {
 		return nil
 	}
@@ -247,7 +247,7 @@ func toWireExternalCredentialGrant(value *ExternalCredentialGrant) *proto.Extern
 	return out
 }
 
-func fromWireExternalCredentialGrant(value *proto.ExternalCredentialGrant) *ExternalCredentialGrant {
+func FromWireExternalCredentialGrant(value *proto.ExternalCredentialGrant) *ExternalCredentialGrant {
 	if value == nil {
 		return nil
 	}
@@ -262,7 +262,7 @@ func fromWireExternalCredentialGrant(value *proto.ExternalCredentialGrant) *Exte
 	return out
 }
 
-func toWireExternalCredentialOpaque(value *ExternalCredentialOpaque) *proto.ExternalCredentialOpaque {
+func ToWireExternalCredentialOpaque(value *ExternalCredentialOpaque) *proto.ExternalCredentialOpaque {
 	if value == nil {
 		return nil
 	}
@@ -272,7 +272,7 @@ func toWireExternalCredentialOpaque(value *ExternalCredentialOpaque) *proto.Exte
 	return out
 }
 
-func fromWireExternalCredentialOpaque(value *proto.ExternalCredentialOpaque) *ExternalCredentialOpaque {
+func FromWireExternalCredentialOpaque(value *proto.ExternalCredentialOpaque) *ExternalCredentialOpaque {
 	if value == nil {
 		return nil
 	}
@@ -282,7 +282,7 @@ func fromWireExternalCredentialOpaque(value *proto.ExternalCredentialOpaque) *Ex
 	return out
 }
 
-func toWireExternalCredentialTokenExchangeDriver(value *ExternalCredentialTokenExchangeDriver) *proto.ExternalCredentialTokenExchangeDriver {
+func ToWireExternalCredentialTokenExchangeDriver(value *ExternalCredentialTokenExchangeDriver) *proto.ExternalCredentialTokenExchangeDriver {
 	if value == nil {
 		return nil
 	}
@@ -297,7 +297,7 @@ func toWireExternalCredentialTokenExchangeDriver(value *ExternalCredentialTokenE
 	return out
 }
 
-func fromWireExternalCredentialTokenExchangeDriver(value *proto.ExternalCredentialTokenExchangeDriver) *ExternalCredentialTokenExchangeDriver {
+func FromWireExternalCredentialTokenExchangeDriver(value *proto.ExternalCredentialTokenExchangeDriver) *ExternalCredentialTokenExchangeDriver {
 	if value == nil {
 		return nil
 	}
@@ -312,7 +312,7 @@ func fromWireExternalCredentialTokenExchangeDriver(value *proto.ExternalCredenti
 	return out
 }
 
-func toWireExternalCredentialTokenResponse(value *ExternalCredentialTokenResponse) *proto.ExternalCredentialTokenResponse {
+func ToWireExternalCredentialTokenResponse(value *ExternalCredentialTokenResponse) *proto.ExternalCredentialTokenResponse {
 	if value == nil {
 		return nil
 	}
@@ -327,7 +327,7 @@ func toWireExternalCredentialTokenResponse(value *ExternalCredentialTokenRespons
 	return out
 }
 
-func fromWireExternalCredentialTokenResponse(value *proto.ExternalCredentialTokenResponse) *ExternalCredentialTokenResponse {
+func FromWireExternalCredentialTokenResponse(value *proto.ExternalCredentialTokenResponse) *ExternalCredentialTokenResponse {
 	if value == nil {
 		return nil
 	}
@@ -342,7 +342,7 @@ func fromWireExternalCredentialTokenResponse(value *proto.ExternalCredentialToke
 	return out
 }
 
-func toWireGetExternalCredentialRequest(value *GetExternalCredentialRequest) *proto.GetExternalCredentialRequest {
+func ToWireGetExternalCredentialRequest(value *GetExternalCredentialRequest) *proto.GetExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -354,7 +354,7 @@ func toWireGetExternalCredentialRequest(value *GetExternalCredentialRequest) *pr
 	return out
 }
 
-func fromWireGetExternalCredentialRequest(value *proto.GetExternalCredentialRequest) *GetExternalCredentialRequest {
+func FromWireGetExternalCredentialRequest(value *proto.GetExternalCredentialRequest) *GetExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -366,7 +366,7 @@ func fromWireGetExternalCredentialRequest(value *proto.GetExternalCredentialRequ
 	return out
 }
 
-func toWireListExternalCredentialsRequest(value *ListExternalCredentialsRequest) *proto.ListExternalCredentialsRequest {
+func ToWireListExternalCredentialsRequest(value *ListExternalCredentialsRequest) *proto.ListExternalCredentialsRequest {
 	if value == nil {
 		return nil
 	}
@@ -377,7 +377,7 @@ func toWireListExternalCredentialsRequest(value *ListExternalCredentialsRequest)
 	return out
 }
 
-func fromWireListExternalCredentialsRequest(value *proto.ListExternalCredentialsRequest) *ListExternalCredentialsRequest {
+func FromWireListExternalCredentialsRequest(value *proto.ListExternalCredentialsRequest) *ListExternalCredentialsRequest {
 	if value == nil {
 		return nil
 	}
@@ -388,29 +388,29 @@ func fromWireListExternalCredentialsRequest(value *proto.ListExternalCredentials
 	return out
 }
 
-func toWireListExternalCredentialsResponse(value *ListExternalCredentialsResponse) *proto.ListExternalCredentialsResponse {
+func ToWireListExternalCredentialsResponse(value *ListExternalCredentialsResponse) *proto.ListExternalCredentialsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ListExternalCredentialsResponse{}
 	for _, item := range value.Credentials {
-		out.Credentials = append(out.Credentials, toWireExternalCredential(item))
+		out.Credentials = append(out.Credentials, ToWireExternalCredential(item))
 	}
 	return out
 }
 
-func fromWireListExternalCredentialsResponse(value *proto.ListExternalCredentialsResponse) *ListExternalCredentialsResponse {
+func FromWireListExternalCredentialsResponse(value *proto.ListExternalCredentialsResponse) *ListExternalCredentialsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &ListExternalCredentialsResponse{}
 	for _, item := range value.Credentials {
-		out.Credentials = append(out.Credentials, fromWireExternalCredential(item))
+		out.Credentials = append(out.Credentials, FromWireExternalCredential(item))
 	}
 	return out
 }
 
-func toWireResolveExternalCredentialRequest(value *ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
+func ToWireResolveExternalCredentialRequest(value *ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -422,13 +422,13 @@ func toWireResolveExternalCredentialRequest(value *ResolveExternalCredentialRequ
 		CredentialSubjectId: value.CredentialSubjectId,
 		ActorSubjectId:      value.ActorSubjectId,
 		Instance:            value.Instance,
-		Auth:                toWireExternalCredentialAuthConfig(value.Auth),
+		Auth:                ToWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams:    value.ConnectionParams,
 	}
 	return out
 }
 
-func fromWireResolveExternalCredentialRequest(value *proto.ResolveExternalCredentialRequest) *ResolveExternalCredentialRequest {
+func FromWireResolveExternalCredentialRequest(value *proto.ResolveExternalCredentialRequest) *ResolveExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
@@ -440,13 +440,13 @@ func fromWireResolveExternalCredentialRequest(value *proto.ResolveExternalCreden
 		CredentialSubjectId: value.CredentialSubjectId,
 		ActorSubjectId:      value.ActorSubjectId,
 		Instance:            value.Instance,
-		Auth:                fromWireExternalCredentialAuthConfig(value.Auth),
+		Auth:                FromWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams:    value.ConnectionParams,
 	}
 	return out
 }
 
-func toWireResolveExternalCredentialResponse(value *ResolveExternalCredentialResponse) *proto.ResolveExternalCredentialResponse {
+func ToWireResolveExternalCredentialResponse(value *ResolveExternalCredentialResponse) *proto.ResolveExternalCredentialResponse {
 	if value == nil {
 		return nil
 	}
@@ -455,12 +455,12 @@ func toWireResolveExternalCredentialResponse(value *ResolveExternalCredentialRes
 		ExpiresAt:    toWireTimestamp(value.ExpiresAt),
 		MetadataJson: value.MetadataJson,
 		Params:       value.Params,
-		Credential:   toWireExternalCredential(value.Credential),
+		Credential:   ToWireExternalCredential(value.Credential),
 	}
 	return out
 }
 
-func fromWireResolveExternalCredentialResponse(value *proto.ResolveExternalCredentialResponse) *ResolveExternalCredentialResponse {
+func FromWireResolveExternalCredentialResponse(value *proto.ResolveExternalCredentialResponse) *ResolveExternalCredentialResponse {
 	if value == nil {
 		return nil
 	}
@@ -469,32 +469,32 @@ func fromWireResolveExternalCredentialResponse(value *proto.ResolveExternalCrede
 		ExpiresAt:    fromWireTimestamp(value.ExpiresAt),
 		MetadataJson: value.MetadataJson,
 		Params:       value.Params,
-		Credential:   fromWireExternalCredential(value.Credential),
+		Credential:   FromWireExternalCredential(value.Credential),
 	}
 	return out
 }
 
-func toWireUpsertExternalCredentialRequest(value *UpsertExternalCredentialRequest) *proto.UpsertExternalCredentialRequest {
+func ToWireUpsertExternalCredentialRequest(value *UpsertExternalCredentialRequest) *proto.UpsertExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.UpsertExternalCredentialRequest{
-		Credential: toWireExternalCredential(value.Credential),
+		Credential: ToWireExternalCredential(value.Credential),
 	}
 	return out
 }
 
-func fromWireUpsertExternalCredentialRequest(value *proto.UpsertExternalCredentialRequest) *UpsertExternalCredentialRequest {
+func FromWireUpsertExternalCredentialRequest(value *proto.UpsertExternalCredentialRequest) *UpsertExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
 	out := &UpsertExternalCredentialRequest{
-		Credential: fromWireExternalCredential(value.Credential),
+		Credential: FromWireExternalCredential(value.Credential),
 	}
 	return out
 }
 
-func toWireValidateExternalCredentialConfigRequest(value *ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
+func ToWireValidateExternalCredentialConfigRequest(value *ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
 	if value == nil {
 		return nil
 	}
@@ -503,13 +503,13 @@ func toWireValidateExternalCredentialConfigRequest(value *ValidateExternalCreden
 		Connection:       value.Connection,
 		ConnectionId:     value.ConnectionId,
 		Mode:             value.Mode,
-		Auth:             toWireExternalCredentialAuthConfig(value.Auth),
+		Auth:             ToWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams: value.ConnectionParams,
 	}
 	return out
 }
 
-func fromWireValidateExternalCredentialConfigRequest(value *proto.ValidateExternalCredentialConfigRequest) *ValidateExternalCredentialConfigRequest {
+func FromWireValidateExternalCredentialConfigRequest(value *proto.ValidateExternalCredentialConfigRequest) *ValidateExternalCredentialConfigRequest {
 	if value == nil {
 		return nil
 	}
@@ -518,7 +518,7 @@ func fromWireValidateExternalCredentialConfigRequest(value *proto.ValidateExtern
 		Connection:       value.Connection,
 		ConnectionId:     value.ConnectionId,
 		Mode:             value.Mode,
-		Auth:             fromWireExternalCredentialAuthConfig(value.Auth),
+		Auth:             FromWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams: value.ConnectionParams,
 	}
 	return out
