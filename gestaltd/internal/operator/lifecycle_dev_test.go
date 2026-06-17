@@ -3,6 +3,7 @@ package operator
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -162,5 +163,69 @@ func TestConfigHasLocalProviderSourcesIgnoresDevActiveUI(t *testing.T) {
 	}
 	if configHasLocalProviderSources(cfg) {
 		t.Fatal("dev-active UI should not trigger local provider auto-prepare")
+	}
+}
+
+func TestLockSyncBuildsLocalDevUI(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	uiDir := filepath.Join(dir, "ui", "demo")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: ui
+source: github.com/acme/apps/demo-ui
+version: "1.0.0"
+dev:
+  command: [sh, -c, echo]
+build:
+  command: [sh, ./build.sh]
+  inputs: [build.sh]
+spec:
+  assetRoot: dist
+  routes:
+    - path: /
+      allowedRoles: [viewer]
+`
+	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>demo</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile build.sh: %v", err)
+	}
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := `apiVersion: gestaltd.config/v6
+` + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + `  ui:
+    demo:
+      source:
+        path: ui/demo/manifest.yaml
+      path: /demo
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: ` + filepath.ToSlash(artifactsDir) + `
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+	preparedUI := filepath.Join(artifactsDir, ".gestaltd", "ui", "demo", "dist", "index.html")
+	if _, err := os.Stat(preparedUI); err != nil {
+		t.Fatalf("sync should build local dev UI during lock/sync (not skip as dev-active): %v", err)
 	}
 }

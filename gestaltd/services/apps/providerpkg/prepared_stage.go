@@ -356,6 +356,7 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	manifest.Version = version
 	manifest.Build = nil
 	manifest.Run = nil
+	manifest.Dev = nil
 	manifest.Artifacts = nil
 
 	kind, err := ManifestKind(manifest)
