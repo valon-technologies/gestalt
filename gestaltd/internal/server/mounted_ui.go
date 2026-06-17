@@ -358,7 +358,8 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
 			inner = mountedUIThemeHandlerFullPath(mounted, inner)
 		}
-		return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
+		h := mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
+		return withDevContentSecurityPolicy(h)
 	}
 	// The theme interceptor wraps the static handler under StripPrefix (it
 	// matches mount-relative paths) and runs inside protectedUIHandler:
