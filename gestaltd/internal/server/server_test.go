@@ -6493,6 +6493,65 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 	assertListOperations("/api/v1/apps/notion/operations?_connection=OAuth&_instance=OAuth")
 }
 
+func TestListOperations_SessionCatalogAuthFailureReturnsReconnectRequired(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "notion", ConnMode: core.ConnectionModeSubject},
+		},
+		catalog: &catalog.Catalog{
+			Name: "notion",
+			Operations: []catalog.CatalogOperation{
+				{ID: "search", Description: "Search pages", Method: http.MethodPost, Transport: catalog.TransportREST},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			return nil, fmt.Errorf("mcpupstream notion: initialize: transport error: unauthorized (401) for %q", token)
+		},
+	}
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "tok-oauth",
+		Subject:   principal.UserSubjectID(u.ID),
+		Audience:  "notion:OAuth",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "oauth-token"},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.CatalogConnection = map[string]string{"notion": "OAuth"}
+		cfg.MCPConnection = map[string]string{"notion": "MCP"}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/notion/operations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
+	}
+
+	var errResp struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if errResp.Code != "reconnect_required" {
+		t.Fatalf("error code = %q, want reconnect_required", errResp.Code)
+	}
+}
+
 func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testing.T) {
 	t.Parallel()
 
