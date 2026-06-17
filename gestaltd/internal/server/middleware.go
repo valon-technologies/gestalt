@@ -114,11 +114,11 @@ func requestBearerToken(r *http.Request) (string, error) {
 	if header == "" {
 		return "", nil
 	}
-	bearer := strings.TrimPrefix(header, core.BearerScheme)
-	if bearer == header {
+	fields := strings.Fields(header)
+	if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
 		return "", errInvalidAuthorizationHeader
 	}
-	return bearer, nil
+	return fields[1], nil
 }
 
 func requestSessionOrBearerToken(r *http.Request) (string, error) {

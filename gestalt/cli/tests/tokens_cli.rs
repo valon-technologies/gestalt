@@ -7,17 +7,45 @@ fn test_list_tokens() {
     let mut server = Server::new();
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/tokens", StatusCode::OK)
         .with_body(
-            r#"[{"id":"1","name":"my-token","scopes":"","createdAt":"2025-01-01T00:00:00Z"}]"#,
+            r#"[{"id":"grant-1","name":"grant-1","scopes":["my-app"],"createdAt":"2025-01-01T00:00:00Z","expiresAt":"2026-01-01T00:00:00Z"}]"#,
         )
         .create();
 
-    let client = create_client(&server);
-    let resp = client.get("/api/v1/tokens").unwrap();
-
+    let output = run_cli(&server, &["auth", "token", "list"]);
     mock.assert();
-    let items = resp.as_array().unwrap();
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["name"], "my-token");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("grant-1"));
+    assert!(stdout.contains("my-app"));
+    assert!(stdout.contains("2025-01-01T00:00:00Z"));
+    assert!(stdout.contains("2026-01-01T00:00:00Z"));
+}
+
+#[test]
+fn test_list_tokens_without_expires_at() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(server, Method::GET, "/api/v1/tokens", StatusCode::OK)
+        .with_body(
+            r#"[{"id":"grant-2","name":"grant-2","scopes":["my-app"],"createdAt":"2025-01-01T00:00:00Z"}]"#,
+        )
+        .create();
+
+    let output = run_cli(&server, &["auth", "token", "list"]);
+    mock.assert();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("grant-2"));
+    assert!(stdout.contains("never"));
 }
 
 #[test]
@@ -28,7 +56,9 @@ fn test_create_token() {
         .match_body(Matcher::JsonString(
             r#"{"name":"cli-token","scopes":"my-app"}"#.to_string(),
         ))
-        .with_body(r#"{"id":"2","name":"cli-token","token":"plaintext-secret"}"#)
+        .with_body(
+            r#"{"id":"2","name":"cli-token","token":"plaintext-secret","scopes":["my-app"]}"#,
+        )
         .create();
 
     let client = create_client(&server);

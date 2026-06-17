@@ -23,8 +23,8 @@ type grantInfo struct {
 	ID        string   `json:"id"`
 	Name      string   `json:"name,omitempty"`
 	Scopes    []string `json:"scopes,omitempty"`
-	CreatedAt int64    `json:"createdAt,omitempty"`
-	ExpiresAt int64    `json:"expiresAt,omitempty"`
+	CreatedAt string   `json:"createdAt,omitempty"`
+	ExpiresAt string   `json:"expiresAt,omitempty"`
 }
 
 func (s *Server) callerAuthContext(ctx context.Context, r *http.Request) context.Context {
@@ -46,13 +46,20 @@ func (s *Server) callerBearerToken(r *http.Request) (string, error) {
 	return strings.TrimSpace(token), nil
 }
 
+func grantUnixSecondsToRFC3339(seconds int64) string {
+	if seconds <= 0 {
+		return ""
+	}
+	return time.Unix(seconds, 0).UTC().Format(time.RFC3339)
+}
+
 func grantInfoFromResponse(grantID string, resp *core.GetGrantResponse) grantInfo {
 	info := grantInfo{ID: grantID, Name: grantID}
 	if resp == nil {
 		return info
 	}
-	info.CreatedAt = resp.CreatedAt
-	info.ExpiresAt = resp.ExpiresAt
+	info.CreatedAt = grantUnixSecondsToRFC3339(resp.CreatedAt)
+	info.ExpiresAt = grantUnixSecondsToRFC3339(resp.ExpiresAt)
 	for _, scope := range resp.Scopes {
 		if scope.Scope != "" {
 			info.Scopes = append(info.Scopes, scope.Scope)

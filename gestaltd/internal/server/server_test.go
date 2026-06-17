@@ -3796,16 +3796,28 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
-	req.Header.Set("Authorization", "Bearer "+plaintext)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	for _, tc := range []struct {
+		name   string
+		scheme string
+	}{
+		{name: "Bearer", scheme: "Bearer"},
+		{name: "bearer", scheme: "bearer"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+			req.Header.Set("Authorization", tc.scheme+" "+plaintext)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+		})
 	}
 }
 
@@ -9450,6 +9462,50 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	if result.Name != result.ID {
 		t.Fatalf("expected name to equal grant id %q, got %q", result.ID, result.Name)
 	}
+	if len(result.Scopes) != 1 || result.Scopes[0] != "testapp" {
+		t.Fatalf("expected scopes [testapp], got %v", result.Scopes)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(listReq)
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("list status = %d, want 200: %s", listResp.StatusCode, respBody)
+	}
+
+	var listed []struct {
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		CreatedAt string   `json:"createdAt"`
+		ExpiresAt string   `json:"expiresAt"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 listed token, got %d", len(listed))
+	}
+	if listed[0].ID != result.ID {
+		t.Fatalf("listed id = %q, want %q", listed[0].ID, result.ID)
+	}
+	if listed[0].Name != result.ID {
+		t.Fatalf("listed name = %q, want grant id %q", listed[0].Name, result.ID)
+	}
+	if len(listed[0].Scopes) != 1 || listed[0].Scopes[0] != "testapp" {
+		t.Fatalf("listed scopes = %v, want [testapp]", listed[0].Scopes)
+	}
+	if _, err := time.Parse(time.RFC3339, listed[0].CreatedAt); err != nil {
+		t.Fatalf("listed createdAt = %q, want RFC3339: %v", listed[0].CreatedAt, err)
+	}
+	if _, err := time.Parse(time.RFC3339, listed[0].ExpiresAt); err != nil {
+		t.Fatalf("listed expiresAt = %q, want RFC3339: %v", listed[0].ExpiresAt, err)
+	}
 }
 
 func TestCreateAPITokenRejectsEmptyScopes(t *testing.T) {
@@ -9604,8 +9660,11 @@ func TestListAPITokensSkipsNotFoundGrant(t *testing.T) {
 	}
 
 	var tokens []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		CreatedAt string   `json:"createdAt"`
+		ExpiresAt string   `json:"expiresAt"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
 		t.Fatalf("decode list response: %v", err)
@@ -9615,6 +9674,17 @@ func TestListAPITokensSkipsNotFoundGrant(t *testing.T) {
 	}
 	if tokens[0].Name != "grant-live" {
 		t.Fatalf("listed token name = %q, want grant id", tokens[0].Name)
+	}
+	if len(tokens[0].Scopes) != 1 || tokens[0].Scopes[0] != "testapp" {
+		t.Fatalf("listed scopes = %v, want [testapp]", tokens[0].Scopes)
+	}
+	expectedCreatedAt := time.Unix(now.Unix(), 0).UTC().Format(time.RFC3339)
+	if tokens[0].CreatedAt != expectedCreatedAt {
+		t.Fatalf("listed createdAt = %q, want %q", tokens[0].CreatedAt, expectedCreatedAt)
+	}
+	expectedExpiresAt := time.Unix(now.Add(time.Hour).Unix(), 0).UTC().Format(time.RFC3339)
+	if tokens[0].ExpiresAt != expectedExpiresAt {
+		t.Fatalf("listed expiresAt = %q, want %q", tokens[0].ExpiresAt, expectedExpiresAt)
 	}
 }
 
@@ -9729,13 +9799,26 @@ func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 	}
 
 	var tokens []struct {
-		ID string `json:"id"`
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		CreatedAt string   `json:"createdAt"`
+		ExpiresAt string   `json:"expiresAt"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
 	if len(tokens) != 1 || tokens[0].ID != createResp.ID {
 		t.Fatalf("tokens = %+v, want only %q", tokens, createResp.ID)
+	}
+	if len(tokens[0].Scopes) != 1 || tokens[0].Scopes[0] != "testapp" {
+		t.Fatalf("listed scopes = %v, want [testapp]", tokens[0].Scopes)
+	}
+	if _, err := time.Parse(time.RFC3339, tokens[0].CreatedAt); err != nil {
+		t.Fatalf("listed createdAt = %q, want RFC3339: %v", tokens[0].CreatedAt, err)
+	}
+	if _, err := time.Parse(time.RFC3339, tokens[0].ExpiresAt); err != nil {
+		t.Fatalf("listed expiresAt = %q, want RFC3339: %v", tokens[0].ExpiresAt, err)
 	}
 }
 
