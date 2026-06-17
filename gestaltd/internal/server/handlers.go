@@ -653,7 +653,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		name,
 		resolver,
 		p,
-		s.catalogSelectorConfig().APICatalogTargets(name, requestedConnection, requestedInstance),
+		s.catalogSelectorConfig().HTTPListCatalogTargets(name, requestedConnection, requestedInstance),
 		strictCatalog,
 	)
 	discoveryFailed = metadata.SessionFailed

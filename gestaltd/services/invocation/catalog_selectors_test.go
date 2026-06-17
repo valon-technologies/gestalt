@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 type stubMCPConnectionBroker struct {
@@ -93,5 +95,56 @@ func TestClassifySessionCatalogError_MapsUnauthorizedToReconnectRequired(t *test
 	err := ClassifySessionCatalogError(fmt.Errorf("mcpupstream notion: initialize: transport error: unauthorized (401)"))
 	if !errors.Is(err, ErrReconnectRequired) {
 		t.Fatalf("ClassifySessionCatalogError() = %v, want ErrReconnectRequired", err)
+	}
+}
+
+func TestAPICatalogTargets_SetsAPISurface(t *testing.T) {
+	t.Parallel()
+
+	cfg := CatalogSelectorConfig{
+		CatalogConnection: map[string]string{"notion": "OAuth"},
+		MCPConnection:     map[string]string{"notion": "MCP"},
+	}
+	targets := cfg.APICatalogTargets("notion", "", "")
+	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceAPI {
+		t.Fatalf("APICatalogTargets() = %#v, want API surface", targets)
+	}
+}
+
+func TestSessionCatalogTargets_SetsMCPSurface(t *testing.T) {
+	t.Parallel()
+
+	cfg := CatalogSelectorConfig{
+		MCPConnection: map[string]string{"notion": "MCP"},
+	}
+	targets := cfg.SessionCatalogTargets("notion", "", "")
+	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceMCP {
+		t.Fatalf("SessionCatalogTargets() = %#v, want MCP surface", targets)
+	}
+}
+
+func TestHTTPListCatalogTargets_DefaultsToAPI(t *testing.T) {
+	t.Parallel()
+
+	cfg := CatalogSelectorConfig{
+		CatalogConnection: map[string]string{"notion": "OAuth"},
+		MCPConnection:     map[string]string{"notion": "MCP"},
+	}
+	targets := cfg.HTTPListCatalogTargets("notion", "", "")
+	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceAPI || targets[0].Connection != "OAuth" {
+		t.Fatalf("HTTPListCatalogTargets() = %#v, want OAuth/API surface", targets)
+	}
+}
+
+func TestHTTPListCatalogTargets_ExplicitMCPUsesMCPSurface(t *testing.T) {
+	t.Parallel()
+
+	cfg := CatalogSelectorConfig{
+		CatalogConnection: map[string]string{"notion": "OAuth"},
+		MCPConnection:     map[string]string{"notion": "MCP"},
+	}
+	targets := cfg.HTTPListCatalogTargets("notion", "MCP", "")
+	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceMCP || targets[0].Connection != "MCP" {
+		t.Fatalf("HTTPListCatalogTargets() = %#v, want MCP surface", targets)
 	}
 }

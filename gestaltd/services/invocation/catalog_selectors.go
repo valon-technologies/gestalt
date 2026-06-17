@@ -69,6 +69,7 @@ func (cfg CatalogSelectorConfig) APICatalogTargets(providerName string, explicit
 		targets = append(targets, CatalogResolutionTarget{
 			Connection: connection,
 			Instance:   instance,
+			Surface:    core.CatalogSurfaceAPI,
 		})
 	}
 	return targets
@@ -81,9 +82,27 @@ func (cfg CatalogSelectorConfig) SessionCatalogTargets(providerName string, expl
 		targets = append(targets, CatalogResolutionTarget{
 			Connection: connection,
 			Instance:   instance,
+			Surface:    core.CatalogSurfaceMCP,
 		})
 	}
 	return targets
+}
+
+// HTTPListCatalogTargets returns catalog resolution targets for HTTP operation listing.
+// Default listing uses the API/OAuth surface. An explicit MCP connection selects the MCP surface.
+func (cfg CatalogSelectorConfig) HTTPListCatalogTargets(providerName string, explicit, instance string) []CatalogResolutionTarget {
+	if explicit != "" {
+		resolved := core.ResolveConnectionAlias(explicit)
+		if mcpConn := cfg.MCPConnection[providerName]; mcpConn != "" && resolved == mcpConn {
+			return cfg.SessionCatalogTargets(providerName, explicit, instance)
+		}
+		if broker, ok := cfg.Invoker.(interface{ MCPConnection(string) string }); ok {
+			if mcpConn := broker.MCPConnection(providerName); mcpConn != "" && resolved == mcpConn {
+				return cfg.SessionCatalogTargets(providerName, explicit, instance)
+			}
+		}
+	}
+	return cfg.APICatalogTargets(providerName, explicit, instance)
 }
 
 // ClassifySessionCatalogError maps known MCP/session catalog auth failures to

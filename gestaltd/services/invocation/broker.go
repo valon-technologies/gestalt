@@ -651,6 +651,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 			resolved := CatalogResolutionTarget{
 				Connection: target.Connection,
 				Instance:   strings.TrimSpace(credential.Qualifier),
+				Surface:    target.Surface,
 			}
 			if _, ok := seen[resolved]; ok {
 				continue

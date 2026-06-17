@@ -19,11 +19,15 @@ type MergedProvider struct {
 	opConn   map[string]string
 	route    map[string]core.Provider
 	binding  map[string]BoundProvider
+	bindings []BoundProvider
 	owned    []core.Provider
 }
 
 type BoundProvider struct {
 	Provider core.Provider
+
+	// Surface scopes session catalog discovery for this child provider.
+	Surface core.CatalogSurface
 
 	// Connection forces every operation from this provider to use the named
 	// connection. FallbackConnection only applies when the provider does not
@@ -51,10 +55,11 @@ func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers
 			IconSVG:     iconSVG,
 			Operations:  make([]catalog.CatalogOperation, 0),
 		},
-		opConn:  make(map[string]string),
-		route:   make(map[string]core.Provider),
-		binding: make(map[string]BoundProvider),
-		owned:   owned,
+		opConn:   make(map[string]string),
+		route:    make(map[string]core.Provider),
+		binding:  make(map[string]BoundProvider),
+		bindings: slices.Clone(providers),
+		owned:    owned,
 	}
 	for i, bound := range providers {
 		p := bound.Provider
@@ -176,7 +181,7 @@ func (m *MergedProvider) Catalog() *catalog.Catalog { return m.catalog.Clone() }
 func (m *MergedProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	p, ok := m.route[op]
 	if !ok {
-		sessionProvider, err := sessionProviderForOperation(ctx, m.owned, op, token)
+		sessionProvider, err := sessionProviderForOperation(ctx, m.sessionProvidersForSurface(core.CatalogSurfaceFromContext(ctx)), op, token)
 		if err != nil {
 			return nil, err
 		}
@@ -186,6 +191,19 @@ func (m *MergedProvider) Execute(ctx context.Context, op string, params map[stri
 		return sessionProvider.Execute(ctx, op, params, token)
 	}
 	return p.Execute(ctx, op, params, token)
+}
+
+func (m *MergedProvider) sessionProvidersForSurface(surface core.CatalogSurface) []core.Provider {
+	if surface == core.CatalogSurfaceAll {
+		return m.owned
+	}
+	providers := make([]core.Provider, 0, len(m.bindings))
+	for i, bound := range m.bindings {
+		if boundSurfaceMatches(bound.Surface, surface, bound.Provider) {
+			providers = append(providers, m.owned[i])
+		}
+	}
+	return providers
 }
 
 func (m *MergedProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
@@ -236,11 +254,16 @@ func (m *MergedProvider) CatalogForRequest(ctx context.Context, token string) (*
 		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", m.Name()))
 	}
 
+	surface := core.CatalogSurfaceFromContext(ctx)
 	merged := m.catalog.Clone()
 	merged.Operations = nil
 	seen := make(map[string]string)
-	for _, provider := range m.owned {
+	for i, provider := range m.owned {
 		if !core.SupportsSessionCatalog(provider) {
+			continue
+		}
+		bound := m.bindings[i]
+		if !boundSurfaceMatches(bound.Surface, surface, provider) {
 			continue
 		}
 		cat, _, err := core.CatalogForRequest(ctx, provider, token)
@@ -274,4 +297,43 @@ func (m *MergedProvider) Close() error {
 		}
 	}
 	return err
+}
+
+func boundSurfaceMatches(boundSurface, requested core.CatalogSurface, provider core.Provider) bool {
+	surface := boundSurface
+	if surface == core.CatalogSurfaceAll {
+		surface = inferProviderCatalogSurface(provider)
+	}
+	switch requested {
+	case core.CatalogSurfaceAll:
+		return true
+	case core.CatalogSurfaceAPI, core.CatalogSurfaceMCP:
+		return surface == core.CatalogSurfaceAll || surface == requested
+	default:
+		return true
+	}
+}
+
+func inferProviderCatalogSurface(provider core.Provider) core.CatalogSurface {
+	cat := provider.Catalog()
+	if cat == nil || len(cat.Operations) == 0 {
+		return core.CatalogSurfaceAll
+	}
+	hasMCP := false
+	hasAPI := false
+	for i := range cat.Operations {
+		if cat.Operations[i].Transport == catalog.TransportMCPPassthrough {
+			hasMCP = true
+		} else {
+			hasAPI = true
+		}
+	}
+	switch {
+	case hasMCP && !hasAPI:
+		return core.CatalogSurfaceMCP
+	case hasAPI && !hasMCP:
+		return core.CatalogSurfaceAPI
+	default:
+		return core.CatalogSurfaceAll
+	}
 }
