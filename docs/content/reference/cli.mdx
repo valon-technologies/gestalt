@@ -55,8 +55,8 @@ the platform where they run.
 | `gestaltd provider repo list` | List the default, user-level, and project provider repositories. |
 | `gestaltd provider repo update` | Fetch and cache provider repository indexes. |
 | `gestaltd provider repo remove NAME` | Remove a provider repository from the user-level store. Pass `--config PATH` to remove it from project config instead. |
-| `gestaltd serve --path PATH` | Run a local source app or UI bundle inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
-| `gestaltd serve --path PATH --config PATH` | Layer supporting providers, apps, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
+| `gestaltd serve --path PATH` | Run one or more local source app or UI bundles. Repeat `--path` for multiple targets. Without `--config`, serves a synthesized baseline (unlocked). |
+| `gestaltd serve --path PATH --config PATH` | Layer `--path` local-source overrides on top of the user config. Repeat `--path` and `--config` as needed. With `--locked`, the fleet loads pinned artifacts while `--path` UIs that declare a manifest `dev:` block hot-reload from local trees. |
 | `gestaltd provider validate --path PATH` | Validate a local source app or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve --path`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
 | `gestaltd provider package --version VERSION` | Build provider release archives from a source directory. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch` targets or `--platform all` for multi-platform builds. |
@@ -191,11 +191,23 @@ Map these in your framework dev script, for example
 `NEXT_BASE_PATH=$GESTALT_DEV_BASE_PATH next dev --port $GESTALT_DEV_PORT`.
 
 Production and `gestaltd serve --locked` ignore `dev:` and continue to serve the
-static `build` output. Config or provider changes require restarting gestaltd.
+static `build` output, except for UIs selected with `--path` that declare a
+`dev:` block — those are dev-proxied even under `--locked`. Config or provider
+changes require restarting gestaltd.
 
-For faster iteration on one local plugin, use `gestaltd serve --path`
-for a standalone source tree or layer a small local config that includes only
-the app under test:
+For faster iteration on local UIs while the rest of the fleet runs from pinned
+artifacts, repeat `--path` together with `--config` and `--locked`:
+
+```sh
+gestaltd serve --locked \
+  --config ./deploy/config.yaml \
+  --config ./deploy/local/config.yaml \
+  --path ./apps/g-issues/ui \
+  --path ./apps/delta/ui
+```
+
+For a standalone local provider without the full fleet config, use `gestaltd serve --path`
+for a source tree or layer a small local config that includes only the app under test:
 
 ```sh
 gestaltd serve \
@@ -219,6 +231,7 @@ gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --path ./apps/support/manifest.yaml
+gestaltd serve --locked --config ./config.yaml --path ./apps/g-issues/ui
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml
@@ -241,7 +254,9 @@ gestaltd provider validate --path ./ui/dashboard
 gestaltd provider validate --path ./apps/support --config ./dev/support.yaml --config ./dev/local.yaml
 gestaltd serve --path ./apps/support
 gestaltd serve --path ./ui/dashboard
+gestaltd serve --path ./apps/support --path ./ui/dashboard --config ./dev/support.yaml
 gestaltd serve --path ./apps/support --config ./dev/support.yaml --port 8080
+gestaltd serve --locked --config ./config.yaml --path ./apps/g-issues/ui --path ./apps/delta/ui
 gestaltd provider package --version 0.0.1-alpha.1
 gestaltd provider package --version 0.0.1-alpha.1 --platform all
 gestaltd provider package --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64

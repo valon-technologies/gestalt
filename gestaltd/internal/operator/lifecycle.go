@@ -103,6 +103,9 @@ type Lifecycle struct {
 	// unlocked `gestaltd serve`; false for lock/sync/validate and serve --locked,
 	// so committed lockfiles build and pin dev UIs normally.
 	devServeEligible bool
+	// forcedDevUIKeys marks specific UI keys dev-active even when devServeEligible
+	// is false (serve --locked --config … --path … overlay mode).
+	forcedDevUIKeys map[string]bool
 }
 
 type StatePaths struct {
@@ -185,6 +188,30 @@ func (l *Lifecycle) WithProviderResolver(resolver *providerregistry.Resolver) *L
 func (l *Lifecycle) WithDevServeEligible(v bool) *Lifecycle {
 	l.devServeEligible = v
 	return l
+}
+
+func (l *Lifecycle) WithForcedDevUIKeys(keys []string) *Lifecycle {
+	if len(keys) == 0 {
+		l.forcedDevUIKeys = nil
+		return l
+	}
+	l.forcedDevUIKeys = make(map[string]bool, len(keys))
+	for _, key := range keys {
+		if key = strings.TrimSpace(key); key != "" {
+			l.forcedDevUIKeys[key] = true
+		}
+	}
+	return l
+}
+
+func (l *Lifecycle) shouldMarkUIForDev(name string) bool {
+	if l == nil {
+		return false
+	}
+	if l.forcedDevUIKeys[name] {
+		return true
+	}
+	return l.devServeEligible
 }
 
 func (l *Lifecycle) metadataHTTPClient() *http.Client {
@@ -921,32 +948,47 @@ func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, _ StatePaths, a
 	if err != nil {
 		return nil, err
 	}
-	if l != nil && l.devServeEligible {
-		if err := markDevActiveUIProviders(cfg); err != nil {
+	if l != nil && (l.devServeEligible || len(l.forcedDevUIKeys) > 0) {
+		if err := l.markDevActiveUIProviders(cfg); err != nil {
 			return nil, err
 		}
 	}
 	return cfg, nil
 }
 
-func markDevActiveUIProviders(cfg *config.Config) error {
+func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
 	if cfg == nil {
 		return nil
 	}
 	for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
 		entry := cfg.Providers.UI[name]
-		if entry == nil || !entry.HasLocalSource() {
+		if entry == nil || !l.shouldMarkUIForDev(name) {
+			continue
+		}
+		if !entry.HasLocalSource() {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q is not configured with a local source.path override", name)
+			}
 			continue
 		}
 		normalized, err := normalizeLocalSource(entry.SourcePath())
 		if err != nil {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q: resolve local source: %w", name, err)
+			}
 			continue
 		}
 		_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
 		if err != nil {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q: read source manifest: %w", name, err)
+			}
 			continue
 		}
 		if providerpkg.EffectiveDev(manifest) == nil {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q has no dev: block; cannot dev-serve under --locked", name)
+			}
 			continue
 		}
 		configMap, err := config.NodeToMap(entry.Config)
@@ -980,7 +1022,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
-	if l.devServeEligible {
+	if l.devServeEligible || len(l.forcedDevUIKeys) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
 			entry := cfg.Providers.UI[name]
 			if entry != nil && entry.DevActive {

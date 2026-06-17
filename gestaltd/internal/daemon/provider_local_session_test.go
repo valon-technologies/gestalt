@@ -16,7 +16,7 @@ func TestPrepareProviderLocalSessionSupportsDirectUITarget(t *testing.T) {
 	mountedUI := setupMountedUIDir(t, dir)
 	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
 
-	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Path: mountedUI.ManifestPath})
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Paths: []string{mountedUI.ManifestPath}})
 	if err != nil {
 		t.Fatalf("prepareProviderLocalSession: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
 	siblingUI := setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
 	appManifest := componentProviderManifestPath(t, appDir)
 
-	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Path: appManifest})
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Paths: []string{appManifest}})
 	if err != nil {
 		t.Fatalf("prepareProviderLocalSession: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestPrepareProviderLocalSessionLeavesAppWithoutUIUnmounted(t *testing.T) {
 	setAppManifestSource(t, appDir, "github.com/test/apps/api-only")
 	appManifest := componentProviderManifestPath(t, appDir)
 
-	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Path: appManifest})
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Paths: []string{appManifest}})
 	if err != nil {
 		t.Fatalf("prepareProviderLocalSession: %v", err)
 	}
