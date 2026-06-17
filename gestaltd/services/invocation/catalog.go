@@ -205,6 +205,7 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 	sessionCat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
 	meta.SessionAttempted = attempted
 	if err != nil {
+		err = ClassifySessionCatalogError(err)
 		meta.SessionFailed = true
 		if strictSession || staticCat == nil {
 			return nil, meta, err
@@ -267,7 +268,7 @@ func resolveSessionOperation(ctx context.Context, prov core.Provider, provName s
 		cat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
 		if err != nil {
 			if firstErr == nil {
-				firstErr = err
+				firstErr = ClassifySessionCatalogError(err)
 			}
 			continue
 		}

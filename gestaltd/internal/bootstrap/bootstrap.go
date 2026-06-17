@@ -1188,6 +1188,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Audit:             audit,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
+		MCPConnection:     connMaps.MCPConnection,
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
@@ -1198,6 +1199,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Invoker:           sharedInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
+		MCPConnection:     connMaps.MCPConnection,
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))

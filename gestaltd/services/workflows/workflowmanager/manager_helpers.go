@@ -15,6 +15,7 @@ func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
 		Invoker:           m.invoker,
 		CatalogConnection: m.catalogConnection,
+		MCPConnection:     m.mcpConnection,
 		DefaultConnection: m.defaultConnection,
 	}
 }

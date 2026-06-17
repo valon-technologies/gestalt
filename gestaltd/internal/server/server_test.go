@@ -119,9 +119,9 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	if cfg.DefaultConnection != nil {
 		brokerOpts = append(brokerOpts, invocation.WithConnectionMapper(invocation.ConnectionMap(cfg.DefaultConnection)))
 	}
-	if cfg.CatalogConnection != nil {
+	if cfg.MCPConnection != nil {
 		brokerOpts = append(brokerOpts,
-			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(cfg.CatalogConnection)),
+			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(cfg.MCPConnection)),
 		)
 	}
 	if cfg.TracerProvider != nil {
@@ -6453,7 +6453,8 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.CatalogConnection = map[string]string{"notion": "MCP"}
+		cfg.CatalogConnection = map[string]string{"notion": "OAuth"}
+		cfg.MCPConnection = map[string]string{"notion": "MCP"}
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -6492,82 +6493,62 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 	assertListOperations("/api/v1/apps/notion/operations?_connection=OAuth&_instance=OAuth")
 }
 
-func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
+func TestListOperations_SessionCatalogAuthFailureReturnsReconnectRequired(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
+			StubIntegration: coretesting.StubIntegration{N: "notion", ConnMode: core.ConnectionModeSubject},
+		},
+		catalog: &catalog.Catalog{
+			Name: "notion",
+			Operations: []catalog.CatalogOperation{
+				{ID: "search", Description: "Search pages", Method: http.MethodPost, Transport: catalog.TransportREST},
+			},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
-			switch token {
-			case "catalog-token":
-				return &catalog.Catalog{
-					Name: "sample-int",
-					Operations: []catalog.CatalogOperation{
-						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
-					},
-				}, nil
-			case "rest-token":
-				return &catalog.Catalog{Name: "sample-int"}, nil
-			default:
-				return nil, fmt.Errorf("unexpected token %q", token)
-			}
+			return nil, fmt.Errorf("mcpupstream notion: initialize: transport error: unauthorized (401) for %q", token)
 		},
 	}
 
-	providers := testutil.NewProviderRegistry(t, stub)
 	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
-		ID:        "tok-catalog",
+		ID:        "tok-oauth",
 		Subject:   principal.UserSubjectID(u.ID),
-		Audience:  "sample-int:catalog-conn",
+		Audience:  "notion:OAuth",
 		Qualifier: "default",
-		Grant:     &core.ExternalCredentialGrant{AccessToken: "catalog-token"},
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "oauth-token"},
 	})
-	seedToken(t, svc, &core.ExternalCredential{
-		ID:        "tok-rest",
-		Subject:   principal.UserSubjectID(u.ID),
-		Audience:  "sample-int:rest-conn",
-		Qualifier: "default",
-		Grant:     &core.ExternalCredentialGrant{AccessToken: "rest-token"},
-	})
-
-	broker := invocation.NewBroker(
-		providers,
-		svc.Users,
-		svc.ExternalCredentials,
-		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
-		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "catalog-conn"})),
-	)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = providers
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.CatalogConnection = map[string]string{"notion": "OAuth"}
+		cfg.MCPConnection = map[string]string{"notion": "MCP"}
 		cfg.Services = svc
-		cfg.Invoker = broker
-		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/sample-int/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/notion/operations", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusPreconditionFailed {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
 	}
 
-	var ops []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
-		t.Fatalf("decoding response: %v", err)
+	var errResp struct {
+		Code string `json:"code"`
 	}
-	if len(ops) != 1 || ops[0]["id"] != "run" {
-		t.Fatalf("operations = %+v, want only run", ops)
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if errResp.Code != "reconnect_required" {
+		t.Fatalf("error code = %q, want reconnect_required", errResp.Code)
 	}
 }
 
@@ -7744,7 +7725,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 
 	ts = newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
-		cfg.CatalogConnection = map[string]string{"sample-int": testCatalogConnection}
+		cfg.MCPConnection = map[string]string{"sample-int": testCatalogConnection}
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -7788,23 +7769,9 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	if resp.StatusCode != http.StatusPreconditionFailed {
 		t.Fatalf("expected 412, got %d", resp.StatusCode)
 	}
-
-	sessionStub := &stubIntegrationWithSessionCatalog{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
-		},
-	}
-
-	ts = newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
-		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
-		cfg.Services = testutil.NewStubServices(t)
-	})
-	testutil.CloseOnCleanup(t, ts)
-
 }
 
-func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(t *testing.T) {
+func TestExecuteOperation_DoesNotFallbackToDefaultWhenBrokerMCPConnectionConfigured(t *testing.T) {
 	t.Parallel()
 
 	var gotToken string
@@ -7864,14 +7831,14 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 		t.Fatalf("request: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusPreconditionFailed {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 412 when MCP session catalog credential is missing, got %d: %s", resp.StatusCode, body)
 	}
-	if gotToken != "rest-token" {
+	if gotToken != "" {
 		_ = resp.Body.Close()
-		t.Fatalf("execute token = %q, want %q", gotToken, "rest-token")
+		t.Fatalf("execute token = %q, want no provider execution", gotToken)
 	}
 	_ = resp.Body.Close()
 
@@ -8043,6 +8010,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 		cfg.Invoker = wrappedInvoker
 		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
 		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		cfg.MCPConnection = map[string]string{"sample-int": "catalog-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8062,7 +8030,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 	}
 }
 
-func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *testing.T) {
+func TestExecuteOperation_UsesServerMCPConnectionBeforeBrokerFallback(t *testing.T) {
 	t.Parallel()
 
 	var gotToken string
@@ -8124,7 +8092,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 		cfg.Services = svc
 		cfg.Invoker = broker
 		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
-		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		cfg.MCPConnection = map[string]string{"sample-int": "catalog-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8144,7 +8112,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 	}
 }
 
-func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *testing.T) {
+func TestExecuteOperation_DoesNotFallbackPastConfiguredMCPConnection(t *testing.T) {
 	t.Parallel()
 
 	var gotToken string
@@ -8206,7 +8174,7 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 		cfg.Services = svc
 		cfg.Invoker = broker
 		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
-		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		cfg.MCPConnection = map[string]string{"sample-int": "catalog-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 

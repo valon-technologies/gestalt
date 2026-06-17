@@ -112,6 +112,7 @@ type Server struct {
 	agentStreamHeartbeat   time.Duration
 	defaultConnection      map[string]string
 	catalogConnection      map[string]string
+	mcpConnection          map[string]string
 	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
 	manualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
 	pluginDefs             map[string]*config.ProviderEntry
@@ -148,6 +149,7 @@ func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
 		Invoker:           s.invoker,
 		CatalogConnection: s.catalogConnection,
+		MCPConnection:     s.mcpConnection,
 		DefaultConnection: s.defaultConnection,
 	}
 }
@@ -169,6 +171,7 @@ type Config struct {
 	AppInvocation        invocation.Invoker
 	DefaultConnection    map[string]string
 	CatalogConnection    map[string]string
+	MCPConnection        map[string]string
 	ConnectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
 	ManualConnectionAuth func() map[string]map[string]bootstrap.ManualTokenExchanger
 	AppDefs              map[string]*config.ProviderEntry
@@ -369,6 +372,7 @@ func New(cfg Config) (*Server, error) {
 		agentStreamHeartbeat:   agentStreamHeartbeat,
 		defaultConnection:      cfg.DefaultConnection,
 		catalogConnection:      cfg.CatalogConnection,
+		mcpConnection:          cfg.MCPConnection,
 		connectionAuth:         cfg.ConnectionAuth,
 		manualConnectionAuth:   cfg.ManualConnectionAuth,
 		pluginDefs:             cfg.AppDefs,
@@ -406,6 +410,7 @@ func New(cfg Config) (*Server, error) {
 		Audit:             cfg.AuditSink,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
+		MCPConnection:     cfg.MCPConnection,
 		Now:               now,
 	})
 	if noAuth || hasAnonymousAuthProvider(authProviders) {

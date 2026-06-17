@@ -122,6 +122,7 @@ type Config struct {
 	Audit             core.AuditSink
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
+	MCPConnection     map[string]string
 	Now               func() time.Time
 	Logger            *slog.Logger
 }
@@ -135,6 +136,7 @@ type Manager struct {
 	audit             core.AuditSink
 	defaultConnection map[string]string
 	catalogConnection map[string]string
+	mcpConnection     map[string]string
 	now               func() time.Time
 	logger            *slog.Logger
 }
@@ -238,6 +240,7 @@ func New(cfg Config) *Manager {
 		audit:             cfg.Audit,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
+		mcpConnection:     maps.Clone(cfg.MCPConnection),
 		now:               now,
 		logger:            cfg.Logger,
 	}
