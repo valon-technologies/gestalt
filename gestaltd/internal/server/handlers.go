@@ -646,7 +646,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	} else if core.SupportsSessionCatalog(prov) {
 		strictCatalog = true
 	}
-	ctx := r.Context()
+	ctx := core.WithCatalogSurface(r.Context(), core.CatalogSurfaceAPI)
 	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
 		ctx,
 		prov,

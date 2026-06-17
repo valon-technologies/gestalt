@@ -98,7 +98,7 @@ func setupCompositeNotion(t *testing.T, cfg compositeNotionConfig) compositeNoti
 	return compositeNotionEnv{ts: ts}
 }
 
-func TestExecuteOperation_CompositeSearchUsesOAuthWithoutMCPCatalogDiscovery(t *testing.T) {
+func TestCompositeSearchAndListUseOAuthWithoutMCPCatalogDiscovery(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -120,6 +120,31 @@ func TestExecuteOperation_CompositeSearchUsesOAuthWithoutMCPCatalogDiscovery(t *
 		},
 		seedOAuth: true,
 	})
+
+	listReq, _ := http.NewRequest(http.MethodGet, env.ts.URL+"/api/v1/apps/notion/operations", nil)
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list operations request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("expected list operations 200, got %d: %s", listResp.StatusCode, body)
+	}
+	var ops []catalog.CatalogOperation
+	if err := json.NewDecoder(listResp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decode operations: %v", err)
+	}
+	foundSearch := false
+	for _, op := range ops {
+		if op.ID == "search" {
+			foundSearch = true
+			break
+		}
+	}
+	if !foundSearch {
+		t.Fatalf("operations = %#v, want search", ops)
+	}
 
 	req, _ := http.NewRequest(http.MethodPost, env.ts.URL+"/api/v1/notion/search", strings.NewReader("{}"))
 	resp, err := http.DefaultClient.Do(req)

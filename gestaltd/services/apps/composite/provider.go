@@ -124,6 +124,14 @@ func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalo
 			return nil, err
 		}
 	}
+
+	if core.CatalogSurfaceFromContext(ctx) == core.CatalogSurfaceAPI {
+		if apiCat != nil {
+			return tagRESTCatalog(apiCat), nil
+		}
+		return tagRESTCatalog(p.api.Catalog()), nil
+	}
+
 	mcpCat, err := p.mcp.CatalogForRequest(ctx, token)
 	if err != nil {
 		return nil, err
@@ -254,6 +262,9 @@ func (p *Provider) buildCatalogFromSources(apiCat, mcpCat *catalog.Catalog) *cat
 }
 
 func tagCatalog(src *catalog.Catalog, transport string) *catalog.Catalog {
+	if src == nil {
+		return nil
+	}
 	out := src.Clone()
 	for i := range out.Operations {
 		out.Operations[i].Transport = transport
