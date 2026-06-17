@@ -95,6 +95,28 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"form-action 'self'; " +
 	"frame-ancestors 'none'"
 
+// devContentSecurityPolicy relaxes contentSecurityPolicy for dev-active mounted
+// UIs so the framework dev server's HMR websocket (connect-src ws:) and eval-based
+// hot updates (script-src 'unsafe-eval') work in the browser. Applied ONLY to
+// dev-active mounts (MountedUI.IsDev); production mounts keep contentSecurityPolicy.
+const devContentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data:; " +
+	"font-src 'self'; " +
+	"connect-src 'self' ws: wss:; " +
+	"object-src 'none'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'; " +
+	"frame-ancestors 'none'"
+
+func withDevContentSecurityPolicy(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", devContentSecurityPolicy)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
