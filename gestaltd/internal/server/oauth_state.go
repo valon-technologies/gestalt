@@ -144,18 +144,20 @@ type mcpOAuthAuthorizationCodeState struct {
 	DisplayName         string `json:"dn,omitempty"`
 	AvatarURL           string `json:"av,omitempty"`
 	Scope               string `json:"sc,omitempty"`
+	SubjectToken        string `json:"st,omitempty"`
 	CodeChallenge       string `json:"cc"`
 	CodeChallengeMethod string `json:"cm,omitempty"`
 	ExpiresAt           int64  `json:"exp"`
 }
 
 type mcpOAuthRefreshTokenState struct {
-	ClientID    string `json:"cid"`
-	Email       string `json:"em"`
-	DisplayName string `json:"dn,omitempty"`
-	AvatarURL   string `json:"av,omitempty"`
-	Scope       string `json:"sc,omitempty"`
-	ExpiresAt   int64  `json:"exp"`
+	ClientID     string `json:"cid"`
+	Email        string `json:"em"`
+	DisplayName  string `json:"dn,omitempty"`
+	AvatarURL    string `json:"av,omitempty"`
+	Scope        string `json:"sc,omitempty"`
+	SubjectToken string `json:"st,omitempty"`
+	ExpiresAt    int64  `json:"exp"`
 }
 
 func encodeLoginState(enc *cryptoutil.AESGCMEncryptor, state loginState) (string, error) {

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 )
 
@@ -48,6 +50,31 @@ func TestResolveTokenInactiveTokenReturnsInvalidToken(t *testing.T) {
 	_, err := resolver.ResolveToken(context.Background(), "token")
 	if !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("ResolveToken() error = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestResolveTokenInactiveDoesNotFallbackToHostSessionJWT(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("resolver-test-session-secret")
+	jwt, err := session.IssueToken(&core.UserIdentity{
+		Email:       "user@example.com",
+		DisplayName: "User",
+	}, secret, time.Hour)
+	if err != nil {
+		t.Fatalf("IssueToken() error = %v", err)
+	}
+
+	auth := &coretesting.StubAuthProvider{
+		IntrospectFn: func(context.Context, *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			return &core.IntrospectResponse{Active: false}, nil
+		},
+	}
+	resolver := NewResolver(auth)
+
+	_, err = resolver.ResolveToken(context.Background(), jwt)
+	if !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("ResolveToken() error = %v, want ErrInvalidToken without session fallback", err)
 	}
 }
 

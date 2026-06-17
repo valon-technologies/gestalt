@@ -110,7 +110,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditErr = nil
 	writeJSON(w, http.StatusCreated, createGrantResponse{
 		ID:        grantID,
-		Name:      req.Name,
+		Name:      grantID,
 		Token:     tokenResp.AccessToken,
 		Scopes:    principal.ParseScopeString(tokenResp.Scope),
 		ExpiresAt: tokenExpiresAt(s.now, tokenResp.ExpiresIn),

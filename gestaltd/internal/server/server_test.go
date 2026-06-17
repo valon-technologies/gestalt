@@ -9189,6 +9189,7 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	}
 
 	var result struct {
+		ID     string   `json:"id"`
 		Token  string   `json:"token"`
 		Name   string   `json:"name"`
 		Scopes []string `json:"scopes"`
@@ -9199,8 +9200,11 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	if result.Token == "" {
 		t.Fatal("expected non-empty token in response")
 	}
-	if result.Name != "my-token" {
-		t.Fatalf("expected name my-token, got %q", result.Name)
+	if result.ID == "" {
+		t.Fatal("expected non-empty grant id in response")
+	}
+	if result.Name != result.ID {
+		t.Fatalf("expected name to equal grant id %q, got %q", result.ID, result.Name)
 	}
 }
 
@@ -9365,8 +9369,8 @@ func TestListAPITokensSkipsNotFoundGrant(t *testing.T) {
 	if len(tokens) != 1 || tokens[0].ID != "grant-live" {
 		t.Fatalf("tokens = %+v, want only grant-live", tokens)
 	}
-	if tokens[0].Name != "" {
-		t.Fatalf("listed token name = %q, want empty", tokens[0].Name)
+	if tokens[0].Name != "grant-live" {
+		t.Fatalf("listed token name = %q, want grant id", tokens[0].Name)
 	}
 }
 

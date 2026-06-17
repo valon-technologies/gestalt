@@ -6,21 +6,19 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type Resolver struct {
-	auth          core.AuthenticationProvider
-	providerName  string
-	sessionSecret []byte
+	auth         core.AuthenticationProvider
+	providerName string
 }
 
 func NewResolver(auth core.AuthenticationProvider) *Resolver {
-	return NewResolverNamed("", auth, nil)
+	return NewResolverNamed("", auth)
 }
 
-func NewResolverNamed(providerName string, auth core.AuthenticationProvider, sessionSecret []byte) *Resolver {
+func NewResolverNamed(providerName string, auth core.AuthenticationProvider) *Resolver {
 	name := strings.TrimSpace(providerName)
 	switch {
 	case auth == nil && name == "":
@@ -28,7 +26,7 @@ func NewResolverNamed(providerName string, auth core.AuthenticationProvider, ses
 	case name == "":
 		name = "authentication"
 	}
-	return &Resolver{auth: auth, providerName: name, sessionSecret: sessionSecret}
+	return &Resolver{auth: auth, providerName: name}
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
@@ -56,12 +54,6 @@ func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, 
 		}
 		resp.Subject = subject
 		return principalFromIntrospection(resp), nil
-	}
-	if len(r.sessionSecret) > 0 {
-		identity, jwtErr := session.ValidateToken(token, r.sessionSecret)
-		if jwtErr == nil && identity != nil && strings.TrimSpace(identity.Email) != "" {
-			return principalFromSessionIdentity(identity), nil
-		}
 	}
 	return nil, ErrInvalidToken
 }
@@ -95,25 +87,6 @@ func principalFromIntrospection(resp *core.IntrospectResponse) *Principal {
 		}
 	} else if kind := KindFromSubjectID(p.SubjectID); kind != "" {
 		p.Kind = kind
-	}
-	p.CredentialSubjectID = p.SubjectID
-	return Canonicalize(p)
-}
-
-func principalFromSessionIdentity(identity *core.UserIdentity) *Principal {
-	if identity == nil || strings.TrimSpace(identity.Email) == "" {
-		return nil
-	}
-	email := strings.TrimSpace(identity.Email)
-	p := &Principal{
-		SubjectID: "user:" + email,
-		Identity: &core.UserIdentity{
-			Email:       email,
-			DisplayName: identity.DisplayName,
-			AvatarURL:   identity.AvatarURL,
-		},
-		Kind:   KindUser,
-		Source: SourceBearer,
 	}
 	p.CredentialSubjectID = p.SubjectID
 	return Canonicalize(p)

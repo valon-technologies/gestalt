@@ -47,7 +47,7 @@ func (s *Server) callerBearerToken(r *http.Request) (string, error) {
 }
 
 func grantInfoFromResponse(grantID string, resp *core.GetGrantResponse) grantInfo {
-	info := grantInfo{ID: grantID}
+	info := grantInfo{ID: grantID, Name: grantID}
 	if resp == nil {
 		return info
 	}
