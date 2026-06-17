@@ -980,6 +980,16 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	if l.devServeEligible {
+		for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
+			entry := cfg.Providers.UI[name]
+			if entry != nil && entry.DevActive {
+				if err := resolveUIThemeConfig(paths, name, entry); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+	}
 	mode := artifactModeMaterialize
 	if locked {
 		mode = artifactModeReadOnly

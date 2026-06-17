@@ -229,3 +229,73 @@ server:
 		t.Fatalf("sync should build local dev UI during lock/sync (not skip as dev-active): %v", err)
 	}
 }
+
+func TestUnlockedServeResolvesDevUITheme(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	themeDir := filepath.Join(dir, "theme")
+	if err := os.MkdirAll(themeDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll theme: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(themeDir, "tenant.css"), []byte("body{}"), 0o644); err != nil {
+		t.Fatalf("WriteFile tenant.css: %v", err)
+	}
+
+	uiDir := filepath.Join(dir, "ui")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll ui: %v", err)
+	}
+	manifest := `kind: ui
+source: github.com/acme/apps/demo-ui
+version: "1.0.0"
+dev:
+  command: [sh, -c, echo]
+build:
+  command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
+spec:
+  assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer]
+`
+	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "gestaltd.yaml")
+	cfgYAML := `apiVersion: gestaltd.config/v6
+` + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + `  ui:
+    demo:
+      path: /demo
+      source:
+        path: ./ui
+      config:
+        theme:
+          stylesheet: ./theme/tenant.css
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: ` + filepath.ToSlash(filepath.Join(dir, "artifacts")) + `
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	loaded, _, err := NewLifecycle().WithDevServeEligible(true).LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, StatePaths{}, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPathsWithStatePaths: %v", err)
+	}
+	entry := loaded.Providers.UI["demo"]
+	if entry == nil {
+		t.Fatal("expected ui.demo entry")
+	}
+	if !entry.DevActive {
+		t.Fatal("expected DevActive for unlocked serve")
+	}
+	wantStylesheet := filepath.Join(dir, "theme", "tenant.css")
+	if entry.ResolvedThemeStylesheet != wantStylesheet {
+		t.Fatalf("ResolvedThemeStylesheet = %q, want %q", entry.ResolvedThemeStylesheet, wantStylesheet)
+	}
+}

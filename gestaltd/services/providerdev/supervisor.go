@@ -251,6 +251,7 @@ func (p *managedProc) start(ctx context.Context, logger *slog.Logger) error {
 	p.done = done
 	go func() {
 		p.waitErr = cmd.Wait()
+		p.ready.Store(false)
 		close(done)
 	}()
 	go p.probeReadiness(ctx, logger, port, done)
