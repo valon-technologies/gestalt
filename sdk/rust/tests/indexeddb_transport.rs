@@ -278,6 +278,22 @@ async fn object_store_bulk_helpers() {
         .expect("get_all_keys");
     assert_eq!(all_keys, vec!["a", "b", "c", "d"]);
 
+    let paged = store
+        .get_all(Query::all(), Some(2))
+        .await
+        .expect("get_all with count");
+    let paged_ids: Vec<_> = paged
+        .iter()
+        .map(|record| record["id"].as_str().expect("id").to_string())
+        .collect();
+    assert_eq!(paged_ids, vec!["a", "b"]);
+
+    let paged_keys = store
+        .get_all_keys(Query::all(), Some(3))
+        .await
+        .expect("get_all_keys with count");
+    assert_eq!(paged_keys, vec!["a", "b", "c"]);
+
     let count = store.count(Query::all()).await.expect("count");
     assert_eq!(count, 4);
 

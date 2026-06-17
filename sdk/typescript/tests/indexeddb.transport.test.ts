@@ -578,6 +578,54 @@ describe("IndexedDB transport", () => {
     await expect(local.createObjectStore("dupe")).rejects.toThrow(AlreadyExistsError);
   });
 
+  test("getAll count limits object-store range reads", async () => {
+    const store = "getall_count_object_store";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+
+    for (const id of ["a", "b", "c", "d", "e"]) {
+      await os.put({ id, val: id });
+    }
+
+    const page = await os.getAll(undefined, { count: 2 });
+    expect(page.map((record) => record.id)).toEqual(["a", "b"]);
+
+    const keyPage = await os.getAllKeys(undefined, { count: 3 });
+    expect(keyPage).toEqual(["a", "b", "c"]);
+
+    const full = await os.getAll();
+    expect(full).toHaveLength(5);
+  });
+
+  test("getAll count limits index and transaction reads", async () => {
+    const store = "getall_count_index_tx";
+    await db.createObjectStore(store, {
+      indexes: [{ name: "by_status", keyPath: ["status"] }],
+    });
+    const os = db.objectStore(store);
+    const idx = os.index("by_status");
+
+    for (const id of ["a", "b", "c", "d"]) {
+      await os.put({ id, status: "active" });
+    }
+    await os.put({ id: "e", status: "inactive" });
+
+    expect((await idx.getAll("active", { count: 2 })).map((record) => record.id)).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(await idx.getAllKeys("active", { count: 2 })).toEqual(["a", "b"]);
+
+    const tx = await db.transaction([store], "readonly");
+    const txos = tx.objectStore(store);
+    expect((await txos.getAll(undefined, { count: 2 })).map((record) => record.id)).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(await txos.index("by_status").getAllKeys("active", { count: 2 })).toEqual(["a", "b"]);
+    await tx.commit();
+  });
+
   test("query parity: scalar key and bound range on object store", async () => {
     const store = "query_parity_scalar";
     await db.createObjectStore(store);

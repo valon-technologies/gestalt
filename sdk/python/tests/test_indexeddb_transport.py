@@ -658,6 +658,52 @@ class TestIndexCompoundRange(unittest.TestCase):
         c.close()
 
 
+class TestGetAllCount(unittest.TestCase):
+    def test_object_store_get_all_and_get_all_keys_honor_count(self) -> None:
+        c = _client()
+        c.create_object_store("getall_count_store")
+        s = c.object_store("getall_count_store")
+        for row_id in ["a", "b", "c", "d", "e"]:
+            s.put({"id": row_id, "val": row_id})
+
+        page = s.get_all(count=2)
+        self.assertEqual([row["id"] for row in page], ["a", "b"])
+        key_page = s.get_all_keys(count=3)
+        self.assertEqual(key_page, ["a", "b", "c"])
+        self.assertEqual(len(s.get_all()), 5)
+        c.close()
+
+    def test_index_and_transaction_get_all_honor_count(self) -> None:
+        c = _client()
+        c.create_object_store(
+            "getall_count_index_tx",
+            ObjectStoreSchema(
+                indexes=[IndexSchema(name="by_status", key_path=["status"], unique=False)]
+            ),
+        )
+        s = c.object_store("getall_count_index_tx")
+        for row_id in ["a", "b", "c", "d"]:
+            s.put({"id": row_id, "status": "active"})
+        s.put({"id": "e", "status": "inactive"})
+
+        idx = s.index("by_status")
+        self.assertEqual(
+            [row["id"] for row in idx.get_all(query="active", count=2)],
+            ["a", "b"],
+        )
+        self.assertEqual(idx.get_all_keys(query="active", count=2), ["a", "b"])
+
+        tx = c.transaction(["getall_count_index_tx"], "readonly")
+        txs = tx.object_store("getall_count_index_tx")
+        self.assertEqual([row["id"] for row in txs.get_all(count=2)], ["a", "b"])
+        self.assertEqual(
+            txs.index("by_status").get_all_keys(query="active", count=2),
+            ["a", "b"],
+        )
+        tx.commit()
+        c.close()
+
+
 class TestErrorMapping(unittest.TestCase):
     def test_not_found(self) -> None:
         c = _client()
