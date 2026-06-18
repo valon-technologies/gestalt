@@ -139,20 +139,20 @@ func (m *Manager) authorizeAgentInvocationScope(ctx context.Context, req agentIn
 	}
 	subject := agentSubjectFromPrincipal(p)
 	scope := agentturnscope.Scope{
-		ProviderName:        providerName,
-		SessionID:           strings.TrimSpace(agent.SessionID),
-		TurnID:              requestedTurnID,
-		CallerKind:          req.CallerKind,
-		CallerName:          strings.TrimSpace(req.CallerName),
-		WorkflowRunID:       workflowRunID,
+		ProviderName:   providerName,
+		SessionID:      strings.TrimSpace(agent.SessionID),
+		TurnID:         requestedTurnID,
+		CallerKind:     req.CallerKind,
+		CallerName:     strings.TrimSpace(req.CallerName),
+		WorkflowRunID:  workflowRunID,
 		WorkflowStepID: workflowStepID,
 		SubjectID:      subject.SubjectID,
 		Permissions:    agentTurnPermissions(ctx, p, req.CallerKind, strings.TrimSpace(req.CallerName), sessionScope.ToolRefs),
-		ToolRefs:            append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...),
-		ToolRefsSet:         sessionScope.ToolRefsSet,
-		ListedTools:         append([]coreagent.ListedTool(nil), sessionScope.ListedTools...),
-		ToolSource:          sessionScope.ToolSource,
-		Connections:         m.agentConnectionBindings(providerName),
+		ToolRefs:       append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...),
+		ToolRefsSet:    sessionScope.ToolRefsSet,
+		ListedTools:    append([]coreagent.ListedTool(nil), sessionScope.ListedTools...),
+		ToolSource:     sessionScope.ToolSource,
+		Connections:    m.agentConnectionBindings(providerName),
 	}
 	if err := m.validateAgentInvocationTurn(ctx, scope, requestedTurnID, req.RequestContext); err != nil {
 		return agentturnscope.Scope{}, err

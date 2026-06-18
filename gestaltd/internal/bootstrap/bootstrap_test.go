@@ -2248,8 +2248,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		SubjectID: "user:user-123",
 		UserID:    "user-123",
 		Kind:      principal.KindUser,
-		Source:              principal.SourceBearer,
-		Scopes:              principal.ScopeStringsFromPermissionSet(perms),
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 	reqContext := bootstrapAgentRequestContext(t, p, "managed")

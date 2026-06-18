@@ -1572,19 +1572,19 @@ func (m *Manager) storeSessionScope(ctx context.Context, reqContext *proto.Reque
 		connections = nil
 	}
 	return m.turnScopes.PutSession(agentturnscope.Scope{
-		ProviderName:        providerName,
-		SessionID:           sessionID,
-		CallerKind:          callerKind,
-		CallerName:          callerName,
-		WorkflowRunID:       workflowRunID,
+		ProviderName:   providerName,
+		SessionID:      sessionID,
+		CallerKind:     callerKind,
+		CallerName:     callerName,
+		WorkflowRunID:  workflowRunID,
 		WorkflowStepID: workflowStepID,
 		SubjectID:      subject.SubjectID,
 		Permissions:    permissions,
-		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolRefsSet:         true,
-		ListedTools:         append([]coreagent.ListedTool(nil), listedTools...),
-		ToolSource:          toolSource,
-		Connections:         connections,
+		ToolRefs:       append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolRefsSet:    true,
+		ListedTools:    append([]coreagent.ListedTool(nil), listedTools...),
+		ToolSource:     toolSource,
+		Connections:    connections,
 	})
 }
 
@@ -2133,13 +2133,13 @@ func agentToolRefsEqual(left, right []coreagent.ToolRef) bool {
 }
 
 type agentToolRefCompareKey struct {
-	System          string
-	App             string
-	Operation       string
-	Connection      string
-	Instance        string
-	CredentialMode  core.ConnectionMode
-	RunAsSubject string
+	System         string
+	App            string
+	Operation      string
+	Connection     string
+	Instance       string
+	CredentialMode core.ConnectionMode
+	RunAsSubject   string
 }
 
 func agentToolRefCompareKeyFromRef(ref coreagent.ToolRef) agentToolRefCompareKey {

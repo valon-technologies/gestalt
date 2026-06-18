@@ -387,7 +387,7 @@ func principalForCredentialMaterial(p *principal.Principal, tm credentialMateria
 		}
 		return principal.Canonicalize(cred)
 	}
-	if p = principal.Canonicalized(p); p != nil {
+	if p := principal.Canonicalized(p); p != nil {
 		return p
 	}
 	actorSubjectID := strings.TrimSpace(tm.ActorSubjectID)
