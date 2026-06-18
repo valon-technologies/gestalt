@@ -1873,7 +1873,6 @@ export function subjectToProto(input?: SubjectInput | Subject): SubjectContext |
   if (input === undefined) return undefined;
   return create(SubjectContextSchema, {
     id: input.id ?? "",
-    credentialSubjectId: input.credentialSubjectId ?? "",
     email: input.email ?? "",
     displayName: input.displayName ?? "",
     scopes: [...(input.scopes ?? [])],
@@ -1885,7 +1884,6 @@ export function subjectFromProto(input?: SubjectContext): Subject | undefined {
   if (input === undefined) return undefined;
   return {
     id: input.id,
-    credentialSubjectId: input.credentialSubjectId,
     email: input.email,
     displayName: input.displayName,
     scopes: [...input.scopes],
@@ -1897,7 +1895,6 @@ export function subjectInputFromProto(input?: SubjectContext): SubjectInput | un
   if (input === undefined) return undefined;
   return {
     id: input.id,
-    credentialSubjectId: input.credentialSubjectId,
     email: input.email,
     displayName: input.displayName,
     scopes: [...input.scopes],

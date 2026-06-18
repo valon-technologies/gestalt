@@ -635,7 +635,6 @@ export function createProviderService(
         ? {
             subject: {
               id: subject.id,
-              credentialSubjectId: subject.credentialSubjectId ?? "",
               email: subject.email ?? "",
               displayName: subject.displayName ?? "",
             },
@@ -960,7 +959,6 @@ function providerRequest(
 function providerSubject(subject?: ProtoSubjectContext): Subject {
   return {
     id: subject?.id ?? "",
-    credentialSubjectId: subject?.credentialSubjectId ?? "",
     email: subject?.email ?? "",
     displayName: subject?.displayName ?? "",
     scopes: [...(subject?.scopes ?? [])],

@@ -1450,7 +1450,6 @@ def _provider_servicer(*, app: App) -> Any:
             return app_pb2.ResolveHTTPSubjectResponse(
                 subject=app_pb2.SubjectContext(
                     id=subject.id,
-                    credential_subject_id=subject.credential_subject_id,
                     email=subject.email,
                     display_name=subject.display_name,
                 )
@@ -1931,7 +1930,6 @@ def _subject_from_proto(request_context: Any, field_name: str) -> Subject:
         return Subject()
     return Subject(
         id=getattr(subject, "id", ""),
-        credential_subject_id=getattr(subject, "credential_subject_id", ""),
         email=getattr(subject, "email", ""),
         display_name=getattr(subject, "display_name", ""),
         scopes=list(getattr(subject, "scopes", ())),

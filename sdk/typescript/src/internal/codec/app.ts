@@ -824,7 +824,6 @@ export function toWireSubjectContext(
 ): wire.SubjectContext {
   return create(wire.SubjectContextSchema, {
     id: value.id ?? "",
-    credentialSubjectId: value.credentialSubjectId ?? "",
     email: value.email ?? "",
     displayName: value.displayName ?? "",
     scopes: value.scopes ?? [],
@@ -837,7 +836,6 @@ export function fromWireSubjectContext(
 ): SubjectContext {
   return {
     id: value.id,
-    credentialSubjectId: value.credentialSubjectId,
     email: value.email,
     displayName: value.displayName,
     scopes: value.scopes,

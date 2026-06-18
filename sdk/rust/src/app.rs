@@ -514,8 +514,6 @@ pub struct StringList {
 pub struct SubjectContext {
     /// The `id` field.
     pub id: String,
-    /// The `credential_subject_id` field.
-    pub credential_subject_id: String,
     /// The `email` field.
     pub email: String,
     /// The `display_name` field.

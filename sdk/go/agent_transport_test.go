@@ -252,9 +252,8 @@ func TestTransport_AgentWorkflowContext(t *testing.T) {
 		"providerName": "indexeddb",
 		"runId":        "run-1",
 		"runAs": map[string]any{
-			"id":                  "service_account:workflow-runner",
-			"kind":                "service_account",
-			"credentialSubjectId": "service_account:workflow-runner",
+			"id":   "service_account:workflow-runner",
+			"kind": "service_account",
 		},
 	}
 	requestContext := agentTransportRequestContext()

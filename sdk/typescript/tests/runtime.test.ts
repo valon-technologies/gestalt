@@ -773,7 +773,6 @@ test("integration provider service resolves hosted HTTP subjects through the app
   expect(seenContext).toEqual({
     subject: {
       id: "system:http_binding:agent:command",
-      credentialSubjectId: "",
       email: "",
       displayName: "",
       kind: "system",
@@ -1955,7 +1954,6 @@ test("integration provider request context includes workflow metadata", async ()
             operation: "bot.getPullRequest",
             runAs: create(SubjectContextSchema, {
               id: "service_account:github-review",
-              credentialSubjectId: "service_account:github-review",
             }),
           }),
         ],
@@ -2015,7 +2013,6 @@ test("integration provider request context includes workflow metadata", async ()
         system: "",
         runAs: {
           id: "service_account:github-review",
-          credentialSubjectId: "service_account:github-review",
           email: "",
           displayName: "",
           scopes: [],

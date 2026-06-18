@@ -324,7 +324,6 @@ fn request_subject_field(
     };
     Subject {
         id: subject.id.clone(),
-        credential_subject_id: subject.credential_subject_id.clone(),
         email: subject.email.clone(),
         display_name: subject.display_name.clone(),
     }
@@ -413,7 +412,6 @@ fn http_subject_request(request: Option<&HttpSubjectRequest>) -> HTTPSubjectRequ
 fn subject_to_proto(subject: Subject) -> SubjectContext {
     SubjectContext {
         id: subject.id,
-        credential_subject_id: subject.credential_subject_id,
         email: subject.email,
         display_name: subject.display_name,
         ..Default::default()

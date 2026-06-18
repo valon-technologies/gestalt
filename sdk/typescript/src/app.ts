@@ -364,7 +364,6 @@ export interface StringList {
  */
 export interface SubjectContext {
   id: string;
-  credentialSubjectId: string;
   email: string;
   displayName: string;
   scopes: string[];

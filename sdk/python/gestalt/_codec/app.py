@@ -668,7 +668,6 @@ def from_wire_string_list(value: Any) -> native.StringList:
 def to_wire_subject_context(value: native.SubjectContext) -> Any:
     return _app_pb2.SubjectContext(
         id=value.id,
-        credential_subject_id=value.credential_subject_id,
         email=value.email,
         display_name=value.display_name,
         scopes=value.scopes,
@@ -681,7 +680,6 @@ def to_wire_subject_context(value: native.SubjectContext) -> Any:
 def from_wire_subject_context(value: Any) -> native.SubjectContext:
     return native.SubjectContext(
         id=value.id,
-        credential_subject_id=value.credential_subject_id,
         email=value.email,
         display_name=value.display_name,
         scopes=list(value.scopes),

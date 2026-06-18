@@ -72,7 +72,6 @@ class Subject:
     """Identity information attached to an incoming provider request."""
 
     id: str = ""
-    credential_subject_id: str = ""
     email: str = ""
     display_name: str = ""
     scopes: list[str] = dataclasses.field(default_factory=list)
