@@ -9563,7 +9563,7 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	}
 }
 
-func TestCreateAPITokenRejectsEmptyScopes(t *testing.T) {
+func TestCreateAPITokenAllowsEmptyScopes(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -9586,11 +9586,25 @@ func TestCreateAPITokenRejectsEmptyScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read create response: %v", err)
 	}
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("create status = %d, want 400: %s", resp.StatusCode, respBody)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201: %s", resp.StatusCode, respBody)
 	}
-	if !strings.Contains(string(respBody), "scopes are required") {
-		t.Fatalf("create response = %s, want scopes are required error", respBody)
+	var result struct {
+		ID     string   `json:"id"`
+		Token  string   `json:"token"`
+		Scopes []string `json:"scopes"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if result.Token == "" {
+		t.Fatalf("expected token in response, got empty: %s", respBody)
+	}
+	if result.ID == "" {
+		t.Fatalf("expected grant id in response, got empty: %s", respBody)
+	}
+	if len(result.Scopes) != 0 {
+		t.Fatalf("expected empty scopes for full-identity token, got %v", result.Scopes)
 	}
 }
 

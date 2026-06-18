@@ -19,10 +19,10 @@ func (s *Server) validateCreateGrantRequest(req createTokenRequest) (string, err
 	if strings.TrimSpace(req.Name) == "" {
 		return "", errors.New("name is required")
 	}
+	// Scopes are optional: an empty scope mints a grant that inherits the
+	// caller's full scope (token-exchange attenuation), i.e. a token that acts
+	// as the signed-in identity. Provided scopes must reference a known app.
 	scope := strings.TrimSpace(req.Scopes)
-	if scope == "" {
-		return "", errors.New("scopes are required")
-	}
 	for _, part := range strings.Fields(scope) {
 		appName, _, _ := strings.Cut(part, ":")
 		if _, err := s.providers.Get(appName); err != nil {
