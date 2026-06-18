@@ -234,3 +234,102 @@ func TestParseAndEncodeTargetMapPreservesEmptyObjectArgs(t *testing.T) {
 		t.Fatalf("encoded message metadata = %#v, want empty object", encodedMessages[0]["metadata"])
 	}
 }
+
+func TestParseTargetMapAgentWorkspaceRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	raw := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"id": "diagnosis",
+				"agent": map[string]any{
+					"provider": "claude",
+					"model":    "default",
+					"tools":    []any{},
+					"output":   map[string]any{"text": map[string]any{}},
+					"workspace": map[string]any{
+						"checkouts": []any{
+							map[string]any{
+								"url":  "https://github.com/valon-technologies/toolshed.git",
+								"ref":  "main",
+								"path": "toolshed",
+							},
+							map[string]any{
+								"url":  "https://github.com/valon-technologies/gestalt.git",
+								"ref":  "main",
+								"path": "gestalt",
+							},
+						},
+						"cwd": "toolshed",
+					},
+				},
+			},
+		},
+	}
+
+	target, err := ParseTargetMap(raw, "target")
+	if err != nil {
+		t.Fatalf("ParseTargetMap() error = %v", err)
+	}
+	workspace := target.Steps[0].Agent.Workspace
+	if workspace == nil || workspace.CWD != "toolshed" || len(workspace.Checkouts) != 2 {
+		t.Fatalf("workspace = %#v, want toolshed cwd with two checkouts", workspace)
+	}
+	if workspace.Checkouts[0].URL != "https://github.com/valon-technologies/toolshed.git" ||
+		workspace.Checkouts[0].Ref != "main" ||
+		workspace.Checkouts[0].Path != "toolshed" {
+		t.Fatalf("first checkout = %#v", workspace.Checkouts[0])
+	}
+
+	encoded := EncodeTargetMap(target)
+	again, err := ParseTargetMap(encoded, "target")
+	if err != nil {
+		t.Fatalf("ParseTargetMap(round-trip) error = %v", err)
+	}
+	if !coreworkflow.TargetsEqual(target, again) {
+		t.Fatalf("round-trip target = %#v, want %#v", again, target)
+	}
+}
+
+func TestParseTargetMapClonesAgentWorkspaceCheckouts(t *testing.T) {
+	t.Parallel()
+
+	checkouts := []any{
+		map[string]any{
+			"url":  "https://github.com/valon-technologies/toolshed.git",
+			"ref":  "main",
+			"path": "toolshed",
+		},
+	}
+	raw := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"id": "diagnosis",
+				"agent": map[string]any{
+					"provider": "claude",
+					"model":    "default",
+					"tools":    []any{},
+					"output":   map[string]any{"text": map[string]any{}},
+					"workspace": map[string]any{
+						"checkouts": checkouts,
+						"cwd":       "toolshed",
+					},
+				},
+			},
+		},
+	}
+
+	target, err := ParseTargetMap(raw, "target")
+	if err != nil {
+		t.Fatalf("ParseTargetMap() error = %v", err)
+	}
+	checkouts = append(checkouts, map[string]any{
+		"url":  "https://github.com/valon-technologies/gestalt.git",
+		"ref":  "main",
+		"path": "gestalt",
+	})
+	workspace := target.Steps[0].Agent.Workspace
+	if len(workspace.Checkouts) != 1 {
+		t.Fatalf("workspace checkouts = %#v, want one checkout", workspace.Checkouts)
+	}
+}

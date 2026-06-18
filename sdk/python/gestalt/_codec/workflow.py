@@ -1065,6 +1065,9 @@ def to_wire_workflow_step_agent_turn(value: native.WorkflowStepAgentTurn) -> Any
         model_options=None
         if value.model_options is None
         else to_wire_struct(value.model_options),
+        workspace=None
+        if value.workspace is None
+        else agent.to_wire_agent_workspace(value.workspace),
     )
 
 
@@ -1083,6 +1086,9 @@ def from_wire_workflow_step_agent_turn(value: Any) -> native.WorkflowStepAgentTu
         else None,
         model_options=from_wire_struct(value.model_options)
         if value.HasField("model_options")
+        else None,
+        workspace=agent.from_wire_agent_workspace(value.workspace)
+        if value.HasField("workspace")
         else None,
     )
 

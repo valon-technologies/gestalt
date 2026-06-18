@@ -19,7 +19,7 @@ from ._grpc_transport import (
     ENV_HOST_SERVICE_TOKEN,
     host_service_channel,
 )
-from .agent import AgentOutput
+from .agent import AgentOutput, AgentWorkspace
 from .app import AgentToolRef, RequestContext, SubjectContext
 from .rpc_support import JsonValue
 
@@ -427,6 +427,7 @@ class WorkflowStepAgentTurn:
     tools: list[AgentToolRef] = field(default_factory=list)
     output: AgentOutput | None = None
     model_options: dict[str, JsonValue] | None = None
+    workspace: AgentWorkspace | None = None
 
 
 @dataclass(frozen=True, slots=True)

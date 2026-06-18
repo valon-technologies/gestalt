@@ -152,7 +152,7 @@ func parseAgentTurn(value any, path string) (*coreworkflow.AgentTurn, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s must be an object", ErrInvalid, path)
 	}
-	if err := rejectUnknownKeys(agentMap, path, "provider", "model", "sessionKey", "prompt", "messages", "tools", "output", "modelOptions"); err != nil {
+	if err := rejectUnknownKeys(agentMap, path, "provider", "model", "sessionKey", "prompt", "messages", "tools", "output", "modelOptions", "workspace"); err != nil {
 		return nil, err
 	}
 	messages, err := parseMessages(agentMap["messages"], path+".messages")
@@ -175,6 +175,10 @@ func parseAgentTurn(value any, path string) (*coreworkflow.AgentTurn, error) {
 	if err != nil {
 		return nil, err
 	}
+	workspace, err := parseAgentWorkspace(agentMap["workspace"], path+".workspace")
+	if err != nil {
+		return nil, err
+	}
 	return &coreworkflow.AgentTurn{
 		ProviderName: stringArg(agentMap, "provider"),
 		Model:        stringArg(agentMap, "model"),
@@ -184,6 +188,7 @@ func parseAgentTurn(value any, path string) (*coreworkflow.AgentTurn, error) {
 		ToolRefs:     tools,
 		Output:       output,
 		ModelOptions: modelOptions,
+		Workspace:    workspace,
 	}, nil
 }
 
@@ -326,6 +331,58 @@ func parseToolRefs(value any) ([]coreagent.ToolRef, error) {
 	return out, nil
 }
 
+func parseAgentWorkspace(value any, path string) (*coreagent.Workspace, error) {
+	if value == nil {
+		return nil, nil
+	}
+	workspaceMap, ok := asMap(value)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s must be an object", ErrInvalid, path)
+	}
+	if err := rejectUnknownKeys(workspaceMap, path, "checkouts", "cwd"); err != nil {
+		return nil, err
+	}
+	checkouts, err := parseWorkspaceCheckouts(workspaceMap["checkouts"], path+".checkouts")
+	if err != nil {
+		return nil, err
+	}
+	normalized, err := coreagent.NormalizeWorkspace(&coreagent.Workspace{
+		Checkouts: checkouts,
+		CWD:       stringArg(workspaceMap, "cwd"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrInvalid, path, err)
+	}
+	return coreagent.CloneWorkspace(normalized), nil
+}
+
+func parseWorkspaceCheckouts(value any, path string) ([]coreagent.WorkspaceGitCheckout, error) {
+	if value == nil {
+		return nil, fmt.Errorf("%w: %s is required", ErrInvalid, path)
+	}
+	items, ok := asArray(value)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s must be an array", ErrInvalid, path)
+	}
+	out := make([]coreagent.WorkspaceGitCheckout, 0, len(items))
+	for i, item := range items {
+		checkoutMap, ok := asMap(item)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s[%d] must be an object", ErrInvalid, path, i)
+		}
+		checkoutPath := fmt.Sprintf("%s[%d]", path, i)
+		if err := rejectUnknownKeys(checkoutMap, checkoutPath, "url", "ref", "path"); err != nil {
+			return nil, err
+		}
+		out = append(out, coreagent.WorkspaceGitCheckout{
+			URL:  stringArg(checkoutMap, "url"),
+			Ref:  stringArg(checkoutMap, "ref"),
+			Path: stringArg(checkoutMap, "path"),
+		})
+	}
+	return out, nil
+}
+
 // EncodeTargetMap converts a core workflow target into canonical JSON shape.
 func EncodeTargetMap(target coreworkflow.Target) map[string]any {
 	steps := make([]map[string]any, 0, len(target.Steps))
@@ -373,8 +430,10 @@ func encodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
 		"model":        agent.Model,
 		"sessionKey":   agent.SessionKey,
 		"prompt":       encodeText(agent.Prompt),
-		"tools":        encodeToolRefs(agent.ToolRefs),
 		"modelOptions": mapDeepClone(agent.ModelOptions),
+	}
+	if len(agent.ToolRefs) > 0 {
+		value["tools"] = encodeToolRefs(agent.ToolRefs)
 	}
 	if len(agent.Messages) > 0 {
 		messages := make([]map[string]any, 0, len(agent.Messages))
@@ -397,7 +456,28 @@ func encodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
 			},
 		}
 	}
+	if agent.Workspace != nil {
+		value["workspace"] = encodeAgentWorkspace(agent.Workspace)
+	}
 	return value
+}
+
+func encodeAgentWorkspace(workspace *coreagent.Workspace) map[string]any {
+	if workspace == nil {
+		return nil
+	}
+	checkouts := make([]map[string]any, 0, len(workspace.Checkouts))
+	for _, checkout := range workspace.Checkouts {
+		checkouts = append(checkouts, map[string]any{
+			"url":  checkout.URL,
+			"ref":  checkout.Ref,
+			"path": checkout.Path,
+		})
+	}
+	return map[string]any{
+		"checkouts": checkouts,
+		"cwd":       workspace.CWD,
+	}
 }
 
 func encodeStepWhen(when coreworkflow.StepWhen) map[string]any {

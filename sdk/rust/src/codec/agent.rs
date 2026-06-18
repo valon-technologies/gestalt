@@ -438,11 +438,34 @@ pub(crate) fn to_wire_agent_workspace(value: AgentWorkspace) -> v1::AgentWorkspa
     }
 }
 
+/// Converts a wire `AgentWorkspace` to its native message.
+pub(crate) fn from_wire_agent_workspace(value: v1::AgentWorkspace) -> AgentWorkspace {
+    AgentWorkspace {
+        checkouts: value
+            .checkouts
+            .into_iter()
+            .map(from_wire_agent_workspace_git_checkout)
+            .collect(),
+        cwd: value.cwd,
+    }
+}
+
 /// Converts a native `AgentWorkspaceGitCheckout` to its wire message.
 pub(crate) fn to_wire_agent_workspace_git_checkout(
     value: AgentWorkspaceGitCheckout,
 ) -> v1::AgentWorkspaceGitCheckout {
     v1::AgentWorkspaceGitCheckout {
+        url: value.url,
+        r#ref: value.r#ref,
+        path: value.path,
+    }
+}
+
+/// Converts a wire `AgentWorkspaceGitCheckout` to its native message.
+pub(crate) fn from_wire_agent_workspace_git_checkout(
+    value: v1::AgentWorkspaceGitCheckout,
+) -> AgentWorkspaceGitCheckout {
+    AgentWorkspaceGitCheckout {
         url: value.url,
         r#ref: value.r#ref,
         path: value.path,

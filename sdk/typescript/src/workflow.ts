@@ -18,7 +18,7 @@ import {
 } from "./host-service.ts";
 
 import * as wire from "./internal/gen/v1/workflow_pb.ts";
-import { type AgentOutput } from "./agent.ts";
+import { type AgentOutput, type AgentWorkspace } from "./agent.ts";
 import {
   type AgentToolRef,
   type RequestContext,
@@ -414,6 +414,7 @@ export interface WorkflowStepAgentTurn {
   tools: AgentToolRef[];
   output?: AgentOutput;
   modelOptions?: JsonObject;
+  workspace?: AgentWorkspace;
 }
 
 export interface WorkflowStepAppCall {

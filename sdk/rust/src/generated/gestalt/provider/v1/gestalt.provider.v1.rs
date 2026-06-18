@@ -3446,6 +3446,8 @@ pub struct WorkflowStepAgentTurn {
     pub output: ::core::option::Option<AgentOutput>,
     #[prost(message, optional, tag = "8")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "9")]
+    pub workspace: ::core::option::Option<AgentWorkspace>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowAgentMessage {

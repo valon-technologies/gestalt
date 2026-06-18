@@ -2,7 +2,7 @@
 
 //! Generated native types and clients for workflow.proto.
 
-use crate::agent::AgentOutput;
+use crate::agent::{AgentOutput, AgentWorkspace};
 use crate::app::{AgentToolRef, RequestContext, SubjectContext};
 use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::codec::workflow::{
@@ -624,6 +624,8 @@ pub struct WorkflowStepAgentTurn {
     pub output: Option<AgentOutput>,
     /// The `model_options` field; None when unset.
     pub model_options: Option<serde_json::Map<String, serde_json::Value>>,
+    /// The `workspace` field; None when unset.
+    pub workspace: Option<AgentWorkspace>,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowStepAppCall`.

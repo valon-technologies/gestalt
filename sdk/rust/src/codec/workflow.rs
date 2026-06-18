@@ -2,7 +2,10 @@
 
 //! Generated wire conversions for workflow.proto.
 
-use crate::codec::agent::{from_wire_agent_output, to_wire_agent_output};
+use crate::codec::agent::{
+    from_wire_agent_output, from_wire_agent_workspace, to_wire_agent_output,
+    to_wire_agent_workspace,
+};
 use crate::codec::app::{
     from_wire_agent_tool_ref, from_wire_subject_context, to_wire_agent_tool_ref,
     to_wire_request_context, to_wire_subject_context,
@@ -738,6 +741,7 @@ pub(crate) fn to_wire_workflow_step_agent_turn(
             .collect(),
         output: value.output.map(to_wire_agent_output),
         model_options: value.model_options.map(to_wire_struct),
+        workspace: value.workspace.map(to_wire_agent_workspace),
     }
 }
 
@@ -762,6 +766,7 @@ pub(crate) fn from_wire_workflow_step_agent_turn(
             .collect(),
         output: value.output.map(from_wire_agent_output),
         model_options: value.model_options.map(from_wire_struct),
+        workspace: value.workspace.map(from_wire_agent_workspace),
     }
 }
 

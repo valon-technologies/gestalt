@@ -104,6 +104,7 @@ class WorkflowStepAgentTurn(_message.Message):
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_FIELD_NUMBER: _ClassVar[int]
     MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
     provider: str
     model: str
     session_key: str
@@ -112,7 +113,8 @@ class WorkflowStepAgentTurn(_message.Message):
     tools: _containers.RepeatedCompositeFieldContainer[_app_pb2.AgentToolRef]
     output: _agent_pb2.AgentOutput
     model_options: _struct_pb2.Struct
-    def __init__(self, provider: _Optional[str] = ..., model: _Optional[str] = ..., session_key: _Optional[str] = ..., prompt: _Optional[_Union[WorkflowText, _Mapping]] = ..., messages: _Optional[_Iterable[_Union[WorkflowAgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., output: _Optional[_Union[_agent_pb2.AgentOutput, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    workspace: _agent_pb2.AgentWorkspace
+    def __init__(self, provider: _Optional[str] = ..., model: _Optional[str] = ..., session_key: _Optional[str] = ..., prompt: _Optional[_Union[WorkflowText, _Mapping]] = ..., messages: _Optional[_Iterable[_Union[WorkflowAgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., output: _Optional[_Union[_agent_pb2.AgentOutput, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., workspace: _Optional[_Union[_agent_pb2.AgentWorkspace, _Mapping]] = ...) -> None: ...
 
 class WorkflowAgentMessage(_message.Message):
     __slots__ = ()

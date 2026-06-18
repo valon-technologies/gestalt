@@ -7,6 +7,7 @@ import {
 } from "@connectrpc/connect";
 
 import type { AgentOutput, AgentToolRef } from "./agent.ts";
+import type { AgentWorkspace } from "../agent.ts";
 import {
   agentOutputFromProto,
   agentOutputToProto,
@@ -69,6 +70,8 @@ import {
   WorkflowStepWhenSchema,
   WorkflowTextSchema,
   WorkflowValueSchema,
+  AgentWorkspaceGitCheckoutSchema,
+  AgentWorkspaceSchema,
   type ApplyWorkflowProviderDefinitionRequest as ProtoApplyWorkflowProviderDefinitionRequest,
   type BoundWorkflowTarget as ProtoBoundWorkflowTarget,
   type CancelWorkflowProviderRunRequest as ProtoCancelWorkflowProviderRunRequest,
@@ -213,6 +216,7 @@ export interface WorkflowStepAgentTurn {
   tools?: readonly AgentToolRef[] | undefined;
   output?: AgentOutput | undefined;
   modelOptions?: JsonObjectInput | undefined;
+  workspace?: AgentWorkspace | undefined;
 }
 
 export interface WorkflowStepWhen {
@@ -1150,6 +1154,7 @@ export function workflowStepAgentTurnToProto(input?: WorkflowStepAgentTurn): Pro
     tools: input.tools?.map(agentToolRefToProto) ?? [],
     output: agentOutputToProto(input.output),
     modelOptions: optionalStruct(input.modelOptions),
+    workspace: workflowAgentWorkspaceToProto(input.workspace),
   });
 }
 
@@ -1164,6 +1169,37 @@ export function workflowStepAgentTurnFromProto(input?: ProtoWorkflowStepAgentTur
     tools: input.tools.map(agentToolRefFromProto),
     output: agentOutputFromProto(input.output),
     modelOptions: optionalObjectFromStruct(input.modelOptions),
+    workspace: workflowAgentWorkspaceFromProto(input.workspace),
+  };
+}
+
+function workflowAgentWorkspaceToProto(
+  workspace?: AgentWorkspace,
+): ReturnType<typeof create<typeof AgentWorkspaceSchema>> | undefined {
+  if (workspace === undefined) return undefined;
+  return create(AgentWorkspaceSchema, {
+    checkouts: workspace.checkouts.map((checkout) =>
+      create(AgentWorkspaceGitCheckoutSchema, {
+        url: checkout.url,
+        ref: checkout.ref,
+        path: checkout.path,
+      }),
+    ),
+    cwd: workspace.cwd,
+  });
+}
+
+function workflowAgentWorkspaceFromProto(
+  workspace?: ReturnType<typeof create<typeof AgentWorkspaceSchema>>,
+): AgentWorkspace | undefined {
+  if (workspace === undefined) return undefined;
+  return {
+    checkouts: workspace.checkouts.map((checkout) => ({
+      url: checkout.url,
+      ref: checkout.ref,
+      path: checkout.path,
+    })),
+    cwd: workspace.cwd,
   };
 }
 

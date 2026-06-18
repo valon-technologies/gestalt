@@ -58,7 +58,12 @@ import type {
   WorkflowValue,
   WorkflowValueKind,
 } from "../../workflow.ts";
-import { fromWireAgentOutput, toWireAgentOutput } from "./agent.ts";
+import {
+  fromWireAgentOutput,
+  fromWireAgentWorkspace,
+  toWireAgentOutput,
+  toWireAgentWorkspace,
+} from "./agent.ts";
 import {
   fromWireAgentToolRef,
   fromWireRequestContext,
@@ -1276,6 +1281,9 @@ export function toWireWorkflowStepAgentTurn(
     ...(value.modelOptions !== undefined
       ? { modelOptions: value.modelOptions }
       : {}),
+    ...(value.workspace !== undefined
+      ? { workspace: toWireAgentWorkspace(value.workspace) }
+      : {}),
   });
 }
 
@@ -1296,6 +1304,9 @@ export function fromWireWorkflowStepAgentTurn(
       : {}),
     ...(value.modelOptions !== undefined
       ? { modelOptions: value.modelOptions }
+      : {}),
+    ...(value.workspace !== undefined
+      ? { workspace: fromWireAgentWorkspace(value.workspace) }
       : {}),
   };
 }
