@@ -34,6 +34,45 @@ type authInfoFeaturesResponse struct {
 	Agent bool `json:"agent"`
 }
 
+type authSessionResponse struct {
+	SubjectID   string `json:"subjectId"`
+	Email       string `json:"email,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+}
+
+func (s *Server) authSession(w http.ResponseWriter, r *http.Request) {
+	p := principal.Canonicalized(PrincipalFromContext(r.Context()))
+	subjectID := ""
+	if p != nil {
+		subjectID = strings.TrimSpace(p.SubjectID)
+	}
+	if subjectID == "" && p != nil {
+		subjectID = strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
+	}
+	if subjectID == "" && p != nil && p.Identity != nil {
+		if email := strings.TrimSpace(p.Identity.Email); email != "" {
+			subjectID = principal.UserSubjectID(email)
+		}
+	}
+	if subjectID == "" {
+		writeError(w, http.StatusUnauthorized, "missing authenticated session")
+		return
+	}
+
+	resp := authSessionResponse{
+		SubjectID: subjectID,
+	}
+	if p != nil && p.Identity != nil {
+		resp.Email = strings.TrimSpace(p.Identity.Email)
+		resp.DisplayName = strings.TrimSpace(p.Identity.DisplayName)
+	}
+	if resp.DisplayName == "" && p != nil {
+		resp.DisplayName = strings.TrimSpace(p.DisplayName)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) authProviderName() string {
 	if s.serverAuthProvider != "" {
 		return s.serverAuthProvider

@@ -8386,6 +8386,35 @@ func TestLoginCallback(t *testing.T) {
 	if _, ok := auditRecord["user_id"]; ok {
 		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 	}
+
+	sessionResp, err := client.Get(ts.URL + "/api/v1/auth/session")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected session 200, got %d", sessionResp.StatusCode)
+	}
+	var sessionBody map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&sessionBody); err != nil {
+		t.Fatalf("decoding session: %v", err)
+	}
+	subjectID, _ := sessionBody["subjectId"].(string)
+	if strings.TrimSpace(subjectID) == "" {
+		t.Fatalf("expected non-empty subjectId, got %v", sessionBody["subjectId"])
+	}
+	if sessionBody["email"] != "user@example.com" {
+		t.Fatalf("expected email user@example.com, got %v", sessionBody["email"])
+	}
+	if displayName, ok := sessionBody["displayName"].(string); ok && displayName != "" && displayName != "User" {
+		t.Fatalf("unexpected displayName %q", displayName)
+	}
+	if _, ok := sessionBody["credentialSubjectId"]; ok {
+		t.Fatalf("expected session response to omit credentialSubjectId, got %v", sessionBody["credentialSubjectId"])
+	}
+	if _, ok := sessionBody["kind"]; ok {
+		t.Fatalf("expected session response to omit kind, got %v", sessionBody["kind"])
+	}
 }
 
 func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *testing.T) {
@@ -10759,6 +10788,30 @@ func TestAuthInfoNoAuth(t *testing.T) {
 		t.Fatalf("expected loginSupported false, got %#v", body["loginSupported"])
 	}
 	requireAuthInfoAgentFeature(t, body, false)
+
+	sessionResp, err := http.Get(ts.URL + "/api/v1/auth/session")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected session 200, got %d", sessionResp.StatusCode)
+	}
+	var sessionBody map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&sessionBody); err != nil {
+		t.Fatalf("decoding session: %v", err)
+	}
+	subjectID, _ := sessionBody["subjectId"].(string)
+	email, _ := sessionBody["email"].(string)
+	if strings.TrimSpace(subjectID) == "" && strings.TrimSpace(email) != "anonymous@gestalt" {
+		t.Fatalf("expected non-empty subjectId or anonymous@gestalt email, got %#v", sessionBody)
+	}
+	if _, ok := sessionBody["credentialSubjectId"]; ok {
+		t.Fatalf("expected session response to omit credentialSubjectId, got %v", sessionBody["credentialSubjectId"])
+	}
+	if _, ok := sessionBody["kind"]; ok {
+		t.Fatalf("expected session response to omit kind, got %v", sessionBody["kind"])
+	}
 }
 
 func TestAuthInfoAgentFeature(t *testing.T) {
