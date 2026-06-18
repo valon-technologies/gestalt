@@ -34,10 +34,10 @@ import (
 	"testing"
 	"time"
 
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"

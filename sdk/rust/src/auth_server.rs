@@ -4,8 +4,8 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::auth::{AuthCallContext, AuthenticationProvider, caller_bearer_token_from_metadata};
 use crate::authentication::{
-    AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest,
-    RevokeGrantRequest, TokenRequest, UserInfoRequest, UserInfoResponse,
+    AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
+    TokenRequest, UserInfoRequest, UserInfoResponse,
 };
 use crate::authentication::{
     GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse,

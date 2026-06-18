@@ -103,7 +103,7 @@ export interface GrantDetails {
 export interface AuthenticationProviderOptions extends ProviderBaseOptions {
   authorize: (request: AuthorizeRequest) => MaybePromise<AuthorizeResponse>;
   token: (request: TokenRequest) => MaybePromise<TokenResponse>;
-  introspect: (request) => MaybePromise<IntrospectResponse>;
+  introspect: (request: IntrospectRequest) => MaybePromise<IntrospectResponse>;
   userInfo: (
     request: Record<string, never>,
     call: AuthCallContext,

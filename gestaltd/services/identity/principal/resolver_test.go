@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
 func TestPermissionSetFromScopesExplicitEmptyDeniesAll(t *testing.T) {

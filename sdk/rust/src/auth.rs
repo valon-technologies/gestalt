@@ -1,8 +1,8 @@
 use tonic::codegen::async_trait;
 
 use crate::authentication::{
-    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse,
-    IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
+    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
+    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
     RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
 };
 use crate::error::Result;
