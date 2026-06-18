@@ -2,10 +2,13 @@ package principal
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/authentication"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
@@ -53,7 +56,7 @@ func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, 
 			return nil, ErrInvalidToken
 		}
 		resp.Subject = subject
-		return principalFromIntrospection(resp), nil
+		return r.enrichPrincipalWithUserInfo(ctx, token, principalFromIntrospection(resp)), nil
 	}
 	return nil, ErrInvalidToken
 }
@@ -64,6 +67,62 @@ func (r *Resolver) ResolveEmail(email string) *Principal {
 		Kind:     KindUser,
 		Source:   SourceEnv,
 	}
+}
+
+func (r *Resolver) enrichPrincipalWithUserInfo(ctx context.Context, accessToken string, p *Principal) *Principal {
+	p = Canonicalized(p)
+	accessToken = strings.TrimSpace(accessToken)
+	if r.auth == nil || p == nil || accessToken == "" || strings.TrimSpace(p.SubjectID) == "" {
+		return p
+	}
+
+	startedAt := time.Now()
+	userInfoCtx := authentication.WithCallerBearerToken(ctx, accessToken)
+	userInfo, err := r.auth.UserInfo(userInfoCtx, &core.UserInfoRequest{})
+	metricutil.RecordAuthMetrics(ctx, startedAt, r.providerName, "userinfo", userInfoLookupFailed(err))
+	if err != nil {
+		if !errors.Is(err, core.ErrNotFound) {
+			slog.WarnContext(ctx, "authentication provider userinfo lookup failed", "error", err)
+		}
+		return p
+	}
+	if userInfo == nil {
+		return p
+	}
+
+	introspectedSubject := strings.TrimSpace(p.SubjectID)
+	if subjectID := strings.TrimSpace(userInfo.SubjectID); subjectID != "" && subjectID != introspectedSubject {
+		slog.WarnContext(ctx, "authentication provider userinfo subject mismatch",
+			"introspected_subject", introspectedSubject,
+			"userinfo_subject", subjectID,
+		)
+		return p
+	}
+
+	clone := *p
+	if clone.Identity == nil {
+		clone.Identity = &core.UserIdentity{}
+	}
+	if email := strings.TrimSpace(userInfo.Email); email != "" {
+		clone.Identity.Email = email
+	}
+	if name := strings.TrimSpace(userInfo.Name); name != "" {
+		clone.Identity.DisplayName = name
+		clone.DisplayName = name
+	}
+	if clone.Identity.Email == "" && clone.UserID == "" {
+		if suffix := UserIDFromSubjectID(clone.SubjectID); strings.Contains(suffix, "@") {
+			clone.Identity.Email = suffix
+		}
+	}
+	return Canonicalize(&clone)
+}
+
+func userInfoLookupFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+	return !errors.Is(err, core.ErrNotFound)
 }
 
 func principalFromIntrospection(resp *core.IntrospectResponse) *Principal {

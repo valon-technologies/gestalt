@@ -99,6 +99,8 @@ if TYPE_CHECKING:
         RevokeGrantResponse,
         TokenRequest,
         TokenResponse,
+        UserInfoRequest,
+        UserInfoResponse,
     )
     from .authorization import (
         AddRelationshipRequest,
@@ -316,6 +318,13 @@ class AuthenticationProvider(AppProvider):
 
     def introspect(self, request: IntrospectRequest) -> IntrospectResponse:
         """Introspect a bearer token via RFC 7662."""
+
+        raise NotImplementedError
+
+    def user_info(
+        self, request: UserInfoRequest, call: AuthCallContext
+    ) -> UserInfoResponse:
+        """Return profile claims for the authenticated caller."""
 
         raise NotImplementedError
 

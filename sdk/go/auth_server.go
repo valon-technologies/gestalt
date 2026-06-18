@@ -59,6 +59,21 @@ func (s *authServer) Introspect(ctx context.Context, req *proto.IntrospectReques
 	return introspectResponseToProto(resp), nil
 }
 
+func (s *authServer) UserInfo(ctx context.Context, req *proto.UserInfoRequest) (*proto.UserInfoResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	ctx = s.authCallContext(ctx)
+	resp, err := s.auth.UserInfo(ctx, userInfoRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("userinfo", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+	}
+	return userInfoResponseToProto(resp), nil
+}
+
 func (s *authServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
 	ctx = s.authCallContext(ctx)
 	resp, err := s.auth.ListGrants(ctx, &ListGrantsRequest{})

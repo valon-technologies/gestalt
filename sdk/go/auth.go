@@ -108,6 +108,17 @@ type RevokeGrantRequest struct {
 // RevokeGrantResponse acknowledges API-token grant revocation.
 type RevokeGrantResponse struct{}
 
+// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+type UserInfoRequest struct{}
+
+// UserInfoResponse models profile claims about the authenticated end user.
+type UserInfoResponse struct {
+	SubjectID string
+	Email     string
+	Name      string
+}
+
 // AuthenticationProvider serves the Gestalt authentication protocol.
 //
 // ListGrants, GetGrant, and RevokeGrant are the grant-management surface used
@@ -120,6 +131,7 @@ type AuthenticationProvider interface {
 	Authorize(ctx context.Context, req *AuthorizeRequest) (*AuthorizeResponse, error)
 	Token(ctx context.Context, req *TokenRequest) (*TokenResponse, error)
 	Introspect(ctx context.Context, req *IntrospectRequest) (*IntrospectResponse, error)
+	UserInfo(ctx context.Context, req *UserInfoRequest) (*UserInfoResponse, error)
 	ListGrants(ctx context.Context, req *ListGrantsRequest) (*ListGrantsResponse, error)
 	GetGrant(ctx context.Context, req *GetGrantRequest) (*GetGrantResponse, error)
 	RevokeGrant(ctx context.Context, req *RevokeGrantRequest) (*RevokeGrantResponse, error)
@@ -281,4 +293,22 @@ func revokeGrantRequestFromProto(req *proto.RevokeGrantRequest) *RevokeGrantRequ
 		return nil
 	}
 	return &RevokeGrantRequest{GrantID: req.GetGrantId()}
+}
+
+func userInfoRequestFromProto(req *proto.UserInfoRequest) *UserInfoRequest {
+	if req == nil {
+		return nil
+	}
+	return &UserInfoRequest{}
+}
+
+func userInfoResponseToProto(resp *UserInfoResponse) *proto.UserInfoResponse {
+	if resp == nil {
+		return nil
+	}
+	return &proto.UserInfoResponse{
+		SubjectId: resp.SubjectID,
+		Email:     resp.Email,
+		Name:      resp.Name,
+	}
 }

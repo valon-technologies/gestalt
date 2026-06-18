@@ -34,6 +34,10 @@ func (s *UserService) GetUser(ctx context.Context, id string) (*core.User, error
 }
 
 func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
+	return s.FindOrCreateUserWithName(ctx, email, "")
+}
+
+func (s *UserService) FindOrCreateUserWithName(ctx context.Context, email, name string) (*core.User, error) {
 	email = normalizeEmail(email)
 	if email == "" {
 		return nil, fmt.Errorf("find user: email is required")
@@ -42,7 +46,7 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 	user, err := s.findUserByNormalizedEmail(ctx, email)
 	switch {
 	case err == nil:
-		return user, nil
+		return s.maybeUpdateDisplayName(ctx, user, name)
 	case !errors.Is(err, core.ErrNotFound):
 		return nil, err
 	}
@@ -52,7 +56,7 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 		"id":               uuid.New().String(),
 		"email":            email,
 		"normalized_email": email,
-		"display_name":     "",
+		"display_name":     strings.TrimSpace(name),
 		"created_at":       now,
 		"updated_at":       now,
 	}
@@ -61,9 +65,30 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 		if retryErr != nil {
 			return nil, fmt.Errorf("create user: %w", err)
 		}
-		return user, nil
+		return s.maybeUpdateDisplayName(ctx, user, name)
 	}
 	return recordToUser(newRec), nil
+}
+
+func (s *UserService) maybeUpdateDisplayName(ctx context.Context, user *core.User, displayName string) (*core.User, error) {
+	displayName = strings.TrimSpace(displayName)
+	if user == nil || displayName == "" || strings.TrimSpace(user.DisplayName) == displayName {
+		return user, nil
+	}
+	rec, err := s.store.Get(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("update user display name: %w", err)
+	}
+	now := time.Now()
+	rec["display_name"] = displayName
+	rec["updated_at"] = now
+	if err := s.store.Put(ctx, rec); err != nil {
+		return nil, fmt.Errorf("update user display name: %w", err)
+	}
+	updated := *user
+	updated.DisplayName = displayName
+	updated.UpdatedAt = now
+	return &updated, nil
 }
 
 func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*core.User, error) {

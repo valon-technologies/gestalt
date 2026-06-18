@@ -17,6 +17,8 @@ import type {
   RevokeGrantResponse,
   TokenRequest,
   TokenResponse,
+  UserInfoRequest,
+  UserInfoResponse,
 } from "../../authentication.ts";
 import type { Init } from "../../rpc_support.ts";
 
@@ -259,5 +261,37 @@ export function fromWireTokenResponse(
     refreshToken: value.refreshToken,
     scope: value.scope,
     grantId: value.grantId,
+  };
+}
+
+export function toWireUserInfoRequest(
+  value: Init<UserInfoRequest>,
+): wire.UserInfoRequest {
+  return create(wire.UserInfoRequestSchema, {});
+}
+
+export function fromWireUserInfoRequest(
+  value: wire.UserInfoRequest,
+): UserInfoRequest {
+  return {};
+}
+
+export function toWireUserInfoResponse(
+  value: Init<UserInfoResponse>,
+): wire.UserInfoResponse {
+  return create(wire.UserInfoResponseSchema, {
+    subjectId: value.subjectId ?? "",
+    email: value.email ?? "",
+    name: value.name ?? "",
+  });
+}
+
+export function fromWireUserInfoResponse(
+  value: wire.UserInfoResponse,
+): UserInfoResponse {
+  return {
+    subjectId: value.subjectId,
+    email: value.email,
+    name: value.name,
   };
 }

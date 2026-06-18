@@ -128,3 +128,17 @@ class RevokeGrantRequest(_message.Message):
 class RevokeGrantResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class UserInfoRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class UserInfoResponse(_message.Message):
+    __slots__ = ()
+    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    subject_id: str
+    email: str
+    name: str
+    def __init__(self, subject_id: _Optional[str] = ..., email: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...

@@ -136,6 +136,21 @@ type TokenResponse struct {
 	GrantId string
 }
 
+// UserInfoRequest is the native message type for gestalt.provider.v1.UserInfoRequest.
+//
+// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+type UserInfoRequest struct{}
+
+// UserInfoResponse is the native message type for gestalt.provider.v1.UserInfoResponse.
+//
+// UserInfoResponse models profile claims about the authenticated end user.
+type UserInfoResponse struct {
+	SubjectId string
+	Email     string
+	Name      string
+}
+
 // Authentication is the generated client for gestalt.provider.v1.Authentication.
 // Every transport error is converted to *GestaltError.
 //
@@ -204,6 +219,15 @@ func (c *Authentication) IntrospectRaw(ctx context.Context, request *IntrospectR
 		return nil, toGestaltError(err)
 	}
 	return FromWireIntrospectResponse(response), nil
+}
+
+// UserInfo calls the UserInfo RPC of Authentication.
+func (c *Authentication) UserInfo(ctx context.Context, request *UserInfoRequest) (*UserInfoResponse, error) {
+	response, err := c.client.UserInfo(ctx, ToWireUserInfoRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireUserInfoResponse(response), nil
 }
 
 // ListGrants calls the ListGrants RPC of Authentication.

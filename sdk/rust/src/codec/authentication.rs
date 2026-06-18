@@ -5,7 +5,8 @@
 use crate::authentication::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, GrantScope,
     IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
-    RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse,
+    RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest,
+    UserInfoResponse,
 };
 use crate::generated::v1;
 
@@ -123,5 +124,19 @@ pub(crate) fn from_wire_token_response(value: v1::TokenResponse) -> TokenRespons
         refresh_token: value.refresh_token,
         scope: value.scope,
         grant_id: value.grant_id,
+    }
+}
+
+/// Converts a native `UserInfoRequest` to its wire message.
+pub(crate) fn to_wire_user_info_request(_value: UserInfoRequest) -> v1::UserInfoRequest {
+    v1::UserInfoRequest {}
+}
+
+/// Converts a wire `UserInfoResponse` to its native message.
+pub(crate) fn from_wire_user_info_response(value: v1::UserInfoResponse) -> UserInfoResponse {
+    UserInfoResponse {
+        subject_id: value.subject_id,
+        email: value.email,
+        name: value.name,
     }
 }

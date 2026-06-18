@@ -204,3 +204,27 @@ def from_wire_token_response(value: Any) -> native.TokenResponse:
         scope=value.scope,
         grant_id=value.grant_id,
     )
+
+
+def to_wire_user_info_request(_value: native.UserInfoRequest) -> Any:
+    return _authentication_pb2.UserInfoRequest()
+
+
+def from_wire_user_info_request(_value: Any) -> native.UserInfoRequest:
+    return native.UserInfoRequest()
+
+
+def to_wire_user_info_response(value: native.UserInfoResponse) -> Any:
+    return _authentication_pb2.UserInfoResponse(
+        subject_id=value.subject_id,
+        email=value.email,
+        name=value.name,
+    )
+
+
+def from_wire_user_info_response(value: Any) -> native.UserInfoResponse:
+    return native.UserInfoResponse(
+        subject_id=value.subject_id,
+        email=value.email,
+        name=value.name,
+    )

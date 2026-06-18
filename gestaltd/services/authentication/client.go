@@ -19,6 +19,7 @@ type authenticationRPCClient interface {
 	Authorize(context.Context, *proto.AuthorizeRequest, ...grpc.CallOption) (*proto.AuthorizeResponse, error)
 	Token(context.Context, *proto.TokenRequest, ...grpc.CallOption) (*proto.TokenResponse, error)
 	Introspect(context.Context, *proto.IntrospectRequest, ...grpc.CallOption) (*proto.IntrospectResponse, error)
+	UserInfo(context.Context, *proto.UserInfoRequest, ...grpc.CallOption) (*proto.UserInfoResponse, error)
 	ListGrants(context.Context, *proto.ListGrantsRequest, ...grpc.CallOption) (*proto.ListGrantsResponse, error)
 	GetGrant(context.Context, *proto.GetGrantRequest, ...grpc.CallOption) (*proto.GetGrantResponse, error)
 	RevokeGrant(context.Context, *proto.RevokeGrantRequest, ...grpc.CallOption) (*proto.RevokeGrantResponse, error)
@@ -149,6 +150,18 @@ func (p *remoteAuthenticationProvider) Introspect(ctx context.Context, req *core
 		return nil, err
 	}
 	return introspectResponseFromProto(resp), nil
+}
+
+func (p *remoteAuthenticationProvider) UserInfo(ctx context.Context, req *core.UserInfoRequest) (*core.UserInfoResponse, error) {
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+	ctx = p.outgoingAuthCallContext(ctx)
+
+	resp, err := p.client.UserInfo(ctx, userInfoRequestToProto(req))
+	if err != nil {
+		return nil, mapAuthenticationProviderRPCError(err)
+	}
+	return userInfoResponseFromProto(resp), nil
 }
 
 func (p *remoteAuthenticationProvider) ListGrants(ctx context.Context, req *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
@@ -312,7 +325,22 @@ func revokeGrantRequestToProto(req *core.RevokeGrantRequest) *proto.RevokeGrantR
 	return &proto.RevokeGrantRequest{GrantId: req.GrantID}
 }
 
-// WithCallerBearerToken attaches the caller bearer token for grant-management RPCs.
+func userInfoRequestToProto(req *core.UserInfoRequest) *proto.UserInfoRequest {
+	return &proto.UserInfoRequest{}
+}
+
+func userInfoResponseFromProto(resp *proto.UserInfoResponse) *core.UserInfoResponse {
+	if resp == nil {
+		return nil
+	}
+	return &core.UserInfoResponse{
+		SubjectID: resp.GetSubjectId(),
+		Email:     resp.GetEmail(),
+		Name:      resp.GetName(),
+	}
+}
+
+// WithCallerBearerToken attaches the caller bearer token for caller-relative RPCs.
 func WithCallerBearerToken(ctx context.Context, token string) context.Context {
 	ctx = gestalt.WithAuthCallContext(ctx, gestalt.AuthCallContext{CallerBearerToken: token})
 	return metadata.AppendToOutgoingContext(ctx, gestalt.CallerBearerTokenMetadataKey, token)

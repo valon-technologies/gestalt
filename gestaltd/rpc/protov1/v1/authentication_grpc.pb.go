@@ -22,6 +22,7 @@ const (
 	Authentication_Authorize_FullMethodName   = "/gestalt.provider.v1.Authentication/Authorize"
 	Authentication_Token_FullMethodName       = "/gestalt.provider.v1.Authentication/Token"
 	Authentication_Introspect_FullMethodName  = "/gestalt.provider.v1.Authentication/Introspect"
+	Authentication_UserInfo_FullMethodName    = "/gestalt.provider.v1.Authentication/UserInfo"
 	Authentication_ListGrants_FullMethodName  = "/gestalt.provider.v1.Authentication/ListGrants"
 	Authentication_GetGrant_FullMethodName    = "/gestalt.provider.v1.Authentication/GetGrant"
 	Authentication_RevokeGrant_FullMethodName = "/gestalt.provider.v1.Authentication/RevokeGrant"
@@ -36,6 +37,7 @@ type AuthenticationClient interface {
 	Authorize(ctx context.Context, in *AuthorizeRequest, opts ...grpc.CallOption) (*AuthorizeResponse, error)
 	Token(ctx context.Context, in *TokenRequest, opts ...grpc.CallOption) (*TokenResponse, error)
 	Introspect(ctx context.Context, in *IntrospectRequest, opts ...grpc.CallOption) (*IntrospectResponse, error)
+	UserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfoResponse, error)
 	ListGrants(ctx context.Context, in *ListGrantsRequest, opts ...grpc.CallOption) (*ListGrantsResponse, error)
 	GetGrant(ctx context.Context, in *GetGrantRequest, opts ...grpc.CallOption) (*GetGrantResponse, error)
 	RevokeGrant(ctx context.Context, in *RevokeGrantRequest, opts ...grpc.CallOption) (*RevokeGrantResponse, error)
@@ -73,6 +75,16 @@ func (c *authenticationClient) Introspect(ctx context.Context, in *IntrospectReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(IntrospectResponse)
 	err := c.cc.Invoke(ctx, Authentication_Introspect_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authenticationClient) UserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UserInfoResponse)
+	err := c.cc.Invoke(ctx, Authentication_UserInfo_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -118,6 +130,7 @@ type AuthenticationServer interface {
 	Authorize(context.Context, *AuthorizeRequest) (*AuthorizeResponse, error)
 	Token(context.Context, *TokenRequest) (*TokenResponse, error)
 	Introspect(context.Context, *IntrospectRequest) (*IntrospectResponse, error)
+	UserInfo(context.Context, *UserInfoRequest) (*UserInfoResponse, error)
 	ListGrants(context.Context, *ListGrantsRequest) (*ListGrantsResponse, error)
 	GetGrant(context.Context, *GetGrantRequest) (*GetGrantResponse, error)
 	RevokeGrant(context.Context, *RevokeGrantRequest) (*RevokeGrantResponse, error)
@@ -139,6 +152,9 @@ func (UnimplementedAuthenticationServer) Token(context.Context, *TokenRequest) (
 }
 func (UnimplementedAuthenticationServer) Introspect(context.Context, *IntrospectRequest) (*IntrospectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Introspect not implemented")
+}
+func (UnimplementedAuthenticationServer) UserInfo(context.Context, *UserInfoRequest) (*UserInfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UserInfo not implemented")
 }
 func (UnimplementedAuthenticationServer) ListGrants(context.Context, *ListGrantsRequest) (*ListGrantsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListGrants not implemented")
@@ -224,6 +240,24 @@ func _Authentication_Introspect_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Authentication_UserInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UserInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthenticationServer).UserInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Authentication_UserInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthenticationServer).UserInfo(ctx, req.(*UserInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Authentication_ListGrants_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListGrantsRequest)
 	if err := dec(in); err != nil {
@@ -296,6 +330,10 @@ var Authentication_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Introspect",
 			Handler:    _Authentication_Introspect_Handler,
+		},
+		{
+			MethodName: "UserInfo",
+			Handler:    _Authentication_UserInfo_Handler,
 		},
 		{
 			MethodName: "ListGrants",

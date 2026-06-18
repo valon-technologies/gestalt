@@ -17,6 +17,7 @@ type StubAuthProvider struct {
 	ListGrantsFn  func(context.Context, *core.ListGrantsRequest) (*core.ListGrantsResponse, error)
 	GetGrantFn    func(context.Context, *core.GetGrantRequest) (*core.GetGrantResponse, error)
 	RevokeGrantFn func(context.Context, *core.RevokeGrantRequest) (*core.RevokeGrantResponse, error)
+	UserInfoFn    func(context.Context, *core.UserInfoRequest) (*core.UserInfoResponse, error)
 
 	// Legacy test hooks mapped onto Token/Introspect.
 	HandleCallbackFn func(context.Context, string) (*core.UserIdentity, error)
@@ -189,4 +190,11 @@ func (s *StubAuthProvider) RevokeGrant(ctx context.Context, req *core.RevokeGran
 		return s.RevokeGrantFn(ctx, req)
 	}
 	return &core.RevokeGrantResponse{}, nil
+}
+
+func (s *StubAuthProvider) UserInfo(ctx context.Context, req *core.UserInfoRequest) (*core.UserInfoResponse, error) {
+	if s.UserInfoFn != nil {
+		return s.UserInfoFn(ctx, req)
+	}
+	return nil, core.ErrNotFound
 }

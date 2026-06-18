@@ -170,6 +170,18 @@ func (p *closeableStubAuthenticationProvider) Introspect(_ context.Context, req 
 	return &gestalt.IntrospectResponse{Active: false}, nil
 }
 
+func (p *closeableStubAuthenticationProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+	call := gestalt.AuthCallContextFromContext(ctx)
+	if call.CallerBearerToken == "stub-access-token" {
+		return &gestalt.UserInfoResponse{
+			SubjectID: "user:user@example.com",
+			Email:     "user@example.com",
+			Name:      "User Example",
+		}, nil
+	}
+	return nil, status.Error(codes.NotFound, "userinfo not found")
+}
+
 func (p *closeableStubAuthenticationProvider) ListGrants(context.Context, *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
 	return &gestalt.ListGrantsResponse{}, nil
 }

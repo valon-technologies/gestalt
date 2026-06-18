@@ -145,6 +145,22 @@ class TokenResponse:
     grant_id: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class UserInfoRequest:
+    """UserInfoRequest is intentionally empty. The caller bearer token is supplied
+    through provider-call metadata, analogous to OIDC Authorization: Bearer.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class UserInfoResponse:
+    """UserInfoResponse models profile claims about the authenticated end user."""
+
+    subject_id: str = ""
+    email: str = ""
+    name: str = ""
+
+
 class Authentication:
     """Authentication models the shared Gestalt authentication protocol.
 
@@ -288,6 +304,14 @@ class Authentication:
             )
         )
         return _codec.from_wire_introspect_response(response)
+
+    def user_info(self, request: UserInfoRequest) -> UserInfoResponse:
+        response = _support.call_unary(
+            lambda: self._stub.UserInfo(
+                _codec.to_wire_user_info_request(request), timeout=self._timeout
+            )
+        )
+        return _codec.from_wire_user_info_response(response)
 
     def list_grants(self, request: ListGrantsRequest) -> ListGrantsResponse:
         response = _support.call_unary(

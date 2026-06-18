@@ -30,6 +30,7 @@ import {
   ListGrantsResponseSchema,
   RevokeGrantResponseSchema,
   TokenResponseSchema,
+  UserInfoResponseSchema,
 } from "../internal/gen/v1/authentication_pb.ts";
 import {
   Cache as CacheService,
@@ -741,6 +742,23 @@ export function createAuthenticationService(
         scope: response.scope ?? "",
         clientId: response.clientId ?? "",
         audience: [...(response.audience ?? [])],
+      });
+    },
+    async userInfo(request, context) {
+      const response = await provider.userInfo(
+        {},
+        authCallContextFromHandler(context),
+      );
+      if (!response?.subjectId) {
+        throw new ConnectError(
+          "authentication provider returned empty userinfo",
+          Code.Internal,
+        );
+      }
+      return create(UserInfoResponseSchema, {
+        subjectId: response.subjectId,
+        email: response.email ?? "",
+        name: response.name ?? "",
       });
     },
     async listGrants(request, context) {

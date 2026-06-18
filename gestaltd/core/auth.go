@@ -48,6 +48,15 @@ type AuthenticationProvider interface {
 	// RevokeGrant revokes one caller-visible API-token grant and invalidates its
 	// credentials. Session/login grants must be reported as not found.
 	RevokeGrant(ctx context.Context, req *RevokeGrantRequest) (*RevokeGrantResponse, error)
+
+	// UserInfo returns profile claims for the authenticated end user represented
+	// by the access token, modeled after OIDC UserInfo.
+	//
+	// Contract:
+	//   - nil error with populated UserInfoResponse means profile data was found.
+	//   - core.ErrNotFound means no profile data is stored for the token.
+	//   - other errors mean provider/storage/transport failure.
+	UserInfo(ctx context.Context, req *UserInfoRequest) (*UserInfoResponse, error)
 }
 
 // AuthorizeRequest models RFC 6749 authorization endpoint parameters.
@@ -142,3 +151,14 @@ type RevokeGrantRequest struct {
 
 // RevokeGrantResponse acknowledges grant revocation.
 type RevokeGrantResponse struct{}
+
+// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+type UserInfoRequest struct{}
+
+// UserInfoResponse models profile claims about the authenticated end user.
+type UserInfoResponse struct {
+	SubjectID string
+	Email     string
+	Name      string
+}

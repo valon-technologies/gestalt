@@ -330,6 +330,58 @@ func TestUserService(t *testing.T) {
 		}
 	})
 
+	t.Run("FindOrCreateUserWithName_stores_name", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+
+		user, err := svc.Users.FindOrCreateUserWithName(context.Background(), "dana@test.com", "Dana Example")
+		if err != nil {
+			t.Fatalf("FindOrCreateUserWithName: %v", err)
+		}
+		if user.DisplayName != "Dana Example" {
+			t.Fatalf("DisplayName = %q, want Dana Example", user.DisplayName)
+		}
+	})
+
+	t.Run("FindOrCreateUserWithName_updates_changed_name", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		user, err := svc.Users.FindOrCreateUserWithName(ctx, "dana@test.com", "Dana Example")
+		if err != nil {
+			t.Fatalf("first create: %v", err)
+		}
+		updated, err := svc.Users.FindOrCreateUserWithName(ctx, "dana@test.com", "Dana Updated")
+		if err != nil {
+			t.Fatalf("update name: %v", err)
+		}
+		if updated.ID != user.ID {
+			t.Fatalf("user id changed from %q to %q", user.ID, updated.ID)
+		}
+		if updated.DisplayName != "Dana Updated" {
+			t.Fatalf("DisplayName = %q, want Dana Updated", updated.DisplayName)
+		}
+	})
+
+	t.Run("FindOrCreateUserWithName_does_not_clear_existing_name", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		_, err := svc.Users.FindOrCreateUserWithName(ctx, "dana@test.com", "Dana Example")
+		if err != nil {
+			t.Fatalf("first create: %v", err)
+		}
+		updated, err := svc.Users.FindOrCreateUserWithName(ctx, "dana@test.com", "")
+		if err != nil {
+			t.Fatalf("empty name update: %v", err)
+		}
+		if updated.DisplayName != "Dana Example" {
+			t.Fatalf("DisplayName = %q, want Dana Example", updated.DisplayName)
+		}
+	})
+
 	t.Run("FindOrCreateUser_idempotent", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)

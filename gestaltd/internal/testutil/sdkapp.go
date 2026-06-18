@@ -397,6 +397,10 @@ func (p *Provider) Introspect(_ context.Context, req *gestalt.IntrospectRequest)
 	}, nil
 }
 
+func (p *Provider) UserInfo(_ context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+	return nil, fmt.Errorf("userinfo not found")
+}
+
 func (p *Provider) ListGrants(_ context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

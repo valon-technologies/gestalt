@@ -5,8 +5,9 @@
 use crate::codec::authentication::{
     from_wire_authorize_response, from_wire_get_grant_response, from_wire_introspect_response,
     from_wire_list_grants_response, from_wire_revoke_grant_response, from_wire_token_response,
-    to_wire_authorize_request, to_wire_get_grant_request, to_wire_introspect_request,
-    to_wire_list_grants_request, to_wire_revoke_grant_request, to_wire_token_request,
+    from_wire_user_info_response, to_wire_authorize_request, to_wire_get_grant_request,
+    to_wire_introspect_request, to_wire_list_grants_request, to_wire_revoke_grant_request,
+    to_wire_token_request, to_wire_user_info_request,
 };
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
@@ -194,6 +195,26 @@ pub struct TokenResponse {
     pub grant_id: String,
 }
 
+/// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+/// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+///
+/// Native message type for `gestalt.provider.v1.UserInfoRequest`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UserInfoRequest {}
+
+/// UserInfoResponse models profile claims about the authenticated end user.
+///
+/// Native message type for `gestalt.provider.v1.UserInfoResponse`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UserInfoResponse {
+    /// The `subject_id` field.
+    pub subject_id: String,
+    /// The `email` field.
+    pub email: String,
+    /// The `name` field.
+    pub name: String,
+}
+
 /// Authentication models the shared Gestalt authentication protocol.
 ///
 /// Client for the `gestalt.provider.v1.Authentication` service.
@@ -328,6 +349,19 @@ impl Authentication {
         }
         let response = self.inner.introspect(tonic_request).await?;
         Ok(from_wire_introspect_response(response.into_inner()))
+    }
+
+    /// Calls `gestalt.provider.v1.Authentication.UserInfo`.
+    pub async fn user_info(
+        &mut self,
+        request: UserInfoRequest,
+    ) -> Result<UserInfoResponse, GestaltError> {
+        let mut tonic_request = tonic::Request::new(to_wire_user_info_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.user_info(tonic_request).await?;
+        Ok(from_wire_user_info_response(response.into_inner()))
     }
 
     /// Calls `gestalt.provider.v1.Authentication.ListGrants`.
