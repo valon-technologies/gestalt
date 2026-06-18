@@ -36,7 +36,8 @@ certificates on a `scratch` base. There is no shell, no package manager, and
 minimal attack surface.
 
 For debugging or app compatibility, use the `-alpine` variant. It includes
-a shell, `ca-certificates`, and a writable `/data` directory owned by `nobody`.
+a shell, `ca-certificates`, `libgcc`, `libstdc++`, and a writable `/data`
+directory owned by `nobody`.
 
 ## Run a simple config
 
