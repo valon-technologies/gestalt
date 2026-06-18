@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import overload
 
@@ -12,6 +13,11 @@ import grpc
 from ._codec import authentication as _codec
 from ._codec import support as _support
 from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
+from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +176,19 @@ class Authentication:
     def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:
         self._stub = _authentication_pb2_grpc.AuthenticationStub(channel)
         self._timeout = timeout
+
+    @classmethod
+    def connect(
+        cls, name: str | None = None, *, timeout: float | None = None
+    ) -> Authentication:
+        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
+        if not target:
+            raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
+        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
+        channel = host_service_channel(
+            "authentication", target, token=token.strip(), binding=(name or "").strip()
+        )
+        return cls(channel, timeout=timeout)
 
     @overload
     def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse: ...

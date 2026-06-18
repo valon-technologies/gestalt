@@ -961,7 +961,7 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name2\xfa\x06\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\x8e\a\n" +
 	"\x0eAuthentication\x12\x9c\x01\n" +
 	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"@\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\x12\xbc\x01\n" +
 	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"l\x8a\xb5\x18\n" +
@@ -972,7 +972,7 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\n" +
 	"ListGrants\x12&.gestalt.provider.v1.ListGrantsRequest\x1a'.gestalt.provider.v1.ListGrantsResponse\x12e\n" +
 	"\bGetGrant\x12$.gestalt.provider.v1.GetGrantRequest\x1a%.gestalt.provider.v1.GetGrantResponse\"\f\x8a\xb5\x18\bgrant_id\x12n\n" +
-	"\vRevokeGrant\x12'.gestalt.provider.v1.RevokeGrantRequest\x1a(.gestalt.provider.v1.RevokeGrantResponse\"\f\x8a\xb5\x18\bgrant_idB\xdf\x01\n" +
+	"\vRevokeGrant\x12'.gestalt.provider.v1.RevokeGrantRequest\x1a(.gestalt.provider.v1.RevokeGrantResponse\"\f\x8a\xb5\x18\bgrant_id\x1a\x12\x8a\xb5\x18\x0eauthenticationB\xdf\x01\n" +
 	"\x17com.gestalt.provider.v1B\x13AuthenticationProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

@@ -5,6 +5,7 @@ package client
 import (
 	"context"
 
+	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 )
@@ -162,6 +163,26 @@ type Authentication struct {
 // NewAuthentication creates a Authentication client over an injected gRPC connection.
 func NewAuthentication(conn grpc.ClientConnInterface) *Authentication {
 	return &Authentication{client: proto.NewAuthenticationClient(conn)}
+}
+
+var connectAuthenticationConns host.ConnPool
+
+// ConnectAuthentication dials the "authentication" host service advertised through the
+// GESTALT_HOST_SERVICE_SOCKET environment and returns a connected client.
+// name selects a named binding; the empty string selects the default
+// binding. Connections are pooled per binding and shared across clients for
+// the life of the process. The first dial blocks until the connection is
+// ready or ctx is done.
+func ConnectAuthentication(ctx context.Context, name string) (*Authentication, error) {
+	target, token, err := host.Target("authentication")
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	conn, err := connectAuthenticationConns.Conn(ctx, "authentication", target, token, name)
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return NewAuthentication(conn), nil
 }
 
 // Authorize is the ergonomic form of [Authentication.AuthorizeRaw].

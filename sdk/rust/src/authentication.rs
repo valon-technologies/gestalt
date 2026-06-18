@@ -9,6 +9,7 @@ use crate::codec::authentication::{
     to_wire_introspect_request, to_wire_list_grants_request, to_wire_revoke_grant_request,
     to_wire_token_request, to_wire_user_info_request,
 };
+use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
 
@@ -219,7 +220,7 @@ pub struct UserInfoResponse {
 ///
 /// Client for the `gestalt.provider.v1.Authentication` service.
 pub struct Authentication {
-    inner: v1::authentication_client::AuthenticationClient<tonic::transport::Channel>,
+    inner: v1::authentication_client::AuthenticationClient<HostServiceChannel>,
     timeout: Option<std::time::Duration>,
 }
 
@@ -227,7 +228,7 @@ impl Authentication {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {
-            inner: v1::authentication_client::AuthenticationClient::new(channel),
+            inner: v1::authentication_client::AuthenticationClient::new(plain_channel(channel)),
             timeout: None,
         }
     }
@@ -237,6 +238,21 @@ impl Authentication {
     pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
         self.timeout = Some(timeout);
         self
+    }
+
+    /// Connects to the `authentication` host service described by the environment.
+    pub async fn connect() -> Result<Self, GestaltError> {
+        Self::connect_named("").await
+    }
+
+    /// Connects to the named `authentication` host-service binding.
+    pub async fn connect_named(name: &str) -> Result<Self, GestaltError> {
+        Ok(Self {
+            inner: v1::authentication_client::AuthenticationClient::new(
+                connect_host_service("authentication", name).await?,
+            ),
+            timeout: None,
+        })
     }
 
     /// Calls `gestalt.provider.v1.Authentication.Authorize`.

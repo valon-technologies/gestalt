@@ -16,6 +16,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
@@ -48,6 +49,9 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 	if authorizationHostService, ok := authorizationHostServiceFromDeps(deps); ok {
 		hostServices = append(hostServices, authorizationHostService)
 	}
+	if authenticationHostService, ok := authenticationHostServiceFromDeps(deps); ok {
+		hostServices = append(hostServices, authenticationHostService)
+	}
 	hostServices = append(hostServices,
 		buildAppInvocationHostService(name, deps),
 		buildWorkflowProviderHostService(name, deps),
@@ -67,6 +71,19 @@ func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
 	deps.Caches = scopedCacheBindings(entry.Cache, deps.Caches)
 	deps.S3 = scopedS3Bindings(entry.S3, deps.S3)
 	return deps
+}
+
+func authenticationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool) {
+	if deps.Authentication == nil {
+		return runtimehost.HostService{}, false
+	}
+	return runtimehost.HostService{
+		Name:           "authentication",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.Authentication_ServiceDesc.ServiceName)},
+		Register: func(srv *grpc.Server) {
+			proto.RegisterAuthenticationServer(srv, authenticationservice.NewProviderServer(deps.Authentication))
+		},
+	}, true
 }
 
 func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool) {

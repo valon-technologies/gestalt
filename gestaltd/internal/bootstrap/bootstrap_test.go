@@ -3338,7 +3338,7 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	<-result.ProvidersReady
 
 	got := hostEnvs["basic"]
-	for _, want := range []string{"agent_provider", "indexeddb", "app", "workflow_provider"} {
+	for _, want := range []string{"agent_provider", "authentication", "indexeddb", "app", "workflow_provider"} {
 		if !slices.Contains(got, want) {
 			t.Fatalf("workflow provider host services = %v, want %q", got, want)
 		}

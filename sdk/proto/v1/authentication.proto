@@ -120,6 +120,8 @@ message UserInfoResponse {
 
 // Authentication models the shared Gestalt authentication protocol.
 service Authentication {
+  option (host_binding) = "authentication";
+
   rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
     option (signature) = "response_type";
     option (signature) = "client_id";

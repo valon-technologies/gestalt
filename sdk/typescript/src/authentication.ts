@@ -9,6 +9,13 @@
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  requireHostServiceTarget,
+} from "./host-service.ts";
+
 import * as wire from "./internal/gen/v1/authentication_pb.ts";
 import {
   fromWireAuthorizeResponse,
@@ -200,6 +207,18 @@ export class Authentication {
   ) {
     this.client = createClient(wire.Authentication, transport);
     this.timeoutMs = options?.timeoutMs;
+  }
+
+  static connect(options?: {
+    name?: string | undefined;
+    timeoutMs?: number | undefined;
+  }): Authentication {
+    const { target, token } = requireHostServiceTarget("authentication");
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("authentication", target),
+      hostServiceMetadataInterceptors(token, options?.name?.trim() ?? ""),
+    );
+    return new Authentication(transport, options);
   }
 
   async authorize(

@@ -164,6 +164,7 @@ type Deps struct {
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
 	S3                    map[string]s3sdk.S3
+	Authentication        core.AuthenticationProvider
 	Authorization         core.AuthorizationProvider
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
@@ -967,6 +968,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	auth := authProviders[selectedAuthName]
+	deps.Authentication = auth
 
 	callerTokenPrivateKey, err := resolveCallerTokenPrivateKey(ctx, sm)
 	if err != nil {

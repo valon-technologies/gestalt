@@ -14,7 +14,12 @@ import {
   OperationResultSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
+  Authentication as AuthenticationService,
+  UserInfoResponseSchema,
+} from "../src/internal/gen/v1/authentication_pb.ts";
+import {
   App,
+  CALLER_BEARER_TOKEN_METADATA_KEY,
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
   GestaltError,
@@ -457,4 +462,79 @@ test("App honors tcp target env and relay token env", async () => {
 test("Request.app creates an app client", async () => {
   const req = request();
   await expect(req.app()).rejects.toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
+});
+
+test("Request.authentication forwards the caller bearer token", async () => {
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
+  const seenHeaders: Array<{ relayToken: string; callerToken: string }> = [];
+  const address = await reserveTCPAddress();
+
+  const handler = connectNodeAdapter({
+    grpc: true,
+    grpcWeb: false,
+    connect: false,
+    routes(router) {
+      router.service(AuthenticationService, {
+        async userInfo() {
+          return create(UserInfoResponseSchema, {
+            subjectId: "user:hugh@valon.com",
+            email: "hugh@valon.com",
+            name: "Hugh Han",
+          });
+        },
+      } satisfies Partial<ServiceImpl<typeof AuthenticationService>>);
+    },
+  });
+  const server = createServer((req, res) => {
+    const relayToken = req.headers["x-gestalt-host-service-relay-token"];
+    const callerToken = req.headers[CALLER_BEARER_TOKEN_METADATA_KEY];
+    seenHeaders.push({
+      relayToken: typeof relayToken === "string" ? relayToken : "",
+      callerToken: typeof callerToken === "string" ? callerToken : "",
+    });
+    handler(req, res);
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(Number(address.split(":").at(-1)), "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+
+    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
+    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
+
+    const auth = await request("caller-access-token").authentication();
+    const response = await auth.userInfo({});
+
+    expect(response).toEqual({
+      subjectId: "user:hugh@valon.com",
+      email: "hugh@valon.com",
+      name: "Hugh Han",
+    });
+    expect(seenHeaders).toEqual([{
+      relayToken: "relay-token-typescript",
+      callerToken: "caller-access-token",
+    }]);
+  } finally {
+    if (previousSocket === undefined) {
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
+    } else {
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
+    }
+    if (previousToken === undefined) {
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
+    } else {
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
+    }
+    if (server.listening) {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  }
 });
