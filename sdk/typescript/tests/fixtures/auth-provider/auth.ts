@@ -42,6 +42,16 @@ export const provider = defineAuthenticationProvider({
       audience: [configuredIssuer],
     };
   },
+  userInfo(_request, call) {
+    if (!call.callerBearerToken || call.callerBearerToken !== fixtureAccessToken) {
+      throw new Error("userinfo not found");
+    }
+    return {
+      subjectId: "user:fixture@example.com",
+      email: "fixture@example.com",
+      name: "Fixture User",
+    };
+  },
   listGrants(_request, call) {
     if (!call.callerBearerToken) {
       throw new Error("caller bearer token required");

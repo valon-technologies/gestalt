@@ -309,3 +309,43 @@ func FromWireTokenResponse(value *proto.TokenResponse) *TokenResponse {
 	}
 	return out
 }
+
+func ToWireUserInfoRequest(value *UserInfoRequest) *proto.UserInfoRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.UserInfoRequest{}
+	return out
+}
+
+func FromWireUserInfoRequest(value *proto.UserInfoRequest) *UserInfoRequest {
+	if value == nil {
+		return nil
+	}
+	out := &UserInfoRequest{}
+	return out
+}
+
+func ToWireUserInfoResponse(value *UserInfoResponse) *proto.UserInfoResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.UserInfoResponse{
+		SubjectId: value.SubjectId,
+		Email:     value.Email,
+		Name:      value.Name,
+	}
+	return out
+}
+
+func FromWireUserInfoResponse(value *proto.UserInfoResponse) *UserInfoResponse {
+	if value == nil {
+		return nil
+	}
+	out := &UserInfoResponse{
+		SubjectId: value.SubjectId,
+		Email:     value.Email,
+		Name:      value.Name,
+	}
+	return out
+}

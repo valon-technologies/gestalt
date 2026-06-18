@@ -107,6 +107,17 @@ message RevokeGrantRequest {
 // RevokeGrantResponse acknowledges grant revocation.
 message RevokeGrantResponse {}
 
+// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+message UserInfoRequest {}
+
+// UserInfoResponse models profile claims about the authenticated end user.
+message UserInfoResponse {
+  string subject_id = 1;
+  string email = 2;
+  string name = 3;
+}
+
 // Authentication models the shared Gestalt authentication protocol.
 service Authentication {
   rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
@@ -130,6 +141,7 @@ service Authentication {
     option (signature) = "token";
     option (signature) = "token_type_hint";
   }
+  rpc UserInfo(UserInfoRequest) returns (UserInfoResponse);
   rpc ListGrants(ListGrantsRequest) returns (ListGrantsResponse);
   rpc GetGrant(GetGrantRequest) returns (GetGrantResponse) {
     option (signature) = "grant_id";

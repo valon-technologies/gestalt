@@ -35,9 +35,9 @@ import (
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
-
-	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -8318,6 +8318,17 @@ func TestLoginCallback(t *testing.T) {
 				}
 				return nil, fmt.Errorf("bad code")
 			},
+			UserInfoFn: func(ctx context.Context, _ *core.UserInfoRequest) (*core.UserInfoResponse, error) {
+				call := gestalt.AuthCallContextFromContext(ctx)
+				if call.CallerBearerToken == "dev-token-user@example.com" {
+					return &core.UserInfoResponse{
+						SubjectID: "user:user@example.com",
+						Email:     "user@example.com",
+						Name:      "User",
+					}, nil
+				}
+				return nil, core.ErrNotFound
+			},
 		}
 		cfg.Services = svc
 		cfg.AuditSink = auditSink
@@ -8406,8 +8417,8 @@ func TestLoginCallback(t *testing.T) {
 	if sessionBody["email"] != "user@example.com" {
 		t.Fatalf("expected email user@example.com, got %v", sessionBody["email"])
 	}
-	if displayName, ok := sessionBody["displayName"].(string); ok && displayName != "" && displayName != "User" {
-		t.Fatalf("unexpected displayName %q", displayName)
+	if sessionBody["displayName"] != "User" {
+		t.Fatalf("expected displayName User, got %v", sessionBody["displayName"])
 	}
 	if _, ok := sessionBody["credentialSubjectId"]; ok {
 		t.Fatalf("expected session response to omit credentialSubjectId, got %v", sessionBody["credentialSubjectId"])

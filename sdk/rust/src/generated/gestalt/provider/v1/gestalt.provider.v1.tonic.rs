@@ -2079,6 +2079,25 @@ pub mod authentication_client {
             self.inner.unary(req, path, codec).await
         }
         ///
+        pub async fn user_info(
+            &mut self,
+            request: impl tonic::IntoRequest<super::UserInfoRequest>,
+        ) -> std::result::Result<tonic::Response<super::UserInfoResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.Authentication/UserInfo",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.Authentication",
+                "UserInfo",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn list_grants(
             &mut self,
             request: impl tonic::IntoRequest<super::ListGrantsRequest>,
@@ -2167,6 +2186,11 @@ pub mod authentication_server {
             &self,
             request: tonic::Request<super::IntrospectRequest>,
         ) -> std::result::Result<tonic::Response<super::IntrospectResponse>, tonic::Status>;
+        ///
+        async fn user_info(
+            &self,
+            request: tonic::Request<super::UserInfoRequest>,
+        ) -> std::result::Result<tonic::Response<super::UserInfoResponse>, tonic::Status>;
         ///
         async fn list_grants(
             &self,
@@ -2359,6 +2383,45 @@ pub mod authentication_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = IntrospectSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.Authentication/UserInfo" => {
+                    #[allow(non_camel_case_types)]
+                    struct UserInfoSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::UserInfoRequest> for UserInfoSvc<T> {
+                        type Response = super::UserInfoResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::UserInfoRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as Authentication>::user_info(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = UserInfoSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

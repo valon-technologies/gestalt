@@ -17,12 +17,14 @@ import {
   fromWireListGrantsResponse,
   fromWireRevokeGrantResponse,
   fromWireTokenResponse,
+  fromWireUserInfoResponse,
   toWireAuthorizeRequest,
   toWireGetGrantRequest,
   toWireIntrospectRequest,
   toWireListGrantsRequest,
   toWireRevokeGrantRequest,
   toWireTokenRequest,
+  toWireUserInfoRequest,
 } from "./internal/codec/authentication.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
 import type { Init } from "./rpc_support.ts";
@@ -171,6 +173,21 @@ export interface TokenResponse {
 }
 
 /**
+ * UserInfoRequest is intentionally empty. The caller bearer token is supplied
+ * through provider-call metadata, analogous to OIDC Authorization: Bearer.
+ */
+export interface UserInfoRequest {}
+
+/**
+ * UserInfoResponse models profile claims about the authenticated end user.
+ */
+export interface UserInfoResponse {
+  subjectId: string;
+  email: string;
+  name: string;
+}
+
+/**
  * Authentication models the shared Gestalt authentication protocol.
  */
 export class Authentication {
@@ -283,6 +300,16 @@ export class Authentication {
       ),
     );
     return fromWireIntrospectResponse(response);
+  }
+
+  async userInfo(request: Init<UserInfoRequest>): Promise<UserInfoResponse> {
+    const response = await callUnary(() =>
+      this.client.userInfo(
+        toWireUserInfoRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireUserInfoResponse(response);
   }
 
   async listGrants(

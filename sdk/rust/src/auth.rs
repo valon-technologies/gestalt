@@ -1,9 +1,9 @@
 use tonic::codegen::async_trait;
 
 use crate::authentication::{
-    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
-    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
-    RevokeGrantResponse, TokenRequest, TokenResponse,
+    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse,
+    IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
+    RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
 };
 use crate::error::Result;
 
@@ -68,6 +68,13 @@ pub trait AuthenticationProvider: Send + Sync + 'static {
 
     /// Introspects a bearer token via RFC 7662.
     async fn introspect(&self, req: IntrospectRequest) -> Result<IntrospectResponse>;
+
+    /// Returns profile claims for the authenticated caller.
+    async fn user_info(
+        &self,
+        call: AuthCallContext,
+        req: UserInfoRequest,
+    ) -> Result<UserInfoResponse>;
 
     /// Lists grant IDs visible to the caller.
     async fn list_grants(

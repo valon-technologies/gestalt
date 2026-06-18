@@ -103,7 +103,15 @@ export interface GrantDetails {
 export interface AuthenticationProviderOptions extends ProviderBaseOptions {
   authorize: (request: AuthorizeRequest) => MaybePromise<AuthorizeResponse>;
   token: (request: TokenRequest) => MaybePromise<TokenResponse>;
-  introspect: (request: IntrospectRequest) => MaybePromise<IntrospectResponse>;
+  introspect: (request) => MaybePromise<IntrospectResponse>;
+  userInfo: (
+    request: Record<string, never>,
+    call: AuthCallContext,
+  ) => MaybePromise<{
+    subjectId: string;
+    email?: string;
+    name?: string;
+  }>;
   /** Returns caller-visible API-token grant IDs only, not login/session grants. */
   listGrants: (
     request: Record<string, never>,
@@ -130,6 +138,7 @@ export class AuthenticationProvider extends ProviderBase {
   private readonly authorizeHandler: AuthenticationProviderOptions["authorize"];
   private readonly tokenHandler: AuthenticationProviderOptions["token"];
   private readonly introspectHandler: AuthenticationProviderOptions["introspect"];
+  private readonly userInfoHandler: AuthenticationProviderOptions["userInfo"];
   private readonly listGrantsHandler: AuthenticationProviderOptions["listGrants"];
   private readonly getGrantHandler: AuthenticationProviderOptions["getGrant"];
   private readonly revokeGrantHandler: AuthenticationProviderOptions["revokeGrant"];
@@ -139,6 +148,7 @@ export class AuthenticationProvider extends ProviderBase {
     this.authorizeHandler = options.authorize;
     this.tokenHandler = options.token;
     this.introspectHandler = options.introspect;
+    this.userInfoHandler = options.userInfo;
     this.listGrantsHandler = options.listGrants;
     this.getGrantHandler = options.getGrant;
     this.revokeGrantHandler = options.revokeGrant;
@@ -154,6 +164,13 @@ export class AuthenticationProvider extends ProviderBase {
 
   async introspect(request: IntrospectRequest): Promise<IntrospectResponse> {
     return await this.introspectHandler(request);
+  }
+
+  async userInfo(
+    request: Record<string, never>,
+    call: AuthCallContext,
+  ): Promise<{ subjectId: string; email?: string; name?: string }> {
+    return await this.userInfoHandler(request, call);
   }
 
   async listGrants(

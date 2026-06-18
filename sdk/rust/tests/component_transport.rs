@@ -115,6 +115,21 @@ impl AuthenticationProvider for TestAuthProvider {
         })
     }
 
+    async fn user_info(
+        &self,
+        call: gestalt::AuthCallContext,
+        _req: gestalt::authentication::UserInfoRequest,
+    ) -> gestalt::Result<gestalt::authentication::UserInfoResponse> {
+        if call.caller_bearer_token == "fixture-access-token" {
+            return Ok(gestalt::authentication::UserInfoResponse {
+                subject_id: "user:fixture".to_string(),
+                email: "fixture@example.com".to_string(),
+                name: "Fixture User".to_string(),
+            });
+        }
+        Err(gestalt::Error::not_found("userinfo not found"))
+    }
+
     async fn list_grants(
         &self,
         _call: gestalt::AuthCallContext,

@@ -50,6 +50,11 @@ class AuthenticationStub(object):
                 request_serializer=v1_dot_authentication__pb2.IntrospectRequest.SerializeToString,
                 response_deserializer=v1_dot_authentication__pb2.IntrospectResponse.FromString,
                 _registered_method=True)
+        self.UserInfo = channel.unary_unary(
+                '/gestalt.provider.v1.Authentication/UserInfo',
+                request_serializer=v1_dot_authentication__pb2.UserInfoRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.UserInfoResponse.FromString,
+                _registered_method=True)
         self.ListGrants = channel.unary_unary(
                 '/gestalt.provider.v1.Authentication/ListGrants',
                 request_serializer=v1_dot_authentication__pb2.ListGrantsRequest.SerializeToString,
@@ -84,6 +89,12 @@ class AuthenticationServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def Introspect(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UserInfo(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -124,6 +135,11 @@ def add_AuthenticationServicer_to_server(servicer, server):
                     servicer.Introspect,
                     request_deserializer=v1_dot_authentication__pb2.IntrospectRequest.FromString,
                     response_serializer=v1_dot_authentication__pb2.IntrospectResponse.SerializeToString,
+            ),
+            'UserInfo': grpc.unary_unary_rpc_method_handler(
+                    servicer.UserInfo,
+                    request_deserializer=v1_dot_authentication__pb2.UserInfoRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.UserInfoResponse.SerializeToString,
             ),
             'ListGrants': grpc.unary_unary_rpc_method_handler(
                     servicer.ListGrants,
@@ -223,6 +239,33 @@ class Authentication(object):
             '/gestalt.provider.v1.Authentication/Introspect',
             v1_dot_authentication__pb2.IntrospectRequest.SerializeToString,
             v1_dot_authentication__pb2.IntrospectResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UserInfo(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.Authentication/UserInfo',
+            v1_dot_authentication__pb2.UserInfoRequest.SerializeToString,
+            v1_dot_authentication__pb2.UserInfoResponse.FromString,
             options,
             channel_credentials,
             insecure,

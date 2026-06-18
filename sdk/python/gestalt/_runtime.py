@@ -1597,6 +1597,20 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
                 )
             return _authentication_codec.to_wire_introspect_response(response)
 
+        @_grpc_handler("userinfo")
+        def UserInfo(self, request: Any, context: Any) -> Any:
+            _ = request
+            response = auth_provider.user_info(
+                _authentication_codec.from_wire_user_info_request(request),
+                _auth_call_context_from_handler(context),
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authentication provider returned nil response",
+                )
+            return _authentication_codec.to_wire_user_info_response(response)
+
         @_grpc_handler("list grants")
         def ListGrants(self, request: Any, context: Any) -> Any:
             _ = request

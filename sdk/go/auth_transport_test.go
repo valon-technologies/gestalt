@@ -93,6 +93,18 @@ func (p *fullAuthenticationProvider) Introspect(_ context.Context, req *gestalt.
 	}
 }
 
+func (p *fullAuthenticationProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+	call := gestalt.AuthCallContextFromContext(ctx)
+	if call.CallerBearerToken != "valid-token" {
+		return nil, status.Error(codes.NotFound, "userinfo not found")
+	}
+	return &gestalt.UserInfoResponse{
+		SubjectID: "user:user@example.test",
+		Email:     "user@example.test",
+		Name:      "Test User",
+	}, nil
+}
+
 func (p *fullAuthenticationProvider) ListGrants(_ context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
 	return &gestalt.ListGrantsResponse{GrantIDs: []string{"grant-1", "grant-2"}}, nil
 }
@@ -292,6 +304,17 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 	}
 	if len(getResp.GetScopes()) != 2 {
 		t.Fatalf("scopes = %d, want 2", len(getResp.GetScopes()))
+	}
+
+	userInfoResp, err := authClient.UserInfo(grantCtx, &proto.UserInfoRequest{})
+	if err != nil {
+		t.Fatalf("UserInfo: %v", err)
+	}
+	if userInfoResp.GetSubjectId() != "user:user@example.test" {
+		t.Fatalf("userinfo subject_id = %q, want %q", userInfoResp.GetSubjectId(), "user:user@example.test")
+	}
+	if userInfoResp.GetName() != "Test User" {
+		t.Fatalf("userinfo name = %q, want %q", userInfoResp.GetName(), "Test User")
 	}
 
 	_, err = authClient.RevokeGrant(grantCtx, &proto.RevokeGrantRequest{GrantId: "grant-1"})

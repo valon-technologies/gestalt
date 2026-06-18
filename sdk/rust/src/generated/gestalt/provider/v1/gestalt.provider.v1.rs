@@ -1441,6 +1441,20 @@ pub struct RevokeGrantRequest {
 /// RevokeGrantResponse acknowledges grant revocation.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RevokeGrantResponse {}
+/// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+/// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UserInfoRequest {}
+/// UserInfoResponse models profile claims about the authenticated end user.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UserInfoResponse {
+    #[prost(string, tag = "1")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub email: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Subject {
     #[prost(string, tag = "1")]

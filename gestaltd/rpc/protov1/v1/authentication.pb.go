@@ -798,6 +798,105 @@ func (*RevokeGrantResponse) Descriptor() ([]byte, []int) {
 	return file_v1_authentication_proto_rawDescGZIP(), []int{12}
 }
 
+// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+type UserInfoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserInfoRequest) Reset() {
+	*x = UserInfoRequest{}
+	mi := &file_v1_authentication_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserInfoRequest) ProtoMessage() {}
+
+func (x *UserInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserInfoRequest.ProtoReflect.Descriptor instead.
+func (*UserInfoRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{13}
+}
+
+// UserInfoResponse models profile claims about the authenticated end user.
+type UserInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SubjectId     string                 `protobuf:"bytes,1,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserInfoResponse) Reset() {
+	*x = UserInfoResponse{}
+	mi := &file_v1_authentication_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserInfoResponse) ProtoMessage() {}
+
+func (x *UserInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserInfoResponse.ProtoReflect.Descriptor instead.
+func (*UserInfoResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *UserInfoResponse) GetSubjectId() string {
+	if x != nil {
+		return x.SubjectId
+	}
+	return ""
+}
+
+func (x *UserInfoResponse) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *UserInfoResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_v1_authentication_proto protoreflect.FileDescriptor
 
 const file_v1_authentication_proto_rawDesc = "" +
@@ -856,13 +955,20 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"expires_at\x18\x03 \x01(\x03R\texpiresAt\"/\n" +
 	"\x12RevokeGrantRequest\x12\x19\n" +
 	"\bgrant_id\x18\x01 \x01(\tR\agrantId\"\x15\n" +
-	"\x13RevokeGrantResponse2\xa1\x06\n" +
+	"\x13RevokeGrantResponse\"\x11\n" +
+	"\x0fUserInfoRequest\"[\n" +
+	"\x10UserInfoResponse\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\xfa\x06\n" +
 	"\x0eAuthentication\x12\x9c\x01\n" +
 	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"@\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\x12\xbc\x01\n" +
 	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"l\x8a\xb5\x18\n" +
 	"grant_type\x8a\xb5\x18\x04code\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\x12{\n" +
 	"\n" +
-	"Introspect\x12&.gestalt.provider.v1.IntrospectRequest\x1a'.gestalt.provider.v1.IntrospectResponse\"\x1c\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\x12]\n" +
+	"Introspect\x12&.gestalt.provider.v1.IntrospectRequest\x1a'.gestalt.provider.v1.IntrospectResponse\"\x1c\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\x12W\n" +
+	"\bUserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\x12]\n" +
 	"\n" +
 	"ListGrants\x12&.gestalt.provider.v1.ListGrantsRequest\x1a'.gestalt.provider.v1.ListGrantsResponse\x12e\n" +
 	"\bGetGrant\x12$.gestalt.provider.v1.GetGrantRequest\x1a%.gestalt.provider.v1.GetGrantResponse\"\f\x8a\xb5\x18\bgrant_id\x12n\n" +
@@ -881,7 +987,7 @@ func file_v1_authentication_proto_rawDescGZIP() []byte {
 	return file_v1_authentication_proto_rawDescData
 }
 
-var file_v1_authentication_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_v1_authentication_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_v1_authentication_proto_goTypes = []any{
 	(*AuthorizeRequest)(nil),    // 0: gestalt.provider.v1.AuthorizeRequest
 	(*AuthorizeResponse)(nil),   // 1: gestalt.provider.v1.AuthorizeResponse
@@ -896,23 +1002,27 @@ var file_v1_authentication_proto_goTypes = []any{
 	(*GetGrantResponse)(nil),    // 10: gestalt.provider.v1.GetGrantResponse
 	(*RevokeGrantRequest)(nil),  // 11: gestalt.provider.v1.RevokeGrantRequest
 	(*RevokeGrantResponse)(nil), // 12: gestalt.provider.v1.RevokeGrantResponse
+	(*UserInfoRequest)(nil),     // 13: gestalt.provider.v1.UserInfoRequest
+	(*UserInfoResponse)(nil),    // 14: gestalt.provider.v1.UserInfoResponse
 }
 var file_v1_authentication_proto_depIdxs = []int32{
 	9,  // 0: gestalt.provider.v1.GetGrantResponse.scopes:type_name -> gestalt.provider.v1.GrantScope
 	0,  // 1: gestalt.provider.v1.Authentication.Authorize:input_type -> gestalt.provider.v1.AuthorizeRequest
 	2,  // 2: gestalt.provider.v1.Authentication.Token:input_type -> gestalt.provider.v1.TokenRequest
 	4,  // 3: gestalt.provider.v1.Authentication.Introspect:input_type -> gestalt.provider.v1.IntrospectRequest
-	6,  // 4: gestalt.provider.v1.Authentication.ListGrants:input_type -> gestalt.provider.v1.ListGrantsRequest
-	8,  // 5: gestalt.provider.v1.Authentication.GetGrant:input_type -> gestalt.provider.v1.GetGrantRequest
-	11, // 6: gestalt.provider.v1.Authentication.RevokeGrant:input_type -> gestalt.provider.v1.RevokeGrantRequest
-	1,  // 7: gestalt.provider.v1.Authentication.Authorize:output_type -> gestalt.provider.v1.AuthorizeResponse
-	3,  // 8: gestalt.provider.v1.Authentication.Token:output_type -> gestalt.provider.v1.TokenResponse
-	5,  // 9: gestalt.provider.v1.Authentication.Introspect:output_type -> gestalt.provider.v1.IntrospectResponse
-	7,  // 10: gestalt.provider.v1.Authentication.ListGrants:output_type -> gestalt.provider.v1.ListGrantsResponse
-	10, // 11: gestalt.provider.v1.Authentication.GetGrant:output_type -> gestalt.provider.v1.GetGrantResponse
-	12, // 12: gestalt.provider.v1.Authentication.RevokeGrant:output_type -> gestalt.provider.v1.RevokeGrantResponse
-	7,  // [7:13] is the sub-list for method output_type
-	1,  // [1:7] is the sub-list for method input_type
+	13, // 4: gestalt.provider.v1.Authentication.UserInfo:input_type -> gestalt.provider.v1.UserInfoRequest
+	6,  // 5: gestalt.provider.v1.Authentication.ListGrants:input_type -> gestalt.provider.v1.ListGrantsRequest
+	8,  // 6: gestalt.provider.v1.Authentication.GetGrant:input_type -> gestalt.provider.v1.GetGrantRequest
+	11, // 7: gestalt.provider.v1.Authentication.RevokeGrant:input_type -> gestalt.provider.v1.RevokeGrantRequest
+	1,  // 8: gestalt.provider.v1.Authentication.Authorize:output_type -> gestalt.provider.v1.AuthorizeResponse
+	3,  // 9: gestalt.provider.v1.Authentication.Token:output_type -> gestalt.provider.v1.TokenResponse
+	5,  // 10: gestalt.provider.v1.Authentication.Introspect:output_type -> gestalt.provider.v1.IntrospectResponse
+	14, // 11: gestalt.provider.v1.Authentication.UserInfo:output_type -> gestalt.provider.v1.UserInfoResponse
+	7,  // 12: gestalt.provider.v1.Authentication.ListGrants:output_type -> gestalt.provider.v1.ListGrantsResponse
+	10, // 13: gestalt.provider.v1.Authentication.GetGrant:output_type -> gestalt.provider.v1.GetGrantResponse
+	12, // 14: gestalt.provider.v1.Authentication.RevokeGrant:output_type -> gestalt.provider.v1.RevokeGrantResponse
+	8,  // [8:15] is the sub-list for method output_type
+	1,  // [1:8] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -930,7 +1040,7 @@ func file_v1_authentication_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_authentication_proto_rawDesc), len(file_v1_authentication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
