@@ -82,7 +82,7 @@ func bootstrapAgentRequestContext(t testing.TB, p *principal.Principal, callerNa
 }
 
 func stubAuthFactory(name string) bootstrap.AuthFactory {
-	return func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
+	return func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthenticationProvider, error) {
 		return &coretesting.StubAuthProvider{N: name}, nil
 	}
 }
@@ -3573,6 +3573,37 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 	})
 }
 
+func TestBootstrapRoutesAuthenticationIndexedDBHostServices(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Server.Providers.Authentication = "default"
+
+	factories := validFactories()
+	var hostServices []runtimehost.HostService
+	factories.Auth = func(_ context.Context, _ string, _ yaml.Node, services []runtimehost.HostService, _ bootstrap.Deps) (core.AuthenticationProvider, error) {
+		hostServices = append([]runtimehost.HostService(nil), services...)
+		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	indexedDBService := requireHostService(t, hostServices, "indexeddb")
+	withIndexedDBHostClient(t, indexedDBService, func(client proto.IndexedDBClient) {
+		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+			Name:   "authentication_grants",
+			Schema: &proto.ObjectStoreSchema{},
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(authentication_grants): %v", err)
+		}
+	})
+}
+
 func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	t.Parallel()
 
@@ -4893,7 +4924,7 @@ func TestResultCloseClosesAuthProvider(t *testing.T) {
 
 	closed := &atomic.Bool{}
 	factories := validFactories()
-	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
+	factories.Auth = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthenticationProvider, error) {
 		return &closableAuthProvider{
 			StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
 			closed:           closed,
@@ -5355,7 +5386,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 
 	var gotAuthNode yaml.Node
 	factories := validFactories()
-	factories.Auth = func(node yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+	factories.Auth = func(_ context.Context, _ string, node yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 		gotAuthNode = node
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
@@ -5394,7 +5425,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 		{
 			name: "auth factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
+				f.Auth = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthenticationProvider, error) {
 					return nil, fmt.Errorf("auth broke")
 				}
 			},
@@ -5447,7 +5478,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+		factories.Auth = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -5476,7 +5507,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+		factories.Auth = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -5500,7 +5531,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		var keys [][]byte
 		for i := 0; i < 2; i++ {
 			factories := validFactories()
-			factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+			factories.Auth = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 				keys = append(keys, deps.EncryptionKey)
 				return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 			}
@@ -5532,7 +5563,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
 			}, nil
 		}
-		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+		factories.Auth = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -5614,7 +5645,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		var receivedNode yaml.Node
-		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthenticationProvider, error) {
+		factories.Auth = func(_ context.Context, _ string, node yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -5925,7 +5956,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		var authNode yaml.Node
 		factories := validFactories()
-		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthenticationProvider, error) {
+		factories.Auth = func(_ context.Context, _ string, node yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (core.AuthenticationProvider, error) {
 			authNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -5960,7 +5991,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		var authFactoryCalled atomic.Bool
 		factories := validFactories()
-		factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
+		factories.Auth = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthenticationProvider, error) {
 			authFactoryCalled.Store(true)
 			return &coretesting.StubAuthProvider{N: "unexpected"}, nil
 		}

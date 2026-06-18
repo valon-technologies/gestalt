@@ -119,7 +119,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Source.Builtin)
 		}
 	}
-	factories.Auth = func(node yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+	factories.Auth = func(_ context.Context, _ string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 		defaultCallbackURL := ""
 		if deps.BaseURL != "" {
 			defaultCallbackURL = deps.BaseURL + config.AuthCallbackPath
@@ -127,6 +127,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 		return providerdrivers.AuthenticationFactory(node, providerdrivers.AuthenticationDeps{
 			DefaultCallbackURL: defaultCallbackURL,
 			SessionKey:         deps.EncryptionKey,
+			HostServices:       hostServices,
 		})
 	}
 	factories.Authorization = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {

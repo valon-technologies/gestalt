@@ -8,6 +8,7 @@ import (
 type AuthenticationDeps struct {
 	DefaultCallbackURL string
 	SessionKey         []byte
+	HostServices       []runtimehost.HostService
 }
 
 type WorkflowDeps struct {

@@ -185,7 +185,7 @@ type Deps struct {
 	hostedAgentPoolClock hostedAgentPoolClock
 }
 
-type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
+type AuthFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.AuthenticationProvider, error)
 type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (providerdrivers.AuthorizationBuildResult, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
@@ -869,12 +869,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	deps.AgentRuntime = agentRuntime
 
-	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
-	if err != nil {
-		return nil, err
-	}
-	auth := authProviders[selectedAuthName]
-
 	selectedIndexedDBName, def, err := cfg.SelectedIndexedDBProvider()
 	if err != nil {
 		return nil, err
@@ -967,6 +961,13 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
+
+	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
+	if err != nil {
+		return nil, err
+	}
+	auth := authProviders[selectedAuthName]
+
 	callerTokenPrivateKey, err := resolveCallerTokenPrivateKey(ctx, sm)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1845,7 +1846,11 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 			return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
 		}
 	}
-	auth, err := factories.Auth(node, deps)
+	hostServices, err := buildProviderHostServices(name, deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
+	}
+	auth, err := factories.Auth(context.Background(), name, node, hostServices, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
 	}
