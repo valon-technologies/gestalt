@@ -46,6 +46,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{turnID}/interactions/{interactionID}/resolve", s.resolveAgentInteraction)
 		})
 
+		r.Get("/auth/session", s.authSession)
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)
 
