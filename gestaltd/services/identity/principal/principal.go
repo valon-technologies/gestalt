@@ -23,16 +23,15 @@ const (
 )
 
 type Principal struct {
-	Identity            *core.UserIdentity
-	UserID              string
-	SubjectID           string
-	CredentialSubjectID string
-	DisplayName         string
-	Kind                Kind
-	Source              Source
-	Scopes              []string
-	ClientID            string
-	Audience            []string
+	Identity    *core.UserIdentity
+	UserID      string
+	SubjectID   string
+	DisplayName string
+	Kind        Kind
+	Source      Source
+	Scopes      []string
+	ClientID    string
+	Audience    []string
 }
 
 type PermissionSet map[string]map[string]struct{}
@@ -126,9 +125,6 @@ func IsNonUserPrincipal(p *Principal) bool {
 func EffectiveCredentialSubjectID(p *Principal) string {
 	if p == nil {
 		return ""
-	}
-	if subjectID := strings.TrimSpace(p.CredentialSubjectID); subjectID != "" {
-		return subjectID
 	}
 	if subjectID := strings.TrimSpace(p.SubjectID); subjectID != "" {
 		return subjectID

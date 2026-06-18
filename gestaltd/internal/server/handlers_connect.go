@@ -365,17 +365,17 @@ func credentialMaterialContext(ctx context.Context, p *principal.Principal, tm c
 	if p != nil {
 		p = principal.Canonicalized(p)
 		if p != nil {
-			p.CredentialSubjectID = strings.TrimSpace(tm.SubjectID)
-			return principal.WithPrincipal(ctx, p)
+			clone := *p
+			clone.SubjectID = strings.TrimSpace(tm.SubjectID)
+			return principal.WithPrincipal(ctx, principal.Canonicalize(&clone))
 		}
 	}
 	if strings.TrimSpace(tm.ActorSubjectID) == "" {
 		return ctx
 	}
 	actor := &principal.Principal{
-		SubjectID:           strings.TrimSpace(tm.ActorSubjectID),
-		UserID:              strings.TrimSpace(tm.ActorUserID),
-		CredentialSubjectID: strings.TrimSpace(tm.SubjectID),
+		SubjectID: strings.TrimSpace(tm.ActorSubjectID),
+		UserID:    strings.TrimSpace(tm.ActorUserID),
 	}
 	if kind, _, ok := core.ParseSubjectID(actor.SubjectID); ok {
 		actor.Kind = principal.Kind(kind)

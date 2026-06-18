@@ -70,11 +70,10 @@ func clientSubjectContext(subject *proto.SubjectContext) *client.SubjectContext 
 		return nil
 	}
 	out := &client.SubjectContext{
-		Id:                  subject.GetId(),
-		CredentialSubjectId: subject.GetCredentialSubjectId(),
-		Email:               subject.GetEmail(),
-		DisplayName:         subject.GetDisplayName(),
-		Scopes:              append([]string(nil), subject.GetScopes()...),
+		Id:          subject.GetId(),
+		Email:       subject.GetEmail(),
+		DisplayName: subject.GetDisplayName(),
+		Scopes:      append([]string(nil), subject.GetScopes()...),
 	}
 	for _, permission := range subject.GetPermissions() {
 		if permission == nil {

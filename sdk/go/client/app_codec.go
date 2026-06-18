@@ -823,11 +823,10 @@ func ToWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
 		return nil
 	}
 	out := &proto.SubjectContext{
-		Id:                  value.Id,
-		CredentialSubjectId: value.CredentialSubjectId,
-		Email:               value.Email,
-		DisplayName:         value.DisplayName,
-		Scopes:              value.Scopes,
+		Id:          value.Id,
+		Email:       value.Email,
+		DisplayName: value.DisplayName,
+		Scopes:      value.Scopes,
 	}
 	for _, item := range value.Permissions {
 		out.Permissions = append(out.Permissions, ToWireSubjectPermissionContext(item))
@@ -840,11 +839,10 @@ func FromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
 		return nil
 	}
 	out := &SubjectContext{
-		Id:                  value.Id,
-		CredentialSubjectId: value.CredentialSubjectId,
-		Email:               value.Email,
-		DisplayName:         value.DisplayName,
-		Scopes:              value.Scopes,
+		Id:          value.Id,
+		Email:       value.Email,
+		DisplayName: value.DisplayName,
+		Scopes:      value.Scopes,
 	}
 	for _, item := range value.Permissions {
 		out.Permissions = append(out.Permissions, FromWireSubjectPermissionContext(item))

@@ -147,7 +147,6 @@ func principalFromIntrospection(resp *core.IntrospectResponse) *Principal {
 	} else if kind := KindFromSubjectID(p.SubjectID); kind != "" {
 		p.Kind = kind
 	}
-	p.CredentialSubjectID = p.SubjectID
 	return Canonicalize(p)
 }
 

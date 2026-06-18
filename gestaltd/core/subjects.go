@@ -10,8 +10,7 @@ const GestaltdSubjectID = "system:gestaltd"
 // provisioning instead of relying on opaque subject IDs plus separate tuple
 // seeding.
 type RunAsSubject struct {
-	SubjectID           string
-	CredentialSubjectID string
+	SubjectID string
 }
 
 func ParseSubjectID(subjectID string) (kind, id string, ok bool) {
@@ -25,14 +24,9 @@ func NormalizeRunAsSubject(subject *RunAsSubject) *RunAsSubject {
 	if subject == nil {
 		return nil
 	}
-	out := &RunAsSubject{
-		SubjectID:           strings.TrimSpace(subject.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(subject.CredentialSubjectID),
+	return &RunAsSubject{
+		SubjectID: strings.TrimSpace(subject.SubjectID),
 	}
-	if out.CredentialSubjectID == "" {
-		out.CredentialSubjectID = out.SubjectID
-	}
-	return out
 }
 
 func RunAsSubjectsEqual(left, right *RunAsSubject) bool {
@@ -41,8 +35,7 @@ func RunAsSubjectsEqual(left, right *RunAsSubject) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return left.SubjectID == right.SubjectID &&
-		left.CredentialSubjectID == right.CredentialSubjectID
+	return left.SubjectID == right.SubjectID
 }
 
 func RunAsSubjectsMatchIdentity(left, right *RunAsSubject) bool {

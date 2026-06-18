@@ -125,8 +125,7 @@ func workflowAgentRequestContext(t testing.TB, runID, stepID, providerName, mode
 			Name: "temporal",
 		},
 		Subject: &proto.SubjectContext{
-			Id:                  principal.UserSubjectID("runner"),
-			CredentialSubjectId: principal.UserSubjectID("runner"),
+			Id: principal.UserSubjectID("runner"),
 		},
 		Workflow: mustProtoStruct(t, map[string]any{
 			"providerName":         "temporal",
@@ -1311,8 +1310,7 @@ func TestAuthorizeAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		TurnScopes: scopes,
 	})
 	p := &principal.Principal{
-		SubjectID:           principal.UserSubjectID("user-1"),
-		CredentialSubjectID: principal.UserSubjectID("user-1"),
+		SubjectID: principal.UserSubjectID("user-1"),
 	}
 	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "sats")
 
@@ -1354,8 +1352,7 @@ func TestAuthorizeAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		t.Fatalf("turn listed tools = %#v, want slack chat.postMessage", scope.ListedTools)
 	}
 	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:automation",
-		CredentialSubjectID: "service_account:automation",
+		SubjectID: "service_account:automation",
 	}
 	scope.ListedTools[0].Target.RunAs = runAs
 	if err := scopes.PutSession(scope); err != nil {
@@ -1380,8 +1377,8 @@ func TestAuthorizeAppInvocationUsesPersistedTurnScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AuthorizeAppInvocation: %v", err)
 	}
-	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
-		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
+	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID {
+		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)
 	}
 	if _, ok := authorized.Principal.EffectivePermissions()["slack"]["chat.postMessage"]; !ok {
 		t.Fatalf("authorized permissions = %#v, want only persisted slack chat.postMessage scope", authorized.Principal.EffectivePermissions())
@@ -1496,8 +1493,7 @@ func TestAuthorizeWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 		}},
 	})
 	p := &principal.Principal{
-		SubjectID:           principal.UserSubjectID("user-1"),
-		CredentialSubjectID: principal.UserSubjectID("user-1"),
+		SubjectID: principal.UserSubjectID("user-1"),
 	}
 	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "sats")
 
@@ -1572,8 +1568,8 @@ func TestAuthorizeWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AuthorizeWorkflowInvocation: %v", err)
 	}
-	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
-		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
+	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID {
+		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)
 	}
 	if _, ok := authorized.Principal.EffectivePermissions()["slack"]["chat.postMessage"]; !ok {
 		t.Fatalf("authorized permissions = %#v, want slack chat.postMessage scope", authorized.Principal.EffectivePermissions())
@@ -2777,8 +2773,7 @@ func TestNormalizeToolRefsRejectsProviderRunAsDelegation(t *testing.T) {
 	t.Parallel()
 
 	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:automation",
-		CredentialSubjectID: "service_account:automation",
+		SubjectID: "service_account:automation",
 	}
 	for _, tc := range []struct {
 		name string
@@ -3276,24 +3271,21 @@ func TestAgentToolTargetKeyUsesRunAsIdentity(t *testing.T) {
 		App:       "target",
 		Operation: "automation.write",
 		RunAs: &core.RunAsSubject{
-			SubjectID:           "service_account:automation",
-			CredentialSubjectID: "service_account:automation",
+			SubjectID: "service_account:automation",
 		},
 	}
 	same := base
 	same.RunAs = &core.RunAsSubject{
-		SubjectID:           " service_account:automation ",
-		CredentialSubjectID: " service_account:automation ",
+		SubjectID: " service_account:automation ",
 	}
-	differentCredentialSubject := base
-	differentCredentialSubject.RunAs = &core.RunAsSubject{
-		SubjectID:           base.RunAs.SubjectID,
-		CredentialSubjectID: "service_account:other-automation",
+	differentSubject := base
+	differentSubject.RunAs = &core.RunAsSubject{
+		SubjectID: "service_account:other-automation",
 	}
 	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(same) {
 		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects")
 	}
-	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentCredentialSubject) {
-		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs credential subject")
+	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentSubject) {
+		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs subjects")
 	}
 }

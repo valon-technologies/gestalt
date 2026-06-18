@@ -196,17 +196,16 @@ func requestContextForRequest(req Request) (*proto.RequestContext, error) {
 
 func subjectContextFromSubject(subject Subject) *proto.SubjectContext {
 	return &proto.SubjectContext{
-		Id:                  subject.ID,
-		CredentialSubjectId: subject.CredentialSubjectID,
-		Email:               subject.Email,
-		DisplayName:         subject.DisplayName,
-		Scopes:              cloneStrings(subject.Scopes),
-		Permissions:         subjectPermissionsToProto(subject.Permissions),
+		Id:          subject.ID,
+		Email:       subject.Email,
+		DisplayName: subject.DisplayName,
+		Scopes:      cloneStrings(subject.Scopes),
+		Permissions: subjectPermissionsToProto(subject.Permissions),
 	}
 }
 
 func emptySubject(subject Subject) bool {
-	return subject.ID == "" && subject.CredentialSubjectID == "" && subject.Email == "" && subject.DisplayName == "" && len(subject.Scopes) == 0 && len(subject.Permissions) == 0
+	return subject.ID == "" && subject.Email == "" && subject.DisplayName == "" && len(subject.Scopes) == 0 && len(subject.Permissions) == 0
 }
 
 func subjectPermissionsToProto(values []SubjectPermission) []*proto.SubjectPermissionContext {

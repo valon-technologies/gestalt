@@ -26,9 +26,6 @@ func TestToolRefProtoRoundTripCarriesRunAs(t *testing.T) {
 	if got := encoded.GetRunAs().GetId(); got != "service_account:gestalt-support-notion" {
 		t.Fatalf("encoded runAs subject id = %q, want service_account:gestalt-support-notion", got)
 	}
-	if got := encoded.GetRunAs().GetCredentialSubjectId(); got != "service_account:gestalt-support-notion" {
-		t.Fatalf("encoded runAs credential subject = %q, want normalized default", got)
-	}
 
 	decoded := ToolRefFromProto(encoded)
 	if !core.RunAsSubjectsEqual(decoded.RunAs, core.NormalizeRunAsSubject(ref.RunAs)) {

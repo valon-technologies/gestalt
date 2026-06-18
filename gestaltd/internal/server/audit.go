@@ -38,15 +38,7 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 		return p, nil
 	}
 
-	displayName := ""
-	if p.Identity != nil {
-		displayName = p.Identity.DisplayName
-	}
-	if displayName == "" {
-		displayName = p.DisplayName
-	}
-
-	dbUser, err := s.users.FindOrCreateUserWithName(ctx, p.Identity.Email, displayName)
+	dbUser, err := s.users.FindOrCreateUser(ctx, p.Identity.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -58,14 +50,6 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	clone.UserID = dbUser.ID
 	clone.Kind = principal.KindUser
 	clone.SubjectID = principal.UserSubjectID(dbUser.ID)
-	clone.CredentialSubjectID = clone.SubjectID
-	if dbUser.DisplayName != "" {
-		clone.DisplayName = dbUser.DisplayName
-		if clone.Identity == nil {
-			clone.Identity = &core.UserIdentity{Email: dbUser.Email}
-		}
-		clone.Identity.DisplayName = dbUser.DisplayName
-	}
 	return principal.Canonicalize(&clone), nil
 }
 

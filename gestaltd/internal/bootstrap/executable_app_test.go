@@ -1243,8 +1243,7 @@ func fakeHostedAppRequestContext(ctx context.Context) *proto.RequestContext {
 	if p := principal.FromContext(ctx); p != nil {
 		p = principal.Canonicalized(p)
 		out.Subject = &proto.SubjectContext{
-			Id:                  p.SubjectID,
-			CredentialSubjectId: principal.EffectiveCredentialSubjectID(p),
+			Id: p.SubjectID,
 		}
 	}
 	if cred := invocation.CredentialContextFromContext(ctx); cred != (invocation.CredentialContext{}) {

@@ -73,8 +73,7 @@ func workflowTransportRequestContext() *client.RequestContext {
 	return &client.RequestContext{
 		Subject: &client.SubjectContext{
 			Id:                  "user:transport",
-			CredentialSubjectId: "user:transport",
-			Email:               "transport@example.test",
+						Email:               "transport@example.test",
 		},
 	}
 }

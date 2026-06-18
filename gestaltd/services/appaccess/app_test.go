@@ -54,7 +54,7 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Princi
 	i.clientIP = invocation.RequestMetaFromContext(ctx).ClientIP
 	if p != nil {
 		i.subjectID = p.SubjectID
-		i.credentialSubjectID = p.CredentialSubjectID
+		i.credentialSubjectID = p.SubjectID
 	}
 	if runAsAudit.AgentSubject != nil {
 		i.agentSubjectID = runAsAudit.AgentSubject.SubjectID
@@ -155,8 +155,7 @@ func TestAppServerInvokeAppliesRequestRunAs(t *testing.T) {
 		App:       "target",
 		Operation: "do.thing",
 		RunAs: &proto.SubjectContext{
-			Id:                  "service_account:runner",
-			CredentialSubjectId: "service_account:runner",
+			Id: "service_account:runner",
 		},
 		Context: requestContext(t, "caller", nil),
 	})
@@ -210,15 +209,13 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	agentAuth := &recordingAgentAppAuthorizer{
 		response: invocation.AgentAppAuthorization{
 			Principal: &principal.Principal{
-				SubjectID:           "user:runner",
-				CredentialSubjectID: "user:runner",
+				SubjectID: "user:runner",
 			},
 			CredentialMode: core.ConnectionModeSubject,
 			Connection:     "team-primary",
 			Instance:       "workspace-1",
 			RunAs: &core.RunAsSubject{
-				SubjectID:           "service_account:automation",
-				CredentialSubjectID: "service_account:automation",
+				SubjectID: "service_account:automation",
 			},
 			ToolRefs: []coreagent.ToolRef{{
 				App:            "slack",
@@ -593,9 +590,8 @@ func requestContextWithCallerKind(t *testing.T, callerKind, caller string, workf
 	}
 	return &proto.RequestContext{
 		Subject: &proto.SubjectContext{
-			Id:                  "user:test-user",
-			CredentialSubjectId: "user:test-user",
-			Email:               "test@example.com",
+			Id:    "user:test-user",
+			Email: "test@example.com",
 		},
 		Credential: &proto.CredentialContext{
 			Mode:       "subject",

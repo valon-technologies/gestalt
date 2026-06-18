@@ -909,15 +909,14 @@ func (x *AppInvokeGraphQLRequest) GetContext() *RequestContext {
 
 // SubjectContext identifies the caller that initiated an operation.
 type SubjectContext struct {
-	state               protoimpl.MessageState      `protogen:"open.v1"`
-	Id                  string                      `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	CredentialSubjectId string                      `protobuf:"bytes,2,opt,name=credential_subject_id,json=credentialSubjectId,proto3" json:"credential_subject_id,omitempty"`
-	Email               string                      `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
-	DisplayName         string                      `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	Scopes              []string                    `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	Permissions         []*SubjectPermissionContext `protobuf:"bytes,6,rep,name=permissions,proto3" json:"permissions,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Id            string                      `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Email         string                      `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
+	DisplayName   string                      `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Scopes        []string                    `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Permissions   []*SubjectPermissionContext `protobuf:"bytes,6,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubjectContext) Reset() {
@@ -953,13 +952,6 @@ func (*SubjectContext) Descriptor() ([]byte, []int) {
 func (x *SubjectContext) GetId() string {
 	if x != nil {
 		return x.Id
-	}
-	return ""
-}
-
-func (x *SubjectContext) GetCredentialSubjectId() string {
-	if x != nil {
-		return x.CredentialSubjectId
 	}
 	return ""
 }
@@ -2427,14 +2419,13 @@ const file_v1_app_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12'\n" +
 	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x12=\n" +
-	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x06\x10\a\"\xf6\x01\n" +
+	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x06\x10\a\"\xc8\x01\n" +
 	"\x0eSubjectContext\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
-	"\x15credential_subject_id\x18\x02 \x01(\tR\x13credentialSubjectId\x12\x14\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x12!\n" +
 	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x16\n" +
 	"\x06scopes\x18\x05 \x03(\tR\x06scopes\x12O\n" +
-	"\vpermissions\x18\x06 \x03(\v2-.gestalt.provider.v1.SubjectPermissionContextR\vpermissions\"s\n" +
+	"\vpermissions\x18\x06 \x03(\v2-.gestalt.provider.v1.SubjectPermissionContextR\vpermissionsJ\x04\b\x02\x10\x03\"s\n" +
 	"\x18SubjectPermissionContext\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1e\n" +
 	"\n" +

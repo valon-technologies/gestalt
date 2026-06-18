@@ -129,10 +129,9 @@ func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.Reso
 
 	return &proto.ResolveHTTPSubjectResponse{
 		Subject: &proto.SubjectContext{
-			Id:                  subject.ID,
-			CredentialSubjectId: subject.CredentialSubjectID,
-			Email:               subject.Email,
-			DisplayName:         subject.DisplayName,
+			Id:          subject.ID,
+			Email:       subject.Email,
+			DisplayName: subject.DisplayName,
 		},
 	}, nil
 }
@@ -241,22 +240,20 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 	ctx = context.WithValue(ctx, requestContextKey{}, reqCtx)
 	if subject := reqCtx.GetSubject(); subject != nil {
 		ctx = WithSubject(ctx, Subject{
-			ID:                  subject.GetId(),
-			CredentialSubjectID: subject.GetCredentialSubjectId(),
-			Email:               subject.GetEmail(),
-			DisplayName:         subject.GetDisplayName(),
-			Scopes:              cloneStrings(subject.GetScopes()),
-			Permissions:         subjectPermissionsFromProto(subject.GetPermissions()),
+			ID:          subject.GetId(),
+			Email:       subject.GetEmail(),
+			DisplayName: subject.GetDisplayName(),
+			Scopes:      cloneStrings(subject.GetScopes()),
+			Permissions: subjectPermissionsFromProto(subject.GetPermissions()),
 		})
 	}
 	if subject := reqCtx.GetAgentSubject(); subject != nil {
 		ctx = WithAgentSubject(ctx, Subject{
-			ID:                  subject.GetId(),
-			CredentialSubjectID: subject.GetCredentialSubjectId(),
-			Email:               subject.GetEmail(),
-			DisplayName:         subject.GetDisplayName(),
-			Scopes:              cloneStrings(subject.GetScopes()),
-			Permissions:         subjectPermissionsFromProto(subject.GetPermissions()),
+			ID:          subject.GetId(),
+			Email:       subject.GetEmail(),
+			DisplayName: subject.GetDisplayName(),
+			Scopes:      cloneStrings(subject.GetScopes()),
+			Permissions: subjectPermissionsFromProto(subject.GetPermissions()),
 		})
 	}
 	if credential := reqCtx.GetCredential(); credential != nil {

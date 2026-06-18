@@ -17,8 +17,7 @@ func TestProviderRequestContextRestoreDoesNotTrustAgentInternalConnectionAccess(
 			Name: "alpha",
 		},
 		Subject: &proto.SubjectContext{
-			Id:                  "user:runner",
-			CredentialSubjectId: "user:runner",
+			Id: "user:runner",
 		},
 		Agent: &proto.AgentInvocationContext{
 			ProviderName: "alpha",

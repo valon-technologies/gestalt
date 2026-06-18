@@ -355,8 +355,7 @@ func agentManagerRequestContextWithCallerKind(callerKind, callerApp, subjectID s
 			Name: callerApp,
 		},
 		Subject: &proto.SubjectContext{
-			Id:                  subjectID,
-			CredentialSubjectId: subjectID,
+			Id: subjectID,
 		},
 	}
 	if workflow != nil {

@@ -295,8 +295,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 		CreatedBySubjectId: "user:user-1",
 		Subject: &proto.SubjectContext{
 			Id:                  "borrower:borrower-1",
-			CredentialSubjectId: "user:user-1",
-			Email:               "borrower@example.com",
+						Email:               "borrower@example.com",
 		},
 		Context: &proto.RequestContext{
 			Subject: &proto.SubjectContext{Id: "user:session"},
@@ -425,7 +424,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 		Metadata:           mustStruct(t, map[string]any{"requireInteraction": true}),
 		CreatedBySubjectId: session.GetCreatedBySubjectId(),
 		ExecutionRef:       "exec-turn-1",
-		Subject:            &proto.SubjectContext{Id: "borrower:borrower-1", CredentialSubjectId: "user:user-1"},
+		Subject:            &proto.SubjectContext{Id: "borrower:borrower-1"},
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,
 		}),
