@@ -46,6 +46,7 @@ message WorkflowStepAgentTurn {
   repeated AgentToolRef tools = 6;
   AgentOutput output = 7;
   google.protobuf.Struct model_options = 8;
+  AgentWorkspace workspace = 9;
 }
 
 message WorkflowAgentMessage {

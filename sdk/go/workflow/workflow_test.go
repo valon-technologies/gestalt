@@ -322,3 +322,117 @@ func (c *recordingAgentClient) GetTurn(ctx context.Context, input gestalt.AgentG
 func (c *recordingAgentClient) CancelTurn(context.Context, gestalt.AgentCancelTurn) (*gestalt.AgentTurn, error) {
 	return nil, nil
 }
+
+func TestExecutorPassesAgentWorkspaceToCreateSession(t *testing.T) {
+	t.Parallel()
+
+	agent := &recordingAgentClient{}
+	executor := New(Config{
+		NewAgent: func(req gestalt.Request) (AgentClient, error) {
+			agent.request = req
+			return agent, nil
+		},
+		AgentPollInterval: 0,
+	})
+	workspace := &gestalt.AgentWorkspace{
+		Checkouts: []gestalt.AgentWorkspaceGitCheckout{{
+			URL:  "https://github.com/valon-technologies/toolshed.git",
+			Ref:  "main",
+			Path: "toolshed",
+		}},
+		CWD: "toolshed",
+	}
+	resp, err := executor.Execute(context.Background(), Request{
+		ProviderName:         "indexeddb",
+		RunID:                "run-1",
+		DefinitionID:         "definition-1",
+		DefinitionGeneration: 1,
+		RunAs: &gestalt.Subject{
+			ID:                  "service_account:workflow-runner",
+		},
+		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
+			ID: "review",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider:  "claude",
+				Model:     "default",
+				Prompt:    gestalt.WorkflowText{Template: "review"},
+				Workspace: workspace,
+			},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("Execute status = %d body = %s", resp.Status, resp.Body)
+	}
+	if agent.session.Workspace == nil || agent.session.Workspace.CWD != "toolshed" {
+		t.Fatalf("session workspace = %#v", agent.session.Workspace)
+	}
+}
+
+func TestExecutorRejectsSessionReuseWithDifferentWorkspace(t *testing.T) {
+	t.Parallel()
+
+	agent := &recordingAgentClient{}
+	executor := New(Config{
+		NewAgent: func(req gestalt.Request) (AgentClient, error) {
+			return agent, nil
+		},
+		AgentPollInterval: 0,
+	})
+	baseWorkspace := &gestalt.AgentWorkspace{
+		Checkouts: []gestalt.AgentWorkspaceGitCheckout{{
+			URL:  "https://github.com/valon-technologies/toolshed.git",
+			Ref:  "main",
+			Path: "toolshed",
+		}},
+		CWD: "toolshed",
+	}
+	otherWorkspace := &gestalt.AgentWorkspace{
+		Checkouts: []gestalt.AgentWorkspaceGitCheckout{{
+			URL:  "https://github.com/valon-technologies/gestalt.git",
+			Ref:  "main",
+			Path: "gestalt",
+		}},
+		CWD: "gestalt",
+	}
+	target := &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
+		{
+			ID: "first",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider:   "claude",
+				Model:      "default",
+				SessionKey: "shared",
+				Prompt:     gestalt.WorkflowText{Template: "first"},
+				Workspace:  baseWorkspace,
+			},
+		},
+		{
+			ID: "second",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider:   "claude",
+				Model:      "default",
+				SessionKey: "shared",
+				Prompt:     gestalt.WorkflowText{Template: "second"},
+				Workspace:  otherWorkspace,
+			},
+		},
+	}}
+	resp, err := executor.Execute(context.Background(), Request{
+		ProviderName:         "indexeddb",
+		RunID:                "run-1",
+		DefinitionID:         "definition-1",
+		DefinitionGeneration: 1,
+		RunAs: &gestalt.Subject{
+			ID:                  "service_account:workflow-runner",
+		},
+		Target: target,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status == 200 {
+		t.Fatalf("expected incompatible workspace failure, got status 200 body = %s", resp.Body)
+	}
+}

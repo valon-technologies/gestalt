@@ -2180,6 +2180,13 @@ func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowSt
 	if err := validateWorkflowAgentOutputConfig(path+".output", agent.Output); err != nil {
 		return err
 	}
+	if agent.Workspace != nil {
+		normalized, err := coreagent.NormalizeWorkspace(workflowAgentWorkspaceToCore(agent.Workspace))
+		if err != nil {
+			return fmt.Errorf("config validation: %s.workspace: %w", path, err)
+		}
+		agent.Workspace = workflowAgentWorkspaceFromCore(normalized)
+	}
 	return nil
 }
 

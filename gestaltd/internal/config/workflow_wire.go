@@ -148,6 +148,45 @@ func workflowAgentTurnToCore(agent *WorkflowStepAgentConfig) *coreworkflow.Agent
 		ToolRefs:     tools,
 		Output:       WorkflowAgentOutputToCore(agent.Output),
 		ModelOptions: maps.Clone(agent.ModelOptions),
+		Workspace:    workflowAgentWorkspaceToCore(agent.Workspace),
+	}
+}
+
+func workflowAgentWorkspaceToCore(workspace *WorkflowStepAgentWorkspaceConfig) *coreagent.Workspace {
+	if workspace == nil {
+		return nil
+	}
+	checkouts := make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.Checkouts))
+	for i := range workspace.Checkouts {
+		checkout := &workspace.Checkouts[i]
+		checkouts = append(checkouts, coreagent.WorkspaceGitCheckout{
+			URL:  strings.TrimSpace(checkout.URL),
+			Ref:  strings.TrimSpace(checkout.Ref),
+			Path: strings.TrimSpace(checkout.Path),
+		})
+	}
+	return &coreagent.Workspace{
+		Checkouts: checkouts,
+		CWD:       strings.TrimSpace(workspace.CWD),
+	}
+}
+
+func workflowAgentWorkspaceFromCore(workspace *coreagent.Workspace) *WorkflowStepAgentWorkspaceConfig {
+	if workspace == nil {
+		return nil
+	}
+	checkouts := make([]WorkflowStepAgentWorkspaceCheckoutConfig, 0, len(workspace.Checkouts))
+	for i := range workspace.Checkouts {
+		checkout := workspace.Checkouts[i]
+		checkouts = append(checkouts, WorkflowStepAgentWorkspaceCheckoutConfig{
+			URL:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
+		})
+	}
+	return &WorkflowStepAgentWorkspaceConfig{
+		Checkouts: checkouts,
+		CWD:       workspace.CWD,
 	}
 }
 

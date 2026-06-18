@@ -169,6 +169,7 @@ func workflowStepAgentTurnToProto(target *coreworkflow.AgentTurn) (*proto.Workfl
 		Tools:        agentwire.ToolRefsToProto(target.ToolRefs),
 		Output:       output,
 		ModelOptions: modelOptions,
+		Workspace:    agentwire.WorkspaceToProto(target.Workspace),
 	}, nil
 }
 
@@ -185,6 +186,7 @@ func workflowStepAgentTurnFromProto(target *proto.WorkflowStepAgentTurn) *corewo
 		ToolRefs:     agentwire.ToolRefsFromProto(target.GetTools()),
 		Output:       workflowAgentOutputFromProto(target.GetOutput()),
 		ModelOptions: protoutil.MapFromStruct(target.GetModelOptions()),
+		Workspace:    agentwire.WorkspaceFromProto(target.GetWorkspace()),
 	}
 }
 

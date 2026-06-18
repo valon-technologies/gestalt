@@ -1126,6 +1126,7 @@ func ToWireWorkflowStepAgentTurn(value *WorkflowStepAgentTurn) *proto.WorkflowSt
 		Prompt:       ToWireWorkflowText(value.Prompt),
 		Output:       ToWireAgentOutput(value.Output),
 		ModelOptions: toWireStruct(value.ModelOptions),
+		Workspace:    ToWireAgentWorkspace(value.Workspace),
 	}
 	for _, item := range value.Messages {
 		out.Messages = append(out.Messages, ToWireWorkflowAgentMessage(item))
@@ -1147,6 +1148,7 @@ func FromWireWorkflowStepAgentTurn(value *proto.WorkflowStepAgentTurn) *Workflow
 		Prompt:       FromWireWorkflowText(value.Prompt),
 		Output:       FromWireAgentOutput(value.Output),
 		ModelOptions: fromWireStruct(value.ModelOptions),
+		Workspace:    FromWireAgentWorkspace(value.Workspace),
 	}
 	for _, item := range value.Messages {
 		out.Messages = append(out.Messages, FromWireWorkflowAgentMessage(item))

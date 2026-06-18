@@ -358,7 +358,7 @@ func workflowAgentSessionsFromOutputs(target *gestalt.BoundWorkflowTarget, stepI
 		state, exists := sessions[sessionKey]
 		if exists {
 			if state.providerName != providerName || state.model != model || state.options != optionsKey {
-				return nil, fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, or model_options", sessionKey)
+				return nil, fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, model_options, or workspace", sessionKey)
 			}
 			continue
 		}

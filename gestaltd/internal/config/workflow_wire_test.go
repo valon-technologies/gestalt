@@ -45,3 +45,36 @@ func TestWorkflowTargetToCoreClonesMutableMaps(t *testing.T) {
 		t.Fatalf("model options shares map with core target: %v", modelOptions)
 	}
 }
+
+func TestWorkflowAgentWorkspaceToCore(t *testing.T) {
+	t.Parallel()
+
+	target := WorkflowTargetToCore(&WorkflowTargetConfig{
+		Steps: []WorkflowStepConfig{{
+			ID: "agent-step",
+			Agent: &WorkflowStepAgentConfig{
+				Provider: "claude",
+				Prompt:   WorkflowTextConfig{Template: "inspect"},
+				Output: &WorkflowAgentOutputConfig{
+					Text: &WorkflowAgentTextOutputConfig{},
+				},
+				Workspace: &WorkflowStepAgentWorkspaceConfig{
+					Checkouts: []WorkflowStepAgentWorkspaceCheckoutConfig{{
+						URL:  "https://github.com/valon-technologies/toolshed.git",
+						Ref:  "main",
+						Path: "toolshed",
+					}},
+					CWD: "toolshed",
+				},
+			},
+		}},
+	})
+
+	workspace := target.Steps[0].Agent.Workspace
+	if workspace == nil || workspace.CWD != "toolshed" || len(workspace.Checkouts) != 1 {
+		t.Fatalf("workspace = %#v", workspace)
+	}
+	if workspace.Checkouts[0].URL != "https://github.com/valon-technologies/toolshed.git" {
+		t.Fatalf("checkout url = %q", workspace.Checkouts[0].URL)
+	}
+}

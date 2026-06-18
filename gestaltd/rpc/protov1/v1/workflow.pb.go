@@ -403,6 +403,7 @@ type WorkflowStepAgentTurn struct {
 	Tools         []*AgentToolRef         `protobuf:"bytes,6,rep,name=tools,proto3" json:"tools,omitempty"`
 	Output        *AgentOutput            `protobuf:"bytes,7,opt,name=output,proto3" json:"output,omitempty"`
 	ModelOptions  *structpb.Struct        `protobuf:"bytes,8,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
+	Workspace     *AgentWorkspace         `protobuf:"bytes,9,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -489,6 +490,13 @@ func (x *WorkflowStepAgentTurn) GetOutput() *AgentOutput {
 func (x *WorkflowStepAgentTurn) GetModelOptions() *structpb.Struct {
 	if x != nil {
 		return x.ModelOptions
+	}
+	return nil
+}
+
+func (x *WorkflowStepAgentTurn) GetWorkspace() *AgentWorkspace {
+	if x != nil {
+		return x.Workspace
 	}
 	return nil
 }
@@ -3736,7 +3744,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"connection\x18\x04 \x01(\tR\n" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12'\n" +
-	"\x0fcredential_mode\x18\x06 \x01(\tR\x0ecredentialMode\"\x9d\x03\n" +
+	"\x0fcredential_mode\x18\x06 \x01(\tR\x0ecredentialMode\"\xe0\x03\n" +
 	"\x15WorkflowStepAgentTurn\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1f\n" +
@@ -3746,7 +3754,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\bmessages\x18\x05 \x03(\v2).gestalt.provider.v1.WorkflowAgentMessageR\bmessages\x127\n" +
 	"\x05tools\x18\x06 \x03(\v2!.gestalt.provider.v1.AgentToolRefR\x05tools\x128\n" +
 	"\x06output\x18\a \x01(\v2 .gestalt.provider.v1.AgentOutputR\x06output\x12<\n" +
-	"\rmodel_options\x18\b \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\"\x96\x01\n" +
+	"\rmodel_options\x18\b \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\x12A\n" +
+	"\tworkspace\x18\t \x01(\v2#.gestalt.provider.v1.AgentWorkspaceR\tworkspace\"\x96\x01\n" +
 	"\x14WorkflowAgentMessage\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x125\n" +
 	"\x04text\x18\x02 \x01(\v2!.gestalt.provider.v1.WorkflowTextR\x04text\x123\n" +
@@ -4117,11 +4126,12 @@ var file_v1_workflow_proto_goTypes = []any{
 	(*structpb.Struct)(nil),       // 54: google.protobuf.Struct
 	(*AgentToolRef)(nil),          // 55: gestalt.provider.v1.AgentToolRef
 	(*AgentOutput)(nil),           // 56: gestalt.provider.v1.AgentOutput
-	(*structpb.Value)(nil),        // 57: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil), // 58: google.protobuf.Timestamp
-	(*SubjectContext)(nil),        // 59: gestalt.provider.v1.SubjectContext
-	(*RequestContext)(nil),        // 60: gestalt.provider.v1.RequestContext
-	(*emptypb.Empty)(nil),         // 61: google.protobuf.Empty
+	(*AgentWorkspace)(nil),        // 57: gestalt.provider.v1.AgentWorkspace
+	(*structpb.Value)(nil),        // 58: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil), // 59: google.protobuf.Timestamp
+	(*SubjectContext)(nil),        // 60: gestalt.provider.v1.SubjectContext
+	(*RequestContext)(nil),        // 61: gestalt.provider.v1.RequestContext
+	(*emptypb.Empty)(nil),         // 62: google.protobuf.Empty
 }
 var file_v1_workflow_proto_depIdxs = []int32{
 	3,   // 0: gestalt.provider.v1.BoundWorkflowTarget.steps:type_name -> gestalt.provider.v1.WorkflowStep
@@ -4136,134 +4146,135 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	55,  // 9: gestalt.provider.v1.WorkflowStepAgentTurn.tools:type_name -> gestalt.provider.v1.AgentToolRef
 	56,  // 10: gestalt.provider.v1.WorkflowStepAgentTurn.output:type_name -> gestalt.provider.v1.AgentOutput
 	54,  // 11: gestalt.provider.v1.WorkflowStepAgentTurn.model_options:type_name -> google.protobuf.Struct
-	7,   // 12: gestalt.provider.v1.WorkflowAgentMessage.text:type_name -> gestalt.provider.v1.WorkflowText
-	54,  // 13: gestalt.provider.v1.WorkflowAgentMessage.metadata:type_name -> google.protobuf.Struct
-	9,   // 14: gestalt.provider.v1.WorkflowStepWhen.value:type_name -> gestalt.provider.v1.WorkflowValue
-	57,  // 15: gestalt.provider.v1.WorkflowStepWhen.equals:type_name -> google.protobuf.Value
-	57,  // 16: gestalt.provider.v1.WorkflowValue.literal:type_name -> google.protobuf.Value
-	10,  // 17: gestalt.provider.v1.WorkflowValue.object:type_name -> gestalt.provider.v1.WorkflowObject
-	11,  // 18: gestalt.provider.v1.WorkflowValue.array:type_name -> gestalt.provider.v1.WorkflowArray
-	7,   // 19: gestalt.provider.v1.WorkflowValue.template:type_name -> gestalt.provider.v1.WorkflowText
-	12,  // 20: gestalt.provider.v1.WorkflowValue.input:type_name -> gestalt.provider.v1.WorkflowPathSource
-	12,  // 21: gestalt.provider.v1.WorkflowValue.signal:type_name -> gestalt.provider.v1.WorkflowPathSource
-	13,  // 22: gestalt.provider.v1.WorkflowValue.step_output:type_name -> gestalt.provider.v1.WorkflowStepOutputSource
-	14,  // 23: gestalt.provider.v1.WorkflowValue.step_input:type_name -> gestalt.provider.v1.WorkflowStepInputSource
-	52,  // 24: gestalt.provider.v1.WorkflowObject.fields:type_name -> gestalt.provider.v1.WorkflowObject.FieldsEntry
-	9,   // 25: gestalt.provider.v1.WorkflowArray.values:type_name -> gestalt.provider.v1.WorkflowValue
-	58,  // 26: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
-	54,  // 27: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
-	53,  // 28: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
-	16,  // 29: gestalt.provider.v1.WorkflowEventActivation.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
-	9,   // 30: gestalt.provider.v1.WorkflowActivation.input:type_name -> gestalt.provider.v1.WorkflowValue
-	17,  // 31: gestalt.provider.v1.WorkflowActivation.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleActivation
-	18,  // 32: gestalt.provider.v1.WorkflowActivation.event:type_name -> gestalt.provider.v1.WorkflowEventActivation
-	2,   // 33: gestalt.provider.v1.WorkflowDefinitionSpec.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	19,  // 34: gestalt.provider.v1.WorkflowDefinitionSpec.activations:type_name -> gestalt.provider.v1.WorkflowActivation
-	59,  // 35: gestalt.provider.v1.WorkflowDefinitionSpec.run_as:type_name -> gestalt.provider.v1.SubjectContext
-	2,   // 36: gestalt.provider.v1.WorkflowDefinition.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	19,  // 37: gestalt.provider.v1.WorkflowDefinition.activations:type_name -> gestalt.provider.v1.WorkflowActivation
-	58,  // 38: gestalt.provider.v1.WorkflowDefinition.created_at:type_name -> google.protobuf.Timestamp
-	58,  // 39: gestalt.provider.v1.WorkflowDefinition.updated_at:type_name -> google.protobuf.Timestamp
-	59,  // 40: gestalt.provider.v1.WorkflowDefinition.run_as:type_name -> gestalt.provider.v1.SubjectContext
-	58,  // 41: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
-	15,  // 42: gestalt.provider.v1.WorkflowEventTriggerInvocation.event:type_name -> gestalt.provider.v1.WorkflowEvent
-	22,  // 43: gestalt.provider.v1.WorkflowRunTrigger.manual:type_name -> gestalt.provider.v1.WorkflowManualTrigger
-	23,  // 44: gestalt.provider.v1.WorkflowRunTrigger.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleTrigger
-	24,  // 45: gestalt.provider.v1.WorkflowRunTrigger.event:type_name -> gestalt.provider.v1.WorkflowEventTriggerInvocation
-	1,   // 46: gestalt.provider.v1.WorkflowStepAttempt.status:type_name -> gestalt.provider.v1.WorkflowStepStatus
-	57,  // 47: gestalt.provider.v1.WorkflowStepAttempt.input:type_name -> google.protobuf.Value
-	57,  // 48: gestalt.provider.v1.WorkflowStepAttempt.output:type_name -> google.protobuf.Value
-	58,  // 49: gestalt.provider.v1.WorkflowStepAttempt.started_at:type_name -> google.protobuf.Timestamp
-	58,  // 50: gestalt.provider.v1.WorkflowStepAttempt.completed_at:type_name -> google.protobuf.Timestamp
-	1,   // 51: gestalt.provider.v1.WorkflowStepExecution.status:type_name -> gestalt.provider.v1.WorkflowStepStatus
-	26,  // 52: gestalt.provider.v1.WorkflowStepExecution.attempts:type_name -> gestalt.provider.v1.WorkflowStepAttempt
-	57,  // 53: gestalt.provider.v1.WorkflowStepExecution.input:type_name -> google.protobuf.Value
-	57,  // 54: gestalt.provider.v1.WorkflowStepExecution.output:type_name -> google.protobuf.Value
-	58,  // 55: gestalt.provider.v1.WorkflowStepExecution.started_at:type_name -> google.protobuf.Timestamp
-	58,  // 56: gestalt.provider.v1.WorkflowStepExecution.completed_at:type_name -> google.protobuf.Timestamp
-	0,   // 57: gestalt.provider.v1.WorkflowRun.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
-	2,   // 58: gestalt.provider.v1.WorkflowRun.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	25,  // 59: gestalt.provider.v1.WorkflowRun.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
-	58,  // 60: gestalt.provider.v1.WorkflowRun.created_at:type_name -> google.protobuf.Timestamp
-	58,  // 61: gestalt.provider.v1.WorkflowRun.started_at:type_name -> google.protobuf.Timestamp
-	58,  // 62: gestalt.provider.v1.WorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
-	57,  // 63: gestalt.provider.v1.WorkflowRun.output:type_name -> google.protobuf.Value
-	59,  // 64: gestalt.provider.v1.WorkflowRun.run_as:type_name -> gestalt.provider.v1.SubjectContext
-	54,  // 65: gestalt.provider.v1.WorkflowRun.input:type_name -> google.protobuf.Struct
-	27,  // 66: gestalt.provider.v1.WorkflowRun.steps:type_name -> gestalt.provider.v1.WorkflowStepExecution
-	54,  // 67: gestalt.provider.v1.WorkflowSignal.payload:type_name -> google.protobuf.Struct
-	54,  // 68: gestalt.provider.v1.WorkflowSignal.metadata:type_name -> google.protobuf.Struct
-	58,  // 69: gestalt.provider.v1.WorkflowSignal.created_at:type_name -> google.protobuf.Timestamp
-	20,  // 70: gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.spec:type_name -> gestalt.provider.v1.WorkflowDefinitionSpec
-	60,  // 71: gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	60,  // 72: gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	60,  // 73: gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	21,  // 74: gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse.definitions:type_name -> gestalt.provider.v1.WorkflowDefinition
-	60,  // 75: gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	60,  // 76: gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	60,  // 77: gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	59,  // 78: gestalt.provider.v1.StartWorkflowProviderRunRequest.run_as:type_name -> gestalt.provider.v1.SubjectContext
-	54,  // 79: gestalt.provider.v1.StartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
-	60,  // 80: gestalt.provider.v1.StartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	60,  // 81: gestalt.provider.v1.GetWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	0,   // 82: gestalt.provider.v1.ListWorkflowProviderRunsRequest.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
-	60,  // 83: gestalt.provider.v1.ListWorkflowProviderRunsRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	28,  // 84: gestalt.provider.v1.ListWorkflowProviderRunsResponse.runs:type_name -> gestalt.provider.v1.WorkflowRun
-	60,  // 85: gestalt.provider.v1.CancelWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	29,  // 86: gestalt.provider.v1.SignalWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
-	60,  // 87: gestalt.provider.v1.SignalWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	29,  // 88: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
-	59,  // 89: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.run_as:type_name -> gestalt.provider.v1.SubjectContext
-	54,  // 90: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
-	60,  // 91: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	28,  // 92: gestalt.provider.v1.SignalWorkflowRunResponse.run:type_name -> gestalt.provider.v1.WorkflowRun
-	29,  // 93: gestalt.provider.v1.SignalWorkflowRunResponse.signal:type_name -> gestalt.provider.v1.WorkflowSignal
-	15,  // 94: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
-	60,  // 95: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	54,  // 96: gestalt.provider.v1.WorkflowRunEvent.data:type_name -> google.protobuf.Struct
-	58,  // 97: gestalt.provider.v1.WorkflowRunEvent.created_at:type_name -> google.protobuf.Timestamp
-	60,  // 98: gestalt.provider.v1.GetWorkflowProviderRunEventsRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	46,  // 99: gestalt.provider.v1.GetWorkflowProviderRunEventsResponse.events:type_name -> gestalt.provider.v1.WorkflowRunEvent
-	60,  // 100: gestalt.provider.v1.GetWorkflowProviderRunOutputRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	57,  // 101: gestalt.provider.v1.GetWorkflowProviderRunOutputResponse.output:type_name -> google.protobuf.Value
-	9,   // 102: gestalt.provider.v1.WorkflowStep.InputsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
-	9,   // 103: gestalt.provider.v1.WorkflowObject.FieldsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
-	57,  // 104: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
-	30,  // 105: gestalt.provider.v1.Workflow.ApplyDefinition:input_type -> gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest
-	31,  // 106: gestalt.provider.v1.Workflow.GetDefinition:input_type -> gestalt.provider.v1.GetWorkflowProviderDefinitionRequest
-	32,  // 107: gestalt.provider.v1.Workflow.ListDefinitions:input_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest
-	34,  // 108: gestalt.provider.v1.Workflow.SetDefinitionPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest
-	35,  // 109: gestalt.provider.v1.Workflow.SetActivationPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest
-	36,  // 110: gestalt.provider.v1.Workflow.DeleteDefinition:input_type -> gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest
-	37,  // 111: gestalt.provider.v1.Workflow.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
-	39,  // 112: gestalt.provider.v1.Workflow.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
-	38,  // 113: gestalt.provider.v1.Workflow.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
-	47,  // 114: gestalt.provider.v1.Workflow.GetRunEvents:input_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
-	49,  // 115: gestalt.provider.v1.Workflow.GetRunOutput:input_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
-	41,  // 116: gestalt.provider.v1.Workflow.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
-	42,  // 117: gestalt.provider.v1.Workflow.SignalRun:input_type -> gestalt.provider.v1.SignalWorkflowProviderRunRequest
-	43,  // 118: gestalt.provider.v1.Workflow.SignalOrStartRun:input_type -> gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
-	45,  // 119: gestalt.provider.v1.Workflow.DeliverEvent:input_type -> gestalt.provider.v1.DeliverWorkflowProviderEventRequest
-	21,  // 120: gestalt.provider.v1.Workflow.ApplyDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
-	21,  // 121: gestalt.provider.v1.Workflow.GetDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
-	33,  // 122: gestalt.provider.v1.Workflow.ListDefinitions:output_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse
-	21,  // 123: gestalt.provider.v1.Workflow.SetDefinitionPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
-	21,  // 124: gestalt.provider.v1.Workflow.SetActivationPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
-	61,  // 125: gestalt.provider.v1.Workflow.DeleteDefinition:output_type -> google.protobuf.Empty
-	28,  // 126: gestalt.provider.v1.Workflow.StartRun:output_type -> gestalt.provider.v1.WorkflowRun
-	40,  // 127: gestalt.provider.v1.Workflow.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
-	28,  // 128: gestalt.provider.v1.Workflow.GetRun:output_type -> gestalt.provider.v1.WorkflowRun
-	48,  // 129: gestalt.provider.v1.Workflow.GetRunEvents:output_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
-	50,  // 130: gestalt.provider.v1.Workflow.GetRunOutput:output_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
-	28,  // 131: gestalt.provider.v1.Workflow.CancelRun:output_type -> gestalt.provider.v1.WorkflowRun
-	44,  // 132: gestalt.provider.v1.Workflow.SignalRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
-	44,  // 133: gestalt.provider.v1.Workflow.SignalOrStartRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
-	15,  // 134: gestalt.provider.v1.Workflow.DeliverEvent:output_type -> gestalt.provider.v1.WorkflowEvent
-	120, // [120:135] is the sub-list for method output_type
-	105, // [105:120] is the sub-list for method input_type
-	105, // [105:105] is the sub-list for extension type_name
-	105, // [105:105] is the sub-list for extension extendee
-	0,   // [0:105] is the sub-list for field type_name
+	57,  // 12: gestalt.provider.v1.WorkflowStepAgentTurn.workspace:type_name -> gestalt.provider.v1.AgentWorkspace
+	7,   // 13: gestalt.provider.v1.WorkflowAgentMessage.text:type_name -> gestalt.provider.v1.WorkflowText
+	54,  // 14: gestalt.provider.v1.WorkflowAgentMessage.metadata:type_name -> google.protobuf.Struct
+	9,   // 15: gestalt.provider.v1.WorkflowStepWhen.value:type_name -> gestalt.provider.v1.WorkflowValue
+	58,  // 16: gestalt.provider.v1.WorkflowStepWhen.equals:type_name -> google.protobuf.Value
+	58,  // 17: gestalt.provider.v1.WorkflowValue.literal:type_name -> google.protobuf.Value
+	10,  // 18: gestalt.provider.v1.WorkflowValue.object:type_name -> gestalt.provider.v1.WorkflowObject
+	11,  // 19: gestalt.provider.v1.WorkflowValue.array:type_name -> gestalt.provider.v1.WorkflowArray
+	7,   // 20: gestalt.provider.v1.WorkflowValue.template:type_name -> gestalt.provider.v1.WorkflowText
+	12,  // 21: gestalt.provider.v1.WorkflowValue.input:type_name -> gestalt.provider.v1.WorkflowPathSource
+	12,  // 22: gestalt.provider.v1.WorkflowValue.signal:type_name -> gestalt.provider.v1.WorkflowPathSource
+	13,  // 23: gestalt.provider.v1.WorkflowValue.step_output:type_name -> gestalt.provider.v1.WorkflowStepOutputSource
+	14,  // 24: gestalt.provider.v1.WorkflowValue.step_input:type_name -> gestalt.provider.v1.WorkflowStepInputSource
+	52,  // 25: gestalt.provider.v1.WorkflowObject.fields:type_name -> gestalt.provider.v1.WorkflowObject.FieldsEntry
+	9,   // 26: gestalt.provider.v1.WorkflowArray.values:type_name -> gestalt.provider.v1.WorkflowValue
+	59,  // 27: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
+	54,  // 28: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
+	53,  // 29: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
+	16,  // 30: gestalt.provider.v1.WorkflowEventActivation.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
+	9,   // 31: gestalt.provider.v1.WorkflowActivation.input:type_name -> gestalt.provider.v1.WorkflowValue
+	17,  // 32: gestalt.provider.v1.WorkflowActivation.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleActivation
+	18,  // 33: gestalt.provider.v1.WorkflowActivation.event:type_name -> gestalt.provider.v1.WorkflowEventActivation
+	2,   // 34: gestalt.provider.v1.WorkflowDefinitionSpec.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	19,  // 35: gestalt.provider.v1.WorkflowDefinitionSpec.activations:type_name -> gestalt.provider.v1.WorkflowActivation
+	60,  // 36: gestalt.provider.v1.WorkflowDefinitionSpec.run_as:type_name -> gestalt.provider.v1.SubjectContext
+	2,   // 37: gestalt.provider.v1.WorkflowDefinition.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	19,  // 38: gestalt.provider.v1.WorkflowDefinition.activations:type_name -> gestalt.provider.v1.WorkflowActivation
+	59,  // 39: gestalt.provider.v1.WorkflowDefinition.created_at:type_name -> google.protobuf.Timestamp
+	59,  // 40: gestalt.provider.v1.WorkflowDefinition.updated_at:type_name -> google.protobuf.Timestamp
+	60,  // 41: gestalt.provider.v1.WorkflowDefinition.run_as:type_name -> gestalt.provider.v1.SubjectContext
+	59,  // 42: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
+	15,  // 43: gestalt.provider.v1.WorkflowEventTriggerInvocation.event:type_name -> gestalt.provider.v1.WorkflowEvent
+	22,  // 44: gestalt.provider.v1.WorkflowRunTrigger.manual:type_name -> gestalt.provider.v1.WorkflowManualTrigger
+	23,  // 45: gestalt.provider.v1.WorkflowRunTrigger.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleTrigger
+	24,  // 46: gestalt.provider.v1.WorkflowRunTrigger.event:type_name -> gestalt.provider.v1.WorkflowEventTriggerInvocation
+	1,   // 47: gestalt.provider.v1.WorkflowStepAttempt.status:type_name -> gestalt.provider.v1.WorkflowStepStatus
+	58,  // 48: gestalt.provider.v1.WorkflowStepAttempt.input:type_name -> google.protobuf.Value
+	58,  // 49: gestalt.provider.v1.WorkflowStepAttempt.output:type_name -> google.protobuf.Value
+	59,  // 50: gestalt.provider.v1.WorkflowStepAttempt.started_at:type_name -> google.protobuf.Timestamp
+	59,  // 51: gestalt.provider.v1.WorkflowStepAttempt.completed_at:type_name -> google.protobuf.Timestamp
+	1,   // 52: gestalt.provider.v1.WorkflowStepExecution.status:type_name -> gestalt.provider.v1.WorkflowStepStatus
+	26,  // 53: gestalt.provider.v1.WorkflowStepExecution.attempts:type_name -> gestalt.provider.v1.WorkflowStepAttempt
+	58,  // 54: gestalt.provider.v1.WorkflowStepExecution.input:type_name -> google.protobuf.Value
+	58,  // 55: gestalt.provider.v1.WorkflowStepExecution.output:type_name -> google.protobuf.Value
+	59,  // 56: gestalt.provider.v1.WorkflowStepExecution.started_at:type_name -> google.protobuf.Timestamp
+	59,  // 57: gestalt.provider.v1.WorkflowStepExecution.completed_at:type_name -> google.protobuf.Timestamp
+	0,   // 58: gestalt.provider.v1.WorkflowRun.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
+	2,   // 59: gestalt.provider.v1.WorkflowRun.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	25,  // 60: gestalt.provider.v1.WorkflowRun.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
+	59,  // 61: gestalt.provider.v1.WorkflowRun.created_at:type_name -> google.protobuf.Timestamp
+	59,  // 62: gestalt.provider.v1.WorkflowRun.started_at:type_name -> google.protobuf.Timestamp
+	59,  // 63: gestalt.provider.v1.WorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
+	58,  // 64: gestalt.provider.v1.WorkflowRun.output:type_name -> google.protobuf.Value
+	60,  // 65: gestalt.provider.v1.WorkflowRun.run_as:type_name -> gestalt.provider.v1.SubjectContext
+	54,  // 66: gestalt.provider.v1.WorkflowRun.input:type_name -> google.protobuf.Struct
+	27,  // 67: gestalt.provider.v1.WorkflowRun.steps:type_name -> gestalt.provider.v1.WorkflowStepExecution
+	54,  // 68: gestalt.provider.v1.WorkflowSignal.payload:type_name -> google.protobuf.Struct
+	54,  // 69: gestalt.provider.v1.WorkflowSignal.metadata:type_name -> google.protobuf.Struct
+	59,  // 70: gestalt.provider.v1.WorkflowSignal.created_at:type_name -> google.protobuf.Timestamp
+	20,  // 71: gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.spec:type_name -> gestalt.provider.v1.WorkflowDefinitionSpec
+	61,  // 72: gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	61,  // 73: gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	61,  // 74: gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	21,  // 75: gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse.definitions:type_name -> gestalt.provider.v1.WorkflowDefinition
+	61,  // 76: gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	61,  // 77: gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	61,  // 78: gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	60,  // 79: gestalt.provider.v1.StartWorkflowProviderRunRequest.run_as:type_name -> gestalt.provider.v1.SubjectContext
+	54,  // 80: gestalt.provider.v1.StartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
+	61,  // 81: gestalt.provider.v1.StartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	61,  // 82: gestalt.provider.v1.GetWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	0,   // 83: gestalt.provider.v1.ListWorkflowProviderRunsRequest.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
+	61,  // 84: gestalt.provider.v1.ListWorkflowProviderRunsRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	28,  // 85: gestalt.provider.v1.ListWorkflowProviderRunsResponse.runs:type_name -> gestalt.provider.v1.WorkflowRun
+	61,  // 86: gestalt.provider.v1.CancelWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	29,  // 87: gestalt.provider.v1.SignalWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
+	61,  // 88: gestalt.provider.v1.SignalWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	29,  // 89: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.signal:type_name -> gestalt.provider.v1.WorkflowSignal
+	60,  // 90: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.run_as:type_name -> gestalt.provider.v1.SubjectContext
+	54,  // 91: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.input:type_name -> google.protobuf.Struct
+	61,  // 92: gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	28,  // 93: gestalt.provider.v1.SignalWorkflowRunResponse.run:type_name -> gestalt.provider.v1.WorkflowRun
+	29,  // 94: gestalt.provider.v1.SignalWorkflowRunResponse.signal:type_name -> gestalt.provider.v1.WorkflowSignal
+	15,  // 95: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
+	61,  // 96: gestalt.provider.v1.DeliverWorkflowProviderEventRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	54,  // 97: gestalt.provider.v1.WorkflowRunEvent.data:type_name -> google.protobuf.Struct
+	59,  // 98: gestalt.provider.v1.WorkflowRunEvent.created_at:type_name -> google.protobuf.Timestamp
+	61,  // 99: gestalt.provider.v1.GetWorkflowProviderRunEventsRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	46,  // 100: gestalt.provider.v1.GetWorkflowProviderRunEventsResponse.events:type_name -> gestalt.provider.v1.WorkflowRunEvent
+	61,  // 101: gestalt.provider.v1.GetWorkflowProviderRunOutputRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	58,  // 102: gestalt.provider.v1.GetWorkflowProviderRunOutputResponse.output:type_name -> google.protobuf.Value
+	9,   // 103: gestalt.provider.v1.WorkflowStep.InputsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
+	9,   // 104: gestalt.provider.v1.WorkflowObject.FieldsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
+	58,  // 105: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
+	30,  // 106: gestalt.provider.v1.Workflow.ApplyDefinition:input_type -> gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest
+	31,  // 107: gestalt.provider.v1.Workflow.GetDefinition:input_type -> gestalt.provider.v1.GetWorkflowProviderDefinitionRequest
+	32,  // 108: gestalt.provider.v1.Workflow.ListDefinitions:input_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest
+	34,  // 109: gestalt.provider.v1.Workflow.SetDefinitionPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest
+	35,  // 110: gestalt.provider.v1.Workflow.SetActivationPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest
+	36,  // 111: gestalt.provider.v1.Workflow.DeleteDefinition:input_type -> gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest
+	37,  // 112: gestalt.provider.v1.Workflow.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
+	39,  // 113: gestalt.provider.v1.Workflow.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
+	38,  // 114: gestalt.provider.v1.Workflow.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
+	47,  // 115: gestalt.provider.v1.Workflow.GetRunEvents:input_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
+	49,  // 116: gestalt.provider.v1.Workflow.GetRunOutput:input_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
+	41,  // 117: gestalt.provider.v1.Workflow.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
+	42,  // 118: gestalt.provider.v1.Workflow.SignalRun:input_type -> gestalt.provider.v1.SignalWorkflowProviderRunRequest
+	43,  // 119: gestalt.provider.v1.Workflow.SignalOrStartRun:input_type -> gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
+	45,  // 120: gestalt.provider.v1.Workflow.DeliverEvent:input_type -> gestalt.provider.v1.DeliverWorkflowProviderEventRequest
+	21,  // 121: gestalt.provider.v1.Workflow.ApplyDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
+	21,  // 122: gestalt.provider.v1.Workflow.GetDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
+	33,  // 123: gestalt.provider.v1.Workflow.ListDefinitions:output_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse
+	21,  // 124: gestalt.provider.v1.Workflow.SetDefinitionPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
+	21,  // 125: gestalt.provider.v1.Workflow.SetActivationPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
+	62,  // 126: gestalt.provider.v1.Workflow.DeleteDefinition:output_type -> google.protobuf.Empty
+	28,  // 127: gestalt.provider.v1.Workflow.StartRun:output_type -> gestalt.provider.v1.WorkflowRun
+	40,  // 128: gestalt.provider.v1.Workflow.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
+	28,  // 129: gestalt.provider.v1.Workflow.GetRun:output_type -> gestalt.provider.v1.WorkflowRun
+	48,  // 130: gestalt.provider.v1.Workflow.GetRunEvents:output_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
+	50,  // 131: gestalt.provider.v1.Workflow.GetRunOutput:output_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
+	28,  // 132: gestalt.provider.v1.Workflow.CancelRun:output_type -> gestalt.provider.v1.WorkflowRun
+	44,  // 133: gestalt.provider.v1.Workflow.SignalRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
+	44,  // 134: gestalt.provider.v1.Workflow.SignalOrStartRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
+	15,  // 135: gestalt.provider.v1.Workflow.DeliverEvent:output_type -> gestalt.provider.v1.WorkflowEvent
+	121, // [121:136] is the sub-list for method output_type
+	106, // [106:121] is the sub-list for method input_type
+	106, // [106:106] is the sub-list for extension type_name
+	106, // [106:106] is the sub-list for extension extendee
+	0,   // [0:106] is the sub-list for field type_name
 }
 
 func init() { file_v1_workflow_proto_init() }

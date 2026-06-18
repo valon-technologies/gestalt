@@ -440,6 +440,7 @@ type WorkflowStepAgentTurn struct {
 	Tools        []*AgentToolRef
 	Output       *AgentOutput
 	ModelOptions map[string]any
+	Workspace    *AgentWorkspace
 }
 
 // WorkflowStepAppCall is the native message type for gestalt.provider.v1.WorkflowStepAppCall.

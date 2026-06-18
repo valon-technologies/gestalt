@@ -853,14 +853,26 @@ type WorkflowStepAppCallConfig struct {
 }
 
 type WorkflowStepAgentConfig struct {
-	Provider     string                     `yaml:"provider,omitempty"`
-	Model        string                     `yaml:"model,omitempty"`
-	SessionKey   string                     `yaml:"sessionKey,omitempty"`
-	Prompt       WorkflowTextConfig         `yaml:"prompt,omitempty"`
-	Messages     []WorkflowAgentMessage     `yaml:"messages,omitempty"`
-	Tools        []WorkflowAgentToolRef     `yaml:"tools,omitempty"`
-	Output       *WorkflowAgentOutputConfig `yaml:"output,omitempty"`
-	ModelOptions map[string]any             `yaml:"modelOptions,omitempty"`
+	Provider     string                            `yaml:"provider,omitempty"`
+	Model        string                            `yaml:"model,omitempty"`
+	SessionKey   string                            `yaml:"sessionKey,omitempty"`
+	Prompt       WorkflowTextConfig                `yaml:"prompt,omitempty"`
+	Messages     []WorkflowAgentMessage            `yaml:"messages,omitempty"`
+	Tools        []WorkflowAgentToolRef            `yaml:"tools,omitempty"`
+	Output       *WorkflowAgentOutputConfig        `yaml:"output,omitempty"`
+	ModelOptions map[string]any                    `yaml:"modelOptions,omitempty"`
+	Workspace    *WorkflowStepAgentWorkspaceConfig `yaml:"workspace,omitempty"`
+}
+
+type WorkflowStepAgentWorkspaceConfig struct {
+	Checkouts []WorkflowStepAgentWorkspaceCheckoutConfig `yaml:"checkouts,omitempty"`
+	CWD       string                                     `yaml:"cwd,omitempty"`
+}
+
+type WorkflowStepAgentWorkspaceCheckoutConfig struct {
+	URL  string `yaml:"url,omitempty"`
+	Ref  string `yaml:"ref,omitempty"`
+	Path string `yaml:"path,omitempty"`
 }
 
 type WorkflowAgentOutputConfig struct {

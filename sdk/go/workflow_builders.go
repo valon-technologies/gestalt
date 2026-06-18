@@ -48,6 +48,7 @@ type WorkflowStepAgentTurn struct {
 	Tools        []AgentToolRef
 	Output       *AgentOutput
 	ModelOptions any
+	Workspace    *AgentWorkspace
 }
 
 // WorkflowAgentMessage contains one rendered agent message.
@@ -257,6 +258,7 @@ func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.Workflow
 		Tools:        agentToolRefsToProto(input.Tools),
 		Output:       output,
 		ModelOptions: modelOptions,
+		Workspace:    agentWorkspaceToProto(input.Workspace),
 	}, nil
 }
 
@@ -273,6 +275,7 @@ func workflowStepAgentTurnFromProto(value *proto.WorkflowStepAgentTurn) *Workflo
 		Tools:        agentToolRefsFromProto(value.GetTools()),
 		Output:       agentOutputFromProto(value.GetOutput()),
 		ModelOptions: mapFromStruct(value.GetModelOptions()),
+		Workspace:    agentWorkspaceFromProto(value.GetWorkspace()),
 	}
 }
 

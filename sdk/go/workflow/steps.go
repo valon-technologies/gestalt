@@ -94,13 +94,14 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 	state, ok := sessions[sessionKey]
 	if ok {
 		if state.providerName != providerName || state.model != model || state.options != optionsKey {
-			return nil, "", fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, or model_options", sessionKey)
+			return nil, "", fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, model_options, or workspace", sessionKey)
 		}
 	} else {
 		session, err := client.CreateSession(ctx, gestalt.AgentCreateSession{
 			ProviderName: providerName,
 			Model:        model,
 			Tools:        workflowAgentSessionTools(agent.Tools),
+			Workspace:    agent.Workspace,
 			Metadata: map[string]any{
 				"workflow":       workflowContext,
 				"workflowStepId": stepID,
@@ -190,6 +191,7 @@ func workflowAgentSessionOptionsKey(agent *gestalt.WorkflowStepAgentTurn) string
 	return stableJSON(map[string]any{
 		"model_options": agent.ModelOptions,
 		"tools":         agent.Tools,
+		"workspace":     agent.Workspace,
 	})
 }
 

@@ -68,6 +68,7 @@ type AgentTurn struct {
 	ToolRefs     []coreagent.ToolRef
 	Output       coreagent.Output
 	ModelOptions map[string]any
+	Workspace    *coreagent.Workspace
 }
 
 type AgentMessage struct {

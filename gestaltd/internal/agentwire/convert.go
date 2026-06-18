@@ -141,6 +141,46 @@ func ToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
 	return out
 }
 
+func WorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &coreagent.Workspace{
+		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
+		CWD:       workspace.GetCwd(),
+	}
+	for _, checkout := range workspace.GetCheckouts() {
+		if checkout == nil {
+			continue
+		}
+		out.Checkouts = append(out.Checkouts, coreagent.WorkspaceGitCheckout{
+			URL:  checkout.GetUrl(),
+			Ref:  checkout.GetRef(),
+			Path: checkout.GetPath(),
+		})
+	}
+	return out
+}
+
+func WorkspaceToProto(workspace *coreagent.Workspace) *proto.AgentWorkspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &proto.AgentWorkspace{
+		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
+		Cwd:       workspace.CWD,
+	}
+	for i := range workspace.Checkouts {
+		checkout := workspace.Checkouts[i]
+		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
+			Url:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
+		})
+	}
+	return out
+}
+
 func ToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
 	switch mode {
 	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG:
