@@ -427,7 +427,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		Code:        code,
 		RedirectURI: redirectURI,
 		ClientID:    core.DefaultOAuthClientID,
-		State:       originalState,
+		State:       loginState.State,
 	})
 	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
 		auditErr = errors.New("login failed")

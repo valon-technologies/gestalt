@@ -8561,8 +8561,20 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 
 	svc := testutil.NewStubServices(t)
 	_ = seedUser(t, svc, "host@example.com")
+	auth := newHostIssuedSessionAuthStub([]byte("host-issued-secret"), hostIssuedSessionAuthOpts{})
+	baseTokenFn := auth.TokenFn
+	var gotAuthorizationCodeState string
+	auth.TokenFn = func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+		if req != nil && req.GrantType == core.GrantTypeAuthorizationCode {
+			gotAuthorizationCodeState = req.State
+			if req.State != "cli:54305:test-state" {
+				return nil, fmt.Errorf("authorization code state = %q, want prefixed CLI state", req.State)
+			}
+		}
+		return baseTokenFn(ctx, req)
+	}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = newHostIssuedSessionAuthStub([]byte("host-issued-secret"), hostIssuedSessionAuthOpts{})
+		cfg.Auth = auth
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -8596,6 +8608,9 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 	}
 	if result["token"] == "" {
 		t.Fatal("expected token in CLI login response")
+	}
+	if gotAuthorizationCodeState != "cli:54305:test-state" {
+		t.Fatalf("authorization code state = %q, want prefixed CLI state", gotAuthorizationCodeState)
 	}
 }
 
