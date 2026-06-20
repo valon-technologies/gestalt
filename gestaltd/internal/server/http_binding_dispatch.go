@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -25,13 +26,16 @@ func (s *Server) httpBindingPrincipal(binding MountedHTTPBinding, verified *veri
 	})
 }
 
-func httpBindingContextValue(binding MountedHTTPBinding, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) map[string]any {
+func httpBindingContextValue(binding MountedHTTPBinding, r *http.Request, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) map[string]any {
 	value := map[string]any{
 		"name":   binding.Name,
 		"app":    binding.AppName,
 		"path":   binding.Path,
 		"method": binding.Method,
 		"target": binding.Target,
+	}
+	if headers := requestHeaderValues(r); len(headers) > 0 {
+		value["headers"] = headers
 	}
 	if parsed != nil && parsed.ContentType != "" {
 		value["contentType"] = parsed.ContentType
@@ -54,7 +58,7 @@ func httpBindingContextValue(binding MountedHTTPBinding, verified *verifiedHTTPB
 	return map[string]any{"http": value}
 }
 
-func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding MountedHTTPBinding, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*core.OperationResult, error) {
+func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding MountedHTTPBinding, r *http.Request, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*core.OperationResult, error) {
 	params := map[string]any{}
 	if parsed != nil && parsed.Params != nil {
 		params = cloneAnyMap(parsed.Params)
@@ -63,7 +67,7 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 		p = s.httpBindingPrincipal(binding, verified)
 	}
 	ctx = principal.WithPrincipal(ctx, p)
-	ctx = invocation.WithWorkflowContext(ctx, httpBindingContextValue(binding, verified, parsed))
+	ctx = invocation.WithWorkflowContext(ctx, httpBindingContextValue(binding, r, verified, parsed))
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTPBinding)
 	ctx = invocation.WithHTTPBinding(ctx, binding.Name)
 	if binding.CredentialMode != "" {
@@ -81,4 +85,17 @@ func cloneAnyMap(src map[string]any) map[string]any {
 		dst[key] = value
 	}
 	return dst
+}
+
+func requestHeaderValues(r *http.Request) map[string]any {
+	if r == nil || len(r.Header) == 0 {
+		return nil
+	}
+	headers := make(map[string]any, len(r.Header))
+	for key, values := range r.Header {
+		copied := make([]string, len(values))
+		copy(copied, values)
+		headers[key] = copied
+	}
+	return headers
 }

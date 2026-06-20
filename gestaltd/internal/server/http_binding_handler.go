@@ -58,7 +58,7 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 		return
 	}
 
-	result, err := s.httpBindingOperationInvocation(r.Context(), binding, resolvedPrincipal, verified, parsed)
+	result, err := s.httpBindingOperationInvocation(r.Context(), binding, r, resolvedPrincipal, verified, parsed)
 	if err != nil {
 		s.writeInvocationError(w, r, binding.AppName, binding.Target, err)
 		return

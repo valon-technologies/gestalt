@@ -20,7 +20,7 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 		return nil, err
 	}
 	resolveCtx := principal.WithPrincipal(ctx, bindingPrincipal)
-	resolveCtx = invocation.WithWorkflowContext(resolveCtx, httpBindingContextValue(binding, verified, parsed))
+	resolveCtx = invocation.WithWorkflowContext(resolveCtx, httpBindingContextValue(binding, r, verified, parsed))
 	resolveCtx = invocation.WithInvocationSurface(resolveCtx, invocation.InvocationSurfaceHTTP)
 	resolveCtx = invocation.WithHTTPBinding(resolveCtx, binding.Name)
 
