@@ -10511,6 +10511,83 @@ func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 	}
 }
 
+func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
+	t.Parallel()
+
+	const providerName = "webhook-context"
+	workflowSeen := make(chan map[string]any, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        providerName,
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				if operation == "receive_event" {
+					workflowSeen <- invocation.WorkflowContextFromContext(ctx)
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
+				}
+				return &core.OperationResult{Status: http.StatusNotFound, Body: []byte(`{}`)}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "receive_event", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			providerName: {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"delivery": {
+						Path:     "/delivery",
+						Method:   http.MethodPost,
+						Security: "public",
+						Target:   "receive_event",
+					},
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/"+providerName+"/delivery", strings.NewReader(`{"event":"opened"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Slack-Request-Timestamp", "123")
+	req.Header.Set("X-Slack-Signature", "v0=abc")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var workflow map[string]any
+	select {
+	case workflow = <-workflowSeen:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("timed out waiting for http binding invocation")
+	}
+	httpContext := invocation.WorkflowContextMap(workflow, "http")
+	if httpContext == nil {
+		t.Fatal("workflow http context is missing")
+	}
+	headers, ok := httpContext["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow http headers = %#v, want map", httpContext["headers"])
+	}
+	signatures, ok := headers["X-Slack-Signature"].([]string)
+	if !ok || len(signatures) != 1 || signatures[0] != "v0=abc" {
+		t.Fatalf("X-Slack-Signature header = %#v, want [v0=abc]", headers["X-Slack-Signature"])
+	}
+	timestamps, ok := headers["X-Slack-Request-Timestamp"].([]string)
+	if !ok || len(timestamps) != 1 || timestamps[0] != "123" {
+		t.Fatalf("X-Slack-Request-Timestamp header = %#v, want [123]", headers["X-Slack-Request-Timestamp"])
+	}
+}
+
 func TestHostedHTTPBinding_RejectsInvalidConfigBindings(t *testing.T) {
 	t.Parallel()
 
