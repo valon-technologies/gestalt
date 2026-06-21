@@ -84,6 +84,84 @@ func TestAuthorizeUsesAuthorizationProvider(t *testing.T) {
 	}
 }
 
+func TestAuthorizeShadowModeAllowsDeniedRequests(t *testing.T) {
+	t.Parallel()
+
+	privateKeyPEM, publicKeyPEM := testGatewayAuthorizeCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	claims, err := GenerateCallerTokenClaims("user:alice", time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	callerToken, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
+	transport := NewProviderGatewayTransport()
+	transport.SetAuthorizationProvider(authorization)
+	transport.SetCallerTokenPublicKey(publicKeyPEM)
+
+	allowed, err := transport.Authorize(context.Background(), AuthorizationParams{
+		ProviderID:  "authz-primary",
+		Operation:   "CheckAccess",
+		CallerToken: callerToken,
+	})
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if !allowed {
+		t.Fatal("Authorize allowed = false, want true in shadow mode")
+	}
+	if !authorization.called {
+		t.Fatal("authorization provider was not called")
+	}
+}
+
+func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+
+	privateKeyPEM, publicKeyPEM := testGatewayAuthorizeCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	claims, err := GenerateCallerTokenClaims("user:alice", time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	callerToken, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
+	transport := NewProviderGatewayTransport()
+	transport.SetAuthorizationProvider(authorization)
+	transport.SetCallerTokenPublicKey(publicKeyPEM)
+
+	if _, err := transport.Authorize(ctx, AuthorizationParams{
+		ProviderID:  "authz-primary",
+		Operation:   "CheckAccess",
+		CallerToken: callerToken,
+	}); err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
+		"gestaltd.provider_gateway.authorization.allowed":   "false",
+		"gestaltd.provider_gateway.authorization.subject":   "subject/user:alice",
+		"gestaltd.provider_gateway.authorization.resource":  "provider/authz-primary",
+		"gestaltd.provider_gateway.authorization.action":    "CheckAccess",
+	})
+}
+
 func TestProviderGatewayTransportAuthorizesThenInvokesNext(t *testing.T) {
 	t.Parallel()
 
@@ -144,16 +222,25 @@ func TestDirectTransportInvokesNext(t *testing.T) {
 }
 
 type stubAuthorizationProvider struct {
-	called  bool
-	ctx     context.Context
-	request *proto.CheckAccessRequest
+	called        bool
+	allowedResult *bool
+	ctx           context.Context
+	request       *proto.CheckAccessRequest
 }
 
 func (p *stubAuthorizationProvider) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.called = true
 	p.ctx = ctx
 	p.request = req
-	return &proto.CheckAccessResponse{Allowed: true}, nil
+	allowed := true
+	if p.allowedResult != nil {
+		allowed = *p.allowedResult
+	}
+	return &proto.CheckAccessResponse{Allowed: allowed}, nil
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func (p *stubAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {

@@ -2,28 +2,50 @@ package providergateway
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
 var (
-	attrProviderGatewayProviderID    = attribute.Key("gestaltd.provider_gateway.provider.id")
-	attrProviderGatewayProviderKind  = attribute.Key("gestaltd.provider_gateway.provider.kind")
-	attrProviderGatewayServiceName   = attribute.Key("gestaltd.provider_gateway.service.name")
-	attrProviderGatewayOperation     = attribute.Key("gestaltd.provider_gateway.operation.name")
-	attrProviderGatewaySource        = attribute.Key("gestaltd.provider_gateway.source")
-	attrProviderGatewayTransportPath = attribute.Key("gestaltd.provider_gateway.transport.path")
+	attrProviderGatewayProviderID           = attribute.Key("gestaltd.provider_gateway.provider.id")
+	attrProviderGatewayProviderKind         = attribute.Key("gestaltd.provider_gateway.provider.kind")
+	attrProviderGatewayServiceName          = attribute.Key("gestaltd.provider_gateway.service.name")
+	attrProviderGatewayOperation            = attribute.Key("gestaltd.provider_gateway.operation.name")
+	attrProviderGatewaySource               = attribute.Key("gestaltd.provider_gateway.source")
+	attrProviderGatewayTransportPath        = attribute.Key("gestaltd.provider_gateway.transport.path")
+	attrProviderGatewayAuthorizationAllowed = attribute.Key("gestaltd.provider_gateway.authorization.allowed")
+	attrProviderGatewayAuthorizationSubject = attribute.Key("gestaltd.provider_gateway.authorization.subject")
+	attrProviderGatewayAuthorizationResource = attribute.Key("gestaltd.provider_gateway.authorization.resource")
+	attrProviderGatewayAuthorizationAction  = attribute.Key("gestaltd.provider_gateway.authorization.action")
 
-	providerGatewayOperationMetrics metricutil.MeterCache[providerGatewayMetrics]
+	providerGatewayOperationMetrics     metricutil.MeterCache[providerGatewayMetrics]
+	providerGatewayAuthorizationChecks  metricutil.MeterCache[providerGatewayAuthorizationMetrics]
 )
 
 type providerGatewayMetrics struct {
 	count      metric.Int64Counter
 	errorCount metric.Int64Counter
 	duration   metric.Float64Histogram
+}
+
+type providerGatewayAuthorizationMetrics struct {
+	count metric.Int64Counter
+}
+
+func newProviderGatewayAuthorizationMetrics(meter metric.Meter) providerGatewayAuthorizationMetrics {
+	return providerGatewayAuthorizationMetrics{
+		count: metricutil.NewInt64Counter(
+			meter,
+			"gestaltd.provider_gateway.authorization.count",
+			"Counts provider gateway authorization checks.",
+		),
+	}
 }
 
 func newProviderGatewayMetrics(meter metric.Meter) providerGatewayMetrics {
@@ -45,6 +67,43 @@ func newProviderGatewayMetrics(meter metric.Meter) providerGatewayMetrics {
 			"s",
 		),
 	}
+}
+
+func recordProviderGatewayAuthorizationCheck(ctx context.Context, allowed bool, req *proto.CheckAccessRequest) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	metrics := providerGatewayAuthorizationChecks.Load(ctx, "gestaltd", newProviderGatewayAuthorizationMetrics)
+	attrs := []attribute.KeyValue{
+		attrProviderGatewayAuthorizationAllowed.String(strconv.FormatBool(allowed)),
+		attrProviderGatewayAuthorizationSubject.String(metricutil.AttrValue(authorizationCheckSubjectValue(req))),
+		attrProviderGatewayAuthorizationResource.String(metricutil.AttrValue(authorizationCheckResourceValue(req))),
+		attrProviderGatewayAuthorizationAction.String(metricutil.AttrValue(authorizationCheckActionValue(req))),
+	}
+	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+func authorizationCheckSubjectValue(req *proto.CheckAccessRequest) string {
+	if req == nil || req.GetSubject() == nil {
+		return ""
+	}
+	subject := req.GetSubject()
+	return strings.TrimSpace(subject.GetType()) + "/" + strings.TrimSpace(subject.GetId())
+}
+
+func authorizationCheckResourceValue(req *proto.CheckAccessRequest) string {
+	if req == nil || req.GetResource() == nil {
+		return ""
+	}
+	resource := req.GetResource()
+	return strings.TrimSpace(resource.GetType()) + "/" + strings.TrimSpace(resource.GetId())
+}
+
+func authorizationCheckActionValue(req *proto.CheckAccessRequest) string {
+	if req == nil || req.GetAction() == nil {
+		return ""
+	}
+	return strings.TrimSpace(req.GetAction().GetName())
 }
 
 func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, err error, req ProviderGatewayRequest, transportPath TransportPath) {

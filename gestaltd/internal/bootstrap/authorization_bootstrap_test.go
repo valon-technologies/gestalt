@@ -8,7 +8,6 @@ import (
 	"encoding/pem"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -354,8 +353,8 @@ func TestBootstrapAuthorizationProviderStateAuthorizesProviderGatewayRequests(t 
 		CallerToken:  deniedToken,
 	}, func(_ context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
 		return providergateway.ProviderGatewayResponse{}, nil
-	}); err == nil || !strings.Contains(err.Error(), "unauthorized") {
-		t.Fatalf("Invoke denied error = %v, want unauthorized", err)
+	}); err != nil {
+		t.Fatalf("Invoke denied in shadow mode: %v", err)
 	}
 }
 

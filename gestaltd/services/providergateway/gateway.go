@@ -21,16 +21,13 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 	}
 	req, err := t.checkAccessRequest(params)
 	if err != nil {
-		return false, err
+		recordProviderGatewayAuthorizationCheck(ctx, false, nil)
+		return true, nil
 	}
 	resp, err := t.authorization.CheckAccess(ctx, req)
-	if err != nil {
-		return false, err
-	}
-	if resp == nil {
-		return false, fmt.Errorf("provider gateway: check access returned nil response")
-	}
-	return resp.GetAllowed(), nil
+	allowed := err == nil && resp != nil && resp.GetAllowed()
+	recordProviderGatewayAuthorizationCheck(ctx, allowed, req)
+	return true, nil
 }
 
 type DirectTransport struct{}
