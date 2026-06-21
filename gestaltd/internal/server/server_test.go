@@ -10551,7 +10551,8 @@ func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/"+providerName+"/delivery", strings.NewReader(`{"event":"opened"}`))
+	const body = `{"event":"opened"}`
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/"+providerName+"/delivery", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Slack-Request-Timestamp", "123")
 	req.Header.Set("X-Slack-Signature", "v0=abc")
@@ -10585,6 +10586,9 @@ func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 	timestamps, ok := headers["X-Slack-Request-Timestamp"].([]string)
 	if !ok || len(timestamps) != 1 || timestamps[0] != "123" {
 		t.Fatalf("X-Slack-Request-Timestamp header = %#v, want [123]", headers["X-Slack-Request-Timestamp"])
+	}
+	if got, want := invocation.WorkflowContextString(httpContext, "rawBodyBase64"), base64.StdEncoding.EncodeToString([]byte(body)); got != want {
+		t.Fatalf("workflow http rawBodyBase64 = %q, want %q", got, want)
 	}
 }
 

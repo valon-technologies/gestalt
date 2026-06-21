@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"strings"
 
@@ -36,6 +37,9 @@ func httpBindingContextValue(binding MountedHTTPBinding, r *http.Request, verifi
 	}
 	if headers := requestHeaderValues(r); len(headers) > 0 {
 		value["headers"] = headers
+	}
+	if parsed != nil && len(parsed.RawBody) > 0 {
+		value["rawBodyBase64"] = base64.StdEncoding.EncodeToString(parsed.RawBody)
 	}
 	if parsed != nil && parsed.ContentType != "" {
 		value["contentType"] = parsed.ContentType
