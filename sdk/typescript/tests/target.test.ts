@@ -100,7 +100,7 @@ test("package config reads provider targets", () => {
     },
   });
   expect(formatProviderTarget(readPackageProviderTarget(authRoot))).toBe(
-    "authentication:./auth.ts#provider",
+    "identity:./auth.ts#provider",
   );
 
   const cacheRoot = fixturePath("cache-provider");

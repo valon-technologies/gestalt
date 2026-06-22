@@ -16,3 +16,10 @@ func ServeAuthenticationProvider(ctx context.Context, auth AuthenticationProvide
 		proto.RegisterAuthenticationServer(srv, server)
 	})
 }
+
+
+// ServeIdentityProvider starts a gRPC server for an [IdentityProvider].
+// It is the canonical alias for ServeAuthenticationProvider.
+func ServeIdentityProvider(ctx context.Context, identity IdentityProvider) error {
+	return ServeAuthenticationProvider(ctx, identity)
+}

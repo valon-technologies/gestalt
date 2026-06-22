@@ -75,3 +75,20 @@ func tokenExpiresAt(now func() time.Time, expiresIn int) *time.Time {
 	t := now().UTC().Add(time.Duration(expiresIn) * time.Second)
 	return &t
 }
+
+// requestedTokenTTL resolves a caller-supplied API-token lifetime hint to the
+// seconds value passed to the auth provider. A nil or zero hint yields 0,
+// meaning the provider applies its default. Negative values and values above
+// MaxRequestedTokenTTLSeconds are rejected.
+func requestedTokenTTL(expiresInSeconds *int64) (int64, error) {
+	if expiresInSeconds == nil {
+		return 0, nil
+	}
+	if *expiresInSeconds < 0 || *expiresInSeconds > core.MaxRequestedTokenTTLSeconds {
+		return 0, errors.New("expiresInSeconds out of range")
+	}
+	if *expiresInSeconds == 0 {
+		return 0, nil
+	}
+	return *expiresInSeconds, nil
+}

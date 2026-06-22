@@ -163,8 +163,12 @@ type TokenRequest struct {
 	SubjectToken string `protobuf:"bytes,8,opt,name=subject_token,json=subjectToken,proto3" json:"subject_token,omitempty"`
 	// subject_token_type is the RFC 8693 token type for subject_token.
 	SubjectTokenType string `protobuf:"bytes,9,opt,name=subject_token_type,json=subjectTokenType,proto3" json:"subject_token_type,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// requested_ttl_seconds is an RFC 8693 token-exchange hint for the desired
+	// access-token lifetime. The issuer MAY clamp it; expires_in in the response
+	// remains authoritative per RFC 6749 §5.1. 0 means use the provider default.
+	RequestedTtlSeconds int64 `protobuf:"varint,10,opt,name=requested_ttl_seconds,json=requestedTtlSeconds,proto3" json:"requested_ttl_seconds,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *TokenRequest) Reset() {
@@ -251,6 +255,13 @@ func (x *TokenRequest) GetSubjectTokenType() string {
 		return x.SubjectTokenType
 	}
 	return ""
+}
+
+func (x *TokenRequest) GetRequestedTtlSeconds() int64 {
+	if x != nil {
+		return x.RequestedTtlSeconds
+	}
+	return 0
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -909,7 +920,7 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\"6\n" +
 	"\x11AuthorizeResponse\x12!\n" +
-	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\x95\x02\n" +
+	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\xc9\x02\n" +
 	"\fTokenRequest\x12\x1d\n" +
 	"\n" +
 	"grant_type\x18\x01 \x01(\tR\tgrantType\x12\x12\n" +
@@ -919,7 +930,9 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x05state\x18\x06 \x01(\tR\x05state\x12\x14\n" +
 	"\x05scope\x18\a \x01(\tR\x05scope\x12#\n" +
 	"\rsubject_token\x18\b \x01(\tR\fsubjectToken\x12,\n" +
-	"\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenTypeJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc6\x01\n" +
+	"\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenType\x122\n" +
+	"\x15requested_ttl_seconds\x18\n" +
+	" \x01(\x03R\x13requestedTtlSecondsJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc6\x01\n" +
 	"\rTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
 	"\n" +

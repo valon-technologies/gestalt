@@ -184,6 +184,13 @@ export {
   type TokenResponse,
 } from "./auth.ts";
 export {
+  IdentityProvider,
+  defineIdentityProvider,
+  isIdentityProvider,
+  type IdentityCallContext,
+  type IdentityProviderOptions,
+} from "./auth.ts";
+export {
   Cache,
   type CacheDeleteManyRequest,
   type CacheDeleteManyResponse,

@@ -122,6 +122,10 @@ type TokenRequest struct {
 	SubjectToken string
 	// subject_token_type is the RFC 8693 token type for subject_token.
 	SubjectTokenType string
+	// requested_ttl_seconds is an RFC 8693 token-exchange hint for the desired
+	// access-token lifetime. The issuer MAY clamp it; expires_in in the response
+	// remains authoritative per RFC 6749 §5.1. 0 means use the provider default.
+	RequestedTtlSeconds int64
 }
 
 // TokenResponse is the native message type for gestalt.provider.v1.TokenResponse.

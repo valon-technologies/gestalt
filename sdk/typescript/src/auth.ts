@@ -225,3 +225,66 @@ export function isAuthenticationProvider(
       "revokeGrant" in value)
   );
 }
+
+
+/**
+ * IdentityCallContext is the canonical alias for AuthCallContext.
+ * @deprecated Use AuthCallContext via this alias; the canonical name is
+ * IdentityCallContext.
+ */
+export type IdentityCallContext = AuthCallContext;
+
+/**
+ * IdentityProviderOptions is the canonical alias for
+ * AuthenticationProviderOptions.
+ */
+export type IdentityProviderOptions = AuthenticationProviderOptions;
+
+/**
+ * IdentityProvider is the canonical name for the Gestalt identity provider
+ * surface. AuthenticationProvider is retained as a deprecated alias.
+ *
+ * IdentityProvider issues and resolves identity-bearing OAuth/OIDC tokens,
+ * exposes UserInfo/claims, manages grants, and supplies canonical principals
+ * that downstream tools treat as user identity.
+ *
+ * Under the hood this is an alias for AuthenticationProvider; the wire
+ * protocol and host binding remain "authentication" for compatibility.
+ */
+export const IdentityProvider = AuthenticationProvider;
+// Type alias so IdentityProvider can be used in type positions.
+export type IdentityProvider = AuthenticationProvider;
+
+/**
+ * Creates an identity provider with the standard Gestalt runtime contract.
+ * This is the canonical alias for defineAuthenticationProvider.
+ */
+export function defineIdentityProvider(
+  options: IdentityProviderOptions,
+): IdentityProvider {
+  return new IdentityProvider(options);
+}
+
+/**
+ * Runtime type guard for identity providers loaded from user modules.
+ * Accepts both "identity" and "authentication" kind tokens.
+ */
+export function isIdentityProvider(
+  value: unknown,
+): value is IdentityProvider {
+  return (
+    value instanceof IdentityProvider ||
+    value instanceof AuthenticationProvider ||
+    (typeof value === "object" &&
+      value !== null &&
+      "kind" in value &&
+      (String((value as { kind?: unknown }).kind ?? "") === "identity" ||
+        String((value as { kind?: unknown }).kind ?? "") === "authentication") &&
+      "authorize" in value &&
+      "token" in value &&
+      "introspect" in value &&
+      "listGrants" in value &&
+      "getGrant" in value &&
+      "revokeGrant" in value)
+  );
+}

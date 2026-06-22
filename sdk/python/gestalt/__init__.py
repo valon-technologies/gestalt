@@ -369,6 +369,8 @@ _LAZY_EXPORTS = {
     "AuthorizationResource": (".authorization", "Resource"),
     "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
     "AuthCallContext": ("._providers", "AuthCallContext"),
+    "IdentityProvider": ("._providers", "IdentityProvider"),
+    "IdentityCallContext": ("._providers", "IdentityCallContext"),
     "CALLER_BEARER_TOKEN_METADATA_KEY": (
         "._providers",
         "CALLER_BEARER_TOKEN_METADATA_KEY",
@@ -505,6 +507,7 @@ _LAZY_EXPORTS.update({name: ("._workflow", name) for name in _WORKFLOW_HELPER_EX
 
 _LAZY_MODULES = {
     "telemetry": ".telemetry",
+    "identity": ".identity",
 }
 
 
@@ -550,6 +553,8 @@ __all__ = [
     "AuthorizationAction",
     "AuthorizationResource",
     "AuthenticationProvider",
+    "IdentityProvider",
+    "IdentityCallContext",
     "Cache",
     "CacheSetEntry",
     "CacheProvider",

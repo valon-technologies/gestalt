@@ -37,6 +37,7 @@ class TokenRequest(_message.Message):
     SCOPE_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_TOKEN_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
+    REQUESTED_TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
     grant_type: str
     code: str
     redirect_uri: str
@@ -45,7 +46,8 @@ class TokenRequest(_message.Message):
     scope: str
     subject_token: str
     subject_token_type: str
-    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ...) -> None: ...
+    requested_ttl_seconds: int
+    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., requested_ttl_seconds: _Optional[int] = ...) -> None: ...
 
 class TokenResponse(_message.Message):
     __slots__ = ()

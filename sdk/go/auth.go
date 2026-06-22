@@ -31,14 +31,15 @@ type AuthorizeResponse struct {
 // TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
 // exchange inputs.
 type TokenRequest struct {
-	GrantType        string
-	Code             string
-	RedirectURI      string
-	ClientID         string
-	State            string
-	Scope            string
-	SubjectToken     string
-	SubjectTokenType string
+	GrantType           string
+	Code                string
+	RedirectURI         string
+	ClientID            string
+	State               string
+	Scope               string
+	SubjectToken        string
+	SubjectTokenType    string
+	RequestedTTLSeconds int64
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -182,6 +183,35 @@ func CallerBearerTokenFromIncomingContext(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+// IdentityProvider is the canonical name for the Gestalt identity provider
+// surface. It issues and resolves identity-bearing OAuth/OIDC tokens, exposes
+// UserInfo/claims, manages grants, and supplies canonical principals.
+//
+// AuthenticationProvider is retained as a deprecated alias.
+type IdentityProvider = AuthenticationProvider
+
+// IdentityCallContext is the canonical name for caller-scoped identity metadata
+// on grant-management RPCs. AuthCallContext is retained as a deprecated alias.
+type IdentityCallContext = AuthCallContext
+
+// WithIdentityCallContext returns a child context carrying caller identity
+// metadata. It is the canonical alias for WithAuthCallContext.
+func WithIdentityCallContext(ctx context.Context, call IdentityCallContext) context.Context {
+	return WithAuthCallContext(ctx, call)
+}
+
+// IdentityCallContextFromContext extracts caller identity metadata from ctx.
+// It is the canonical alias for AuthCallContextFromContext.
+func IdentityCallContextFromContext(ctx context.Context) IdentityCallContext {
+	return AuthCallContextFromContext(ctx)
+}
+
+// AppendIdentityCallMetadata attaches caller identity metadata to outgoing
+// gRPC metadata. It is the canonical alias for AppendAuthCallMetadata.
+func AppendIdentityCallMetadata(ctx context.Context) context.Context {
+	return AppendAuthCallMetadata(ctx)
 }
 
 func authorizeRequestFromProto(req *proto.AuthorizeRequest) *AuthorizeRequest {

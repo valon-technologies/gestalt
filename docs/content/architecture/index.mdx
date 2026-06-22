@@ -22,7 +22,7 @@ From there, the authentication and datastore providers are spawned as child proc
 
 ## How requests flow
 
-Authentication middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. Bearer values are validated through the configured authentication provider (introspection). Provider-issued session and API grants share the same validation path.
+Authentication middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. Bearer values are validated through the configured identity provider (introspection). Provider-issued session and API grants share the same validation path.
 
 For operation invocations (`/api/v1/{integration}/{operation}` or `/mcp`), the request reaches the *broker*. The broker resolves the caller's app token from the datastore, decrypts it, refreshes it if needed, and dispatches to the app (over gRPC, or to a REST/GraphQL/MCP upstream). The same broker handles both HTTP and MCP calls.
 

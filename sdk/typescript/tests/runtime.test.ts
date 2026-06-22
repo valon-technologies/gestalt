@@ -287,7 +287,7 @@ export const app = defineApp({
     );
 
     await expect(loadProviderFromTarget(root, "   ")).rejects.toThrow(
-      "authentication:./provider.ts#missing did not resolve to a Gestalt authentication provider",
+      "identity:./provider.ts#missing did not resolve to a Gestalt identity provider",
     );
   } finally {
     removeTempDir(root);

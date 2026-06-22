@@ -11,6 +11,7 @@
     "src/agent.ts",
     "src/app.ts",
     "src/authentication.ts",
+    "src/identity.ts",
     "src/authorization.ts",
     "src/cache.ts",
     "src/external_credential.ts",

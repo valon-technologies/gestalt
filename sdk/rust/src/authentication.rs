@@ -173,6 +173,12 @@ pub struct TokenRequest {
     ///
     /// The `subject_token_type` field.
     pub subject_token_type: String,
+    /// requested_ttl_seconds is an RFC 8693 token-exchange hint for the desired
+    /// access-token lifetime. The issuer MAY clamp it; expires_in in the response
+    /// remains authoritative per RFC 6749 §5.1. 0 means use the provider default.
+    ///
+    /// The `requested_ttl_seconds` field.
+    pub requested_ttl_seconds: i64,
 }
 
 /// TokenResponse models RFC 6749 token endpoint response fields.
@@ -314,6 +320,7 @@ impl Authentication {
             scope,
             subject_token,
             subject_token_type,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_token_request(request));
         if let Some(timeout) = self.timeout {

@@ -14,6 +14,11 @@ const (
 	SubjectTokenTypeAccessToken = "urn:ietf:params:oauth:token-type:access_token"
 )
 
+// MaxRequestedTokenTTLSeconds is the upper bound a caller may request for an
+// API-token lifetime via token exchange. The auth provider clamps requests at
+// or below this; the provider's own default applies when no TTL is requested.
+const MaxRequestedTokenTTLSeconds = int64(365 * 24 * 60 * 60)
+
 // AuthenticationProvider is the RFC 6749 / RFC 7662 / OIDF Grant Management
 // authentication surface. Providers own subjects, grants, token issuance,
 // storage, introspection, and revocation.
@@ -76,14 +81,15 @@ type AuthorizeResponse struct {
 // TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
 // exchange inputs.
 type TokenRequest struct {
-	GrantType        string
-	Code             string
-	RedirectURI      string
-	ClientID         string
-	State            string
-	Scope            string
-	SubjectToken     string
-	SubjectTokenType string
+	GrantType           string
+	Code                string
+	RedirectURI         string
+	ClientID            string
+	State               string
+	Scope               string
+	SubjectToken        string
+	SubjectTokenType    string
+	RequestedTTLSeconds int64
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.

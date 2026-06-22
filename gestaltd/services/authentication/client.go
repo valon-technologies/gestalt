@@ -236,14 +236,15 @@ func tokenRequestToProto(req *core.TokenRequest) *proto.TokenRequest {
 		return nil
 	}
 	return &proto.TokenRequest{
-		GrantType:        req.GrantType,
-		Code:             req.Code,
-		RedirectUri:      req.RedirectURI,
-		ClientId:         req.ClientID,
-		State:            req.State,
-		Scope:            req.Scope,
-		SubjectToken:     req.SubjectToken,
-		SubjectTokenType: req.SubjectTokenType,
+		GrantType:           req.GrantType,
+		Code:                req.Code,
+		RedirectUri:         req.RedirectURI,
+		ClientId:            req.ClientID,
+		State:               req.State,
+		Scope:               req.Scope,
+		SubjectToken:        req.SubjectToken,
+		SubjectTokenType:    req.SubjectTokenType,
+		RequestedTtlSeconds: req.RequestedTTLSeconds,
 	}
 }
 

@@ -1,0 +1,374 @@
+import { Tabs } from 'nextra/components'
+
+# Identity
+
+Identity providers handle user identity for the Gestalt platform: OAuth/OIDC
+authorization, token issuance, token introspection, UserInfo/claims, grant
+management, and token exchange. The identity provider is the canonical source
+of user principals that downstream tools and apps treat as the authenticated
+caller.
+
+Identity is separate from [authorization configuration](/reference/config-file#authorization),
+which decides what the caller may access, and
+[External Credentials](/providers/external-credentials), which provide upstream
+credentials for configured connections.
+
+## Standards
+
+The identity provider surface follows these open standards:
+
+- [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html): OIDC is an identity layer over OAuth 2.0, using claims and UserInfo to communicate end-user identity.
+- [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html): Relying parties discover OpenID Providers and their endpoints.
+- [OAuth 2.0 RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749): Authorization framework for the authorize and token endpoints.
+- [OAuth 2.0 Token Introspection RFC 7662](https://datatracker.ietf.org/doc/html/rfc7662): Active-token state and metadata lookup.
+- [OAuth 2.0 Token Exchange RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693): Exchanging one security token for another.
+- [OIDF Grant Management](https://openid.net/specs/fapi-grant-management-01.html): Explicit grant list, get, and revoke semantics.
+
+## How identity providers work
+
+When a request arrives without a valid session, Gestalt asks the configured
+identity provider to begin an authorization flow. The provider returns a
+redirect URI (RFC 6749 authorization endpoint), Gestalt redirects the user,
+and when the callback arrives Gestalt calls the provider's token endpoint to
+exchange the authorization code for tokens. Gestalt then stores its own
+session keyed by the canonical subject returned by introspection or UserInfo.
+
+For API access, callers present bearer tokens directly. Gestalt introspects
+the token via RFC 7662 to determine whether it is active and to resolve the
+canonical subject and scope. The identity provider may also support RFC 8693
+token exchange for issuing short-lived API tokens from a subject token.
+
+## First-Party Identity Providers
+
+Published first-party identity providers live under
+[`valon-technologies/gestalt-providers/auth`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth).
+
+| Provider | Use case |
+| --- | --- |
+| [`github.com/valon-technologies/gestalt-providers/auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | Generic OpenID Connect providers such as Google, Okta, Auth0, Azure AD, or Keycloak |
+
+## Configuring `providers.identity`
+
+```yaml
+providers:
+  identity:
+    oidc:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ...
+        clientSecret: ...
+```
+
+The legacy spelling `providers.authentication` is still accepted for
+compatibility, but `providers.identity` is canonical. Using both
+`providers.identity` and `providers.authentication` in the same config is a
+validation error.
+
+Structured secret refs such as `clientSecret.secret.provider: default` are
+resolved through `providers.secrets` before the identity provider receives its
+config.
+
+To disable platform identity entirely, omit `providers.identity` (or
+`providers.authentication`).
+
+For local development, omission is the simple default: every request is treated
+as the same anonymous user.
+
+### Server-level selection
+
+```yaml
+server:
+  providers:
+    identity: oidc
+```
+
+The legacy spelling `server.providers.authentication` is also accepted.
+
+## Local source during development
+
+```yaml
+providers:
+  identity:
+    oidc:
+      source: ./oidc-auth/manifest.yaml
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ...
+        clientSecret: ...
+```
+
+## Building your own identity provider
+
+### Manifest
+
+An identity provider manifest declares `kind: identity` (or the legacy
+`kind: authentication`). You can optionally include a `configSchemaPath` so
+Gestalt validates provider config at startup.
+
+```yaml
+kind: identity
+source: github.com/your-org/identity/google
+version: 0.0.1
+displayName: Google Identity
+description: Authenticate users with Google OAuth/OIDC.
+spec:
+  configSchemaPath: ./identity_config.json
+```
+
+### Interface
+
+The identity provider surface implements these methods:
+
+- **Authorize** (RFC 6749 authorization endpoint): returns a redirect URI with authorization parameters.
+- **Token** (RFC 6749 token endpoint / RFC 8693 token exchange): issues or exchanges tokens.
+- **Introspect** (RFC 7662): returns active-token state, canonical subject, scope, client ID, and audience.
+- **UserInfo** (OIDC UserInfo): returns profile claims for the authenticated caller. The caller bearer token is supplied through call context metadata.
+- **ListGrants** (OIDF Grant Management): returns caller-visible API-token grant IDs.
+- **GetGrant** (OIDF Grant Management): returns details for one API-token grant.
+- **RevokeGrant** (OIDF Grant Management): revokes one API-token grant.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package oidcidentity
+
+    import (
+        "context"
+        "fmt"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type OIDCIdentity struct {
+        clientID     string
+        clientSecret string
+    }
+
+    func New() *OIDCIdentity { return &OIDCIdentity{} }
+
+    func (o *OIDCIdentity) Configure(_ context.Context, _ string, config map[string]any) error {
+        o.clientID, _ = config["clientId"].(string)
+        o.clientSecret, _ = config["clientSecret"].(string)
+        if o.clientID == "" || o.clientSecret == "" {
+            return fmt.Errorf("clientId and clientSecret are required")
+        }
+        return nil
+    }
+
+    func (o *OIDCIdentity) Authorize(ctx context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+        // Build the RFC 6749 authorization redirect URI.
+        return &gestalt.AuthorizeResponse{
+            RedirectURI: fmt.Sprintf("https://login.example.com/authorize?client_id=%s&redirect_uri=%s&state=%s", o.clientID, req.RedirectURI, req.State),
+        }, nil
+    }
+
+    func (o *OIDCIdentity) Token(ctx context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+        // Exchange the authorization code or subject token for tokens.
+        return &gestalt.TokenResponse{
+            AccessToken: "access-token",
+            TokenType:   "Bearer",
+            ExpiresIn:   3600,
+        }, nil
+    }
+
+    func (o *OIDCIdentity) Introspect(ctx context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+        // Validate the token and return canonical subject + scope.
+        return &gestalt.IntrospectResponse{
+            Active:  true,
+            Subject: "user:123",
+            Scope:   "openid email",
+        }, nil
+    }
+
+    func (o *OIDCIdentity) UserInfo(ctx context.Context, req *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+        // Return profile claims for the caller (bearer token in call context).
+        return &gestalt.UserInfoResponse{
+            SubjectID: "user:123",
+            Email:     "user@example.com",
+            Name:      "Example User",
+        }, nil
+    }
+
+    func (o *OIDCIdentity) ListGrants(ctx context.Context, req *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+        return &gestalt.ListGrantsResponse{GrantIDs: []string{"grant-1"}}, nil
+    }
+
+    func (o *OIDCIdentity) GetGrant(ctx context.Context, req *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
+        return &gestalt.GetGrantResponse{}, nil
+    }
+
+    func (o *OIDCIdentity) RevokeGrant(ctx context.Context, req *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
+        return &gestalt.RevokeGrantResponse{}, nil
+    }
+    ```
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import IdentityProvider, AuthorizeRequest, AuthorizeResponse
+
+    class OIDCIdentity(IdentityProvider):
+        def configure(self, name: str, config: dict) -> None:
+            self.client_id = config["clientId"]
+            self.client_secret = config["clientSecret"]
+
+        def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse:
+            return AuthorizeResponse(
+                redirect_uri=f"https://login.example.com/authorize?client_id={self.client_id}&state={request.state}"
+            )
+
+        def token(self, request):
+            # Exchange code or subject token for tokens.
+            ...
+
+        def introspect(self, request):
+            # Validate token and return canonical subject + scope.
+            ...
+
+        def user_info(self, request, call):
+            # Return profile claims (caller bearer token in call.caller_bearer_token).
+            ...
+
+        def list_grants(self, request, call):
+            ...
+
+        def get_grant(self, request, call):
+            ...
+
+        def revoke_grant(self, request, call):
+            ...
+    ```
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::IdentityProvider;
+    use gestalt::authentication::*;
+
+    pub struct OIDCIdentity {
+        client_id: String,
+        client_secret: String,
+    }
+
+    #[gestalt::async_trait]
+    impl AuthenticationProvider for OIDCIdentity {
+        async fn configure(&self, _name: &str, config: serde_json::Map<String, serde_json::Value>) -> gestalt::Result<()> {
+            // Read clientId and clientSecret from config.
+            Ok(())
+        }
+
+        async fn authorize(&self, req: AuthorizeRequest) -> gestalt::Result<AuthorizeResponse> {
+            Ok(AuthorizeResponse { redirect_uri: format!("https://login.example.com/authorize?state={}", req.state) })
+        }
+
+        async fn token(&self, req: TokenRequest) -> gestalt::Result<TokenResponse> {
+            // Exchange code or subject token for tokens.
+            Ok(TokenResponse::default())
+        }
+
+        async fn introspect(&self, req: IntrospectRequest) -> gestalt::Result<IntrospectResponse> {
+            // Validate token and return canonical subject + scope.
+            Ok(IntrospectResponse::default())
+        }
+
+        async fn user_info(&self, call: AuthCallContext, req: UserInfoRequest) -> gestalt::Result<UserInfoResponse> {
+            // Return profile claims (caller bearer token in call.caller_bearer_token).
+            Ok(UserInfoResponse::default())
+        }
+
+        async fn list_grants(&self, call: AuthCallContext, req: ListGrantsRequest) -> gestalt::Result<ListGrantsResponse> {
+            Ok(ListGrantsResponse::default())
+        }
+
+        async fn get_grant(&self, call: AuthCallContext, req: GetGrantRequest) -> gestalt::Result<GetGrantResponse> {
+            Ok(GetGrantResponse::default())
+        }
+
+        async fn revoke_grant(&self, call: AuthCallContext, req: RevokeGrantRequest) -> gestalt::Result<RevokeGrantResponse> {
+            Ok(RevokeGrantResponse::default())
+        }
+    }
+
+    gestalt::export_identity_provider!(constructor = OIDCIdentity::default);
+    ```
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { defineIdentityProvider } from "@valon-technologies/gestalt";
+
+    export const identity = defineIdentityProvider({
+      async configure(_name, config) {
+        // Read clientId and clientSecret from config.
+      },
+      async authorize(request) {
+        return {
+          redirectUri: `https://login.example.com/authorize?state=${request.state}`,
+        };
+      },
+      async token(request) {
+        // Exchange code or subject token for tokens.
+        return { accessToken: "", tokenType: "", expiresIn: 0, refreshToken: "", scope: "", grantId: "" };
+      },
+      async introspect(request) {
+        // Validate token and return canonical subject + scope.
+        return { active: false, subject: "", scope: "", clientId: "", audience: [] };
+      },
+      async userInfo(request, call) {
+        // Return profile claims (caller bearer token in call.callerBearerToken).
+        return { subjectId: "", email: "", name: "" };
+      },
+      async listGrants(request, call) {
+        return { grantIds: [] };
+      },
+      async getGrant(request, call) {
+        return { scopes: [], createdAt: 0n, expiresAt: 0n };
+      },
+      async revokeGrant(request, call) {},
+    });
+    ```
+
+    The identity provider manifest points Gestalt at the executable artifact
+    produced by its build command:
+
+    ```yaml
+    build:
+      command:
+        - npm
+        - run
+        - build
+      inputs:
+        - package.json
+        - package-lock.json
+        - identity.ts
+    entrypoint:
+      artifactPath: .gestalt/build/identity
+    ```
+
+  </Tabs.Tab>
+</Tabs>
+
+### Caller context for grant RPCs
+
+ListGrants, GetGrant, RevokeGrant, and UserInfo receive caller-scoped metadata
+through the call context. The caller bearer token is available via
+`IdentityCallContext` (or the deprecated `AuthCallContext`), so the provider
+can scope grant operations to the requesting user without widening the
+RFC-shaped request structs.
+
+### Deploying the provider
+
+Configure a custom identity provider through the same `providers.identity`
+block shown in [Configuring `providers.identity`](#configuring-providersidentity).
+That section is the source of truth for local manifest paths, published
+provider release URLs, and structured secret refs. For packaging and release
+mechanics, see [Releasing provider packages](/providers#releasing-provider-packages).
+
+## What To Read Next
+
+- [Secrets](/providers/secrets): secret managers for identity provider config
+- [Configuration](/reference/configuration): full config examples including `providers.identity`
+- [Built-in Providers](/reference/built-in-providers): first-party identity provider reference

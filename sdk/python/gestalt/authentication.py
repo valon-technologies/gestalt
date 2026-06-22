@@ -136,6 +136,10 @@ class TokenRequest:
     subject_token: str = ""
     #: subject_token_type is the RFC 8693 token type for subject_token.
     subject_token_type: str = ""
+    #: requested_ttl_seconds is an RFC 8693 token-exchange hint for the desired
+    #: access-token lifetime. The issuer MAY clamp it; expires_in in the response
+    #: remains authoritative per RFC 6749 §5.1. 0 means use the provider default.
+    requested_ttl_seconds: int = 0
 
 
 @dataclass(frozen=True, slots=True)

@@ -162,6 +162,12 @@ export interface TokenRequest {
    * subject_token_type is the RFC 8693 token type for subject_token.
    */
   subjectTokenType: string;
+  /**
+   * requested_ttl_seconds is an RFC 8693 token-exchange hint for the desired
+   * access-token lifetime. The issuer MAY clamp it; expires_in in the response
+   * remains authoritative per RFC 6749 §5.1. 0 means use the provider default.
+   */
+  requestedTtlSeconds: bigint;
 }
 
 /**
@@ -275,6 +281,7 @@ export class Authentication {
       scope,
       subjectToken,
       subjectTokenType,
+      requestedTtlSeconds: 0n,
     } satisfies Init<TokenRequest>;
     const response = await callUnary(() =>
       this.client.token(

@@ -6738,3 +6738,67 @@ func workflowTestLiteralObjectValueConfig(input map[string]any) WorkflowValueCon
 	}
 	return WorkflowValueConfig{Object: fields}
 }
+
+func TestLoadConfigAcceptsIdentityConfig(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v6
+server:
+  providers:
+    identity: local
+    indexeddb: sqlite
+  encryptionKey: server-key
+providers:
+  identity:
+    local:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
+	if authName != "local" || authEntry == nil {
+		t.Fatalf("SelectedIdentityProvider = (%q, %#v), want local", authName, authEntry)
+	}
+	if cfg.Server.Providers.Authentication != "local" {
+		t.Fatalf("Server.Providers.Authentication = %q, want local (normalized from identity)", cfg.Server.Providers.Authentication)
+	}
+	if cfg.Providers.Authentication["local"] == nil {
+		t.Fatal("Providers.Authentication[local] = nil (expected identity normalized to authentication)")
+	}
+	if cfg.Providers.Identity != nil {
+		t.Fatal("Providers.Identity should be nil after normalization")
+	}
+}
+
+func TestLoadConfigRejectsMixedIdentityAndAuthentication(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v6
+server:
+  providers:
+    identity: local
+  encryptionKey: server-key
+providers:
+  identity:
+    local:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
+  authentication:
+    legacy:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load should fail when both identity and authentication are configured")
+	}
+}

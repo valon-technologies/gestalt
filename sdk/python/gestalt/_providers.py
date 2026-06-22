@@ -178,6 +178,7 @@ class ProviderKind(str, Enum):
     INTEGRATION = "integration"
     AUTHORIZATION = "authorization"
     AUTHENTICATION = "authentication"
+    IDENTITY = "identity"
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
@@ -280,6 +281,10 @@ class AuthCallContext:
     caller_bearer_token: str = ""
 
 
+# Canonical alias for AuthCallContext.
+IdentityCallContext = AuthCallContext
+
+
 class AppProviderAdapter:
     """Wrap a provider and registration callback for integration runtimes."""
 
@@ -355,6 +360,10 @@ class AuthenticationProvider(AppProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
+
+
+# Canonical alias for AuthenticationProvider.
+IdentityProvider = AuthenticationProvider
 
 
 class AuthorizationProvider(AppProvider):

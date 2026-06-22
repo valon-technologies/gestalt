@@ -15,6 +15,7 @@ import (
 const (
 	KindApp                 = "app"
 	KindAuthentication      = "authentication"
+	KindIdentity            = "identity"
 	KindAuthorization       = "authorization"
 	KindExternalCredentials = "externalcredentials"
 	KindIndexedDB           = "indexeddb"
@@ -28,7 +29,13 @@ const (
 )
 
 func NormalizeKind(kind string) string {
-	return strings.TrimSpace(strings.ToLower(kind))
+	normalized := strings.TrimSpace(strings.ToLower(kind))
+	// "identity" is the canonical public spelling; normalize to the internal
+	// "authentication" wire kind for compatibility.
+	if normalized == KindIdentity {
+		return KindAuthentication
+	}
+	return normalized
 }
 
 type Manifest struct {

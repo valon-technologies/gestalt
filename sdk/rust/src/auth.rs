@@ -98,6 +98,26 @@ pub trait AuthenticationProvider: Send + Sync + 'static {
     ) -> Result<RevokeGrantResponse>;
 }
 
+/// Canonical alias for AuthCallContext.
+#[allow(dead_code)]
+pub type IdentityCallContext = AuthCallContext;
+
+/// Canonical alias for the AuthenticationProvider trait.
+///
+/// IdentityProvider issues and resolves identity-bearing OAuth/OIDC tokens,
+/// exposes UserInfo/claims, manages grants, and supplies canonical principals
+/// that downstream tools treat as user identity. AuthenticationProvider is
+/// retained as a deprecated alias.
+///
+/// This is a blanket-impl alias: any type that implements
+/// [AuthenticationProvider] automatically implements [IdentityProvider].
+#[allow(dead_code)]
+#[async_trait]
+pub trait IdentityProvider: AuthenticationProvider {}
+
+#[async_trait]
+impl<T: AuthenticationProvider> IdentityProvider for T {}
+
 pub(crate) fn caller_bearer_token_from_metadata(metadata: &tonic::metadata::MetadataMap) -> String {
     metadata
         .get(CALLER_BEARER_TOKEN_METADATA_KEY)

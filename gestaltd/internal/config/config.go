@@ -83,6 +83,7 @@ type ProviderSnapshotRepositoryStorageConfig struct {
 
 type ProvidersConfig struct {
 	Authentication      map[string]*ProviderEntry `yaml:"authentication,omitempty"`
+	Identity            map[string]*ProviderEntry `yaml:"identity,omitempty"`
 	Authorization       map[string]*ProviderEntry `yaml:"authorization,omitempty"`
 	ExternalCredentials map[string]*ProviderEntry `yaml:"externalCredentials,omitempty"`
 	Secrets             map[string]*ProviderEntry `yaml:"secrets,omitempty"`
@@ -148,6 +149,7 @@ const (
 
 type ServerProvidersConfig struct {
 	Authentication      string `yaml:"authentication,omitempty"`
+	Identity            string `yaml:"identity,omitempty"`
 	Authorization       string `yaml:"authorization,omitempty"`
 	ExternalCredentials string `yaml:"externalCredentials,omitempty"`
 	Secrets             string `yaml:"secrets,omitempty"`
@@ -2497,11 +2499,38 @@ func normalizeConfigShapeForPartialLoad(cfg *Config) error {
 	normalizeProviderSourceShapes(cfg)
 	normalizeProviderEntries(cfg)
 	normalizeServerRuntimeConfig(cfg)
+	if err := normalizeIdentityConfig(cfg); err != nil {
+		return err
+	}
 	if err := normalizeAuthorizationConfig(cfg); err != nil {
 		return err
 	}
 	if err := normalizeAdminConfig(cfg); err != nil {
 		return err
+	}
+	return nil
+}
+
+// normalizeIdentityConfig resolves the canonical "identity" provider config
+// key into the internal "authentication" wire kind, and rejects configurations
+// that specify both "identity" and "authentication" in the same scope.
+func normalizeIdentityConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if len(cfg.Providers.Identity) > 0 && len(cfg.Providers.Authentication) > 0 {
+		return fmt.Errorf("config validation: providers.identity and providers.authentication are mutually exclusive; use only providers.identity (the canonical spelling)")
+	}
+	if cfg.Server.Providers.Identity != "" && cfg.Server.Providers.Authentication != "" {
+		return fmt.Errorf("config validation: server.providers.identity and server.providers.authentication are mutually exclusive; use only server.providers.identity (the canonical spelling)")
+	}
+	if len(cfg.Providers.Identity) > 0 {
+		cfg.Providers.Authentication = cfg.Providers.Identity
+		cfg.Providers.Identity = nil
+	}
+	if cfg.Server.Providers.Identity != "" {
+		cfg.Server.Providers.Authentication = cfg.Server.Providers.Identity
+		cfg.Server.Providers.Identity = ""
 	}
 	return nil
 }
@@ -3857,7 +3886,8 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 			key  string
 			kind string
 		}{
-			{key: "authentication", kind: providermanifestv1.KindAuthentication},
+			{key: "identity", kind: providermanifestv1.KindAuthentication},
+		{key: "authentication", kind: providermanifestv1.KindAuthentication},
 			{key: "authorization", kind: providermanifestv1.KindAuthorization},
 			{key: "externalCredentials", kind: providermanifestv1.KindExternalCredentials},
 			{key: "secrets", kind: providermanifestv1.KindSecrets},
@@ -3979,6 +4009,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 	}
 
+	for _, entry := range cfg.Providers.Identity {
+		resolveEntry(entry)
+	}
 	for _, entry := range cfg.Providers.Authentication {
 		resolveEntry(entry)
 	}

@@ -1,6 +1,7 @@
 export default {
   agent: "Agent",
   authentication: "Authentication",
+  identity: "Identity",
   cache: "Cache",
   "external-credentials": "External Credentials",
   indexeddb: "IndexedDB",

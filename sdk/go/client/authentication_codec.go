@@ -251,14 +251,15 @@ func ToWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
 		return nil
 	}
 	out := &proto.TokenRequest{
-		GrantType:        value.GrantType,
-		Code:             value.Code,
-		RedirectUri:      value.RedirectUri,
-		ClientId:         value.ClientId,
-		State:            value.State,
-		Scope:            value.Scope,
-		SubjectToken:     value.SubjectToken,
-		SubjectTokenType: value.SubjectTokenType,
+		GrantType:           value.GrantType,
+		Code:                value.Code,
+		RedirectUri:         value.RedirectUri,
+		ClientId:            value.ClientId,
+		State:               value.State,
+		Scope:               value.Scope,
+		SubjectToken:        value.SubjectToken,
+		SubjectTokenType:    value.SubjectTokenType,
+		RequestedTtlSeconds: value.RequestedTtlSeconds,
 	}
 	return out
 }
@@ -268,14 +269,15 @@ func FromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
 		return nil
 	}
 	out := &TokenRequest{
-		GrantType:        value.GrantType,
-		Code:             value.Code,
-		RedirectUri:      value.RedirectUri,
-		ClientId:         value.ClientId,
-		State:            value.State,
-		Scope:            value.Scope,
-		SubjectToken:     value.SubjectToken,
-		SubjectTokenType: value.SubjectTokenType,
+		GrantType:           value.GrantType,
+		Code:                value.Code,
+		RedirectUri:         value.RedirectUri,
+		ClientId:            value.ClientId,
+		State:               value.State,
+		Scope:               value.Scope,
+		SubjectToken:        value.SubjectToken,
+		SubjectTokenType:    value.SubjectTokenType,
+		RequestedTtlSeconds: value.RequestedTtlSeconds,
 	}
 	return out
 }

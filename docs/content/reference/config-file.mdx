@@ -284,7 +284,7 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
 | `agent.defaultToolNarrowingThreshold` | `200` | Visible catalog size above which implicit default agent catalog grants may be narrowed to exactly mentioned providers. Set `0` to narrow whenever a matching provider has any visible tools. |
-| `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
+| `providers.audit` / `providers.identity` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `runtime.defaultProvider` | | Default runtime-provider selector for apps and providers that opt into `runtime`. This does not move anything into hosted runtimes by itself. |
 | `runtime.relayBaseUrl` | `server.baseUrl` | Absolute HTTP(S) URL that hosted runtimes use for Gestalt host-service relay and egress proxy callbacks. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
@@ -398,13 +398,15 @@ There is no separate launch source or runtime command override. If
 `runtime.image` is set, the image must preserve the provider package layout and
 make the manifest entrypoint executable from the image working directory.
 
-## `providers.authentication`
+## `providers.identity`
 
-Platform authentication is optional. Omit the `providers.authentication` block entirely to disable it. When platform authentication is enabled, configure one or more named entries under `providers.authentication`. If more than one entry exists, set `server.providers.authentication` to pick which one the host should use.
+Platform identity is optional. Omit the `providers.identity` block entirely to disable it. When platform identity is enabled, configure one or more named entries under `providers.identity`. If more than one entry exists, set `server.providers.identity` to pick which one the host should use.
+
+The legacy spelling `providers.authentication` (and `server.providers.authentication`) is still accepted for compatibility, but `providers.identity` is canonical. Using both spellings in the same config is a validation error.
 
 ### `local`
 
-The `local` authentication provider is intended for single-user development on a trusted machine. It uses the same `ProviderEntry` shape as any other `providers.authentication.<name>` entry, but it does not require an external identity provider configuration.
+The `local` identity provider is intended for single-user development on a trusted machine. It uses the same `ProviderEntry` shape as any other `providers.identity.<name>` entry, but it does not require an external identity provider configuration.
 
 ### `oidc`
 
@@ -449,13 +451,13 @@ Two fields are required: `issuerUrl` (the OIDC discovery base URL) and `clientId
 
 OIDC checks `email_verified` when the claim is present. Unverified accounts are rejected.
 
-### `providers.authentication` shape
+### `providers.identity` shape
 
-Authentication providers use the same `ProviderEntry` shape under `providers.authentication.<name>`. First-party authentication providers are published under `github.com/valon-technologies/gestalt-providers/auth/`.
+Identity providers use the same `ProviderEntry` shape under `providers.identity.<name>`. First-party identity providers are published under `github.com/valon-technologies/gestalt-providers/auth/`.
 
 | Field | Description |
 | --- | --- |
-| `default` | Marks this named authentication entry as the default selection when `server.providers.authentication` is omitted. |
+| `default` | Marks this named identity entry as the default selection when `server.providers.identity` is omitted. |
 | `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, direct metadata URLs, local release metadata, and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authentication provider. |
@@ -1209,7 +1211,7 @@ apps:
 | `ui` | Optional app-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the app manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
-| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{app}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{app}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide identity provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the app manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
 | `http` | Optional hosted HTTP binding overrides merged over the app manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, or target operation. |
@@ -1371,7 +1373,7 @@ spec:
 | --- | --- |
 | `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
-| `auth` | Optional app route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on app HTTP operation routes and on app-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional app route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on app HTTP operation routes and on app-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide identity provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -1722,7 +1724,7 @@ local manifest path, published `provider-release.yaml` metadata URL,
 `source.url`, or `source.githubRelease`.
 
 Host-provider entries use the same ProviderEntry shape. When
-`providers.authentication.<name>`, `providers.cache.<name>`,
+`providers.identity.<name>`, `providers.cache.<name>`,
 `providers.indexeddb.<name>`, or `providers.s3.<name>` is set, `source`
 must be present.
 `providers.authentication.<name>.config`, `providers.cache.<name>.config`,

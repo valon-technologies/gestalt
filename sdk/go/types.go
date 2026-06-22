@@ -14,8 +14,13 @@ const (
 	// integration apps.
 	ProviderKindApp ProviderKind = "integration"
 	// ProviderKindAuthentication serves interactive login and token-validation
-	// flows.
+	// flows. It is retained as a deprecated alias for ProviderKindIdentity.
 	ProviderKindAuthentication ProviderKind = "authentication"
+	// ProviderKindIdentity is the canonical provider kind for the Gestalt
+	// identity provider surface: OAuth/OIDC token issuance, introspection,
+	// UserInfo/claims, grant management, and token exchange. The wire protocol
+	// and host binding remain "authentication" for compatibility.
+	ProviderKindIdentity ProviderKind = "identity"
 	// ProviderKindAuthorization serves generic authorization model,
 	// relationship, and access-check flows.
 	ProviderKindAuthorization ProviderKind = "authorization"

@@ -11,9 +11,9 @@ Two simple secrets providers (`env` and `file`), telemetry, and audit remain bui
 
 ## Authentication Providers
 
-Authentication providers handle platform login. They are configured under
-`providers.authentication.<name>` in your config file. Omit
-`providers.authentication` for local or unauthenticated deployments.
+Identity providers handle platform login. They are configured under
+`providers.identity.<name>` in your config file. Omit
+`providers.identity` for local or unauthenticated deployments.
 
 | Package | Purpose |
 | --- | --- |
@@ -35,7 +35,7 @@ providers:
             name: oidc-client-secret
 ```
 
-To disable platform authentication entirely, omit the `providers.authentication` block.
+To disable platform authentication entirely, omit the `providers.identity` block.
 
 ## Authorization Providers
 
@@ -258,4 +258,4 @@ apps:
 
 ## Community and Custom Providers
 
-Third-party authentication providers, datastore providers, and apps use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish it through a provider index, and reference that package source in config. For one-off releases, you can still point directly at the exact `provider-release.yaml` URL.
+Third-party identity providers, datastore providers, and apps use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish it through a provider index, and reference that package source in config. For one-off releases, you can still point directly at the exact `provider-release.yaml` URL.

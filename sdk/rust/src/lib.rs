@@ -25,6 +25,7 @@ mod env;
 mod error;
 /// Generated ExternalCredentials client and native types.
 pub mod external_credential;
+pub mod identity;
 // The prost wire module is reachable only through the doc-hidden proto
 // escape hatch; its items are not part of the documented surface.
 #[allow(missing_docs)]
@@ -226,6 +227,18 @@ macro_rules! export_provider {
 macro_rules! export_authentication_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_authentication(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime_impl::run_authentication_provider(provider)
+        }
+    };
+}
+
+/// Exports the identity-provider entrypoint expected by `gestaltd`.
+/// Canonical alias for [export_authentication_provider].
+#[macro_export]
+macro_rules! export_identity_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_identity(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_authentication_provider(provider)
         }
