@@ -20,7 +20,7 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 		return true, nil
 	}
 	allowed, req := t.shadowAuthorizationCheck(ctx, params)
-	recordProviderGatewayAuthorizationCheck(ctx, allowed, req)
+	recordProviderGatewayAuthorizationCheck(ctx, allowed, strings.TrimSpace(params.CallerToken) != "", req)
 	return true, nil
 }
 

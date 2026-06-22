@@ -20,6 +20,7 @@ var (
 	attrProviderGatewayOperation             = attribute.Key("gd.operation")
 	attrProviderGatewayTransportPath         = attribute.Key("gd.transport")
 	attrProviderGatewayEntry                 = attribute.Key("gd.entry")
+	attrProviderGatewayCallerTokenProvided   = attribute.Key("gd.caller_token_provided")
 	attrProviderGatewayAuthorizationAllowed  = attribute.Key("gd.allowed")
 	attrProviderGatewayAuthorizationSubject  = attribute.Key("gd.subject")
 	attrProviderGatewayAuthorizationResource = attribute.Key("gd.resource")
@@ -70,13 +71,14 @@ func newProviderGatewayMetrics(meter metric.Meter) providerGatewayMetrics {
 	}
 }
 
-func recordProviderGatewayAuthorizationCheck(ctx context.Context, allowed bool, req *proto.CheckAccessRequest) {
+func recordProviderGatewayAuthorizationCheck(ctx context.Context, allowed bool, callerTokenProvided bool, req *proto.CheckAccessRequest) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	metrics := providerGatewayAuthorizationChecks.Load(ctx, "gestaltd", newProviderGatewayAuthorizationMetrics)
 	attrs := []attribute.KeyValue{
 		attrProviderGatewayEntry.String(string(invocation.EntryFromContext(ctx))),
+		attrProviderGatewayCallerTokenProvided.String(strconv.FormatBool(callerTokenProvided)),
 		attrProviderGatewayAuthorizationAllowed.String(strconv.FormatBool(allowed)),
 		attrProviderGatewayAuthorizationSubject.String(metricutil.AttrValue(authorizationCheckSubjectValue(req))),
 		attrProviderGatewayAuthorizationResource.String(metricutil.AttrValue(authorizationCheckResourceValue(req))),
@@ -120,6 +122,7 @@ func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, er
 		attrProviderGatewayOperation.String(metricutil.AttrValue(req.Operation)),
 		attrProviderGatewayTransportPath.String(metricutil.AttrValue(string(transportPath))),
 		attrProviderGatewayEntry.String(string(invocation.EntryFromContext(ctx))),
+		attrProviderGatewayCallerTokenProvided.String(strconv.FormatBool(strings.TrimSpace(req.CallerToken) != "")),
 	}
 	metricAttrs := metric.WithAttributes(attrs...)
 

@@ -155,11 +155,12 @@ func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
-		"gd.entry":    "internal",
-		"gd.allowed":  "false",
-		"gd.subject":  "subject/user:alice",
-		"gd.resource": "provider/authz-primary",
-		"gd.action":   "CheckAccess",
+		"gd.entry":                 "internal",
+		"gd.caller_token_provided": "true",
+		"gd.allowed":               "false",
+		"gd.subject":               "subject/user:alice",
+		"gd.resource":              "provider/authz-primary",
+		"gd.action":                "CheckAccess",
 	})
 }
 
@@ -390,12 +391,13 @@ func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
 
 func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath TransportPath) map[string]string {
 	return map[string]string{
-		"gd.provider_id":   req.ProviderID,
-		"gd.provider_kind": string(req.ProviderKind),
-		"gd.service":       req.ServiceName,
-		"gd.operation":     req.Operation,
-		"gd.transport":     string(transportPath),
-		"gd.entry":         "internal",
+		"gd.provider_id":           req.ProviderID,
+		"gd.provider_kind":         string(req.ProviderKind),
+		"gd.service":               req.ServiceName,
+		"gd.operation":             req.Operation,
+		"gd.transport":             string(transportPath),
+		"gd.entry":                 "internal",
+		"gd.caller_token_provided": "false",
 	}
 }
 
