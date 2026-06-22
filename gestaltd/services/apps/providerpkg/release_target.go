@@ -1,8 +1,8 @@
 package providerpkg
 
 import (
-	"errors"
 	"fmt"
+	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -41,88 +41,65 @@ func ValidateExplicitRunPackaging(root string, manifest *providermanifestv1.Mani
 	if kind == providermanifestv1.KindUI || !releaseRequiresBuildForKind(manifest, kind) {
 		return nil
 	}
-	hasSource, err := HasSourceReleaseTarget(root, kind)
+	hasDeclaredBuild, err := HasSourceReleaseTarget(root, kind)
 	if err != nil {
-		return fmt.Errorf("detect source %s package: %w", kind, err)
+		return fmt.Errorf("validate %s release build: %w", kind, err)
 	}
-	if hasSource {
+	if hasDeclaredBuild {
 		return nil
 	}
 	return LocalOnlyRunReleaseError(kind)
 }
 
 func HasSourceReleaseTarget(root, kind string) (bool, error) {
-	switch kind {
-	case providermanifestv1.KindApp:
-		return HasSourceProviderPackage(root)
-	case providermanifestv1.KindUI:
-		return false, nil
-	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return HasSourceComponentPackage(root, kind)
-	default:
-		return false, fmt.Errorf("unsupported release build target kind %q", kind)
+	manifestPath, err := FindManifestFile(root)
+	if err != nil {
+		return false, err
 	}
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return false, err
+	}
+	return SourceBuildProducesOutput(manifest), nil
 }
 
-func ValidateSourceReleaseTarget(root, kind, goos, goarch string) error {
-	switch kind {
-	case providermanifestv1.KindApp:
-		return ValidateSourceProviderRelease(root, goos, goarch)
-	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return ValidateSourceComponentRelease(root, kind, goos, goarch)
-	default:
-		return fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func BuildSourceReleaseBinary(root, outputPath, pluginName, kind, goos, goarch string) error {
-	switch kind {
-	case providermanifestv1.KindApp:
-		_, err := BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
-		return err
-	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		_, err := BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
-		return err
-	default:
-		return fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func IsMissingSourceReleaseTarget(err error, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindApp:
-		return errors.Is(err, ErrNoSourceProviderPackage)
-	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return errors.Is(err, ErrNoSourceComponentPackage)
-	default:
-		return false
-	}
-}
-
-func MissingSourceReleaseTargetError(kind string) error {
-	switch kind {
-	case providermanifestv1.KindApp:
-		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
-	case providermanifestv1.KindAuthorization:
-		return fmt.Errorf("no Go authorization source package found")
-	case providermanifestv1.KindExternalCredentials:
-		return fmt.Errorf("no Go externalcredentials source package found")
-	case providermanifestv1.KindIdentity, providermanifestv1.KindCache, providermanifestv1.KindIndexedDB, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets:
-		return fmt.Errorf("no Go, Rust, Python, or TypeScript %s source package found", kind)
-	case providermanifestv1.KindRuntime:
-		return fmt.Errorf("no Go runtime source package found")
-	default:
-		return fmt.Errorf("unsupported release build target kind %q", kind)
-	}
+func MissingDeclaredSourceBuildError(manifest *providermanifestv1.Manifest, kind string) error {
+	return missingDeclaredSourceBuildError(manifest, kind)
 }
 
 func LocalOnlyRunReleaseError(kind string) error {
 	switch kind {
 	case providermanifestv1.KindApp:
-		return fmt.Errorf("run is local-only and cannot be packaged; add SDK-native provider metadata or object-form build.command with entrypoint.artifactPath")
+		return fmt.Errorf("run is local-only and cannot be packaged; add object-form build.command with entrypoint.artifactPath")
 	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return fmt.Errorf("run is local-only and cannot be packaged; add SDK-native %s provider metadata or object-form build.command with entrypoint.artifactPath", kind)
+		return fmt.Errorf("run is local-only and cannot be packaged; add object-form build.command with entrypoint.artifactPath for kind %s", kind)
 	default:
 		return fmt.Errorf("run is local-only and cannot be packaged for %q", kind)
 	}
+}
+
+func missingDeclaredSourceBuildError(manifest *providermanifestv1.Manifest, kind string) error {
+	name := providerDisplayName(manifest)
+	switch kind {
+	case providermanifestv1.KindApp:
+		return fmt.Errorf("%s: declare object-form build.command and entrypoint.artifactPath", name)
+	default:
+		return fmt.Errorf("%s: declare object-form build.command and entrypoint.artifactPath for kind %s", name, kind)
+	}
+}
+
+func providerDisplayName(manifest *providermanifestv1.Manifest) string {
+	if manifest == nil {
+		return "provider"
+	}
+	if strings.TrimSpace(manifest.DisplayName) != "" {
+		return strings.TrimSpace(manifest.DisplayName)
+	}
+	if strings.TrimSpace(manifest.Source) != "" {
+		parts := strings.Split(strings.TrimSpace(manifest.Source), "/")
+		if last := parts[len(parts)-1]; last != "" {
+			return last
+		}
+	}
+	return "provider"
 }

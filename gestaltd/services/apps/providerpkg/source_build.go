@@ -42,7 +42,6 @@ type SourceExecutionIntent int
 const (
 	SourceExecutionIntentLocalRun SourceExecutionIntent = iota
 	SourceExecutionIntentPackagedEntrypoint
-	SourceExecutionIntentSynthesizedSDK
 )
 
 type SourceExecution struct {
@@ -302,25 +301,11 @@ func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Ma
 			SourceExecution: exec,
 			Intent:          SourceExecutionIntentPackagedEntrypoint,
 		}, nil
-	} else {
-		goos, goarch := SourceBuildTarget(opts)
-		var err error
-		switch providermanifestv1.NormalizeKind(kind) {
-		case providermanifestv1.KindApp:
-			exec.Command, exec.Args, exec.Cleanup, err = SourceProviderExecutionCommand(rootDir, goos, goarch)
-		case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-			exec.Command, exec.Args, exec.Cleanup, err = SourceComponentExecutionCommand(rootDir, kind, goos, goarch)
-		default:
-			return ResolvedSourceExecution{}, fmt.Errorf("manifest does not define a %s entrypoint", kind)
-		}
-		if err != nil {
-			return ResolvedSourceExecution{}, err
-		}
 	}
-	return ResolvedSourceExecution{
-		SourceExecution: exec,
-		Intent:          SourceExecutionIntentSynthesizedSDK,
-	}, nil
+	if HasExplicitSourceRun(manifest) {
+		return ResolvedSourceExecution{}, fmt.Errorf("manifest defines run but no %s entrypoint.artifactPath", kind)
+	}
+	return ResolvedSourceExecution{}, missingDeclaredSourceBuildError(manifest, kind)
 }
 
 func explicitRunExecution(rootDir string, manifest *providermanifestv1.Manifest) ResolvedSourceExecution {
