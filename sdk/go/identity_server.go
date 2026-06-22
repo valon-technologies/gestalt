@@ -9,11 +9,11 @@ import (
 )
 
 type authServer struct {
-	proto.UnimplementedAuthenticationServer
-	auth AuthenticationProvider
+	proto.UnimplementedIdentityServer
+	auth IdentityProvider
 }
 
-func newAuthenticationProviderServer(auth AuthenticationProvider) *authServer {
+func newIdentityProviderServer(auth IdentityProvider) *authServer {
 	return &authServer{auth: auth}
 }
 
@@ -26,7 +26,7 @@ func (s *authServer) Authorize(ctx context.Context, req *proto.AuthorizeRequest)
 		return nil, providerRPCError("authorize", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return authorizeResponseToProto(resp), nil
 }
@@ -40,7 +40,7 @@ func (s *authServer) Token(ctx context.Context, req *proto.TokenRequest) (*proto
 		return nil, providerRPCError("token", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return tokenResponseToProto(resp), nil
 }
@@ -54,7 +54,7 @@ func (s *authServer) Introspect(ctx context.Context, req *proto.IntrospectReques
 		return nil, providerRPCError("introspect", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return introspectResponseToProto(resp), nil
 }
@@ -69,7 +69,7 @@ func (s *authServer) UserInfo(ctx context.Context, req *proto.UserInfoRequest) (
 		return nil, providerRPCError("userinfo", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return userInfoResponseToProto(resp), nil
 }
@@ -81,7 +81,7 @@ func (s *authServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequest)
 		return nil, providerRPCError("list grants", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return listGrantsResponseToProto(resp), nil
 }
@@ -96,7 +96,7 @@ func (s *authServer) GetGrant(ctx context.Context, req *proto.GetGrantRequest) (
 		return nil, providerRPCError("get grant", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return getGrantResponseToProto(resp), nil
 }
@@ -118,5 +118,5 @@ func (s *authServer) authCallContext(ctx context.Context) context.Context {
 	if token == "" {
 		return ctx
 	}
-	return WithAuthCallContext(ctx, AuthCallContext{CallerBearerToken: token})
+	return WithIdentityCallContext(ctx, IdentityCallContext{CallerBearerToken: token})
 }

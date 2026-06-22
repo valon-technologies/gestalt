@@ -15,7 +15,7 @@ model.
 
 Each provider adds one kind of capability to Gestalt. Some providers expose
 tools that users and agents can call. Others back services such as
-authentication, authorization, and storage.
+identity, authorization, and storage.
 
 Every configured provider is resolved from a manifest and validated by
 `gestaltd`.
@@ -24,7 +24,7 @@ The provider pages describe the configuration shape, runtime model, SDK
 examples, and custom provider contract for that kind:
 
 <Cards num={6} className="provider-kind-cards">
-  <Cards.Card title="Authentication" href="/providers/authentication" />
+  <Cards.Card title="Identity" href="/providers/identity" />
   <Cards.Card title="External Credentials" href="/providers/external-credentials" />
   <Cards.Card title="Agent" href="/providers/agent" />
   <Cards.Card title="Cache" href="/providers/cache" />
@@ -66,10 +66,10 @@ repositories or duplicate package addresses.
 ```yaml
 server:
   providers:
-    authentication: oidc
+    identity: oidc
 
 providers:
-  authentication:
+  identity:
     oidc:
       source:
         package: github.com/valon-technologies/gestalt-providers/auth/oidc
@@ -178,7 +178,7 @@ Add an indexed provider package to one writable config file:
 ```sh
 gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc \
   --config ./gestalt.yaml \
-  --kind authentication \
+  --kind identity \
   --name oidc \
   --version '^1.4.0'
 ```
@@ -393,7 +393,7 @@ are building, then use the release guidance below when the package is ready.
 ### Releasing provider packages
 
 Gestalt uses the same release system for executable provider packages,
-authentication and datastore component packages, and packaged UI bundles. Every
+identity and datastore component packages, and packaged UI bundles. Every
 package is described by a provider manifest file: `manifest.yaml`,
 `manifest.yml`, or `manifest.json`.
 

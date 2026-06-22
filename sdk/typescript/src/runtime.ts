@@ -24,7 +24,7 @@ import type { Init } from "./rpc_support.ts";
 export const ProviderKind = {
   UNSPECIFIED: 0,
   APP: 1,
-  AUTHENTICATION: 2,
+  IDENTITY: 2,
   INDEXEDDB: 3,
   SECRETS: 4,
   TELEMETRY: 5,

@@ -31,7 +31,7 @@ import {
   AuthorizeRequestSchema,
   IntrospectRequestSchema,
   TokenRequestSchema,
-} from "../src/internal/gen/v1/authentication_pb.ts";
+} from "../src/internal/gen/v1/identity_pb.ts";
 import {
   CacheDeleteManyRequestSchema,
   CacheDeleteRequestSchema,
@@ -85,7 +85,7 @@ import {
   createCacheService,
   ENV_WRITE_CATALOG,
   ENV_PROVIDER_SOCKET,
-  createAuthenticationService,
+  createIdentityService,
   createProviderService,
   createRuntimeProviderService,
   createRuntimeService,
@@ -261,7 +261,7 @@ test("loadProviderFromTarget formats package target in errors when explicit targ
         name: "broken-provider",
         gestalt: {
           provider: {
-            kind: "authentication",
+            kind: "identity",
             target: "./provider.ts#missing",
           },
         },
@@ -287,7 +287,7 @@ export const app = defineApp({
     );
 
     await expect(loadProviderFromTarget(root, "   ")).rejects.toThrow(
-      "authentication:./provider.ts#missing did not resolve to a Gestalt authentication provider",
+      "identity:./provider.ts#missing did not resolve to a Gestalt identity provider",
     );
   } finally {
     removeTempDir(root);
@@ -997,10 +997,10 @@ export const app = defineApp({
   }
 });
 
-test("authentication provider supports runtime metadata, OAuth flows, and introspection", async () => {
+test("identity provider supports runtime metadata, OAuth flows, and introspection", async () => {
   const provider = await loadProviderFromTarget(fixturePath("auth-provider"));
   const runtime = createRuntimeService(provider);
-  const auth = createAuthenticationService(provider as any);
+  const auth = createIdentityService(provider as any);
 
   await expectConnectCode(
     (runtime.configureProvider as any)(
@@ -1029,7 +1029,7 @@ test("authentication provider supports runtime metadata, OAuth flows, and intros
   const metadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
-  expect(metadata.kind).toBe(ProtoProviderKind.AUTHENTICATION);
+  expect(metadata.kind).toBe(ProtoProviderKind.IDENTITY);
   expect(metadata.displayName).toBe("Fixture Auth");
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);

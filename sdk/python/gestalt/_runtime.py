@@ -23,8 +23,8 @@ from ._api import Access, Credential, Error, Host, Request, Subject, SubjectPerm
 from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
-from ._codec import authentication as _authentication_codec
 from ._codec import authorization as _authorization_codec
+from ._codec import identity as _identity_codec
 from ._codec import s3 as _s3_codec
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
@@ -35,12 +35,12 @@ from ._providers import (
     AgentProvider,
     AppProvider,
     AppProviderAdapter,
-    AuthCallContext,
-    AuthenticationProvider,
     AuthorizationProvider,
     CacheProvider,
     Closer,
     HealthChecker,
+    IdentityCallContext,
+    IdentityProvider,
     MetadataProvider,
     ProviderKind,
     ProviderMetadata,
@@ -68,8 +68,8 @@ runtime_provider_pb2: Any = cast(Any, None)
 runtime_provider_pb2_grpc: Any = cast(Any, None)
 runtime_pb2: Any = cast(Any, None)
 runtime_pb2_grpc: Any = cast(Any, None)
-authentication_pb2: Any = cast(Any, None)
-authentication_pb2_grpc: Any = cast(Any, None)
+identity_pb2: Any = cast(Any, None)
+identity_pb2_grpc: Any = cast(Any, None)
 authorization_pb2_grpc: Any = cast(Any, None)
 cache_pb2: Any = cast(Any, None)
 cache_pb2_grpc: Any = cast(Any, None)
@@ -83,7 +83,7 @@ workflow_pb2_grpc: Any = cast(Any, None)
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PROVIDER_SOCKET"
 ENV_PROVIDER_NAME: Final[str] = "GESTALT_APP_NAME"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_APP_WRITE_CATALOG"
-CURRENT_PROTOCOL_VERSION: Final[int] = 4
+CURRENT_PROTOCOL_VERSION: Final[int] = 5
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
 USAGE: Final[str] = (
@@ -93,8 +93,8 @@ USAGE: Final[str] = (
 
 def _ensure_grpc_runtime() -> None:
     global json_format
-    global authentication_pb2
-    global authentication_pb2_grpc
+    global identity_pb2
+    global identity_pb2_grpc
     global authorization_pb2_grpc
     global cache_pb2
     global cache_pb2_grpc
@@ -125,11 +125,11 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
     from ._gen.v1 import app_pb2 as _app_pb2
     from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-    from ._gen.v1 import authentication_pb2 as _authentication_pb2
-    from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
     from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
     from ._gen.v1 import cache_pb2 as _cache_pb2
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
+    from ._gen.v1 import identity_pb2 as _identity_pb2
+    from ._gen.v1 import identity_pb2_grpc as _identity_pb2_grpc
     from ._gen.v1 import runtime_pb2 as _runtime_pb2
     from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
     from ._gen.v1 import runtime_provider_pb2 as _runtime_provider_pb2
@@ -150,8 +150,8 @@ def _ensure_grpc_runtime() -> None:
     runtime_provider_pb2_grpc = _runtime_provider_pb2_grpc
     runtime_pb2 = _runtime_pb2
     runtime_pb2_grpc = _runtime_pb2_grpc
-    authentication_pb2 = _authentication_pb2
-    authentication_pb2_grpc = _authentication_pb2_grpc
+    identity_pb2 = _identity_pb2
+    identity_pb2_grpc = _identity_pb2_grpc
     authorization_pb2_grpc = _authorization_pb2_grpc
     cache_pb2 = _cache_pb2
     cache_pb2_grpc = _cache_pb2_grpc
@@ -336,10 +336,10 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
     if isinstance(target, (App, AppProviderAdapter)):
         return target
 
-    if resolved_kind == ProviderKind.AUTHENTICATION and isinstance(
-        target, AuthenticationProvider
+    if resolved_kind == ProviderKind.IDENTITY and isinstance(
+        target, IdentityProvider
     ):
-        return _authentication_runtime_plugin(target)
+        return _identity_runtime_plugin(target)
     if resolved_kind == ProviderKind.AUTHORIZATION and isinstance(
         target, AuthorizationProvider
     ):
@@ -456,10 +456,10 @@ def _servable_target(
         return target
 
     kind = _normalized_runtime_kind(runtime_kind)
-    if kind == ProviderKind.AUTHENTICATION and isinstance(
-        target, AuthenticationProvider
+    if kind == ProviderKind.IDENTITY and isinstance(
+        target, IdentityProvider
     ):
-        return _authentication_runtime_plugin(target)
+        return _identity_runtime_plugin(target)
     if kind == ProviderKind.AUTHORIZATION and isinstance(target, AuthorizationProvider):
         return _authorization_runtime_plugin(target)
     if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
@@ -477,24 +477,24 @@ def _servable_target(
     raise RuntimeError("unsupported runtime target")
 
 
-def _authentication_runtime_plugin(
-    provider: AuthenticationProvider,
+def _identity_runtime_plugin(
+    provider: IdentityProvider,
 ) -> AppProviderAdapter:
     return AppProviderAdapter(
-        kind=ProviderKind.AUTHENTICATION,
+        kind=ProviderKind.IDENTITY,
         provider=provider,
-        register_services=_register_authentication_services,
+        register_services=_register_identity_services,
     )
 
 
-def _register_authentication_services(server: Any, provider: AppProvider) -> None:
+def _register_identity_services(server: Any, provider: AppProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
-        _runtime_servicer(provider=provider, kind=ProviderKind.AUTHENTICATION),
+        _runtime_servicer(provider=provider, kind=ProviderKind.IDENTITY),
         server,
     )
-    authentication_pb2_grpc.add_AuthenticationServicer_to_server(
-        _authentication_servicer(provider=provider),
+    identity_pb2_grpc.add_IdentityServicer_to_server(
+        _identity_servicer(provider=provider),
         server,
     )
 
@@ -1538,10 +1538,10 @@ def _runtime_servicer(*, provider: AppProvider, kind: ProviderKind) -> Any:
     return RuntimeServicer()
 
 
-def _auth_call_context_from_handler(context: Any) -> AuthCallContext:
+def _auth_call_context_from_handler(context: Any) -> IdentityCallContext:
     invocation_metadata = getattr(context, "invocation_metadata", None)
     if invocation_metadata is None:
-        return AuthCallContext()
+        return IdentityCallContext()
     for key, value in invocation_metadata():
         if key != CALLER_BEARER_TOKEN_METADATA_KEY:
             continue
@@ -1549,108 +1549,108 @@ def _auth_call_context_from_handler(context: Any) -> AuthCallContext:
             token = value.decode("utf-8")
         else:
             token = str(value)
-        return AuthCallContext(caller_bearer_token=token.strip())
-    return AuthCallContext()
+        return IdentityCallContext(caller_bearer_token=token.strip())
+    return IdentityCallContext()
 
 
-def _authentication_servicer(*, provider: AppProvider) -> Any:
+def _identity_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
-    auth_provider = cast(AuthenticationProvider, provider)
+    auth_provider = cast(IdentityProvider, provider)
 
-    class AuthenticationServicer(
-        authentication_pb2_grpc.AuthenticationServicer
+    class IdentityServicer(
+        identity_pb2_grpc.IdentityServicer
     ):
         @_grpc_handler("authorize")
         def Authorize(self, request: Any, context: Any) -> Any:
             response = auth_provider.authorize(
-                _authentication_codec.from_wire_authorize_request(request)
+                _identity_codec.from_wire_authorize_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
-            return _authentication_codec.to_wire_authorize_response(response)
+            return _identity_codec.to_wire_authorize_response(response)
 
         @_grpc_handler("token")
         def Token(self, request: Any, context: Any) -> Any:
             response = auth_provider.token(
-                _authentication_codec.from_wire_token_request(request)
+                _identity_codec.from_wire_token_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
-            return _authentication_codec.to_wire_token_response(response)
+            return _identity_codec.to_wire_token_response(response)
 
         @_grpc_handler("introspect")
         def Introspect(self, request: Any, context: Any) -> Any:
             response = auth_provider.introspect(
-                _authentication_codec.from_wire_introspect_request(request)
+                _identity_codec.from_wire_introspect_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
-            return _authentication_codec.to_wire_introspect_response(response)
+            return _identity_codec.to_wire_introspect_response(response)
 
         @_grpc_handler("userinfo")
         def UserInfo(self, request: Any, context: Any) -> Any:
             _ = request
             response = auth_provider.user_info(
-                _authentication_codec.from_wire_user_info_request(request),
+                _identity_codec.from_wire_user_info_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
-            return _authentication_codec.to_wire_user_info_response(response)
+            return _identity_codec.to_wire_user_info_response(response)
 
         @_grpc_handler("list grants")
         def ListGrants(self, request: Any, context: Any) -> Any:
             _ = request
             response = auth_provider.list_grants(
-                _authentication_codec.from_wire_list_grants_request(request),
+                _identity_codec.from_wire_list_grants_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
-            return _authentication_codec.to_wire_list_grants_response(response)
+            return _identity_codec.to_wire_list_grants_response(response)
 
         @_grpc_handler("get grant")
         def GetGrant(self, request: Any, context: Any) -> Any:
             response = auth_provider.get_grant(
-                _authentication_codec.from_wire_get_grant_request(request),
+                _identity_codec.from_wire_get_grant_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
-            return _authentication_codec.to_wire_get_grant_response(response)
+            return _identity_codec.to_wire_get_grant_response(response)
 
         @_grpc_handler("revoke grant")
         def RevokeGrant(self, request: Any, context: Any) -> Any:
             response = auth_provider.revoke_grant(
-                _authentication_codec.from_wire_revoke_grant_request(request),
+                _identity_codec.from_wire_revoke_grant_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
-            return _authentication_codec.to_wire_revoke_grant_response(response)
+            return _identity_codec.to_wire_revoke_grant_response(response)
 
-    return AuthenticationServicer()
+    return IdentityServicer()
 
 
 def _authorization_servicer(*, provider: AppProvider) -> Any:
@@ -2046,7 +2046,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     return {
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_APP,
         ProviderKind.AUTHORIZATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHORIZATION,
-        ProviderKind.AUTHENTICATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
+        ProviderKind.IDENTITY: runtime_pb2.ProviderKind.PROVIDER_KIND_IDENTITY,
         ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
         ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
         ProviderKind.AGENT: runtime_pb2.ProviderKind.PROVIDER_KIND_AGENT,

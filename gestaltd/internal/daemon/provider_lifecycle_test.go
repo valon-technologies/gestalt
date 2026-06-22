@@ -29,7 +29,7 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v7\napps:\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
@@ -112,7 +112,7 @@ packages:
 
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v7\napps:\n")
 	env := []string{"XDG_CONFIG_HOME=" + xdgConfigHome}
 
 	out := runGestaltdWithEnv(t, env, "provider", "add", pkg, "--config", cfgPath, "--repo", "private", "--name", "alpha", "--version", "1.2.3", "--lockfile", lockPath)
@@ -153,8 +153,8 @@ func TestE2EProviderAddExactSourceAndRejectsRepeatedConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
 	otherCfgPath := filepath.Join(dir, "other.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n")
-	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v6\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v7\napps:\n")
+	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v7\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
@@ -180,7 +180,7 @@ func TestE2EProviderAddRejectsExistingName(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n  alpha:\n    source: env\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v7\napps:\n  alpha:\n    source: env\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
@@ -196,7 +196,7 @@ func TestE2EProviderListOfflineAndLockStatus(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v6
+	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v7
 providerRepositories:
   unreachable:
     url: http://127.0.0.1:1/provider-index.yaml
@@ -365,7 +365,7 @@ func TestE2EProviderRemoveUniqueAndAmbiguousKinds(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v6
+	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v7
 apps:
   alpha:
     source: env
@@ -401,7 +401,7 @@ func TestE2EProviderUpgradeVersionRejectsRepeatedConfigAndAmbiguousKind(t *testi
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
 	otherCfgPath := filepath.Join(dir, "other.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v6
+	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v7
 apps:
   alpha:
     source:
@@ -413,7 +413,7 @@ providers:
         package: github.com/acme/providers/alpha-ui
       path: /
 `)
-	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v6\n")
+	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v7\n")
 
 	out, err := runGestaltdResult("provider", "upgrade", "alpha", "--version", "1.2.3", "--config", cfgPath, "--config", otherCfgPath)
 	if err == nil {

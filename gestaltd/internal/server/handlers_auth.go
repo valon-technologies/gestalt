@@ -80,7 +80,7 @@ func (s *Server) authProviderName() string {
 	if s.auth == nil {
 		return "none"
 	}
-	return "authentication"
+	return "identity"
 }
 
 func (s *Server) authEnabled() bool {

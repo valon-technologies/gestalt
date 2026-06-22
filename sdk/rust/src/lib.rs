@@ -10,9 +10,6 @@ mod api;
 pub mod app;
 /// Generated shared runtime for the sdkgen clients.
 mod auth;
-mod auth_server;
-/// Generated Authentication client and native types.
-pub mod authentication;
 /// Generated Authorization client and native types.
 pub mod authorization;
 /// Generated Cache client and native types.
@@ -25,6 +22,9 @@ mod env;
 mod error;
 /// Generated ExternalCredentials client and native types.
 pub mod external_credential;
+/// Generated Identity client and native types.
+pub mod identity;
+mod identity_server;
 // The prost wire module is reachable only through the doc-hidden proto
 // escape hatch; its items are not part of the documented surface.
 #[allow(missing_docs)]
@@ -100,8 +100,8 @@ pub use api::{
 };
 pub use app::App;
 pub use auth::{
-    AuthCallContext, AuthenticationProvider, GRANT_TYPE_AUTHORIZATION_CODE,
-    GRANT_TYPE_TOKEN_EXCHANGE, SUBJECT_TOKEN_TYPE_ACCESS_TOKEN,
+    GRANT_TYPE_AUTHORIZATION_CODE, GRANT_TYPE_TOKEN_EXCHANGE, IdentityCallContext,
+    IdentityProvider, SUBJECT_TOKEN_TYPE_ACCESS_TOKEN,
 };
 pub use cache::Cache;
 pub use cache_provider::{CacheEntry, CacheProvider, CacheSetOptions};
@@ -221,13 +221,13 @@ macro_rules! export_provider {
     };
 }
 
-/// Exports the authentication-provider entrypoint expected by `gestaltd`.
+/// Exports the identity-provider entrypoint expected by `gestaltd`.
 #[macro_export]
-macro_rules! export_authentication_provider {
+macro_rules! export_identity_provider {
     (constructor = $constructor:path $(,)?) => {
-        pub fn __gestalt_serve_authentication(_name: &str) -> $crate::Result<()> {
+        pub fn __gestalt_serve_identity(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime_impl::run_authentication_provider(provider)
+            $crate::runtime_impl::run_identity_provider(provider)
         }
     };
 }

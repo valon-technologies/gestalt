@@ -18,11 +18,11 @@ Once the secret managers are ready, Gestalt resolves every structured secret ref
 
 With secrets resolved, `server.encryptionKey` gets converted into a 32-byte AES key. A 64-character hex string is decoded directly; anything else goes through Argon2id derivation. This derived key protects all stored tokens.
 
-From there, the authentication and datastore providers are spawned as child processes over gRPC, schema migrations run, apps start, and the HTTP listeners come up. The `/ready` endpoint returns 503 until everything reports ready.
+From there, the identity and datastore providers are spawned as child processes over gRPC, schema migrations run, apps start, and the HTTP listeners come up. The `/ready` endpoint returns 503 until everything reports ready.
 
 ## How requests flow
 
-Authentication middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. Bearer values are validated through the configured authentication provider (introspection). Provider-issued session and API grants share the same validation path.
+Authentication middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. Bearer values are validated through the configured identity provider (introspection). Provider-issued session and API grants share the same validation path.
 
 For operation invocations (`/api/v1/{integration}/{operation}` or `/mcp`), the request reaches the *broker*. The broker resolves the caller's app token from the datastore, decrypts it, refreshes it if needed, and dispatches to the app (over gRPC, or to a REST/GraphQL/MCP upstream). The same broker handles both HTTP and MCP calls.
 

@@ -504,7 +504,7 @@ func slugAppName(value string) string {
 func validateSourceComponentKind(kind string) error {
 	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return nil
 	default:
 		return fmt.Errorf("unsupported source component kind %q", kind)
@@ -514,8 +514,8 @@ func validateSourceComponentKind(kind string) error {
 func componentServeCall(kind string) (string, error) {
 	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
-	case providermanifestv1.KindAuthentication:
-		return "gestalt.ServeAuthenticationProvider(ctx, providerpkg.New())", nil
+	case providermanifestv1.KindIdentity:
+		return "gestalt.ServeIdentityProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindAuthorization:
 		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindExternalCredentials:

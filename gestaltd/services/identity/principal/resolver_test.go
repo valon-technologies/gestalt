@@ -118,7 +118,7 @@ func TestResolveTokenEnrichesPrincipalWithUserInfo(t *testing.T) {
 			}, nil
 		},
 		UserInfoFn: func(ctx context.Context, _ *core.UserInfoRequest) (*core.UserInfoResponse, error) {
-			call := gestalt.AuthCallContextFromContext(ctx)
+			call := gestalt.IdentityCallContextFromContext(ctx)
 			if call.CallerBearerToken != accessToken {
 				t.Fatalf("UserInfo() caller bearer token = %q, want %q", call.CallerBearerToken, accessToken)
 			}

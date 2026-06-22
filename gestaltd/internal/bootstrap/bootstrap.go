@@ -164,7 +164,7 @@ type Deps struct {
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
 	S3                    map[string]s3sdk.S3
-	Authentication        core.AuthenticationProvider
+	Authentication        core.IdentityProvider
 	Authorization         core.AuthorizationProvider
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
@@ -186,7 +186,7 @@ type Deps struct {
 	hostedAgentPoolClock hostedAgentPoolClock
 }
 
-type AuthFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.AuthenticationProvider, error)
+type AuthFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.IdentityProvider, error)
 type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (providerdrivers.AuthorizationBuildResult, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
@@ -229,9 +229,9 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth                 core.AuthenticationProvider
+	Auth                 core.IdentityProvider
 	SelectedAuthProvider string
-	AuthProviders        map[string]core.AuthenticationProvider
+	AuthProviders        map[string]core.IdentityProvider
 	Authorization        map[string]core.AuthorizationProvider
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
@@ -657,9 +657,9 @@ func (p *agentProviderWithTracking) SupportsWorkspaceRequests() bool {
 }
 
 type preparedCore struct {
-	Auth                 core.AuthenticationProvider
+	Auth                 core.IdentityProvider
 	SelectedAuthProvider string
-	AuthProviders        map[string]core.AuthenticationProvider
+	AuthProviders        map[string]core.IdentityProvider
 	Authorization        map[string]core.AuthorizationProvider
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
@@ -1751,7 +1751,7 @@ func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.Provid
 	return mapToYAMLNode(providerCfg)
 }
 
-func closeAuth(provider core.AuthenticationProvider) error {
+func closeAuth(provider core.IdentityProvider) error {
 	closer, ok := provider.(interface{ Close() error })
 	if !ok {
 		return nil
@@ -1759,7 +1759,7 @@ func closeAuth(provider core.AuthenticationProvider) error {
 	return closer.Close()
 }
 
-func closeAuthProviders(providers map[string]core.AuthenticationProvider) error {
+func closeAuthProviders(providers map[string]core.IdentityProvider) error {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -1810,19 +1810,19 @@ func closeSecretManager(sm core.SecretManager) error {
 	return closer.Close()
 }
 
-func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.AuthenticationProvider, error) {
-	selectedName, _, err := cfg.SelectedAuthenticationProvider()
+func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.IdentityProvider, error) {
+	selectedName, _, err := cfg.SelectedIdentityProvider()
 	if err != nil {
 		return "", nil, err
 	}
-	if len(cfg.Providers.Authentication) == 0 {
+	if len(cfg.Providers.Identity) == 0 {
 		return selectedName, nil, nil
 	}
 	if factories.Auth == nil {
 		return "", nil, fmt.Errorf("bootstrap: authentication factory is not registered")
 	}
-	providers := make(map[string]core.AuthenticationProvider, len(cfg.Providers.Authentication))
-	for name, authEntry := range cfg.Providers.Authentication {
+	providers := make(map[string]core.IdentityProvider, len(cfg.Providers.Identity))
+	for name, authEntry := range cfg.Providers.Identity {
 		if authEntry == nil {
 			continue
 		}
@@ -1836,25 +1836,25 @@ func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Dep
 	return selectedName, providers, nil
 }
 
-func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthenticationProvider, error) {
+func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.IdentityProvider, error) {
 	if authEntry == nil {
 		return nil, nil
 	}
 	node := authEntry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
-		node, err = config.BuildComponentRuntimeConfigNode(name, "authentication", authEntry, authEntry.Config)
+		node, err = config.BuildComponentRuntimeConfigNode(name, "identity", authEntry, authEntry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
+			return nil, fmt.Errorf("bootstrap: identity provider %q: %w", name, err)
 		}
 	}
 	hostServices, err := buildProviderHostServices(name, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
+		return nil, fmt.Errorf("bootstrap: identity provider %q: %w", name, err)
 	}
 	auth, err := factories.Auth(context.Background(), name, node, hostServices, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
+		return nil, fmt.Errorf("bootstrap: identity provider %q: %w", name, err)
 	}
 	return auth, nil
 }

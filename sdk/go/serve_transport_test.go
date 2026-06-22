@@ -59,26 +59,26 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	}
 }
 
-func TestServeAuthenticationProviderClosesProviderOnShutdown(t *testing.T) {
+func TestServeIdentityProviderClosesProviderOnShutdown(t *testing.T) {
 	socket := newSocketPath(t, "a.sock")
 	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	auth := &closeableStubAuthenticationProvider{}
+	auth := &closeableStubIdentityProvider{}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeAuthenticationProvider(ctx, auth)
+		errCh <- gestalt.ServeIdentityProvider(ctx, auth)
 	}()
 	t.Cleanup(func() {
 		cancel()
 		waitServeResult(t, errCh)
 		if !auth.closed.Load() {
-			t.Fatal("authentication provider Close was not called")
+			t.Fatal("identity provider Close was not called")
 		}
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewAuthenticationClient(conn)
+	client := proto.NewIdentityClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
@@ -138,19 +138,19 @@ type closeableStubProvider struct {
 	closeTracker
 }
 
-type closeableStubAuthenticationProvider struct {
+type closeableStubIdentityProvider struct {
 	closeTracker
 }
 
-func (p *closeableStubAuthenticationProvider) Configure(context.Context, string, map[string]any) error {
+func (p *closeableStubIdentityProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
-func (p *closeableStubAuthenticationProvider) Authorize(_ context.Context, _ *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+func (p *closeableStubIdentityProvider) Authorize(_ context.Context, _ *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
 	return &gestalt.AuthorizeResponse{RedirectURI: "https://auth.example.test/login"}, nil
 }
 
-func (p *closeableStubAuthenticationProvider) Token(_ context.Context, _ *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+func (p *closeableStubIdentityProvider) Token(_ context.Context, _ *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
 	return &gestalt.TokenResponse{
 		AccessToken: "stub-access-token",
 		TokenType:   "Bearer",
@@ -159,7 +159,7 @@ func (p *closeableStubAuthenticationProvider) Token(_ context.Context, _ *gestal
 	}, nil
 }
 
-func (p *closeableStubAuthenticationProvider) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+func (p *closeableStubIdentityProvider) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
 	if req != nil && req.Token == "stub-access-token" {
 		return &gestalt.IntrospectResponse{
 			Active:   true,
@@ -170,8 +170,8 @@ func (p *closeableStubAuthenticationProvider) Introspect(_ context.Context, req 
 	return &gestalt.IntrospectResponse{Active: false}, nil
 }
 
-func (p *closeableStubAuthenticationProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
-	call := gestalt.AuthCallContextFromContext(ctx)
+func (p *closeableStubIdentityProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+	call := gestalt.IdentityCallContextFromContext(ctx)
 	if call.CallerBearerToken == "stub-access-token" {
 		return &gestalt.UserInfoResponse{
 			SubjectID: "user:user@example.com",
@@ -182,15 +182,15 @@ func (p *closeableStubAuthenticationProvider) UserInfo(ctx context.Context, _ *g
 	return nil, status.Error(codes.NotFound, "userinfo not found")
 }
 
-func (p *closeableStubAuthenticationProvider) ListGrants(context.Context, *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+func (p *closeableStubIdentityProvider) ListGrants(context.Context, *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
 	return &gestalt.ListGrantsResponse{}, nil
 }
 
-func (p *closeableStubAuthenticationProvider) GetGrant(context.Context, *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
+func (p *closeableStubIdentityProvider) GetGrant(context.Context, *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
 	return nil, status.Error(codes.NotFound, "grant not found")
 }
 
-func (p *closeableStubAuthenticationProvider) RevokeGrant(context.Context, *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
+func (p *closeableStubIdentityProvider) RevokeGrant(context.Context, *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
 	return &gestalt.RevokeGrantResponse{}, nil
 }
 

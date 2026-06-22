@@ -2,15 +2,8 @@ use std::sync::Arc;
 
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::auth::{AuthCallContext, AuthenticationProvider, caller_bearer_token_from_metadata};
-use crate::authentication::{
-    AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
-    TokenRequest, UserInfoRequest, UserInfoResponse,
-};
-use crate::authentication::{
-    GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse,
-};
-use crate::generated::v1::authentication_server::Authentication as AuthenticationProviderGrpc;
+use crate::auth::{IdentityCallContext, IdentityProvider, caller_bearer_token_from_metadata};
+use crate::generated::v1::identity_server::Identity as IdentityProviderGrpc;
 use crate::generated::v1::{
     AuthorizeRequest as ProtoAuthorizeRequest, AuthorizeResponse as ProtoAuthorizeResponse,
     GetGrantRequest as ProtoGetGrantRequest, GetGrantResponse as ProtoGetGrantResponse,
@@ -21,19 +14,24 @@ use crate::generated::v1::{
     TokenResponse as ProtoTokenResponse, UserInfoRequest as ProtoUserInfoRequest,
     UserInfoResponse as ProtoUserInfoResponse,
 };
+use crate::identity::{
+    AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
+    TokenRequest, UserInfoRequest, UserInfoResponse,
+};
+use crate::identity::{GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse};
 use crate::rpc_status::rpc_status;
 
-pub struct AuthenticationServer<P> {
+pub struct IdentityServer<P> {
     provider: Arc<P>,
 }
 
-impl<P> AuthenticationServer<P> {
+impl<P> IdentityServer<P> {
     pub fn new(provider: Arc<P>) -> Self {
         Self { provider }
     }
 }
 
-impl<P> Clone for AuthenticationServer<P> {
+impl<P> Clone for IdentityServer<P> {
     fn clone(&self) -> Self {
         Self {
             provider: Arc::clone(&self.provider),
@@ -134,9 +132,9 @@ fn get_grant_response_to_proto(value: GetGrantResponse) -> ProtoGetGrantResponse
 }
 
 #[tonic::async_trait]
-impl<P> AuthenticationProviderGrpc for AuthenticationServer<P>
+impl<P> IdentityProviderGrpc for IdentityServer<P>
 where
-    P: AuthenticationProvider,
+    P: IdentityProvider,
 {
     async fn authorize(
         &self,
@@ -180,7 +178,7 @@ where
         &self,
         request: GrpcRequest<ProtoUserInfoRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoUserInfoResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         let response = self
@@ -195,7 +193,7 @@ where
         &self,
         request: GrpcRequest<ProtoListGrantsRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoListGrantsResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         let response = self
@@ -210,7 +208,7 @@ where
         &self,
         request: GrpcRequest<ProtoGetGrantRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoGetGrantResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         let response = self
@@ -225,7 +223,7 @@ where
         &self,
         request: GrpcRequest<ProtoRevokeGrantRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoRevokeGrantResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         self.provider

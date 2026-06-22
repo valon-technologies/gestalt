@@ -86,22 +86,6 @@ if TYPE_CHECKING:
         WorkflowEvent,
         WorkflowRun,
     )
-    from .authentication import (
-        AuthorizeRequest,
-        AuthorizeResponse,
-        GetGrantRequest,
-        GetGrantResponse,
-        IntrospectRequest,
-        IntrospectResponse,
-        ListGrantsRequest,
-        ListGrantsResponse,
-        RevokeGrantRequest,
-        RevokeGrantResponse,
-        TokenRequest,
-        TokenResponse,
-        UserInfoRequest,
-        UserInfoResponse,
-    )
     from .authorization import (
         AddRelationshipRequest,
         AddRelationshipResponse,
@@ -122,6 +106,22 @@ if TYPE_CHECKING:
         SetAuthorizationStateResponse,
     )
     from .cache import CacheSetEntry
+    from .identity import (
+        AuthorizeRequest,
+        AuthorizeResponse,
+        GetGrantRequest,
+        GetGrantResponse,
+        IntrospectRequest,
+        IntrospectResponse,
+        ListGrantsRequest,
+        ListGrantsResponse,
+        RevokeGrantRequest,
+        RevokeGrantResponse,
+        TokenRequest,
+        TokenResponse,
+        UserInfoRequest,
+        UserInfoResponse,
+    )
     from .s3 import (
         CopyObjectRequest,
         CopyObjectResponse,
@@ -177,7 +177,7 @@ class ProviderKind(str, Enum):
 
     INTEGRATION = "integration"
     AUTHORIZATION = "authorization"
-    AUTHENTICATION = "authentication"
+    IDENTITY = "identity"
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
@@ -274,7 +274,7 @@ CALLER_BEARER_TOKEN_METADATA_KEY = "x-gestalt-caller-bearer-token"
 
 
 @dataclass(frozen=True)
-class AuthCallContext:
+class IdentityCallContext:
     """Caller-scoped authentication metadata for grant-management RPCs."""
 
     caller_bearer_token: str = ""
@@ -303,8 +303,8 @@ class AppProviderAdapter:
         _runtime.serve(self)
 
 
-class AuthenticationProvider(AppProvider):
-    """Base class for authentication providers."""
+class IdentityProvider(AppProvider):
+    """Base class for identity providers."""
 
     def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse:
         """Start an RFC 6749 authorization flow."""
@@ -322,28 +322,28 @@ class AuthenticationProvider(AppProvider):
         raise NotImplementedError
 
     def user_info(
-        self, request: UserInfoRequest, call: AuthCallContext
+        self, request: UserInfoRequest, call: IdentityCallContext
     ) -> UserInfoResponse:
         """Return profile claims for the authenticated caller."""
 
         raise NotImplementedError
 
     def list_grants(
-        self, request: ListGrantsRequest, call: AuthCallContext
+        self, request: ListGrantsRequest, call: IdentityCallContext
     ) -> ListGrantsResponse:
         """List grant IDs visible to the caller."""
 
         raise NotImplementedError
 
     def get_grant(
-        self, request: GetGrantRequest, call: AuthCallContext
+        self, request: GetGrantRequest, call: IdentityCallContext
     ) -> GetGrantResponse:
         """Return one grant owned by the caller."""
 
         raise NotImplementedError
 
     def revoke_grant(
-        self, request: RevokeGrantRequest, call: AuthCallContext
+        self, request: RevokeGrantRequest, call: IdentityCallContext
     ) -> RevokeGrantResponse:
         """Revoke one grant owned by the caller."""
 
@@ -354,7 +354,7 @@ class AuthenticationProvider(AppProvider):
 
         from . import _runtime
 
-        _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
+        _runtime.serve(self, runtime_kind=ProviderKind.IDENTITY)
 
 
 class AuthorizationProvider(AppProvider):

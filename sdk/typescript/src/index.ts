@@ -168,12 +168,12 @@ export {
   type SubjectSetType,
 } from "./providers/authorization.ts";
 export {
-  AuthenticationProvider,
+  IdentityProvider,
   CALLER_BEARER_TOKEN_METADATA_KEY,
-  defineAuthenticationProvider,
-  isAuthenticationProvider,
-  type AuthCallContext,
-  type AuthenticationProviderOptions,
+  defineIdentityProvider,
+  isIdentityProvider,
+  type IdentityCallContext,
+  type IdentityProviderOptions,
   type AuthorizeRequest,
   type AuthorizeResponse,
   type GrantDetails,
@@ -182,7 +182,7 @@ export {
   type IntrospectResponse,
   type TokenRequest,
   type TokenResponse,
-} from "./auth.ts";
+} from "./providers/identity.ts";
 export {
   Cache,
   type CacheDeleteManyRequest,

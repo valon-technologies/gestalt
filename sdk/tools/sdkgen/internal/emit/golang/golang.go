@@ -81,6 +81,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 	for _, g := range groupFiles(services, messages, enums) {
 		public := newRenderer(idx)
+		outputBase := g.base
 		for _, e := range g.enums {
 			public.renderEnum(e)
 		}
@@ -90,7 +91,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		for _, svc := range g.services {
 			public.renderClient(svc)
 		}
-		if err := set.Add("client/"+g.base+".go", []byte(public.assemble())); err != nil {
+		if err := set.Add("client/"+outputBase+".go", []byte(public.assemble())); err != nil {
 			return nil, err
 		}
 
@@ -101,7 +102,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
-		if err := set.Add("client/"+g.base+"_codec.go", []byte(codec.assemble())); err != nil {
+		if err := set.Add("client/"+outputBase+"_codec.go", []byte(codec.assemble())); err != nil {
 			return nil, err
 		}
 	}

@@ -5,7 +5,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
-type AuthenticationDeps struct {
+type IdentityDeps struct {
 	DefaultCallbackURL string
 	SessionKey         []byte
 	HostServices       []runtimehost.HostService

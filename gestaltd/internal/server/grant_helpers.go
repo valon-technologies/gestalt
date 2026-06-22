@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/authentication"
+	"github.com/valon-technologies/gestalt/server/services/identity"
 )
 
 type createGrantResponse struct {
@@ -32,7 +32,7 @@ func (s *Server) callerAuthContext(ctx context.Context, r *http.Request) context
 	if err != nil || strings.TrimSpace(token) == "" {
 		return ctx
 	}
-	return authentication.WithCallerBearerToken(ctx, token)
+	return identity.WithCallerBearerToken(ctx, token)
 }
 
 func (s *Server) callerBearerToken(r *http.Request) (string, error) {

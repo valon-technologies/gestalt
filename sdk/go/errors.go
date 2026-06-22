@@ -195,9 +195,9 @@ var (
 	// ErrExternalCredentialNotFound indicates that the requested external
 	// credential does not exist.
 	ErrExternalCredentialNotFound = errors.New("external credential not found")
-	// ErrExternalTokenValidationUnsupported indicates that the authentication provider
+	// ErrExternalTokenValidationUnsupported indicates that the identity provider
 	// does not implement external token validation.
-	ErrExternalTokenValidationUnsupported = errors.New("authentication provider does not support external token validation")
+	ErrExternalTokenValidationUnsupported = errors.New("identity provider does not support external token validation")
 )
 
 func providerRPCError(operation string, err error) error {

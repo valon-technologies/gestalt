@@ -5,11 +5,11 @@
 
 pub(crate) mod agent;
 pub(crate) mod app;
-pub(crate) mod authentication;
 pub(crate) mod authorization;
 pub(crate) mod cache;
 pub(crate) mod external_credential;
 pub(crate) mod host_service;
+pub(crate) mod identity;
 pub(crate) mod indexeddb;
 pub(crate) mod runtime;
 pub(crate) mod runtime_provider;

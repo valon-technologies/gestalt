@@ -36,7 +36,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v6
+	cfgYAML := `apiVersion: gestaltd.config/v7
 providers:
   ui:
     demo:
@@ -93,7 +93,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v6
+	cfgYAML := `apiVersion: gestaltd.config/v7
 providers:
   ui:
     demo:
@@ -123,7 +123,7 @@ func TestLoadConfigForLifecycleGitUISkipsDevActive(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v6
+	cfgYAML := `apiVersion: gestaltd.config/v7
 providers:
   ui:
     demo:
@@ -202,7 +202,7 @@ spec:
 
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
-	configYAML := `apiVersion: gestaltd.config/v6
+	configYAML := `apiVersion: gestaltd.config/v7
 ` + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + `  ui:
     demo:
       source:
@@ -265,7 +265,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "gestaltd.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v6
+	cfgYAML := `apiVersion: gestaltd.config/v7
 ` + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + `  ui:
     demo:
       path: /demo
@@ -327,7 +327,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v6
+	cfgYAML := `apiVersion: gestaltd.config/v7
 providers:
   ui:
     demo:
@@ -376,7 +376,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v6
+	cfgYAML := `apiVersion: gestaltd.config/v7
 providers:
   ui:
     demo:
@@ -399,7 +399,7 @@ func TestForcedDevUIKeyWithUnreadableSourceErrors(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v6
+	cfgYAML := `apiVersion: gestaltd.config/v7
 providers:
   ui:
     demo:

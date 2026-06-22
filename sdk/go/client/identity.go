@@ -152,41 +152,41 @@ type UserInfoResponse struct {
 	Name      string
 }
 
-// Authentication is the generated client for gestalt.provider.v1.Authentication.
+// Identity is the generated client for gestalt.provider.v1.Identity.
 // Every transport error is converted to *GestaltError.
 //
-// Authentication models the shared Gestalt authentication protocol.
-type Authentication struct {
-	client proto.AuthenticationClient
+// Identity models the shared Gestalt authentication protocol.
+type Identity struct {
+	client proto.IdentityClient
 }
 
-// NewAuthentication creates a Authentication client over an injected gRPC connection.
-func NewAuthentication(conn grpc.ClientConnInterface) *Authentication {
-	return &Authentication{client: proto.NewAuthenticationClient(conn)}
+// NewIdentity creates a Identity client over an injected gRPC connection.
+func NewIdentity(conn grpc.ClientConnInterface) *Identity {
+	return &Identity{client: proto.NewIdentityClient(conn)}
 }
 
-var connectAuthenticationConns host.ConnPool
+var connectIdentityConns host.ConnPool
 
-// ConnectAuthentication dials the "authentication" host service advertised through the
+// ConnectIdentity dials the "identity" host service advertised through the
 // GESTALT_HOST_SERVICE_SOCKET environment and returns a connected client.
 // name selects a named binding; the empty string selects the default
 // binding. Connections are pooled per binding and shared across clients for
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
-func ConnectAuthentication(ctx context.Context, name string) (*Authentication, error) {
-	target, token, err := host.Target("authentication")
+func ConnectIdentity(ctx context.Context, name string) (*Identity, error) {
+	target, token, err := host.Target("identity")
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	conn, err := connectAuthenticationConns.Conn(ctx, "authentication", target, token, name)
+	conn, err := connectIdentityConns.Conn(ctx, "identity", target, token, name)
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return NewAuthentication(conn), nil
+	return NewIdentity(conn), nil
 }
 
-// Authorize is the ergonomic form of [Authentication.AuthorizeRaw].
-func (c *Authentication) Authorize(ctx context.Context, responseType string, clientId string, redirectUri string, scope string, state string) (*AuthorizeResponse, error) {
+// Authorize is the ergonomic form of [Identity.AuthorizeRaw].
+func (c *Identity) Authorize(ctx context.Context, responseType string, clientId string, redirectUri string, scope string, state string) (*AuthorizeResponse, error) {
 	request := &AuthorizeRequest{ResponseType: responseType, ClientId: clientId, RedirectUri: redirectUri, Scope: scope, State: state}
 	response, err := c.client.Authorize(ctx, ToWireAuthorizeRequest(request))
 	if err != nil {
@@ -195,8 +195,8 @@ func (c *Authentication) Authorize(ctx context.Context, responseType string, cli
 	return FromWireAuthorizeResponse(response), nil
 }
 
-// AuthorizeRaw is the faithful form of [Authentication.Authorize].
-func (c *Authentication) AuthorizeRaw(ctx context.Context, request *AuthorizeRequest) (*AuthorizeResponse, error) {
+// AuthorizeRaw is the faithful form of [Identity.Authorize].
+func (c *Identity) AuthorizeRaw(ctx context.Context, request *AuthorizeRequest) (*AuthorizeResponse, error) {
 	response, err := c.client.Authorize(ctx, ToWireAuthorizeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -204,8 +204,8 @@ func (c *Authentication) AuthorizeRaw(ctx context.Context, request *AuthorizeReq
 	return FromWireAuthorizeResponse(response), nil
 }
 
-// Token is the ergonomic form of [Authentication.TokenRaw].
-func (c *Authentication) Token(ctx context.Context, grantType string, code string, redirectUri string, clientId string, state string, scope string, subjectToken string, subjectTokenType string) (*TokenResponse, error) {
+// Token is the ergonomic form of [Identity.TokenRaw].
+func (c *Identity) Token(ctx context.Context, grantType string, code string, redirectUri string, clientId string, state string, scope string, subjectToken string, subjectTokenType string) (*TokenResponse, error) {
 	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType}
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	if err != nil {
@@ -214,8 +214,8 @@ func (c *Authentication) Token(ctx context.Context, grantType string, code strin
 	return FromWireTokenResponse(response), nil
 }
 
-// TokenRaw is the faithful form of [Authentication.Token].
-func (c *Authentication) TokenRaw(ctx context.Context, request *TokenRequest) (*TokenResponse, error) {
+// TokenRaw is the faithful form of [Identity.Token].
+func (c *Identity) TokenRaw(ctx context.Context, request *TokenRequest) (*TokenResponse, error) {
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -223,8 +223,8 @@ func (c *Authentication) TokenRaw(ctx context.Context, request *TokenRequest) (*
 	return FromWireTokenResponse(response), nil
 }
 
-// Introspect is the ergonomic form of [Authentication.IntrospectRaw].
-func (c *Authentication) Introspect(ctx context.Context, token string, tokenTypeHint string) (*IntrospectResponse, error) {
+// Introspect is the ergonomic form of [Identity.IntrospectRaw].
+func (c *Identity) Introspect(ctx context.Context, token string, tokenTypeHint string) (*IntrospectResponse, error) {
 	request := &IntrospectRequest{Token: token, TokenTypeHint: tokenTypeHint}
 	response, err := c.client.Introspect(ctx, ToWireIntrospectRequest(request))
 	if err != nil {
@@ -233,8 +233,8 @@ func (c *Authentication) Introspect(ctx context.Context, token string, tokenType
 	return FromWireIntrospectResponse(response), nil
 }
 
-// IntrospectRaw is the faithful form of [Authentication.Introspect].
-func (c *Authentication) IntrospectRaw(ctx context.Context, request *IntrospectRequest) (*IntrospectResponse, error) {
+// IntrospectRaw is the faithful form of [Identity.Introspect].
+func (c *Identity) IntrospectRaw(ctx context.Context, request *IntrospectRequest) (*IntrospectResponse, error) {
 	response, err := c.client.Introspect(ctx, ToWireIntrospectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -242,8 +242,8 @@ func (c *Authentication) IntrospectRaw(ctx context.Context, request *IntrospectR
 	return FromWireIntrospectResponse(response), nil
 }
 
-// UserInfo calls the UserInfo RPC of Authentication.
-func (c *Authentication) UserInfo(ctx context.Context, request *UserInfoRequest) (*UserInfoResponse, error) {
+// UserInfo calls the UserInfo RPC of Identity.
+func (c *Identity) UserInfo(ctx context.Context, request *UserInfoRequest) (*UserInfoResponse, error) {
 	response, err := c.client.UserInfo(ctx, ToWireUserInfoRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -251,8 +251,8 @@ func (c *Authentication) UserInfo(ctx context.Context, request *UserInfoRequest)
 	return FromWireUserInfoResponse(response), nil
 }
 
-// ListGrants calls the ListGrants RPC of Authentication.
-func (c *Authentication) ListGrants(ctx context.Context, request *ListGrantsRequest) (*ListGrantsResponse, error) {
+// ListGrants calls the ListGrants RPC of Identity.
+func (c *Identity) ListGrants(ctx context.Context, request *ListGrantsRequest) (*ListGrantsResponse, error) {
 	response, err := c.client.ListGrants(ctx, ToWireListGrantsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -260,8 +260,8 @@ func (c *Authentication) ListGrants(ctx context.Context, request *ListGrantsRequ
 	return FromWireListGrantsResponse(response), nil
 }
 
-// GetGrant is the ergonomic form of [Authentication.GetGrantRaw].
-func (c *Authentication) GetGrant(ctx context.Context, grantId string) (*GetGrantResponse, error) {
+// GetGrant is the ergonomic form of [Identity.GetGrantRaw].
+func (c *Identity) GetGrant(ctx context.Context, grantId string) (*GetGrantResponse, error) {
 	request := &GetGrantRequest{GrantId: grantId}
 	response, err := c.client.GetGrant(ctx, ToWireGetGrantRequest(request))
 	if err != nil {
@@ -270,8 +270,8 @@ func (c *Authentication) GetGrant(ctx context.Context, grantId string) (*GetGran
 	return FromWireGetGrantResponse(response), nil
 }
 
-// GetGrantRaw is the faithful form of [Authentication.GetGrant].
-func (c *Authentication) GetGrantRaw(ctx context.Context, request *GetGrantRequest) (*GetGrantResponse, error) {
+// GetGrantRaw is the faithful form of [Identity.GetGrant].
+func (c *Identity) GetGrantRaw(ctx context.Context, request *GetGrantRequest) (*GetGrantResponse, error) {
 	response, err := c.client.GetGrant(ctx, ToWireGetGrantRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -279,8 +279,8 @@ func (c *Authentication) GetGrantRaw(ctx context.Context, request *GetGrantReque
 	return FromWireGetGrantResponse(response), nil
 }
 
-// RevokeGrant is the ergonomic form of [Authentication.RevokeGrantRaw].
-func (c *Authentication) RevokeGrant(ctx context.Context, grantId string) (*RevokeGrantResponse, error) {
+// RevokeGrant is the ergonomic form of [Identity.RevokeGrantRaw].
+func (c *Identity) RevokeGrant(ctx context.Context, grantId string) (*RevokeGrantResponse, error) {
 	request := &RevokeGrantRequest{GrantId: grantId}
 	response, err := c.client.RevokeGrant(ctx, ToWireRevokeGrantRequest(request))
 	if err != nil {
@@ -289,8 +289,8 @@ func (c *Authentication) RevokeGrant(ctx context.Context, grantId string) (*Revo
 	return FromWireRevokeGrantResponse(response), nil
 }
 
-// RevokeGrantRaw is the faithful form of [Authentication.RevokeGrant].
-func (c *Authentication) RevokeGrantRaw(ctx context.Context, request *RevokeGrantRequest) (*RevokeGrantResponse, error) {
+// RevokeGrantRaw is the faithful form of [Identity.RevokeGrant].
+func (c *Identity) RevokeGrantRaw(ctx context.Context, request *RevokeGrantRequest) (*RevokeGrantResponse, error) {
 	response, err := c.client.RevokeGrant(ctx, ToWireRevokeGrantRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

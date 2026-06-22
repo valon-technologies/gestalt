@@ -15,7 +15,7 @@ A Gestalt config has six top-level areas:
 | Key | Purpose |
 | --- | --- |
 | `server` | Host settings, listener configuration, encryption key, runtime defaults, and selected host providers. |
-| `providers` | Named host-scoped providers for authentication, authorization, storage, secrets, telemetry, audit, UI, workflow, and agent backends. |
+| `providers` | Named host-scoped providers for identity, authorization, storage, secrets, telemetry, audit, UI, workflow, and agent backends. |
 | `apps` | Tool providers exposed over HTTP, MCP, and CLI, plus optional app-backed UI mounts. |
 | `authorization` | Static subject access policies shared by the host and provider-backed authorization. |
 | `runtime` | Named runtime placement backends for providers that opt into hosted execution. |
@@ -27,13 +27,13 @@ server:
   encryptionKey: ...
   providers:
     indexeddb: ...
-    authentication: ...
+    identity: ...
     authorization: ...
 
 providers:
   indexeddb:
     <name>: ...
-  authentication:
+  identity:
     <name>: ...
   authorization:
     <name>: ...
@@ -76,7 +76,7 @@ the field reference:
 | Need | Read |
 | --- | --- |
 | App setup, operation filtering, connections, and app-backed UIs | [Apps](/providers/apps) |
-| Platform login | [Authentication](/providers/authentication) |
+| Platform login | [Identity](/providers/identity) |
 | RBAC, policies, and static grants | [Authorization configuration](/reference/config-file#authorization) |
 | Service accounts, subject-owned API tokens, and `runAs` | [Service Accounts](/service-accounts) |
 | Credential storage and upstream credentials | [External Credentials](/providers/external-credentials) |
@@ -98,7 +98,7 @@ order:
 3. `~/.gestaltd/config.yaml`
 
 If nothing is found, `gestaltd` generates a default config at
-`~/.gestaltd/config.yaml` with SQLite storage, no authentication, a random
+`~/.gestaltd/config.yaml` with SQLite storage, no identity provider, a random
 encryption key, and an HTTPBin test app.
 
 When `--config` is repeated, Gestalt loads the files left-to-right and merges
@@ -159,7 +159,7 @@ built-in `env` when `providers.secrets` is omitted,
 
 The required fields at `serve` time are `providers.indexeddb`,
 `server.providers.indexeddb`, and `server.encryptionKey`. Platform
-authentication is optional.
+identity is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token
 encryption and session material from it. Changing this key invalidates existing
@@ -204,7 +204,7 @@ Gestalt. Do not use a shared placeholder value in a real deployment.
 
 ## Full Example
 
-A production deployment with OIDC auth, external credential storage, a GitHub
+A production deployment with OIDC identity, external credential storage, a GitHub
 app with subject-scoped connections, and MCP enabled:
 
 ```yaml
@@ -215,7 +215,7 @@ server:
       provider: default
       name: gestalt-encryption-key
   providers:
-    authentication: oidc
+    identity: oidc
     indexeddb: main
     externalCredentials: main
     secrets: default
@@ -243,7 +243,7 @@ providers:
       config:
         indexeddb: main
 
-  authentication:
+  identity:
     oidc:
       source:
         package: github.com/valon-technologies/gestalt-providers/auth/oidc

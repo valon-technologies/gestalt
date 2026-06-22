@@ -19,8 +19,8 @@ const (
 	ProviderKindUnspecified ProviderKind = 0
 	// ProviderKindApp is the PROVIDER_KIND_APP value of ProviderKind.
 	ProviderKindApp ProviderKind = 1
-	// ProviderKindAuthentication is the PROVIDER_KIND_AUTHENTICATION value of ProviderKind.
-	ProviderKindAuthentication ProviderKind = 2
+	// ProviderKindIdentity is the PROVIDER_KIND_IDENTITY value of ProviderKind.
+	ProviderKindIdentity ProviderKind = 2
 	// ProviderKindIndexeddb is the PROVIDER_KIND_INDEXEDDB value of ProviderKind.
 	ProviderKindIndexeddb ProviderKind = 3
 	// ProviderKindSecrets is the PROVIDER_KIND_SECRETS value of ProviderKind.

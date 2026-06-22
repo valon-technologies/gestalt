@@ -1,11 +1,11 @@
 use tonic::codegen::async_trait;
 
-use crate::authentication::{
+use crate::error::Result;
+use crate::identity::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
     IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
     RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
 };
-use crate::error::Result;
 
 pub const CALLER_BEARER_TOKEN_METADATA_KEY: &str = "x-gestalt-caller-bearer-token";
 
@@ -16,16 +16,15 @@ pub const GRANT_TYPE_TOKEN_EXCHANGE: &str = "urn:ietf:params:oauth:grant-type:to
 /// OAuth 2.0 access token subject token type (RFC 8693).
 pub const SUBJECT_TOKEN_TYPE_ACCESS_TOKEN: &str = "urn:ietf:params:oauth:token-type:access_token";
 
-/// Caller-scoped authentication metadata for grant-management RPCs.
+/// Caller-scoped identity metadata for grant-management RPCs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AuthCallContext {
+pub struct IdentityCallContext {
     /// The caller bearer token from gRPC metadata.
     pub caller_bearer_token: String,
 }
-
 #[async_trait]
-/// Lifecycle and authentication contract for Gestalt authentication providers.
-pub trait AuthenticationProvider: Send + Sync + 'static {
+/// Lifecycle and identity contract for Gestalt identity providers.
+pub trait IdentityProvider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
@@ -72,32 +71,31 @@ pub trait AuthenticationProvider: Send + Sync + 'static {
     /// Returns profile claims for the authenticated caller.
     async fn user_info(
         &self,
-        call: AuthCallContext,
+        call: IdentityCallContext,
         req: UserInfoRequest,
     ) -> Result<UserInfoResponse>;
 
     /// Lists grant IDs visible to the caller.
     async fn list_grants(
         &self,
-        call: AuthCallContext,
+        call: IdentityCallContext,
         req: ListGrantsRequest,
     ) -> Result<ListGrantsResponse>;
 
     /// Returns one grant owned by the caller.
     async fn get_grant(
         &self,
-        call: AuthCallContext,
+        call: IdentityCallContext,
         req: GetGrantRequest,
     ) -> Result<GetGrantResponse>;
 
     /// Revokes one grant owned by the caller.
     async fn revoke_grant(
         &self,
-        call: AuthCallContext,
+        call: IdentityCallContext,
         req: RevokeGrantRequest,
     ) -> Result<RevokeGrantResponse>;
 }
-
 pub(crate) fn caller_bearer_token_from_metadata(metadata: &tonic::metadata::MetadataMap) -> String {
     metadata
         .get(CALLER_BEARER_TOKEN_METADATA_KEY)

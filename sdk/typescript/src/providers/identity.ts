@@ -1,5 +1,5 @@
-import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
-import type { MaybePromise } from "./api.ts";
+import { ProviderBase, type ProviderBaseOptions } from "../provider.ts";
+import type { MaybePromise } from "../api.ts";
 
 /** gRPC metadata key for the caller bearer token on grant-management RPCs. */
 export const CALLER_BEARER_TOKEN_METADATA_KEY =
@@ -8,7 +8,7 @@ export const CALLER_BEARER_TOKEN_METADATA_KEY =
 /**
  * Call context passed to grant-management handlers.
  */
-export interface AuthCallContext {
+export interface IdentityCallContext {
   callerBearerToken: string;
 }
 
@@ -66,11 +66,6 @@ export interface IntrospectRequest {
 
 /**
  * RFC 7662 token introspection response fields.
- *
- * subject must be a canonical Gestalt subject ID, for example a user: subject
- * using a stable user identifier or verified email. It must not be a raw
- * upstream OIDC sub. Empty scope means full first-party/Gestalt access for
- * that grant.
  */
 export interface IntrospectResponse {
   active: boolean;
@@ -98,52 +93,49 @@ export interface GrantDetails {
 }
 
 /**
- * Runtime hooks required to implement a Gestalt authentication provider.
+ * Runtime hooks required to implement a Gestalt identity provider.
  */
-export interface AuthenticationProviderOptions extends ProviderBaseOptions {
+export interface IdentityProviderOptions extends ProviderBaseOptions {
   authorize: (request: AuthorizeRequest) => MaybePromise<AuthorizeResponse>;
   token: (request: TokenRequest) => MaybePromise<TokenResponse>;
   introspect: (request: IntrospectRequest) => MaybePromise<IntrospectResponse>;
   userInfo: (
     request: Record<string, never>,
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ) => MaybePromise<{
     subjectId: string;
     email?: string;
     name?: string;
   }>;
-  /** Returns caller-visible API-token grant IDs only, not login/session grants. */
   listGrants: (
     request: Record<string, never>,
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ) => MaybePromise<{ grantIds: string[] }>;
-  /** Returns details for one API-token grant; session/login grants are not found. */
   getGrant: (
     request: { grantId: string },
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ) => MaybePromise<GrantDetails>;
-  /** Revokes one API-token grant; session/login grants are not found. */
   revokeGrant: (
     request: { grantId: string },
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ) => MaybePromise<void>;
 }
 
 /**
- * Authentication provider implementation consumed by the Gestalt runtime.
+ * Identity provider implementation consumed by the Gestalt runtime.
  */
-export class AuthenticationProvider extends ProviderBase {
-  readonly kind = "authentication" as const;
+export class IdentityProvider extends ProviderBase {
+  readonly kind = "identity" as const;
 
-  private readonly authorizeHandler: AuthenticationProviderOptions["authorize"];
-  private readonly tokenHandler: AuthenticationProviderOptions["token"];
-  private readonly introspectHandler: AuthenticationProviderOptions["introspect"];
-  private readonly userInfoHandler: AuthenticationProviderOptions["userInfo"];
-  private readonly listGrantsHandler: AuthenticationProviderOptions["listGrants"];
-  private readonly getGrantHandler: AuthenticationProviderOptions["getGrant"];
-  private readonly revokeGrantHandler: AuthenticationProviderOptions["revokeGrant"];
+  private readonly authorizeHandler: IdentityProviderOptions["authorize"];
+  private readonly tokenHandler: IdentityProviderOptions["token"];
+  private readonly introspectHandler: IdentityProviderOptions["introspect"];
+  private readonly userInfoHandler: IdentityProviderOptions["userInfo"];
+  private readonly listGrantsHandler: IdentityProviderOptions["listGrants"];
+  private readonly getGrantHandler: IdentityProviderOptions["getGrant"];
+  private readonly revokeGrantHandler: IdentityProviderOptions["revokeGrant"];
 
-  constructor(options: AuthenticationProviderOptions) {
+  constructor(options: IdentityProviderOptions) {
     super(options);
     this.authorizeHandler = options.authorize;
     this.tokenHandler = options.token;
@@ -168,55 +160,52 @@ export class AuthenticationProvider extends ProviderBase {
 
   async userInfo(
     request: Record<string, never>,
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ): Promise<{ subjectId: string; email?: string; name?: string }> {
     return await this.userInfoHandler(request, call);
   }
 
   async listGrants(
     request: Record<string, never>,
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ): Promise<{ grantIds: string[] }> {
     return await this.listGrantsHandler(request, call);
   }
 
   async getGrant(
     request: { grantId: string },
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ): Promise<GrantDetails> {
     return await this.getGrantHandler(request, call);
   }
 
   async revokeGrant(
     request: { grantId: string },
-    call: AuthCallContext,
+    call: IdentityCallContext,
   ): Promise<void> {
     await this.revokeGrantHandler(request, call);
   }
 }
 
 /**
- * Creates an authentication provider with the standard Gestalt runtime
- * contract.
+ * Creates an identity provider with the standard Gestalt runtime contract.
  */
-export function defineAuthenticationProvider(
-  options: AuthenticationProviderOptions,
-): AuthenticationProvider {
-  return new AuthenticationProvider(options);
+export function defineIdentityProvider(
+  options: IdentityProviderOptions,
+): IdentityProvider {
+  return new IdentityProvider(options);
 }
 
 /**
- * Runtime type guard for authentication providers loaded from user modules.
+ * Runtime type guard for identity providers loaded from user modules.
  */
-export function isAuthenticationProvider(
-  value: unknown,
-): value is AuthenticationProvider {
+export function isIdentityProvider(value: unknown): value is IdentityProvider {
   return (
-    value instanceof AuthenticationProvider ||
+    value instanceof IdentityProvider ||
     (typeof value === "object" &&
       value !== null &&
       "kind" in value &&
-      String((value as { kind?: unknown }).kind ?? "") === "authentication" &&
+      String((value as { kind?: unknown }).kind ?? "") === "identity" &&
       "authorize" in value &&
       "token" in value &&
       "introspect" in value &&

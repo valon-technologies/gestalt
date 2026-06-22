@@ -87,8 +87,8 @@ type BuiltinAdminUIOptions struct {
 type Server struct {
 	router                 chi.Router
 	handler                http.Handler
-	auth                   core.AuthenticationProvider
-	authProviders          map[string]core.AuthenticationProvider
+	auth                   core.IdentityProvider
+	authProviders          map[string]core.IdentityProvider
 	serverAuthProvider     string
 	authorization          core.AuthorizationProvider
 	auditSink              core.AuditSink
@@ -152,9 +152,9 @@ func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 }
 
 type Config struct {
-	Auth                 core.AuthenticationProvider
+	Auth                 core.IdentityProvider
 	SelectedAuthProvider string
-	AuthProviders        map[string]core.AuthenticationProvider
+	AuthProviders        map[string]core.IdentityProvider
 	Authorization        core.AuthorizationProvider
 	AuditSink            core.AuditSink
 	Services             *coredata.Services
@@ -210,7 +210,7 @@ func New(cfg Config) (*Server, error) {
 		if cfg.Auth == nil {
 			serverAuthProvider = "none"
 		} else {
-			serverAuthProvider = "authentication"
+			serverAuthProvider = "identity"
 		}
 	}
 	noAuth := cfg.Auth == nil || serverAuthProvider == "none"
@@ -296,7 +296,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	managedSubjects := cfg.Services.ManagedSubjects
 	resolver := principal.NewResolverNamed(cfg.SelectedAuthProvider, cfg.Auth)
-	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
+	authProviders := make(map[string]core.IdentityProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
 		if provider == nil {
 			continue

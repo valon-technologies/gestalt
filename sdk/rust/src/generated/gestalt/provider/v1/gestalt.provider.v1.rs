@@ -1303,156 +1303,6 @@ impl AgentInteractionState {
         }
     }
 }
-/// AuthorizeRequest models RFC 6749 authorization endpoint parameters.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AuthorizeRequest {
-    /// response_type is typically "code".
-    #[prost(string, tag = "1")]
-    pub response_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub client_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub redirect_uri: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub scope: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub state: ::prost::alloc::string::String,
-}
-/// AuthorizeResponse returns the HTTP Location redirect URI containing RFC 6749
-/// response parameters.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AuthorizeResponse {
-    #[prost(string, tag = "1")]
-    pub redirect_uri: ::prost::alloc::string::String,
-}
-/// TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
-/// exchange inputs.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct TokenRequest {
-    /// grant_type is "authorization_code" or
-    /// "urn:ietf:params:oauth:grant-type:token-exchange".
-    #[prost(string, tag = "1")]
-    pub grant_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub code: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub redirect_uri: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub client_id: ::prost::alloc::string::String,
-    /// state correlates authorization-code exchanges with Authorize.
-    #[prost(string, tag = "6")]
-    pub state: ::prost::alloc::string::String,
-    /// scope is the requested scope for issued tokens.
-    #[prost(string, tag = "7")]
-    pub scope: ::prost::alloc::string::String,
-    /// subject_token is the bearer token being exchanged per RFC 8693.
-    #[prost(string, tag = "8")]
-    pub subject_token: ::prost::alloc::string::String,
-    /// subject_token_type is the RFC 8693 token type for subject_token.
-    #[prost(string, tag = "9")]
-    pub subject_token_type: ::prost::alloc::string::String,
-}
-/// TokenResponse models RFC 6749 token endpoint response fields.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct TokenResponse {
-    #[prost(string, tag = "1")]
-    pub access_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub token_type: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
-    pub expires_in: i64,
-    #[prost(string, tag = "4")]
-    pub refresh_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub scope: ::prost::alloc::string::String,
-    /// grant_id is the OIDF Grant Management extension when available.
-    #[prost(string, tag = "6")]
-    pub grant_id: ::prost::alloc::string::String,
-}
-/// IntrospectRequest models RFC 7662 token introspection parameters.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct IntrospectRequest {
-    #[prost(string, tag = "1")]
-    pub token: ::prost::alloc::string::String,
-    /// token_type_hint is "access_token" or "refresh_token".
-    #[prost(string, tag = "2")]
-    pub token_type_hint: ::prost::alloc::string::String,
-}
-/// IntrospectResponse models RFC 7662 token introspection response fields.
-/// subject must be a canonical Gestalt subject ID, for example a user: subject
-/// using a stable user identifier or verified email. It must not be a raw
-/// upstream OIDC sub. Empty scope means full first-party/Gestalt access for
-/// that grant.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct IntrospectResponse {
-    #[prost(bool, tag = "1")]
-    pub active: bool,
-    #[prost(string, tag = "2")]
-    pub subject: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub scope: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub client_id: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "5")]
-    pub audience: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-/// ListGrantsRequest lists API-token grant IDs visible to the caller.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListGrantsRequest {}
-/// ListGrantsResponse returns caller-visible API-token grant IDs created via
-/// token exchange. It must not include transient login or session grants.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListGrantsResponse {
-    #[prost(string, repeated, tag = "1")]
-    pub grant_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-/// GetGrantRequest retrieves one API-token grant by ID.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetGrantRequest {
-    #[prost(string, tag = "1")]
-    pub grant_id: ::prost::alloc::string::String,
-}
-/// GrantScope describes one authorized scope and optional resources.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GrantScope {
-    #[prost(string, tag = "1")]
-    pub scope: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "2")]
-    pub resource: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-/// GetGrantResponse returns OIDF-shaped grant details.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetGrantResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub scopes: ::prost::alloc::vec::Vec<GrantScope>,
-    #[prost(int64, tag = "2")]
-    pub created_at: i64,
-    #[prost(int64, tag = "3")]
-    pub expires_at: i64,
-}
-/// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RevokeGrantRequest {
-    #[prost(string, tag = "1")]
-    pub grant_id: ::prost::alloc::string::String,
-}
-/// RevokeGrantResponse acknowledges grant revocation.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RevokeGrantResponse {}
-/// UserInfoRequest is intentionally empty. The caller bearer token is supplied
-/// through provider-call metadata, analogous to OIDC Authorization: Bearer.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UserInfoRequest {}
-/// UserInfoResponse models profile claims about the authenticated end user.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UserInfoResponse {
-    #[prost(string, tag = "1")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub email: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub name: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Subject {
     #[prost(string, tag = "1")]
@@ -2169,6 +2019,156 @@ pub struct ExchangeExternalCredentialResponse {
     #[prost(message, optional, tag = "1")]
     pub token_response: ::core::option::Option<ExternalCredentialTokenResponse>,
 }
+/// AuthorizeRequest models RFC 6749 authorization endpoint parameters.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizeRequest {
+    /// response_type is typically "code".
+    #[prost(string, tag = "1")]
+    pub response_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub client_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub redirect_uri: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub scope: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub state: ::prost::alloc::string::String,
+}
+/// AuthorizeResponse returns the HTTP Location redirect URI containing RFC 6749
+/// response parameters.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizeResponse {
+    #[prost(string, tag = "1")]
+    pub redirect_uri: ::prost::alloc::string::String,
+}
+/// TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
+/// exchange inputs.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TokenRequest {
+    /// grant_type is "authorization_code" or
+    /// "urn:ietf:params:oauth:grant-type:token-exchange".
+    #[prost(string, tag = "1")]
+    pub grant_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub code: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub redirect_uri: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub client_id: ::prost::alloc::string::String,
+    /// state correlates authorization-code exchanges with Authorize.
+    #[prost(string, tag = "6")]
+    pub state: ::prost::alloc::string::String,
+    /// scope is the requested scope for issued tokens.
+    #[prost(string, tag = "7")]
+    pub scope: ::prost::alloc::string::String,
+    /// subject_token is the bearer token being exchanged per RFC 8693.
+    #[prost(string, tag = "8")]
+    pub subject_token: ::prost::alloc::string::String,
+    /// subject_token_type is the RFC 8693 token type for subject_token.
+    #[prost(string, tag = "9")]
+    pub subject_token_type: ::prost::alloc::string::String,
+}
+/// TokenResponse models RFC 6749 token endpoint response fields.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TokenResponse {
+    #[prost(string, tag = "1")]
+    pub access_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub token_type: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub expires_in: i64,
+    #[prost(string, tag = "4")]
+    pub refresh_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub scope: ::prost::alloc::string::String,
+    /// grant_id is the OIDF Grant Management extension when available.
+    #[prost(string, tag = "6")]
+    pub grant_id: ::prost::alloc::string::String,
+}
+/// IntrospectRequest models RFC 7662 token introspection parameters.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct IntrospectRequest {
+    #[prost(string, tag = "1")]
+    pub token: ::prost::alloc::string::String,
+    /// token_type_hint is "access_token" or "refresh_token".
+    #[prost(string, tag = "2")]
+    pub token_type_hint: ::prost::alloc::string::String,
+}
+/// IntrospectResponse models RFC 7662 token introspection response fields.
+/// subject must be a canonical Gestalt subject ID, for example a user: subject
+/// using a stable user identifier or verified email. It must not be a raw
+/// upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+/// that grant.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct IntrospectResponse {
+    #[prost(bool, tag = "1")]
+    pub active: bool,
+    #[prost(string, tag = "2")]
+    pub subject: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub scope: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub client_id: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "5")]
+    pub audience: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// ListGrantsRequest lists API-token grant IDs visible to the caller.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListGrantsRequest {}
+/// ListGrantsResponse returns caller-visible API-token grant IDs created via
+/// token exchange. It must not include transient login or session grants.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListGrantsResponse {
+    #[prost(string, repeated, tag = "1")]
+    pub grant_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// GetGrantRequest retrieves one API-token grant by ID.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetGrantRequest {
+    #[prost(string, tag = "1")]
+    pub grant_id: ::prost::alloc::string::String,
+}
+/// GrantScope describes one authorized scope and optional resources.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GrantScope {
+    #[prost(string, tag = "1")]
+    pub scope: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub resource: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// GetGrantResponse returns OIDF-shaped grant details.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetGrantResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub scopes: ::prost::alloc::vec::Vec<GrantScope>,
+    #[prost(int64, tag = "2")]
+    pub created_at: i64,
+    #[prost(int64, tag = "3")]
+    pub expires_at: i64,
+}
+/// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RevokeGrantRequest {
+    #[prost(string, tag = "1")]
+    pub grant_id: ::prost::alloc::string::String,
+}
+/// RevokeGrantResponse acknowledges grant revocation.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RevokeGrantResponse {}
+/// UserInfoRequest is intentionally empty. The caller bearer token is supplied
+/// through provider-call metadata, analogous to OIDC Authorization: Bearer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UserInfoRequest {}
+/// UserInfoResponse models profile claims about the authenticated end user.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UserInfoResponse {
+    #[prost(string, tag = "1")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub email: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+}
 /// TypedValue stores one scalar or structured value in an IndexedDB record.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TypedValue {
@@ -2782,7 +2782,7 @@ pub struct StartRuntimeProviderResponse {
 pub enum ProviderKind {
     Unspecified = 0,
     App = 1,
-    Authentication = 2,
+    Identity = 2,
     Indexeddb = 3,
     Secrets = 4,
     Telemetry = 5,
@@ -2804,7 +2804,7 @@ impl ProviderKind {
         match self {
             Self::Unspecified => "PROVIDER_KIND_UNSPECIFIED",
             Self::App => "PROVIDER_KIND_APP",
-            Self::Authentication => "PROVIDER_KIND_AUTHENTICATION",
+            Self::Identity => "PROVIDER_KIND_IDENTITY",
             Self::Indexeddb => "PROVIDER_KIND_INDEXEDDB",
             Self::Secrets => "PROVIDER_KIND_SECRETS",
             Self::Telemetry => "PROVIDER_KIND_TELEMETRY",
@@ -2823,7 +2823,7 @@ impl ProviderKind {
         match value {
             "PROVIDER_KIND_UNSPECIFIED" => Some(Self::Unspecified),
             "PROVIDER_KIND_APP" => Some(Self::App),
-            "PROVIDER_KIND_AUTHENTICATION" => Some(Self::Authentication),
+            "PROVIDER_KIND_IDENTITY" => Some(Self::Identity),
             "PROVIDER_KIND_INDEXEDDB" => Some(Self::Indexeddb),
             "PROVIDER_KIND_SECRETS" => Some(Self::Secrets),
             "PROVIDER_KIND_TELEMETRY" => Some(Self::Telemetry),

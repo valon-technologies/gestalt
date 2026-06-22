@@ -68,7 +68,7 @@ The top-level `gestalt` package exposes the supported authoring API:
 
 - `Model`, `field`, `App`, `operation`, and `Request` for integration
   providers.
-- `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
+- `IdentityProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
   `WorkflowProvider`, `AgentProvider`, and `RuntimeProvider` for
   host-service provider runtimes.
 - `Cache`, `IndexedDB`, `S3`, `Workflow`, `Agent`, and `Request.app()` for

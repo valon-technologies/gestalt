@@ -21,7 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
-	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
+	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	"gopkg.in/yaml.v3"
 )
 
@@ -124,13 +124,13 @@ func extractReleasedArchive(t *testing.T, outputDir, archiveName string) string 
 func assertExecutableAuthProviderWorks(t *testing.T, command, providerName string, assertIntrospectJWT bool) {
 	t.Helper()
 
-	auth, err := authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
+	auth, err := identityservice.NewExecutable(context.Background(), identityservice.ExecConfig{
 		Command:     command,
 		Name:        providerName,
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 	})
 	if err != nil {
-		t.Fatalf("authenticationservice.NewExecutable: %v", err)
+		t.Fatalf("identityservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := auth.(interface{ Close() error }); ok {

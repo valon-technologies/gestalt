@@ -1,6 +1,6 @@
 {
   "name": "@valon-technologies/gestalt",
-  "version": "0.0.1-alpha.62",
+  "version": "0.0.1-alpha.63",
   "description": "TypeScript SDK for Gestalt executable providers",
   "type": "module",
   "repository": {
@@ -17,7 +17,7 @@
     "./workflow": "./src/providers/workflow-public.ts",
     "./services/agent": "./src/agent.ts",
     "./services/app": "./src/app.ts",
-    "./services/authentication": "./src/authentication.ts",
+    "./services/identity": "./src/identity.ts",
     "./services/authorization": "./src/authorization.ts",
     "./services/cache": "./src/cache.ts",
     "./services/external_credential": "./src/external_credential.ts",

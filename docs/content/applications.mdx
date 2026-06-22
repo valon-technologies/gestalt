@@ -14,7 +14,7 @@ import ActiveDevelopmentCallout from '../components/ActiveDevelopmentCallout'
 Gestalt can be used to build applications. At a minimum, an application is a
 single [app](/providers/apps), or optionally a composition of
 [apps](/providers/apps) and [UIs](/providers/ui), using existing
-primitives for [authentication](/providers/authentication),
+primitives for [identity](/providers/identity),
 [authorization configuration](/reference/config-file#authorization),
 [IndexedDB](/providers/indexeddb)/[Cache](/providers/cache)/[S3](/providers/s3),
 [workflows](/providers/workflow), and [agents](/providers/agent).
@@ -102,7 +102,7 @@ spec:
 ## Host Services
 
 The deployment config wires the application into host services. Platform
-authentication protects the mounted UI and HTTP operation routes, the
+identity protects the mounted UI and HTTP operation routes, the
 authorization policy controls who may use the application, and the provider
 bindings expose only the host services the app is allowed to use.
 
@@ -111,7 +111,7 @@ server:
   baseUrl: https://gestalt.example.com
   encryptionKey: ${GESTALT_ENCRYPTION_KEY}
   providers:
-    authentication: oidc
+    identity: oidc
     authorization: authz
     indexeddb: main
 
@@ -126,7 +126,7 @@ authorization:
               subjectTypes: [subject]
 
 providers:
-  authentication:
+  identity:
     oidc:
       source:
         package: github.com/valon-technologies/gestalt-providers/auth/oidc

@@ -21,8 +21,6 @@ from gestalt import (
     App,
     ApplyWorkflowProviderDefinitionRequest,
     AppProviderAdapter,
-    AuthCallContext,
-    AuthenticationProvider,
     AuthorizeRequest,
     CacheProvider,
     CacheSetEntry,
@@ -36,6 +34,8 @@ from gestalt import (
     GetWorkflowProviderRunOutputRequest,
     GetWorkflowProviderRunOutputResponse,
     HealthChecker,
+    IdentityCallContext,
+    IdentityProvider,
     ListWorkflowProviderDefinitionsRequest,
     ListWorkflowProviderDefinitionsResponse,
     ListWorkflowProviderRunsRequest,
@@ -63,8 +63,8 @@ from gestalt import (
 )
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
+from gestalt._gen.v1 import identity_pb2 as _identity_pb2
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import runtime_provider_pb2 as _runtime_provider_pb2
 from gestalt._gen.v1 import runtime_provider_pb2_grpc as _runtime_provider_pb2_grpc
@@ -72,7 +72,7 @@ from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
-authentication_pb2: Any = _authentication_pb2
+identity_pb2: Any = _identity_pb2
 cache_pb2: Any = _cache_pb2
 empty_pb2: Any = _empty_pb2
 app_pb2: Any = _app_pb2
@@ -106,7 +106,7 @@ class AbortContext:
 class ParseRuntimeArgsTests(unittest.TestCase):
     def test_explicit_root_and_target(self) -> None:
         runtime_args = _runtime._parse_runtime_args(
-            ["/tmp/plugin", "example.plugin:PLUGIN", "authentication"]
+            ["/tmp/plugin", "example.plugin:PLUGIN", "identity"]
         )
 
         self.assertEqual(
@@ -114,7 +114,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
             _runtime.RuntimeArgs(
                 target="example.plugin:PLUGIN",
                 root=pathlib.Path("/tmp/plugin"),
-                runtime_kind="authentication",
+                runtime_kind="identity",
             ),
         )
 
@@ -651,8 +651,8 @@ class MainEntrypointTests(unittest.TestCase):
 
 
 class AuthenticationRuntimeTests(unittest.TestCase):
-    class StubAuthenticationProvider(
-        AuthenticationProvider,
+    class StubIdentityProvider(
+        IdentityProvider,
         MetadataProvider,
         WarningsProvider,
         HealthChecker,
@@ -665,10 +665,10 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
         def metadata(self) -> ProviderMetadata:
             return ProviderMetadata(
-                kind=ProviderKind.AUTHENTICATION,
+                kind=ProviderKind.IDENTITY,
                 name="stub-auth",
                 display_name="Stub Auth",
-                description="test authentication provider",
+                description="test identity provider",
                 version="1.2.3",
             )
 
@@ -680,13 +680,13 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
         def authorize(self, request: AuthorizeRequest) -> Any:
             self.authorize_request = request
-            return authentication_pb2.AuthorizeResponse(
+            return identity_pb2.AuthorizeResponse(
                 redirect_uri=f"https://auth.example.test/login?state={request.state}",
             )
 
         def token(self, request: TokenRequest) -> Any:
             self.token_request = request
-            return authentication_pb2.TokenResponse(
+            return identity_pb2.TokenResponse(
                 access_token="fixture-access-token",
                 token_type="Bearer",
                 expires_in=5400,
@@ -696,36 +696,36 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
         def introspect(self, request: Any) -> Any:
             if request.token == "fixture-access-token":
-                return authentication_pb2.IntrospectResponse(
+                return identity_pb2.IntrospectResponse(
                     active=True,
                     subject="user:fixture@example.com",
                     scope="openid email",
                     client_id="gestaltd",
                 )
-            return authentication_pb2.IntrospectResponse(active=False)
+            return identity_pb2.IntrospectResponse(active=False)
 
-        def list_grants(self, request: Any, call: AuthCallContext) -> Any:
+        def list_grants(self, request: Any, call: IdentityCallContext) -> Any:
             self.list_grants_request = request
             self.list_grants_call = call
-            return authentication_pb2.ListGrantsResponse(
+            return identity_pb2.ListGrantsResponse(
                 grant_ids=["grant-fixture-1"],
             )
 
-        def get_grant(self, request: Any, call: AuthCallContext) -> Any:
+        def get_grant(self, request: Any, call: IdentityCallContext) -> Any:
             self.get_grant_request = request
             self.get_grant_call = call
-            return authentication_pb2.GetGrantResponse(
-                scopes=[authentication_pb2.GrantScope(scope="openid")],
+            return identity_pb2.GetGrantResponse(
+                scopes=[identity_pb2.GrantScope(scope="openid")],
                 created_at=1_700_000_000,
                 expires_at=1_800_000_000,
             )
 
-        def revoke_grant(self, request: Any, call: AuthCallContext) -> Any:
+        def revoke_grant(self, request: Any, call: IdentityCallContext) -> Any:
             self.revoke_grant_request = request
             self.revoke_grant_call = call
-            return authentication_pb2.RevokeGrantResponse()
+            return identity_pb2.RevokeGrantResponse()
 
-    class StartableAuthenticationProvider(StubAuthenticationProvider):
+    class StartableIdentityProvider(StubIdentityProvider):
         def __init__(self) -> None:
             super().__init__()
             self.started = 0
@@ -734,11 +734,11 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             self.started += 1
 
     def test_runtime_metadata_and_authentication_servicer(self) -> None:
-        provider = self.StubAuthenticationProvider()
+        provider = self.StubIdentityProvider()
 
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
-            kind=ProviderKind.AUTHENTICATION,
+            kind=ProviderKind.IDENTITY,
         )
         bad_context = AbortContext()
         with self.assertRaisesRegex(
@@ -774,7 +774,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
         self.assertEqual(
             meta.kind,
-            runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
+            runtime_pb2.ProviderKind.PROVIDER_KIND_IDENTITY,
         )
         self.assertEqual(meta.name, "stub-auth")
         self.assertEqual(list(meta.warnings), ["set AUTH_ENV"])
@@ -795,9 +795,9 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             [("fixture-auth", {"issuer": "https://login.example.test"})],
         )
 
-        auth_servicer = _runtime._authentication_servicer(provider=provider)
+        auth_servicer = _runtime._identity_servicer(provider=provider)
         authorize = auth_servicer.Authorize(
-            authentication_pb2.AuthorizeRequest(
+            identity_pb2.AuthorizeRequest(
                 response_type="code",
                 client_id="gestaltd",
                 redirect_uri="https://cb.example.test",
@@ -815,7 +815,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.authorize_request.state, "host-state")
 
         token = auth_servicer.Token(
-            authentication_pb2.TokenRequest(
+            identity_pb2.TokenRequest(
                 grant_type="authorization_code",
                 code="auth-code",
                 redirect_uri="https://cb.example.test",
@@ -830,14 +830,14 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.token_request.code, "auth-code")
 
         introspection = auth_servicer.Introspect(
-            authentication_pb2.IntrospectRequest(token="fixture-access-token"),
+            identity_pb2.IntrospectRequest(token="fixture-access-token"),
             mock.Mock(),
         )
         self.assertTrue(introspection.active)
         self.assertEqual(introspection.subject, "user:fixture@example.com")
 
         grants = auth_servicer.ListGrants(
-            authentication_pb2.ListGrantsRequest(),
+            identity_pb2.ListGrantsRequest(),
             mock.Mock(
                 invocation_metadata=mock.Mock(
                     return_value=(
@@ -847,14 +847,14 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             ),
         )
         self.assertEqual(list(grants.grant_ids), ["grant-fixture-1"])
-        self.assertIsInstance(provider.list_grants_call, AuthCallContext)
+        self.assertIsInstance(provider.list_grants_call, IdentityCallContext)
         self.assertEqual(
             provider.list_grants_call.caller_bearer_token,
             "caller-bearer-token",
         )
 
         grant = auth_servicer.GetGrant(
-            authentication_pb2.GetGrantRequest(grant_id="grant-fixture-1"),
+            identity_pb2.GetGrantRequest(grant_id="grant-fixture-1"),
             mock.Mock(
                 invocation_metadata=mock.Mock(
                     return_value=(
@@ -867,7 +867,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.get_grant_call.caller_bearer_token, "caller-bearer-token")
 
         revoked = auth_servicer.RevokeGrant(
-            authentication_pb2.RevokeGrantRequest(grant_id="grant-fixture-1"),
+            identity_pb2.RevokeGrantRequest(grant_id="grant-fixture-1"),
             mock.Mock(
                 invocation_metadata=mock.Mock(
                     return_value=(
@@ -883,10 +883,10 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
 
     def test_runtime_start_provider_is_separate_from_configure(self) -> None:
-        provider = self.StartableAuthenticationProvider()
+        provider = self.StartableIdentityProvider()
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
-            kind=ProviderKind.AUTHENTICATION,
+            kind=ProviderKind.IDENTITY,
         )
 
         configured = runtime_servicer.ConfigureProvider(
@@ -910,10 +910,10 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.started, 1)
 
     def test_runtime_start_provider_noops_without_start_hook(self) -> None:
-        provider = self.StubAuthenticationProvider()
+        provider = self.StubIdentityProvider()
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
-            kind=ProviderKind.AUTHENTICATION,
+            kind=ProviderKind.IDENTITY,
         )
 
         started = runtime_servicer.StartProvider(empty_pb2.Empty(), mock.Mock())
@@ -923,11 +923,11 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
 
     def test_auth_introspect_inactive_token(self) -> None:
-        servicer = _runtime._authentication_servicer(
-            provider=self.StubAuthenticationProvider()
+        servicer = _runtime._identity_servicer(
+            provider=self.StubIdentityProvider()
         )
         introspection = servicer.Introspect(
-            authentication_pb2.IntrospectRequest(token="unknown"),
+            identity_pb2.IntrospectRequest(token="unknown"),
             mock.Mock(),
         )
         self.assertFalse(introspection.active)

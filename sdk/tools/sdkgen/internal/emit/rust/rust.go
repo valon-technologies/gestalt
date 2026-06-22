@@ -71,7 +71,8 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	supportUses := map[string]bool{}
 	codecModules := []string{"support"}
 	for _, g := range groupFiles(services, messages, enums) {
-		public := newRenderer(idx, g.base, modulePublic)
+		outputBase := g.base
+		public := newRenderer(idx, outputBase, g.base, modulePublic)
 		for _, e := range g.enums {
 			public.renderEnum(e)
 		}
@@ -81,7 +82,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		for _, svc := range g.services {
 			public.renderClient(svc)
 		}
-		if err := set.Add(g.base+".rs", []byte(public.assemble())); err != nil {
+		if err := set.Add(outputBase+".rs", []byte(public.assemble())); err != nil {
 			return nil, err
 		}
 		for name := range public.features.supportFns {
@@ -91,14 +92,14 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		if len(g.messages) == 0 {
 			continue
 		}
-		codec := newRenderer(idx, g.base, moduleCodec)
+		codec := newRenderer(idx, outputBase, g.base, moduleCodec)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
-		if err := set.Add("codec/"+g.base+".rs", []byte(codec.assemble())); err != nil {
+		if err := set.Add("codec/"+outputBase+".rs", []byte(codec.assemble())); err != nil {
 			return nil, err
 		}
-		codecModules = append(codecModules, g.base)
+		codecModules = append(codecModules, outputBase)
 		for name := range codec.features.supportFns {
 			supportUses[name] = true
 		}

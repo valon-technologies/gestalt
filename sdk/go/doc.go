@@ -53,7 +53,7 @@
 // Catalog metadata is built from [Catalog], [CatalogOperation], struct tags,
 // and typed [Operation] definitions.
 //
-// Provider runtimes are modeled by [AuthenticationProvider],
+// Provider runtimes are modeled by [IdentityProvider],
 // [CacheProvider], [IndexedDBProvider], [S3Provider], [SecretsProvider],
 // [WorkflowProvider], [AgentProvider], and [RuntimeProvider].
 //
@@ -80,7 +80,7 @@
 //
 // Provider, Operation, Register, and Router model integration providers. The
 // package also exposes provider interfaces for host-service backends, including
-// AuthenticationProvider, CacheProvider, IndexedDBProvider, S3Provider,
+// IdentityProvider, CacheProvider, IndexedDBProvider, S3Provider,
 // SecretsProvider, WorkflowProvider, AgentProvider, and RuntimeProvider.
 //
 // Use the generated sdk/go/client package when provider code needs to call

@@ -13,7 +13,7 @@
       "type": "string",
       "enum": [
         "app",
-        "authentication",
+        "identity",
         "authorization",
         "externalcredentials",
         "indexeddb",

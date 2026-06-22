@@ -14,7 +14,7 @@ import (
 
 const (
 	KindApp                 = "app"
-	KindAuthentication      = "authentication"
+	KindIdentity            = "identity"
 	KindAuthorization       = "authorization"
 	KindExternalCredentials = "externalcredentials"
 	KindIndexedDB           = "indexeddb"
