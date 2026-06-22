@@ -393,12 +393,12 @@ func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
 
 func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath TransportPath) map[string]string {
 	return map[string]string{
-		"gestaltd.provider_gateway.provider.id":    req.ProviderID,
-		"gestaltd.provider_gateway.provider.kind":  string(req.ProviderKind),
-		"gestaltd.provider_gateway.service.name":   req.ServiceName,
-		"gestaltd.provider_gateway.operation.name": req.Operation,
-		"gestaltd.provider_gateway.source":         string(req.Source),
-		"gestaltd.provider_gateway.transport.path": string(transportPath),
+		"gd.provider":  req.ProviderID,
+		"gd.kind":      string(req.ProviderKind),
+		"gd.service":   req.ServiceName,
+		"gd.operation": req.Operation,
+		"gd.source":    string(req.Source),
+		"gd.transport": string(transportPath),
 	}
 }
 
