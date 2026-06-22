@@ -260,7 +260,7 @@ func TransformSourceAuthTokens(cfg *Config, transform ConfigStringTransformer) e
 		}
 	}
 	for _, entries := range []map[string]*ProviderEntry{
-		cfg.Providers.Authentication,
+		cfg.Providers.Identity,
 		cfg.Providers.Authorization,
 		cfg.Providers.ExternalCredentials,
 		cfg.Providers.Secrets,
@@ -308,7 +308,7 @@ func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer)
 		}
 	}
 	for _, entries := range []map[string]*ProviderEntry{
-		cfg.Providers.Authentication,
+		cfg.Providers.Identity,
 		cfg.Providers.Authorization,
 		cfg.Providers.Telemetry,
 		cfg.Providers.Audit,

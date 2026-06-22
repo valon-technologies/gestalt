@@ -13,9 +13,8 @@ const (
 	// ProviderKindApp is the main executable provider surface used by
 	// integration apps.
 	ProviderKindApp ProviderKind = "integration"
-	// ProviderKindAuthentication serves interactive login and token-validation
-	// flows.
-	ProviderKindAuthentication ProviderKind = "authentication"
+	// ProviderKindIdentity serves OAuth 2.0 / OpenID Connect identity flows.
+	ProviderKindIdentity ProviderKind = "identity"
 	// ProviderKindAuthorization serves generic authorization model,
 	// relationship, and access-check flows.
 	ProviderKindAuthorization ProviderKind = "authorization"

@@ -82,7 +82,7 @@ type ProviderSnapshotRepositoryStorageConfig struct {
 }
 
 type ProvidersConfig struct {
-	Authentication      map[string]*ProviderEntry `yaml:"authentication,omitempty"`
+	Identity            map[string]*ProviderEntry `yaml:"identity,omitempty"`
 	Authorization       map[string]*ProviderEntry `yaml:"authorization,omitempty"`
 	ExternalCredentials map[string]*ProviderEntry `yaml:"externalCredentials,omitempty"`
 	Secrets             map[string]*ProviderEntry `yaml:"secrets,omitempty"`
@@ -133,7 +133,7 @@ func (e *RuntimeProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 type HostProviderKind string
 
 const (
-	HostProviderKindAuthentication      HostProviderKind = "authentication"
+	HostProviderKindIdentity            HostProviderKind = "identity"
 	HostProviderKindAuthorization       HostProviderKind = "authorization"
 	HostProviderKindExternalCredentials HostProviderKind = "externalCredentials"
 	HostProviderKindSecrets             HostProviderKind = "secrets"
@@ -147,7 +147,7 @@ const (
 )
 
 type ServerProvidersConfig struct {
-	Authentication      string `yaml:"authentication,omitempty"`
+	Identity            string `yaml:"identity,omitempty"`
 	Authorization       string `yaml:"authorization,omitempty"`
 	ExternalCredentials string `yaml:"externalCredentials,omitempty"`
 	Secrets             string `yaml:"secrets,omitempty"`
@@ -2520,7 +2520,7 @@ func normalizeProviderEntries(cfg *Config) {
 	for _, entry := range cfg.Apps {
 		normalizeProviderEntryAliases(entry)
 	}
-	for _, entry := range cfg.Providers.Authentication {
+	for _, entry := range cfg.Providers.Identity {
 		normalizeProviderEntryAliases(entry)
 	}
 	for _, entry := range cfg.Providers.Authorization {
@@ -2593,7 +2593,7 @@ func OverlayRemoteAppConfigPaths(paths []string, cfg *Config) error {
 		kind    HostProviderKind
 		entries map[string]*ProviderEntry
 	}{
-		{HostProviderKindAuthentication, cfg.Providers.Authentication},
+		{HostProviderKindIdentity, cfg.Providers.Identity},
 		{HostProviderKindAuthorization, cfg.Providers.Authorization},
 		{HostProviderKindExternalCredentials, cfg.Providers.ExternalCredentials},
 		{HostProviderKindSecrets, cfg.Providers.Secrets},
@@ -3356,7 +3356,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Apps = nonNilProviderEntryMap(cfg.Apps)
 	cfg.Workflows.Definitions = nonNilWorkflowDefinitionMap(cfg.Workflows.Definitions)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
-	cfg.Providers.Authentication = nonNilProviderEntryMap(cfg.Providers.Authentication)
+	cfg.Providers.Identity = nonNilProviderEntryMap(cfg.Providers.Identity)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
 	cfg.Providers.ExternalCredentials = applyDefaultSourceProviderEntries(cfg.Providers.ExternalCredentials, DefaultProviderInstance, DefaultProviderSource(DefaultExternalCredentialsProvider, DefaultExternalCredentialsVersion))
 	cfg.Providers.Secrets = applyDefaultBuiltinProviderEntries(cfg.Providers.Secrets, DefaultProviderInstance, "env")
@@ -3396,7 +3396,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		kind    string
 		entries map[string]*ProviderEntry
 	}{
-		{providermanifestv1.KindAuthentication, cfg.Providers.Authentication},
+		{providermanifestv1.KindIdentity, cfg.Providers.Identity},
 		{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
 		{providermanifestv1.KindExternalCredentials, cfg.Providers.ExternalCredentials},
 		{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
@@ -3857,7 +3857,7 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 			key  string
 			kind string
 		}{
-			{key: "authentication", kind: providermanifestv1.KindAuthentication},
+			{key: "identity", kind: providermanifestv1.KindIdentity},
 			{key: "authorization", kind: providermanifestv1.KindAuthorization},
 			{key: "externalCredentials", kind: providermanifestv1.KindExternalCredentials},
 			{key: "secrets", kind: providermanifestv1.KindSecrets},
@@ -3979,7 +3979,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 	}
 
-	for _, entry := range cfg.Providers.Authentication {
+	for _, entry := range cfg.Providers.Identity {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Providers.Authorization {

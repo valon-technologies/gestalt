@@ -10,10 +10,10 @@ import (
 
 type authServer struct {
 	proto.UnimplementedAuthenticationServer
-	auth AuthenticationProvider
+	auth IdentityProvider
 }
 
-func newAuthenticationProviderServer(auth AuthenticationProvider) *authServer {
+func newIdentityProviderServer(auth IdentityProvider) *authServer {
 	return &authServer{auth: auth}
 }
 
@@ -118,5 +118,5 @@ func (s *authServer) authCallContext(ctx context.Context) context.Context {
 	if token == "" {
 		return ctx
 	}
-	return WithAuthCallContext(ctx, AuthCallContext{CallerBearerToken: token})
+	return WithIdentityCallContext(ctx, IdentityCallContext{CallerBearerToken: token})
 }

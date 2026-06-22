@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::auth::{AuthCallContext, AuthenticationProvider, caller_bearer_token_from_metadata};
-use crate::authentication::{
+use crate::auth::{IdentityCallContext, IdentityProvider, caller_bearer_token_from_metadata};
+use crate::identity::{
     AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
     TokenRequest, UserInfoRequest, UserInfoResponse,
 };
-use crate::authentication::{
+use crate::identity::{
     GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse,
 };
-use crate::generated::v1::authentication_server::Authentication as AuthenticationProviderGrpc;
+use crate::generated::v1::authentication_server::Authentication as IdentityProviderGrpc;
 use crate::generated::v1::{
     AuthorizeRequest as ProtoAuthorizeRequest, AuthorizeResponse as ProtoAuthorizeResponse,
     GetGrantRequest as ProtoGetGrantRequest, GetGrantResponse as ProtoGetGrantResponse,
@@ -134,9 +134,9 @@ fn get_grant_response_to_proto(value: GetGrantResponse) -> ProtoGetGrantResponse
 }
 
 #[tonic::async_trait]
-impl<P> AuthenticationProviderGrpc for AuthenticationServer<P>
+impl<P> IdentityProviderGrpc for AuthenticationServer<P>
 where
-    P: AuthenticationProvider,
+    P: IdentityProvider,
 {
     async fn authorize(
         &self,
@@ -180,7 +180,7 @@ where
         &self,
         request: GrpcRequest<ProtoUserInfoRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoUserInfoResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         let response = self
@@ -195,7 +195,7 @@ where
         &self,
         request: GrpcRequest<ProtoListGrantsRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoListGrantsResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         let response = self
@@ -210,7 +210,7 @@ where
         &self,
         request: GrpcRequest<ProtoGetGrantRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoGetGrantResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         let response = self
@@ -225,7 +225,7 @@ where
         &self,
         request: GrpcRequest<ProtoRevokeGrantRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoRevokeGrantResponse>, Status> {
-        let call = AuthCallContext {
+        let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
         self.provider

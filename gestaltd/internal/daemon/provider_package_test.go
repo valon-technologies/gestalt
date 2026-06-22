@@ -481,7 +481,7 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 			sourceFile: "auth.go",
 			sourceCode: testutil.GeneratedAuthPackageSource(),
 			manifest: &providermanifestv1.Manifest{
-				Kind:   providermanifestv1.KindAuthentication,
+				Kind:   providermanifestv1.KindIdentity,
 				Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
 				Spec: &providermanifestv1.Spec{ConfigSchemaPath: authReleaseSchemaPath},
 			},
@@ -554,8 +554,8 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 			if metadata.Package != authReleaseSource {
 				t.Fatalf("release metadata package = %q, want %q", metadata.Package, authReleaseSource)
 			}
-			if metadata.Kind != providermanifestv1.KindAuthentication {
-				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuthentication)
+			if metadata.Kind != providermanifestv1.KindIdentity {
+				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindIdentity)
 			}
 			authArtifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.CurrentPlatformString())
 			authDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))

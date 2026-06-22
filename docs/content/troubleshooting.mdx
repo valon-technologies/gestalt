@@ -69,7 +69,7 @@ Common source-package checks:
     cargo check
     ```
 
-    The app root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_authentication_provider!(...)`, or `gestalt::export_indexeddb_provider!(...)`.
+    The app root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_identity_provider!(...)`, or `gestalt::export_indexeddb_provider!(...)`.
 
   </Tabs.Tab>
   <Tabs.Tab>

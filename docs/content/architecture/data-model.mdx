@@ -9,7 +9,7 @@ For encryption mechanics, see [Security Internals](/architecture/security-intern
 | Owner | Persistent state |
 | --- | --- |
 | `gestaltd` core | `users`, `managed_subjects` |
-| Authentication provider | `authentication_grants`, `authentication_token_hashes` |
+| Identity provider | `authentication_grants`, `authentication_token_hashes` |
 | External credentials provider | `external_credentials` |
 | Agent provider | Provider-defined agent session, turn, interaction, event, and idempotency state |
 | Workflow provider | Provider-defined schedule, event trigger, run, execution ref, and idempotency state |
@@ -86,7 +86,7 @@ Owned by the configured external credentials provider, not gestaltd core. Every 
 
 ### `authentication_grants` and `authentication_token_hashes`
 
-Owned by the configured authentication provider, not gestaltd core. Grant records hold metadata for each issued bearer grant. Token-hash records map SHA-256 hashes back to grants for introspection; plaintext bearer tokens are never stored.
+Owned by the configured identity provider, not gestaltd core. Grant records hold metadata for each issued bearer grant. Token-hash records map SHA-256 hashes back to grants for introspection; plaintext bearer tokens are never stored.
 
 | Store | Key fields | Notes |
 | --- | --- | --- |
@@ -127,4 +127,4 @@ Renaming an `apps` key in config is a breaking change. Stored credentials refere
 
 ## Sessions
 
-Platform sessions (OIDC, local, and custom authentication providers) are not stored in the IndexedDB provider. They are HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `sessionTtl` for OIDC). Sessions cannot be revoked server-side; they expire on TTL. Logout clears the client cookie.
+Platform sessions (OIDC, local, and custom identity providers) are not stored in the IndexedDB provider. They are HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `sessionTtl` for OIDC). Sessions cannot be revoked server-side; they expire on TTL. Logout clears the client cookie.

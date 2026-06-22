@@ -1188,9 +1188,9 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "auth.go", []byte(authProviderSource(name)), 0o644)
 	artifactRel := ".gestalt/build/auth-provider"
-	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/auth/"+name, providermanifestv1.KindAuthentication, artifactRel)
+	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/auth/"+name, providermanifestv1.KindIdentity, artifactRel)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindAuthentication,
+		Kind:        providermanifestv1.KindIdentity,
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
@@ -1320,8 +1320,8 @@ func main() {
 func goComponentServeCallForTest(t *testing.T, kind string) string {
 	t.Helper()
 	switch providermanifestv1.NormalizeKind(kind) {
-	case providermanifestv1.KindAuthentication:
-		return "gestalt.ServeAuthenticationProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindIdentity:
+		return "gestalt.ServeIdentityProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindAuthorization:
 		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindCache:
@@ -1380,8 +1380,8 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, indexedDBName, dbPath 
 `, indexedDBName, externalCredentialsName)
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
-		serverProvidersBlock += fmt.Sprintf("    authentication: %s\n", authName)
-		authBlock = fmt.Sprintf(`  authentication:
+		serverProvidersBlock += fmt.Sprintf("    identity: %s\n", authName)
+		identityBlock = fmt.Sprintf(`  identity:
     %s:
       source:
         path: %s
@@ -2205,11 +2205,11 @@ func TestRunLockSyncLayeredConfigs(t *testing.T) {
 		t.Fatalf("setupBootstrapWithConfigPaths locked layered configs: %v", err)
 	}
 	defer env.Close()
-	if got := env.Config.Server.Providers.Authentication; got != "local" {
-		t.Fatalf("Server.Providers.Authentication = %q, want local", got)
+	if got := env.Config.Server.Providers.Identity; got != "local" {
+		t.Fatalf("Server.Providers.Identity = %q, want local", got)
 	}
-	if _, auth, err := env.Config.SelectedAuthenticationProvider(); err != nil || auth == nil {
-		t.Fatalf("SelectedAuthenticationProvider = (%#v, %v), want local auth provider", auth, err)
+	if _, auth, err := env.Config.SelectedIdentityProvider(); err != nil || auth == nil {
+		t.Fatalf("SelectedIdentityProvider = (%#v, %v), want local auth provider", auth, err)
 	}
 }
 
@@ -2366,10 +2366,10 @@ apps:
 	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   providers:
-    authentication: local
+    identity: local
   artifactsDir: ../artifacts/local
 providers:
-  authentication:
+  identity:
     local:
       source:
         path: %s

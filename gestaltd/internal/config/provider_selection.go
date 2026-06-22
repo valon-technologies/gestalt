@@ -10,8 +10,8 @@ import (
 
 func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 	switch kind {
-	case HostProviderKindAuthentication:
-		return s.Authentication
+	case HostProviderKindIdentity:
+		return s.Identity
 	case HostProviderKindAuthorization:
 		return s.Authorization
 	case HostProviderKindExternalCredentials:
@@ -40,8 +40,8 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 		return nil
 	}
 	switch kind {
-	case HostProviderKindAuthentication:
-		return c.Providers.Authentication
+	case HostProviderKindIdentity:
+		return c.Providers.Identity
 	case HostProviderKindAuthorization:
 		return c.Providers.Authorization
 	case HostProviderKindExternalCredentials:
@@ -69,8 +69,8 @@ func (c *Config) SelectedHostProvider(kind HostProviderKind) (string, *ProviderE
 	return ResolveSelectedHostProvider(kind, c.Server.Providers.Selection(kind), c.HostProviderEntries(kind))
 }
 
-func (c *Config) SelectedAuthenticationProvider() (string, *ProviderEntry, error) {
-	return c.SelectedHostProvider(HostProviderKindAuthentication)
+func (c *Config) SelectedIdentityProvider() (string, *ProviderEntry, error) {
+	return c.SelectedHostProvider(HostProviderKindIdentity)
 }
 
 func (c *Config) SelectedAuthorizationProvider() (string, *ProviderEntry, error) {

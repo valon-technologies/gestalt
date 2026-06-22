@@ -6,6 +6,7 @@ package python
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
@@ -61,6 +62,12 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 
 	messages, enums := reachable(idx, services)
+	publicBases := map[string]string{}
+	for _, svc := range services {
+		if rename := emit.ClientAliasFor(svc.Name); rename != nil {
+			publicBases[generatedFileBase(svc.ProtoFile)] = strings.ToLower(rename.Target)
+		}
+	}
 	idx.taken = takenNames(messages, enums)
 	if err := set.Add("rpc_support.py", []byte(supportFile)); err != nil {
 		return nil, err
@@ -77,7 +84,15 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		return nil, err
 	}
 	for _, g := range groupFiles(services, messages, enums) {
-		public := newRenderer(idx, g.base, modulePublic)
+		outputBase := g.base
+		var rename *emit.ClientAlias
+		for _, svc := range g.services {
+			rename = emit.ClientAliasFor(svc.Name)
+			if rename != nil {
+				outputBase = strings.ToLower(rename.Target)
+			}
+		}
+		public := newRenderer(idx, outputBase, g.base, modulePublic, publicBases)
 		for _, e := range g.enums {
 			public.renderEnum(e)
 		}
@@ -85,20 +100,20 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 			public.renderMessage(m)
 		}
 		for _, svc := range g.services {
-			public.renderClient(svc)
+			public.renderClient(svc, rename)
 		}
-		if err := set.Add(g.base+".py", []byte(public.assemble())); err != nil {
+		if err := set.Add(outputBase+".py", []byte(public.assemble())); err != nil {
 			return nil, err
 		}
 
 		if len(g.messages) == 0 {
 			continue
 		}
-		codec := newRenderer(idx, g.base, moduleCodec)
+		codec := newRenderer(idx, outputBase, g.base, moduleCodec, publicBases)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
-		if err := set.Add("_codec/"+g.base+".py", []byte(codec.assemble())); err != nil {
+		if err := set.Add("_codec/"+outputBase+".py", []byte(codec.assemble())); err != nil {
 			return nil, err
 		}
 	}

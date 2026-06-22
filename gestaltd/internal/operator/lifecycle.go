@@ -314,7 +314,7 @@ func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, state State
 		return nil, nil, lifecyclePaths{}, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers.App), "authentication", len(lock.Providers.Authentication), "authorization", len(lock.Providers.Authorization), "indexeddbs", len(lock.Providers.IndexedDB), "cache", len(lock.Providers.Cache), "s3", len(lock.Providers.S3), "workflow", len(lock.Providers.Workflow), "agent", len(lock.Providers.Agent), "runtime", len(lock.Providers.Runtime), "secrets", len(lock.Providers.Secrets), "telemetry", len(lock.Providers.Telemetry), "audit", len(lock.Providers.Audit), "uis", len(lock.Providers.UI))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers.App), "authentication", len(lock.Providers.Identity), "authorization", len(lock.Providers.Authorization), "indexeddbs", len(lock.Providers.IndexedDB), "cache", len(lock.Providers.Cache), "s3", len(lock.Providers.S3), "workflow", len(lock.Providers.Workflow), "agent", len(lock.Providers.Agent), "runtime", len(lock.Providers.Runtime), "secrets", len(lock.Providers.Secrets), "telemetry", len(lock.Providers.Telemetry), "audit", len(lock.Providers.Audit), "uis", len(lock.Providers.UI))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, paths, nil
 }
@@ -1754,7 +1754,7 @@ func hostProviderCollections(cfg *config.Config) []struct {
 		kind    config.HostProviderKind
 		entries map[string]*config.ProviderEntry
 	}{
-		{config.HostProviderKindAuthentication, cfg.Providers.Authentication},
+		{config.HostProviderKindIdentity, cfg.Providers.Identity},
 		{config.HostProviderKindAuthorization, cfg.Providers.Authorization},
 		{config.HostProviderKindExternalCredentials, cfg.Providers.ExternalCredentials},
 		{config.HostProviderKindSecrets, cfg.Providers.Secrets},
@@ -1771,8 +1771,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return nil
 	}
 	switch kind {
-	case config.HostProviderKindAuthentication:
-		return lock.Providers.Authentication
+	case config.HostProviderKindIdentity:
+		return lock.Providers.Identity
 	case config.HostProviderKindAuthorization:
 		return lock.Providers.Authorization
 	case config.HostProviderKindExternalCredentials:
@@ -2025,7 +2025,7 @@ func s3DestDir(paths lifecyclePaths, name string) string {
 
 func componentDestDir(paths lifecyclePaths, kind config.HostProviderKind, name string) string {
 	switch kind {
-	case config.HostProviderKindAuthentication:
+	case config.HostProviderKindIdentity:
 		return authDestDir(paths, name)
 	case config.HostProviderKindAuthorization:
 		return authorizationDestDir(paths, name)
@@ -2275,8 +2275,8 @@ func inspectPreparedLockMetadata(paths lifecyclePaths, install *preparedInstall,
 
 func providerManifestKind(kind config.HostProviderKind) string {
 	switch kind {
-	case config.HostProviderKindAuthentication:
-		return providermanifestv1.KindAuthentication
+	case config.HostProviderKindIdentity:
+		return providermanifestv1.KindIdentity
 	case config.HostProviderKindAuthorization:
 		return providermanifestv1.KindAuthorization
 	case config.HostProviderKindExternalCredentials:

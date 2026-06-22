@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -51,18 +52,28 @@ type features struct {
 }
 
 type renderer struct {
-	idx      *index
-	base     string // generated file base currently being rendered
-	kind     moduleKind
-	features features
-	body     strings.Builder
+	idx         *index
+	base        string
+	wireBase    string
+	publicBases map[string]string
+	kind        moduleKind
+	features    features
+	body        strings.Builder
 }
 
-func newRenderer(idx *index, base string, kind moduleKind) *renderer {
+func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicBases map[string]string) *renderer {
+	if wireBase == "" {
+		wireBase = base
+	}
+	if publicBases == nil {
+		publicBases = map[string]string{}
+	}
 	return &renderer{
-		idx:  idx,
-		base: base,
-		kind: kind,
+		idx:         idx,
+		base:        base,
+		wireBase:    wireBase,
+		publicBases: publicBases,
+		kind:        kind,
 		features: features{
 			rpcTypes:    map[string]bool{},
 			invokeNames: map[string]bool{},
@@ -72,6 +83,14 @@ func newRenderer(idx *index, base string, kind moduleKind) *renderer {
 			crossCodec:  map[string]bool{},
 		},
 	}
+}
+
+func (r *renderer) publicBase(protoFile string) string {
+	base := generatedFileBase(protoFile)
+	if mapped, ok := r.publicBases[base]; ok {
+		return mapped
+	}
+	return base
 }
 
 // useType records a public-module import of a native well-known type from the
@@ -106,18 +125,18 @@ func (r *renderer) helper(name string) string {
 // gestalt/_gen/v1 type these modules, so generated code references them
 // directly instead of going through an Any-typed alias.
 func (r *renderer) wireModule() string {
-	return "_" + r.base + "_pb2"
+	return "_" + r.wireBase + "_pb2"
 }
 
 func (r *renderer) wireGrpcModule() string {
-	return "_" + r.base + "_pb2_grpc"
+	return "_" + r.wireBase + "_pb2_grpc"
 }
 
 // crossRef records a public-module import of a native type from another
 // generated public module and returns the name unchanged. References within
 // the current file are not imports.
 func (r *renderer) crossRef(protoFile, name string) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if base != r.base {
 		if r.features.crossNative[base] == nil {
 			r.features.crossNative[base] = map[string]bool{}
@@ -151,7 +170,7 @@ func (r *renderer) codecAlias(base string) string {
 // modules by base name; public modules go through the imported codec module
 // object, which keeps the circular import resolvable.
 func (r *renderer) codecRef(protoFile, name string) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if r.kind == moduleCodec {
 		if base == r.base {
 			return name
@@ -565,14 +584,20 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 	r.body.WriteString("    return None\n\n\n")
 }
 
-func (r *renderer) renderClient(svc *model.Service) {
-	name := localName(svc.FullName)
+func (r *renderer) renderClient(svc *model.Service, rename *emit.ClientAlias) {
+	wireName := localName(svc.FullName)
+	name := wireName
+	if rename != nil {
+		name = rename.Target
+	}
 	r.features.grpc = true
 	r.features.wireGrpc = true
 
 	fmt.Fprintf(&r.body, "class %s:\n", name)
 	doc := fmt.Sprintf("Client for the %s service.", svc.FullName)
-	if svc.Doc != "" {
+	if rename != nil && rename.Doc != "" {
+		doc = rename.Doc
+	} else if svc.Doc != "" {
 		doc = svc.Doc + "\n\n" + doc
 	}
 	r.writeDocstring("    ", doc)
@@ -581,12 +606,12 @@ func (r *renderer) renderClient(svc *model.Service) {
 	if ctxField != nil {
 		ctxType := r.fieldType(ctxField)
 		fmt.Fprintf(&r.body, "    def __init__(self, channel: grpc.Channel, *, context: %s | None = None, timeout: float | None = None) -> None:\n", ctxType)
-		fmt.Fprintf(&r.body, "        self._stub = %s.%sStub(channel)\n", r.wireGrpcModule(), name)
+		fmt.Fprintf(&r.body, "        self._stub = %s.%sStub(channel)\n", r.wireGrpcModule(), wireName)
 		r.body.WriteString("        self._context = context\n")
 		r.body.WriteString("        self._timeout = timeout\n\n")
 	} else {
 		r.body.WriteString("    def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:\n")
-		fmt.Fprintf(&r.body, "        self._stub = %s.%sStub(channel)\n", r.wireGrpcModule(), name)
+		fmt.Fprintf(&r.body, "        self._stub = %s.%sStub(channel)\n", r.wireGrpcModule(), wireName)
 		r.body.WriteString("        self._timeout = timeout\n\n")
 	}
 
@@ -1061,7 +1086,7 @@ func (r *renderer) localImports() string {
 			fmt.Fprintf(&b, "from .. import %s as native\n", r.base)
 		}
 		if r.features.wire {
-			fmt.Fprintf(&b, "from .._gen.v1 import %s_pb2 as _%s_pb2\n", r.base, r.base)
+			fmt.Fprintf(&b, "from .._gen.v1 import %s_pb2 as _%s_pb2\n", r.wireBase, r.wireBase)
 		}
 		if len(r.features.crossCodec) > 0 {
 			fmt.Fprintf(&b, "from . import %s\n", strings.Join(sortedKeys(r.features.crossCodec), ", "))
@@ -1096,7 +1121,7 @@ func (r *renderer) localImports() string {
 	if r.features.wireGrpc {
 		locals = append(locals, localImport{
 			module: "._gen.v1",
-			lines:  fmt.Sprintf("from ._gen.v1 import %s_pb2_grpc as _%s_pb2_grpc\n", r.base, r.base),
+			lines:  fmt.Sprintf("from ._gen.v1 import %s_pb2_grpc as _%s_pb2_grpc\n", r.wireBase, r.wireBase),
 		})
 	}
 	if r.features.hostService {

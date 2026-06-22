@@ -19,7 +19,7 @@ import type {
   TokenResponse,
   UserInfoRequest,
   UserInfoResponse,
-} from "../../authentication.ts";
+} from "../../identity.ts";
 import type { Init } from "../../rpc_support.ts";
 
 export function toWireAuthorizeRequest(

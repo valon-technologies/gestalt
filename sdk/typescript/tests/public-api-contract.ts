@@ -88,7 +88,7 @@ import { loadProviderFromTarget as runtimeSub_loadProviderFromTarget } from "@va
 // @ts-expect-error The runtime subpath exposes only the provider-protocol bridges.
 import { runBundledProvider as runtimeSub_runBundledProvider } from "@valon-technologies/gestalt/runtime";
 // @ts-expect-error Root package must not expose internal protocol-service adapters.
-import { createAuthenticationService as removedInternal_createAuthenticationService } from "@valon-technologies/gestalt";
+import { createIdentityService as removedInternal_createIdentityService } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose internal protocol-service adapters.
 import { createCacheService as removedInternal_createCacheService } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose internal protocol-service adapters.
@@ -160,7 +160,7 @@ declare const useProviderTarget: RemovedProviderTarget; void useProviderTarget;
 void runtimeSub_parseRuntimeArgs;
 void runtimeSub_loadProviderFromTarget;
 void runtimeSub_runBundledProvider;
-void removedInternal_createAuthenticationService;
+void removedInternal_createIdentityService;
 void removedInternal_createCacheService;
 void removedInternal_createSecretsService;
 void removedInternal_createProviderService;

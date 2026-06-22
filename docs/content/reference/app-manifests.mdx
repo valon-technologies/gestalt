@@ -4,7 +4,7 @@ import { Tabs } from "nextra/components";
 
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
-Providers are the umbrella concept in Gestalt. Authentication, authorization,
+Providers are the umbrella concept in Gestalt. Identity, authorization,
 agent, cache, indexeddb, runtime, S3, secrets, workflow, and app packages all use
 this manifest format. The `app` manifest kind is reserved for providers that
 expose callable operations.
@@ -16,7 +16,7 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | Kind        | Purpose                                              |
 | ----------- | ---------------------------------------------------- |
 | `app` | App (REST, OpenAPI, GraphQL, MCP, or executable). |
-| `authentication` | Platform authentication provider. |
+| `identity` | Platform identity provider. |
 | `authorization` | Human authorization decision and control-plane provider. |
 | `agent` | Global session-and-turn agent provider. |
 | `cache` | Cache backend for app-bound cache bindings. |
@@ -35,7 +35,7 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field         | Type       | Required | Purpose                                                                                                                                                                                              |
 | ------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`        | string     | yes      | The provider kind (`app`, `authentication`, `authorization`, `agent`, `cache`, `indexeddb`, `runtime`, `s3`, `secrets`, `ui`, `workflow`).                                                                                                                |
+| `kind`        | string     | yes      | The provider kind (`app`, `identity`, `authorization`, `agent`, `cache`, `indexeddb`, `runtime`, `s3`, `secrets`, `ui`, `workflow`).                                                                                                                |
 | `source`      | string     | yes      | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version`     | string     | yes      | Semver version. Pre-release suffixes like `-alpha.1` are allowed.                                                                                                                                    |
 | `displayName` | string     | no       | Human-readable label shown in the UI.                                                                                                                                                                |
@@ -482,18 +482,18 @@ The `params` map on a connection defines parameters that are populated during or
 | `description` | string | Describes the parameter to the user.                                           |
 | `from`        | string | Set to `discovery` to populate the value from post-connect discovery metadata. |
 
-## Authentication Provider Metadata
+## Identity Provider Metadata
 
-The `spec` block for a `kind: authentication` manifest describes a platform authentication provider package.
+The `spec` block for a `kind: identity` manifest describes a platform identity provider package.
 
 | Field              | Type   | Purpose                                                                                                            |
 | ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------ |
-| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.authentication.<name>.config` block in the server config. |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.identity.<name>.config` block in the server config. |
 
-Authentication providers require an executable entrypoint. Declare it under `entrypoint`.
+Identity providers require an executable entrypoint. Declare it under `entrypoint`.
 
 ```yaml
-kind: authentication
+kind: identity
 source: github.com/valon-technologies/gestalt-providers/auth/oidc
 version: 1.0.0
 displayName: OIDC Authentication
@@ -823,7 +823,7 @@ spec:
 
 Manifest paths must stay inside the package. `kind`, `source`, and `version`
 are required. A manifest defines exactly one provider kind. The current set is
-`app`, `authentication`, `authorization`, `agent`, `cache`, `indexeddb`,
+`app`, `identity`, `authorization`, `agent`, `cache`, `indexeddb`,
 `runtime`, `s3`, `secrets`, `ui`, and `workflow`.
 
 `configSchemaPath` validates deployment config for the provider and may be

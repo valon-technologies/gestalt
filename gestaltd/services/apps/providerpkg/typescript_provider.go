@@ -180,8 +180,8 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 func typeScriptComponentKind(kind string) (string, error) {
 	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
-	case providermanifestv1.KindAuthentication:
-		return "authentication", nil
+	case providermanifestv1.KindIdentity:
+		return "identity", nil
 	case providermanifestv1.KindCache:
 		return "cache", nil
 	case providermanifestv1.KindIndexedDB:

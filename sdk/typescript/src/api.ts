@@ -5,11 +5,11 @@ import type { Interceptor } from "@connectrpc/connect";
 
 import {
   CALLER_BEARER_TOKEN_METADATA_KEY,
-} from "./auth.ts";
+} from "./providers/identity.ts";
 import type { AgentToolRef } from "./providers/agent.ts";
 import { Agent } from "./agent.ts";
 import { App, type RequestContext } from "./app.ts";
-import { Authentication } from "./authentication.ts";
+import { Identity } from "./identity.ts";
 import {
   createHostServiceGrpcTransport,
   hostServiceMetadataInterceptors,
@@ -89,8 +89,8 @@ export interface Request {
   __requestContext?: RequestContext | undefined;
   /** Returns the generated App client carrying this request's context. */
   app(options?: { timeoutMs?: number | undefined }): Promise<App>;
-  /** Returns the generated Authentication client scoped to this request's caller. */
-  authentication(options?: { timeoutMs?: number | undefined }): Promise<Authentication>;
+  /** Returns the generated Identity client scoped to this request's caller. */
+  identity(options?: { timeoutMs?: number | undefined }): Promise<Identity>;
   /** Returns the generated Agent client carrying this request's context. */
   agent(options?: { timeoutMs?: number | undefined }): Promise<Agent>;
   /** Returns the generated Workflow client carrying this request's context. */
@@ -199,7 +199,7 @@ export function request(
   toolRefsSet = false,
   requestContext?: RequestContext,
 ): Request {
-  const req: Omit<Request, "app" | "authentication" | "agent" | "workflows"> = {
+  const req: Omit<Request, "app" | "identity" | "agent" | "workflows"> = {
     token,
     connectionParams: {
       ...connectionParams,
@@ -249,14 +249,14 @@ export function request(
   return attachRequestHelpers(req);
 }
 
-export function attachRequestHelpers<T extends Omit<Request, "app" | "authentication" | "agent" | "workflows">>(
+export function attachRequestHelpers<T extends Omit<Request, "app" | "identity" | "agent" | "workflows">>(
   input: T,
 ): Request {
   const req = input as unknown as Request;
   req.app = async (options) =>
     App.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
-  req.authentication = async (options) =>
-    connectAuthentication(req.token, options);
+  req.identity = async (options) =>
+    connectIdentity(req.token, options);
   req.agent = async (options) =>
     Agent.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
   req.workflows = async (options) =>
@@ -264,10 +264,10 @@ export function attachRequestHelpers<T extends Omit<Request, "app" | "authentica
   return req;
 }
 
-function connectAuthentication(
+function connectIdentity(
   callerBearerToken: string,
   options?: { timeoutMs?: number | undefined },
-): Authentication {
+): Identity {
   const { target, token } = requireHostServiceTarget("authentication");
   const transport = createHostServiceGrpcTransport(
     parseHostServiceTarget("authentication", target),
@@ -276,7 +276,7 @@ function connectAuthentication(
       ...callerBearerTokenMetadataInterceptors(callerBearerToken),
     ],
   );
-  return new Authentication(transport, options);
+  return new Identity(transport, options);
 }
 
 function callerBearerTokenMetadataInterceptors(token: string): Interceptor[] {

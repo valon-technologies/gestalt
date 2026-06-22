@@ -41,7 +41,7 @@ use crate::generated::v1::secrets_server::SecretsServer as SecretsRpcServer;
 use crate::generated::v1::workflow_server::WorkflowServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
 use crate::{
-    AgentProvider, AuthenticationProvider, CacheProvider, Provider, Router, RuntimeProvider,
+    AgentProvider, IdentityProvider, CacheProvider, Provider, Router, RuntimeProvider,
     S3Provider, SecretsProvider, WorkflowProvider,
 };
 #[cfg(unix)]
@@ -70,7 +70,7 @@ pub fn run_provider<P: Provider>(provider: Arc<P>, router: Router<P>) -> Result<
 }
 
 /// Runs an authentication provider on the Unix socket exposed by `gestaltd`.
-pub fn run_authentication_provider<P: AuthenticationProvider>(provider: Arc<P>) -> Result<()> {
+pub fn run_identity_provider<P: IdentityProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_authentication_provider(provider))
 }
 
@@ -155,7 +155,7 @@ where
 /// Serves an authentication provider over the configured Unix socket.
 pub async fn serve_authentication_provider<P>(provider: Arc<P>) -> Result<()>
 where
-    P: AuthenticationProvider,
+    P: IdentityProvider,
 {
     serve_unix_provider(
         provider,
@@ -176,7 +176,7 @@ where
 #[cfg(not(unix))]
 pub async fn serve_authentication_provider<P>(_provider: Arc<P>) -> Result<()>
 where
-    P: AuthenticationProvider,
+    P: IdentityProvider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",

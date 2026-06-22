@@ -16,13 +16,13 @@ type yamlConfig struct {
 	CallbackURL                  string `yaml:"callbackUrl"`
 }
 
-func AuthenticationFactory(node yaml.Node, deps AuthenticationDeps) (core.AuthenticationProvider, error) {
+func AuthenticationFactory(node yaml.Node, deps AuthenticationDeps) (core.IdentityProvider, error) {
 	var cfg yamlConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("authentication provider: parsing config: %w", err)
 	}
 	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
-		Kind:                 providermanifestv1.KindAuthentication,
+		Kind:                 providermanifestv1.KindIdentity,
 		Subject:              "authentication provider",
 		SourceMissingMessage: "no Go, Rust, Python, or TypeScript authentication provider source package found",
 		Config:               cfg.YAMLConfig,

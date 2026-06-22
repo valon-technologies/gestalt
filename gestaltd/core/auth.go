@@ -5,7 +5,7 @@ import "context"
 const BearerScheme = "Bearer "
 
 // DefaultOAuthClientID is the first-party OAuth client identifier gestaltd uses
-// when calling AuthenticationProvider.Authorize and Token.
+// when calling IdentityProvider.Authorize and Token.
 const DefaultOAuthClientID = "gestaltd"
 
 const (
@@ -14,10 +14,10 @@ const (
 	SubjectTokenTypeAccessToken = "urn:ietf:params:oauth:token-type:access_token"
 )
 
-// AuthenticationProvider is the RFC 6749 / RFC 7662 / OIDF Grant Management
+// IdentityProvider is the RFC 6749 / RFC 7662 / OIDF Grant Management
 // authentication surface. Providers own subjects, grants, token issuance,
 // storage, introspection, and revocation.
-type AuthenticationProvider interface {
+type IdentityProvider interface {
 	// Authorize implements the RFC 6749 authorization endpoint.
 	Authorize(ctx context.Context, req *AuthorizeRequest) (*AuthorizeResponse, error)
 

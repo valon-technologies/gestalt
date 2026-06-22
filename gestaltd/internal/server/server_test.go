@@ -3899,7 +3899,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = nil
-		cfg.AuthProviders = map[string]core.AuthenticationProvider{
+		cfg.AuthProviders = map[string]core.IdentityProvider{
 			"alt": &coretesting.StubAuthProvider{
 				N: "alt",
 				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
@@ -8406,7 +8406,7 @@ func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *
 		cfg.Auth = newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{name: "server"})
 		cfg.SelectedAuthProvider = "server"
 		cfg.StateSecret = secret
-		cfg.AuthProviders = map[string]core.AuthenticationProvider{
+		cfg.AuthProviders = map[string]core.IdentityProvider{
 			"alt": newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{name: "alt"}),
 		}
 		cfg.MountedUIs = []server.MountedUI{{

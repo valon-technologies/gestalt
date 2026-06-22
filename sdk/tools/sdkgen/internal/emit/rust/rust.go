@@ -68,10 +68,24 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 
 	messages, enums := reachable(idx, services)
+	publicBases := map[string]string{}
+	for _, svc := range services {
+		if rename := emit.ClientAliasFor(svc.Name); rename != nil {
+			publicBases[generatedFileBase(svc.ProtoFile)] = strings.ToLower(rename.Target)
+		}
+	}
 	supportUses := map[string]bool{}
 	codecModules := []string{"support"}
 	for _, g := range groupFiles(services, messages, enums) {
-		public := newRenderer(idx, g.base, modulePublic)
+		outputBase := g.base
+		var rename *emit.ClientAlias
+		for _, svc := range g.services {
+			rename = emit.ClientAliasFor(svc.Name)
+			if rename != nil {
+				outputBase = strings.ToLower(rename.Target)
+			}
+		}
+		public := newRenderer(idx, outputBase, g.base, modulePublic, publicBases)
 		for _, e := range g.enums {
 			public.renderEnum(e)
 		}
@@ -79,9 +93,9 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 			public.renderMessage(m)
 		}
 		for _, svc := range g.services {
-			public.renderClient(svc)
+			public.renderClient(svc, rename)
 		}
-		if err := set.Add(g.base+".rs", []byte(public.assemble())); err != nil {
+		if err := set.Add(outputBase+".rs", []byte(public.assemble())); err != nil {
 			return nil, err
 		}
 		for name := range public.features.supportFns {
@@ -91,14 +105,14 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		if len(g.messages) == 0 {
 			continue
 		}
-		codec := newRenderer(idx, g.base, moduleCodec)
+		codec := newRenderer(idx, outputBase, g.base, moduleCodec, publicBases)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
-		if err := set.Add("codec/"+g.base+".rs", []byte(codec.assemble())); err != nil {
+		if err := set.Add("codec/"+outputBase+".rs", []byte(codec.assemble())); err != nil {
 			return nil, err
 		}
-		codecModules = append(codecModules, g.base)
+		codecModules = append(codecModules, outputBase)
 		for name := range codec.features.supportFns {
 			supportUses[name] = true
 		}

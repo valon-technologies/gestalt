@@ -14,7 +14,7 @@ import {
   CreateAgentProviderTurnRequestSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
-  Authentication as AuthenticationProviderService,
+  Authentication as IdentityProviderService,
   AuthorizeRequestSchema,
   IntrospectRequestSchema,
   TokenRequestSchema,
@@ -109,7 +109,7 @@ test("build arg parsing validates required arguments", () => {
   expect(
     parseBuildArgs([
       "root",
-      "authentication:./auth.ts#provider",
+      "identity:./auth.ts#provider",
       "out",
       "name",
       "darwin",
@@ -117,7 +117,7 @@ test("build arg parsing validates required arguments", () => {
     ]),
   ).toEqual({
     root: "root",
-    target: "authentication:./auth.ts#provider",
+    target: "identity:./auth.ts#provider",
     outputPath: "out",
     providerName: "name",
     goos: "darwin",
@@ -143,7 +143,7 @@ test("buildProviderBinary compiles a runnable authentication provider executable
   try {
     buildProviderBinary({
       root: fixturePath("auth-provider"),
-      target: "authentication:./auth.ts#provider",
+      target: "identity:./auth.ts#provider",
       outputPath,
       providerName: "fixture-built",
       goos,
@@ -166,7 +166,7 @@ test("buildProviderBinary compiles a runnable authentication provider executable
 
     const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
     const auth = createUnixGrpcClient(
-      AuthenticationProviderService,
+      IdentityProviderService,
       socketPath,
     );
 

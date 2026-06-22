@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -37,18 +38,28 @@ type features struct {
 }
 
 type renderer struct {
-	idx      *index
-	base     string // generated file base currently being rendered
-	kind     moduleKind
-	features features
-	body     strings.Builder
+	idx          *index
+	base         string            // generated output file base
+	wireBase     string            // proto file base used for wire imports
+	publicBases  map[string]string // proto base -> public output base
+	kind         moduleKind
+	features     features
+	body         strings.Builder
 }
 
-func newRenderer(idx *index, base string, kind moduleKind) *renderer {
+func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicBases map[string]string) *renderer {
+	if wireBase == "" {
+		wireBase = base
+	}
+	if publicBases == nil {
+		publicBases = map[string]string{}
+	}
 	return &renderer{
-		idx:  idx,
-		base: base,
-		kind: kind,
+		idx:         idx,
+		base:        base,
+		wireBase:    wireBase,
+		publicBases: publicBases,
+		kind:        kind,
 		features: features{
 			supportValues: map[string]bool{},
 			supportTypes:  map[string]bool{},
@@ -57,6 +68,14 @@ func newRenderer(idx *index, base string, kind moduleKind) *renderer {
 			crossCodec:    map[string]map[string]bool{},
 		},
 	}
+}
+
+func (r *renderer) publicBase(protoFile string) string {
+	base := generatedFileBase(protoFile)
+	if mapped, ok := r.publicBases[base]; ok {
+		return mapped
+	}
+	return base
 }
 
 // use records an import from a shared support module: values come from the
@@ -81,7 +100,7 @@ func (r *renderer) useInvoke(name string) {
 // types, and only type-only: the value-level edge runs public -> codec, so
 // the reverse edge must erase under verbatimModuleSyntax.
 func (r *renderer) typeRef(protoFile, name string, isType bool) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if r.kind == modulePublic && base == r.base {
 		return name
 	}
@@ -106,7 +125,7 @@ func (r *renderer) typeRef(protoFile, name string, isType bool) string {
 // returns the name unchanged. References from a codec module to its own
 // converters are not imports.
 func (r *renderer) convRef(protoFile, name string) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if r.kind == moduleCodec && base == r.base {
 		return name
 	}
@@ -468,8 +487,12 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 	r.body.WriteString("    default:\n      return { case: undefined };\n  }\n}\n\n")
 }
 
-func (r *renderer) renderClient(svc *model.Service) {
-	name := localName(svc.FullName)
+func (r *renderer) renderClient(svc *model.Service, rename *emit.ClientAlias) {
+	wireName := localName(svc.FullName)
+	name := wireName
+	if rename != nil {
+		name = rename.Target
+	}
 	r.features.client = true
 	r.features.wire = true
 
@@ -480,15 +503,19 @@ func (r *renderer) renderClient(svc *model.Service) {
 	if ctxField != nil {
 		optionsType = fmt.Sprintf("{ context?: %s | undefined; timeoutMs?: number | undefined }", r.fieldType(ctxField))
 	}
-	r.writeDoc(svc.Doc, "")
+	doc := svc.Doc
+	if rename != nil && doc == "" {
+		doc = rename.Doc
+	}
+	r.writeDoc(doc, "")
 	fmt.Fprintf(&r.body, "export class %s {\n", name)
-	fmt.Fprintf(&r.body, "  private readonly client: Client<typeof wire.%s>;\n", name)
+	fmt.Fprintf(&r.body, "  private readonly client: Client<typeof wire.%s>;\n", wireName)
 	r.body.WriteString("  private readonly timeoutMs: number | undefined;\n")
 	if ctxField != nil {
 		fmt.Fprintf(&r.body, "  private readonly context: %s | undefined;\n", r.fieldType(ctxField))
 	}
 	fmt.Fprintf(&r.body, "\n  constructor(transport: Transport, options?: %s) {\n", optionsType)
-	fmt.Fprintf(&r.body, "    this.client = createClient(wire.%s, transport);\n", name)
+	fmt.Fprintf(&r.body, "    this.client = createClient(wire.%s, transport);\n", wireName)
 	if ctxField != nil {
 		r.body.WriteString("    this.context = options?.context;\n")
 	}
@@ -936,7 +963,7 @@ func (r *renderer) assemble() string {
 	}
 
 	if r.features.wire {
-		fmt.Fprintf(&b, "\nimport * as wire from \"%s/%s_pb.ts\";\n", r.wireDir(), r.base)
+		fmt.Fprintf(&b, "\nimport * as wire from \"%s/%s_pb.ts\";\n", r.wireDir(), r.wireBase)
 	} else {
 		b.WriteString("\n")
 	}

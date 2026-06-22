@@ -75,7 +75,7 @@ func TestManifestKindDoesNotMutateCallerManifest(t *testing.T) {
 
 	artifactPath := testArtifactPath("authentication")
 	manifest := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindAuthentication,
+		Kind:    providermanifestv1.KindIdentity,
 		Source:  "example.com/acme/apps/authentication",
 		Version: "1.0.0",
 		Artifacts: []providermanifestv1.Artifact{{
@@ -91,10 +91,10 @@ func TestManifestKindDoesNotMutateCallerManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ManifestKind: %v", err)
 	}
-	if kind != providermanifestv1.KindAuthentication {
-		t.Fatalf("ManifestKind = %q, want %q", kind, providermanifestv1.KindAuthentication)
+	if kind != providermanifestv1.KindIdentity {
+		t.Fatalf("ManifestKind = %q, want %q", kind, providermanifestv1.KindIdentity)
 	}
-	if manifest.Kind != providermanifestv1.KindAuthentication {
+	if manifest.Kind != providermanifestv1.KindIdentity {
 		t.Fatalf("ManifestKind mutated manifest kind to %q", manifest.Kind)
 	}
 
@@ -102,7 +102,7 @@ func TestManifestKindDoesNotMutateCallerManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if manifest.Kind != providermanifestv1.KindAuthentication {
+	if manifest.Kind != providermanifestv1.KindIdentity {
 		t.Fatalf("EncodeManifest mutated manifest kind to %q", manifest.Kind)
 	}
 	if !strings.Contains(string(encoded), `"kind": "authentication"`) {

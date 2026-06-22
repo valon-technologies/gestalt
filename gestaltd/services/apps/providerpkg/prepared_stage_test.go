@@ -330,14 +330,14 @@ fi
 			run: func(t *testing.T, root, fakeUVPath, logPath string) {
 				mustWriteFile(t, filepath.Join(root, "auth.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
 				manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
-					Kind:    providermanifestv1.KindAuthentication,
+					Kind:    providermanifestv1.KindIdentity,
 					Source:  "github.com/test/providers/auth",
 					Version: "0.0.1-alpha.1",
 					Run:     []string{"./auth.sh", "--serve"},
 					Spec:    &providermanifestv1.Spec{},
 				}))
 
-				execution, err := SourceManifestExecution(manifestPath, providermanifestv1.KindAuthentication, SourceBuildOptions{})
+				execution, err := SourceManifestExecution(manifestPath, providermanifestv1.KindIdentity, SourceBuildOptions{})
 				if err != nil {
 					t.Fatalf("SourceManifestExecution: %v", err)
 				}

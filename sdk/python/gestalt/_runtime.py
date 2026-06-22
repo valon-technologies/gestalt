@@ -23,7 +23,7 @@ from ._api import Access, Credential, Error, Host, Request, Subject, SubjectPerm
 from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
-from ._codec import authentication as _authentication_codec
+from ._codec import identity as _identity_codec
 from ._codec import authorization as _authorization_codec
 from ._codec import s3 as _s3_codec
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
@@ -35,8 +35,8 @@ from ._providers import (
     AgentProvider,
     AppProvider,
     AppProviderAdapter,
-    AuthCallContext,
-    AuthenticationProvider,
+    IdentityCallContext,
+    IdentityProvider,
     AuthorizationProvider,
     CacheProvider,
     Closer,
@@ -337,7 +337,7 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
         return target
 
     if resolved_kind == ProviderKind.AUTHENTICATION and isinstance(
-        target, AuthenticationProvider
+        target, IdentityProvider
     ):
         return _authentication_runtime_plugin(target)
     if resolved_kind == ProviderKind.AUTHORIZATION and isinstance(
@@ -457,7 +457,7 @@ def _servable_target(
 
     kind = _normalized_runtime_kind(runtime_kind)
     if kind == ProviderKind.AUTHENTICATION and isinstance(
-        target, AuthenticationProvider
+        target, IdentityProvider
     ):
         return _authentication_runtime_plugin(target)
     if kind == ProviderKind.AUTHORIZATION and isinstance(target, AuthorizationProvider):
@@ -478,7 +478,7 @@ def _servable_target(
 
 
 def _authentication_runtime_plugin(
-    provider: AuthenticationProvider,
+    provider: IdentityProvider,
 ) -> AppProviderAdapter:
     return AppProviderAdapter(
         kind=ProviderKind.AUTHENTICATION,
@@ -1538,10 +1538,10 @@ def _runtime_servicer(*, provider: AppProvider, kind: ProviderKind) -> Any:
     return RuntimeServicer()
 
 
-def _auth_call_context_from_handler(context: Any) -> AuthCallContext:
+def _auth_call_context_from_handler(context: Any) -> IdentityCallContext:
     invocation_metadata = getattr(context, "invocation_metadata", None)
     if invocation_metadata is None:
-        return AuthCallContext()
+        return IdentityCallContext()
     for key, value in invocation_metadata():
         if key != CALLER_BEARER_TOKEN_METADATA_KEY:
             continue
@@ -1549,13 +1549,13 @@ def _auth_call_context_from_handler(context: Any) -> AuthCallContext:
             token = value.decode("utf-8")
         else:
             token = str(value)
-        return AuthCallContext(caller_bearer_token=token.strip())
-    return AuthCallContext()
+        return IdentityCallContext(caller_bearer_token=token.strip())
+    return IdentityCallContext()
 
 
 def _authentication_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
-    auth_provider = cast(AuthenticationProvider, provider)
+    auth_provider = cast(IdentityProvider, provider)
 
     class AuthenticationServicer(
         authentication_pb2_grpc.AuthenticationServicer
@@ -1563,44 +1563,44 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
         @_grpc_handler("authorize")
         def Authorize(self, request: Any, context: Any) -> Any:
             response = auth_provider.authorize(
-                _authentication_codec.from_wire_authorize_request(request)
+                _identity_codec.from_wire_authorize_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_authorize_response(response)
+            return _identity_codec.to_wire_authorize_response(response)
 
         @_grpc_handler("token")
         def Token(self, request: Any, context: Any) -> Any:
             response = auth_provider.token(
-                _authentication_codec.from_wire_token_request(request)
+                _identity_codec.from_wire_token_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_token_response(response)
+            return _identity_codec.to_wire_token_response(response)
 
         @_grpc_handler("introspect")
         def Introspect(self, request: Any, context: Any) -> Any:
             response = auth_provider.introspect(
-                _authentication_codec.from_wire_introspect_request(request)
+                _identity_codec.from_wire_introspect_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_introspect_response(response)
+            return _identity_codec.to_wire_introspect_response(response)
 
         @_grpc_handler("userinfo")
         def UserInfo(self, request: Any, context: Any) -> Any:
             _ = request
             response = auth_provider.user_info(
-                _authentication_codec.from_wire_user_info_request(request),
+                _identity_codec.from_wire_user_info_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
@@ -1608,13 +1608,13 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_user_info_response(response)
+            return _identity_codec.to_wire_user_info_response(response)
 
         @_grpc_handler("list grants")
         def ListGrants(self, request: Any, context: Any) -> Any:
             _ = request
             response = auth_provider.list_grants(
-                _authentication_codec.from_wire_list_grants_request(request),
+                _identity_codec.from_wire_list_grants_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
@@ -1622,12 +1622,12 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_list_grants_response(response)
+            return _identity_codec.to_wire_list_grants_response(response)
 
         @_grpc_handler("get grant")
         def GetGrant(self, request: Any, context: Any) -> Any:
             response = auth_provider.get_grant(
-                _authentication_codec.from_wire_get_grant_request(request),
+                _identity_codec.from_wire_get_grant_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
@@ -1635,12 +1635,12 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_get_grant_response(response)
+            return _identity_codec.to_wire_get_grant_response(response)
 
         @_grpc_handler("revoke grant")
         def RevokeGrant(self, request: Any, context: Any) -> Any:
             response = auth_provider.revoke_grant(
-                _authentication_codec.from_wire_revoke_grant_request(request),
+                _identity_codec.from_wire_revoke_grant_request(request),
                 _auth_call_context_from_handler(context),
             )
             if response is None:
@@ -1648,7 +1648,7 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_revoke_grant_response(response)
+            return _identity_codec.to_wire_revoke_grant_response(response)
 
     return AuthenticationServicer()
 

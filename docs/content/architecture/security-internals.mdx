@@ -42,11 +42,11 @@ Disconnecting deletes the token row. No soft-delete, no upstream revocation. If 
 
 ## API grant lifecycle
 
-Long-lived API access is provider-owned. Gestalt mints grants through RFC 8693 token exchange against the caller's session, and the authentication provider persists grant metadata plus SHA-256 token hashes.
+Long-lived API access is provider-owned. Gestalt mints grants through RFC 8693 token exchange against the caller's session, and the identity provider persists grant metadata plus SHA-256 token hashes.
 
 **Creation.** `POST /api/v1/tokens` exchanges the caller's session for a new grant. The provider stores only the hash; the plaintext bearer is returned once.
 
-**Validation.** On each request, Gestalt asks the authentication provider to introspect the bearer token.
+**Validation.** On each request, Gestalt asks the identity provider to introspect the bearer token.
 
 **Revocation.** `DELETE /api/v1/tokens/{id}` or `DELETE /api/v1/tokens` (all). The provider marks the grant revoked and deletes associated hash rows.
 

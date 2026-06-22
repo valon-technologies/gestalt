@@ -81,7 +81,7 @@ a host-service backend.
 
 | Trait | Export macro | Use it when you want to serve |
 | --- | --- | --- |
-| `AuthenticationProvider` | `export_authentication_provider!` | Login flows. |
+| `AuthenticationProvider` | `export_identity_provider!` | Login flows. |
 | `CacheProvider` | `export_cache_provider!` | App-bound cache storage. |
 | `S3Provider` | `export_s3_provider!` | S3-compatible object storage. |
 | `SecretsProvider` | `export_secrets_provider!` | Secret resolution. |

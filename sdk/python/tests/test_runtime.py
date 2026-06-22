@@ -21,8 +21,8 @@ from gestalt import (
     App,
     ApplyWorkflowProviderDefinitionRequest,
     AppProviderAdapter,
-    AuthCallContext,
-    AuthenticationProvider,
+    IdentityCallContext,
+    IdentityProvider,
     AuthorizeRequest,
     CacheProvider,
     CacheSetEntry,
@@ -651,8 +651,8 @@ class MainEntrypointTests(unittest.TestCase):
 
 
 class AuthenticationRuntimeTests(unittest.TestCase):
-    class StubAuthenticationProvider(
-        AuthenticationProvider,
+    class StubIdentityProvider(
+        IdentityProvider,
         MetadataProvider,
         WarningsProvider,
         HealthChecker,
@@ -704,14 +704,14 @@ class AuthenticationRuntimeTests(unittest.TestCase):
                 )
             return authentication_pb2.IntrospectResponse(active=False)
 
-        def list_grants(self, request: Any, call: AuthCallContext) -> Any:
+        def list_grants(self, request: Any, call: IdentityCallContext) -> Any:
             self.list_grants_request = request
             self.list_grants_call = call
             return authentication_pb2.ListGrantsResponse(
                 grant_ids=["grant-fixture-1"],
             )
 
-        def get_grant(self, request: Any, call: AuthCallContext) -> Any:
+        def get_grant(self, request: Any, call: IdentityCallContext) -> Any:
             self.get_grant_request = request
             self.get_grant_call = call
             return authentication_pb2.GetGrantResponse(
@@ -720,12 +720,12 @@ class AuthenticationRuntimeTests(unittest.TestCase):
                 expires_at=1_800_000_000,
             )
 
-        def revoke_grant(self, request: Any, call: AuthCallContext) -> Any:
+        def revoke_grant(self, request: Any, call: IdentityCallContext) -> Any:
             self.revoke_grant_request = request
             self.revoke_grant_call = call
             return authentication_pb2.RevokeGrantResponse()
 
-    class StartableAuthenticationProvider(StubAuthenticationProvider):
+    class StartableIdentityProvider(StubIdentityProvider):
         def __init__(self) -> None:
             super().__init__()
             self.started = 0
@@ -734,7 +734,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             self.started += 1
 
     def test_runtime_metadata_and_authentication_servicer(self) -> None:
-        provider = self.StubAuthenticationProvider()
+        provider = self.StubIdentityProvider()
 
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
@@ -847,7 +847,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             ),
         )
         self.assertEqual(list(grants.grant_ids), ["grant-fixture-1"])
-        self.assertIsInstance(provider.list_grants_call, AuthCallContext)
+        self.assertIsInstance(provider.list_grants_call, IdentityCallContext)
         self.assertEqual(
             provider.list_grants_call.caller_bearer_token,
             "caller-bearer-token",
@@ -883,7 +883,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
 
     def test_runtime_start_provider_is_separate_from_configure(self) -> None:
-        provider = self.StartableAuthenticationProvider()
+        provider = self.StartableIdentityProvider()
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
             kind=ProviderKind.AUTHENTICATION,
@@ -910,7 +910,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.started, 1)
 
     def test_runtime_start_provider_noops_without_start_hook(self) -> None:
-        provider = self.StubAuthenticationProvider()
+        provider = self.StubIdentityProvider()
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
             kind=ProviderKind.AUTHENTICATION,
@@ -924,7 +924,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
     def test_auth_introspect_inactive_token(self) -> None:
         servicer = _runtime._authentication_servicer(
-            provider=self.StubAuthenticationProvider()
+            provider=self.StubIdentityProvider()
         )
         introspection = servicer.Introspect(
             authentication_pb2.IntrospectRequest(token="unknown"),

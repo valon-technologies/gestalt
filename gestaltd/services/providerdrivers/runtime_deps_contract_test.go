@@ -24,7 +24,7 @@ func TestAuthenticationFactoryForwardsRuntimeDepsToExecutableProvider(t *testing
 	dir := t.TempDir()
 	const callbackURL = "http://127.0.0.1:18088/auth/callback"
 
-	authManifest := componentProviderManifestPath(t, setupGoContractProviderDir(t, dir, providermanifestv1.KindAuthentication, "local", authContractProviderSource(callbackURL)))
+	authManifest := componentProviderManifestPath(t, setupGoContractProviderDir(t, dir, providermanifestv1.KindIdentity, "local", authContractProviderSource(callbackURL)))
 	auth, err := AuthenticationFactory(contractRuntimeNode(t, "local", authManifest), AuthenticationDeps{
 		DefaultCallbackURL: callbackURL,
 		HostServices: []runtimehost.HostService{{
@@ -105,7 +105,7 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := gestalt.ServeAuthenticationProvider(ctx, providerpkg.New()); err != nil {
+	if err := gestalt.ServeIdentityProvider(ctx, providerpkg.New()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
 		os.Exit(1)
 	}

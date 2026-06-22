@@ -101,11 +101,11 @@ import { fromWireRequestContext } from "../internal/codec/app.ts";
 import type { RequestContext as WireRequestContext } from "../internal/gen/v1/app_pb.ts";
 import type { RequestContext } from "../app.ts";
 import {
-  AuthenticationProvider,
+  IdentityProvider,
   CALLER_BEARER_TOKEN_METADATA_KEY,
-  isAuthenticationProvider,
-  type AuthCallContext,
-} from "../auth.ts";
+  isIdentityProvider,
+  type IdentityCallContext,
+} from "./identity.ts";
 import {
   AuthorizationProvider,
   createAuthorizationProviderService,
@@ -195,7 +195,7 @@ export type RuntimeArgs = {
 export type LoadedProvider =
   | AppProvider
   | AuthorizationProvider
-  | AuthenticationProvider
+  | IdentityProvider
   | CacheProvider
   | SecretsProvider
   | S3Provider
@@ -233,14 +233,14 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
       );
     },
   },
-  authentication: {
+  identity: {
     isProvider:
-      isAuthenticationProvider as (value: unknown) => value is LoadedProvider,
+      isIdentityProvider as (value: unknown) => value is LoadedProvider,
     protoKind: ProtoProviderKind.AUTHENTICATION,
     registerService(router, provider) {
       router.service(
         AuthenticationProviderService,
-        createAuthenticationService(provider as AuthenticationProvider),
+        createIdentityService(provider as IdentityProvider),
       );
     },
   },
@@ -671,13 +671,12 @@ export function createProviderService(
 }
 
 /**
- * Adapts an authentication provider to the shared protocol service
- * implementation.
+ * Adapts an identity provider to the shared protocol service implementation.
  *
  * @internal
  */
-export function createAuthenticationService(
-  provider: AuthenticationProvider,
+export function createIdentityService(
+  provider: IdentityProvider,
 ): Partial<ServiceImpl<typeof AuthenticationProviderService>> {
   return {
     async authorize(request) {
@@ -803,7 +802,7 @@ export function createAuthenticationService(
   };
 }
 
-function authCallContextFromHandler(context: HandlerContext): AuthCallContext {
+function authCallContextFromHandler(context: HandlerContext): IdentityCallContext {
   return {
     callerBearerToken:
       context.requestHeader.get(CALLER_BEARER_TOKEN_METADATA_KEY) ?? "",

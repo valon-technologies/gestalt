@@ -13,10 +13,10 @@ import (
 
 type providerServer struct {
 	proto.UnimplementedAuthenticationServer
-	provider core.AuthenticationProvider
+	provider core.IdentityProvider
 }
 
-func NewProviderServer(provider core.AuthenticationProvider) proto.AuthenticationServer {
+func NewProviderServer(provider core.IdentityProvider) proto.AuthenticationServer {
 	return &providerServer{provider: provider}
 }
 
@@ -144,7 +144,7 @@ func authCallContext(ctx context.Context) context.Context {
 	if token == "" {
 		return ctx
 	}
-	return gestalt.WithAuthCallContext(ctx, gestalt.AuthCallContext{CallerBearerToken: token})
+	return gestalt.WithIdentityCallContext(ctx, gestalt.IdentityCallContext{CallerBearerToken: token})
 }
 
 func authenticationToGRPCError(operation string, err error) error {

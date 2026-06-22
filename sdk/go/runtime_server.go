@@ -88,7 +88,7 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 	switch kind {
 	case ProviderKindApp:
 		return proto.ProviderKind_PROVIDER_KIND_APP
-	case ProviderKindAuthentication:
+	case ProviderKindIdentity:
 		return proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION
 	case ProviderKindAuthorization:
 		return proto.ProviderKind_PROVIDER_KIND_AUTHORIZATION

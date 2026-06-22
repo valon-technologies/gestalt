@@ -18,7 +18,7 @@ use generated::v1::{
     ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef, TokenRequest as ProtoTokenRequest,
     WriteObjectRequest as ProtoWriteObjectRequest,
 };
-use gestalt::authentication::{
+use gestalt::identity::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
     IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
     RevokeGrantResponse, TokenRequest, TokenResponse,
@@ -29,7 +29,7 @@ use gestalt::s3_provider::{
     PresignObjectRequest, PresignObjectResponse, ReadObjectRequest, S3ReadObjectFrame,
     S3WriteObjectFrame, WriteObjectResponse,
 };
-use gestalt::{AuthenticationProvider, RuntimeMetadata};
+use gestalt::{IdentityProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tokio_stream::iter as stream_iter;
@@ -50,7 +50,7 @@ impl Default for TestAuthProvider {
 }
 
 #[async_trait]
-impl AuthenticationProvider for TestAuthProvider {
+impl IdentityProvider for TestAuthProvider {
     async fn configure(
         &self,
         name: &str,
@@ -117,11 +117,11 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn user_info(
         &self,
-        call: gestalt::AuthCallContext,
-        _req: gestalt::authentication::UserInfoRequest,
-    ) -> gestalt::Result<gestalt::authentication::UserInfoResponse> {
+        call: gestalt::IdentityCallContext,
+        _req: gestalt::identity::UserInfoRequest,
+    ) -> gestalt::Result<gestalt::identity::UserInfoResponse> {
         if call.caller_bearer_token == "fixture-access-token" {
-            return Ok(gestalt::authentication::UserInfoResponse {
+            return Ok(gestalt::identity::UserInfoResponse {
                 subject_id: "user:fixture".to_string(),
                 email: "fixture@example.com".to_string(),
                 name: "Fixture User".to_string(),
@@ -132,7 +132,7 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn list_grants(
         &self,
-        _call: gestalt::AuthCallContext,
+        _call: gestalt::IdentityCallContext,
         _req: ListGrantsRequest,
     ) -> gestalt::Result<ListGrantsResponse> {
         Ok(ListGrantsResponse {
@@ -142,14 +142,14 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn get_grant(
         &self,
-        _call: gestalt::AuthCallContext,
+        _call: gestalt::IdentityCallContext,
         req: GetGrantRequest,
     ) -> gestalt::Result<GetGrantResponse> {
         if req.grant_id != "grant-fixture" {
             return Err(gestalt::Error::not_found("grant not found"));
         }
         Ok(GetGrantResponse {
-            scopes: vec![gestalt::authentication::GrantScope {
+            scopes: vec![gestalt::identity::GrantScope {
                 scope: "openid".to_string(),
                 resource: Vec::new(),
             }],
@@ -160,7 +160,7 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn revoke_grant(
         &self,
-        _call: gestalt::AuthCallContext,
+        _call: gestalt::IdentityCallContext,
         _req: RevokeGrantRequest,
     ) -> gestalt::Result<RevokeGrantResponse> {
         Ok(RevokeGrantResponse {})

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -32,18 +33,28 @@ type features struct {
 }
 
 type renderer struct {
-	idx      *index
-	base     string // generated file base currently being rendered
-	kind     moduleKind
-	features features
-	body     strings.Builder
+	idx         *index
+	base        string
+	wireBase    string
+	publicBases map[string]string
+	kind        moduleKind
+	features    features
+	body        strings.Builder
 }
 
-func newRenderer(idx *index, base string, kind moduleKind) *renderer {
+func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicBases map[string]string) *renderer {
+	if wireBase == "" {
+		wireBase = base
+	}
+	if publicBases == nil {
+		publicBases = map[string]string{}
+	}
 	return &renderer{
-		idx:  idx,
-		base: base,
-		kind: kind,
+		idx:         idx,
+		base:        base,
+		wireBase:    wireBase,
+		publicBases: publicBases,
+		kind:        kind,
 		features: features{
 			supportTypes: map[string]bool{},
 			supportFns:   map[string]bool{},
@@ -52,6 +63,14 @@ func newRenderer(idx *index, base string, kind moduleKind) *renderer {
 			crossCodec:   map[string]map[string]bool{},
 		},
 	}
+}
+
+func (r *renderer) publicBase(protoFile string) string {
+	base := generatedFileBase(protoFile)
+	if mapped, ok := r.publicBases[base]; ok {
+		return mapped
+	}
+	return base
 }
 
 // useType records an import of a public type from the shared rpc_support
@@ -77,7 +96,7 @@ func (r *renderer) useInvoke(name string) {
 // its own declarations are not imports; codec modules always import native
 // types from their public siblings.
 func (r *renderer) typeRef(protoFile, name string) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if r.kind == modulePublic && base == r.base {
 		return name
 	}
@@ -102,7 +121,7 @@ func (r *renderer) hostRef(name string) string {
 // returns the name unchanged. References from a codec module to its own
 // converters are not imports.
 func (r *renderer) convRef(protoFile, name string) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if r.kind == moduleCodec && base == r.base {
 		return name
 	}
@@ -502,8 +521,12 @@ type streamWrapper struct {
 	fromFn    string // wire-to-native frame converter
 }
 
-func (r *renderer) renderClient(svc *model.Service) {
-	name := localName(svc.FullName)
+func (r *renderer) renderClient(svc *model.Service, rename *emit.ClientAlias) {
+	wireName := localName(svc.FullName)
+	name := wireName
+	if rename != nil {
+		name = rename.Target
+	}
 	r.features.v1 = true
 	r.useType("GestaltError")
 	module := wireClientModule(svc)

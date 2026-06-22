@@ -26,7 +26,7 @@ type StubAuthProvider struct {
 	lastAuthorize    *core.AuthorizeRequest
 }
 
-type StubAuthenticationProvider = StubAuthProvider
+type StubIdentityProvider = StubAuthProvider
 
 func (s *StubAuthProvider) Authorize(ctx context.Context, req *core.AuthorizeRequest) (*core.AuthorizeResponse, error) {
 	if s.AuthorizeFn != nil {

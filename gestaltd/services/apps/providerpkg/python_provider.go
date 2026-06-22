@@ -296,7 +296,7 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 
 const (
 	pythonRuntimeKindIntegration    = "integration"
-	pythonRuntimeKindAuthentication = "authentication"
+	pythonRuntimeKindIdentity       = "identity"
 	pythonRuntimeKindCache          = "cache"
 	pythonRuntimeKindIndexedDB      = "indexeddb"
 	pythonRuntimeKindS3             = "s3"
@@ -311,8 +311,8 @@ func pythonRuntimeKind(kind string) (string, error) {
 	switch kind {
 	case providermanifestv1.KindApp:
 		return pythonRuntimeKindIntegration, nil
-	case providermanifestv1.KindAuthentication:
-		return pythonRuntimeKindAuthentication, nil
+	case providermanifestv1.KindIdentity:
+		return pythonRuntimeKindIdentity, nil
 	case providermanifestv1.KindCache:
 		return pythonRuntimeKindCache, nil
 	case providermanifestv1.KindIndexedDB:

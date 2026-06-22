@@ -13,15 +13,15 @@ import (
 )
 
 type Resolver struct {
-	auth         core.AuthenticationProvider
+	auth         core.IdentityProvider
 	providerName string
 }
 
-func NewResolver(auth core.AuthenticationProvider) *Resolver {
+func NewResolver(auth core.IdentityProvider) *Resolver {
 	return NewResolverNamed("", auth)
 }
 
-func NewResolverNamed(providerName string, auth core.AuthenticationProvider) *Resolver {
+func NewResolverNamed(providerName string, auth core.IdentityProvider) *Resolver {
 	name := strings.TrimSpace(providerName)
 	switch {
 	case auth == nil && name == "":

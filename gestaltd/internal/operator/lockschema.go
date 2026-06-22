@@ -10,7 +10,7 @@ import (
 
 const (
 	providerLockSchemaName         = "gestaltd-provider-lock"
-	providerLockSchemaVersion      = 10
+	providerLockSchemaVersion      = 11
 	providerLockRevision           = 0
 	providerLockKindWorkflow       = "workflow"
 	providerLockKindTelemetry      = "telemetry"
@@ -23,7 +23,7 @@ const (
 
 type providerLockBuckets struct {
 	App                 map[string]LockEntry `json:"app,omitempty"`
-	Authentication      map[string]LockEntry `json:"authentication,omitempty"`
+	Identity            map[string]LockEntry `json:"identity,omitempty"`
 	Authorization       map[string]LockEntry `json:"authorization,omitempty"`
 	ExternalCredentials map[string]LockEntry `json:"externalCredentials,omitempty"`
 	IndexedDB           map[string]LockEntry `json:"indexeddb,omitempty"`
@@ -46,7 +46,7 @@ type providerLockBucketSpec struct {
 
 var providerLockBucketSpecs = []providerLockBucketSpec{
 	newProviderLockBucket(providermanifestv1.KindApp, "app", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.App }),
-	newProviderLockBucket(providermanifestv1.KindAuthentication, "authentication", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.Authentication }),
+	newProviderLockBucket(providermanifestv1.KindIdentity, "identity", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.Identity }),
 	newProviderLockBucket(providermanifestv1.KindAuthorization, "authorization", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.Authorization }),
 	newProviderLockBucket(providermanifestv1.KindExternalCredentials, "externalCredentials", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.ExternalCredentials }),
 	newProviderLockBucket(providermanifestv1.KindIndexedDB, "indexeddb", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.IndexedDB }),
