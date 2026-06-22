@@ -184,6 +184,8 @@ func workflowAgentSessionTools(refs []gestalt.AgentToolRef) gestalt.AgentToolCon
 	return &gestalt.AgentCatalogToolConfig{Refs: append([]gestalt.AgentToolRef(nil), refs...)}
 }
 
+// workflowAgentSessionOptionsKey hashes agent options that must match for session reuse.
+// Workspace is included so a session cannot be reused with a different checkout layout or cwd.
 func workflowAgentSessionOptionsKey(agent *gestalt.WorkflowStepAgentTurn) string {
 	if agent == nil {
 		return ""

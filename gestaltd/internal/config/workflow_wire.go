@@ -160,14 +160,14 @@ func workflowAgentWorkspaceToCore(workspace *WorkflowStepAgentWorkspaceConfig) *
 	for i := range workspace.Checkouts {
 		checkout := &workspace.Checkouts[i]
 		checkouts = append(checkouts, coreagent.WorkspaceGitCheckout{
-			URL:  strings.TrimSpace(checkout.URL),
-			Ref:  strings.TrimSpace(checkout.Ref),
-			Path: strings.TrimSpace(checkout.Path),
+			URL:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
 		})
 	}
 	return &coreagent.Workspace{
 		Checkouts: checkouts,
-		CWD:       strings.TrimSpace(workspace.CWD),
+		CWD:       workspace.CWD,
 	}
 }
 

@@ -78,6 +78,18 @@ type AgentWorkspaceGitCheckout struct {
 	Path string
 }
 
+// CloneAgentWorkspace returns a defensive copy of workspace, or nil when src is nil.
+func CloneAgentWorkspace(src *AgentWorkspace) *AgentWorkspace {
+	if src == nil {
+		return nil
+	}
+	out := *src
+	if len(src.Checkouts) > 0 {
+		out.Checkouts = append([]AgentWorkspaceGitCheckout(nil), src.Checkouts...)
+	}
+	return &out
+}
+
 // PreparedAgentWorkspace is the native message type for gestalt.provider.v1.PreparedAgentWorkspace.
 type PreparedAgentWorkspace struct {
 	Root string
