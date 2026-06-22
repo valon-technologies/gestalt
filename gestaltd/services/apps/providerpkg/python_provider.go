@@ -295,15 +295,15 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 }
 
 const (
-	pythonRuntimeKindIntegration    = "integration"
-	pythonRuntimeKindIdentity       = "identity"
-	pythonRuntimeKindCache          = "cache"
-	pythonRuntimeKindIndexedDB      = "indexeddb"
-	pythonRuntimeKindS3             = "s3"
-	pythonRuntimeKindWorkflow       = "workflow"
-	pythonRuntimeKindAgent          = "agent"
-	pythonRuntimeKindSecrets        = "secrets"
-	pythonRuntimeKindRuntime        = "runtime"
+	pythonRuntimeKindIntegration = "integration"
+	pythonRuntimeKindIdentity    = "identity"
+	pythonRuntimeKindCache       = "cache"
+	pythonRuntimeKindIndexedDB   = "indexeddb"
+	pythonRuntimeKindS3          = "s3"
+	pythonRuntimeKindWorkflow    = "workflow"
+	pythonRuntimeKindAgent       = "agent"
+	pythonRuntimeKindSecrets     = "secrets"
+	pythonRuntimeKindRuntime     = "runtime"
 )
 
 func pythonRuntimeKind(kind string) (string, error) {

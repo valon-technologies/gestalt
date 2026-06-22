@@ -795,7 +795,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             [("fixture-auth", {"issuer": "https://login.example.test"})],
         )
 
-        auth_servicer = _runtime._authentication_servicer(provider=provider)
+        auth_servicer = _runtime._identity_servicer(provider=provider)
         authorize = auth_servicer.Authorize(
             identity_pb2.AuthorizeRequest(
                 response_type="code",
@@ -923,7 +923,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
 
     def test_auth_introspect_inactive_token(self) -> None:
-        servicer = _runtime._authentication_servicer(
+        servicer = _runtime._identity_servicer(
             provider=self.StubIdentityProvider()
         )
         introspection = servicer.Introspect(

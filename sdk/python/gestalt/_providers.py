@@ -177,7 +177,7 @@ class ProviderKind(str, Enum):
 
     INTEGRATION = "integration"
     AUTHORIZATION = "authorization"
-    AUTHENTICATION = "identity"
+    IDENTITY = "identity"
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
