@@ -155,10 +155,12 @@ func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
-		"gd.allowed":  "false",
-		"gd.subject":  "subject/user:alice",
-		"gd.resource": "provider/authz-primary",
-		"gd.action":   "CheckAccess",
+		"gd.entry":                 "internal",
+		"gd.caller_token_provided": "true",
+		"gd.allowed":               "false",
+		"gd.subject":               "subject/user:alice",
+		"gd.resource":              "provider/authz-primary",
+		"gd.action":                "CheckAccess",
 	})
 }
 
@@ -289,7 +291,6 @@ func TestDirectTransportInvokeRecordsMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceSDKGRPC,
 	}
 
 	_, err := (DirectTransport{}).Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
@@ -316,7 +317,6 @@ func TestDirectTransportInvokeRecordsErrorMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceInternal,
 	}
 	wantErr := errors.New("provider failed")
 
@@ -345,7 +345,6 @@ func TestProviderGatewayTransportInvokeRecordsMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceSDKGRPC,
 	}
 
 	_, err := transport.Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
@@ -373,7 +372,6 @@ func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceInternal,
 	}
 	wantErr := errors.New("provider failed")
 
@@ -393,12 +391,13 @@ func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
 
 func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath TransportPath) map[string]string {
 	return map[string]string{
-		"gd.provider_id":   req.ProviderID,
-		"gd.provider_kind": string(req.ProviderKind),
-		"gd.service":       req.ServiceName,
-		"gd.operation":     req.Operation,
-		"gd.source":        string(req.Source),
-		"gd.transport":     string(transportPath),
+		"gd.provider_id":           req.ProviderID,
+		"gd.provider_kind":         string(req.ProviderKind),
+		"gd.service":               req.ServiceName,
+		"gd.operation":             req.Operation,
+		"gd.transport":             string(transportPath),
+		"gd.entry":                 "internal",
+		"gd.caller_token_provided": "false",
 	}
 }
 

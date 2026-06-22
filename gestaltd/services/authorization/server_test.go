@@ -6,48 +6,30 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-func TestProviderServerLeavesGatewaySourceInternalByDefault(t *testing.T) {
+func TestProviderServerStampsGRPCEntry(t *testing.T) {
 	t.Parallel()
 
-	provider := &sourceRecordingAuthorizationProvider{}
+	provider := &entryRecordingAuthorizationProvider{}
 	server := NewProviderServer(provider)
 
 	_, err := server.CheckAccess(context.Background(), &proto.CheckAccessRequest{})
 	if err != nil {
 		t.Fatalf("CheckAccess: %v", err)
 	}
-	if provider.source != providergateway.GatewaySourceInternal {
-		t.Fatalf("source = %q, want %q", provider.source, providergateway.GatewaySourceInternal)
+	if provider.entry != invocation.EntryGRPC {
+		t.Fatalf("entry = %q, want %q", provider.entry, invocation.EntryGRPC)
 	}
 }
 
-func TestProviderServerAppliesConfiguredGatewaySource(t *testing.T) {
-	t.Parallel()
-
-	provider := &sourceRecordingAuthorizationProvider{}
-	server := NewProviderServer(
-		provider,
-		WithGatewaySource(providergateway.GatewaySourceSDKGRPC),
-	)
-
-	_, err := server.CheckAccess(context.Background(), &proto.CheckAccessRequest{})
-	if err != nil {
-		t.Fatalf("CheckAccess: %v", err)
-	}
-	if provider.source != providergateway.GatewaySourceSDKGRPC {
-		t.Fatalf("source = %q, want %q", provider.source, providergateway.GatewaySourceSDKGRPC)
-	}
-}
-
-type sourceRecordingAuthorizationProvider struct {
+type entryRecordingAuthorizationProvider struct {
 	core.AuthorizationProvider
-	source providergateway.GatewaySource
+	entry invocation.Entry
 }
 
-func (p *sourceRecordingAuthorizationProvider) CheckAccess(ctx context.Context, _ *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	p.source = providergateway.SourceFromContext(ctx)
+func (p *entryRecordingAuthorizationProvider) CheckAccess(ctx context.Context, _ *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.entry = invocation.EntryFromContext(ctx)
 	return &proto.CheckAccessResponse{Allowed: true}, nil
 }

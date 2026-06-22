@@ -88,6 +88,7 @@ type CallerProvider struct {
 }
 
 type invocationSurfaceCtxKey struct{}
+type entryCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
 type callerProviderCtxKey struct{}
@@ -109,6 +110,14 @@ const (
 	InvocationSurfaceHTTP        InvocationSurface = "http"
 	InvocationSurfaceHTTPBinding InvocationSurface = "http_binding"
 	InvocationSurfaceMCP         InvocationSurface = "mcp"
+)
+
+type Entry string
+
+const (
+	EntryHTTP     Entry = "HTTP"
+	EntryGRPC     Entry = "gRPC"
+	EntryInternal Entry = "internal"
 )
 
 func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
@@ -328,6 +337,21 @@ func WithInvocationSurface(ctx context.Context, surface InvocationSurface) conte
 func InvocationSurfaceFromContext(ctx context.Context) InvocationSurface {
 	surface, _ := ctx.Value(invocationSurfaceCtxKey{}).(InvocationSurface)
 	return surface
+}
+
+func WithEntry(ctx context.Context, entry Entry) context.Context {
+	if entry == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, entryCtxKey{}, entry)
+}
+
+func EntryFromContext(ctx context.Context) Entry {
+	entry, _ := ctx.Value(entryCtxKey{}).(Entry)
+	if entry == "" {
+		return EntryInternal
+	}
+	return entry
 }
 
 func WithHTTPBinding(ctx context.Context, binding string) context.Context {

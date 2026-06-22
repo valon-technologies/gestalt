@@ -118,6 +118,7 @@ func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) *core.HTTPSubjec
 }
 
 func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) context.Context {
+	ctx = invocation.WithEntry(ctx, invocation.EntryGRPC)
 	if reqCtx == nil {
 		return ctx
 	}
