@@ -273,6 +273,7 @@ func (c ProviderRequestContext) Restore(ctx context.Context, connectionOverride 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	ctx = invocation.WithEntry(ctx, invocation.EntryGRPC)
 	if c.principal != nil {
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(c.principal))
 	}

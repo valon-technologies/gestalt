@@ -350,6 +350,7 @@ func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocat
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	ctx = invocation.WithEntry(ctx, invocation.EntryGRPC)
 	if callCtx.principal != nil {
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(callCtx.principal))
 	}

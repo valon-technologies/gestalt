@@ -7,6 +7,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -18,6 +19,7 @@ var (
 	attrProviderGatewayServiceName           = attribute.Key("gd.service")
 	attrProviderGatewayOperation             = attribute.Key("gd.operation")
 	attrProviderGatewayTransportPath         = attribute.Key("gd.transport")
+	attrProviderGatewayEntry                 = attribute.Key("gd.entry")
 	attrProviderGatewayAuthorizationAllowed  = attribute.Key("gd.allowed")
 	attrProviderGatewayAuthorizationSubject  = attribute.Key("gd.subject")
 	attrProviderGatewayAuthorizationResource = attribute.Key("gd.resource")
@@ -74,6 +76,7 @@ func recordProviderGatewayAuthorizationCheck(ctx context.Context, allowed bool, 
 	}
 	metrics := providerGatewayAuthorizationChecks.Load(ctx, "gestaltd", newProviderGatewayAuthorizationMetrics)
 	attrs := []attribute.KeyValue{
+		attrProviderGatewayEntry.String(string(invocation.EntryFromContext(ctx))),
 		attrProviderGatewayAuthorizationAllowed.String(strconv.FormatBool(allowed)),
 		attrProviderGatewayAuthorizationSubject.String(metricutil.AttrValue(authorizationCheckSubjectValue(req))),
 		attrProviderGatewayAuthorizationResource.String(metricutil.AttrValue(authorizationCheckResourceValue(req))),
@@ -116,6 +119,7 @@ func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, er
 		attrProviderGatewayServiceName.String(metricutil.AttrValue(req.ServiceName)),
 		attrProviderGatewayOperation.String(metricutil.AttrValue(req.Operation)),
 		attrProviderGatewayTransportPath.String(metricutil.AttrValue(string(transportPath))),
+		attrProviderGatewayEntry.String(string(invocation.EntryFromContext(ctx))),
 	}
 	metricAttrs := metric.WithAttributes(attrs...)
 

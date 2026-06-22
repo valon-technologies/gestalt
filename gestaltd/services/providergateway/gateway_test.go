@@ -155,6 +155,7 @@ func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
+		"gd.entry":    "internal",
 		"gd.allowed":  "false",
 		"gd.subject":  "subject/user:alice",
 		"gd.resource": "provider/authz-primary",
@@ -394,6 +395,7 @@ func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath Transp
 		"gd.service":       req.ServiceName,
 		"gd.operation":     req.Operation,
 		"gd.transport":     string(transportPath),
+		"gd.entry":         "internal",
 	}
 }
 
