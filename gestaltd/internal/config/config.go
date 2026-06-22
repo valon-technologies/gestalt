@@ -3887,7 +3887,7 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 			kind string
 		}{
 			{key: "identity", kind: providermanifestv1.KindAuthentication},
-		{key: "authentication", kind: providermanifestv1.KindAuthentication},
+			{key: "authentication", kind: providermanifestv1.KindAuthentication},
 			{key: "authorization", kind: providermanifestv1.KindAuthorization},
 			{key: "externalCredentials", kind: providermanifestv1.KindExternalCredentials},
 			{key: "secrets", kind: providermanifestv1.KindSecrets},

@@ -1,9 +1,8 @@
-// Identity is the canonical alias client for the Authentication wire service.
-// It is a handwritten alias over the generated Authentication client so the
-// proto service, host binding, and wire protocol remain "authentication" for
-// compatibility, while the public SDK surface exposes the canonical
-// "identity" naming.
-
+// Package client also provides Identity, the canonical alias client for the
+// Authentication wire service. It is a handwritten alias over the generated
+// Authentication client so the proto service, host binding, and wire protocol
+// remain "authentication" for compatibility, while the public SDK surface
+// exposes the canonical "identity" naming.
 package client
 
 import (
