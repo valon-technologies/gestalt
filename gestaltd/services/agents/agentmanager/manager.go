@@ -288,45 +288,6 @@ func agentSubjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
 	return agentwire.RunAsSubjectToProto(&subject)
 }
 
-func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &coreagent.Workspace{
-		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
-		CWD:       workspace.GetCwd(),
-	}
-	for _, checkout := range workspace.GetCheckouts() {
-		if checkout == nil {
-			continue
-		}
-		out.Checkouts = append(out.Checkouts, coreagent.WorkspaceGitCheckout{
-			URL:  checkout.GetUrl(),
-			Ref:  checkout.GetRef(),
-			Path: checkout.GetPath(),
-		})
-	}
-	return out
-}
-
-func agentWorkspaceToProto(workspace *coreagent.Workspace) *proto.AgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &proto.AgentWorkspace{
-		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
-		Cwd:       workspace.CWD,
-	}
-	for _, checkout := range workspace.Checkouts {
-		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
-			Url:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
-		})
-	}
-	return out
-}
-
 func sessionStartConfigToProto(value *coreagent.SessionStartConfig) *proto.AgentSessionStartConfig {
 	if value == nil {
 		return nil
@@ -468,7 +429,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if err := validateAgentSessionUserMetadata(metadata); err != nil {
 		return nil, err
 	}
-	workspace, err := coreagent.NormalizeWorkspace(agentWorkspaceFromProto(req.GetWorkspace()))
+	workspace, err := coreagent.NormalizeWorkspace(agentwire.WorkspaceFromProto(req.GetWorkspace()))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentWorkspaceInvalid, err)
 	}
@@ -514,7 +475,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
-	providerReq.Workspace = agentWorkspaceToProto(workspace)
+	providerReq.Workspace = agentwire.WorkspaceToProto(workspace)
 	providerReq.PreparedWorkspace = nil
 	providerReq.Tools = sessionTools.config
 	providerReq.Context = providerReqContext

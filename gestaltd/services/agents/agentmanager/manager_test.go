@@ -619,7 +619,7 @@ func TestCreateSessionRejectsWorkspaceWhenProviderCannotPrepare(t *testing.T) {
 
 	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "alpha",
-		Workspace: agentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "git@github.com:valon-technologies/app.git",
@@ -650,7 +650,7 @@ func TestCreateSessionValidatesWorkspaceBeforeProviderCreate(t *testing.T) {
 
 	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "alpha",
-		Workspace: agentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "../app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "git@github.com:valon-technologies/app.git",
@@ -684,7 +684,7 @@ func TestCreateSessionReplaysExistingSessionForIdempotencyKey(t *testing.T) {
 		IdempotencyKey: "workspace-create-1",
 		Model:          "test-model",
 		ClientRef:      "client-1",
-		Workspace: agentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "git@github.com:valon-technologies/app.git",

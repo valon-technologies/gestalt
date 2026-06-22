@@ -20,6 +20,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -66,24 +67,6 @@ func testAgentRuntimeIndexedDBDefs() map[string]*config.ProviderEntry {
 			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 		},
 	}
-}
-
-func testAgentWorkspaceToProto(workspace *coreagent.Workspace) *proto.AgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &proto.AgentWorkspace{
-		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
-		Cwd:       workspace.CWD,
-	}
-	for _, checkout := range workspace.Checkouts {
-		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
-			Url:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
-		})
-	}
-	return out
 }
 
 func testAgentSessionStateFromProto(state proto.AgentSessionState) coreagent.SessionState {
@@ -287,7 +270,7 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	session, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
 		Model:              "gpt-test",
 		CreatedBySubjectId: "user:user-1",
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "file://" + filepath.ToSlash(repo),
@@ -338,7 +321,7 @@ func TestHostedAgentPoolRejectsWorkspaceWithoutProviderCapability(t *testing.T) 
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "file://" + filepath.ToSlash(repo),
@@ -369,7 +352,7 @@ func TestHostedAgentPoolCleansNonIdempotentPreparedWorkspaceAfterCreateFailure(t
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "file://" + filepath.ToSlash(repo),
@@ -401,7 +384,7 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
 	t.Cleanup(func() { _ = pool.Close() })
 
-	workspace := testAgentWorkspaceToProto(&coreagent.Workspace{
+	workspace := agentwire.WorkspaceToProto(&coreagent.Workspace{
 		CWD: "app",
 		Checkouts: []coreagent.WorkspaceGitCheckout{{
 			URL:  "file://" + filepath.ToSlash(repo),
@@ -464,7 +447,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceAfterValidationFailure(t *testing
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "file://" + filepath.ToSlash(repo),
@@ -493,7 +476,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 
 	session, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
 		CreatedBySubjectId: "user:user-1",
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
+		Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
 				URL:  "file://" + filepath.ToSlash(repo),

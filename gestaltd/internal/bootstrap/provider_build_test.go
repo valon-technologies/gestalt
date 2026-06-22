@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -139,7 +140,7 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		}, &proto.CreateAgentProviderSessionRequest{
 			ProviderName: "managed",
 			Model:        "gpt-startup",
-			Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
+			Workspace: agentwire.WorkspaceToProto(&coreagent.Workspace{
 				Checkouts: []coreagent.WorkspaceGitCheckout{{
 					URL:  "https://github.com/valon-technologies/gestalt.git",
 					Path: "repo",

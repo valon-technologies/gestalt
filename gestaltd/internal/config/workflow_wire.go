@@ -156,19 +156,16 @@ func workflowAgentWorkspaceToCore(workspace *WorkflowStepAgentWorkspaceConfig) *
 	if workspace == nil {
 		return nil
 	}
-	checkouts := make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.Checkouts))
+	ws := &coreagent.Workspace{CWD: workspace.CWD}
 	for i := range workspace.Checkouts {
 		checkout := &workspace.Checkouts[i]
-		checkouts = append(checkouts, coreagent.WorkspaceGitCheckout{
+		ws.Checkouts = append(ws.Checkouts, coreagent.WorkspaceGitCheckout{
 			URL:  checkout.URL,
 			Ref:  checkout.Ref,
 			Path: checkout.Path,
 		})
 	}
-	return &coreagent.Workspace{
-		Checkouts: checkouts,
-		CWD:       workspace.CWD,
-	}
+	return coreagent.CloneWorkspace(ws)
 }
 
 func workflowAgentWorkspaceFromCore(workspace *coreagent.Workspace) *WorkflowStepAgentWorkspaceConfig {

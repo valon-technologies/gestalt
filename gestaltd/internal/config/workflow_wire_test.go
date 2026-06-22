@@ -46,6 +46,39 @@ func TestWorkflowTargetToCoreClonesMutableMaps(t *testing.T) {
 	}
 }
 
+func TestWorkflowTargetToCoreClonesAgentWorkspaceCheckouts(t *testing.T) {
+	t.Parallel()
+
+	workspace := &WorkflowStepAgentWorkspaceConfig{
+		Checkouts: []WorkflowStepAgentWorkspaceCheckoutConfig{{
+			URL:  "https://github.com/valon-technologies/toolshed.git",
+			Ref:  "main",
+			Path: "toolshed",
+		}},
+		CWD: "toolshed",
+	}
+	target := WorkflowTargetToCore(&WorkflowTargetConfig{
+		Steps: []WorkflowStepConfig{{
+			ID: "agent-step",
+			Agent: &WorkflowStepAgentConfig{
+				Provider:  "claude",
+				Prompt:    WorkflowTextConfig{Template: "inspect"},
+				Output:    &WorkflowAgentOutputConfig{Text: &WorkflowAgentTextOutputConfig{}},
+				Workspace: workspace,
+			},
+		}},
+	})
+
+	workspace.Checkouts = append(workspace.Checkouts, WorkflowStepAgentWorkspaceCheckoutConfig{
+		URL:  "https://github.com/valon-technologies/gestalt.git",
+		Ref:  "main",
+		Path: "gestalt",
+	})
+	if len(target.Steps[0].Agent.Workspace.Checkouts) != 1 {
+		t.Fatalf("core workspace checkouts = %#v, want isolated copy", target.Steps[0].Agent.Workspace.Checkouts)
+	}
+}
+
 func TestWorkflowAgentWorkspaceToCore(t *testing.T) {
 	t.Parallel()
 

@@ -7,6 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 )
 
 // ParseTargetMap converts a JSON-shaped target object into core workflow target form.
@@ -304,7 +305,7 @@ func parseToolRefs(value any) ([]coreagent.ToolRef, error) {
 	if value == nil {
 		return nil, nil
 	}
-	items, ok := value.([]any)
+	items, ok := asArray(value)
 	if !ok {
 		return nil, fmt.Errorf("%w: agent tools must be an array", ErrInvalid)
 	}
@@ -430,10 +431,8 @@ func encodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
 		"model":        agent.Model,
 		"sessionKey":   agent.SessionKey,
 		"prompt":       encodeText(agent.Prompt),
+		"tools":        encodeToolRefs(agent.ToolRefs),
 		"modelOptions": mapDeepClone(agent.ModelOptions),
-	}
-	if len(agent.ToolRefs) > 0 {
-		value["tools"] = encodeToolRefs(agent.ToolRefs)
 	}
 	if len(agent.Messages) > 0 {
 		messages := make([]map[string]any, 0, len(agent.Messages))
@@ -463,20 +462,24 @@ func encodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
 }
 
 func encodeAgentWorkspace(workspace *coreagent.Workspace) map[string]any {
-	if workspace == nil {
+	pb := agentwire.WorkspaceToProto(workspace)
+	if pb == nil {
 		return nil
 	}
-	checkouts := make([]map[string]any, 0, len(workspace.Checkouts))
-	for _, checkout := range workspace.Checkouts {
+	checkouts := make([]map[string]any, 0, len(pb.GetCheckouts()))
+	for _, checkout := range pb.GetCheckouts() {
+		if checkout == nil {
+			continue
+		}
 		checkouts = append(checkouts, map[string]any{
-			"url":  checkout.URL,
-			"ref":  checkout.Ref,
-			"path": checkout.Path,
+			"url":  checkout.GetUrl(),
+			"ref":  checkout.GetRef(),
+			"path": checkout.GetPath(),
 		})
 	}
 	return map[string]any{
 		"checkouts": checkouts,
-		"cwd":       workspace.CWD,
+		"cwd":       pb.GetCwd(),
 	}
 }
 

@@ -79,6 +79,7 @@ type AgentWorkspaceGitCheckout struct {
 }
 
 // CloneAgentWorkspace returns a defensive copy of workspace, or nil when src is nil.
+// The canonical server implementation is coreagent.CloneWorkspace in gestaltd/core/agent.
 func CloneAgentWorkspace(src *AgentWorkspace) *AgentWorkspace {
 	if src == nil {
 		return nil
