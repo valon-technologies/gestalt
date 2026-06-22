@@ -7,6 +7,8 @@ host binding remain ``authentication`` for compatibility.
 
 from .authentication import (
     Authentication as Identity,
+)
+from .authentication import (
     AuthorizeRequest,
     AuthorizeResponse,
     GetGrantRequest,
