@@ -255,25 +255,21 @@ func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifes
 	if providerpkg.EffectiveSourceBuild(manifest) != nil {
 		entry := providerpkg.EntrypointForKind(manifest, kind)
 		if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+			if providerpkg.ReleaseRequiresBuild(manifest) {
+				return nil, providerpkg.MissingDeclaredSourceBuildError(manifest, kind)
+			}
 			return nil, nil
 		}
 		return &releaseBuildTarget{Kind: kind, DeclaredBuild: true}, nil
 	}
-	hasSource, err := providerpkg.HasSourceReleaseTarget(root, kind)
-	if err != nil {
-		return nil, fmt.Errorf("detect source %s package: %w", kind, err)
+	entry := providerpkg.EntrypointForKind(manifest, kind)
+	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+		return &releaseBuildTarget{Kind: kind, Prebuilt: true}, nil
 	}
-	if !hasSource {
-		entry := providerpkg.EntrypointForKind(manifest, kind)
-		if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
-			return &releaseBuildTarget{Kind: kind, Prebuilt: true}, nil
-		}
-		if providerpkg.ReleaseRequiresBuild(manifest) {
-			return nil, providerpkg.MissingSourceReleaseTargetError(kind)
-		}
-		return nil, nil
+	if providerpkg.ReleaseRequiresBuild(manifest) {
+		return nil, providerpkg.MissingDeclaredSourceBuildError(manifest, kind)
 	}
-	return &releaseBuildTarget{Kind: kind}, nil
+	return nil, nil
 }
 
 func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
@@ -304,13 +300,6 @@ func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Mani
 	platforms, err := parseReleasePlatforms(value)
 	if err != nil {
 		return nil, err
-	}
-	if !target.DeclaredBuild {
-		for _, platform := range platforms {
-			if err := providerpkg.ValidateSourceReleaseTarget(root, target.Kind, platform.GOOS, platform.GOARCH); err != nil {
-				return nil, fmt.Errorf("validate %s source release target for %s: %w", target.Kind, providerpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
-			}
-		}
 	}
 	return platforms, nil
 }
@@ -466,7 +455,7 @@ func printProviderPackageUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd provider package --version VERSION [--output DIR] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Build provider release archives.")
-	writeUsageLine(w, "Executable source providers use SDK-native source packages or build.command and default to the host platform.")
+	writeUsageLine(w, "Executable source providers require build.command with entrypoint.artifactPath and default to the host platform.")
 	writeUsageLine(w, "UI and declarative providers default to a generic archive.")
 	writeUsageLine(w, "Pass --platform with a comma-separated os/arch list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives.")

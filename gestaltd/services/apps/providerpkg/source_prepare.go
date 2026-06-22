@@ -2,12 +2,10 @@ package providerpkg
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -110,19 +108,12 @@ func ensureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 }
 
 func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *providermanifestv1.Manifest, catalogPath string, opts sourceCatalogOptions) error {
-	var execEnv map[string]string
+	if manifest != nil && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
+		return nil
+	}
 	resolved, err := resolveSourceExecution(manifestPath, manifest, providermanifestv1.KindApp, SourceBuildOptions{}, opts.SkipExplicitRun)
 	if err != nil {
-		if errors.Is(err, ErrNoSourceProviderPackage) {
-			return nil
-		}
-		return fmt.Errorf("prepare synthesized source provider for static catalog: %w", err)
-	}
-	if resolved.Intent == SourceExecutionIntentSynthesizedSDK {
-		execEnv, err = SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
-		if err != nil {
-			return fmt.Errorf("prepare synthesized source provider environment for static catalog: %w", err)
-		}
+		return fmt.Errorf("prepare source provider for static catalog: %w", err)
 	}
 	execution := resolved.SourceExecution
 	if execution.Cleanup != nil {
@@ -135,9 +126,6 @@ func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *provide
 		os.Environ(),
 		envWriteCatalog+"="+catalogPath,
 	)
-	for key, value := range execEnv {
-		cmd.Env = append(cmd.Env, key+"="+value)
-	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

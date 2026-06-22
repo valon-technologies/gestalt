@@ -594,7 +594,7 @@ func TestRun_ProviderPackageAndReleaseCompilesProviderWithoutSourceArtifacts(t *
 	}
 }
 
-func TestRun_ProviderPackageAndReleaseCompilesSDKSourceProviderWithoutBuildCommand(t *testing.T) {
+func TestRun_ProviderPackageRejectsSDKSourceProviderWithoutBuildCommand(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixtureWithoutCatalog(t, t.TempDir())
@@ -614,31 +614,16 @@ func TestRun_ProviderPackageAndReleaseCompilesSDKSourceProviderWithoutBuildComma
 
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-sdk-source.1"
-	runProviderPackageAndReleaseCommand(t, pluginDir,
+
+	out, err := runProviderPackageAndReleaseCommandResult(pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
-
-	archiveName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-
-	wantBinary := "gestalt-app-" + releaseTestAppName
-	if runtime.GOOS == "windows" {
-		wantBinary += ".exe"
+	if err == nil {
+		t.Fatalf("expected provider release to reject SDK source provider without build.command\n%s", out)
 	}
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != wantBinary {
-		t.Fatalf("artifacts = %+v, want one artifact at %q", manifest.Artifacts, wantBinary)
-	}
-	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != wantBinary {
-		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoint, wantBinary)
-	}
-	data, err := os.ReadFile(filepath.Join(extractDir, providerpkg.StaticCatalogFile))
-	if err != nil {
-		t.Fatalf("read generated catalog: %v", err)
-	}
-	if !strings.Contains(string(data), "generated_op") {
-		t.Fatalf("unexpected generated catalog: %s", data)
+	if !strings.Contains(string(out), "declare object-form build.command and entrypoint.artifactPath") {
+		t.Fatalf("unexpected output: %s", out)
 	}
 }
 
