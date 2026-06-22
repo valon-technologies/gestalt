@@ -86,22 +86,6 @@ if TYPE_CHECKING:
         WorkflowEvent,
         WorkflowRun,
     )
-    from .identity import (
-        AuthorizeRequest,
-        AuthorizeResponse,
-        GetGrantRequest,
-        GetGrantResponse,
-        IntrospectRequest,
-        IntrospectResponse,
-        ListGrantsRequest,
-        ListGrantsResponse,
-        RevokeGrantRequest,
-        RevokeGrantResponse,
-        TokenRequest,
-        TokenResponse,
-        UserInfoRequest,
-        UserInfoResponse,
-    )
     from .authorization import (
         AddRelationshipRequest,
         AddRelationshipResponse,
@@ -122,6 +106,22 @@ if TYPE_CHECKING:
         SetAuthorizationStateResponse,
     )
     from .cache import CacheSetEntry
+    from .identity import (
+        AuthorizeRequest,
+        AuthorizeResponse,
+        GetGrantRequest,
+        GetGrantResponse,
+        IntrospectRequest,
+        IntrospectResponse,
+        ListGrantsRequest,
+        ListGrantsResponse,
+        RevokeGrantRequest,
+        RevokeGrantResponse,
+        TokenRequest,
+        TokenResponse,
+        UserInfoRequest,
+        UserInfoResponse,
+    )
     from .s3 import (
         CopyObjectRequest,
         CopyObjectResponse,

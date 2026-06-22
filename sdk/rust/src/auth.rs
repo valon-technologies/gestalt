@@ -1,11 +1,11 @@
 use tonic::codegen::async_trait;
 
+use crate::error::Result;
 use crate::identity::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
     IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
     RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
 };
-use crate::error::Result;
 
 pub const CALLER_BEARER_TOKEN_METADATA_KEY: &str = "x-gestalt-caller-bearer-token";
 

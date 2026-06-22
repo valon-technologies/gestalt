@@ -26,9 +26,9 @@ use crate::generated::v1::agent_server::AgentServer as AgentRpcServer;
 #[cfg(unix)]
 use crate::generated::v1::app_provider_server::AppProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::identity_server::IdentityServer as IdentityRpcServer;
-#[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
+#[cfg(unix)]
+use crate::generated::v1::identity_server::IdentityServer as IdentityRpcServer;
 #[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 #[cfg(unix)]
@@ -41,12 +41,12 @@ use crate::generated::v1::secrets_server::SecretsServer as SecretsRpcServer;
 use crate::generated::v1::workflow_server::WorkflowServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
 use crate::{
-    AgentProvider, IdentityProvider, CacheProvider, Provider, Router, RuntimeProvider,
-    S3Provider, SecretsProvider, WorkflowProvider,
+    AgentProvider, CacheProvider, IdentityProvider, Provider, Router, RuntimeProvider, S3Provider,
+    SecretsProvider, WorkflowProvider,
 };
 #[cfg(unix)]
 use crate::{
-    agent_provider::AgentServer, identity_server::IdentityServer, cache_server::CacheRpcServer,
+    agent_provider::AgentServer, cache_server::CacheRpcServer, identity_server::IdentityServer,
     runtime_provider_impl::RuntimeServer as RuntimeProviderRpcServer,
     runtime_server::RuntimeServer, s3_provider::S3RpcServer, secrets_server::SecretsServer,
     workflow_provider::WorkflowServer,
@@ -155,22 +155,22 @@ where
 /// Serves an identity provider over the configured Unix socket.
 pub async fn serve_identity_provider<P>(provider: Arc<P>) -> Result<()>
 where
-	P: IdentityProvider,
+    P: IdentityProvider,
 {
-	serve_unix_provider(
-		provider,
-		move |incoming, provider| {
-			let identity_server = IdentityServer::new(Arc::clone(&provider));
-			Server::builder()
-				.add_service(ProviderLifecycleServer::new(
-					RuntimeServer::for_identity(Arc::clone(&provider)),
-				))
-				.add_service(IdentityRpcServer::new(identity_server))
-				.serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
-		},
-		|provider| async move { provider.close().await },
-	)
-	.await
+    serve_unix_provider(
+        provider,
+        move |incoming, provider| {
+            let identity_server = IdentityServer::new(Arc::clone(&provider));
+            Server::builder()
+                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_identity(
+                    Arc::clone(&provider),
+                )))
+                .add_service(IdentityRpcServer::new(identity_server))
+                .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
+        },
+        |provider| async move { provider.close().await },
+    )
+    .await
 }
 
 #[cfg(not(unix))]

@@ -21,8 +21,6 @@ from gestalt import (
     App,
     ApplyWorkflowProviderDefinitionRequest,
     AppProviderAdapter,
-    IdentityCallContext,
-    IdentityProvider,
     AuthorizeRequest,
     CacheProvider,
     CacheSetEntry,
@@ -36,6 +34,8 @@ from gestalt import (
     GetWorkflowProviderRunOutputRequest,
     GetWorkflowProviderRunOutputResponse,
     HealthChecker,
+    IdentityCallContext,
+    IdentityProvider,
     ListWorkflowProviderDefinitionsRequest,
     ListWorkflowProviderDefinitionsResponse,
     ListWorkflowProviderRunsRequest,
@@ -63,8 +63,8 @@ from gestalt import (
 )
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-from gestalt._gen.v1 import identity_pb2 as _identity_pb2
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
+from gestalt._gen.v1 import identity_pb2 as _identity_pb2
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import runtime_provider_pb2 as _runtime_provider_pb2
 from gestalt._gen.v1 import runtime_provider_pb2_grpc as _runtime_provider_pb2_grpc

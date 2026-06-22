@@ -40,7 +40,7 @@ struct ProviderRuntime<P> {
 }
 
 struct IdentityRuntime<P> {
-	provider: Arc<P>,
+    provider: Arc<P>,
 }
 
 struct CacheRuntime<P> {
@@ -127,23 +127,23 @@ impl RuntimeServer {
         }
     }
 
-	pub fn for_identity<P>(provider: Arc<P>) -> Self
-	where
-		P: IdentityProvider,
-	{
-		Self {
-			kind: ProviderKind::Identity,
-			provider: Arc::new(IdentityRuntime { provider }),
-		}
-	}
+    pub fn for_identity<P>(provider: Arc<P>) -> Self
+    where
+        P: IdentityProvider,
+    {
+        Self {
+            kind: ProviderKind::Identity,
+            provider: Arc::new(IdentityRuntime { provider }),
+        }
+    }
 
-	#[allow(dead_code)]
-	pub fn for_auth<P>(provider: Arc<P>) -> Self
-	where
-		P: IdentityProvider,
-	{
-		Self::for_identity(provider)
-	}
+    #[allow(dead_code)]
+    pub fn for_auth<P>(provider: Arc<P>) -> Self
+    where
+        P: IdentityProvider,
+    {
+        Self::for_identity(provider)
+    }
 
     pub fn for_cache<P>(provider: Arc<P>) -> Self
     where

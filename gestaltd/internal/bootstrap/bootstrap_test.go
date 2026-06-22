@@ -1236,7 +1236,7 @@ func validConfig() *config.Config {
 	return &config.Config{
 		Apps: map[string]*config.ProviderEntry{},
 		Providers: config.ProvidersConfig{
-			Authentication: map[string]*config.ProviderEntry{
+			Identity: map[string]*config.ProviderEntry{
 				"default": {
 					Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml"),
 					Config: yaml.Node{Kind: yaml.MappingNode},

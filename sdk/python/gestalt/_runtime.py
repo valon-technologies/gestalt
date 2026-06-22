@@ -23,8 +23,8 @@ from ._api import Access, Credential, Error, Host, Request, Subject, SubjectPerm
 from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
-from ._codec import identity as _identity_codec
 from ._codec import authorization as _authorization_codec
+from ._codec import identity as _identity_codec
 from ._codec import s3 as _s3_codec
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
@@ -35,12 +35,12 @@ from ._providers import (
     AgentProvider,
     AppProvider,
     AppProviderAdapter,
-    IdentityCallContext,
-    IdentityProvider,
     AuthorizationProvider,
     CacheProvider,
     Closer,
     HealthChecker,
+    IdentityCallContext,
+    IdentityProvider,
     MetadataProvider,
     ProviderKind,
     ProviderMetadata,
@@ -125,11 +125,11 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
     from ._gen.v1 import app_pb2 as _app_pb2
     from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-    from ._gen.v1 import identity_pb2 as _identity_pb2
-    from ._gen.v1 import identity_pb2_grpc as _identity_pb2_grpc
     from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
     from ._gen.v1 import cache_pb2 as _cache_pb2
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
+    from ._gen.v1 import identity_pb2 as _identity_pb2
+    from ._gen.v1 import identity_pb2_grpc as _identity_pb2_grpc
     from ._gen.v1 import runtime_pb2 as _runtime_pb2
     from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
     from ._gen.v1 import runtime_provider_pb2 as _runtime_provider_pb2

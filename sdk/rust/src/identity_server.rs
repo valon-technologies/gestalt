@@ -3,13 +3,6 @@ use std::sync::Arc;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::auth::{IdentityCallContext, IdentityProvider, caller_bearer_token_from_metadata};
-use crate::identity::{
-    AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
-    TokenRequest, UserInfoRequest, UserInfoResponse,
-};
-use crate::identity::{
-    GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse,
-};
 use crate::generated::v1::identity_server::Identity as IdentityProviderGrpc;
 use crate::generated::v1::{
     AuthorizeRequest as ProtoAuthorizeRequest, AuthorizeResponse as ProtoAuthorizeResponse,
@@ -21,6 +14,11 @@ use crate::generated::v1::{
     TokenResponse as ProtoTokenResponse, UserInfoRequest as ProtoUserInfoRequest,
     UserInfoResponse as ProtoUserInfoResponse,
 };
+use crate::identity::{
+    AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
+    TokenRequest, UserInfoRequest, UserInfoResponse,
+};
+use crate::identity::{GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse};
 use crate::rpc_status::rpc_status;
 
 pub struct IdentityServer<P> {
