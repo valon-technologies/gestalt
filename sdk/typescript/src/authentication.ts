@@ -162,6 +162,12 @@ export interface TokenRequest {
    * subject_token_type is the RFC 8693 token type for subject_token.
    */
   subjectTokenType: string;
+  /**
+   * requested_ttl is the requested lifetime in seconds for token-exchange
+   * grants. The provider may clamp or ignore this value. 0 means use the
+   * provider default.
+   */
+  requestedTtl: number;
 }
 
 /**

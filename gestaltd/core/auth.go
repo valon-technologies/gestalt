@@ -84,6 +84,10 @@ type TokenRequest struct {
 	Scope            string
 	SubjectToken     string
 	SubjectTokenType string
+	// RequestedTTL is the requested lifetime in seconds for token-exchange
+	// grants. The provider may clamp or ignore this value. 0 means use the
+	// provider default.
+	RequestedTTL int64
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.

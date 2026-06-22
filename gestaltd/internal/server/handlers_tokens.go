@@ -33,8 +33,9 @@ func (s *Server) validateCreateGrantRequest(req createTokenRequest) (string, err
 }
 
 type createTokenRequest struct {
-	Name   string `json:"name"`
-	Scopes string `json:"scopes"`
+	Name      string `json:"name"`
+	Scopes    string `json:"scopes"`
+	ExpiresIn *int64 `json:"expiresIn,omitempty"`
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
@@ -88,12 +89,17 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "caller bearer token required")
 		return
 	}
+	var requestedTTL int64
+	if req.ExpiresIn != nil && *req.ExpiresIn > 0 {
+		requestedTTL = *req.ExpiresIn
+	}
 	tokenResp, err := s.auth.Token(ctx, &core.TokenRequest{
 		GrantType:        core.GrantTypeTokenExchange,
 		SubjectToken:     callerToken,
 		SubjectTokenType: core.SubjectTokenTypeAccessToken,
 		Scope:            scope,
 		ClientID:         core.DefaultOAuthClientID,
+		RequestedTTL:     requestedTTL,
 	})
 	grantID := ""
 	if tokenResp != nil {

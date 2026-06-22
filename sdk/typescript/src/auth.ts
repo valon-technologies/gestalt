@@ -42,6 +42,8 @@ export interface TokenRequest {
   scope: string;
   subjectToken: string;
   subjectTokenType: string;
+  /** Requested lifetime in seconds for token-exchange grants. 0 = provider default. */
+  requestedTtl?: number;
 }
 
 /**

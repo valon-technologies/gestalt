@@ -2021,7 +2021,6 @@ pub mod authentication_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn authorize(
             &mut self,
             request: impl tonic::IntoRequest<super::AuthorizeRequest>,
@@ -2171,7 +2170,6 @@ pub mod authentication_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AuthenticationServer.
     #[async_trait]
     pub trait Authentication: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn authorize(
             &self,
             request: tonic::Request<super::AuthorizeRequest>,

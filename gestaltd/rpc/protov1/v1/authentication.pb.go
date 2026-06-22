@@ -163,8 +163,13 @@ type TokenRequest struct {
 	SubjectToken string `protobuf:"bytes,8,opt,name=subject_token,json=subjectToken,proto3" json:"subject_token,omitempty"`
 	// subject_token_type is the RFC 8693 token type for subject_token.
 	SubjectTokenType string `protobuf:"bytes,9,opt,name=subject_token_type,json=subjectTokenType,proto3" json:"subject_token_type,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// requested_ttl is the requested lifetime in seconds for token-exchange
+	// grants. The provider may clamp or ignore this value. 0 means use the
+	// provider default. Non-standard; RFC 8693 leaves lifetime to server
+	// discretion.
+	RequestedTtl  int64 `protobuf:"varint,10,opt,name=requested_ttl,json=requestedTtl,proto3" json:"requested_ttl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TokenRequest) Reset() {
@@ -251,6 +256,13 @@ func (x *TokenRequest) GetSubjectTokenType() string {
 		return x.SubjectTokenType
 	}
 	return ""
+}
+
+func (x *TokenRequest) GetRequestedTtl() int64 {
+	if x != nil {
+		return x.RequestedTtl
+	}
+	return 0
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -909,7 +921,7 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\"6\n" +
 	"\x11AuthorizeResponse\x12!\n" +
-	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\x95\x02\n" +
+	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\xba\x02\n" +
 	"\fTokenRequest\x12\x1d\n" +
 	"\n" +
 	"grant_type\x18\x01 \x01(\tR\tgrantType\x12\x12\n" +
@@ -919,7 +931,9 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x05state\x18\x06 \x01(\tR\x05state\x12\x14\n" +
 	"\x05scope\x18\a \x01(\tR\x05scope\x12#\n" +
 	"\rsubject_token\x18\b \x01(\tR\fsubjectToken\x12,\n" +
-	"\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenTypeJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc6\x01\n" +
+	"\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenType\x12#\n" +
+	"\rrequested_ttl\x18\n" +
+	" \x01(\x03R\frequestedTtlJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc6\x01\n" +
 	"\rTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
 	"\n" +
@@ -961,11 +975,11 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name2\x8e\a\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\x9f\a\n" +
 	"\x0eAuthentication\x12\x9c\x01\n" +
-	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"@\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\x12\xbc\x01\n" +
-	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"l\x8a\xb5\x18\n" +
-	"grant_type\x8a\xb5\x18\x04code\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\x12{\n" +
+	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"@\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\x12\xcd\x01\n" +
+	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"}\x8a\xb5\x18\n" +
+	"grant_type\x8a\xb5\x18\x04code\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\x8a\xb5\x18\rrequested_ttl\x12{\n" +
 	"\n" +
 	"Introspect\x12&.gestalt.provider.v1.IntrospectRequest\x1a'.gestalt.provider.v1.IntrospectResponse\"\x1c\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\x12W\n" +
 	"\bUserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\x12]\n" +

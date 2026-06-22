@@ -39,6 +39,11 @@ message TokenRequest {
   string subject_token = 8;
   // subject_token_type is the RFC 8693 token type for subject_token.
   string subject_token_type = 9;
+  // requested_ttl is the requested lifetime in seconds for token-exchange
+  // grants. The provider may clamp or ignore this value. 0 means use the
+  // provider default. Non-standard; RFC 8693 leaves lifetime to server
+  // discretion.
+  int64 requested_ttl = 10;
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -138,6 +143,7 @@ service Authentication {
     option (signature) = "scope";
     option (signature) = "subject_token";
     option (signature) = "subject_token_type";
+    option (signature) = "requested_ttl";
   }
   rpc Introspect(IntrospectRequest) returns (IntrospectResponse) {
     option (signature) = "token";

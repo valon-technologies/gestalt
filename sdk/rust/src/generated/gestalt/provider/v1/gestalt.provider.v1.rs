@@ -1351,6 +1351,12 @@ pub struct TokenRequest {
     /// subject_token_type is the RFC 8693 token type for subject_token.
     #[prost(string, tag = "9")]
     pub subject_token_type: ::prost::alloc::string::String,
+    /// requested_ttl is the requested lifetime in seconds for token-exchange
+    /// grants. The provider may clamp or ignore this value. 0 means use the
+    /// provider default. Non-standard; RFC 8693 leaves lifetime to server
+    /// discretion.
+    #[prost(int64, tag = "10")]
+    pub requested_ttl: i64,
 }
 /// TokenResponse models RFC 6749 token endpoint response fields.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
