@@ -1845,16 +1845,16 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 		var err error
 		node, err = config.BuildComponentRuntimeConfigNode(name, "identity", authEntry, authEntry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
+			return nil, fmt.Errorf("bootstrap: identity provider %q: %w", name, err)
 		}
 	}
 	hostServices, err := buildProviderHostServices(name, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
+		return nil, fmt.Errorf("bootstrap: identity provider %q: %w", name, err)
 	}
 	auth, err := factories.Auth(context.Background(), name, node, hostServices, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
+		return nil, fmt.Errorf("bootstrap: identity provider %q: %w", name, err)
 	}
 	return auth, nil
 }

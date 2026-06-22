@@ -4937,7 +4937,7 @@ func TestResultCloseClosesAuthProvider(t *testing.T) {
 		t.Fatalf("Result.Close: %v", err)
 	}
 	if !closed.Load() {
-		t.Fatal("authentication provider was not closed")
+		t.Fatal("identity provider was not closed")
 	}
 }
 
@@ -5980,7 +5980,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("omits authentication when the authentication provider is unset", func(t *testing.T) {
+	t.Run("omits authentication when the identity provider is unset", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()

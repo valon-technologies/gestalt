@@ -132,7 +132,7 @@ test("build arg parsing validates required arguments", () => {
   );
 });
 
-test("buildProviderBinary compiles a runnable authentication provider executable", async () => {
+test("buildProviderBinary compiles a runnable identity provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gestalt-typescript-build-test-");

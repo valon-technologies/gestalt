@@ -1568,7 +1568,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_authorize_response(response)
 
@@ -1580,7 +1580,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_token_response(response)
 
@@ -1592,7 +1592,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_introspect_response(response)
 
@@ -1606,7 +1606,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_user_info_response(response)
 
@@ -1620,7 +1620,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_list_grants_response(response)
 
@@ -1633,7 +1633,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_get_grant_response(response)
 
@@ -1646,7 +1646,7 @@ def _identity_servicer(*, provider: AppProvider) -> Any:
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil response",
+                    "identity provider returned nil response",
                 )
             return _identity_codec.to_wire_revoke_grant_response(response)
 

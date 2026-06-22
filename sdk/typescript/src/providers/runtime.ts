@@ -689,7 +689,7 @@ export function createIdentityService(
       });
       if (!response?.redirectUri) {
         throw new ConnectError(
-          "authentication provider returned empty redirect URI",
+          "identity provider returned empty redirect URI",
           Code.Internal,
         );
       }
@@ -710,7 +710,7 @@ export function createIdentityService(
       });
       if (!response?.accessToken) {
         throw new ConnectError(
-          "authentication provider returned empty access token",
+          "identity provider returned empty access token",
           Code.Internal,
         );
       }
@@ -730,7 +730,7 @@ export function createIdentityService(
       });
       if (!response) {
         throw new ConnectError(
-          "authentication provider returned nil introspection",
+          "identity provider returned nil introspection",
           Code.Internal,
         );
       }
@@ -749,7 +749,7 @@ export function createIdentityService(
       );
       if (!response?.subjectId) {
         throw new ConnectError(
-          "authentication provider returned empty userinfo",
+          "identity provider returned empty userinfo",
           Code.Internal,
         );
       }

@@ -1175,7 +1175,7 @@ func TestValidateRuntime(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "missing authentication provider is allowed",
+			name: "missing identity provider is allowed",
 			yaml: `
 providers:
   indexeddb:
@@ -5555,7 +5555,7 @@ server:
 `,
 		},
 		{
-			name: "multiple authentication providers require selection or default",
+			name: "multiple identity providers require selection or default",
 			yaml: `
 providers:
   identity:
@@ -5966,7 +5966,7 @@ apps:
       auth:
         provider: missing
 `,
-			wantErr: `apps.external.auth.provider references unknown authentication provider "missing"`,
+			wantErr: `apps.external.auth.provider references unknown identity provider "missing"`,
 		},
 		{
 			name: "app auth override rejects server alias without configured auth provider",
@@ -5979,7 +5979,7 @@ apps:
       auth:
         provider: server
 `,
-			wantErr: `apps.external.auth.provider "server" requires a configured platform authentication provider`,
+			wantErr: `apps.external.auth.provider "server" requires a configured platform identity provider`,
 		},
 		{
 			name: "apiVersion local source rejects sibling auth",
@@ -6223,7 +6223,7 @@ func TestValidateStructure_AppValidationDirect(t *testing.T) {
 			wantErr: "source.path or provider-release metadata URL is required",
 		},
 		{
-			name: "authentication provider valid",
+			name: "identity provider valid",
 			cfg: &Config{
 				Providers: ProvidersConfig{
 					Identity: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{metadataURL: "https://example.com/providers/test-auth/provider-release.yaml"}}),
@@ -6231,11 +6231,11 @@ func TestValidateStructure_AppValidationDirect(t *testing.T) {
 			},
 		},
 		{
-			name: "authentication provider none valid",
+			name: "identity provider none valid",
 			cfg:  &Config{},
 		},
 		{
-			name: "authentication provider invalid when source missing",
+			name: "identity provider invalid when source missing",
 			cfg: &Config{
 				Providers: ProvidersConfig{
 					Identity: singletonProviderEntry(&ProviderEntry{}),

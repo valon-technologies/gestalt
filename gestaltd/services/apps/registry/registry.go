@@ -75,7 +75,7 @@ type Registry struct {
 
 func New() *Registry {
 	return &Registry{
-		AuthProviders: newProviderMap[core.IdentityProvider]("authentication provider"),
+		AuthProviders: newProviderMap[core.IdentityProvider]("identity provider"),
 		Providers:     newProviderMap[core.Provider]("provider"),
 	}
 }

@@ -73,7 +73,7 @@ func TestServeIdentityProviderClosesProviderOnShutdown(t *testing.T) {
 		cancel()
 		waitServeResult(t, errCh)
 		if !auth.closed.Load() {
-			t.Fatal("authentication provider Close was not called")
+			t.Fatal("identity provider Close was not called")
 		}
 	})
 

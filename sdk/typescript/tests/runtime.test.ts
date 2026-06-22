@@ -997,7 +997,7 @@ export const app = defineApp({
   }
 });
 
-test("authentication provider supports runtime metadata, OAuth flows, and introspection", async () => {
+test("identity provider supports runtime metadata, OAuth flows, and introspection", async () => {
   const provider = await loadProviderFromTarget(fixturePath("auth-provider"));
   const runtime = createRuntimeService(provider);
   const auth = createIdentityService(provider as any);

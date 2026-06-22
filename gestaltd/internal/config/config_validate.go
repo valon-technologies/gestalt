@@ -931,12 +931,12 @@ func validateAppRouteAuth(cfg *Config, name string, entry *ProviderEntry) error 
 			return err
 		}
 		if authProvider == nil {
-			return fmt.Errorf("config validation: apps.%s.auth.provider %q requires a configured platform authentication provider", name, entry.RouteAuth.Provider)
+			return fmt.Errorf("config validation: apps.%s.auth.provider %q requires a configured platform identity provider", name, entry.RouteAuth.Provider)
 		}
 		return nil
 	}
 	if _, ok := cfg.Providers.Identity[entry.RouteAuth.Provider]; !ok {
-		return fmt.Errorf("config validation: apps.%s.auth.provider references unknown authentication provider %q", name, entry.RouteAuth.Provider)
+		return fmt.Errorf("config validation: apps.%s.auth.provider references unknown identity provider %q", name, entry.RouteAuth.Provider)
 	}
 	return nil
 }

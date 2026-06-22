@@ -668,7 +668,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
                 kind=ProviderKind.IDENTITY,
                 name="stub-auth",
                 display_name="Stub Auth",
-                description="test authentication provider",
+                description="test identity provider",
                 version="1.2.3",
             )
 

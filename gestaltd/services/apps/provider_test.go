@@ -143,12 +143,12 @@ func manualOnlyStaticSpec() StaticProviderSpec {
 	return StaticProviderSpec{
 		Name:           "manual-only",
 		DisplayName:    "Manual Only",
-		Description:    "manual authentication provider",
+		Description:    "manual identity provider",
 		ConnectionMode: core.ConnectionModeSubject,
 		Catalog: &catalog.Catalog{
 			Name:        "manual-only",
 			DisplayName: "Manual Only",
-			Description: "manual authentication provider",
+			Description: "manual identity provider",
 			Operations: []catalog.CatalogOperation{
 				{
 					ID:          "echo",
