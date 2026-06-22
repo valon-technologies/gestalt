@@ -2,8 +2,13 @@ package providergateway
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -27,17 +32,31 @@ func TestAuthorizeAllowsRequests(t *testing.T) {
 	}
 }
 
-func TestAuthorizePassesThroughWithAuthorizationProvider(t *testing.T) {
+func TestAuthorizeUsesAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
+	privateKeyPEM, publicKeyPEM := testGatewayAuthorizeCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	claims, err := GenerateCallerTokenClaims("user:alice", time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	callerToken, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
 	authorization := &stubAuthorizationProvider{}
 	transport := NewProviderGatewayTransport()
 	transport.SetAuthorizationProvider(authorization)
+	transport.SetCallerTokenPublicKey(publicKeyPEM)
 
 	allowed, err := transport.Authorize(context.Background(), AuthorizationParams{
 		ProviderID:  "authz-primary",
 		Operation:   "CheckAccess",
-		CallerToken: "caller-token",
+		CallerToken: callerToken,
 	})
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
@@ -45,9 +64,102 @@ func TestAuthorizePassesThroughWithAuthorizationProvider(t *testing.T) {
 	if !allowed {
 		t.Fatal("Authorize allowed = false, want true")
 	}
-	if authorization.called {
-		t.Fatal("authorization provider was called")
+	if !authorization.called {
+		t.Fatal("authorization provider was not called")
 	}
+	if got := authorization.request.GetSubject().GetType(); got != "subject" {
+		t.Fatalf("Subject.Type = %q, want %q", got, "subject")
+	}
+	if got := authorization.request.GetSubject().GetId(); got != "user:alice" {
+		t.Fatalf("Subject.Id = %q, want %q", got, "user:alice")
+	}
+	if got := authorization.request.GetAction().GetName(); got != "CheckAccess" {
+		t.Fatalf("Action.Name = %q, want %q", got, "CheckAccess")
+	}
+	if got := authorization.request.GetResource().GetType(); got != "provider" {
+		t.Fatalf("Resource.Type = %q, want %q", got, "provider")
+	}
+	if got := authorization.request.GetResource().GetId(); got != "authz-primary" {
+		t.Fatalf("Resource.Id = %q, want %q", got, "authz-primary")
+	}
+}
+
+func TestAuthorizeShadowModeAllowsDeniedRequests(t *testing.T) {
+	t.Parallel()
+
+	privateKeyPEM, publicKeyPEM := testGatewayAuthorizeCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	claims, err := GenerateCallerTokenClaims("user:alice", time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	callerToken, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
+	transport := NewProviderGatewayTransport()
+	transport.SetAuthorizationProvider(authorization)
+	transport.SetCallerTokenPublicKey(publicKeyPEM)
+
+	allowed, err := transport.Authorize(context.Background(), AuthorizationParams{
+		ProviderID:  "authz-primary",
+		Operation:   "CheckAccess",
+		CallerToken: callerToken,
+	})
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if !allowed {
+		t.Fatal("Authorize allowed = false, want true in shadow mode")
+	}
+	if !authorization.called {
+		t.Fatal("authorization provider was not called")
+	}
+}
+
+func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+
+	privateKeyPEM, publicKeyPEM := testGatewayAuthorizeCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	claims, err := GenerateCallerTokenClaims("user:alice", time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	callerToken, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
+	transport := NewProviderGatewayTransport()
+	transport.SetAuthorizationProvider(authorization)
+	transport.SetCallerTokenPublicKey(publicKeyPEM)
+
+	if _, err := transport.Authorize(ctx, AuthorizationParams{
+		ProviderID:  "authz-primary",
+		Operation:   "CheckAccess",
+		CallerToken: callerToken,
+	}); err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
+		"gd.allowed":  "false",
+		"gd.subject":  "subject/user:alice",
+		"gd.resource": "provider/authz-primary",
+		"gd.action":   "CheckAccess",
+	})
 }
 
 func TestProviderGatewayTransportAuthorizesThenInvokesNext(t *testing.T) {
@@ -110,16 +222,25 @@ func TestDirectTransportInvokesNext(t *testing.T) {
 }
 
 type stubAuthorizationProvider struct {
-	called  bool
-	ctx     context.Context
-	request *proto.CheckAccessRequest
+	called        bool
+	allowedResult *bool
+	ctx           context.Context
+	request       *proto.CheckAccessRequest
 }
 
 func (p *stubAuthorizationProvider) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.called = true
 	p.ctx = ctx
 	p.request = req
-	return &proto.CheckAccessResponse{Allowed: true}, nil
+	allowed := true
+	if p.allowedResult != nil {
+		allowed = *p.allowedResult
+	}
+	return &proto.CheckAccessResponse{Allowed: allowed}, nil
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func (p *stubAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
@@ -272,11 +393,30 @@ func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
 
 func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath TransportPath) map[string]string {
 	return map[string]string{
-		"gestaltd.provider_gateway.provider.id":    req.ProviderID,
-		"gestaltd.provider_gateway.provider.kind":  string(req.ProviderKind),
-		"gestaltd.provider_gateway.service.name":   req.ServiceName,
-		"gestaltd.provider_gateway.operation.name": req.Operation,
-		"gestaltd.provider_gateway.source":         string(req.Source),
-		"gestaltd.provider_gateway.transport.path": string(transportPath),
+		"gd.provider_id":   req.ProviderID,
+		"gd.provider_kind": string(req.ProviderKind),
+		"gd.service":       req.ServiceName,
+		"gd.operation":     req.Operation,
+		"gd.source":        string(req.Source),
+		"gd.transport":     string(transportPath),
 	}
+}
+
+func testGatewayAuthorizeCallerTokenKeyPair(t testing.TB) (string, string) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		t.Fatalf("MarshalPKIXPublicKey: %v", err)
+	}
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
+	return string(privateKeyPEM), string(publicKeyPEM)
 }

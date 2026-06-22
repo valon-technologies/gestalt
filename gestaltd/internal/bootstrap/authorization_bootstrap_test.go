@@ -2,6 +2,10 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"reflect"
 	"strconv"
 	"testing"
@@ -13,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -284,6 +289,75 @@ command: /bin/true
 	}
 }
 
+func TestBootstrapAuthorizationProviderStateAuthorizesProviderGatewayRequests(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "authz"}},
+		Providers: config.ProvidersConfig{
+			Authorization: map[string]*config.ProviderEntry{"authz": {Default: true}},
+		},
+		Authorization: config.AuthorizationConfig{
+			Models: map[string]config.AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
+						"provider": {
+							Relations: map[string]config.AuthorizationRelationDef{
+								"viewer": {SubjectTypes: []string{"subject"}},
+							},
+							Actions: map[string]config.AuthorizationActionDef{
+								"sync": {Relations: []string{"viewer"}},
+							},
+						},
+					},
+				},
+			},
+			Relationships: []config.AuthorizationRelationshipDef{{
+				Subject:  config.AuthorizationSubjectDef{Type: "subject", ID: "user:alice"},
+				Relation: "viewer",
+				Resource: config.AuthorizationResourceDef{Type: "provider", ID: "github"},
+			}},
+		},
+	}
+	provider := &statefulAuthorizationProvider{}
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
+	}
+
+	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
+	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	transport := providergateway.NewProviderGatewayTransport()
+	transport.SetAuthorizationProvider(provider)
+	transport.SetCallerTokenPublicKey(publicKeyPEM)
+
+	allowedToken := issueProviderGatewayCallerToken(t, issuer, "user:alice")
+	if _, err := transport.Invoke(context.Background(), providergateway.ProviderGatewayRequest{
+		ProviderID:   "github",
+		ProviderKind: providergateway.ProviderKindAuthorization,
+		Operation:    "sync",
+		CallerToken:  allowedToken,
+	}, func(_ context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
+		return providergateway.ProviderGatewayResponse{}, nil
+	}); err != nil {
+		t.Fatalf("Invoke allowed: %v", err)
+	}
+
+	deniedToken := issueProviderGatewayCallerToken(t, issuer, "user:bob")
+	if _, err := transport.Invoke(context.Background(), providergateway.ProviderGatewayRequest{
+		ProviderID:   "github",
+		ProviderKind: providergateway.ProviderKindAuthorization,
+		Operation:    "sync",
+		CallerToken:  deniedToken,
+	}, func(_ context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
+		return providergateway.ProviderGatewayResponse{}, nil
+	}); err != nil {
+		t.Fatalf("Invoke denied in shadow mode: %v", err)
+	}
+}
+
 func TestResolveCallerTokenPublicKey(t *testing.T) {
 	t.Parallel()
 
@@ -412,4 +486,125 @@ func testAuthorizationResourceType(name string, layer proto.SourceLayer) *proto.
 			}},
 		}},
 	}
+}
+
+type statefulAuthorizationProvider struct {
+	model         *proto.AuthorizationModel
+	relationships []*proto.Relationship
+}
+
+func (p *statefulAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	if p == nil || req == nil || req.GetSubject() == nil || req.GetResource() == nil || req.GetAction() == nil || p.model == nil {
+		return &proto.CheckAccessResponse{Allowed: false}, nil
+	}
+	var action *proto.ModelAction
+	for _, resourceType := range p.model.GetResourceTypes() {
+		if resourceType.GetName() != req.GetResource().GetType() {
+			continue
+		}
+		for _, candidate := range resourceType.GetActions() {
+			if candidate.GetName() == req.GetAction().GetName() {
+				action = candidate
+				break
+			}
+		}
+		break
+	}
+	if action == nil {
+		return &proto.CheckAccessResponse{Allowed: false}, nil
+	}
+	for _, relationName := range action.GetRelations() {
+		for _, relationship := range p.relationships {
+			tuple := relationship.GetTuple()
+			target := tuple.GetTarget().GetSubject()
+			resource := tuple.GetResource()
+			if target == nil || resource == nil {
+				continue
+			}
+			if target.GetType() == req.GetSubject().GetType() &&
+				target.GetId() == req.GetSubject().GetId() &&
+				resource.GetType() == req.GetResource().GetType() &&
+				resource.GetId() == req.GetResource().GetId() &&
+				tuple.GetRelation() == relationName {
+				return &proto.CheckAccessResponse{Allowed: true, ModelId: p.model.GetId()}, nil
+			}
+		}
+	}
+	return &proto.CheckAccessResponse{Allowed: false, ModelId: p.model.GetId()}, nil
+}
+
+func (p *statefulAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	return &proto.CheckAccessManyResponse{}, nil
+}
+
+func (p *statefulAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	return &proto.ListRelationshipsResponse{}, nil
+}
+
+func (p *statefulAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	return &proto.AddRelationshipResponse{}, nil
+}
+
+func (p *statefulAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	return &proto.DeleteRelationshipResponse{}, nil
+}
+
+func (p *statefulAuthorizationProvider) SetAuthorizationState(_ context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	p.model = gproto.Clone(req.GetModel()).(*proto.AuthorizationModel)
+	p.relationships = make([]*proto.Relationship, 0, len(req.GetRelationships()))
+	for _, relationship := range req.GetRelationships() {
+		p.relationships = append(p.relationships, gproto.Clone(relationship).(*proto.Relationship))
+	}
+	return &proto.SetAuthorizationStateResponse{ActiveModel: &proto.AuthorizationModelRef{
+		Id:      req.GetModel().GetId(),
+		Version: req.GetModel().GetVersion(),
+	}}, nil
+}
+
+func (p *statefulAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+	return &proto.GetActiveModelRefResponse{}, nil
+}
+
+func (p *statefulAuthorizationProvider) SetActiveModel(_ context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	return &proto.SetActiveModelResponse{Model: &proto.AuthorizationModelRef{Id: req.GetModel().GetId(), Version: req.GetModel().GetVersion()}}, nil
+}
+
+func (p *statefulAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	return &proto.ListActiveModelResourceTypesResponse{}, nil
+}
+
+func (p *statefulAuthorizationProvider) Ping(context.Context) error { return nil }
+
+func (p *statefulAuthorizationProvider) Close() error { return nil }
+
+func issueProviderGatewayCallerToken(t testing.TB, issuer *providergateway.CallerTokenIssuer, subjectID string) string {
+	t.Helper()
+	claims, err := providergateway.GenerateCallerTokenClaims(subjectID, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	token, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	return token
+}
+
+func testProviderGatewayCallerTokenKeyPair(t testing.TB) (string, string) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		t.Fatalf("MarshalPKIXPublicKey: %v", err)
+	}
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
+	return string(privateKeyPEM), string(publicKeyPEM)
 }
