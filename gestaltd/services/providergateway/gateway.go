@@ -19,15 +19,21 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 	if t == nil || t.authorization == nil {
 		return true, nil
 	}
-	req, err := t.checkAccessRequest(params)
-	if err != nil {
-		recordProviderGatewayAuthorizationCheck(ctx, false, nil)
-		return true, nil
-	}
-	resp, err := t.authorization.CheckAccess(ctx, req)
-	allowed := err == nil && resp != nil && resp.GetAllowed()
+	allowed, req := t.shadowAuthorizationCheck(ctx, params)
 	recordProviderGatewayAuthorizationCheck(ctx, allowed, req)
 	return true, nil
+}
+
+func (t *ProviderGatewayTransport) shadowAuthorizationCheck(ctx context.Context, params AuthorizationParams) (bool, *proto.CheckAccessRequest) {
+	req, err := t.checkAccessRequest(params)
+	if err != nil {
+		return false, nil
+	}
+	resp, err := t.authorization.CheckAccess(ctx, req)
+	if err != nil || resp == nil {
+		return false, req
+	}
+	return resp.GetAllowed(), req
 }
 
 type DirectTransport struct{}

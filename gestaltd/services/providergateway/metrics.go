@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -24,8 +24,8 @@ var (
 	attrProviderGatewayAuthorizationResource = attribute.Key("gd.resource")
 	attrProviderGatewayAuthorizationAction   = attribute.Key("gd.action")
 
-	providerGatewayOperationMetrics     metricutil.MeterCache[providerGatewayMetrics]
-	providerGatewayAuthorizationChecks  metricutil.MeterCache[providerGatewayAuthorizationMetrics]
+	providerGatewayOperationMetrics    metricutil.MeterCache[providerGatewayMetrics]
+	providerGatewayAuthorizationChecks metricutil.MeterCache[providerGatewayAuthorizationMetrics]
 )
 
 type providerGatewayMetrics struct {

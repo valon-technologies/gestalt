@@ -395,10 +395,10 @@ func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath Transp
 	return map[string]string{
 		"gd.provider_id":   req.ProviderID,
 		"gd.provider_kind": string(req.ProviderKind),
-		"gd.service":   req.ServiceName,
-		"gd.operation": req.Operation,
-		"gd.source":    string(req.Source),
-		"gd.transport": string(transportPath),
+		"gd.service":       req.ServiceName,
+		"gd.operation":     req.Operation,
+		"gd.source":        string(req.Source),
+		"gd.transport":     string(transportPath),
 	}
 }
 
