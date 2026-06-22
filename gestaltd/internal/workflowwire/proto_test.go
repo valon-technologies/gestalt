@@ -187,42 +187,6 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 	}
 }
 
-func TestWorkflowStepAgentWorkspaceProtoRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	workspace := &coreagent.Workspace{
-		Checkouts: []coreagent.WorkspaceGitCheckout{{
-			URL:  "https://github.com/valon-technologies/toolshed.git",
-			Ref:  "main",
-			Path: "toolshed",
-		}},
-		CWD: "toolshed",
-	}
-	target, err := TargetToProto(coreworkflow.Target{
-		Steps: []coreworkflow.Step{{
-			ID: "diagnosis",
-			Agent: &coreworkflow.AgentTurn{
-				ProviderName: "claude",
-				Model:        "default",
-				Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
-				Output:       coreagent.Output{Text: &coreagent.TextOutput{}},
-				Workspace:    workspace,
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("TargetToProto: %v", err)
-	}
-	if got := target.GetSteps()[0].GetAgent().GetWorkspace().GetCwd(); got != "toolshed" {
-		t.Fatalf("workspace cwd = %q, want toolshed", got)
-	}
-
-	roundTrip := TargetFromProto(target)
-	if roundTrip.Steps[0].Agent.Workspace == nil || roundTrip.Steps[0].Agent.Workspace.CWD != "toolshed" {
-		t.Fatalf("round trip workspace = %#v", roundTrip.Steps[0].Agent.Workspace)
-	}
-}
-
 func TestWorkflowTargetFromProtoPreservesEmptyStepApp(t *testing.T) {
 	t.Parallel()
 

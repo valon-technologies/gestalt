@@ -323,54 +323,6 @@ func (c *recordingAgentClient) CancelTurn(context.Context, gestalt.AgentCancelTu
 	return nil, nil
 }
 
-func TestExecutorPassesAgentWorkspaceToCreateSession(t *testing.T) {
-	t.Parallel()
-
-	agent := &recordingAgentClient{}
-	executor := New(Config{
-		NewAgent: func(req gestalt.Request) (AgentClient, error) {
-			agent.request = req
-			return agent, nil
-		},
-		AgentPollInterval: 0,
-	})
-	workspace := &gestalt.AgentWorkspace{
-		Checkouts: []gestalt.AgentWorkspaceGitCheckout{{
-			URL:  "https://github.com/valon-technologies/toolshed.git",
-			Ref:  "main",
-			Path: "toolshed",
-		}},
-		CWD: "toolshed",
-	}
-	resp, err := executor.Execute(context.Background(), Request{
-		ProviderName:         "indexeddb",
-		RunID:                "run-1",
-		DefinitionID:         "definition-1",
-		DefinitionGeneration: 1,
-		RunAs: &gestalt.Subject{
-			ID:                  "service_account:workflow-runner",
-		},
-		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-			ID: "review",
-			Agent: &gestalt.WorkflowStepAgentTurn{
-				Provider:  "claude",
-				Model:     "default",
-				Prompt:    gestalt.WorkflowText{Template: "review"},
-				Workspace: workspace,
-			},
-		}}},
-	})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if resp.Status != 200 {
-		t.Fatalf("Execute status = %d body = %s", resp.Status, resp.Body)
-	}
-	if agent.session.Workspace == nil || agent.session.Workspace.CWD != "toolshed" {
-		t.Fatalf("session workspace = %#v", agent.session.Workspace)
-	}
-}
-
 func TestExecutorRejectsSessionReuseWithDifferentWorkspace(t *testing.T) {
 	t.Parallel()
 

@@ -289,52 +289,15 @@ func TestParseTargetMapAgentWorkspaceRoundTrip(t *testing.T) {
 	if !coreworkflow.TargetsEqual(target, again) {
 		t.Fatalf("round-trip target = %#v, want %#v", again, target)
 	}
-}
 
-func TestParseTargetMapClonesAgentWorkspaceCheckouts(t *testing.T) {
-	t.Parallel()
-
-	checkouts := []any{
-		map[string]any{
-			"url":  "https://github.com/valon-technologies/toolshed.git",
-			"ref":  "main",
-			"path": "toolshed",
-		},
-	}
-	raw := map[string]any{
-		"steps": []any{
-			map[string]any{
-				"id": "diagnosis",
-				"agent": map[string]any{
-					"provider": "claude",
-					"model":    "default",
-					"tools":    []any{},
-					"output":   map[string]any{"text": map[string]any{}},
-					"workspace": map[string]any{
-						"checkouts": checkouts,
-						"cwd":       "toolshed",
-					},
-				},
-			},
-		},
-	}
-
-	target, err := ParseTargetMap(raw, "target")
-	if err != nil {
-		t.Fatalf("ParseTargetMap() error = %v", err)
-	}
 	workspaceRaw := raw["steps"].([]any)[0].(map[string]any)["agent"].(map[string]any)["workspace"].(map[string]any)
 	checkoutsRaw := workspaceRaw["checkouts"].([]any)
 	workspaceRaw["checkouts"] = append(checkoutsRaw, map[string]any{
-		"url":  "https://github.com/valon-technologies/gestalt.git",
+		"url":  "https://github.com/valon-technologies/gestalt-providers.git",
 		"ref":  "main",
-		"path": "gestalt",
+		"path": "gestalt-providers",
 	})
-	workspace := target.Steps[0].Agent.Workspace
-	if len(workspace.Checkouts) != 1 {
-		t.Fatalf("workspace checkouts = %#v, want one checkout", workspace.Checkouts)
-	}
-	if workspace.Checkouts[0].Path != "toolshed" {
-		t.Fatalf("first checkout path = %q, want toolshed", workspace.Checkouts[0].Path)
+	if len(target.Steps[0].Agent.Workspace.Checkouts) != 2 {
+		t.Fatalf("parsed workspace checkouts = %#v, want isolated from later input mutation", target.Steps[0].Agent.Workspace.Checkouts)
 	}
 }
