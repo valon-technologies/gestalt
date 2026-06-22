@@ -122,6 +122,11 @@ type TokenRequest struct {
 	SubjectToken string
 	// subject_token_type is the RFC 8693 token type for subject_token.
 	SubjectTokenType string
+	// expires_in is a Gestalt request-side extension for the desired access-token
+	// lifetime in seconds. The provider MAY clamp or default it; expires_in in
+	// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+	// default.
+	ExpiresIn int64
 }
 
 // TokenResponse is the native message type for gestalt.provider.v1.TokenResponse.
@@ -204,9 +209,22 @@ func (c *Identity) AuthorizeRaw(ctx context.Context, request *AuthorizeRequest) 
 	return FromWireAuthorizeResponse(response), nil
 }
 
+// IdentityTokenOptions carries the optional parameters of [Identity.Token].
+// A nil options value is equivalent to the zero value.
+type IdentityTokenOptions struct {
+	// expires_in is a Gestalt request-side extension for the desired access-token
+	// lifetime in seconds. The provider MAY clamp or default it; expires_in in
+	// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+	// default.
+	ExpiresIn int64
+}
+
 // Token is the ergonomic form of [Identity.TokenRaw].
-func (c *Identity) Token(ctx context.Context, grantType string, code string, redirectUri string, clientId string, state string, scope string, subjectToken string, subjectTokenType string) (*TokenResponse, error) {
-	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType}
+func (c *Identity) Token(ctx context.Context, grantType string, code string, redirectUri string, clientId string, state string, scope string, subjectToken string, subjectTokenType string, opts *IdentityTokenOptions) (*TokenResponse, error) {
+	if opts == nil {
+		opts = &IdentityTokenOptions{}
+	}
+	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType, ExpiresIn: opts.ExpiresIn}
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

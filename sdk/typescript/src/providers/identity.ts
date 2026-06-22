@@ -42,6 +42,13 @@ export interface TokenRequest {
   scope: string;
   subjectToken: string;
   subjectTokenType: string;
+  /**
+   * Gestalt request-side extension for the desired access-token lifetime in
+   * seconds. The provider MAY clamp or default it; expiresIn in TokenResponse
+   * remains authoritative per RFC 6749 §5.1. Undefined/0 means use the grant
+   * default.
+   */
+  expiresIn?: bigint | number;
 }
 
 /**

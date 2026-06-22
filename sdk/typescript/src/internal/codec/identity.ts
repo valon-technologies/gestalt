@@ -222,6 +222,7 @@ export function toWireTokenRequest(
     scope: value.scope ?? "",
     subjectToken: value.subjectToken ?? "",
     subjectTokenType: value.subjectTokenType ?? "",
+    expiresIn: value.expiresIn ?? 0n,
   });
 }
 
@@ -235,6 +236,7 @@ export function fromWireTokenRequest(value: wire.TokenRequest): TokenRequest {
     scope: value.scope,
     subjectToken: value.subjectToken,
     subjectTokenType: value.subjectTokenType,
+    expiresIn: value.expiresIn,
   };
 }
 

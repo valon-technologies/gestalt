@@ -2067,6 +2067,12 @@ pub struct TokenRequest {
     /// subject_token_type is the RFC 8693 token type for subject_token.
     #[prost(string, tag = "9")]
     pub subject_token_type: ::prost::alloc::string::String,
+    /// expires_in is a Gestalt request-side extension for the desired access-token
+    /// lifetime in seconds. The provider MAY clamp or default it; expires_in in
+    /// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+    /// default.
+    #[prost(int64, tag = "10")]
+    pub expires_in: i64,
 }
 /// TokenResponse models RFC 6749 token endpoint response fields.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

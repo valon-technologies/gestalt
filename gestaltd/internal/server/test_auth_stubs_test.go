@@ -125,18 +125,22 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 			if scope != "" {
 				grantID = "grant-scoped"
 			}
+			ttlSeconds := int64(30 * 24 * 3600)
+			if req.ExpiresIn > 0 {
+				ttlSeconds = req.ExpiresIn
+			}
 			now := time.Now().UTC()
 			stub.mu.Lock()
 			stub.grants[grantID] = &core.GetGrantResponse{
 				CreatedAt: now.Unix(),
-				ExpiresAt: now.Add(30 * 24 * time.Hour).Unix(),
+				ExpiresAt: now.Add(time.Duration(ttlSeconds) * time.Second).Unix(),
 				Scopes:    scopesFromString(scope),
 			}
 			stub.mu.Unlock()
 			return &core.TokenResponse{
 				AccessToken: "grant-access-" + grantID,
 				TokenType:   "Bearer",
-				ExpiresIn:   30 * 24 * 3600,
+				ExpiresIn:   int(ttlSeconds),
 				GrantID:     grantID,
 				Scope:       scope,
 			}, nil

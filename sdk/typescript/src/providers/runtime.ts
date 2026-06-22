@@ -707,6 +707,7 @@ export function createIdentityService(
         scope: request.scope,
         subjectToken: request.subjectToken,
         subjectTokenType: request.subjectTokenType,
+        expiresIn: request.expiresIn,
       });
       if (!response?.accessToken) {
         throw new ConnectError(

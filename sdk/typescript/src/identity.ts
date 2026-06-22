@@ -162,6 +162,13 @@ export interface TokenRequest {
    * subject_token_type is the RFC 8693 token type for subject_token.
    */
   subjectTokenType: string;
+  /**
+   * expires_in is a Gestalt request-side extension for the desired access-token
+   * lifetime in seconds. The provider MAY clamp or default it; expires_in in
+   * TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+   * default.
+   */
+  expiresIn: bigint;
 }
 
 /**
@@ -265,6 +272,7 @@ export class Identity {
     scope: string,
     subjectToken: string,
     subjectTokenType: string,
+    options?: { expiresIn?: bigint | undefined },
   ): Promise<TokenResponse> {
     const request = {
       grantType,
@@ -275,6 +283,7 @@ export class Identity {
       scope,
       subjectToken,
       subjectTokenType,
+      expiresIn: options?.expiresIn ?? 0n,
     } satisfies Init<TokenRequest>;
     const response = await callUnary(() =>
       this.client.token(

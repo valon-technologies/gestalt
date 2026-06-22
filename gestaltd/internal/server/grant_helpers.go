@@ -75,3 +75,20 @@ func tokenExpiresAt(now func() time.Time, expiresIn int) *time.Time {
 	t := now().UTC().Add(time.Duration(expiresIn) * time.Second)
 	return &t
 }
+
+// tokenExpiresIn resolves a caller-supplied API-token lifetime hint to the
+// seconds value passed to the identity provider. A nil or zero hint yields 0,
+// meaning the provider applies its default. Negative values and values above
+// MaxTokenExpiresInSeconds are rejected.
+func tokenExpiresIn(expiresIn *int64) (int64, error) {
+	if expiresIn == nil {
+		return 0, nil
+	}
+	if *expiresIn < 0 || *expiresIn > core.MaxTokenExpiresInSeconds {
+		return 0, errors.New("expiresIn out of range")
+	}
+	if *expiresIn == 0 {
+		return 0, nil
+	}
+	return *expiresIn, nil
+}

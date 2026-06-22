@@ -25,7 +25,7 @@ export const provider = defineIdentityProvider({
     return {
       accessToken: fixtureAccessToken,
       tokenType: "Bearer",
-      expiresIn: 5400,
+      expiresIn: request.expiresIn ?? 5400,
       scope: request.grantType === "authorization_code" ? "openid email" : "",
       grantId: "grant-fixture-1",
     };

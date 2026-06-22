@@ -3,10 +3,16 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub fn create(client: &ApiClient, name: Option<&str>, scopes: &str, format: Format) -> Result<()> {
+pub fn create(
+    client: &ApiClient,
+    name: Option<&str>,
+    scopes: &str,
+    expires_in: i64,
+    format: Format,
+) -> Result<()> {
     let token_name = name.unwrap_or("cli-token");
     let resp = client
-        .create_api_token(token_name, scopes)
+        .create_api_token(token_name, scopes, expires_in)
         .context("failed to create token")?;
 
     match format {

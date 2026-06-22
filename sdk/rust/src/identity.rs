@@ -173,6 +173,13 @@ pub struct TokenRequest {
     ///
     /// The `subject_token_type` field.
     pub subject_token_type: String,
+    /// expires_in is a Gestalt request-side extension for the desired access-token
+    /// lifetime in seconds. The provider MAY clamp or default it; expires_in in
+    /// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+    /// default.
+    ///
+    /// The `expires_in` field.
+    pub expires_in: i64,
 }
 
 /// TokenResponse models RFC 6749 token endpoint response fields.
@@ -304,6 +311,7 @@ impl Identity {
         scope: String,
         subject_token: String,
         subject_token_type: String,
+        options: IdentityTokenOptions,
     ) -> Result<TokenResponse, GestaltError> {
         let request = TokenRequest {
             grant_type,
@@ -314,6 +322,7 @@ impl Identity {
             scope,
             subject_token,
             subject_token_type,
+            expires_in: options.expires_in,
         };
         let mut tonic_request = tonic::Request::new(to_wire_token_request(request));
         if let Some(timeout) = self.timeout {
@@ -443,4 +452,17 @@ impl Identity {
         let response = self.inner.revoke_grant(tonic_request).await?;
         Ok(from_wire_revoke_grant_response(response.into_inner()))
     }
+}
+
+/// Optional parameters of [`Identity::token`]; the default value leaves every
+/// option unset.
+#[derive(Clone, Debug, Default)]
+pub struct IdentityTokenOptions {
+    /// expires_in is a Gestalt request-side extension for the desired access-token
+    /// lifetime in seconds. The provider MAY clamp or default it; expires_in in
+    /// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+    /// default.
+    ///
+    /// The `expires_in` field.
+    pub expires_in: i64,
 }

@@ -54,7 +54,7 @@ fn test_create_token() {
     let mock = authed_json_mock!(server, Method::POST, "/api/v1/tokens", StatusCode::CREATED)
         .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
         .match_body(Matcher::JsonString(
-            r#"{"name":"cli-token","scopes":"my-app"}"#.to_string(),
+            r#"{"name":"cli-token","scopes":"my-app","expiresIn":2592000}"#.to_string(),
         ))
         .with_body(
             r#"{"id":"2","name":"cli-token","token":"plaintext-secret","scopes":["my-app"]}"#,
@@ -62,7 +62,9 @@ fn test_create_token() {
         .create();
 
     let client = create_client(&server);
-    let resp = client.create_api_token("cli-token", "my-app").unwrap();
+    let resp = client
+        .create_api_token("cli-token", "my-app", 30 * 24 * 3600)
+        .unwrap();
 
     mock.assert();
     assert_eq!(resp["token"], "plaintext-secret");

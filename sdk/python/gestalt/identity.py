@@ -136,6 +136,11 @@ class TokenRequest:
     subject_token: str = ""
     #: subject_token_type is the RFC 8693 token type for subject_token.
     subject_token_type: str = ""
+    #: expires_in is a Gestalt request-side extension for the desired access-token
+    #: lifetime in seconds. The provider MAY clamp or default it; expires_in in
+    #: TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+    #: default.
+    expires_in: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,6 +257,7 @@ class Identity:
         scope: str = ...,
         subject_token: str = ...,
         subject_token_type: str = ...,
+        expires_in: int = ...,
     ) -> TokenResponse: ...
 
     def token(
@@ -266,6 +272,7 @@ class Identity:
         scope: str | None = None,
         subject_token: str | None = None,
         subject_token_type: str | None = None,
+        expires_in: int | None = None,
     ) -> TokenResponse:
         if request is None:
             request = TokenRequest(
@@ -277,6 +284,7 @@ class Identity:
                 scope=scope or "",
                 subject_token=subject_token or "",
                 subject_token_type=subject_token_type or "",
+                expires_in=expires_in or 0,
             )
         elif (
             grant_type is not None
@@ -287,6 +295,7 @@ class Identity:
             or scope is not None
             or subject_token is not None
             or subject_token_type is not None
+            or expires_in is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(

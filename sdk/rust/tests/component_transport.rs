@@ -422,6 +422,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
             scope: String::new(),
             subject_token: String::new(),
             subject_token_type: String::new(),
+            expires_in: 0,
         })
         .await
         .expect("token")
