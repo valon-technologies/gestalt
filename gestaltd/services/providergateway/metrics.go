@@ -19,10 +19,10 @@ var (
 	attrProviderGatewayOperation            = attribute.Key("gestaltd.provider_gateway.operation.name")
 	attrProviderGatewaySource               = attribute.Key("gestaltd.provider_gateway.source")
 	attrProviderGatewayTransportPath        = attribute.Key("gestaltd.provider_gateway.transport.path")
-	attrProviderGatewayAuthorizationAllowed = attribute.Key("gestaltd.provider_gateway.authorization.allowed")
-	attrProviderGatewayAuthorizationSubject = attribute.Key("gestaltd.provider_gateway.authorization.subject")
-	attrProviderGatewayAuthorizationResource = attribute.Key("gestaltd.provider_gateway.authorization.resource")
-	attrProviderGatewayAuthorizationAction  = attribute.Key("gestaltd.provider_gateway.authorization.action")
+	attrProviderGatewayAuthorizationAllowed  = attribute.Key("gd.allowed")
+	attrProviderGatewayAuthorizationSubject  = attribute.Key("gd.subject")
+	attrProviderGatewayAuthorizationResource = attribute.Key("gd.resource")
+	attrProviderGatewayAuthorizationAction   = attribute.Key("gd.action")
 
 	providerGatewayOperationMetrics     metricutil.MeterCache[providerGatewayMetrics]
 	providerGatewayAuthorizationChecks  metricutil.MeterCache[providerGatewayAuthorizationMetrics]
