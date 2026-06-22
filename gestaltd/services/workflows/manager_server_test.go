@@ -233,8 +233,7 @@ func managerServerRequestContext(callerApp string) *proto.RequestContext {
 			Name: callerApp,
 		},
 		Subject: &proto.SubjectContext{
-			Id:                  "user:user-123",
-			CredentialSubjectId: "user:user-123",
+			Id: "user:user-123",
 		},
 	}
 }

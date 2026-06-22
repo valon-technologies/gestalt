@@ -28,11 +28,10 @@ func RunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *princi
 		base = &principal.Principal{}
 	}
 	value := &principal.Principal{
-		SubjectID:           strings.TrimSpace(runAs.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(runAs.CredentialSubjectID),
-		Scopes:              append([]string(nil), base.Scopes...),
-		ClientID:            strings.TrimSpace(base.ClientID),
-		Audience:            append([]string(nil), base.Audience...),
+		SubjectID: strings.TrimSpace(runAs.SubjectID),
+		Scopes:    append([]string(nil), base.Scopes...),
+		ClientID:  strings.TrimSpace(base.ClientID),
+		Audience:  append([]string(nil), base.Audience...),
 	}
 	if kind, _, ok := core.ParseSubjectID(value.SubjectID); ok {
 		value.Kind = principal.Kind(kind)
@@ -41,9 +40,6 @@ func RunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *princi
 		value.UserID = strings.TrimSpace(base.UserID)
 		value.Identity = base.Identity
 		value.DisplayName = strings.TrimSpace(base.DisplayName)
-	}
-	if value.CredentialSubjectID == "" && principal.IsSystemSubjectID(value.SubjectID) {
-		value.CredentialSubjectID = value.SubjectID
 	}
 	return principal.Canonicalize(value)
 }
@@ -54,7 +50,6 @@ func AuditSubjectFromPrincipal(p *principal.Principal) *core.RunAsSubject {
 		return nil
 	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:           strings.TrimSpace(p.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		SubjectID: strings.TrimSpace(p.SubjectID),
 	})
 }

@@ -397,7 +397,6 @@ pub(crate) fn from_wire_string_list(value: v1::StringList) -> StringList {
 pub(crate) fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectContext {
     v1::SubjectContext {
         id: value.id,
-        credential_subject_id: value.credential_subject_id,
         email: value.email,
         display_name: value.display_name,
         scopes: value.scopes,
@@ -413,7 +412,6 @@ pub(crate) fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectConte
 pub(crate) fn from_wire_subject_context(value: v1::SubjectContext) -> SubjectContext {
     SubjectContext {
         id: value.id,
-        credential_subject_id: value.credential_subject_id,
         email: value.email,
         display_name: value.display_name,
         scopes: value.scopes,

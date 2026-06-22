@@ -368,7 +368,6 @@ class SubjectContext:
     """SubjectContext identifies the caller that initiated an operation."""
 
     id: str = ""
-    credential_subject_id: str = ""
     email: str = ""
     display_name: str = ""
     scopes: list[str] = field(default_factory=list)

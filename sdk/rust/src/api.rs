@@ -26,8 +26,6 @@ pub fn parse_subject_id(subject_id: &str) -> Option<(&str, &str)> {
 pub struct Subject {
     /// Stable subject id.
     pub id: String,
-    /// Subject id used for credential lookup, when different from the actor.
-    pub credential_subject_id: String,
     /// Email address resolved by the Gestalt host for user subjects.
     pub email: String,
     /// Human-readable display name resolved by the Gestalt host for user subjects.
@@ -359,7 +357,6 @@ mod tests {
         let wire = v1::RequestContext {
             subject: Some(v1::SubjectContext {
                 id: "user:ada".to_string(),
-                credential_subject_id: "user:cred".to_string(),
                 email: "ada@example.test".to_string(),
                 display_name: "Ada".to_string(),
                 scopes: vec!["repo:read".to_string()],
@@ -441,7 +438,6 @@ mod tests {
             crate::app::RequestContext {
                 subject: Some(crate::app::SubjectContext {
                     id: "user:ada".to_string(),
-                    credential_subject_id: "user:cred".to_string(),
                     email: "ada@example.test".to_string(),
                     display_name: "Ada".to_string(),
                     scopes: vec!["repo:read".to_string()],

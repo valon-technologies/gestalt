@@ -93,12 +93,11 @@ type SessionCatalogProvider interface {
 
 // Subject identifies the caller that initiated an operation.
 type Subject struct {
-	ID                  string
-	CredentialSubjectID string
-	Email               string
-	DisplayName         string
-	Scopes              []string
-	Permissions         []SubjectPermission
+	ID          string
+	Email       string
+	DisplayName string
+	Scopes      []string
+	Permissions []SubjectPermission
 }
 
 // SubjectPermission bounds which provider operations the current caller can

@@ -815,8 +815,7 @@ type WorkflowRunAsConfig struct {
 }
 
 type WorkflowRunAsSubjectConfig struct {
-	ID                  string `yaml:"id,omitempty"`
-	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
+	ID string `yaml:"id,omitempty"`
 }
 
 func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
@@ -824,8 +823,7 @@ func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 		return nil
 	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:           r.Subject.ID,
-		CredentialSubjectID: r.Subject.CredentialSubjectID,
+		SubjectID: r.Subject.ID,
 	})
 }
 

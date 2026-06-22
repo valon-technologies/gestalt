@@ -139,21 +139,20 @@ func (m *Manager) authorizeAgentInvocationScope(ctx context.Context, req agentIn
 	}
 	subject := agentSubjectFromPrincipal(p)
 	scope := agentturnscope.Scope{
-		ProviderName:        providerName,
-		SessionID:           strings.TrimSpace(agent.SessionID),
-		TurnID:              requestedTurnID,
-		CallerKind:          req.CallerKind,
-		CallerName:          strings.TrimSpace(req.CallerName),
-		WorkflowRunID:       workflowRunID,
-		WorkflowStepID:      workflowStepID,
-		SubjectID:           subject.SubjectID,
-		CredentialSubjectID: subject.CredentialSubjectID,
-		Permissions:         agentTurnPermissions(ctx, p, req.CallerKind, strings.TrimSpace(req.CallerName), sessionScope.ToolRefs),
-		ToolRefs:            append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...),
-		ToolRefsSet:         sessionScope.ToolRefsSet,
-		ListedTools:         append([]coreagent.ListedTool(nil), sessionScope.ListedTools...),
-		ToolSource:          sessionScope.ToolSource,
-		Connections:         m.agentConnectionBindings(providerName),
+		ProviderName:   providerName,
+		SessionID:      strings.TrimSpace(agent.SessionID),
+		TurnID:         requestedTurnID,
+		CallerKind:     req.CallerKind,
+		CallerName:     strings.TrimSpace(req.CallerName),
+		WorkflowRunID:  workflowRunID,
+		WorkflowStepID: workflowStepID,
+		SubjectID:      subject.SubjectID,
+		Permissions:    agentTurnPermissions(ctx, p, req.CallerKind, strings.TrimSpace(req.CallerName), sessionScope.ToolRefs),
+		ToolRefs:       append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...),
+		ToolRefsSet:    sessionScope.ToolRefsSet,
+		ListedTools:    append([]coreagent.ListedTool(nil), sessionScope.ListedTools...),
+		ToolSource:     sessionScope.ToolSource,
+		Connections:    m.agentConnectionBindings(providerName),
 	}
 	if err := m.validateAgentInvocationTurn(ctx, scope, requestedTurnID, req.RequestContext); err != nil {
 		return agentturnscope.Scope{}, err
@@ -200,8 +199,7 @@ func (m *Manager) getAgentInvocationTurn(ctx context.Context, provider coreagent
 			ProviderName: strings.TrimSpace(scope.ProviderName),
 			Context:      reqCtx,
 			Subject: &proto.SubjectContext{
-				Id:                  strings.TrimSpace(scope.SubjectID),
-				CredentialSubjectId: strings.TrimSpace(scope.CredentialSubjectID),
+				Id: strings.TrimSpace(scope.SubjectID),
 			},
 		})
 		if err != nil {
@@ -488,15 +486,11 @@ func agentWorkflowTargetOnlyUsesCurrentAgentProvider(providerName string, target
 func agentScopePrincipal(scope agentturnscope.Scope) *principal.Principal {
 	compiled := principal.CompilePermissions(scope.Permissions)
 	value := &principal.Principal{
-		SubjectID:           strings.TrimSpace(scope.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(scope.CredentialSubjectID),
-		Scopes:              principal.ScopeStringsFromPermissionSet(compiled),
+		SubjectID: strings.TrimSpace(scope.SubjectID),
+		Scopes:    principal.ScopeStringsFromPermissionSet(compiled),
 	}
 	if kind, _, ok := core.ParseSubjectID(value.SubjectID); ok {
 		value.Kind = principal.Kind(kind)
-	}
-	if value.CredentialSubjectID == "" && principal.IsSystemSubjectID(value.SubjectID) {
-		value.CredentialSubjectID = value.SubjectID
 	}
 	return principal.Canonicalize(value)
 }

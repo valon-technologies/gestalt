@@ -341,12 +341,11 @@ type StringList struct {
 //
 // SubjectContext identifies the caller that initiated an operation.
 type SubjectContext struct {
-	Id                  string
-	CredentialSubjectId string
-	Email               string
-	DisplayName         string
-	Scopes              []string
-	Permissions         []*SubjectPermissionContext
+	Id          string
+	Email       string
+	DisplayName string
+	Scopes      []string
+	Permissions []*SubjectPermissionContext
 }
 
 // SubjectPermissionContext is the native message type for gestalt.provider.v1.SubjectPermissionContext.

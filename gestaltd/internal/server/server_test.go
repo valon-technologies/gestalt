@@ -34,9 +34,9 @@ import (
 	"testing"
 	"time"
 
-	mcpgo "github.com/mark3labs/mcp-go/mcp"
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -718,8 +718,7 @@ func relayAppRequestContext() *proto.RequestContext {
 			Name: "support",
 		},
 		Subject: &proto.SubjectContext{
-			Id:                  "user:test-user",
-			CredentialSubjectId: "user:test-user",
+			Id: "user:test-user",
 		},
 	}
 }
@@ -8318,17 +8317,6 @@ func TestLoginCallback(t *testing.T) {
 				}
 				return nil, fmt.Errorf("bad code")
 			},
-			UserInfoFn: func(ctx context.Context, _ *core.UserInfoRequest) (*core.UserInfoResponse, error) {
-				call := gestalt.AuthCallContextFromContext(ctx)
-				if call.CallerBearerToken == "dev-token-user@example.com" {
-					return &core.UserInfoResponse{
-						SubjectID: "user:user@example.com",
-						Email:     "user@example.com",
-						Name:      "User",
-					}, nil
-				}
-				return nil, core.ErrNotFound
-			},
 		}
 		cfg.Services = svc
 		cfg.AuditSink = auditSink
@@ -8396,35 +8384,6 @@ func TestLoginCallback(t *testing.T) {
 	}
 	if _, ok := auditRecord["user_id"]; ok {
 		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
-	}
-
-	sessionResp, err := client.Get(ts.URL + "/api/v1/auth/session")
-	if err != nil {
-		t.Fatalf("GET /api/v1/auth/session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected session 200, got %d", sessionResp.StatusCode)
-	}
-	var sessionBody map[string]any
-	if err := json.NewDecoder(sessionResp.Body).Decode(&sessionBody); err != nil {
-		t.Fatalf("decoding session: %v", err)
-	}
-	subjectID, _ := sessionBody["subjectId"].(string)
-	if strings.TrimSpace(subjectID) == "" {
-		t.Fatalf("expected non-empty subjectId, got %v", sessionBody["subjectId"])
-	}
-	if sessionBody["email"] != "user@example.com" {
-		t.Fatalf("expected email user@example.com, got %v", sessionBody["email"])
-	}
-	if sessionBody["displayName"] != "User" {
-		t.Fatalf("expected displayName User, got %v", sessionBody["displayName"])
-	}
-	if _, ok := sessionBody["credentialSubjectId"]; ok {
-		t.Fatalf("expected session response to omit credentialSubjectId, got %v", sessionBody["credentialSubjectId"])
-	}
-	if _, ok := sessionBody["kind"]; ok {
-		t.Fatalf("expected session response to omit kind, got %v", sessionBody["kind"])
 	}
 }
 
@@ -10894,30 +10853,6 @@ func TestAuthInfoNoAuth(t *testing.T) {
 		t.Fatalf("expected loginSupported false, got %#v", body["loginSupported"])
 	}
 	requireAuthInfoAgentFeature(t, body, false)
-
-	sessionResp, err := http.Get(ts.URL + "/api/v1/auth/session")
-	if err != nil {
-		t.Fatalf("GET /api/v1/auth/session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected session 200, got %d", sessionResp.StatusCode)
-	}
-	var sessionBody map[string]any
-	if err := json.NewDecoder(sessionResp.Body).Decode(&sessionBody); err != nil {
-		t.Fatalf("decoding session: %v", err)
-	}
-	subjectID, _ := sessionBody["subjectId"].(string)
-	email, _ := sessionBody["email"].(string)
-	if strings.TrimSpace(subjectID) == "" && strings.TrimSpace(email) != "anonymous@gestalt" {
-		t.Fatalf("expected non-empty subjectId or anonymous@gestalt email, got %#v", sessionBody)
-	}
-	if _, ok := sessionBody["credentialSubjectId"]; ok {
-		t.Fatalf("expected session response to omit credentialSubjectId, got %v", sessionBody["credentialSubjectId"])
-	}
-	if _, ok := sessionBody["kind"]; ok {
-		t.Fatalf("expected session response to omit kind, got %v", sessionBody["kind"])
-	}
 }
 
 func TestAuthInfoAgentFeature(t *testing.T) {

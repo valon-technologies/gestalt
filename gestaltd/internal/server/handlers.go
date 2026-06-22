@@ -130,11 +130,6 @@ func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Reque
 		return s.resolveServiceAccountCredentialSubjectID(w, r, serviceAccountID)
 	}
 	p := PrincipalFromContext(r.Context())
-	if p != nil {
-		if subjectID := strings.TrimSpace(p.CredentialSubjectID); subjectID != "" {
-			return subjectID, nil
-		}
-	}
 	if principal.IsNonUserPrincipal(p) {
 		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 		if subjectID == "" {
@@ -277,17 +272,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
 	p := PrincipalFromContext(r.Context())
-	if p != nil {
-		if subjectID := strings.TrimSpace(p.CredentialSubjectID); subjectID != "" {
-			return s.connectedIntegrationsForSubject(r.Context(), subjectID)
-		}
+	if subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)); subjectID != "" {
+		return s.connectedIntegrationsForSubject(r.Context(), subjectID)
 	}
 	if principal.IsNonUserPrincipal(p) {
-		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
-		if subjectID == "" {
-			return nil, nil
-		}
-		return s.connectedIntegrationsForSubject(r.Context(), subjectID)
+		return nil, nil
 	}
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {

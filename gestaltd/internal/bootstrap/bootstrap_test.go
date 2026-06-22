@@ -252,8 +252,7 @@ func bootstrapAgentSubjectFromProto(src *proto.SubjectContext) core.RunAsSubject
 		return core.RunAsSubject{}
 	}
 	return core.RunAsSubject{
-		SubjectID:           src.GetId(),
-		CredentialSubjectID: src.GetCredentialSubjectId(),
+		SubjectID: src.GetId(),
 	}
 }
 
@@ -2246,12 +2245,11 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		},
 	})
 	p := &principal.Principal{
-		SubjectID:           "user:user-123",
-		UserID:              "user-123",
-		CredentialSubjectID: "service_account:agent-credential",
-		Kind:                principal.KindUser,
-		Source:              principal.SourceBearer,
-		Scopes:              principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 	reqContext := bootstrapAgentRequestContext(t, p, "managed")
@@ -4680,7 +4678,7 @@ func TestBootstrapConfiguredWorkflowEventDefinitionRunAsAllowsUserCredentialedTa
 		t.Fatalf("requestedBySubjectId = %q", got.GetRequestedBySubjectId())
 	}
 	runAs := agentwire.RunAsSubjectFromProto(got.GetSpec().GetRunAs())
-	if runAs == nil || runAs.SubjectID != "service_account:roadmap-events" || runAs.CredentialSubjectID != "service_account:roadmap-events" {
+	if runAs == nil || runAs.SubjectID != "service_account:roadmap-events" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
 }

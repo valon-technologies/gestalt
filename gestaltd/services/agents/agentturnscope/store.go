@@ -15,21 +15,20 @@ type ConnectionBinding struct {
 }
 
 type Scope struct {
-	ProviderName        string
-	SessionID           string
-	TurnID              string
-	CallerKind          invocation.ProviderKind
-	CallerName          string
-	WorkflowRunID       string
-	WorkflowStepID      string
-	SubjectID           string
-	CredentialSubjectID string
-	Permissions         []core.AccessPermission
-	ToolRefs            []coreagent.ToolRef
-	ToolRefsSet         bool
-	ListedTools         []coreagent.ListedTool
-	ToolSource          coreagent.ToolSourceMode
-	Connections         []ConnectionBinding
+	ProviderName   string
+	SessionID      string
+	TurnID         string
+	CallerKind     invocation.ProviderKind
+	CallerName     string
+	WorkflowRunID  string
+	WorkflowStepID string
+	SubjectID      string
+	Permissions    []core.AccessPermission
+	ToolRefs       []coreagent.ToolRef
+	ToolRefsSet    bool
+	ListedTools    []coreagent.ListedTool
+	ToolSource     coreagent.ToolSourceMode
+	Connections    []ConnectionBinding
 }
 
 // TurnBinding records which caller created a turn so workflow callers can be
@@ -113,21 +112,20 @@ func cloneScope(src Scope) Scope {
 	callerName := strings.TrimSpace(src.CallerName)
 	turnID := strings.TrimSpace(src.TurnID)
 	return Scope{
-		ProviderName:        strings.TrimSpace(src.ProviderName),
-		SessionID:           strings.TrimSpace(src.SessionID),
-		TurnID:              turnID,
-		CallerKind:          callerKind,
-		CallerName:          callerName,
-		WorkflowRunID:       strings.TrimSpace(src.WorkflowRunID),
-		WorkflowStepID:      strings.TrimSpace(src.WorkflowStepID),
-		SubjectID:           strings.TrimSpace(src.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(src.CredentialSubjectID),
-		Permissions:         clonePermissions(src.Permissions),
-		ToolRefs:            cloneToolRefs(src.ToolRefs),
-		ToolRefsSet:         src.ToolRefsSet || len(src.ToolRefs) > 0,
-		ListedTools:         cloneListedTools(src.ListedTools),
-		ToolSource:          src.ToolSource,
-		Connections:         cloneConnectionBindings(src.Connections),
+		ProviderName:   strings.TrimSpace(src.ProviderName),
+		SessionID:      strings.TrimSpace(src.SessionID),
+		TurnID:         turnID,
+		CallerKind:     callerKind,
+		CallerName:     callerName,
+		WorkflowRunID:  strings.TrimSpace(src.WorkflowRunID),
+		WorkflowStepID: strings.TrimSpace(src.WorkflowStepID),
+		SubjectID:      strings.TrimSpace(src.SubjectID),
+		Permissions:    clonePermissions(src.Permissions),
+		ToolRefs:       cloneToolRefs(src.ToolRefs),
+		ToolRefsSet:    src.ToolRefsSet || len(src.ToolRefs) > 0,
+		ListedTools:    cloneListedTools(src.ListedTools),
+		ToolSource:     src.ToolSource,
+		Connections:    cloneConnectionBindings(src.Connections),
 	}
 }
 

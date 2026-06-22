@@ -28,8 +28,7 @@ func TestClientRequestContextFullFidelity(t *testing.T) {
 	reqCtx := &proto.RequestContext{
 		Subject: &proto.SubjectContext{
 			Id:                  "user:alice",
-			CredentialSubjectId: "user:alice-credential",
-			Email:               "alice@example.test",
+						Email:               "alice@example.test",
 			DisplayName:         "Alice",
 			Scopes:              []string{"read", "write"},
 			Permissions: []*proto.SubjectPermissionContext{{
@@ -94,8 +93,7 @@ func TestClientRequestContextFullFidelity(t *testing.T) {
 	want := &client.RequestContext{
 		Subject: &client.SubjectContext{
 			Id:                  "user:alice",
-			CredentialSubjectId: "user:alice-credential",
-			Email:               "alice@example.test",
+						Email:               "alice@example.test",
 			DisplayName:         "Alice",
 			Scopes:              []string{"read", "write"},
 			Permissions: []*client.SubjectPermissionContext{{

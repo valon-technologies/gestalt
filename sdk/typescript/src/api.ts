@@ -20,7 +20,6 @@ import { Workflow } from "./workflow.ts";
 
 export interface Subject {
   id: string;
-  credentialSubjectId: string;
   email: string;
   scopes?: string[] | undefined;
   permissions?: SubjectPermission[] | undefined;
@@ -39,7 +38,6 @@ export interface SubjectPermission {
  */
 export interface SubjectInput {
   id: string;
-  credentialSubjectId?: string | undefined;
   email?: string | undefined;
   displayName?: string | undefined;
   scopes?: readonly string[] | undefined;
@@ -208,7 +206,6 @@ export function request(
     },
     subject: {
       id: subject.id ?? "",
-      credentialSubjectId: subject.credentialSubjectId ?? "",
       email: subject.email ?? "",
       scopes: [...(subject.scopes ?? [])],
       permissions: cloneSubjectPermissions(subject.permissions),
@@ -218,7 +215,6 @@ export function request(
     },
     agentSubject: {
       id: agentSubject.id ?? "",
-      credentialSubjectId: agentSubject.credentialSubjectId ?? "",
       email: agentSubject.email ?? "",
       scopes: [...(agentSubject.scopes ?? [])],
       permissions: cloneSubjectPermissions(agentSubject.permissions),

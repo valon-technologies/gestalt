@@ -224,16 +224,15 @@ func clientRequestContext(req gestalt.Request) *client.RequestContext {
 }
 
 func subjectToClient(subject gestalt.Subject) *client.SubjectContext {
-	if subject.ID == "" && subject.CredentialSubjectID == "" && subject.Email == "" &&
+	if subject.ID == "" && subject.Email == "" &&
 		subject.DisplayName == "" && len(subject.Scopes) == 0 && len(subject.Permissions) == 0 {
 		return nil
 	}
 	out := &client.SubjectContext{
-		Id:                  subject.ID,
-		CredentialSubjectId: subject.CredentialSubjectID,
-		Email:               subject.Email,
-		DisplayName:         subject.DisplayName,
-		Scopes:              append([]string(nil), subject.Scopes...),
+		Id:          subject.ID,
+		Email:       subject.Email,
+		DisplayName: subject.DisplayName,
+		Scopes:      append([]string(nil), subject.Scopes...),
 	}
 	for _, permission := range subject.Permissions {
 		out.Permissions = append(out.Permissions, &client.SubjectPermissionContext{

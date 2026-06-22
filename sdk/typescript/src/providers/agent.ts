@@ -999,7 +999,6 @@ function agentSubjectFromProto(
   }
   return {
     id: subject.id,
-    credentialSubjectId: subject.credentialSubjectId,
     email: subject.email,
     displayName: subject.displayName,
     scopes: [...subject.scopes],

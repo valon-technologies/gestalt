@@ -228,8 +228,6 @@ pub struct AppInvokeGraphQlRequest {
 pub struct SubjectContext {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub credential_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub email: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]

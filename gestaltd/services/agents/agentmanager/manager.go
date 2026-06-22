@@ -1253,8 +1253,7 @@ type agentSessionToolRefMetadata struct {
 }
 
 type agentSessionRunAsMetadata struct {
-	SubjectID           string `json:"subjectId,omitempty"`
-	CredentialSubjectID string `json:"credentialSubjectId,omitempty"`
+	SubjectID string `json:"subjectId,omitempty"`
 }
 
 func (m *Manager) providerCandidates(ctx context.Context, providerName string) ([]namedAgentProvider, error) {
@@ -1573,20 +1572,19 @@ func (m *Manager) storeSessionScope(ctx context.Context, reqContext *proto.Reque
 		connections = nil
 	}
 	return m.turnScopes.PutSession(agentturnscope.Scope{
-		ProviderName:        providerName,
-		SessionID:           sessionID,
-		CallerKind:          callerKind,
-		CallerName:          callerName,
-		WorkflowRunID:       workflowRunID,
-		WorkflowStepID:      workflowStepID,
-		SubjectID:           subject.SubjectID,
-		CredentialSubjectID: subject.CredentialSubjectID,
-		Permissions:         permissions,
-		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolRefsSet:         true,
-		ListedTools:         append([]coreagent.ListedTool(nil), listedTools...),
-		ToolSource:          toolSource,
-		Connections:         connections,
+		ProviderName:   providerName,
+		SessionID:      sessionID,
+		CallerKind:     callerKind,
+		CallerName:     callerName,
+		WorkflowRunID:  workflowRunID,
+		WorkflowStepID: workflowStepID,
+		SubjectID:      subject.SubjectID,
+		Permissions:    permissions,
+		ToolRefs:       append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolRefsSet:    true,
+		ListedTools:    append([]coreagent.ListedTool(nil), listedTools...),
+		ToolSource:     toolSource,
+		Connections:    connections,
 	})
 }
 
@@ -2092,8 +2090,7 @@ func agentSessionRunAsMetadataFromCore(runAs *core.RunAsSubject) *agentSessionRu
 		return nil
 	}
 	return &agentSessionRunAsMetadata{
-		SubjectID:           normalized.SubjectID,
-		CredentialSubjectID: normalized.CredentialSubjectID,
+		SubjectID: normalized.SubjectID,
 	}
 }
 
@@ -2102,8 +2099,7 @@ func agentSessionRunAsMetadataToCore(runAs *agentSessionRunAsMetadata) *core.Run
 		return nil
 	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:           runAs.SubjectID,
-		CredentialSubjectID: runAs.CredentialSubjectID,
+		SubjectID: runAs.SubjectID,
 	})
 }
 
@@ -2137,14 +2133,13 @@ func agentToolRefsEqual(left, right []coreagent.ToolRef) bool {
 }
 
 type agentToolRefCompareKey struct {
-	System          string
-	App             string
-	Operation       string
-	Connection      string
-	Instance        string
-	CredentialMode  core.ConnectionMode
-	RunAsSubject    string
-	RunAsCredential string
+	System         string
+	App            string
+	Operation      string
+	Connection     string
+	Instance       string
+	CredentialMode core.ConnectionMode
+	RunAsSubject   string
 }
 
 func agentToolRefCompareKeyFromRef(ref coreagent.ToolRef) agentToolRefCompareKey {
@@ -2160,7 +2155,6 @@ func agentToolRefCompareKeyFromRef(ref coreagent.ToolRef) agentToolRefCompareKey
 	}
 	if runAs != nil {
 		key.RunAsSubject = runAs.SubjectID
-		key.RunAsCredential = runAs.CredentialSubjectID
 	}
 	return key
 }
@@ -4112,8 +4106,7 @@ func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {
 		return core.RunAsSubject{}
 	}
 	return core.RunAsSubject{
-		SubjectID:           normalized.SubjectID,
-		CredentialSubjectID: normalized.CredentialSubjectID,
+		SubjectID: normalized.SubjectID,
 	}
 }
 
@@ -4121,10 +4114,7 @@ func agentToolRunAsKeyString(subject core.RunAsSubject) string {
 	if subject == (core.RunAsSubject{}) {
 		return ""
 	}
-	return strings.Join([]string{
-		subject.SubjectID,
-		subject.CredentialSubjectID,
-	}, "\x00")
+	return strings.TrimSpace(subject.SubjectID)
 }
 
 func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Provider, source coreagent.ToolSourceMode) (bool, error) {
@@ -4310,8 +4300,7 @@ func agentSubjectFromPrincipal(p *principal.Principal) core.RunAsSubject {
 		return core.RunAsSubject{}
 	}
 	return core.RunAsSubject{
-		SubjectID:           strings.TrimSpace(p.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		SubjectID: strings.TrimSpace(p.SubjectID),
 	}
 }
 

@@ -1135,7 +1135,6 @@ fn timestamp_from_time(value: Option<SystemTime>) -> Option<Timestamp> {
 fn agent_subject_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject> {
     value.map(|value| Subject {
         id: value.id,
-        credential_subject_id: value.credential_subject_id,
         email: value.email,
         display_name: value.display_name,
     })
@@ -1158,7 +1157,6 @@ pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef
 fn agent_run_as_context_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject> {
     value.map(|value| Subject {
         id: value.id,
-        credential_subject_id: value.credential_subject_id,
         email: value.email,
         display_name: value.display_name,
     })

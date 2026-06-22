@@ -268,9 +268,6 @@ func WorkflowSubjectContext(subject *gestalt.Subject) map[string]any {
 	if id := strings.TrimSpace(subject.ID); id != "" {
 		value["id"] = id
 	}
-	if credentialSubjectID := strings.TrimSpace(subject.CredentialSubjectID); credentialSubjectID != "" {
-		value["credentialSubjectId"] = credentialSubjectID
-	}
 	if email := strings.TrimSpace(subject.Email); email != "" {
 		value["email"] = email
 	}

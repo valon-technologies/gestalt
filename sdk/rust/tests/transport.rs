@@ -104,12 +104,6 @@ impl Provider for TestProvider {
                     .unwrap_or_default();
                 Ok(Some(gestalt::Subject {
                     id: format!("test:{team_id}:{user_id}"),
-                    credential_subject_id: context
-                        .workflow
-                        .get("runId")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
                     email: format!(
                         "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
                         request.method.as_str(),
@@ -403,7 +397,6 @@ async fn serves_provider_requests_over_unix_socket() {
                     operation: "reviews.get".to_string(),
                     run_as: Some(SubjectContext {
                         id: "service_account:review-worker".to_string(),
-                        credential_subject_id: "service_account:review-worker".to_string(),
                         email: String::new(),
                         ..Default::default()
                     }),
@@ -539,7 +532,6 @@ async fn serves_provider_requests_over_unix_socket() {
         subject.email,
         "POST|/api/v1/test/commands/support|application/x-www-form-urlencoded|v0=abc123|trace-123|team_id=T123&user_id=U456|test_signed|test-app|T123|ada@example.com|grace@example.com|subject|admin|https://gestalt.example.test"
     );
-    assert_eq!(subject.credential_subject_id, "run-123");
 
     let fallback = client
         .resolve_http_subject(ResolveHttpSubjectRequest {

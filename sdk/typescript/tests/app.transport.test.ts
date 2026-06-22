@@ -34,7 +34,6 @@ import { removeTempDir } from "./helpers.ts";
 function subjectContext(id: string): SubjectContext {
   return {
     id,
-    credentialSubjectId: "",
     email: "",
     displayName: "",
     scopes: [],

@@ -62,8 +62,7 @@ func appTransportRequestContext() *client.RequestContext {
 	return &client.RequestContext{
 		Subject: &client.SubjectContext{
 			Id:                  "user:transport",
-			CredentialSubjectId: "user:transport",
-			Email:               "transport@example.test",
+						Email:               "transport@example.test",
 		},
 	}
 }
@@ -232,8 +231,7 @@ func TestTransport_AppCallerAndWorkflowContext(t *testing.T) {
 	app, err := client.ConnectApp(context.Background(), "", client.WithRequestContext(&client.RequestContext{
 		Subject: &client.SubjectContext{
 			Id:                  "service_account:workflow-runner",
-			CredentialSubjectId: "service_account:workflow-runner",
-		},
+					},
 		Caller: &client.ProviderContext{Kind: "workflow", Name: "temporal"},
 		Workflow: map[string]any{
 			"providerName":  "temporal",

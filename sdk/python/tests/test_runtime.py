@@ -503,7 +503,6 @@ class MainEntrypointTests(unittest.TestCase):
                             operation="bot.getPullRequest",
                             run_as=app_pb2.SubjectContext(
                                 id="service_account:github-review",
-                                credential_subject_id="service_account:github-review",
                             ),
                         )
                     ],

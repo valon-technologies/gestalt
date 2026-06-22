@@ -274,7 +274,6 @@ function agentRunAsSubjectFromProto(
   }
   return {
     id: subject.id,
-    credentialSubjectId: subject.credentialSubjectId,
     email: subject.email,
     displayName: subject.displayName,
     scopes: [...subject.scopes],
@@ -290,7 +289,6 @@ function agentRunAsSubjectToProto(
   }
   return create(SubjectContextSchema, {
     id: subject.id ?? "",
-    credentialSubjectId: subject.credentialSubjectId ?? "",
     email: subject.email ?? "",
     displayName: subject.displayName ?? "",
     scopes: [...(subject.scopes ?? [])],

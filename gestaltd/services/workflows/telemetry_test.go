@@ -384,8 +384,7 @@ func workflowManagerTelemetryRequestContext() *proto.RequestContext {
 			Name: "slack",
 		},
 		Subject: &proto.SubjectContext{
-			Id:                  "user:user-123",
-			CredentialSubjectId: "user:user-123",
+			Id: "user:user-123",
 		},
 	}
 }

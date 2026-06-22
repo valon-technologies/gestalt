@@ -2030,7 +2030,6 @@ func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowR
 	}
 	subject := *runAs.Subject
 	subject.ID = strings.TrimSpace(subject.ID)
-	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
 	if subject.ID == "" {
 		return nil, fmt.Errorf("config validation: %s.subject.id is required", path)
 	}

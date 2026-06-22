@@ -185,8 +185,7 @@ func workflowProviderTransportContext() *proto.RequestContext {
 	return &proto.RequestContext{
 		Subject: &proto.SubjectContext{
 			Id:                  "user:transport",
-			CredentialSubjectId: "user:transport",
-			Email:               "transport@example.test",
+						Email:               "transport@example.test",
 		},
 	}
 }

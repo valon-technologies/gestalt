@@ -226,12 +226,11 @@ func subjectFromProto(value *proto.SubjectContext) *Subject {
 		return nil
 	}
 	return &Subject{
-		ID:                  value.GetId(),
-		CredentialSubjectID: value.GetCredentialSubjectId(),
-		Email:               value.GetEmail(),
-		DisplayName:         value.GetDisplayName(),
-		Scopes:              cloneStrings(value.GetScopes()),
-		Permissions:         subjectPermissionsFromProto(value.GetPermissions()),
+		ID:          value.GetId(),
+		Email:       value.GetEmail(),
+		DisplayName: value.GetDisplayName(),
+		Scopes:      cloneStrings(value.GetScopes()),
+		Permissions: subjectPermissionsFromProto(value.GetPermissions()),
 	}
 }
 
@@ -240,12 +239,11 @@ func subjectToProto(value *Subject) *proto.SubjectContext {
 		return nil
 	}
 	return &proto.SubjectContext{
-		Id:                  value.ID,
-		CredentialSubjectId: value.CredentialSubjectID,
-		Email:               value.Email,
-		DisplayName:         value.DisplayName,
-		Scopes:              cloneStrings(value.Scopes),
-		Permissions:         subjectPermissionsToProto(value.Permissions),
+		Id:          value.ID,
+		Email:       value.Email,
+		DisplayName: value.DisplayName,
+		Scopes:      cloneStrings(value.Scopes),
+		Permissions: subjectPermissionsToProto(value.Permissions),
 	}
 }
 

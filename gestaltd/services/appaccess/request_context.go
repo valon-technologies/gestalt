@@ -41,12 +41,11 @@ func RequestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 
 	if p := principal.FromContext(ctx); p != nil {
 		out.Subject = &proto.SubjectContext{
-			Id:                  subjectIDForPrincipal(p),
-			CredentialSubjectId: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-			Email:               subjectEmail(p),
-			DisplayName:         subjectDisplayName(p),
-			Scopes:              cloneStrings(p.Scopes),
-			Permissions:         permissionSetToSubjectPermissionContext(p.EffectivePermissions()),
+			Id:          subjectIDForPrincipal(p),
+			Email:       subjectEmail(p),
+			DisplayName: subjectDisplayName(p),
+			Scopes:      cloneStrings(p.Scopes),
+			Permissions: permissionSetToSubjectPermissionContext(p.EffectivePermissions()),
 		}
 	}
 
@@ -338,10 +337,9 @@ func PrincipalFromSubjectContext(subject *proto.SubjectContext) *principal.Princ
 		return nil
 	}
 	p := &principal.Principal{
-		SubjectID:           strings.TrimSpace(subject.GetId()),
-		CredentialSubjectID: strings.TrimSpace(subject.GetCredentialSubjectId()),
-		DisplayName:         strings.TrimSpace(subject.GetDisplayName()),
-		Scopes:              mergeSubjectScopes(subject),
+		SubjectID:   strings.TrimSpace(subject.GetId()),
+		DisplayName: strings.TrimSpace(subject.GetDisplayName()),
+		Scopes:      mergeSubjectScopes(subject),
 	}
 	if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
 		p.Kind = principal.Kind(kind)
@@ -368,12 +366,11 @@ func subjectContextFromPrincipal(p *principal.Principal) *proto.SubjectContext {
 		return nil
 	}
 	return &proto.SubjectContext{
-		Id:                  p.SubjectID,
-		CredentialSubjectId: p.CredentialSubjectID,
-		Email:               subjectEmail(p),
-		DisplayName:         subjectDisplayName(p),
-		Scopes:              cloneStrings(p.Scopes),
-		Permissions:         permissionSetToSubjectPermissionContext(p.EffectivePermissions()),
+		Id:          p.SubjectID,
+		Email:       subjectEmail(p),
+		DisplayName: subjectDisplayName(p),
+		Scopes:      cloneStrings(p.Scopes),
+		Permissions: permissionSetToSubjectPermissionContext(p.EffectivePermissions()),
 	}
 }
 

@@ -362,25 +362,46 @@ func (a credentialActor) applyTo(tm *credentialMaterial) {
 }
 
 func credentialMaterialContext(ctx context.Context, p *principal.Principal, tm credentialMaterial) context.Context {
-	if p != nil {
-		p = principal.Canonicalized(p)
-		if p != nil {
-			p.CredentialSubjectID = strings.TrimSpace(tm.SubjectID)
-			return principal.WithPrincipal(ctx, p)
-		}
+	if cred := principalForCredentialMaterial(p, tm); cred != nil {
+		return principal.WithPrincipal(ctx, cred)
 	}
-	if strings.TrimSpace(tm.ActorSubjectID) == "" {
-		return ctx
+	return ctx
+}
+
+func principalForCredentialMaterial(p *principal.Principal, tm credentialMaterial) *principal.Principal {
+	if subjectID := strings.TrimSpace(tm.SubjectID); subjectID != "" {
+		cred := &principal.Principal{
+			SubjectID: subjectID,
+			Source:    principal.SourceBearer,
+		}
+		if suffix := principal.UserIDFromSubjectID(subjectID); suffix != "" {
+			if strings.Contains(suffix, "@") {
+				cred.Identity = &core.UserIdentity{Email: suffix}
+				cred.Kind = principal.KindUser
+			} else {
+				cred.UserID = suffix
+				cred.Kind = principal.KindUser
+			}
+		} else if kind := principal.KindFromSubjectID(subjectID); kind != "" {
+			cred.Kind = kind
+		}
+		return principal.Canonicalize(cred)
+	}
+	if p := principal.Canonicalized(p); p != nil {
+		return p
+	}
+	actorSubjectID := strings.TrimSpace(tm.ActorSubjectID)
+	if actorSubjectID == "" {
+		return nil
 	}
 	actor := &principal.Principal{
-		SubjectID:           strings.TrimSpace(tm.ActorSubjectID),
-		UserID:              strings.TrimSpace(tm.ActorUserID),
-		CredentialSubjectID: strings.TrimSpace(tm.SubjectID),
+		SubjectID: actorSubjectID,
+		UserID:    strings.TrimSpace(tm.ActorUserID),
 	}
 	if kind, _, ok := core.ParseSubjectID(actor.SubjectID); ok {
 		actor.Kind = principal.Kind(kind)
 	}
-	return principal.WithPrincipal(ctx, principal.Canonicalize(actor))
+	return principal.Canonicalize(actor)
 }
 
 type connectionSetupResult struct {
