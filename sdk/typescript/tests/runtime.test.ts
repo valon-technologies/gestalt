@@ -1065,6 +1065,24 @@ test("identity provider supports runtime metadata, OAuth flows, and introspectio
   expect(introspected.subject).toBe("user:fixture@example.com");
 });
 
+test("identity provider token forwards the request-side expiresIn hint", async () => {
+  const provider = await loadProviderFromTarget(fixturePath("auth-provider"));
+  const auth = createIdentityService(provider as any);
+
+  const token = await (auth.token as any)(
+    create(TokenRequestSchema, {
+      grantType: "authorization_code",
+      code: "fixture-auth-code",
+      redirectUri: "https://app.example.test/callback",
+      clientId: "gestaltd",
+      expiresIn: 7776000n,
+    }),
+  );
+  // The fixture echoes request.expiresIn back through the runtime adapter;
+  // 7776000n seconds (90 days) proves the hint reached the provider handler.
+  expect(token.expiresIn).toBe(7776000n);
+});
+
 test("runtime lifecycle labels provider identity failures", async () => {
   const app = defineApp({
     operations: [

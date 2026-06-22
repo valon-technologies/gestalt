@@ -14,6 +14,10 @@ const (
 	SubjectTokenTypeAccessToken = "urn:ietf:params:oauth:token-type:access_token"
 )
 
+// MaxTokenExpiresInSeconds is the upper bound a caller may request for a
+// long-lived API token lifetime. One year matches the OIDC provider's clamp.
+const MaxTokenExpiresInSeconds = int64(365 * 24 * 60 * 60)
+
 // IdentityProvider is the RFC 6749 / RFC 7662 / OIDF Grant Management
 // authentication surface. Providers own subjects, grants, token issuance,
 // storage, introspection, and revocation.
@@ -84,6 +88,7 @@ type TokenRequest struct {
 	Scope            string
 	SubjectToken     string
 	SubjectTokenType string
+	ExpiresIn        int64
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.

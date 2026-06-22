@@ -33,8 +33,9 @@ func (s *Server) validateCreateGrantRequest(req createTokenRequest) (string, err
 }
 
 type createTokenRequest struct {
-	Name   string `json:"name"`
-	Scopes string `json:"scopes"`
+	Name      string `json:"name"`
+	Scopes    string `json:"scopes"`
+	ExpiresIn *int64 `json:"expiresIn,omitempty"`
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +82,13 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	expiresIn, err := tokenExpiresIn(req.ExpiresIn)
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	ctx := s.callerAuthContext(r.Context(), r)
 	callerToken, err := s.callerBearerToken(r)
 	if err != nil {
@@ -94,6 +102,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		SubjectTokenType: core.SubjectTokenTypeAccessToken,
 		Scope:            scope,
 		ClientID:         core.DefaultOAuthClientID,
+		ExpiresIn:        expiresIn,
 	})
 	grantID := ""
 	if tokenResp != nil {

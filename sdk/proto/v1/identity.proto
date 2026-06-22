@@ -39,6 +39,11 @@ message TokenRequest {
   string subject_token = 8;
   // subject_token_type is the RFC 8693 token type for subject_token.
   string subject_token_type = 9;
+  // expires_in is a Gestalt request-side extension for the desired access-token
+  // lifetime in seconds. The provider MAY clamp or default it; expires_in in
+  // TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+  // default.
+  int64 expires_in = 10;
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -138,6 +143,7 @@ service Identity {
     option (signature) = "scope";
     option (signature) = "subject_token";
     option (signature) = "subject_token_type";
+    option (optional_signature) = "expires_in";
   }
   rpc Introspect(IntrospectRequest) returns (IntrospectResponse) {
     option (signature) = "token";

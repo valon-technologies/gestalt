@@ -112,6 +112,7 @@ pub(crate) fn to_wire_token_request(value: TokenRequest) -> v1::TokenRequest {
         scope: value.scope,
         subject_token: value.subject_token,
         subject_token_type: value.subject_token_type,
+        expires_in: value.expires_in,
     }
 }
 

@@ -59,6 +59,7 @@ fn token_request_from_proto(value: ProtoTokenRequest) -> TokenRequest {
         scope: value.scope,
         subject_token: value.subject_token,
         subject_token_type: value.subject_token_type,
+        expires_in: value.expires_in,
     }
 }
 

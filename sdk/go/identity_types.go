@@ -35,6 +35,7 @@ type TokenRequest struct {
 	Scope            string
 	SubjectToken     string
 	SubjectTokenType string
+	ExpiresIn        int64
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -148,6 +149,7 @@ func tokenRequestFromProto(req *proto.TokenRequest) *TokenRequest {
 		Scope:            req.GetScope(),
 		SubjectToken:     req.GetSubjectToken(),
 		SubjectTokenType: req.GetSubjectTokenType(),
+		ExpiresIn:        req.GetExpiresIn(),
 	}
 }
 

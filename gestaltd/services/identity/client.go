@@ -244,6 +244,7 @@ func tokenRequestToProto(req *core.TokenRequest) *proto.TokenRequest {
 		Scope:            req.Scope,
 		SubjectToken:     req.SubjectToken,
 		SubjectTokenType: req.SubjectTokenType,
+		ExpiresIn:        req.ExpiresIn,
 	}
 }
 

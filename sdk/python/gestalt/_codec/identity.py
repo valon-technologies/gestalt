@@ -168,6 +168,7 @@ def to_wire_token_request(value: native.TokenRequest) -> Any:
         scope=value.scope,
         subject_token=value.subject_token,
         subject_token_type=value.subject_token_type,
+        expires_in=value.expires_in,
     )
 
 
@@ -181,6 +182,7 @@ def from_wire_token_request(value: Any) -> native.TokenRequest:
         scope=value.scope,
         subject_token=value.subject_token,
         subject_token_type=value.subject_token_type,
+        expires_in=value.expires_in,
     )
 
 
