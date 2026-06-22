@@ -12,13 +12,6 @@ const (
 	ProviderKindAuthorization ProviderKind = "authorization"
 )
 
-type GatewaySource string
-
-const (
-	GatewaySourceSDKGRPC  GatewaySource = "sdk_grpc"
-	GatewaySourceInternal GatewaySource = "internal"
-)
-
 type TransportPath string
 
 const (
@@ -44,7 +37,6 @@ type ProviderGatewayRequest struct {
 	ServiceName    string
 	Operation      string
 	RequestContext *RequestContext
-	Source         GatewaySource
 	CallerToken    string
 	Payload        []byte
 }

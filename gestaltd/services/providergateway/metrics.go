@@ -7,7 +7,6 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -18,9 +17,7 @@ var (
 	attrProviderGatewayProviderKind          = attribute.Key("gd.provider_kind")
 	attrProviderGatewayServiceName           = attribute.Key("gd.service")
 	attrProviderGatewayOperation             = attribute.Key("gd.operation")
-	attrProviderGatewaySource                = attribute.Key("gd.source")
 	attrProviderGatewayTransportPath         = attribute.Key("gd.transport")
-	attrProviderGatewayInvocationSurface     = attribute.Key("gd.invocation_surface")
 	attrProviderGatewayAuthorizationAllowed  = attribute.Key("gd.allowed")
 	attrProviderGatewayAuthorizationSubject  = attribute.Key("gd.subject")
 	attrProviderGatewayAuthorizationResource = attribute.Key("gd.resource")
@@ -118,9 +115,7 @@ func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, er
 		attrProviderGatewayProviderKind.String(metricutil.AttrValue(string(req.ProviderKind))),
 		attrProviderGatewayServiceName.String(metricutil.AttrValue(req.ServiceName)),
 		attrProviderGatewayOperation.String(metricutil.AttrValue(req.Operation)),
-		attrProviderGatewaySource.String(metricutil.AttrValue(string(req.Source))),
 		attrProviderGatewayTransportPath.String(metricutil.AttrValue(string(transportPath))),
-		attrProviderGatewayInvocationSurface.String(metricutil.AttrValue(string(invocation.InvocationSurfaceFromContext(ctx)))),
 	}
 	metricAttrs := metric.WithAttributes(attrs...)
 
