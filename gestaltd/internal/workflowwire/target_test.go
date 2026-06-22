@@ -323,7 +323,9 @@ func TestParseTargetMapClonesAgentWorkspaceCheckouts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseTargetMap() error = %v", err)
 	}
-	checkouts = append(checkouts, map[string]any{
+	workspaceRaw := raw["steps"].([]any)[0].(map[string]any)["agent"].(map[string]any)["workspace"].(map[string]any)
+	checkoutsRaw := workspaceRaw["checkouts"].([]any)
+	workspaceRaw["checkouts"] = append(checkoutsRaw, map[string]any{
 		"url":  "https://github.com/valon-technologies/gestalt.git",
 		"ref":  "main",
 		"path": "gestalt",
@@ -331,5 +333,8 @@ func TestParseTargetMapClonesAgentWorkspaceCheckouts(t *testing.T) {
 	workspace := target.Steps[0].Agent.Workspace
 	if len(workspace.Checkouts) != 1 {
 		t.Fatalf("workspace checkouts = %#v, want one checkout", workspace.Checkouts)
+	}
+	if workspace.Checkouts[0].Path != "toolshed" {
+		t.Fatalf("first checkout path = %q, want toolshed", workspace.Checkouts[0].Path)
 	}
 }

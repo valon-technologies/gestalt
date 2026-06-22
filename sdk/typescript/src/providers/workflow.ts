@@ -70,8 +70,6 @@ import {
   WorkflowStepWhenSchema,
   WorkflowTextSchema,
   WorkflowValueSchema,
-  AgentWorkspaceGitCheckoutSchema,
-  AgentWorkspaceSchema,
   type ApplyWorkflowProviderDefinitionRequest as ProtoApplyWorkflowProviderDefinitionRequest,
   type BoundWorkflowTarget as ProtoBoundWorkflowTarget,
   type CancelWorkflowProviderRunRequest as ProtoCancelWorkflowProviderRunRequest,
@@ -115,6 +113,10 @@ import {
   type WorkflowText as ProtoWorkflowText,
   type WorkflowValue as ProtoWorkflowValue,
 } from "../internal/gen/v1/workflow_pb.ts";
+import {
+  fromWireAgentWorkspace,
+  toWireAgentWorkspace,
+} from "../internal/codec/agent.ts";
 import { ProviderBase, type ProviderBaseOptions } from "../provider.ts";
 import {
   dateFromTimestamp,
@@ -1154,7 +1156,10 @@ export function workflowStepAgentTurnToProto(input?: WorkflowStepAgentTurn): Pro
     tools: input.tools?.map(agentToolRefToProto) ?? [],
     output: agentOutputToProto(input.output),
     modelOptions: optionalStruct(input.modelOptions),
-    workspace: workflowAgentWorkspaceToProto(input.workspace),
+    workspace:
+      input.workspace !== undefined
+        ? toWireAgentWorkspace(input.workspace)
+        : undefined,
   });
 }
 
@@ -1169,37 +1174,10 @@ export function workflowStepAgentTurnFromProto(input?: ProtoWorkflowStepAgentTur
     tools: input.tools.map(agentToolRefFromProto),
     output: agentOutputFromProto(input.output),
     modelOptions: optionalObjectFromStruct(input.modelOptions),
-    workspace: workflowAgentWorkspaceFromProto(input.workspace),
-  };
-}
-
-function workflowAgentWorkspaceToProto(
-  workspace?: AgentWorkspace,
-): ReturnType<typeof create<typeof AgentWorkspaceSchema>> | undefined {
-  if (workspace === undefined) return undefined;
-  return create(AgentWorkspaceSchema, {
-    checkouts: workspace.checkouts.map((checkout) =>
-      create(AgentWorkspaceGitCheckoutSchema, {
-        url: checkout.url,
-        ref: checkout.ref,
-        path: checkout.path,
-      }),
-    ),
-    cwd: workspace.cwd,
-  });
-}
-
-function workflowAgentWorkspaceFromProto(
-  workspace?: ReturnType<typeof create<typeof AgentWorkspaceSchema>>,
-): AgentWorkspace | undefined {
-  if (workspace === undefined) return undefined;
-  return {
-    checkouts: workspace.checkouts.map((checkout) => ({
-      url: checkout.url,
-      ref: checkout.ref,
-      path: checkout.path,
-    })),
-    cwd: workspace.cwd,
+    workspace:
+      input.workspace !== undefined
+        ? fromWireAgentWorkspace(input.workspace)
+        : undefined,
   };
 }
 
