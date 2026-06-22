@@ -6,48 +6,30 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-func TestProviderServerLeavesGatewaySourceInternalByDefault(t *testing.T) {
+func TestProviderServerStampsAppSDKOrigin(t *testing.T) {
 	t.Parallel()
 
-	provider := &sourceRecordingAuthorizationProvider{}
+	provider := &originRecordingAuthorizationProvider{}
 	server := NewProviderServer(provider)
 
 	_, err := server.CheckAccess(context.Background(), &proto.CheckAccessRequest{})
 	if err != nil {
 		t.Fatalf("CheckAccess: %v", err)
 	}
-	if provider.source != providergateway.GatewaySourceInternal {
-		t.Fatalf("source = %q, want %q", provider.source, providergateway.GatewaySourceInternal)
+	if provider.origin != invocation.OriginAppSDK {
+		t.Fatalf("origin = %q, want %q", provider.origin, invocation.OriginAppSDK)
 	}
 }
 
-func TestProviderServerAppliesConfiguredGatewaySource(t *testing.T) {
-	t.Parallel()
-
-	provider := &sourceRecordingAuthorizationProvider{}
-	server := NewProviderServer(
-		provider,
-		WithGatewaySource(providergateway.GatewaySourceSDKGRPC),
-	)
-
-	_, err := server.CheckAccess(context.Background(), &proto.CheckAccessRequest{})
-	if err != nil {
-		t.Fatalf("CheckAccess: %v", err)
-	}
-	if provider.source != providergateway.GatewaySourceSDKGRPC {
-		t.Fatalf("source = %q, want %q", provider.source, providergateway.GatewaySourceSDKGRPC)
-	}
-}
-
-type sourceRecordingAuthorizationProvider struct {
+type originRecordingAuthorizationProvider struct {
 	core.AuthorizationProvider
-	source providergateway.GatewaySource
+	origin invocation.Origin
 }
 
-func (p *sourceRecordingAuthorizationProvider) CheckAccess(ctx context.Context, _ *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	p.source = providergateway.SourceFromContext(ctx)
+func (p *originRecordingAuthorizationProvider) CheckAccess(ctx context.Context, _ *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.origin = invocation.OriginFromContext(ctx)
 	return &proto.CheckAccessResponse{Allowed: true}, nil
 }

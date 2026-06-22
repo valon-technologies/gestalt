@@ -350,6 +350,10 @@ func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocat
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// App-access is the SDK-facing gRPC entry point: a reaching caller is an app
+	// calling back into gestaltd over gRPC, so it reports app_sdk as the
+	// immediate caller class regardless of any propagated surface.
+	ctx = invocation.WithOrigin(ctx, invocation.OriginAppSDK)
 	if callCtx.principal != nil {
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(callCtx.principal))
 	}

@@ -155,6 +155,7 @@ func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
+		"gd.origin":   "unknown",
 		"gd.allowed":  "false",
 		"gd.subject":  "subject/user:alice",
 		"gd.resource": "provider/authz-primary",
@@ -289,7 +290,6 @@ func TestDirectTransportInvokeRecordsMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceSDKGRPC,
 	}
 
 	_, err := (DirectTransport{}).Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
@@ -316,7 +316,6 @@ func TestDirectTransportInvokeRecordsErrorMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceInternal,
 	}
 	wantErr := errors.New("provider failed")
 
@@ -345,7 +344,6 @@ func TestProviderGatewayTransportInvokeRecordsMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceSDKGRPC,
 	}
 
 	_, err := transport.Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
@@ -373,7 +371,6 @@ func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
 		ProviderKind: ProviderKindAuthorization,
 		ServiceName:  "gestalt.v1.Authorization",
 		Operation:    "CheckAccess",
-		Source:       GatewaySourceInternal,
 	}
 	wantErr := errors.New("provider failed")
 
@@ -397,7 +394,7 @@ func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath Transp
 		"gd.provider_kind": string(req.ProviderKind),
 		"gd.service":       req.ServiceName,
 		"gd.operation":     req.Operation,
-		"gd.source":        string(req.Source),
+		"gd.origin":        "unknown",
 		"gd.transport":     string(transportPath),
 	}
 }

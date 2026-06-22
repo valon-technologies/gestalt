@@ -88,6 +88,7 @@ type CallerProvider struct {
 }
 
 type invocationSurfaceCtxKey struct{}
+type originCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
 type callerProviderCtxKey struct{}
@@ -109,6 +110,28 @@ const (
 	InvocationSurfaceHTTP        InvocationSurface = "http"
 	InvocationSurfaceHTTPBinding InvocationSurface = "http_binding"
 	InvocationSurfaceMCP         InvocationSurface = "mcp"
+)
+
+// Origin classifies the kind of caller that initiated an invocation. It is the
+// nearest caller class, not the ultimate origin: an app SDK call that was
+// itself triggered by an external request is reported as OriginAppSDK.
+type Origin string
+
+const (
+	// OriginExternal entered via an external request boundary (the HTTP invoke
+	// API, HTTP bindings/webhooks, or MCP clients).
+	OriginExternal Origin = "external"
+	// OriginWorkflow was driven by the workflow manager.
+	OriginWorkflow Origin = "workflow"
+	// OriginAppSDK is an app calling back into gestaltd via the SDK over gRPC.
+	OriginAppSDK Origin = "app_sdk"
+	// OriginInternal is a server-side system invocation (bootstrap, state
+	// setup, background work).
+	OriginInternal Origin = "internal"
+	// OriginUnknown is the fallback for a path that has not been instrumented
+	// yet. A non-zero unknown count is the signal that an entry point still
+	// needs a stamp.
+	OriginUnknown Origin = "unknown"
 )
 
 func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
@@ -328,6 +351,30 @@ func WithInvocationSurface(ctx context.Context, surface InvocationSurface) conte
 func InvocationSurfaceFromContext(ctx context.Context) InvocationSurface {
 	surface, _ := ctx.Value(invocationSurfaceCtxKey{}).(InvocationSurface)
 	return surface
+}
+
+// WithOrigin stamps the caller class onto the context. Each entry point stamps
+// exactly once; the nearest stamp wins, so deeper boundaries (e.g. an SDK
+// callback) overwrite outer ones.
+func WithOrigin(ctx context.Context, origin Origin) context.Context {
+	if origin == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, originCtxKey{}, origin)
+}
+
+func OriginFromContext(ctx context.Context) Origin {
+	origin, _ := ctx.Value(originCtxKey{}).(Origin)
+	return origin
+}
+
+// ResolveOrigin reads the stamped origin, defaulting to OriginUnknown when no
+// entry point declared itself.
+func ResolveOrigin(ctx context.Context) Origin {
+	if origin := OriginFromContext(ctx); origin != "" {
+		return origin
+	}
+	return OriginUnknown
 }
 
 func WithHTTPBinding(ctx context.Context, binding string) context.Context {

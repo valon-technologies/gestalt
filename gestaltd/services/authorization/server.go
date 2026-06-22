@@ -5,7 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -13,17 +13,10 @@ import (
 
 type providerServer struct {
 	proto.UnimplementedAuthorizationServer
-	provider      core.AuthorizationProvider
-	gatewaySource providergateway.GatewaySource
+	provider core.AuthorizationProvider
 }
 
 type ProviderServerOption func(*providerServer)
-
-func WithGatewaySource(source providergateway.GatewaySource) ProviderServerOption {
-	return func(s *providerServer) {
-		s.gatewaySource = source
-	}
-}
 
 func NewProviderServer(provider core.AuthorizationProvider, opts ...ProviderServerOption) proto.AuthorizationServer {
 	s := &providerServer{provider: provider}
@@ -98,11 +91,11 @@ func (s *providerServer) ListActiveModelResourceTypes(ctx context.Context, req *
 	return s.provider.ListActiveModelResourceTypes(s.providerGatewayContext(ctx), req)
 }
 
+// providerGatewayContext stamps the caller class for the authorization host
+// service: apps reaching this gRPC entry point are calling back into gestaltd
+// via the SDK, so they report as app_sdk.
 func (s *providerServer) providerGatewayContext(ctx context.Context) context.Context {
-	if s == nil {
-		return ctx
-	}
-	return providergateway.WithSource(ctx, s.gatewaySource)
+	return invocation.WithOrigin(ctx, invocation.OriginAppSDK)
 }
 
 func (s *providerServer) requireProvider() error {

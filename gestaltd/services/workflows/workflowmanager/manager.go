@@ -58,6 +58,9 @@ func workflowCaller(ctx context.Context, requested invocation.CallerProvider) in
 }
 
 func withWorkflowCaller(ctx context.Context, caller invocation.CallerProvider) context.Context {
+	// Invocations driven by the workflow manager report as workflow, even when
+	// the caller provider is unset.
+	ctx = invocation.WithOrigin(ctx, invocation.OriginWorkflow)
 	caller = normalizeWorkflowCaller(caller)
 	if caller.Kind == "" || caller.Name == "" {
 		return ctx

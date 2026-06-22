@@ -258,6 +258,7 @@ func (h *StatelessHTTPHandler) callTool(ctx context.Context, req mcpgo.CallToolR
 		return nil, err
 	}
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceMCP)
+	ctx = invocation.WithOrigin(ctx, invocation.OriginExternal)
 	ctx = invocation.WithCatalogOperation(ctx, provName, opMeta)
 	if resolvedConnection != "" {
 		ctx = invocation.WithConnection(ctx, resolvedConnection)

@@ -18,9 +18,8 @@ var (
 	attrProviderGatewayProviderKind          = attribute.Key("gd.provider_kind")
 	attrProviderGatewayServiceName           = attribute.Key("gd.service")
 	attrProviderGatewayOperation             = attribute.Key("gd.operation")
-	attrProviderGatewaySource                = attribute.Key("gd.source")
+	attrProviderGatewayOrigin                = attribute.Key("gd.origin")
 	attrProviderGatewayTransportPath         = attribute.Key("gd.transport")
-	attrProviderGatewayInvocationSurface     = attribute.Key("gd.invocation_surface")
 	attrProviderGatewayAuthorizationAllowed  = attribute.Key("gd.allowed")
 	attrProviderGatewayAuthorizationSubject  = attribute.Key("gd.subject")
 	attrProviderGatewayAuthorizationResource = attribute.Key("gd.resource")
@@ -77,6 +76,7 @@ func recordProviderGatewayAuthorizationCheck(ctx context.Context, allowed bool, 
 	}
 	metrics := providerGatewayAuthorizationChecks.Load(ctx, "gestaltd", newProviderGatewayAuthorizationMetrics)
 	attrs := []attribute.KeyValue{
+		attrProviderGatewayOrigin.String(string(invocation.ResolveOrigin(ctx))),
 		attrProviderGatewayAuthorizationAllowed.String(strconv.FormatBool(allowed)),
 		attrProviderGatewayAuthorizationSubject.String(metricutil.AttrValue(authorizationCheckSubjectValue(req))),
 		attrProviderGatewayAuthorizationResource.String(metricutil.AttrValue(authorizationCheckResourceValue(req))),
@@ -118,9 +118,8 @@ func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, er
 		attrProviderGatewayProviderKind.String(metricutil.AttrValue(string(req.ProviderKind))),
 		attrProviderGatewayServiceName.String(metricutil.AttrValue(req.ServiceName)),
 		attrProviderGatewayOperation.String(metricutil.AttrValue(req.Operation)),
-		attrProviderGatewaySource.String(metricutil.AttrValue(string(req.Source))),
+		attrProviderGatewayOrigin.String(string(invocation.ResolveOrigin(ctx))),
 		attrProviderGatewayTransportPath.String(metricutil.AttrValue(string(transportPath))),
-		attrProviderGatewayInvocationSurface.String(metricutil.AttrValue(string(invocation.InvocationSurfaceFromContext(ctx)))),
 	}
 	metricAttrs := metric.WithAttributes(attrs...)
 

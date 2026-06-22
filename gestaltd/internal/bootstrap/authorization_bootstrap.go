@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -58,6 +59,7 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
 	staticRelationships = append(staticRelationships, runtimeRelationships...)
+	ctx = invocation.WithOrigin(ctx, invocation.OriginInternal)
 	if _, err := provider.SetAuthorizationState(ctx, &proto.SetAuthorizationStateRequest{
 		Model:         model,
 		Relationships: staticRelationships,
