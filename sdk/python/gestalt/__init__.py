@@ -367,8 +367,8 @@ _LAZY_EXPORTS = {
     "AuthorizationSubject": (".authorization", "Subject"),
     "AuthorizationAction": (".authorization", "Action"),
     "AuthorizationResource": (".authorization", "Resource"),
-    "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
-    "AuthCallContext": ("._providers", "AuthCallContext"),
+    "IdentityProvider": ("._providers", "IdentityProvider"),
+    "IdentityCallContext": ("._providers", "IdentityCallContext"),
     "CALLER_BEARER_TOKEN_METADATA_KEY": (
         "._providers",
         "CALLER_BEARER_TOKEN_METADATA_KEY",
@@ -489,7 +489,7 @@ _LAZY_EXPORTS = {
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_PROTOCOL_EXPORTS})
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS})
 _LAZY_EXPORTS.update(
-    {name: (".authentication", name) for name in _AUTHENTICATION_AUTHORED_EXPORTS}
+    {name: (".identity", name) for name in _AUTHENTICATION_AUTHORED_EXPORTS}
 )
 _LAZY_EXPORTS.update(
     {name: (".authorization", name) for name in _AUTHORIZATION_AUTHORED_EXPORTS}
@@ -549,7 +549,7 @@ __all__ = [
     "AuthorizationSubject",
     "AuthorizationAction",
     "AuthorizationResource",
-    "AuthenticationProvider",
+    "IdentityProvider",
     "Cache",
     "CacheSetEntry",
     "CacheProvider",

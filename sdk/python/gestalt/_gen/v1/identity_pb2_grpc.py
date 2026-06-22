@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import authentication_pb2 as v1_dot_authentication__pb2
+from . import identity_pb2 as v1_dot_identity__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -18,15 +18,15 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in v1/authentication_pb2_grpc.py depends on'
+        + ' but the generated code in v1/identity_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class AuthenticationStub(object):
-    """Authentication models the shared Gestalt authentication protocol.
+class IdentityStub(object):
+    """Identity models the shared Gestalt authentication protocol.
     """
 
     def __init__(self, channel):
@@ -36,44 +36,44 @@ class AuthenticationStub(object):
             channel: A grpc.Channel.
         """
         self.Authorize = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/Authorize',
-                request_serializer=v1_dot_authentication__pb2.AuthorizeRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.AuthorizeResponse.FromString,
+                '/gestalt.provider.v1.Identity/Authorize',
+                request_serializer=v1_dot_identity__pb2.AuthorizeRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.AuthorizeResponse.FromString,
                 _registered_method=True)
         self.Token = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/Token',
-                request_serializer=v1_dot_authentication__pb2.TokenRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.TokenResponse.FromString,
+                '/gestalt.provider.v1.Identity/Token',
+                request_serializer=v1_dot_identity__pb2.TokenRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.TokenResponse.FromString,
                 _registered_method=True)
         self.Introspect = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/Introspect',
-                request_serializer=v1_dot_authentication__pb2.IntrospectRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.IntrospectResponse.FromString,
+                '/gestalt.provider.v1.Identity/Introspect',
+                request_serializer=v1_dot_identity__pb2.IntrospectRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.IntrospectResponse.FromString,
                 _registered_method=True)
         self.UserInfo = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/UserInfo',
-                request_serializer=v1_dot_authentication__pb2.UserInfoRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.UserInfoResponse.FromString,
+                '/gestalt.provider.v1.Identity/UserInfo',
+                request_serializer=v1_dot_identity__pb2.UserInfoRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.UserInfoResponse.FromString,
                 _registered_method=True)
         self.ListGrants = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/ListGrants',
-                request_serializer=v1_dot_authentication__pb2.ListGrantsRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.ListGrantsResponse.FromString,
+                '/gestalt.provider.v1.Identity/ListGrants',
+                request_serializer=v1_dot_identity__pb2.ListGrantsRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.ListGrantsResponse.FromString,
                 _registered_method=True)
         self.GetGrant = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/GetGrant',
-                request_serializer=v1_dot_authentication__pb2.GetGrantRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.GetGrantResponse.FromString,
+                '/gestalt.provider.v1.Identity/GetGrant',
+                request_serializer=v1_dot_identity__pb2.GetGrantRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.GetGrantResponse.FromString,
                 _registered_method=True)
         self.RevokeGrant = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/RevokeGrant',
-                request_serializer=v1_dot_authentication__pb2.RevokeGrantRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.RevokeGrantResponse.FromString,
+                '/gestalt.provider.v1.Identity/RevokeGrant',
+                request_serializer=v1_dot_identity__pb2.RevokeGrantRequest.SerializeToString,
+                response_deserializer=v1_dot_identity__pb2.RevokeGrantResponse.FromString,
                 _registered_method=True)
 
 
-class AuthenticationServicer(object):
-    """Authentication models the shared Gestalt authentication protocol.
+class IdentityServicer(object):
+    """Identity models the shared Gestalt authentication protocol.
     """
 
     def Authorize(self, request, context):
@@ -119,53 +119,53 @@ class AuthenticationServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AuthenticationServicer_to_server(servicer, server):
+def add_IdentityServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Authorize': grpc.unary_unary_rpc_method_handler(
                     servicer.Authorize,
-                    request_deserializer=v1_dot_authentication__pb2.AuthorizeRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.AuthorizeResponse.SerializeToString,
+                    request_deserializer=v1_dot_identity__pb2.AuthorizeRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.AuthorizeResponse.SerializeToString,
             ),
             'Token': grpc.unary_unary_rpc_method_handler(
                     servicer.Token,
-                    request_deserializer=v1_dot_authentication__pb2.TokenRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.TokenResponse.SerializeToString,
+                    request_deserializer=v1_dot_identity__pb2.TokenRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.TokenResponse.SerializeToString,
             ),
             'Introspect': grpc.unary_unary_rpc_method_handler(
                     servicer.Introspect,
-                    request_deserializer=v1_dot_authentication__pb2.IntrospectRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.IntrospectResponse.SerializeToString,
+                    request_deserializer=v1_dot_identity__pb2.IntrospectRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.IntrospectResponse.SerializeToString,
             ),
             'UserInfo': grpc.unary_unary_rpc_method_handler(
                     servicer.UserInfo,
-                    request_deserializer=v1_dot_authentication__pb2.UserInfoRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.UserInfoResponse.SerializeToString,
+                    request_deserializer=v1_dot_identity__pb2.UserInfoRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.UserInfoResponse.SerializeToString,
             ),
             'ListGrants': grpc.unary_unary_rpc_method_handler(
                     servicer.ListGrants,
-                    request_deserializer=v1_dot_authentication__pb2.ListGrantsRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.ListGrantsResponse.SerializeToString,
+                    request_deserializer=v1_dot_identity__pb2.ListGrantsRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.ListGrantsResponse.SerializeToString,
             ),
             'GetGrant': grpc.unary_unary_rpc_method_handler(
                     servicer.GetGrant,
-                    request_deserializer=v1_dot_authentication__pb2.GetGrantRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.GetGrantResponse.SerializeToString,
+                    request_deserializer=v1_dot_identity__pb2.GetGrantRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.GetGrantResponse.SerializeToString,
             ),
             'RevokeGrant': grpc.unary_unary_rpc_method_handler(
                     servicer.RevokeGrant,
-                    request_deserializer=v1_dot_authentication__pb2.RevokeGrantRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.RevokeGrantResponse.SerializeToString,
+                    request_deserializer=v1_dot_identity__pb2.RevokeGrantRequest.FromString,
+                    response_serializer=v1_dot_identity__pb2.RevokeGrantResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.Authentication', rpc_method_handlers)
+            'gestalt.provider.v1.Identity', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.Authentication', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.Identity', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class Authentication(object):
-    """Authentication models the shared Gestalt authentication protocol.
+class Identity(object):
+    """Identity models the shared Gestalt authentication protocol.
     """
 
     @staticmethod
@@ -182,9 +182,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/Authorize',
-            v1_dot_authentication__pb2.AuthorizeRequest.SerializeToString,
-            v1_dot_authentication__pb2.AuthorizeResponse.FromString,
+            '/gestalt.provider.v1.Identity/Authorize',
+            v1_dot_identity__pb2.AuthorizeRequest.SerializeToString,
+            v1_dot_identity__pb2.AuthorizeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -209,9 +209,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/Token',
-            v1_dot_authentication__pb2.TokenRequest.SerializeToString,
-            v1_dot_authentication__pb2.TokenResponse.FromString,
+            '/gestalt.provider.v1.Identity/Token',
+            v1_dot_identity__pb2.TokenRequest.SerializeToString,
+            v1_dot_identity__pb2.TokenResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -236,9 +236,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/Introspect',
-            v1_dot_authentication__pb2.IntrospectRequest.SerializeToString,
-            v1_dot_authentication__pb2.IntrospectResponse.FromString,
+            '/gestalt.provider.v1.Identity/Introspect',
+            v1_dot_identity__pb2.IntrospectRequest.SerializeToString,
+            v1_dot_identity__pb2.IntrospectResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -263,9 +263,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/UserInfo',
-            v1_dot_authentication__pb2.UserInfoRequest.SerializeToString,
-            v1_dot_authentication__pb2.UserInfoResponse.FromString,
+            '/gestalt.provider.v1.Identity/UserInfo',
+            v1_dot_identity__pb2.UserInfoRequest.SerializeToString,
+            v1_dot_identity__pb2.UserInfoResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -290,9 +290,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/ListGrants',
-            v1_dot_authentication__pb2.ListGrantsRequest.SerializeToString,
-            v1_dot_authentication__pb2.ListGrantsResponse.FromString,
+            '/gestalt.provider.v1.Identity/ListGrants',
+            v1_dot_identity__pb2.ListGrantsRequest.SerializeToString,
+            v1_dot_identity__pb2.ListGrantsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -317,9 +317,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/GetGrant',
-            v1_dot_authentication__pb2.GetGrantRequest.SerializeToString,
-            v1_dot_authentication__pb2.GetGrantResponse.FromString,
+            '/gestalt.provider.v1.Identity/GetGrant',
+            v1_dot_identity__pb2.GetGrantRequest.SerializeToString,
+            v1_dot_identity__pb2.GetGrantResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -344,9 +344,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/RevokeGrant',
-            v1_dot_authentication__pb2.RevokeGrantRequest.SerializeToString,
-            v1_dot_authentication__pb2.RevokeGrantResponse.FromString,
+            '/gestalt.provider.v1.Identity/RevokeGrant',
+            v1_dot_identity__pb2.RevokeGrantRequest.SerializeToString,
+            v1_dot_identity__pb2.RevokeGrantResponse.FromString,
             options,
             channel_credentials,
             insecure,

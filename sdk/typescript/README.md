@@ -19,7 +19,7 @@ explicitly names a submodule.
 | --- | --- | --- |
 | Provider authoring | `defineApp`, `operation`, `ok` | Executable app providers, typed request handlers, and operation results. |
 | Runtime schemas | `s`, `object`, `string` | Runtime validation and generated catalog metadata for operation inputs and outputs. |
-| Provider runtimes | `defineAuthenticationProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
+| Provider runtimes | `defineIdentityProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
 | Workflow and agent models | `WorkflowProvider`, `Workflow`, `AgentProvider`, `Agent` | Native workflow values, agent sessions, turns, messages, tools, and host-service access. |
 | Host-service clients | `Cache`, `IndexedDB`, `S3`, `App` | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Telemetry | `withModelOperation`, `withToolExecution`, `withAgentInvocation` | Provider-authored GenAI spans and metrics inside a running provider process. |
@@ -85,7 +85,7 @@ secrets, workflow, agent, and hosted-runtime providers.
 The root package exports provider definition helpers:
 
 - `defineApp` for integration operations and session catalogs.
-- `defineAuthenticationProvider` for authentication surfaces.
+- `defineIdentityProvider` for authentication surfaces.
 - `defineCacheProvider`, `defineIndexedDBProvider`, `defineS3Provider`, and
   `defineSecretsProvider` for host-service backends.
 - `defineWorkflowProvider`, `defineAgentProvider`, and

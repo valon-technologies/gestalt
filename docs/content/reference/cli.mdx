@@ -242,7 +242,7 @@ gestaltd provider repo list
 gestaltd provider repo add gestalt https://registry.gestaltd.ai/provider-index.yaml --config ./config.yaml
 gestaltd provider repo update --config ./config.yaml
 gestaltd provider add github.com/valon-technologies/gestalt-providers/app/github --config ./config.yaml --name github
-gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc --config ./config.yaml --kind authentication --name oidc --version '^1.4.0'
+gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc --config ./config.yaml --kind identity --name oidc --version '^1.4.0'
 gestaltd provider add github.com/acme/gestalt-providers/ui/console --config ./config.yaml --repo acme --kind ui --name console --set path=/console
 gestaltd provider list --config ./config.yaml
 gestaltd provider list --config ./config.yaml --kind app

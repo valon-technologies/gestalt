@@ -44,8 +44,13 @@ test("provider target parsing supports app defaults and kind prefixes", () => {
     modulePath: "./provider.ts",
     exportName: "app",
   });
-  expect(parseProviderTarget("authentication:./auth.ts#provider")).toEqual({
-    kind: "authentication",
+  expect(parseProviderTarget("identity:./auth.ts#provider")).toEqual({
+    kind: "identity",
+    modulePath: "./auth.ts",
+    exportName: "provider",
+  });
+  expect(parseProviderTarget("identity:./auth.ts#provider")).toEqual({
+    kind: "identity",
     modulePath: "./auth.ts",
     exportName: "provider",
   });
@@ -94,13 +99,13 @@ test("package config reads provider targets", () => {
   expect(readPackageConfig(authRoot)).toEqual({
     name: "@fixtures/auth-provider",
     providerTarget: {
-      kind: "authentication",
+      kind: "identity",
       modulePath: "./auth.ts",
       exportName: "provider",
     },
   });
   expect(formatProviderTarget(readPackageProviderTarget(authRoot))).toBe(
-    "authentication:./auth.ts#provider",
+    "identity:./auth.ts#provider",
   );
 
   const cacheRoot = fixturePath("cache-provider");

@@ -14,7 +14,7 @@ class ProviderKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     PROVIDER_KIND_UNSPECIFIED: _ClassVar[ProviderKind]
     PROVIDER_KIND_APP: _ClassVar[ProviderKind]
-    PROVIDER_KIND_AUTHENTICATION: _ClassVar[ProviderKind]
+    PROVIDER_KIND_IDENTITY: _ClassVar[ProviderKind]
     PROVIDER_KIND_INDEXEDDB: _ClassVar[ProviderKind]
     PROVIDER_KIND_SECRETS: _ClassVar[ProviderKind]
     PROVIDER_KIND_TELEMETRY: _ClassVar[ProviderKind]
@@ -28,7 +28,7 @@ class ProviderKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PROVIDER_KIND_TEST: _ClassVar[ProviderKind]
 PROVIDER_KIND_UNSPECIFIED: ProviderKind
 PROVIDER_KIND_APP: ProviderKind
-PROVIDER_KIND_AUTHENTICATION: ProviderKind
+PROVIDER_KIND_IDENTITY: ProviderKind
 PROVIDER_KIND_INDEXEDDB: ProviderKind
 PROVIDER_KIND_SECRETS: ProviderKind
 PROVIDER_KIND_TELEMETRY: ProviderKind

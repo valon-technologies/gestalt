@@ -5,7 +5,7 @@ use std::time::Duration;
 pub struct Provider;
 
 #[gestalt::async_trait]
-impl gestalt::AuthenticationProvider for Provider {
+impl gestalt::IdentityProvider for Provider {
     fn metadata(&self) -> Option<gestalt::RuntimeMetadata> {
         Some(gestalt::RuntimeMetadata {
             name: "generated-auth".to_string(),
@@ -72,4 +72,4 @@ fn new() -> Provider {
     Provider
 }
 
-gestalt::export_authentication_provider!(constructor = new);
+gestalt::export_identity_provider!(constructor = new);

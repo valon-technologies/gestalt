@@ -58,7 +58,7 @@ var providerLifecycleKinds = []providerLifecycleKind{
 			return lock.Providers.App
 		},
 	},
-	lifecycleHostProviderKind(providermanifestv1.KindAuthentication, providermanifestv1.KindAuthentication),
+	lifecycleHostProviderKind(providermanifestv1.KindIdentity, providermanifestv1.KindIdentity),
 	lifecycleHostProviderKind(providermanifestv1.KindAuthorization, providermanifestv1.KindAuthorization),
 	lifecycleHostProviderKind(providermanifestv1.KindExternalCredentials, providermanifestv1.KindExternalCredentials),
 	lifecycleHostProviderKind(providermanifestv1.KindSecrets, providermanifestv1.KindSecrets),
@@ -133,8 +133,8 @@ func lifecycleHostProviderKind(kind, manifestKind string) providerLifecycleKind 
 				return nil
 			}
 			switch kind {
-			case providermanifestv1.KindAuthentication:
-				return cfg.Providers.Authentication
+			case providermanifestv1.KindIdentity:
+				return cfg.Providers.Identity
 			case providermanifestv1.KindAuthorization:
 				return cfg.Providers.Authorization
 			case providermanifestv1.KindExternalCredentials:
@@ -164,8 +164,8 @@ func lifecycleHostProviderKind(kind, manifestKind string) providerLifecycleKind 
 				return nil
 			}
 			switch kind {
-			case providermanifestv1.KindAuthentication:
-				return lock.Providers.Authentication
+			case providermanifestv1.KindIdentity:
+				return lock.Providers.Identity
 			case providermanifestv1.KindAuthorization:
 				return lock.Providers.Authorization
 			case providermanifestv1.KindExternalCredentials:

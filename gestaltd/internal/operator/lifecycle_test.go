@@ -163,8 +163,8 @@ func main() {
 func operatorGoComponentServeCallForTest(t *testing.T, kind string) string {
 	t.Helper()
 	switch providermanifestv1.NormalizeKind(kind) {
-	case providermanifestv1.KindAuthentication:
-		return "gestalt.ServeAuthenticationProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindIdentity:
+		return "gestalt.ServeIdentityProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindAuthorization:
 		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindCache:
@@ -2183,7 +2183,7 @@ func TestPrepareAtPath_RejectsMetadataPackageManifestKindMismatch(t *testing.T) 
 	const source = "github.com/testowner/gestalt-providers/app/auth-only"
 	const version = "0.0.1-alpha.1"
 	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindAuthentication,
+		Kind:       providermanifestv1.KindIdentity,
 		Source:     source,
 		Version:    version,
 		Spec:       &providermanifestv1.Spec{},
@@ -2220,7 +2220,7 @@ server:
 		t.Fatal("expected provider kind validation error")
 		return
 	}
-	if !strings.Contains(err.Error(), `app "example" manifest has kind "authentication", want "app"`) {
+	if !strings.Contains(err.Error(), `app "example" manifest has kind "identity", want "app"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -2232,7 +2232,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-plugin"))
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindAuthentication,
+		Kind:       providermanifestv1.KindIdentity,
 		Source:     "github.com/testowner/apps/local-auth",
 		Version:    "0.0.1-alpha.1",
 		Spec:       &providermanifestv1.Spec{},
@@ -2257,7 +2257,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: %s
 providers:
-  authentication:
+  identity:
     auth:
       source:
         path: ./auth-manifest.yaml
@@ -2271,7 +2271,7 @@ providers:
         dsn: %q
 server:
   providers:
-    authentication: auth
+    identity: auth
     indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, config.ConfigAPIVersion, idbManifestPath, "sqlite://"+dbPath)
@@ -2285,7 +2285,7 @@ server:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuthentication)
+	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindIdentity)
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
 		return
@@ -2331,9 +2331,9 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	writeTestSourceFile("auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
 	authArtifactRel := ".gestalt/build/auth-provider"
-	writeOperatorGoComponentBuildFixture(t, dir, "example.com/local-components", providermanifestv1.KindAuthentication, authArtifactRel)
+	writeOperatorGoComponentBuildFixture(t, dir, "example.com/local-components", providermanifestv1.KindIdentity, authArtifactRel)
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindAuthentication,
+		Kind:    providermanifestv1.KindIdentity,
 		Source:  "github.com/testowner/apps/local-source-auth",
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
@@ -2355,7 +2355,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: %s
 providers:
-  authentication:
+  identity:
     auth:
       source:
         path: ./auth-manifest.yaml
@@ -2367,7 +2367,7 @@ providers:
         dsn: %q
 server:
   providers:
-    authentication: auth
+    identity: auth
     indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, config.ConfigAPIVersion, idbManifestPath, "sqlite://"+dbPath)
@@ -2381,7 +2381,7 @@ server:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuthentication)
+	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindIdentity)
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
 		return
@@ -3576,8 +3576,8 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindIdentity)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindIdentity)
 
 		firstProvider := &config.ProviderEntry{
 			Source: config.ProviderSource{Path: firstManifestPath},
@@ -3634,9 +3634,9 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
-		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authentication\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindIdentity)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindIdentity)
+		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: identity\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", secondManifestPath, err)
 		}
 
@@ -3840,7 +3840,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 					Executable:       ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 				},
 			},
-			Authentication: map[string]LockEntry{
+			Identity: map[string]LockEntry{
 				"oauth": {
 					InputDigest: "auth-fp",
 					Source:      "github.com/test-org/test-repo/auth-oauth",
@@ -3939,10 +3939,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 		t.Fatalf("Unmarshal lockfile: %v", err)
 	}
 	if diskLock.SchemaVersion != providerLockSchemaVersion {
-		t.Fatalf("lock schemaVersion = %d, want %d", diskLock.SchemaVersion, providerLockSchemaVersion)
-	}
-	if diskLock.SchemaVersion != 10 {
-		t.Fatalf("lock schemaVersion = %d, want explicit v10 schema", diskLock.SchemaVersion)
+		t.Fatalf("lock schemaVersion = %d, want explicit v%d schema", diskLock.SchemaVersion, providerLockSchemaVersion)
 	}
 	providerEntry, ok := diskLock.Providers.App["example"]
 	if !ok {
@@ -3963,21 +3960,21 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if providerEntry.Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("provider runtime = %q, want %q", providerEntry.Runtime, providerLockRuntimeExecutable)
 	}
-	authEntry, ok := diskLock.Providers.Authentication["oauth"]
+	authEntry, ok := diskLock.Providers.Identity["oauth"]
 	if !ok {
-		t.Fatal(`disk lock providers.authentication["oauth"] not found`)
+		t.Fatal(`disk lock providers.identity["oauth"] not found`)
 	}
-	if authEntry.InputDigest != want.Providers.Authentication["oauth"].InputDigest {
-		t.Fatalf("authentication inputDigest = %q, want %q", authEntry.InputDigest, want.Providers.Authentication["oauth"].InputDigest)
+	if authEntry.InputDigest != want.Providers.Identity["oauth"].InputDigest {
+		t.Fatalf("authentication inputDigest = %q, want %q", authEntry.InputDigest, want.Providers.Identity["oauth"].InputDigest)
 	}
-	if authEntry.Package != want.Providers.Authentication["oauth"].Source {
-		t.Fatalf("authentication package = %q, want %q", authEntry.Package, want.Providers.Authentication["oauth"].Source)
+	if authEntry.Package != want.Providers.Identity["oauth"].Source {
+		t.Fatalf("authentication package = %q, want %q", authEntry.Package, want.Providers.Identity["oauth"].Source)
 	}
 	if authEntry.Source != "" {
 		t.Fatalf("authentication source = %q, want omitted portable source", authEntry.Source)
 	}
-	if authEntry.Kind != providermanifestv1.KindAuthentication {
-		t.Fatalf("authentication kind = %q, want %q", authEntry.Kind, providermanifestv1.KindAuthentication)
+	if authEntry.Kind != providermanifestv1.KindIdentity {
+		t.Fatalf("authentication kind = %q, want %q", authEntry.Kind, providermanifestv1.KindIdentity)
 	}
 	if authEntry.Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("authentication runtime = %q, want %q", authEntry.Runtime, providerLockRuntimeExecutable)
@@ -4035,7 +4032,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if got.Providers.App["example"].Source != want.Providers.App["example"].Source || got.Providers.App["example"].Version != want.Providers.App["example"].Version {
 		t.Fatal("provider source mismatch")
 	}
-	if got.Providers.Authentication["oauth"].InputDigest != want.Providers.Authentication["oauth"].InputDigest {
+	if got.Providers.Identity["oauth"].InputDigest != want.Providers.Identity["oauth"].InputDigest {
 		t.Fatal("authentication fingerprint mismatch")
 	}
 	if got.Providers.IndexedDB["main"].InputDigest != want.Providers.IndexedDB["main"].InputDigest {

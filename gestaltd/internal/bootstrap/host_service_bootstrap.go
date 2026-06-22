@@ -16,7 +16,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
+	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
@@ -78,10 +78,10 @@ func authenticationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool
 		return runtimehost.HostService{}, false
 	}
 	return runtimehost.HostService{
-		Name:           "authentication",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.Authentication_ServiceDesc.ServiceName)},
+		Name:           "identity",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.Identity_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAuthenticationServer(srv, authenticationservice.NewProviderServer(deps.Authentication))
+			proto.RegisterIdentityServer(srv, identityservice.NewProviderServer(deps.Authentication))
 		},
 	}, true
 }

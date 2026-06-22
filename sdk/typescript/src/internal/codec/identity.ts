@@ -2,7 +2,7 @@
 
 import { create } from "@bufbuild/protobuf";
 
-import * as wire from "../gen/v1/authentication_pb.ts";
+import * as wire from "../gen/v1/identity_pb.ts";
 import type {
   AuthorizeRequest,
   AuthorizeResponse,
@@ -19,7 +19,7 @@ import type {
   TokenResponse,
   UserInfoRequest,
   UserInfoResponse,
-} from "../../authentication.ts";
+} from "../../identity.ts";
 import type { Init } from "../../rpc_support.ts";
 
 export function toWireAuthorizeRequest(

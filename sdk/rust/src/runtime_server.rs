@@ -5,7 +5,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent_provider::AgentProvider;
 use crate::api::RuntimeMetadata;
-use crate::auth::AuthenticationProvider;
+use crate::auth::IdentityProvider;
 use crate::cache_provider::CacheProvider;
 use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
@@ -39,8 +39,8 @@ struct ProviderRuntime<P> {
     provider: Arc<P>,
 }
 
-struct AuthenticationRuntime<P> {
-    provider: Arc<P>,
+struct IdentityRuntime<P> {
+	provider: Arc<P>,
 }
 
 struct CacheRuntime<P> {
@@ -102,7 +102,7 @@ macro_rules! impl_runtime_hooks {
 }
 
 impl_runtime_hooks!(ProviderRuntime, Provider);
-impl_runtime_hooks!(AuthenticationRuntime, AuthenticationProvider);
+impl_runtime_hooks!(IdentityRuntime, IdentityProvider);
 impl_runtime_hooks!(CacheRuntime, CacheProvider);
 impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
 impl_runtime_hooks!(S3Runtime, S3Provider);
@@ -127,23 +127,23 @@ impl RuntimeServer {
         }
     }
 
-    pub fn for_authentication<P>(provider: Arc<P>) -> Self
-    where
-        P: AuthenticationProvider,
-    {
-        Self {
-            kind: ProviderKind::Authentication,
-            provider: Arc::new(AuthenticationRuntime { provider }),
-        }
-    }
+	pub fn for_identity<P>(provider: Arc<P>) -> Self
+	where
+		P: IdentityProvider,
+	{
+		Self {
+			kind: ProviderKind::Identity,
+			provider: Arc::new(IdentityRuntime { provider }),
+		}
+	}
 
-    #[allow(dead_code)]
-    pub fn for_auth<P>(provider: Arc<P>) -> Self
-    where
-        P: AuthenticationProvider,
-    {
-        Self::for_authentication(provider)
-    }
+	#[allow(dead_code)]
+	pub fn for_auth<P>(provider: Arc<P>) -> Self
+	where
+		P: IdentityProvider,
+	{
+		Self::for_identity(provider)
+	}
 
     pub fn for_cache<P>(provider: Arc<P>) -> Self
     where

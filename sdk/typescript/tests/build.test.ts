@@ -14,11 +14,11 @@ import {
   CreateAgentProviderTurnRequestSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
-  Authentication as AuthenticationProviderService,
+  Identity as IdentityProviderService,
   AuthorizeRequestSchema,
   IntrospectRequestSchema,
   TokenRequestSchema,
-} from "../src/internal/gen/v1/authentication_pb.ts";
+} from "../src/internal/gen/v1/identity_pb.ts";
 import { Cache as CacheService } from "../src/internal/gen/v1/cache_pb.ts";
 import {
   AccessContextSchema,
@@ -109,7 +109,7 @@ test("build arg parsing validates required arguments", () => {
   expect(
     parseBuildArgs([
       "root",
-      "authentication:./auth.ts#provider",
+      "identity:./auth.ts#provider",
       "out",
       "name",
       "darwin",
@@ -117,7 +117,7 @@ test("build arg parsing validates required arguments", () => {
     ]),
   ).toEqual({
     root: "root",
-    target: "authentication:./auth.ts#provider",
+    target: "identity:./auth.ts#provider",
     outputPath: "out",
     providerName: "name",
     goos: "darwin",
@@ -143,7 +143,7 @@ test("buildProviderBinary compiles a runnable authentication provider executable
   try {
     buildProviderBinary({
       root: fixturePath("auth-provider"),
-      target: "authentication:./auth.ts#provider",
+      target: "identity:./auth.ts#provider",
       outputPath,
       providerName: "fixture-built",
       goos,
@@ -166,12 +166,12 @@ test("buildProviderBinary compiles a runnable authentication provider executable
 
     const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
     const auth = createUnixGrpcClient(
-      AuthenticationProviderService,
+      IdentityProviderService,
       socketPath,
     );
 
     const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
-    expect(metadata.kind).toBe(ProtoProviderKind.AUTHENTICATION);
+    expect(metadata.kind).toBe(ProtoProviderKind.IDENTITY);
     expect(metadata.name).toBe("fixture-built");
 
     await runtime.configureProvider(

@@ -200,7 +200,7 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
 	agentManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindAgent, "agent-simple"))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: canonical-config-shapes-key
@@ -353,7 +353,7 @@ server:
 		},
 		{
 			name: "unknown field",
-			cfg: `apiVersion: gestaltd.config/v6
+			cfg: `apiVersion: gestaltd.config/v7
 server:
   encryptionKey: test-key
   bogus: true
@@ -362,7 +362,7 @@ server:
 		},
 		{
 			name: "ui object requires path",
-			cfg: `apiVersion: gestaltd.config/v6
+			cfg: `apiVersion: gestaltd.config/v7
 apps:
   roadmap:
     source:
@@ -454,7 +454,7 @@ func TestE2EProviderValidateReusesConfiguredAppKey(t *testing.T) {
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	appDir := setupAppDir(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v6
+	cfg := `apiVersion: gestaltd.config/v7
 apps:
   provider_go:
     source: https://example.test/provider-release.yaml
@@ -513,7 +513,7 @@ func TestE2EProviderValidateLayeredConfigSupportsNullDeletion(t *testing.T) {
 	}
 
 	baseCfgPath := filepath.Join(dir, "support.yaml")
-	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 providers:
   ui:
     roadmap:
@@ -533,7 +533,7 @@ apps:
 	}
 
 	overrideCfgPath := filepath.Join(dir, "support-override.yaml")
-	overrideCfg := `apiVersion: gestaltd.config/v6
+	overrideCfg := `apiVersion: gestaltd.config/v7
 providers:
   ui:
     roadmap: null
@@ -696,7 +696,7 @@ func TestE2EValidateAcceptsLayeredConfigs(t *testing.T) {
 	setupAppDir(t, overrideDir)
 
 	baseConfigPath := filepath.Join(baseDir, "base.yaml")
-	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -719,7 +719,7 @@ apps:
 	}
 
 	overrideConfigPath := filepath.Join(overrideDir, "local.yaml")
-	overrideConfig := `apiVersion: gestaltd.config/v6
+	overrideConfig := `apiVersion: gestaltd.config/v7
 apps:
   example:
     source:
@@ -755,7 +755,7 @@ func TestE2EValidateUsesScratchPreparedInstallsForLocalSourceConfigs(t *testing.
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -843,7 +843,7 @@ func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *te
 		t.Fatalf("write app provider-release metadata: %v", err)
 	}
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -930,7 +930,7 @@ func TestE2EValidateStaticRejectsStaleCatalogExposureMetadata(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeConfig := func(targetOperation string) {
 		t.Helper()
-		cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+		cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -982,7 +982,7 @@ func TestE2EValidateStaticPlatformRejectsExplicitMissingLockfile(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -1023,7 +1023,7 @@ func TestE2EValidateRejectsAppInvokesField(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -1094,7 +1094,7 @@ paths:
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -1188,9 +1188,9 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "auth.go", []byte(authProviderSource(name)), 0o644)
 	artifactRel := ".gestalt/build/auth-provider"
-	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/auth/"+name, providermanifestv1.KindAuthentication, artifactRel)
+	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/auth/"+name, providermanifestv1.KindIdentity, artifactRel)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindAuthentication,
+		Kind:        providermanifestv1.KindIdentity,
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
@@ -1320,8 +1320,8 @@ func main() {
 func goComponentServeCallForTest(t *testing.T, kind string) string {
 	t.Helper()
 	switch providermanifestv1.NormalizeKind(kind) {
-	case providermanifestv1.KindAuthentication:
-		return "gestalt.ServeAuthenticationProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindIdentity:
+		return "gestalt.ServeIdentityProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindAuthorization:
 		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindCache:
@@ -1370,7 +1370,7 @@ func componentProviderManifestPath(t *testing.T, providerDir string) string {
 func authIndexedDBConfigYAML(t *testing.T, dir, authName, indexedDBName, dbPath string) string {
 	t.Helper()
 
-	authBlock := ""
+	identityBlock := ""
 	indexedDBManifestPath := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifestPath := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	const externalCredentialsName = "default"
@@ -1380,8 +1380,8 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, indexedDBName, dbPath 
 `, indexedDBName, externalCredentialsName)
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
-		serverProvidersBlock += fmt.Sprintf("    authentication: %s\n", authName)
-		authBlock = fmt.Sprintf(`  authentication:
+		serverProvidersBlock += fmt.Sprintf("    identity: %s\n", authName)
+		identityBlock = fmt.Sprintf(`  identity:
     %s:
       source:
         path: %s
@@ -1399,7 +1399,7 @@ providers:
         path: %s
       config:
         dsn: %q
-`, serverProvidersBlock, authBlock, externalCredentialsName, externalCredentialsManifestPath, indexedDBName, indexedDBManifestPath, "sqlite://"+dbPath)
+`, serverProvidersBlock, identityBlock, externalCredentialsName, externalCredentialsManifestPath, indexedDBName, indexedDBManifestPath, "sqlite://"+dbPath)
 }
 
 func writeManifestFile(t *testing.T, appDir string, manifest *providermanifestv1.Manifest) {
@@ -1718,7 +1718,7 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   public:
@@ -1764,7 +1764,7 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   public:
@@ -2018,7 +2018,7 @@ func TestE2ELockAndSyncSkipRuntimeSecretRefs(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	missingSecretName := "GESTALT_E2E_RUNTIME_SECRET_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   encryptionKey:
     secret:
@@ -2205,11 +2205,11 @@ func TestRunLockSyncLayeredConfigs(t *testing.T) {
 		t.Fatalf("setupBootstrapWithConfigPaths locked layered configs: %v", err)
 	}
 	defer env.Close()
-	if got := env.Config.Server.Providers.Authentication; got != "local" {
-		t.Fatalf("Server.Providers.Authentication = %q, want local", got)
+	if got := env.Config.Server.Providers.Identity; got != "local" {
+		t.Fatalf("Server.Providers.Identity = %q, want local", got)
 	}
-	if _, auth, err := env.Config.SelectedAuthenticationProvider(); err != nil || auth == nil {
-		t.Fatalf("SelectedAuthenticationProvider = (%#v, %v), want local auth provider", auth, err)
+	if _, auth, err := env.Config.SelectedIdentityProvider(); err != nil || auth == nil {
+		t.Fatalf("SelectedIdentityProvider = (%#v, %v), want local auth provider", auth, err)
 	}
 }
 
@@ -2252,7 +2252,7 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
 	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -2285,7 +2285,7 @@ func writeInvalidValidateConfig(t *testing.T, path string) {
 	dir := filepath.Dir(path)
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   encryptionKey: invalid-config-e2e-key
@@ -2340,7 +2340,7 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 
 	basePath := filepath.Join(deployDir, "base.yaml")
 	overridePath := filepath.Join(overrideDir, "local.yaml")
-	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   public:
@@ -2363,13 +2363,13 @@ apps:
     source:
       path: %s
 `, e2eLoopbackBaseURL(port), port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(appRel))
-	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: local
+    identity: local
   artifactsDir: ../artifacts/local
 providers:
-  authentication:
+  identity:
     local:
       source:
         path: %s
@@ -2397,7 +2397,7 @@ func writeE2EConfigWithPaths(t *testing.T, dir, appDir, dbPath, artifactsDir str
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	serverBlock := fmt.Sprintf(`apiVersion: gestaltd.config/v6
+	serverBlock := fmt.Sprintf(`apiVersion: gestaltd.config/v7
 server:
   baseUrl: %s
   public:

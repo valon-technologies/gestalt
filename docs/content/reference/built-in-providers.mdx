@@ -1,6 +1,6 @@
 # First-Party Providers
 
-Gestalt does not compile authentication, authorization, agent, workflow, runtime,
+Gestalt does not compile identity, authorization, agent, workflow, runtime,
 IndexedDB, or S3 providers into the `gestaltd` binary. They are loaded at
 startup as external provider processes through the same runtime model that also
 powers apps. The first-party implementations are published from
@@ -9,11 +9,11 @@ and maintained alongside the server.
 
 Two simple secrets providers (`env` and `file`), telemetry, and audit remain built into the binary. Cloud secret backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). See [Config File](/reference/config-file#providerssecrets) for package names and configuration.
 
-## Authentication Providers
+## Identity Providers
 
-Authentication providers handle platform login. They are configured under
-`providers.authentication.<name>` in your config file. Omit
-`providers.authentication` for local or unauthenticated deployments.
+Identity providers handle platform login. They are configured under
+`providers.identity.<name>` in your config file. Omit
+`providers.identity` for local or unauthenticated deployments.
 
 | Package | Purpose |
 | --- | --- |
@@ -21,7 +21,7 @@ Authentication providers handle platform login. They are configured under
 
 ```yaml
 providers:
-  authentication:
+  identity:
     oidc:
       source:
         package: github.com/valon-technologies/gestalt-providers/auth/oidc
@@ -35,7 +35,7 @@ providers:
             name: oidc-client-secret
 ```
 
-To disable platform authentication entirely, omit the `providers.authentication` block.
+To disable platform identity entirely, omit the `providers.identity` block.
 
 ## Authorization Providers
 
@@ -258,4 +258,4 @@ apps:
 
 ## Community and Custom Providers
 
-Third-party authentication providers, datastore providers, and apps use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish it through a provider index, and reference that package source in config. For one-off releases, you can still point directly at the exact `provider-release.yaml` URL.
+Third-party identity providers, datastore providers, and apps use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish it through a provider index, and reference that package source in config. For one-off releases, you can still point directly at the exact `provider-release.yaml` URL.

@@ -147,10 +147,10 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: google
+    identity: google
     indexeddb: sqlite
   encryptionKey: server-key
   public:
@@ -160,7 +160,7 @@ server:
     host: 127.0.0.1
     port: 9191
 providers:
-  authentication:
+  identity:
     google:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
@@ -349,13 +349,13 @@ func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   encryptionKey: server-key
   providers:
     authorization: indexeddb
 providers:
-  authentication:
+  identity:
     primary:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
     backup:
@@ -389,9 +389,9 @@ apps:
 		t.Fatalf("Load: %v", err)
 	}
 
-	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
+	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindIdentity)
 	if authName != "backup" || authEntry == nil {
-		t.Fatalf("SelectedAuthenticationProvider = (%q, %#v), want backup", authName, authEntry)
+		t.Fatalf("SelectedIdentityProvider = (%q, %#v), want backup", authName, authEntry)
 	}
 	indexedDBName, indexedDBEntry := mustSelectedProvider(t, cfg, HostProviderKindIndexedDB)
 	if indexedDBName != "archive" || indexedDBEntry == nil {
@@ -418,14 +418,14 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: local
+    identity: local
     indexeddb: sqlite
   encryptionKey: ${TEST_ENCRYPTION}
 providers:
-  authentication:
+  identity:
     local:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
@@ -463,9 +463,9 @@ apps:
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
 
-	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindIdentity)
 	if auth == nil {
-		t.Fatal("SelectedAuthenticationProvider = nil")
+		t.Fatal("SelectedIdentityProvider = nil")
 		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
@@ -474,18 +474,18 @@ apps:
 	}
 }
 
-func TestLoadConfigAcceptsAuthenticationConfig(t *testing.T) {
+func TestLoadConfigAcceptsIdentityConfig(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: local
+    identity: local
     indexeddb: sqlite
   encryptionKey: server-key
 providers:
-  authentication:
+  identity:
     local:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
   indexeddb:
@@ -499,15 +499,15 @@ providers:
 		t.Fatalf("Load: %v", err)
 	}
 
-	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
+	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindIdentity)
 	if authName != "local" || authEntry == nil {
-		t.Fatalf("SelectedAuthenticationProvider = (%q, %#v), want local", authName, authEntry)
+		t.Fatalf("SelectedIdentityProvider = (%q, %#v), want local", authName, authEntry)
 	}
-	if cfg.Server.Providers.Authentication != "local" {
-		t.Fatalf("Server.Providers.Authentication = %q, want local", cfg.Server.Providers.Authentication)
+	if cfg.Server.Providers.Identity != "local" {
+		t.Fatalf("Server.Providers.Identity = %q, want local", cfg.Server.Providers.Identity)
 	}
-	if cfg.Providers.Authentication["local"] == nil {
-		t.Fatal("Providers.Authentication[local] = nil")
+	if cfg.Providers.Identity["local"] == nil {
+		t.Fatal("Providers.Identity[local] = nil")
 	}
 }
 
@@ -1247,9 +1247,9 @@ server:
 				t.Fatalf("ValidateRuntime: %v", err)
 			}
 			if tc.name == "omitted auth is allowed" {
-				_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
+				_, auth := mustSelectedProvider(t, cfg, HostProviderKindIdentity)
 				if auth != nil {
-					t.Fatalf("SelectedAuthenticationProvider = %#v, want nil", auth)
+					t.Fatalf("SelectedIdentityProvider = %#v, want nil", auth)
 				}
 			}
 		})
@@ -1308,7 +1308,7 @@ server:
   baseUrl: not a url
   encryptionKey: server-key
   providers:
-    authentication: sample
+    identity: sample
     indexeddb: sqlite
     authorization: indexeddb
   management:
@@ -1319,7 +1319,7 @@ server:
     authorizationPolicy: admin_policy
     allowedRoles: [admin]
 providers:
-  authentication:
+  identity:
     sample:
       source:
         path: ./providers/auth/sample
@@ -1350,7 +1350,7 @@ server:
   baseUrl: https://gestalt.example.test
   encryptionKey: server-key
   providers:
-    authentication: sample
+    identity: sample
     indexeddb: sqlite
     authorization: indexeddb
   management:
@@ -1361,7 +1361,7 @@ server:
     authorizationPolicy: admin_policy
     allowedRoles: [admin]
 providers:
-  authentication:
+  identity:
     sample:
       source:
         path: ./providers/auth/sample
@@ -1392,7 +1392,7 @@ server:
   baseUrl: https://gestalt.example.test
   encryptionKey: server-key
   providers:
-    authentication: sample
+    identity: sample
     indexeddb: sqlite
     authorization: indexeddb
   management:
@@ -1401,7 +1401,7 @@ server:
     authorizationPolicy: admin_policy
     allowedRoles: [admin]
 providers:
-  authentication:
+  identity:
     sample:
       source:
         path: ./providers/auth/sample
@@ -1431,14 +1431,14 @@ providers:
 server:
   encryptionKey: server-key
   providers:
-    authentication: sample
+    identity: sample
     indexeddb: sqlite
   admin:
     authorizationPolicy: admin_policy
     allowedRoles:
       - ""
 providers:
-  authentication:
+  identity:
     sample:
       source:
         path: ./providers/auth/sample
@@ -1486,7 +1486,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -1509,7 +1509,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -1529,7 +1529,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -1555,7 +1555,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
   workflow:
     demo:
@@ -1576,7 +1576,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
   ui:
     dashboard:
@@ -1598,7 +1598,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -1681,12 +1681,12 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: corporate
+    identity: corporate
 providers:
-  authentication:
+  identity:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 apps:
@@ -1760,12 +1760,12 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: corporate
+    identity: corporate
 providers:
-  authentication:
+  identity:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 apps:
@@ -1821,7 +1821,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -1879,7 +1879,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -1920,7 +1920,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -1967,7 +1967,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
   secrets:
     default:
@@ -2004,7 +2004,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   encryptionKey: server-key
 providers:
@@ -2480,7 +2480,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
   externalCredentials:
     default:
@@ -5151,7 +5151,7 @@ func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   encryptionKey: server-key
 apps:
@@ -5172,7 +5172,7 @@ runtime:
 		t.Fatalf("writing base config: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 apps:
   service:
     runtime: null
@@ -5199,7 +5199,7 @@ func TestLoadConfigProviderPackageSources(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteRawConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
@@ -5248,7 +5248,7 @@ func TestLoadConfigProviderPackageSourcesDoNotGetBuiltinDefaults(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteRawConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
@@ -5305,7 +5305,7 @@ func TestLoadConfigProviderPackageSourceValidation(t *testing.T) {
 		{
 			name: "package and url are mutually exclusive",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 apps:
   service:
     source:
@@ -5342,7 +5342,7 @@ func TestLoadPathsProviderPackageSourceLayering(t *testing.T) {
 		basePath := filepath.Join(dir, "base.yaml")
 		overridePath := filepath.Join(dir, "override.yaml")
 		if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 apps:
   service:
     source: https://example.com/service/provider-release.yaml
@@ -5350,7 +5350,7 @@ apps:
 			t.Fatalf("write base: %v", err)
 		}
 		if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
@@ -5453,9 +5453,9 @@ providers:
 		{
 			name: "external provider source",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
-  authentication:
+  identity:
     primary:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
 `,
@@ -5463,7 +5463,7 @@ providers:
 		{
 			name: "apiVersion scalar local source",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5473,12 +5473,12 @@ apps:
 		{
 			name: "apiVersion metadata url with app route auth",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: corporate
+    identity: corporate
 providers:
-  authentication:
+  identity:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 apps:
@@ -5491,7 +5491,7 @@ apps:
 		{
 			name: "apiVersion metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5504,9 +5504,9 @@ apps:
 		{
 			name: "provider metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
-  authentication:
+  identity:
     primary:
       source:
         url: https://example.com/providers/test-auth/provider-release.yaml
@@ -5558,7 +5558,7 @@ server:
 			name: "multiple authentication providers require selection or default",
 			yaml: `
 providers:
-  authentication:
+  identity:
     one:
       source:
         path: ./one/manifest.yaml
@@ -5581,7 +5581,7 @@ apps:
 		{
 			name: "provider auth override is rejected outside apps",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
   cache:
     shared:
@@ -5660,7 +5660,7 @@ func TestLoadPathsRequiresAPIVersionInEveryFile(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
   external:
@@ -5761,7 +5761,7 @@ func TestValidConfigurations(t *testing.T) {
 		{
 			name: "metadata source app only",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     custom_tool:
@@ -5847,12 +5847,12 @@ apps:
 		{
 			name: "apiVersion route auth override is valid",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: corporate
+    identity: corporate
 providers:
-  authentication:
+  identity:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 apps:
@@ -5865,7 +5865,7 @@ apps:
 		{
 			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5881,7 +5881,7 @@ apps:
 		{
 			name: "apiVersion github release source requires repo",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5895,7 +5895,7 @@ apps:
 		{
 			name: "apiVersion github release source requires owner slash name",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5910,7 +5910,7 @@ apps:
 		{
 			name: "apiVersion nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5923,12 +5923,12 @@ apps:
 		{
 			name: "app auth override is valid alongside nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   providers:
-    authentication: corporate
+    identity: corporate
 providers:
-  authentication:
+  identity:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 apps:
@@ -5944,7 +5944,7 @@ apps:
 		{
 			name: "app auth override rejects source auth token mix",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5958,7 +5958,7 @@ apps:
 		{
 			name: "app auth override rejects unknown auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5971,7 +5971,7 @@ apps:
 		{
 			name: "app auth override rejects server alias without configured auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5984,7 +5984,7 @@ apps:
 		{
 			name: "apiVersion local source rejects sibling auth",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -5997,7 +5997,7 @@ apps:
 		{
 			name: "apiVersion v5 local provider-release metadata is valid",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6007,7 +6007,7 @@ apps:
 		{
 			name: "apiVersion v5 local provider-release metadata allows current-directory file",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6017,7 +6017,7 @@ apps:
 		{
 			name: "apiVersion v5 local provider-release metadata accepts nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6030,7 +6030,7 @@ apps:
 		{
 			name: "apiVersion accepts local source manifests",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6040,7 +6040,7 @@ apps:
 		{
 			name: "apiVersion accepts absolute http metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6050,7 +6050,7 @@ apps:
 		{
 			name: "apiVersion rejects git scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6061,7 +6061,7 @@ apps:
 		{
 			name: "apiVersion rejects unsupported ssh scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6072,7 +6072,7 @@ apps:
 		{
 			name: "apiVersion rejects unsupported file scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6083,7 +6083,7 @@ apps:
 		{
 			name: "apiVersion rejects malformed hostless https metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
 apps:
     external:
@@ -6094,7 +6094,7 @@ apps:
 		{
 			name: "apiVersion accepts absolute telemetry metadata source before builtin defaulting",
 			yaml: `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
   telemetry:
     default:
@@ -6226,7 +6226,7 @@ func TestValidateStructure_AppValidationDirect(t *testing.T) {
 			name: "authentication provider valid",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Authentication: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{metadataURL: "https://example.com/providers/test-auth/provider-release.yaml"}}),
+					Identity: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{metadataURL: "https://example.com/providers/test-auth/provider-release.yaml"}}),
 				},
 			},
 		},
@@ -6238,7 +6238,7 @@ func TestValidateStructure_AppValidationDirect(t *testing.T) {
 			name: "authentication provider invalid when source missing",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Authentication: singletonProviderEntry(&ProviderEntry{}),
+					Identity: singletonProviderEntry(&ProviderEntry{}),
 				},
 			},
 			wantErr: `source.path or provider-release metadata URL is required`,
@@ -6247,7 +6247,7 @@ func TestValidateStructure_AppValidationDirect(t *testing.T) {
 			name: "authentication config requires source",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Authentication: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}}),
+					Identity: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}}),
 				},
 			},
 			wantErr: `source.path or provider-release metadata URL is required`,
@@ -6514,10 +6514,10 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
-  authentication:
-    authentication:
+  identity:
+    identity:
       source:
         path: ../auth-app/provider.yaml
   indexeddb:
@@ -6544,9 +6544,9 @@ server:
 	if got := cfg.Apps["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindIdentity)
 	if auth == nil {
-		t.Fatal("SelectedAuthenticationProvider = nil")
+		t.Fatal("SelectedIdentityProvider = nil")
 		return
 	}
 	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-app", "provider.yaml") {
@@ -6566,7 +6566,7 @@ func TestLoadPaths_ResolvesRelativePathsPerFile(t *testing.T) {
 		t.Fatalf("MkdirAll base: %v", err)
 	}
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   artifactsDir: ../base-artifacts
 providers:
@@ -6582,7 +6582,7 @@ apps:
 		t.Fatalf("MkdirAll override: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 server:
   artifactsDir: ./override-artifacts
 providers:
@@ -6611,10 +6611,10 @@ func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
-  authentication:
-    authentication:
+  identity:
+    identity:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
         clientId: client-1
@@ -6635,9 +6635,9 @@ server:
 		t.Fatalf("Load: %v", err)
 	}
 
-	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindIdentity)
 	if auth == nil {
-		t.Fatal("SelectedAuthenticationProvider = nil")
+		t.Fatal("SelectedIdentityProvider = nil")
 		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
@@ -6686,7 +6686,7 @@ func TestLoad_ResolvesRelativeAppSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v6
+	cfg := `apiVersion: gestaltd.config/v7
 providers:
 apps:
     sample:

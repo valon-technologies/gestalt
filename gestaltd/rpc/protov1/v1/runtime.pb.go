@@ -28,7 +28,7 @@ type ProviderKind int32
 const (
 	ProviderKind_PROVIDER_KIND_UNSPECIFIED         ProviderKind = 0
 	ProviderKind_PROVIDER_KIND_APP                 ProviderKind = 1
-	ProviderKind_PROVIDER_KIND_AUTHENTICATION      ProviderKind = 2
+	ProviderKind_PROVIDER_KIND_IDENTITY            ProviderKind = 2
 	ProviderKind_PROVIDER_KIND_INDEXEDDB           ProviderKind = 3
 	ProviderKind_PROVIDER_KIND_SECRETS             ProviderKind = 4
 	ProviderKind_PROVIDER_KIND_TELEMETRY           ProviderKind = 5
@@ -47,7 +47,7 @@ var (
 	ProviderKind_name = map[int32]string{
 		0:  "PROVIDER_KIND_UNSPECIFIED",
 		1:  "PROVIDER_KIND_APP",
-		2:  "PROVIDER_KIND_AUTHENTICATION",
+		2:  "PROVIDER_KIND_IDENTITY",
 		3:  "PROVIDER_KIND_INDEXEDDB",
 		4:  "PROVIDER_KIND_SECRETS",
 		5:  "PROVIDER_KIND_TELEMETRY",
@@ -63,7 +63,7 @@ var (
 	ProviderKind_value = map[string]int32{
 		"PROVIDER_KIND_UNSPECIFIED":         0,
 		"PROVIDER_KIND_APP":                 1,
-		"PROVIDER_KIND_AUTHENTICATION":      2,
+		"PROVIDER_KIND_IDENTITY":            2,
 		"PROVIDER_KIND_INDEXEDDB":           3,
 		"PROVIDER_KIND_SECRETS":             4,
 		"PROVIDER_KIND_TELEMETRY":           5,
@@ -439,11 +439,11 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"_\n" +
 	"\x1cStartRuntimeProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version*\x9a\x03\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version*\x94\x03\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11PROVIDER_KIND_APP\x10\x01\x12 \n" +
-	"\x1cPROVIDER_KIND_AUTHENTICATION\x10\x02\x12\x1b\n" +
+	"\x11PROVIDER_KIND_APP\x10\x01\x12\x1a\n" +
+	"\x16PROVIDER_KIND_IDENTITY\x10\x02\x12\x1b\n" +
 	"\x17PROVIDER_KIND_INDEXEDDB\x10\x03\x12\x19\n" +
 	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
 	"\x17PROVIDER_KIND_TELEMETRY\x10\x05\x12\x17\n" +

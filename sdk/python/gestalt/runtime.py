@@ -27,7 +27,7 @@ class ProviderKindValues:
 
     UNSPECIFIED: ProviderKind = 0
     APP: ProviderKind = 1
-    AUTHENTICATION: ProviderKind = 2
+    IDENTITY: ProviderKind = 2
     INDEXEDDB: ProviderKind = 3
     SECRETS: ProviderKind = 4
     TELEMETRY: ProviderKind = 5

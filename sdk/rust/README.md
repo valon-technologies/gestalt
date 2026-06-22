@@ -22,7 +22,7 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 | --- | --- | --- |
 | Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`Response`], [`ok`] | Executable app providers, typed request handlers, hosted HTTP subject hooks, and operation results. |
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
-| Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`RuntimeProvider`] | Host-service backends implemented as Rust providers. |
+| Provider runtimes | [`IdentityProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`RuntimeProvider`] | Host-service backends implemented as Rust providers. |
 | Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_definition`], [`new_workflow_run`], [`new_workflow_signal`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
 | Host-service clients | [`Cache`], [`S3`], [`Workflow`], [`Agent`], [`App`] | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
@@ -81,7 +81,7 @@ a host-service backend.
 
 | Trait | Export macro | Use it when you want to serve |
 | --- | --- | --- |
-| `AuthenticationProvider` | `export_authentication_provider!` | Login flows. |
+| `IdentityProvider` | `export_identity_provider!` | Login flows. |
 | `CacheProvider` | `export_cache_provider!` | App-bound cache storage. |
 | `S3Provider` | `export_s3_provider!` | S3-compatible object storage. |
 | `SecretsProvider` | `export_secrets_provider!` | Secret resolution. |
@@ -149,7 +149,7 @@ The crate exposes higher-level authoring APIs:
   apps map verified hosted HTTP requests to concrete subjects.
 - `Router` and `Operation` register typed operations and derive catalog
   metadata from `serde` and `schemars`.
-- `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
+- `IdentityProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
   `WorkflowProvider`, `AgentProvider`, and `RuntimeProvider` model
   executable provider runtimes.
 - `Cache`, `S3`, `Workflow`, `Agent`, and `App` call sibling host

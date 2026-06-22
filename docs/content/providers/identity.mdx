@@ -1,0 +1,568 @@
+import { Tabs } from 'nextra/components'
+
+# Identity
+
+Identity providers handle platform login for the Gestalt server.
+Identity is separate from [authorization configuration](/reference/config-file#authorization), which
+decides what the caller may access, and
+[External Credentials](/providers/external-credentials), which provide upstream
+credentials for configured connections.
+
+## How identity providers work
+
+When a request arrives without a valid session, Gestalt asks the configured
+identity provider to start login through `Authorize`, redirects the user to the
+upstream identity provider, and then calls `Token` to complete the callback.
+After that, Gestalt issues and stores its own session.
+
+For API access, Gestalt validates bearer tokens through the provider's
+`Introspect` handler. Profile lookup and personal API-token management use
+`UserInfo` and the grant-management RPCs.
+
+## First-Party Identity Providers
+
+Published first-party identity providers live under
+[`valon-technologies/gestalt-providers/auth`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth).
+The `auth/oidc` source path is retained for registry compatibility.
+
+| Provider | Use case |
+| --- | --- |
+| [`github.com/valon-technologies/gestalt-providers/auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | Generic OpenID Connect providers such as Google, Okta, Auth0, Azure AD, or Keycloak |
+
+## Configuring `providers.identity`
+
+```yaml
+server:
+  providers:
+    identity: oidc
+
+providers:
+  identity:
+    oidc:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ...
+        clientSecret: ...
+```
+
+Structured secret refs such as `clientSecret.secret.provider: default` are
+resolved through `providers.secrets` before the identity provider receives its
+config.
+
+To disable platform identity entirely, omit `providers.identity`.
+
+For local development, omission is the simple default: every request is treated
+as the same anonymous user.
+
+## Local source during development
+
+```yaml
+providers:
+  identity:
+    oidc:
+      source: ./oidc-auth/manifest.yaml
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ...
+        clientSecret: ...
+```
+
+## Building your own identity provider
+
+### Manifest
+
+An identity provider manifest declares `kind: identity`. You can optionally include a `configSchemaPath` so Gestalt validates provider config at startup.
+
+```yaml
+kind: identity
+source: github.com/your-org/identity/google
+version: 0.0.1
+displayName: Google Identity
+description: Issue and resolve identities with Google OAuth.
+spec:
+  configSchemaPath: ./identity_config.json
+```
+
+### Interface
+
+The identity surface implements RFC 6749 authorization and token flows, RFC 7662
+introspection, OIDC-style UserInfo, OIDF grant management for API tokens, and
+RFC 8693 token exchange where supported. `Authorize` returns a redirect URI that
+Gestalt sends the browser to. `Token` exchanges callback parameters or subject
+tokens for bearer credentials. `Introspect` resolves bearer tokens to canonical
+Gestalt subject IDs.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package googleidentity
+
+    import (
+        "context"
+        "fmt"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+        "golang.org/x/oauth2"
+        googleoauth "golang.org/x/oauth2/google"
+    )
+
+    type GoogleIdentity struct {
+        clientID     string
+        clientSecret string
+    }
+
+    func New() *GoogleIdentity { return &GoogleIdentity{} }
+
+    func (g *GoogleIdentity) Configure(_ context.Context, _ string, config map[string]any) error {
+        g.clientID, _ = config["clientId"].(string)
+        g.clientSecret, _ = config["clientSecret"].(string)
+        if g.clientID == "" || g.clientSecret == "" {
+            return fmt.Errorf("clientId and clientSecret are required")
+        }
+        return nil
+    }
+
+    func (g *GoogleIdentity) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+        cfg := &oauth2.Config{
+            ClientID:     g.clientID,
+            ClientSecret: g.clientSecret,
+            RedirectURL:  req.RedirectURI,
+            Scopes:       []string{"openid", "email", "profile"},
+            Endpoint:     googleoauth.Endpoint,
+        }
+        return &gestalt.AuthorizeResponse{
+            RedirectURI: cfg.AuthCodeURL(req.State, oauth2.AccessTypeOffline),
+        }, nil
+    }
+
+    func (g *GoogleIdentity) Token(ctx context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+        // Exchange req.Code for a token when req.GrantType is authorization_code,
+        // then return the upstream access token and expiry.
+        _ = ctx
+        _ = req
+        return &gestalt.TokenResponse{
+            AccessToken: "...",
+            TokenType:   "Bearer",
+            ExpiresIn:   3600,
+        }, nil
+    }
+
+    func (g *GoogleIdentity) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+        if req.Token == "" {
+            return &gestalt.IntrospectResponse{Active: false}, nil
+        }
+        // Validate the bearer token with the upstream issuer, then map the
+        // token claims into a canonical Gestalt subject ID.
+        return &gestalt.IntrospectResponse{
+            Active:  true,
+            Subject: "user:user@example.com",
+        }, nil
+    }
+
+    func (g *GoogleIdentity) UserInfo(_ context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+        return &gestalt.UserInfoResponse{
+            SubjectID: "user:user@example.com",
+            Email:     "user@example.com",
+            Name:      "Example User",
+        }, nil
+    }
+
+    func (g *GoogleIdentity) ListGrants(ctx context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+        _ = gestalt.IdentityCallContextFromContext(ctx)
+        return &gestalt.ListGrantsResponse{GrantIDs: []string{}}, nil
+    }
+
+    func (g *GoogleIdentity) GetGrant(ctx context.Context, _ *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
+        _ = gestalt.IdentityCallContextFromContext(ctx)
+        return &gestalt.GetGrantResponse{}, nil
+    }
+
+    func (g *GoogleIdentity) RevokeGrant(ctx context.Context, _ *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
+        _ = gestalt.IdentityCallContextFromContext(ctx)
+        return &gestalt.RevokeGrantResponse{}, nil
+    }
+
+    var _ gestalt.IdentityProvider = (*GoogleIdentity)(nil)
+    ```
+
+    Serve with `gestalt.ServeIdentityProvider(ctx, provider)`.
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import (
+        AuthorizeRequest,
+        AuthorizeResponse,
+        GetGrantRequest,
+        GetGrantResponse,
+        IdentityCallContext,
+        IdentityProvider,
+        IntrospectRequest,
+        IntrospectResponse,
+        ListGrantsRequest,
+        ListGrantsResponse,
+        RevokeGrantRequest,
+        RevokeGrantResponse,
+        TokenRequest,
+        TokenResponse,
+        UserInfoRequest,
+        UserInfoResponse,
+    )
+
+    class GoogleIdentity(IdentityProvider):
+        def configure(self, name: str, config: dict) -> None:
+            self.client_id = config["clientId"]
+            self.client_secret = config["clientSecret"]
+
+        def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse:
+            auth_url = (
+                "https://accounts.google.com/o/oauth2/v2/auth"
+                f"?client_id={self.client_id}"
+                f"&redirect_uri={request.redirect_uri}"
+                f"&state={request.state}"
+                "&response_type=code"
+                "&scope=openid+email+profile"
+            )
+            return AuthorizeResponse(redirect_uri=auth_url)
+
+        def token(self, request: TokenRequest) -> TokenResponse:
+            # Exchange request.code for a token, then return the upstream access token.
+            return TokenResponse(
+                access_token="...",
+                token_type="Bearer",
+                expires_in=3600,
+            )
+
+        def introspect(self, request: IntrospectRequest) -> IntrospectResponse:
+            if not request.token:
+                return IntrospectResponse(active=False)
+
+            # Validate the bearer token with the upstream issuer, then map the
+            # token claims into a canonical Gestalt subject ID.
+            return IntrospectResponse(
+                active=True,
+                subject="user:user@example.com",
+            )
+
+        def user_info(
+            self, request: UserInfoRequest, call: IdentityCallContext
+        ) -> UserInfoResponse:
+            return UserInfoResponse(
+                subject_id="user:user@example.com",
+                email="user@example.com",
+                name="Example User",
+            )
+
+        def list_grants(
+            self, request: ListGrantsRequest, call: IdentityCallContext
+        ) -> ListGrantsResponse:
+            return ListGrantsResponse(grant_ids=[])
+
+        def get_grant(
+            self, request: GetGrantRequest, call: IdentityCallContext
+        ) -> GetGrantResponse:
+            return GetGrantResponse(scopes=[], created_at=0, expires_at=0)
+
+        def revoke_grant(
+            self, request: RevokeGrantRequest, call: IdentityCallContext
+        ) -> RevokeGrantResponse:
+            return RevokeGrantResponse()
+
+    ```
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::sync::Mutex;
+    use gestalt::auth::{IdentityCallContext, IdentityProvider};
+    use gestalt::identity::{
+        AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse,
+        IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
+        RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse,
+        UserInfoRequest, UserInfoResponse,
+    };
+
+    #[derive(Default)]
+    pub struct GoogleIdentity {
+        client_id: Mutex<String>,
+        client_secret: Mutex<String>,
+    }
+
+    #[gestalt::async_trait]
+    impl IdentityProvider for GoogleIdentity {
+        async fn configure(
+            &self, _name: &str, config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            *self.client_id.lock().unwrap() = config
+                .get("clientId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            *self.client_secret.lock().unwrap() = config
+                .get("clientSecret").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            Ok(())
+        }
+
+        async fn authorize(&self, req: AuthorizeRequest) -> gestalt::Result<AuthorizeResponse> {
+            let client_id = self.client_id.lock().unwrap().clone();
+            Ok(AuthorizeResponse {
+                redirect_uri: format!(
+                    "https://accounts.google.com/o/oauth2/v2/auth\
+                    ?client_id={client_id}&redirect_uri={}&state={}&response_type=code\
+                    &scope=openid+email+profile",
+                    req.redirect_uri, req.state,
+                ),
+            })
+        }
+
+        async fn token(&self, req: TokenRequest) -> gestalt::Result<TokenResponse> {
+            // Exchange req.code for a token when req.grant_type is authorization_code.
+            Ok(TokenResponse {
+                access_token: "...".into(),
+                token_type: "Bearer".into(),
+                expires_in: 3600,
+                ..Default::default()
+            })
+        }
+
+        async fn introspect(&self, req: IntrospectRequest) -> gestalt::Result<IntrospectResponse> {
+            if req.token.is_empty() {
+                return Ok(IntrospectResponse { active: false, ..Default::default() });
+            }
+
+            // Validate the bearer token with the upstream issuer, then map the
+            // token claims into a canonical Gestalt subject ID.
+            Ok(IntrospectResponse {
+                active: true,
+                subject: "user:user@example.com".into(),
+                ..Default::default()
+            })
+        }
+
+        async fn user_info(
+            &self,
+            _call: IdentityCallContext,
+            _req: UserInfoRequest,
+        ) -> gestalt::Result<UserInfoResponse> {
+            Ok(UserInfoResponse {
+                subject_id: "user:user@example.com".into(),
+                email: "user@example.com".into(),
+                name: "Example User".into(),
+            })
+        }
+
+        async fn list_grants(
+            &self,
+            _call: IdentityCallContext,
+            _req: ListGrantsRequest,
+        ) -> gestalt::Result<ListGrantsResponse> {
+            Ok(ListGrantsResponse { grant_ids: vec![] })
+        }
+
+        async fn get_grant(
+            &self,
+            _call: IdentityCallContext,
+            _req: GetGrantRequest,
+        ) -> gestalt::Result<GetGrantResponse> {
+            Ok(GetGrantResponse::default())
+        }
+
+        async fn revoke_grant(
+            &self,
+            _call: IdentityCallContext,
+            _req: RevokeGrantRequest,
+        ) -> gestalt::Result<RevokeGrantResponse> {
+            Ok(RevokeGrantResponse {})
+        }
+    }
+
+    gestalt::export_identity_provider!(constructor = GoogleIdentity::default);
+    ```
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { defineIdentityProvider } from "@valon-technologies/gestalt";
+
+    let clientId = "";
+    let clientSecret = "";
+
+    export const provider = defineIdentityProvider({
+      async configure(_name, config) {
+        clientId = config.clientId as string;
+        clientSecret = config.clientSecret as string;
+      },
+      async authorize(request) {
+        return {
+          redirectUri:
+            `https://accounts.google.com/o/oauth2/v2/auth` +
+            `?client_id=${encodeURIComponent(clientId)}` +
+            `&redirect_uri=${encodeURIComponent(request.redirectUri)}` +
+            `&state=${encodeURIComponent(request.state)}` +
+            `&response_type=code&scope=${encodeURIComponent("openid email profile")}`,
+        };
+      },
+      async token(request) {
+        // Exchange request.code for a token, then return the upstream access token.
+        return {
+          accessToken: "...",
+          tokenType: "Bearer",
+          expiresIn: 3600,
+        };
+      },
+      async introspect(request) {
+        if (!request.token) {
+          return { active: false };
+        }
+
+        // Validate the bearer token with the upstream issuer, then map the
+        // token claims into a canonical Gestalt subject ID.
+        return {
+          active: true,
+          subject: "user:user@example.com",
+        };
+      },
+      async userInfo(_request, call) {
+        return {
+          subjectId: "user:user@example.com",
+          email: "user@example.com",
+          name: "Example User",
+        };
+      },
+      async listGrants(_request, call) {
+        return { grantIds: [] };
+      },
+      async getGrant(_request, call) {
+        return { scopes: [], createdAt: 0n, expiresAt: 0n };
+      },
+      async revokeGrant(_request, call) {},
+    });
+    ```
+
+    The identity provider manifest points Gestalt at the executable
+    artifact produced by its build command:
+
+    ```yaml
+    build:
+      command:
+        - npm
+        - run
+        - build
+      inputs:
+        - package.json
+        - package-lock.json
+        - identity.ts
+    entrypoint:
+      artifactPath: .gestalt/build/identity
+    ```
+
+  </Tabs.Tab>
+</Tabs>
+
+### Optional interfaces
+
+Two areas extend the base contract beyond the required RPCs.
+
+#### Bearer token introspection
+
+Bearer token introspection lets API clients present a token directly instead of
+going through the browser login flow. Return `active: false` when the token is
+not recognized. Gestalt routes both session cookies and `Authorization: Bearer`
+headers through `Introspect`.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    func (g *GoogleIdentity) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+        if req.Token == "" {
+            return &gestalt.IntrospectResponse{Active: false}, nil
+        }
+
+        // Validate the bearer token with the upstream issuer, then map the
+        // token claims into a canonical Gestalt subject ID.
+        return &gestalt.IntrospectResponse{
+            Active:  true,
+            Subject: "user:user-123",
+            Scope:   "openid email profile",
+        }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    def introspect(self, request: IntrospectRequest) -> IntrospectResponse:
+        if not request.token:
+            return IntrospectResponse(active=False)
+
+        # Validate the bearer token with the upstream issuer, then map the
+        # token claims into a canonical Gestalt subject ID.
+        return IntrospectResponse(
+            active=True,
+            subject="user:user-123",
+            scope="openid email profile",
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    async fn introspect(&self, req: IntrospectRequest) -> gestalt::Result<IntrospectResponse> {
+        if req.token.is_empty() {
+            return Ok(IntrospectResponse { active: false, ..Default::default() });
+        }
+
+        // Validate the bearer token with the upstream issuer, then map the
+        // token claims into a canonical Gestalt subject ID.
+        Ok(IntrospectResponse {
+            active: true,
+            subject: "user:user-123".into(),
+            scope: "openid email profile".into(),
+            ..Default::default()
+        })
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    async introspect(request) {
+      if (!request.token) {
+        return { active: false };
+      }
+
+      // Validate the bearer token with the upstream issuer, then map the
+      // token claims into a canonical Gestalt subject ID.
+      return {
+        active: true,
+        subject: "user:user-123",
+        scope: "openid email profile",
+      };
+    },
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+#### Session lifetime
+
+Session lifetime controls how long Gestalt persists a successful browser login.
+For first-party OIDC providers, set `sessionTtl` in
+`providers.identity.<name>.config`. The default is `24h`. See
+[`providers.identity` in the config reference](/reference/config-file#providersidentity)
+for the full field list.
+
+Grant-management RPCs receive caller-scoped metadata through
+`IdentityCallContext`. In Go, attach it with `gestalt.WithIdentityCallContext`
+before invoking grant handlers from host code.
+
+### Deploying the provider
+
+Configure a custom identity provider through the same
+`providers.identity` block shown in
+[Configuring `providers.identity`](/providers/identity#configuring-providersidentity).
+That section is the source of truth for local manifest paths, published provider
+release URLs, and structured secret refs. For packaging and release mechanics,
+see [Releasing provider packages](/providers#releasing-provider-packages).
+
+## What To Read Next
+
+- [Secrets](/providers/secrets): secret managers for identity provider config
+- [Configuration](/reference/configuration): full config examples including `providers.identity`
+- [Built-in Providers](/reference/built-in-providers): first-party identity reference

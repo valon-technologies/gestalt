@@ -12,7 +12,7 @@ import (
 type authRuntime struct {
 	providerRef  string
 	providerName string
-	provider     core.AuthenticationProvider
+	provider     core.IdentityProvider
 	resolver     *principal.Resolver
 	noAuth       bool
 	anonymous    *principal.Principal

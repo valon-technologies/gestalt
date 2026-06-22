@@ -552,26 +552,28 @@ func (r *renderer) writeOneofFromWire(m *model.Message, o *model.Oneof) {
 }
 
 func (r *renderer) renderClient(svc *model.Service) {
-	name := localName(svc.FullName)
+	wireName := localName(svc.FullName)
+	name := wireName
 	r.features.context = true
 	r.features.grpc = true
 	r.features.proto = true
 
 	ctxField := contextFieldOf(svc)
-	r.writeIdentDoc("", fmt.Sprintf("%s is the generated client for %s.\nEvery transport error is converted to *GestaltError.", name, svc.FullName), svc.Doc)
+	doc := fmt.Sprintf("%s is the generated client for %s.\nEvery transport error is converted to *GestaltError.", name, svc.FullName)
+	r.writeIdentDoc("", doc, svc.Doc)
 	if ctxField != nil {
 		ctxType := r.fieldType(ctxField)
-		fmt.Fprintf(&r.body, "type %s struct {\n\tclient proto.%sClient\n\tcontext %s\n}\n\n", name, name, ctxType)
+		fmt.Fprintf(&r.body, "type %s struct {\n\tclient proto.%sClient\n\tcontext %s\n}\n\n", name, wireName, ctxType)
 		fmt.Fprintf(&r.body, "// New%s creates a %s client over an injected gRPC connection. A\n", name, name)
 		r.body.WriteString("// WithRequestContext option sets a default request context, injected into\n// outgoing requests that do not carry one.\n")
 		fmt.Fprintf(&r.body, "func New%s(conn grpc.ClientConnInterface, opts ...ClientOption) *%s {\n", name, name)
 		r.body.WriteString("\toptions := applyClientOptions(opts)\n")
-		fmt.Fprintf(&r.body, "\treturn &%s{client: proto.New%sClient(conn), context: options.requestContext}\n}\n\n", name, name)
+		fmt.Fprintf(&r.body, "\treturn &%s{client: proto.New%sClient(conn), context: options.requestContext}\n}\n\n", name, wireName)
 	} else {
-		fmt.Fprintf(&r.body, "type %s struct {\n\tclient proto.%sClient\n}\n\n", name, name)
+		fmt.Fprintf(&r.body, "type %s struct {\n\tclient proto.%sClient\n}\n\n", name, wireName)
 		fmt.Fprintf(&r.body, "// New%s creates a %s client over an injected gRPC connection.\n", name, name)
 		fmt.Fprintf(&r.body, "func New%s(conn grpc.ClientConnInterface) *%s {\n", name, name)
-		fmt.Fprintf(&r.body, "\treturn &%s{client: proto.New%sClient(conn)}\n}\n\n", name, name)
+		fmt.Fprintf(&r.body, "\treturn &%s{client: proto.New%sClient(conn)}\n}\n\n", name, wireName)
 	}
 
 	if svc.HostBinding != "" {

@@ -14,19 +14,19 @@ helm upgrade --install gestaltd \
 
 The default chart profile is for local or disposable testing only:
 
-- platform authentication is omitted
+- platform identity is omitted
 - SQLite uses a PVC mounted at `/data`
 - `server.encryptionKey` is a static dev-only value
 - one replica
 - no ingress
 
 Before any shared or production deployment, set a real encryption key,
-configure authentication, use a networked datastore, and set `server.baseUrl`
+configure identity, use a networked datastore, and set `server.baseUrl`
 to the public HTTPS URL.
 
 ## Production values
 
-This example uses OIDC authentication, a networked RelationalDB datastore, and
+This example uses OIDC identity, a networked RelationalDB datastore, and
 an internal management listener for `/admin` and `/metrics`:
 
 ```yaml
@@ -49,10 +49,10 @@ config:
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
     providers:
-      authentication: oidc
+      identity: oidc
       indexeddb: main
   providers:
-    authentication:
+    identity:
       oidc:
         source:
           package: github.com/valon-technologies/gestalt-providers/auth/oidc

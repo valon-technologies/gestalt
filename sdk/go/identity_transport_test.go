@@ -20,41 +20,41 @@ type configCall struct {
 	config map[string]any
 }
 
-type fullAuthenticationProvider struct {
+type fullIdentityProvider struct {
 	closeTracker
 	configured []configCall
 	started    int
 	revoked    []string
 }
 
-func (p *fullAuthenticationProvider) Configure(_ context.Context, name string, config map[string]any) error {
+func (p *fullIdentityProvider) Configure(_ context.Context, name string, config map[string]any) error {
 	p.configured = append(p.configured, configCall{name: name, config: config})
 	return nil
 }
 
-func (p *fullAuthenticationProvider) Metadata() gestalt.ProviderMetadata {
+func (p *fullIdentityProvider) Metadata() gestalt.ProviderMetadata {
 	return gestalt.ProviderMetadata{
-		Kind:        gestalt.ProviderKindAuthentication,
+		Kind:        gestalt.ProviderKindIdentity,
 		Name:        "stub-auth",
 		DisplayName: "Stub Auth",
 		Version:     "1.0",
 	}
 }
 
-func (p *fullAuthenticationProvider) Warnings() []string {
+func (p *fullIdentityProvider) Warnings() []string {
 	return []string{"battery low"}
 }
 
-func (p *fullAuthenticationProvider) HealthCheck(context.Context) error {
+func (p *fullIdentityProvider) HealthCheck(context.Context) error {
 	return nil
 }
 
-func (p *fullAuthenticationProvider) Start(context.Context) error {
+func (p *fullIdentityProvider) Start(context.Context) error {
 	p.started++
 	return nil
 }
 
-func (p *fullAuthenticationProvider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+func (p *fullIdentityProvider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -63,7 +63,7 @@ func (p *fullAuthenticationProvider) Authorize(_ context.Context, req *gestalt.A
 	}, nil
 }
 
-func (p *fullAuthenticationProvider) Token(_ context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+func (p *fullIdentityProvider) Token(_ context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
 	if req == nil || req.Code != "auth-code" {
 		return nil, status.Error(codes.InvalidArgument, "invalid authorization code")
 	}
@@ -76,7 +76,7 @@ func (p *fullAuthenticationProvider) Token(_ context.Context, req *gestalt.Token
 	}, nil
 }
 
-func (p *fullAuthenticationProvider) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+func (p *fullIdentityProvider) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
 	if req == nil {
 		return &gestalt.IntrospectResponse{Active: false}, nil
 	}
@@ -93,8 +93,8 @@ func (p *fullAuthenticationProvider) Introspect(_ context.Context, req *gestalt.
 	}
 }
 
-func (p *fullAuthenticationProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
-	call := gestalt.AuthCallContextFromContext(ctx)
+func (p *fullIdentityProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
+	call := gestalt.IdentityCallContextFromContext(ctx)
 	if call.CallerBearerToken != "valid-token" {
 		return nil, status.Error(codes.NotFound, "userinfo not found")
 	}
@@ -105,11 +105,11 @@ func (p *fullAuthenticationProvider) UserInfo(ctx context.Context, _ *gestalt.Us
 	}, nil
 }
 
-func (p *fullAuthenticationProvider) ListGrants(_ context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+func (p *fullIdentityProvider) ListGrants(_ context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
 	return &gestalt.ListGrantsResponse{GrantIDs: []string{"grant-1", "grant-2"}}, nil
 }
 
-func (p *fullAuthenticationProvider) GetGrant(_ context.Context, req *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
+func (p *fullIdentityProvider) GetGrant(_ context.Context, req *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
 	if req == nil || req.GrantID != "grant-1" {
 		return nil, status.Error(codes.NotFound, "grant not found")
 	}
@@ -123,7 +123,7 @@ func (p *fullAuthenticationProvider) GetGrant(_ context.Context, req *gestalt.Ge
 	}, nil
 }
 
-func (p *fullAuthenticationProvider) RevokeGrant(_ context.Context, req *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
+func (p *fullIdentityProvider) RevokeGrant(_ context.Context, req *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
 	if req == nil || req.GrantID == "" {
 		return nil, status.Error(codes.InvalidArgument, "grant_id is required")
 	}
@@ -131,15 +131,15 @@ func (p *fullAuthenticationProvider) RevokeGrant(_ context.Context, req *gestalt
 	return &gestalt.RevokeGrantResponse{}, nil
 }
 
-func TestAuthenticationProviderRoundTrip(t *testing.T) {
+func TestIdentityProviderRoundTrip(t *testing.T) {
 	socket := newSocketPath(t, "auth.sock")
 	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	provider := &fullAuthenticationProvider{}
+	provider := &fullIdentityProvider{}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeAuthenticationProvider(ctx, provider)
+		errCh <- gestalt.ServeIdentityProvider(ctx, provider)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -151,7 +151,7 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 
 	conn := newUnixConn(t, socket)
 	runtimeClient := proto.NewProviderLifecycleClient(conn)
-	authClient := proto.NewAuthenticationClient(conn)
+	authClient := proto.NewIdentityClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()
@@ -160,7 +160,7 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProviderIdentity: %v", err)
 	}
-	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION {
+	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_IDENTITY {
 		t.Fatalf("kind = %v, want AUTHENTICATION", meta.GetKind())
 	}
 	if meta.GetName() != "stub-auth" {

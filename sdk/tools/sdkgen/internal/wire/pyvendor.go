@@ -30,7 +30,7 @@ const (
 var pyProtoModules = []string{
 	"agent",
 	"annotations",
-	"authentication",
+	"identity",
 	"authorization",
 	"cache",
 	"indexeddb",

@@ -7,7 +7,7 @@ from pathlib import Path
 PROTO_MODULES = (
     "agent",
     "annotations",
-    "authentication",
+    "identity",
     "authorization",
     "cache",
     "indexeddb",

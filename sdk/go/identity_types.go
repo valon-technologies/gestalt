@@ -1,16 +1,12 @@
 package gestalt
 
 import (
-	"context"
-	"strings"
-
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/grpc/metadata"
 )
 
 const (
 	// CallerBearerTokenMetadataKey carries the original caller bearer token on
-	// authentication provider RPCs that require caller scoping.
+	// identity provider RPCs that require caller scoping.
 	CallerBearerTokenMetadataKey = "x-gestalt-caller-bearer-token"
 )
 
@@ -117,71 +113,6 @@ type UserInfoResponse struct {
 	SubjectID string
 	Email     string
 	Name      string
-}
-
-// AuthenticationProvider serves the Gestalt authentication protocol.
-//
-// ListGrants, GetGrant, and RevokeGrant are the grant-management surface used
-// by Gestalt API-token management. ListGrants must return only caller-visible,
-// user-managed API-token/token-exchange grants, not transient login/session
-// grants. GetGrant and RevokeGrant must treat non-visible session/login grants
-// as not found.
-type AuthenticationProvider interface {
-	Provider
-	Authorize(ctx context.Context, req *AuthorizeRequest) (*AuthorizeResponse, error)
-	Token(ctx context.Context, req *TokenRequest) (*TokenResponse, error)
-	Introspect(ctx context.Context, req *IntrospectRequest) (*IntrospectResponse, error)
-	UserInfo(ctx context.Context, req *UserInfoRequest) (*UserInfoResponse, error)
-	ListGrants(ctx context.Context, req *ListGrantsRequest) (*ListGrantsResponse, error)
-	GetGrant(ctx context.Context, req *GetGrantRequest) (*GetGrantResponse, error)
-	RevokeGrant(ctx context.Context, req *RevokeGrantRequest) (*RevokeGrantResponse, error)
-}
-
-type authCallContextKey struct{}
-
-// AuthCallContext carries caller-scoped authentication metadata for grant RPCs
-// without widening the RFC-shaped request structs.
-type AuthCallContext struct {
-	CallerBearerToken string
-	Introspection     *IntrospectResponse
-}
-
-// WithAuthCallContext returns a child context carrying caller auth metadata.
-func WithAuthCallContext(ctx context.Context, call AuthCallContext) context.Context {
-	if strings.TrimSpace(call.CallerBearerToken) == "" && call.Introspection == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, authCallContextKey{}, call)
-}
-
-// AuthCallContextFromContext extracts caller auth metadata from ctx.
-func AuthCallContextFromContext(ctx context.Context) AuthCallContext {
-	call, _ := ctx.Value(authCallContextKey{}).(AuthCallContext)
-	return call
-}
-
-// AppendAuthCallMetadata attaches caller auth metadata to outgoing gRPC metadata.
-func AppendAuthCallMetadata(ctx context.Context) context.Context {
-	call := AuthCallContextFromContext(ctx)
-	token := strings.TrimSpace(call.CallerBearerToken)
-	if token == "" {
-		return ctx
-	}
-	return metadata.AppendToOutgoingContext(ctx, CallerBearerTokenMetadataKey, token)
-}
-
-// CallerBearerTokenFromIncomingContext reads the caller bearer token from gRPC metadata.
-func CallerBearerTokenFromIncomingContext(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
-	for _, value := range md.Get(CallerBearerTokenMetadataKey) {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func authorizeRequestFromProto(req *proto.AuthorizeRequest) *AuthorizeRequest {

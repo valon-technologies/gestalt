@@ -33,17 +33,22 @@ type features struct {
 
 type renderer struct {
 	idx      *index
-	base     string // generated file base currently being rendered
+	base     string
+	wireBase string
 	kind     moduleKind
 	features features
 	body     strings.Builder
 }
 
-func newRenderer(idx *index, base string, kind moduleKind) *renderer {
+func newRenderer(idx *index, base, wireBase string, kind moduleKind) *renderer {
+	if wireBase == "" {
+		wireBase = base
+	}
 	return &renderer{
-		idx:  idx,
-		base: base,
-		kind: kind,
+		idx:      idx,
+		base:     base,
+		wireBase: wireBase,
+		kind:     kind,
 		features: features{
 			supportTypes: map[string]bool{},
 			supportFns:   map[string]bool{},
@@ -52,6 +57,10 @@ func newRenderer(idx *index, base string, kind moduleKind) *renderer {
 			crossCodec:   map[string]map[string]bool{},
 		},
 	}
+}
+
+func (r *renderer) publicBase(protoFile string) string {
+	return generatedFileBase(protoFile)
 }
 
 // useType records an import of a public type from the shared rpc_support
@@ -77,7 +86,7 @@ func (r *renderer) useInvoke(name string) {
 // its own declarations are not imports; codec modules always import native
 // types from their public siblings.
 func (r *renderer) typeRef(protoFile, name string) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if r.kind == modulePublic && base == r.base {
 		return name
 	}
@@ -102,7 +111,7 @@ func (r *renderer) hostRef(name string) string {
 // returns the name unchanged. References from a codec module to its own
 // converters are not imports.
 func (r *renderer) convRef(protoFile, name string) string {
-	base := generatedFileBase(protoFile)
+	base := r.publicBase(protoFile)
 	if r.kind == moduleCodec && base == r.base {
 		return name
 	}
@@ -503,7 +512,8 @@ type streamWrapper struct {
 }
 
 func (r *renderer) renderClient(svc *model.Service) {
-	name := localName(svc.FullName)
+	wireName := localName(svc.FullName)
+	name := wireName
 	r.features.v1 = true
 	r.useType("GestaltError")
 	module := wireClientModule(svc)

@@ -18,14 +18,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestAuthenticationFactoryForwardsRuntimeDepsToExecutableProvider(t *testing.T) {
+func TestIdentityFactoryForwardsRuntimeDepsToExecutableProvider(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	const callbackURL = "http://127.0.0.1:18088/auth/callback"
 
-	authManifest := componentProviderManifestPath(t, setupGoContractProviderDir(t, dir, providermanifestv1.KindAuthentication, "local", authContractProviderSource(callbackURL)))
-	auth, err := AuthenticationFactory(contractRuntimeNode(t, "local", authManifest), AuthenticationDeps{
+	authManifest := componentProviderManifestPath(t, setupGoContractProviderDir(t, dir, providermanifestv1.KindIdentity, "local", authContractProviderSource(callbackURL)))
+	auth, err := IdentityFactory(contractRuntimeNode(t, "local", authManifest), IdentityDeps{
 		DefaultCallbackURL: callbackURL,
 		HostServices: []runtimehost.HostService{{
 			Name: "test",
@@ -34,7 +34,7 @@ func TestAuthenticationFactoryForwardsRuntimeDepsToExecutableProvider(t *testing
 		}},
 	})
 	if err != nil {
-		t.Fatalf("AuthenticationFactory: %v", err)
+		t.Fatalf("IdentityFactory: %v", err)
 	}
 	defer closeProviderIfSupported(t, auth)
 
@@ -105,7 +105,7 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := gestalt.ServeAuthenticationProvider(ctx, providerpkg.New()); err != nil {
+	if err := gestalt.ServeIdentityProvider(ctx, providerpkg.New()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
 		os.Exit(1)
 	}

@@ -15,9 +15,9 @@ func TestUpdateProviderVersionConstraintFindsProviderCollections(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "gestalt.yaml")
 	if err := os.WriteFile(path, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
-  authentication:
+  identity:
     authn:
       source:
         package: github.com/acme/providers/authn
@@ -36,7 +36,7 @@ apps:
 	if err := updateProviderVersionConstraint(path, "", "dashboard", ">= 2.0.0"); err != nil {
 		t.Fatalf("update ui version: %v", err)
 	}
-	if err := updateProviderVersionConstraint(path, providermanifestv1.KindAuthentication, "authn", "~1.4.0"); err != nil {
+	if err := updateProviderVersionConstraint(path, providermanifestv1.KindIdentity, "authn", "~1.4.0"); err != nil {
 		t.Fatalf("update authentication version: %v", err)
 	}
 
@@ -47,7 +47,7 @@ apps:
 	if got := cfg.Providers.UI["dashboard"].Source.PackageVersionConstraint(); got != ">= 2.0.0" {
 		t.Fatalf("ui version = %q, want >= 2.0.0", got)
 	}
-	if got := cfg.Providers.Authentication["authn"].Source.PackageVersionConstraint(); got != "~1.4.0" {
+	if got := cfg.Providers.Identity["authn"].Source.PackageVersionConstraint(); got != "~1.4.0" {
 		t.Fatalf("authentication version = %q, want ~1.4.0", got)
 	}
 }
@@ -57,7 +57,7 @@ func TestUpdateProviderVersionConstraintRequiresKindForAmbiguousName(t *testing.
 
 	path := filepath.Join(t.TempDir(), "gestalt.yaml")
 	if err := os.WriteFile(path, []byte(`
-apiVersion: gestaltd.config/v6
+apiVersion: gestaltd.config/v7
 providers:
   ui:
     shared:

@@ -1,10 +1,10 @@
-import { defineAuthenticationProvider } from "../../../src/index.ts";
+import { defineIdentityProvider } from "../../../src/index.ts";
 
 let configuredIssuer = "https://issuer.example.test";
 const fixtureCode = "fixture-auth-code";
 const fixtureAccessToken = "fixture-access-token";
 
-export const provider = defineAuthenticationProvider({
+export const provider = defineIdentityProvider({
   displayName: "Fixture Auth",
   description: "Auth fixture used by SDK tests",
   configure(_name, config) {

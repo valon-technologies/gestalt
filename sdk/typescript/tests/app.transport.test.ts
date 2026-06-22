@@ -14,9 +14,9 @@ import {
   OperationResultSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
-  Authentication as AuthenticationService,
+  Identity as IdentityService,
   UserInfoResponseSchema,
-} from "../src/internal/gen/v1/authentication_pb.ts";
+} from "../src/internal/gen/v1/identity_pb.ts";
 import {
   App,
   CALLER_BEARER_TOKEN_METADATA_KEY,
@@ -474,7 +474,7 @@ test("Request.authentication forwards the caller bearer token", async () => {
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(AuthenticationService, {
+      router.service(IdentityService, {
         async userInfo() {
           return create(UserInfoResponseSchema, {
             subjectId: "user:hugh@valon.com",
@@ -482,7 +482,7 @@ test("Request.authentication forwards the caller bearer token", async () => {
             name: "Hugh Han",
           });
         },
-      } satisfies Partial<ServiceImpl<typeof AuthenticationService>>);
+      } satisfies Partial<ServiceImpl<typeof IdentityService>>);
     },
   });
   const server = createServer((req, res) => {
@@ -507,7 +507,7 @@ test("Request.authentication forwards the caller bearer token", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const auth = await request("caller-access-token").authentication();
+    const auth = await request("caller-access-token").identity();
     const response = await auth.userInfo({});
 
     expect(response).toEqual({

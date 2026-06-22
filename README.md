@@ -28,7 +28,7 @@ When you need production controls, add them through the [provider](https://gesta
 
 - Plug-and-play [providers](https://gestaltd.ai/providers), inspired by [Terraform providers](https://developer.hashicorp.com/terraform/language/providers), so you add only what you need.
 - A [unified tool surface](https://gestaltd.ai/providers/apps) over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators.
-- [Authentication](https://gestaltd.ai/providers/authentication) flows, [credential storage](https://gestaltd.ai/providers/external-credentials), encryption at rest, token refresh, and [RBAC](https://gestaltd.ai/providers/authorization) on infrastructure you control.
+- [Identity](https://gestaltd.ai/providers/identity) flows, [credential storage](https://gestaltd.ai/providers/external-credentials), encryption at rest, token refresh, and [RBAC](https://gestaltd.ai/providers/authorization) on infrastructure you control.
 - [OpenTelemetry](https://opentelemetry.io/) compatible [observability](https://gestaltd.ai/observability) and [audit logging](https://gestaltd.ai/audit-logging).
 - [Runtimes](https://gestaltd.ai/providers/runtime) for agent and code sandboxing.<sup><a href="#runtimes-alpha-note">*</a></sup>
 - [Workflows](https://gestaltd.ai/providers/workflow) and [agents](https://gestaltd.ai/providers/agent) with durable state, retries, and delegated invocations.<sup><a href="#workflows-agents-alpha-note">†</a></sup>

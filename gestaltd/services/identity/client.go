@@ -1,4 +1,4 @@
-package authentication
+package identity
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type authenticationRPCClient interface {
+type identityRPCClient interface {
 	Authorize(context.Context, *proto.AuthorizeRequest, ...grpc.CallOption) (*proto.AuthorizeResponse, error)
 	Token(context.Context, *proto.TokenRequest, ...grpc.CallOption) (*proto.TokenResponse, error)
 	Introspect(context.Context, *proto.IntrospectRequest, ...grpc.CallOption) (*proto.IntrospectResponse, error)
@@ -39,9 +39,9 @@ type ExecConfig struct {
 	CallbackURL  string
 }
 
-type remoteAuthenticationProvider struct {
+type remoteIdentityProvider struct {
 	runtime     proto.ProviderLifecycleClient
-	client      authenticationRPCClient
+	client      identityRPCClient
 	name        string
 	displayName string
 	description string
@@ -49,7 +49,7 @@ type remoteAuthenticationProvider struct {
 	closer      io.Closer
 }
 
-func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthenticationProvider, error) {
+func NewExecutable(ctx context.Context, cfg ExecConfig) (core.IdentityProvider, error) {
 	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
@@ -66,8 +66,8 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthenticationProv
 	}
 
 	runtimeClient := proc.Lifecycle()
-	client := proto.NewAuthenticationClient(proc.Conn())
-	provider, err := newRemoteAuthenticationProvider(ctx, runtimeClient, client, cfg)
+	client := proto.NewIdentityClient(proc.Conn())
+	provider, err := newRemoteIdentityProvider(ctx, runtimeClient, client, cfg)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -76,8 +76,8 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthenticationProv
 	return provider, nil
 }
 
-func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client authenticationRPCClient, cfg ExecConfig) (*remoteAuthenticationProvider, error) {
-	provider := &remoteAuthenticationProvider{
+func newRemoteIdentityProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client identityRPCClient, cfg ExecConfig) (*remoteIdentityProvider, error) {
+	provider := &remoteIdentityProvider{
 		runtime:     runtimeClient,
 		client:      client,
 		name:        cfg.Name,
@@ -89,8 +89,8 @@ func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.Pr
 	return provider, nil
 }
 
-func (p *remoteAuthenticationProvider) configure(ctx context.Context, name string, config map[string]any) error {
-	meta, err := runtimehost.ConfigureRuntimeProvider(ctx, p.runtime, proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION, name, config)
+func (p *remoteIdentityProvider) configure(ctx context.Context, name string, config map[string]any) error {
+	meta, err := runtimehost.ConfigureRuntimeProvider(ctx, p.runtime, proto.ProviderKind_PROVIDER_KIND_IDENTITY, name, config)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func (p *remoteAuthenticationProvider) configure(ctx context.Context, name strin
 		p.name = meta.Name
 	}
 	if p.name == "" {
-		p.name = "authentication"
+		p.name = "identity"
 	}
 	if meta != nil {
 		p.displayName = meta.DisplayName
@@ -108,18 +108,18 @@ func (p *remoteAuthenticationProvider) configure(ctx context.Context, name strin
 	return nil
 }
 
-func (p *remoteAuthenticationProvider) DisplayName() string {
+func (p *remoteIdentityProvider) DisplayName() string {
 	if p.displayName == "" {
 		return p.name
 	}
 	return p.displayName
 }
 
-func (p *remoteAuthenticationProvider) Description() string {
+func (p *remoteIdentityProvider) Description() string {
 	return p.description
 }
 
-func (p *remoteAuthenticationProvider) Authorize(ctx context.Context, req *core.AuthorizeRequest) (*core.AuthorizeResponse, error) {
+func (p *remoteIdentityProvider) Authorize(ctx context.Context, req *core.AuthorizeRequest) (*core.AuthorizeResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
@@ -130,7 +130,7 @@ func (p *remoteAuthenticationProvider) Authorize(ctx context.Context, req *core.
 	return authorizeResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) Token(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+func (p *remoteIdentityProvider) Token(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
@@ -141,7 +141,7 @@ func (p *remoteAuthenticationProvider) Token(ctx context.Context, req *core.Toke
 	return tokenResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) Introspect(ctx context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+func (p *remoteIdentityProvider) Introspect(ctx context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
@@ -152,63 +152,63 @@ func (p *remoteAuthenticationProvider) Introspect(ctx context.Context, req *core
 	return introspectResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) UserInfo(ctx context.Context, req *core.UserInfoRequest) (*core.UserInfoResponse, error) {
+func (p *remoteIdentityProvider) UserInfo(ctx context.Context, req *core.UserInfoRequest) (*core.UserInfoResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	ctx = p.outgoingAuthCallContext(ctx)
+	ctx = p.outgoingIdentityCallContext(ctx)
 
 	resp, err := p.client.UserInfo(ctx, userInfoRequestToProto(req))
 	if err != nil {
-		return nil, mapAuthenticationProviderRPCError(err)
+		return nil, mapIdentityProviderRPCError(err)
 	}
 	return userInfoResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) ListGrants(ctx context.Context, req *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+func (p *remoteIdentityProvider) ListGrants(ctx context.Context, req *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	ctx = p.outgoingAuthCallContext(ctx)
+	ctx = p.outgoingIdentityCallContext(ctx)
 
 	resp, err := p.client.ListGrants(ctx, &proto.ListGrantsRequest{})
 	if err != nil {
-		return nil, mapAuthenticationProviderRPCError(err)
+		return nil, mapIdentityProviderRPCError(err)
 	}
 	return listGrantsResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) GetGrant(ctx context.Context, req *core.GetGrantRequest) (*core.GetGrantResponse, error) {
+func (p *remoteIdentityProvider) GetGrant(ctx context.Context, req *core.GetGrantRequest) (*core.GetGrantResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	ctx = p.outgoingAuthCallContext(ctx)
+	ctx = p.outgoingIdentityCallContext(ctx)
 
 	resp, err := p.client.GetGrant(ctx, getGrantRequestToProto(req))
 	if err != nil {
-		return nil, mapAuthenticationProviderRPCError(err)
+		return nil, mapIdentityProviderRPCError(err)
 	}
 	return getGrantResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) RevokeGrant(ctx context.Context, req *core.RevokeGrantRequest) (*core.RevokeGrantResponse, error) {
+func (p *remoteIdentityProvider) RevokeGrant(ctx context.Context, req *core.RevokeGrantRequest) (*core.RevokeGrantResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	ctx = p.outgoingAuthCallContext(ctx)
+	ctx = p.outgoingIdentityCallContext(ctx)
 
 	_, err := p.client.RevokeGrant(ctx, revokeGrantRequestToProto(req))
 	if err != nil {
-		return nil, mapAuthenticationProviderRPCError(err)
+		return nil, mapIdentityProviderRPCError(err)
 	}
 	return &core.RevokeGrantResponse{}, nil
 }
 
-func (p *remoteAuthenticationProvider) Close() error {
+func (p *remoteIdentityProvider) Close() error {
 	if p == nil || p.closer == nil {
 		return nil
 	}
 	return p.closer.Close()
 }
 
-func (p *remoteAuthenticationProvider) outgoingAuthCallContext(ctx context.Context) context.Context {
-	return gestalt.AppendAuthCallMetadata(ctx)
+func (p *remoteIdentityProvider) outgoingIdentityCallContext(ctx context.Context) context.Context {
+	return gestalt.AppendIdentityCallMetadata(ctx)
 }
 
 func authorizeRequestToProto(req *core.AuthorizeRequest) *proto.AuthorizeRequest {
@@ -342,11 +342,11 @@ func userInfoResponseFromProto(resp *proto.UserInfoResponse) *core.UserInfoRespo
 
 // WithCallerBearerToken attaches the caller bearer token for caller-relative RPCs.
 func WithCallerBearerToken(ctx context.Context, token string) context.Context {
-	ctx = gestalt.WithAuthCallContext(ctx, gestalt.AuthCallContext{CallerBearerToken: token})
+	ctx = gestalt.WithIdentityCallContext(ctx, gestalt.IdentityCallContext{CallerBearerToken: token})
 	return metadata.AppendToOutgoingContext(ctx, gestalt.CallerBearerTokenMetadataKey, token)
 }
 
-func mapAuthenticationProviderRPCError(err error) error {
+func mapIdentityProviderRPCError(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -357,10 +357,10 @@ func mapAuthenticationProviderRPCError(err error) error {
 }
 
 var (
-	_ core.AuthenticationProvider = (*remoteAuthenticationProvider)(nil)
+	_ core.IdentityProvider = (*remoteIdentityProvider)(nil)
 	_ interface {
 		DisplayName() string
 		Description() string
-	} = (*remoteAuthenticationProvider)(nil)
-	_ interface{ Close() error } = (*remoteAuthenticationProvider)(nil)
+	} = (*remoteIdentityProvider)(nil)
+	_ interface{ Close() error } = (*remoteIdentityProvider)(nil)
 )

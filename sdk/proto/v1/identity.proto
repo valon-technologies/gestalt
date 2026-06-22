@@ -118,9 +118,9 @@ message UserInfoResponse {
   string name = 3;
 }
 
-// Authentication models the shared Gestalt authentication protocol.
-service Authentication {
-  option (host_binding) = "authentication";
+// Identity models the shared Gestalt authentication protocol.
+service Identity {
+  option (host_binding) = "identity";
 
   rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
     option (signature) = "response_type";

@@ -1,4 +1,4 @@
-package authentication
+package identity
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 )
 
 type providerServer struct {
-	proto.UnimplementedAuthenticationServer
-	provider core.AuthenticationProvider
+	proto.UnimplementedIdentityServer
+	provider core.IdentityProvider
 }
 
-func NewProviderServer(provider core.AuthenticationProvider) proto.AuthenticationServer {
+func NewProviderServer(provider core.IdentityProvider) proto.IdentityServer {
 	return &providerServer{provider: provider}
 }
 
@@ -29,10 +29,10 @@ func (s *providerServer) Authorize(ctx context.Context, req *proto.AuthorizeRequ
 	}
 	resp, err := s.provider.Authorize(ctx, authorizeRequestFromProto(req))
 	if err != nil {
-		return nil, authenticationToGRPCError("authorize", err)
+		return nil, identityToGRPCError("authorize", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return authorizeResponseToProto(resp), nil
 }
@@ -46,10 +46,10 @@ func (s *providerServer) Token(ctx context.Context, req *proto.TokenRequest) (*p
 	}
 	resp, err := s.provider.Token(ctx, tokenRequestFromProto(req))
 	if err != nil {
-		return nil, authenticationToGRPCError("token", err)
+		return nil, identityToGRPCError("token", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return tokenResponseToProto(resp), nil
 }
@@ -63,10 +63,10 @@ func (s *providerServer) Introspect(ctx context.Context, req *proto.IntrospectRe
 	}
 	resp, err := s.provider.Introspect(ctx, introspectRequestFromProto(req))
 	if err != nil {
-		return nil, authenticationToGRPCError("introspect", err)
+		return nil, identityToGRPCError("introspect", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return introspectResponseToProto(resp), nil
 }
@@ -80,10 +80,10 @@ func (s *providerServer) UserInfo(ctx context.Context, req *proto.UserInfoReques
 	}
 	resp, err := s.provider.UserInfo(authCallContext(ctx), userInfoRequestFromProto(req))
 	if err != nil {
-		return nil, authenticationToGRPCError("userinfo", err)
+		return nil, identityToGRPCError("userinfo", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return userInfoResponseToProto(resp), nil
 }
@@ -94,10 +94,10 @@ func (s *providerServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequ
 	}
 	resp, err := s.provider.ListGrants(authCallContext(ctx), &core.ListGrantsRequest{})
 	if err != nil {
-		return nil, authenticationToGRPCError("list grants", err)
+		return nil, identityToGRPCError("list grants", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return listGrantsResponseToProto(resp), nil
 }
@@ -111,10 +111,10 @@ func (s *providerServer) GetGrant(ctx context.Context, req *proto.GetGrantReques
 	}
 	resp, err := s.provider.GetGrant(authCallContext(ctx), getGrantRequestFromProto(req))
 	if err != nil {
-		return nil, authenticationToGRPCError("get grant", err)
+		return nil, identityToGRPCError("get grant", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
 	}
 	return getGrantResponseToProto(resp), nil
 }
@@ -127,14 +127,14 @@ func (s *providerServer) RevokeGrant(ctx context.Context, req *proto.RevokeGrant
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	if _, err := s.provider.RevokeGrant(authCallContext(ctx), revokeGrantRequestFromProto(req)); err != nil {
-		return nil, authenticationToGRPCError("revoke grant", err)
+		return nil, identityToGRPCError("revoke grant", err)
 	}
 	return &proto.RevokeGrantResponse{}, nil
 }
 
 func (s *providerServer) requireProvider() error {
 	if s == nil || s.provider == nil {
-		return status.Error(codes.FailedPrecondition, "authentication provider is not configured")
+		return status.Error(codes.FailedPrecondition, "identity provider is not configured")
 	}
 	return nil
 }
@@ -144,10 +144,10 @@ func authCallContext(ctx context.Context) context.Context {
 	if token == "" {
 		return ctx
 	}
-	return gestalt.WithAuthCallContext(ctx, gestalt.AuthCallContext{CallerBearerToken: token})
+	return gestalt.WithIdentityCallContext(ctx, gestalt.IdentityCallContext{CallerBearerToken: token})
 }
 
-func authenticationToGRPCError(operation string, err error) error {
+func identityToGRPCError(operation string, err error) error {
 	if err == nil {
 		return nil
 	}

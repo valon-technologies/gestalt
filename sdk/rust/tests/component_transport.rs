@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use generated::v1::authentication_client::AuthenticationClient;
+use generated::v1::identity_client::IdentityClient;
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use generated::v1::s3_client::S3Client;
 use generated::v1::{
@@ -18,7 +18,7 @@ use generated::v1::{
     ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef, TokenRequest as ProtoTokenRequest,
     WriteObjectRequest as ProtoWriteObjectRequest,
 };
-use gestalt::authentication::{
+use gestalt::identity::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
     IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
     RevokeGrantResponse, TokenRequest, TokenResponse,
@@ -29,7 +29,7 @@ use gestalt::s3_provider::{
     PresignObjectRequest, PresignObjectResponse, ReadObjectRequest, S3ReadObjectFrame,
     S3WriteObjectFrame, WriteObjectResponse,
 };
-use gestalt::{AuthenticationProvider, RuntimeMetadata};
+use gestalt::{IdentityProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tokio_stream::iter as stream_iter;
@@ -50,7 +50,7 @@ impl Default for TestAuthProvider {
 }
 
 #[async_trait]
-impl AuthenticationProvider for TestAuthProvider {
+impl IdentityProvider for TestAuthProvider {
     async fn configure(
         &self,
         name: &str,
@@ -117,11 +117,11 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn user_info(
         &self,
-        call: gestalt::AuthCallContext,
-        _req: gestalt::authentication::UserInfoRequest,
-    ) -> gestalt::Result<gestalt::authentication::UserInfoResponse> {
+        call: gestalt::IdentityCallContext,
+        _req: gestalt::identity::UserInfoRequest,
+    ) -> gestalt::Result<gestalt::identity::UserInfoResponse> {
         if call.caller_bearer_token == "fixture-access-token" {
-            return Ok(gestalt::authentication::UserInfoResponse {
+            return Ok(gestalt::identity::UserInfoResponse {
                 subject_id: "user:fixture".to_string(),
                 email: "fixture@example.com".to_string(),
                 name: "Fixture User".to_string(),
@@ -132,7 +132,7 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn list_grants(
         &self,
-        _call: gestalt::AuthCallContext,
+        _call: gestalt::IdentityCallContext,
         _req: ListGrantsRequest,
     ) -> gestalt::Result<ListGrantsResponse> {
         Ok(ListGrantsResponse {
@@ -142,14 +142,14 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn get_grant(
         &self,
-        _call: gestalt::AuthCallContext,
+        _call: gestalt::IdentityCallContext,
         req: GetGrantRequest,
     ) -> gestalt::Result<GetGrantResponse> {
         if req.grant_id != "grant-fixture" {
             return Err(gestalt::Error::not_found("grant not found"));
         }
         Ok(GetGrantResponse {
-            scopes: vec![gestalt::authentication::GrantScope {
+            scopes: vec![gestalt::identity::GrantScope {
                 scope: "openid".to_string(),
                 resource: Vec::new(),
             }],
@@ -160,7 +160,7 @@ impl AuthenticationProvider for TestAuthProvider {
 
     async fn revoke_grant(
         &self,
-        _call: gestalt::AuthCallContext,
+        _call: gestalt::IdentityCallContext,
         _req: RevokeGrantRequest,
     ) -> gestalt::Result<RevokeGrantResponse> {
         Ok(RevokeGrantResponse {})
@@ -358,7 +358,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let provider = Arc::new(TestAuthProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime_impl::serve_authentication_provider(serve_provider)
+        gestalt::runtime_impl::serve_identity_provider(serve_provider)
             .await
             .expect("serve authentication provider");
     });
@@ -367,7 +367,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
 
     let channel = connect_unix(&socket).await;
     let mut runtime = ProviderLifecycleClient::new(channel.clone());
-    let mut auth = AuthenticationClient::new(channel);
+    let mut auth = IdentityClient::new(channel);
 
     let metadata = runtime
         .get_provider_identity(())
@@ -378,7 +378,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
         ProviderKind::try_from(metadata.kind)
             .expect("valid provider kind")
             .as_str_name(),
-        "PROVIDER_KIND_AUTHENTICATION"
+        "PROVIDER_KIND_IDENTITY"
     );
     assert_eq!(metadata.name, "auth-example");
     assert_eq!(metadata.warnings, vec!["set OIDC_BASE_URL"]);

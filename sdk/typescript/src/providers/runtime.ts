@@ -22,7 +22,7 @@ import {
   Authorization as AuthorizationProviderService,
 } from "../internal/gen/v1/authorization_pb.ts";
 import {
-  Authentication as AuthenticationProviderService,
+  Identity as IdentityProviderService,
   AuthorizeResponseSchema,
   GetGrantResponseSchema,
   GrantScopeSchema,
@@ -31,7 +31,7 @@ import {
   RevokeGrantResponseSchema,
   TokenResponseSchema,
   UserInfoResponseSchema,
-} from "../internal/gen/v1/authentication_pb.ts";
+} from "../internal/gen/v1/identity_pb.ts";
 import {
   Cache as CacheService,
   CacheDeleteManyResponseSchema,
@@ -101,11 +101,11 @@ import { fromWireRequestContext } from "../internal/codec/app.ts";
 import type { RequestContext as WireRequestContext } from "../internal/gen/v1/app_pb.ts";
 import type { RequestContext } from "../app.ts";
 import {
-  AuthenticationProvider,
+  IdentityProvider,
   CALLER_BEARER_TOKEN_METADATA_KEY,
-  isAuthenticationProvider,
-  type AuthCallContext,
-} from "../auth.ts";
+  isIdentityProvider,
+  type IdentityCallContext,
+} from "./identity.ts";
 import {
   AuthorizationProvider,
   createAuthorizationProviderService,
@@ -171,7 +171,7 @@ export const ENV_WRITE_CATALOG = "GESTALT_APP_WRITE_CATALOG";
 /**
  * Protocol version currently implemented by the TypeScript runtime.
  */
-export const CURRENT_PROTOCOL_VERSION = 4;
+export const CURRENT_PROTOCOL_VERSION = 5;
 /**
  * Command-line usage for the runtime entrypoint.
  */
@@ -195,7 +195,7 @@ export type RuntimeArgs = {
 export type LoadedProvider =
   | AppProvider
   | AuthorizationProvider
-  | AuthenticationProvider
+  | IdentityProvider
   | CacheProvider
   | SecretsProvider
   | S3Provider
@@ -233,14 +233,14 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
       );
     },
   },
-  authentication: {
+  identity: {
     isProvider:
-      isAuthenticationProvider as (value: unknown) => value is LoadedProvider,
-    protoKind: ProtoProviderKind.AUTHENTICATION,
+      isIdentityProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.IDENTITY,
     registerService(router, provider) {
       router.service(
-        AuthenticationProviderService,
-        createAuthenticationService(provider as AuthenticationProvider),
+        IdentityProviderService,
+        createIdentityService(provider as IdentityProvider),
       );
     },
   },
@@ -671,14 +671,13 @@ export function createProviderService(
 }
 
 /**
- * Adapts an authentication provider to the shared protocol service
- * implementation.
+ * Adapts an identity provider to the shared protocol service implementation.
  *
  * @internal
  */
-export function createAuthenticationService(
-  provider: AuthenticationProvider,
-): Partial<ServiceImpl<typeof AuthenticationProviderService>> {
+export function createIdentityService(
+  provider: IdentityProvider,
+): Partial<ServiceImpl<typeof IdentityProviderService>> {
   return {
     async authorize(request) {
       const response = await provider.authorize({
@@ -803,7 +802,7 @@ export function createAuthenticationService(
   };
 }
 
-function authCallContextFromHandler(context: HandlerContext): AuthCallContext {
+function authCallContextFromHandler(context: HandlerContext): IdentityCallContext {
   return {
     callerBearerToken:
       context.requestHeader.get(CALLER_BEARER_TOKEN_METADATA_KEY) ?? "",

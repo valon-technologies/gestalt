@@ -682,7 +682,7 @@ func providerEntryCollectionsForVersionUpdate(doc *yaml.Node, kind string) []pro
 	runtimeProviders := mappingValueNodeLocal(mappingValueNodeLocal(doc, "runtime"), "providers")
 	return []providerEntryCollectionRef{
 		{kind: providermanifestv1.KindApp, node: mappingValueNodeLocal(doc, "apps")},
-		{kind: providermanifestv1.KindAuthentication, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindAuthentication))},
+		{kind: providermanifestv1.KindIdentity, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindIdentity))},
 		{kind: providermanifestv1.KindAuthorization, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindAuthorization))},
 		{kind: providermanifestv1.KindExternalCredentials, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindExternalCredentials))},
 		{kind: providermanifestv1.KindSecrets, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindSecrets))},
@@ -739,8 +739,8 @@ func providerEntryCollection(doc *yaml.Node, kind string) *yaml.Node {
 
 func configKindKey(kind string) string {
 	switch kind {
-	case providermanifestv1.KindAuthentication:
-		return "authentication"
+	case providermanifestv1.KindIdentity:
+		return "identity"
 	case providermanifestv1.KindAuthorization:
 		return "authorization"
 	case providermanifestv1.KindExternalCredentials:

@@ -8,26 +8,26 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/authentication"
+	"github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type Resolver struct {
-	auth         core.AuthenticationProvider
+	auth         core.IdentityProvider
 	providerName string
 }
 
-func NewResolver(auth core.AuthenticationProvider) *Resolver {
+func NewResolver(auth core.IdentityProvider) *Resolver {
 	return NewResolverNamed("", auth)
 }
 
-func NewResolverNamed(providerName string, auth core.AuthenticationProvider) *Resolver {
+func NewResolverNamed(providerName string, auth core.IdentityProvider) *Resolver {
 	name := strings.TrimSpace(providerName)
 	switch {
 	case auth == nil && name == "":
 		name = "none"
 	case name == "":
-		name = "authentication"
+		name = "identity"
 	}
 	return &Resolver{auth: auth, providerName: name}
 }
@@ -77,12 +77,12 @@ func (r *Resolver) enrichPrincipalWithUserInfo(ctx context.Context, accessToken 
 	}
 
 	startedAt := time.Now()
-	userInfoCtx := authentication.WithCallerBearerToken(ctx, accessToken)
+	userInfoCtx := identity.WithCallerBearerToken(ctx, accessToken)
 	userInfo, err := r.auth.UserInfo(userInfoCtx, &core.UserInfoRequest{})
 	metricutil.RecordAuthMetrics(ctx, startedAt, r.providerName, "userinfo", userInfoLookupFailed(err))
 	if err != nil {
 		if !errors.Is(err, core.ErrNotFound) {
-			slog.WarnContext(ctx, "authentication provider userinfo lookup failed", "error", err)
+			slog.WarnContext(ctx, "identity provider userinfo lookup failed", "error", err)
 		}
 		return p
 	}
@@ -92,7 +92,7 @@ func (r *Resolver) enrichPrincipalWithUserInfo(ctx context.Context, accessToken 
 
 	introspectedSubject := strings.TrimSpace(p.SubjectID)
 	if subjectID := strings.TrimSpace(userInfo.SubjectID); subjectID != "" && subjectID != introspectedSubject {
-		slog.WarnContext(ctx, "authentication provider userinfo subject mismatch",
+		slog.WarnContext(ctx, "identity provider userinfo subject mismatch",
 			"introspected_subject", introspectedSubject,
 			"userinfo_subject", subjectID,
 		)
