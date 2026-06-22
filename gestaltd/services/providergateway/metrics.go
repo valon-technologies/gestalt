@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	attrProviderGatewayProviderID            = attribute.Key("gd.provider")
-	attrProviderGatewayProviderKind          = attribute.Key("gd.kind")
+	attrProviderGatewayProviderID            = attribute.Key("gd.provider_id")
+	attrProviderGatewayProviderKind          = attribute.Key("gd.provider_kind")
 	attrProviderGatewayServiceName           = attribute.Key("gd.service")
 	attrProviderGatewayOperation             = attribute.Key("gd.operation")
 	attrProviderGatewaySource                = attribute.Key("gd.source")
