@@ -2011,25 +2011,54 @@ func writeExecutableSourceManifest(t *testing.T, dir, srcDirName, source, versio
 	return manifestPath
 }
 
+var (
+	goSourceSecretsBinaryOnce sync.Once
+	goSourceSecretsBinaryPath string
+	goSourceSecretsBinaryRoot string
+	goSourceSecretsBinaryErr  error
+)
+
+// buildGoSourceSecretsBinary returns the path to the Go secrets provider binary
+// shared by the source-secrets tests. The binary is byte-identical for every
+// caller, so it is compiled once per test-binary run and reused rather than
+// rebuilt on each call; the shared output directory is removed in TestMain.
+// Compiling this binary under -race dominated these tests, so deduplicating the
+// redundant `go build` invocations is a meaningful speedup.
 func buildGoSourceSecretsBinary(t *testing.T) string {
 	t.Helper()
 
-	providerDir := filepath.Join(t.TempDir(), "go-secrets")
+	goSourceSecretsBinaryOnce.Do(func() {
+		goSourceSecretsBinaryRoot, goSourceSecretsBinaryPath, goSourceSecretsBinaryErr = compileGoSourceSecretsBinary(t)
+	})
+	if goSourceSecretsBinaryErr != nil {
+		t.Fatalf("build go source secrets binary: %v", goSourceSecretsBinaryErr)
+	}
+	return goSourceSecretsBinaryPath
+}
+
+func compileGoSourceSecretsBinary(t *testing.T) (root, outputPath string, err error) {
+	t.Helper()
+
+	root, err = os.MkdirTemp("", "go-source-secrets-*")
+	if err != nil {
+		return "", "", fmt.Errorf("create temp dir: %w", err)
+	}
+	providerDir := filepath.Join(root, "go-secrets")
 	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(providerDir): %v", err)
+		return "", "", fmt.Errorf("MkdirAll(providerDir): %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(providerDir, "go.mod"), []byte(testutil.GeneratedProviderModuleSource(t, "example.com/test-go-secrets")), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
+		return "", "", fmt.Errorf("write go.mod: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(providerDir, "go.sum"), testutil.GeneratedProviderModuleSum(t), 0o644); err != nil {
-		t.Fatalf("write go.sum: %v", err)
+		return "", "", fmt.Errorf("write go.sum: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(providerDir, "secrets.go"), []byte(testutil.GeneratedSecretsPackageSource()), 0o644); err != nil {
-		t.Fatalf("write secrets.go: %v", err)
+		return "", "", fmt.Errorf("write secrets.go: %w", err)
 	}
 	mainDir := filepath.Join(providerDir, "cmd", "provider")
 	if err := os.MkdirAll(mainDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll cmd/provider: %v", err)
+		return "", "", fmt.Errorf("MkdirAll cmd/provider: %w", err)
 	}
 	mainSource := `package main
 
@@ -2054,17 +2083,17 @@ func main() {
 }
 `
 	if err := os.WriteFile(filepath.Join(mainDir, "main.go"), []byte(mainSource), 0o644); err != nil {
-		t.Fatalf("write main.go: %v", err)
+		return "", "", fmt.Errorf("write main.go: %w", err)
 	}
-	outputPath := filepath.Join(t.TempDir(), "secrets-provider")
+	outputPath = filepath.Join(root, "secrets-provider")
 	cmd := exec.Command("go", "build", "-o", outputPath, "./cmd/provider")
 	cmd.Dir = providerDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("go build secrets provider: %v", err)
+		return "", "", fmt.Errorf("go build secrets provider: %w", err)
 	}
-	return outputPath
+	return root, outputPath, nil
 }
 
 func writeBootstrapSecretsManifest(t *testing.T, dir, source, version string) string {
