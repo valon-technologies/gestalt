@@ -10,9 +10,10 @@ type releasePlatform struct {
 }
 
 type releaseBuildTarget struct {
-	Kind          string
-	DeclaredBuild bool
-	Prebuilt      bool
+	Kind            string
+	DeclaredBuild   bool
+	Prebuilt        bool
+	ImplicitGoBuild bool
 }
 
 type releaseArchive struct {
