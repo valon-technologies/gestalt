@@ -184,13 +184,12 @@ func runImplicitGoBuild(manifestPath string, manifest *providermanifestv1.Manife
 	if err != nil {
 		return err
 	}
-	entry := resolved.Entrypoint
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return fmt.Errorf("entrypoint.artifactPath is required to build a Go provider without a declared build.command")
-	}
-	outputRel := entry.ArtifactPath
-	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
 	goos, goarch := SourceBuildTarget(opts)
+	outputRel, err := SourceBuildOutputPath(manifest, goos)
+	if err != nil {
+		return err
+	}
+	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
 	tmpOutput := outputPath + ".build"
 	if err := os.RemoveAll(tmpOutput); err != nil {
 		return fmt.Errorf("remove staged build output %q: %w", outputRel, err)
@@ -300,14 +299,12 @@ func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind 
 		}
 		return output, providermanifestv1.KindUI, nil
 	}
-	entry, err := EffectiveSourceEntrypointForKind(manifest, manifestKind)
+	goos, _ := SourceBuildTarget(SourceBuildOptions{})
+	outputRel, err := SourceBuildOutputPath(manifest, goos)
 	if err != nil {
 		return "", "", err
 	}
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return "", "", fmt.Errorf("entrypoint.artifactPath is required when build is set")
-	}
-	return entry.ArtifactPath, "executable", nil
+	return outputRel, "executable", nil
 }
 
 func verifySourceBuildOutput(outputPath, outputRel, outputKind string, opts SourceBuildOptions) error {
@@ -458,22 +455,16 @@ func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Ma
 		return ResolvedSourceExecution{}, err
 	}
 	exec := SourceExecution{Workdir: rootDir}
-	entry, err := EffectiveSourceEntrypointForKind(manifest, kind)
+	goos, _ := SourceBuildTarget(opts)
+	outputRel, err := SourceBuildOutputPath(manifest, goos)
 	if err != nil {
 		return ResolvedSourceExecution{}, err
 	}
-	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
-		exec.Command = filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
-		exec.Args = append([]string(nil), entry.Args...)
-		return ResolvedSourceExecution{
-			SourceExecution: exec,
-			Intent:          SourceExecutionIntentPackagedEntrypoint,
-		}, nil
-	}
-	if HasExplicitSourceRun(manifest) {
-		return ResolvedSourceExecution{}, fmt.Errorf("manifest defines run but no %s entrypoint.artifactPath", kind)
-	}
-	return ResolvedSourceExecution{}, missingDeclaredSourceBuildError(manifest, kind)
+	exec.Command = filepath.Join(rootDir, filepath.FromSlash(outputRel))
+	return ResolvedSourceExecution{
+		SourceExecution: exec,
+		Intent:          SourceExecutionIntentPackagedEntrypoint,
+	}, nil
 }
 
 func explicitRunExecution(rootDir string, manifest *providermanifestv1.Manifest) ResolvedSourceExecution {

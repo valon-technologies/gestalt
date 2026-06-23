@@ -105,13 +105,13 @@ apps:
 		t.Fatalf("source-built git lock archives = %+v, want none", entry.Archives)
 	}
 
-	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")); err != nil {
+	if err := os.RemoveAll(filepath.Join(artifactsDir, "providers", "alpha")); err != nil {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths after removing prepared provider: %v", err)
 	}
-	preparedManifest := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha", "manifest.yaml")
+	preparedManifest := filepath.Join(artifactsDir, "providers", "alpha", "manifest.yaml")
 	if _, err := os.Stat(preparedManifest); err != nil {
 		t.Fatalf("prepared manifest not restored: %v", err)
 	}
@@ -171,8 +171,8 @@ server:
 	if entry.SourceRef.Materialization != gitMaterializationSource {
 		t.Fatalf("sourceRef materialization = %q", entry.SourceRef.Materialization)
 	}
-	preparedIndex := filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap", "dist", "index.html")
-	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap")); err != nil {
+	preparedIndex := filepath.Join(artifactsDir, "ui", "roadmap", "dist", "index.html")
+	if err := os.RemoveAll(filepath.Join(artifactsDir, "ui", "roadmap")); err != nil {
 		t.Fatalf("remove prepared ui: %v", err)
 	}
 	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
@@ -192,7 +192,7 @@ server:
 	if ui.ResolvedManifest.Build != nil {
 		t.Fatalf("prepared ui manifest retained build metadata: %+v", ui.ResolvedManifest.Build)
 	}
-	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap", "dist")); got != want {
+	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(filepath.Join(artifactsDir, "ui", "roadmap", "dist")); got != want {
 		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
 	}
 }
@@ -321,7 +321,7 @@ printf '<html>beta</html>\n' > dist/index.html
 				t.Fatal("sync --locked rewrote committed lockfile")
 			}
 			for _, name := range []string{"alpha", "beta"} {
-				if _, err := os.Stat(filepath.Join(dir, "artifacts", ".gestaltd", "ui", name, "dist", "index.html")); err != nil {
+				if _, err := os.Stat(filepath.Join(dir, "artifacts", "ui", name, "dist", "index.html")); err != nil {
 					t.Fatalf("prepared ui %s not found: %v", name, err)
 				}
 			}
@@ -434,7 +434,7 @@ printf '<html>beta</html>\n' > dist/index.html
 		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
 	}
 	for _, name := range []string{"alpha", "beta"} {
-		if _, err := os.Stat(filepath.Join(dir, "artifacts", ".gestaltd", "providers", name, "_owned_ui", name, "dist", "index.html")); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, "artifacts", "providers", name, "_owned_ui", name, "dist", "index.html")); err != nil {
 			t.Fatalf("prepared owned ui %s not found: %v", name, err)
 		}
 	}
@@ -667,11 +667,12 @@ apps:
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 
-	preparedProvider := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha", "provider")
+	preparedProviderDir := filepath.Join(artifactsDir, "providers", "alpha")
+	preparedProvider := filepath.Join(preparedProviderDir, "bin", "alpha")
 	if _, err := os.Stat(preparedProvider); err != nil {
 		t.Fatalf("prepared provider binary missing before source removal: %v", err)
 	}
-	preparedProviderMetadata := filepath.Join(filepath.Dir(preparedProvider), preparedLockMetadataFile)
+	preparedProviderMetadata := filepath.Join(preparedProviderDir, preparedLockMetadataFile)
 	if _, err := os.Stat(preparedProviderMetadata); err != nil {
 		t.Fatalf("prepared provider lock metadata missing before source removal: %v", err)
 	}
@@ -679,7 +680,7 @@ apps:
 	if err != nil {
 		t.Fatalf("read prepared provider lock metadata before source removal: %v", err)
 	}
-	preparedUI := filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap", "dist")
+	preparedUI := filepath.Join(artifactsDir, "ui", "roadmap", "dist")
 	if _, err := os.Stat(filepath.Join(preparedUI, "index.html")); err != nil {
 		t.Fatalf("prepared ui asset missing before source removal: %v", err)
 	}
@@ -1224,7 +1225,7 @@ func sha256hex(data string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent string) {
+func 	writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create source provider dir: %v", err)
@@ -1235,15 +1236,25 @@ func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent s
 	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: alpha\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
 		t.Fatalf("write catalog: %v", err)
 	}
+	srcParts := strings.Split(source, "/")
+	appName := srcParts[len(srcParts)-1]
+	buildOutput := ".gestaltd/bin/" + appName
+	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp provider %s\nchmod +x %s\n", buildOutput, buildOutput)
+	if err := os.WriteFile(filepath.Join(dir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write build script: %v", err)
+	}
 	manifest := &providermanifestv1.Manifest{
 		Source:      source,
 		Version:     version,
 		Kind:        providermanifestv1.KindApp,
 		DisplayName: "Alpha",
 		Spec:        &providermanifestv1.Spec{},
-		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "provider"},
+		},
 	}
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
@@ -1273,6 +1284,11 @@ func writeOwnedUISourceAppForUI(t *testing.T, appDir, uiManifestPath, name strin
 	if err != nil {
 		t.Fatalf("relative owned ui path: %v", err)
 	}
+	buildOutput := ".gestaltd/bin/" + name
+	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp provider %s\nchmod +x %s\n", buildOutput, buildOutput)
+	if err := os.WriteFile(filepath.Join(appDir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write build script: %v", err)
+	}
 	manifest := &providermanifestv1.Manifest{
 		Source:      "github.com/acme/apps/" + name,
 		Version:     "1.2.3",
@@ -1281,9 +1297,12 @@ func writeOwnedUISourceAppForUI(t *testing.T, appDir, uiManifestPath, name strin
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			UI: &providermanifestv1.OwnedUI{Path: filepath.ToSlash(ownedUIPath)},
 		}),
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "provider"},
+		},
 	}
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode app manifest: %v", err)
 	}
@@ -1309,7 +1328,7 @@ func writeSourceUITree(t *testing.T, dir, source, version string) {
 		},
 		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
 	}
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode ui manifest: %v", err)
 	}
@@ -1344,7 +1363,7 @@ func writeNamedBlockingSourceUIManifest(t *testing.T, dir, manifestName, source,
 		},
 		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
 	}
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode ui manifest: %v", err)
 	}
@@ -1469,13 +1488,13 @@ func runGitTestOutput(t *testing.T, dir string, args ...string) string {
 }
 
 func artifactRelPath(binary string) string {
-	return filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, binary))
+	return providerpkg.PackageExecutablePath(binary, runtime.GOOS)
 }
 
 func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) string {
 	t.Helper()
 
-	artPath := artifactRelPath("provider")
+	artPath := artifactRelPath("alpha")
 	return buildV2ArchiveForArtifact(t, dir, source, version, artPath, "", binaryContent)
 }
 
@@ -1979,25 +1998,38 @@ func writeExecutableSourceManifest(t *testing.T, dir, srcDirName, source, versio
 		Kind:    kind,
 		Spec:    &providermanifestv1.Spec{},
 	}
-	var entrypoint string
-	for i, artifact := range artifacts {
-		artifactPath := filepath.ToSlash(filepath.Join("artifacts", artifact.goos, artifact.goarch, artifact.binaryName))
-		if i == 0 || (artifact.goos == runtime.GOOS && artifact.goarch == runtime.GOARCH && artifact.libc == "") {
-			entrypoint = artifactPath
-		}
-		artifactFilePath := filepath.Join(srcDir, filepath.FromSlash(artifactPath))
-		if err := os.MkdirAll(filepath.Dir(artifactFilePath), 0o755); err != nil {
-			t.Fatalf("create artifact dir: %v", err)
-		}
-		if err := os.WriteFile(artifactFilePath, artifact.data, 0o755); err != nil {
-			t.Fatalf("write artifact: %v", err)
+	var primary *localExecutableManifestArtifact
+	for i := range artifacts {
+		artifact := artifacts[i]
+		if artifact.goos == runtime.GOOS && artifact.goarch == runtime.GOARCH && artifact.libc == "" {
+			primary = &artifacts[i]
+			break
 		}
 	}
-	if entrypoint == "" {
+	if primary == nil && len(artifacts) > 0 {
+		primary = &artifacts[0]
+	}
+	if primary == nil {
 		t.Fatal("writeExecutableSourceManifest: no entrypoint artifact selected")
 	}
-	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: entrypoint}
-	manifestBytes, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	buildOutput, err := providerpkg.SourceBuildOutputPath(manifest, runtime.GOOS)
+	if err != nil {
+		t.Fatalf("SourceBuildOutputPath: %v", err)
+	}
+	staging := "staging-binary"
+	if err := os.WriteFile(filepath.Join(srcDir, staging), primary.data, 0o755); err != nil {
+		t.Fatalf("write staging binary: %v", err)
+	}
+	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp %s %s\nchmod +x %s\n", staging, buildOutput, buildOutput)
+	if err := os.WriteFile(filepath.Join(srcDir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write build script: %v", err)
+	}
+	manifest.Build = &providermanifestv1.SourceBuild{
+		Command: []string{"sh", "./build.sh"},
+		Inputs:  []string{"build.sh", staging},
+	}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: buildOutput}
+	manifestBytes, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode source manifest: %v", err)
 	}
@@ -2005,8 +2037,10 @@ func writeExecutableSourceManifest(t *testing.T, dir, srcDirName, source, versio
 	if err := os.WriteFile(manifestPath, manifestBytes, 0o644); err != nil {
 		t.Fatalf("write source manifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0o644); err != nil {
-		t.Fatalf("write provider catalog: %v", err)
+	if kind == providermanifestv1.KindApp {
+		if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0o644); err != nil {
+			t.Fatalf("write provider catalog: %v", err)
+		}
 	}
 	return manifestPath
 }
@@ -2099,14 +2133,23 @@ func main() {
 func writeBootstrapSecretsManifest(t *testing.T, dir, source, version string) string {
 	t.Helper()
 
-	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
+	srcParts := strings.Split(source, "/")
+	appName := srcParts[len(srcParts)-1]
+	buildOutput := ".gestaltd/bin/" + appName
 	manifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
-	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindSecrets,
-		Source:     source,
-		Version:    version,
-		Spec:       &providermanifestv1.Spec{},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
+	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp bootstrap-secrets-binary %s\nchmod +x %s\n", buildOutput, buildOutput)
+	if err := os.WriteFile(filepath.Join(dir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write bootstrap build script: %v", err)
+	}
+	manifest, err := encodeSourceManifestForTest(&providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindSecrets,
+		Source:  source,
+		Version: version,
+		Spec:    &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "bootstrap-secrets-binary"},
+		},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat bootstrap: %v", err)
@@ -2118,12 +2161,8 @@ func writeBootstrapSecretsManifest(t *testing.T, dir, source, version string) st
 	if err != nil {
 		t.Fatalf("read bootstrap binary: %v", err)
 	}
-	bootstrapBinaryPath := filepath.Join(dir, filepath.FromSlash(bootstrapArtifact))
-	if err := os.MkdirAll(filepath.Dir(bootstrapBinaryPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll bootstrap artifact: %v", err)
-	}
-	if err := os.WriteFile(bootstrapBinaryPath, bootstrapBinaryData, 0o755); err != nil {
-		t.Fatalf("write bootstrap artifact: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "bootstrap-secrets-binary"), bootstrapBinaryData, 0o755); err != nil {
+		t.Fatalf("write bootstrap binary input: %v", err)
 	}
 	return manifestPath
 }
@@ -2506,7 +2545,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				t.Fatalf("disk lock extra archive URL = %q, want %q", got, wantExtraArchiveURL)
 			}
 
-			appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+			appRoot := filepath.Join(artifactsDir, "providers", "alpha")
 			if err := os.RemoveAll(appRoot); err != nil {
 				t.Fatalf("RemoveAll app root: %v", err)
 			}
@@ -2573,7 +2612,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if cfg.Apps["alpha"].ResolvedManifest.Source != packageSource {
 				t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Apps["alpha"].ResolvedManifest.Source, packageSource)
 			}
-			executablePath := filepath.Join(artifactsDir, PreparedProvidersDir, "alpha", filepath.FromSlash(artifactRelPath("provider")))
+			executablePath := filepath.Join(artifactsDir, PreparedProvidersDir, "alpha", filepath.FromSlash(artifactRelPath("alpha")))
 			if cfg.Apps["alpha"].Command != executablePath {
 				t.Fatalf("app command = %q, want %q", cfg.Apps["alpha"].Command, executablePath)
 			}
@@ -2779,7 +2818,7 @@ packages:
 	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
-	appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	appRoot := filepath.Join(artifactsDir, "providers", "alpha")
 	if err := os.RemoveAll(appRoot); err != nil {
 		t.Fatalf("RemoveAll app root: %v", err)
 	}
@@ -3753,7 +3792,7 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 		t.Fatalf("archive request count = %d, want 1", got)
 	}
 
-	appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	appRoot := filepath.Join(artifactsDir, "providers", "alpha")
 	if err := os.RemoveAll(appRoot); err != nil {
 		t.Fatalf("RemoveAll app root: %v", err)
 	}
@@ -4455,7 +4494,7 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	if _, ok := lock.Providers.App["gadget"]; !ok {
 		t.Fatal(`lock.Providers.App["gadget"] not found`)
 	}
-	install, err := inspectPreparedInstall(filepath.Join(artifactsDir, ".gestaltd", "providers", "gadget"))
+	install, err := inspectPreparedInstall(filepath.Join(artifactsDir, "providers", "gadget"))
 	if err != nil {
 		t.Fatalf("inspectPreparedInstall: %v", err)
 	}
@@ -4630,7 +4669,7 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
 	}
 
-	authRoot := filepath.Join(artifactsDir, ".gestaltd", "auth")
+	authRoot := filepath.Join(artifactsDir, "auth")
 	if err := os.RemoveAll(authRoot); err != nil {
 		t.Fatalf("RemoveAll auth root: %v", err)
 	}
@@ -5224,10 +5263,10 @@ packages:
 		t.Fatal(handlerErr)
 	}
 
-	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "secrets", "bootstrap")); err != nil {
+	if err := os.RemoveAll(filepath.Join(artifactsDir, "secrets", "bootstrap")); err != nil {
 		t.Fatalf("RemoveAll secrets root: %v", err)
 	}
-	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "providers", "private")); err != nil {
+	if err := os.RemoveAll(filepath.Join(artifactsDir, "providers", "private")); err != nil {
 		t.Fatalf("RemoveAll app root: %v", err)
 	}
 	indexBefore := indexCount.Load()
@@ -5388,10 +5427,6 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
 
-	wantBinaries := map[string]string{
-		"main":    "indexeddb-main",
-		"archive": "indexeddb-archive",
-	}
 	for _, name := range []string{"main", "archive"} {
 		entry := cfg.Providers.IndexedDB[name]
 		if entry == nil {
@@ -5402,7 +5437,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 			t.Fatalf("cfg.Providers.IndexedDB[%q].ResolvedManifest = nil", name)
 			return
 		}
-		wantCommand := filepath.Join(artifactsDir, "indexeddb", name, "artifacts", runtime.GOOS, runtime.GOARCH, wantBinaries[name])
+		wantCommand := filepath.Join(artifactsDir, "indexeddb", name, "bin", name)
 		if entry.Command != wantCommand {
 			t.Fatalf("cfg.Providers.IndexedDB[%q].Command = %q, want %q", name, entry.Command, wantCommand)
 		}
@@ -5507,10 +5542,6 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		"session":    "generated-secret-value",
 		"rate_limit": "ghp_inline_auth_source_token",
 	}
-	wantBinaries := map[string]string{
-		"session":    "cache-session",
-		"rate_limit": "cache-rate-limit",
-	}
 	for _, name := range []string{"session", "rate_limit"} {
 		entry := cfg.Providers.Cache[name]
 		if entry == nil {
@@ -5521,7 +5552,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 			t.Fatalf("cfg.Providers.Cache[%q].ResolvedManifest = nil", name)
 			return
 		}
-		wantCommand := filepath.Join(artifactsDir, ".gestaltd", "cache", name, "artifacts", runtime.GOOS, runtime.GOARCH, wantBinaries[name])
+		wantCommand := filepath.Join(artifactsDir, "cache", name, "bin", name)
 		if entry.Command != wantCommand {
 			t.Fatalf("cfg.Providers.Cache[%q].Command = %q, want %q", name, entry.Command, wantCommand)
 		}
@@ -5756,32 +5787,7 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	secretsVersion := "1.0.0"
 	authSource := "github.com/acme/tools/auth-widget"
 	authVersion := "2.0.0"
-	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
-	bootstrapManifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
-	bootstrapManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindSecrets,
-		Source:     bootstrapSource,
-		Version:    bootstrapVersion,
-		Spec:       &providermanifestv1.Spec{},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat bootstrap: %v", err)
-	}
-	if err := os.WriteFile(bootstrapManifestPath, bootstrapManifest, 0o644); err != nil {
-		t.Fatalf("write bootstrap manifest: %v", err)
-	}
-	bootstrapBinaryData, err := os.ReadFile(buildGoSourceSecretsBinary(t))
-	if err != nil {
-		t.Fatalf("read bootstrap binary: %v", err)
-	}
-	bootstrapBinaryPath := filepath.Join(dir, filepath.FromSlash(bootstrapArtifact))
-	if err := os.MkdirAll(filepath.Dir(bootstrapBinaryPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll bootstrap artifact: %v", err)
-	}
-	if err := os.WriteFile(bootstrapBinaryPath, bootstrapBinaryData, 0o755); err != nil {
-		t.Fatalf("write bootstrap artifact: %v", err)
-	}
+	_ = writeBootstrapSecretsManifest(t, dir, bootstrapSource, bootstrapVersion)
 
 	secretsArchivePath := buildExecutableArchiveFromBinaryPath(
 		t,
@@ -5958,11 +5964,11 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 		t.Fatalf("auth metadata request count = %d, want 1", got)
 	}
 
-	secretsRoot := filepath.Join(artifactsDir, ".gestaltd", "secrets", "secrets")
+	secretsRoot := filepath.Join(artifactsDir, "secrets", "secrets")
 	if err := os.RemoveAll(secretsRoot); err != nil {
 		t.Fatalf("RemoveAll secrets provider root: %v", err)
 	}
-	authRoot := filepath.Join(artifactsDir, ".gestaltd", "auth")
+	authRoot := filepath.Join(artifactsDir, "auth")
 	if err := os.RemoveAll(authRoot); err != nil {
 		t.Fatalf("RemoveAll auth root: %v", err)
 	}
@@ -6030,33 +6036,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 	bootstrapVersion := "0.1.0"
 	authSource := "github.com/acme/tools/auth-widget"
 	authVersion := "2.0.0"
-	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
-	bootstrapManifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
-	bootstrapManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindSecrets,
-		Source:     bootstrapSource,
-		Version:    bootstrapVersion,
-		Spec:       &providermanifestv1.Spec{},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat bootstrap: %v", err)
-	}
-	if err := os.WriteFile(bootstrapManifestPath, bootstrapManifest, 0o644); err != nil {
-		t.Fatalf("write bootstrap manifest: %v", err)
-	}
-	bootstrapBinaryData, err := os.ReadFile(buildGoSourceSecretsBinary(t))
-	if err != nil {
-		t.Fatalf("read bootstrap binary: %v", err)
-	}
-	bootstrapBinaryPath := filepath.Join(dir, filepath.FromSlash(bootstrapArtifact))
-	if err := os.MkdirAll(filepath.Dir(bootstrapBinaryPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll bootstrap artifact: %v", err)
-	}
-	if err := os.WriteFile(bootstrapBinaryPath, bootstrapBinaryData, 0o755); err != nil {
-		t.Fatalf("write bootstrap artifact: %v", err)
-	}
-
+	_ = writeBootstrapSecretsManifest(t, dir, bootstrapSource, bootstrapVersion)
 	authArchivePath := buildExecutableArchive(
 		t,
 		dir,

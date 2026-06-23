@@ -312,7 +312,7 @@ func writeComponentProviderDir(dir, binaryPath string, manifest *providermanifes
 }
 
 func writeManifest(path string, manifest *providermanifestv1.Manifest) error {
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeTestManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		return err
 	}
@@ -328,22 +328,51 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 			return err
 		}
 	} else {
+		if manifest.Build != nil && !manifest.Build.PrepareOnly {
+			if sourceOutput, err := providerpkg.SourceBuildOutputPath(manifest, runtime.GOOS); err == nil {
+				srcPath := filepath.Join(dir, filepath.FromSlash(sourceOutput))
+				if _, err := os.Stat(srcPath); err != nil {
+					if err := providerpkg.RunSourceBuild(manifestPath, manifest, providerpkg.SourceBuildOptions{}); err != nil {
+						return fmt.Errorf("run source build: %w", err)
+					}
+				}
+			}
+		}
 		manifestCopy := *manifest
 		manifestCopy.Build = nil
 		manifestCopy.Artifacts = nil
-		entrypoint := providerpkg.EntrypointForKind(&manifestCopy, manifestCopy.Kind)
-		if entrypoint != nil && entrypoint.ArtifactPath != "" {
-			digest, err := providerpkg.FileSHA256(filepath.Join(dir, filepath.FromSlash(entrypoint.ArtifactPath)))
-			if err != nil {
-				return err
-			}
-			manifestCopy.Artifacts = []providermanifestv1.Artifact{{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   entrypoint.ArtifactPath,
-				SHA256: digest,
-			}}
+		name, err := providerpkg.SourceNameFromManifest(&manifestCopy)
+		if err != nil {
+			return err
 		}
+		packageEntrypoint := providerpkg.PackageExecutablePath(name, runtime.GOOS)
+		if sourceOutput, err := providerpkg.SourceBuildOutputPath(manifest, runtime.GOOS); err == nil {
+			srcPath := filepath.Join(dir, filepath.FromSlash(sourceOutput))
+			dstPath := filepath.Join(dir, filepath.FromSlash(packageEntrypoint))
+			if data, err := os.ReadFile(srcPath); err == nil {
+				if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(dstPath, data, 0o755); err != nil {
+					return err
+				}
+			}
+		}
+		artifactPath := packageEntrypoint
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(artifactPath))); err != nil {
+			return fmt.Errorf("package artifact %q: %w", artifactPath, err)
+		}
+		digest, err := providerpkg.FileSHA256(filepath.Join(dir, filepath.FromSlash(artifactPath)))
+		if err != nil {
+			return err
+		}
+		manifestCopy.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactPath}
+		manifestCopy.Artifacts = []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: digest,
+		}}
 		manifestData, err := providerpkg.EncodeManifestFormat(&manifestCopy, providerpkg.ManifestFormatYAML)
 		if err != nil {
 			return err

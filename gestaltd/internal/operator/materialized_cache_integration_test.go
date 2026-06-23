@@ -119,7 +119,7 @@ packages:
 	t.Cleanup(func() { newMaterializedCacheRemote = oldFactory })
 	t.Setenv(materializedCacheRemoteEnv, remoteURL)
 
-	appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	appRoot := filepath.Join(artifactsDir, "providers", "alpha")
 	if err := os.RemoveAll(appRoot); err != nil {
 		t.Fatalf("remove prepared app before seed sync: %v", err)
 	}

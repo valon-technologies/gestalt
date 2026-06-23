@@ -19,15 +19,14 @@ _MANIFEST_BASENAMES: Final[tuple[str, ...]] = (
 class SourceManifest:
     kind: str | None
     source: str | None
-    entrypoint_artifact_path: str | None
 
 
 def read_source_manifest(root: pathlib.Path) -> SourceManifest:
     """Read the build-relevant fields from a provider source manifest.
 
     Dispatches on the manifest file extension. Raises ``FileNotFoundError`` if
-    no manifest is present in ``root``. ``entrypoint_artifact_path`` is optional;
-    when omitted, build derivation defaults to ``.gestalt/build/<source-name>``.
+    no manifest is present in ``root``. Build output defaults to
+    ``.gestaltd/bin/<source-name>``.
     """
     for name in _MANIFEST_BASENAMES:
         path = root / name
@@ -61,17 +60,9 @@ def _parse_source_manifest(path: pathlib.Path) -> SourceManifest:
     source = data.get("source")
     source = source.strip() if isinstance(source, str) else None
 
-    entrypoint = data.get("entrypoint")
-    artifact_path = None
-    if isinstance(entrypoint, dict):
-        raw_path = entrypoint.get("artifactPath")
-        if isinstance(raw_path, str):
-            artifact_path = raw_path.strip() or None
-
     return SourceManifest(
         kind=kind,
         source=source,
-        entrypoint_artifact_path=artifact_path,
     )
 
 

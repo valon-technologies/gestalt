@@ -225,7 +225,7 @@ server:
 	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
-	preparedUI := filepath.Join(artifactsDir, ".gestaltd", "ui", "demo", "dist", "index.html")
+	preparedUI := filepath.Join(artifactsDir, "ui", "demo", "dist", "index.html")
 	if _, err := os.Stat(preparedUI); err != nil {
 		t.Fatalf("sync should build local dev UI during lock/sync (not skip as dev-active): %v", err)
 	}

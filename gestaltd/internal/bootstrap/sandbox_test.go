@@ -22,6 +22,15 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
+func encodeBootstrapSourceManifest(manifest *providermanifestv1.Manifest, format string) ([]byte, error) {
+	if manifest == nil {
+		return providerpkg.EncodeSourceManifestFormat(nil, format)
+	}
+	clone := *manifest
+	clone.Entrypoint = nil
+	return providerpkg.EncodeSourceManifestFormat(&clone, format)
+}
+
 func buildGestaltdBinary(t *testing.T) string {
 	t.Helper()
 	if sharedGestaltdBin == "" {
@@ -153,17 +162,13 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 
 	hostBin := buildGestaltdBinary(t)
 	sourceRoot := t.TempDir()
-	artifactRel := ".gestalt/build/provider"
-	artifactPath := filepath.Join(sourceRoot, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(artifact dir): %v", err)
-	}
+	stagingBinary := filepath.Join(sourceRoot, "provider-staging")
 	binData, err := os.ReadFile(buildExampleProviderBinary(t))
 	if err != nil {
 		t.Fatalf("ReadFile(example provider binary): %v", err)
 	}
-	if err := os.WriteFile(artifactPath, binData, 0o755); err != nil {
-		t.Fatalf("WriteFile(artifact): %v", err)
+	if err := os.WriteFile(stagingBinary, binData, 0o755); err != nil {
+		t.Fatalf("WriteFile(staging binary): %v", err)
 	}
 	catalogData, err := os.ReadFile(filepath.Join(exampleProviderRoot(t), providerpkg.StaticCatalogFile))
 	if err != nil {
@@ -173,13 +178,20 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 		t.Fatalf("WriteFile(catalog): %v", err)
 	}
 	manifestPath := filepath.Join(sourceRoot, "manifest.yaml")
-	manifestData, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+	buildScript := "#!/bin/sh\nset -eu\nmkdir -p .gestaltd/bin\ncp provider-staging .gestaltd/bin/provider\nchmod +x .gestaltd/bin/provider\n"
+	if err := os.WriteFile(filepath.Join(sourceRoot, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("WriteFile(build.sh): %v", err)
+	}
+	manifestData, err := encodeBootstrapSourceManifest(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
 		Source:      "github.com/test/apps/provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
-		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "provider-staging", providerpkg.StaticCatalogFile},
+		},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)

@@ -33,18 +33,18 @@ import (
 
 const (
 	LockfileName                   = "gestalt.lock.json"
-	PreparedProvidersDir           = ".gestaltd/providers"
-	PreparedAuthDir                = ".gestaltd/auth"
-	PreparedAuthorizationDir       = ".gestaltd/authorization"
-	PreparedExternalCredentialsDir = ".gestaltd/external-credentials"
-	PreparedSecretsDir             = ".gestaltd/secrets"
-	PreparedTelemetryDir           = ".gestaltd/telemetry"
-	PreparedAuditDir               = ".gestaltd/audit"
-	PreparedCacheDir               = ".gestaltd/cache"
-	PreparedWorkflowDir            = ".gestaltd/workflow"
-	PreparedAgentDir               = ".gestaltd/agent"
-	PreparedRuntimeDir             = ".gestaltd/runtime"
-	PreparedUIDir                  = ".gestaltd/ui"
+	PreparedProvidersDir           = "providers"
+	PreparedAuthDir                = "auth"
+	PreparedAuthorizationDir       = "authorization"
+	PreparedExternalCredentialsDir = "external-credentials"
+	PreparedSecretsDir             = "secrets"
+	PreparedTelemetryDir           = "telemetry"
+	PreparedAuditDir               = "audit"
+	PreparedCacheDir               = "cache"
+	PreparedWorkflowDir            = "workflow"
+	PreparedAgentDir               = "agent"
+	PreparedRuntimeDir             = "runtime"
+	PreparedUIDir                  = "ui"
 
 	platformKeyGeneric = providerrelease.GenericTarget
 )
@@ -574,7 +574,7 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if entry.DevActive {
 			continue
 		}
-		if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() && pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+		if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() && pathWithinRoot(paths.artifactsDir, entry.SourcePath()) {
 			if _, err := l.applyConfiguredUIProvider(paths, nil, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), artifactModeCheck); err != nil {
 				return nil, err
 			}
@@ -3462,7 +3462,7 @@ func localUIParallelPrepareCandidate(paths lifecyclePaths, entry *config.UIEntry
 	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() || entry.DevActive {
 		return false
 	}
-	if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+	if pathWithinRoot(paths.artifactsDir, entry.SourcePath()) {
 		return false
 	}
 	return true
@@ -3586,7 +3586,7 @@ func installLockedPackageAtomic(packagePath, destDir string) (*installedPackage,
 		return nil, nil, nil, fmt.Errorf("create temp install directory: %w", err)
 	}
 	cleanupDir := tempDir
-	installed, err := installPackage(packagePath, tempDir)
+	installed, err := installPackageAs(packagePath, tempDir, filepath.Base(destDir))
 	if err != nil {
 		_ = os.RemoveAll(cleanupDir)
 		return nil, nil, nil, err
@@ -3760,7 +3760,7 @@ func synthesizedCommittedOwnedUIEntry(paths lifecyclePaths, cfg *config.Config, 
 	if cfg == nil || entry == nil || !entry.HasLocalSource() {
 		return false
 	}
-	if !pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+	if !pathWithinRoot(paths.artifactsDir, entry.SourcePath()) {
 		return false
 	}
 	owner := strings.TrimSpace(entry.OwnerApp)
@@ -4252,7 +4252,7 @@ func localAppParallelPrepareCandidate(paths lifecyclePaths, entry *config.Provid
 	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
 		return false
 	}
-	if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+	if pathWithinRoot(paths.artifactsDir, entry.SourcePath()) {
 		return false
 	}
 	return true
@@ -4604,7 +4604,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 	switch {
 	case sourceBacked(provider):
 		if provider.HasLocalSource() {
-			if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), provider.SourcePath()) {
+			if pathWithinRoot(paths.artifactsDir, provider.SourcePath()) {
 				start := time.Now()
 				assetRoot, err := bindPathBackedUIManifest(provider, configMap)
 				if err == nil {
@@ -5024,9 +5024,12 @@ func bindPathBackedUIManifest(app *config.ProviderEntry, configMap map[string]an
 		return "", fmt.Errorf("ui provider manifest not found at %s: %w", manifestPath, err)
 	}
 	manifestPath = normalized.manifestPath
-	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
-		return "", fmt.Errorf("prepare manifest for ui provider: %w", err)
+		_, manifest, err = providerpkg.ReadManifestFile(manifestPath)
+		if err != nil {
+			return "", fmt.Errorf("prepare manifest for ui provider: %w", err)
+		}
 	}
 	if err := bindResolvedUIManifest(app, manifestPath, manifest, configMap); err != nil {
 		return "", err

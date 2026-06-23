@@ -90,7 +90,7 @@ spec: {}
 entrypoint:
   artifactPath: ""
 `,
-			wantError: "entrypoint.artifactPath is required",
+			wantError: "source manifests do not declare entrypoint.artifactPath",
 		},
 	}
 
@@ -171,8 +171,8 @@ func TestE2EProviderPackageAndReleaseBigquery(t *testing.T) {
 	if artifact.OS != "linux" || artifact.Arch != "amd64" {
 		t.Fatalf("artifact platform = %s/%s, want linux/amd64", artifact.OS, artifact.Arch)
 	}
-	if artifact.Path != "gestalt-app-bigquery" {
-		t.Fatalf("artifact path = %q, want %q", artifact.Path, "gestalt-app-bigquery")
+	if artifact.Path != providerpkg.PackageExecutablePath("bigquery", "linux") {
+		t.Fatalf("artifact path = %q, want %q", artifact.Path, providerpkg.PackageExecutablePath("bigquery", "linux"))
 	}
 
 	binaryPath := filepath.Join(extractDir, artifact.Path)
@@ -265,7 +265,7 @@ func TestRun_ProviderPackageAndReleaseBuildsGoSourceSecretsPlugin(t *testing.T) 
 	archiveName := platformArchiveNameForTest(secretsReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := ".gestalt/build/provider"
+	binaryName := providerpkg.PackageExecutablePath(secretsReleaseAppName, runtime.GOOS)
 
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
@@ -330,7 +330,7 @@ func TestRun_ProviderPackageAndReleaseBuildsGoSourceWorkflowProvider(t *testing.
 	archiveName := platformArchiveNameForTest(workflowReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := ".gestalt/build/provider"
+	binaryName := providerpkg.PackageExecutablePath(workflowReleaseAppName, runtime.GOOS)
 
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
@@ -390,7 +390,7 @@ func TestRun_ProviderPackageAndReleaseBuildsGoSourceExternalCredentialsPlugin(t 
 	archiveName := platformArchiveNameForTest(externalCredentialReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := ".gestalt/build/provider"
+	binaryName := providerpkg.PackageExecutablePath(externalCredentialReleaseAppName, runtime.GOOS)
 
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
@@ -537,7 +537,7 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 			archiveName := tc.archiveName(tc.version)
 			extractDir := extractReleasedArchive(t, outputDir, archiveName)
 			_, manifest := readManifestFromDir(t, extractDir)
-			binaryName := ".gestalt/build/provider"
+			binaryName := providerpkg.PackageExecutablePath(tc.appName, runtime.GOOS)
 
 			if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 				t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
@@ -593,7 +593,7 @@ func TestRun_ProviderPackageAndReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	for _, rel := range []string{
 		"branding/icon.svg",
 		"schemas/provider.schema.json",
-		".gestalt/build/provider",
+		providerpkg.PackageExecutablePath(releaseTestAppName, runtime.GOOS),
 	} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("expected %s in archive: %v", rel, err)

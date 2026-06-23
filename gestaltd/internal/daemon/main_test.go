@@ -227,7 +227,7 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
 	}
-	if err := os.RemoveAll(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
 	}
-	if err := os.RemoveAll(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 
@@ -339,7 +339,7 @@ func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	appDir := setupPrebuiltAppDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	manifestPath := componentProviderManifestPath(t, appDir)
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
@@ -349,6 +349,20 @@ func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
 		Command:     []string{"sh", "-c", "printf 'PREPARE_ONLY_STDOUT_SENTINEL\\n'"},
 		PrepareOnly: true,
 	}
+	manifest.Spec = &providermanifestv1.Spec{
+		Surfaces: &providermanifestv1.ProviderSurfaces{
+			REST: &providermanifestv1.RESTSurface{
+				BaseURL: "http://127.0.0.1",
+				Operations: []providermanifestv1.ProviderOperation{{
+					Name:   "ping",
+					Method: "GET",
+					Path:   "/ping",
+				}},
+			},
+		},
+	}
+	writeTestFile(t, appDir, "run.sh", []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	manifest.Run = []string{"./run.sh"}
 	writeManifestFile(t, appDir, manifest)
 	configPath := writeE2EConfig(t, dir, appDir, 18080)
 
@@ -356,7 +370,7 @@ func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
 	}
-	if err := os.RemoveAll(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 

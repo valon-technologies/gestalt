@@ -1,11 +1,6 @@
 /**
  * Source manifest reader for the zero-arg build derivation.
  *
- * The build entrypoint derives its positional args from `manifest.yaml` plus
- * the language package manifest when invoked with no arguments. This module
- * reads just the fields the derivation needs (kind, source, entrypoint artifact
- * path), dispatching on the manifest file extension.
- *
  * @module manifest
  */
 import { readFileSync } from "node:fs";
@@ -16,9 +11,6 @@ import YAML from "yaml";
 export type SourceManifest = {
   kind?: string | undefined;
   source?: string | undefined;
-  entrypoint?: {
-    artifactPath?: string | undefined;
-  } | undefined;
 };
 
 const MANIFEST_BASENAMES = ["manifest.yaml", "manifest.yml", "manifest.json"] as const;
@@ -47,16 +39,8 @@ function parseSourceManifest(raw: string, name: string): SourceManifest {
     throw new Error(`${name} must be a mapping`);
   }
   const record = data as Record<string, unknown>;
-  const entrypoint = record.entrypoint;
-  const manifest: SourceManifest = {
+  return {
     kind: typeof record.kind === "string" ? record.kind : undefined,
     source: typeof record.source === "string" ? record.source : undefined,
   };
-  if (entrypoint !== null && typeof entrypoint === "object" && !Array.isArray(entrypoint)) {
-    const artifactPath = (entrypoint as Record<string, unknown>).artifactPath;
-    if (typeof artifactPath === "string") {
-      manifest.entrypoint = { artifactPath };
-    }
-  }
-  return manifest;
 }

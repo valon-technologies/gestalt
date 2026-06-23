@@ -2124,14 +2124,27 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 				},
 			},
 		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.ToSlash(filepath.Join(".venv", "bin", "python"))},
-	}
-	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: ".gestaltd/bin/python-source"},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"/bin/sh", "-c", "/bin/mkdir -p .gestaltd/bin && /bin/cp .venv/bin/python .gestaltd/bin/python-source && /bin/chmod +x .gestaltd/bin/python-source"},
+			Inputs:  []string{".venv/bin/python"},
+		},
 	}
 	manifestPath := filepath.Join(root, "manifest.yaml")
-	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+	if err := os.WriteFile(manifestPath, []byte(`kind: app
+source: github.com/testowner/apps/python-source
+version: 0.0.1-alpha.1
+displayName: Python Source
+description: Python source provider fixture
+build:
+  command: [/bin/sh, -c, "/bin/mkdir -p .gestaltd/bin && /bin/cp .venv/bin/python .gestaltd/bin/python-source && /bin/chmod +x .gestaltd/bin/python-source"]
+  inputs: [.venv/bin/python]
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`), 0o644); err != nil {
 		t.Fatalf("WriteFile(manifest.yaml): %v", err)
 	}
 	catalogData, err := yaml.Marshal(&catalog.Catalog{
@@ -3250,7 +3263,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	manifest.Entrypoint = &providermanifestv1.Entrypoint{
-		ArtifactPath: "bin/gestalt-app-echo",
+		ArtifactPath: "bin/echo",
 		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
@@ -5235,7 +5248,7 @@ func TestRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	manifest.Entrypoint = &providermanifestv1.Entrypoint{
-		ArtifactPath: "bin/gestalt-app-echo",
+		ArtifactPath: "bin/echo",
 		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 
@@ -5284,7 +5297,7 @@ func TestRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 		t.Fatalf("start app requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.GetCommand() != "./bin/gestalt-app-echo" {
+	if req.GetCommand() != "./bin/echo" {
 		t.Fatalf("StartApp Command = %q, want manifest image entrypoint", req.GetCommand())
 	}
 	if !slices.Equal(req.GetArgs(), []string{"--config", "/etc/gestalt/echo.yaml"}) {
@@ -5303,7 +5316,7 @@ func TestRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	manifest.Entrypoint = &providermanifestv1.Entrypoint{
-		ArtifactPath: "bin/gestalt-app-echo",
+		ArtifactPath: "bin/echo",
 		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 
@@ -5354,7 +5367,7 @@ func TestRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 		t.Fatalf("start app requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.GetCommand() != "./bin/gestalt-app-echo" {
+	if req.GetCommand() != "./bin/echo" {
 		t.Fatalf("StartApp Command = %q, want manifest template entrypoint", req.GetCommand())
 	}
 	if !slices.Equal(req.GetArgs(), []string{"--config", "/etc/gestalt/echo.yaml"}) {
@@ -5374,7 +5387,7 @@ func TestRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	manifest.Entrypoint = &providermanifestv1.Entrypoint{
-		ArtifactPath: "bin/gestalt-app-echo",
+		ArtifactPath: "bin/echo",
 		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 

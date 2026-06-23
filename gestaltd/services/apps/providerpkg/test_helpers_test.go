@@ -41,6 +41,19 @@ func testArtifactPath(binary string) string {
 	return artifactPathFor(testArtifactOS, testArtifactArch, binary)
 }
 
+func sourceBuildOutputRel(t *testing.T, source, goos string) string {
+	t.Helper()
+	rel, err := SourceBuildOutputPath(&providermanifestv1.Manifest{Source: source}, goos)
+	if err != nil {
+		t.Fatalf("SourceBuildOutputPath(%q): %v", source, err)
+	}
+	return rel
+}
+
+func stagedExecutableRel(appName, goos string) string {
+	return PackageExecutablePath(appName, goos)
+}
+
 func unknownSiblingArtifactPath(artifactPath string) string {
 	base := path.Base(artifactPath)
 	ext := path.Ext(base)

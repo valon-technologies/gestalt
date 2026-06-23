@@ -153,7 +153,7 @@ func TestE2EValidateAcceptsTelemetryBuiltins(t *testing.T) {
 
 			dir := t.TempDir()
 			indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-			appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
+			appManifest := componentProviderManifestPath(t, setupAppDir(t, dir))
 
 			cfgPath := filepath.Join(dir, "config.yaml")
 			cfg := fmt.Sprintf(`apiVersion: %s
@@ -194,7 +194,7 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
 
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, filepath.Join(dir, "app")))
+	appManifest := componentProviderManifestPath(t, setupAppDir(t, filepath.Join(dir, "app")))
 	ui := setupMountedUIDir(t, dir)
 	workflowManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindWorkflow, "workflow-indexeddb"))
 	agentManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindAgent, "agent-simple"))
@@ -498,7 +498,7 @@ func TestE2EProviderValidateLayeredConfigSupportsNullDeletion(t *testing.T) {
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	targetDir := setupAppDir(t, filepath.Join(dir, "target"))
-	supportDir := setupPrebuiltAppDir(t, filepath.Join(dir, "support"))
+	supportDir := setupAppDir(t, filepath.Join(dir, "support"))
 	mountedUI := setupMountedUIDir(t, dir)
 	attachOwnedUIToAppSource(t, targetDir, mountedUI.ManifestPath)
 
@@ -648,6 +648,15 @@ func TestE2EValidateConfigPathPrecedence(t *testing.T) {
 			root := t.TempDir()
 			home := filepath.Join(root, "home")
 			workdir := filepath.Join(root, "work")
+			cacheRoot := filepath.Join(root, "go-cache")
+			t.Cleanup(func() {
+				_ = filepath.WalkDir(cacheRoot, func(path string, _ os.DirEntry, err error) error {
+					if err == nil {
+						_ = os.Chmod(path, 0o700)
+					}
+					return nil
+				})
+			})
 			if err := os.MkdirAll(home, 0o755); err != nil {
 				t.Fatalf("MkdirAll home: %v", err)
 			}
@@ -664,6 +673,8 @@ func TestE2EValidateConfigPathPrecedence(t *testing.T) {
 			cmd.Env = append(os.Environ(),
 				"HOME="+home,
 				"GOTELEMETRY=off",
+				"GOMODCACHE="+filepath.Join(cacheRoot, "mod"),
+				"GOCACHE="+filepath.Join(cacheRoot, "build"),
 			)
 			if tc.env != nil {
 				cmd.Env = append(cmd.Env, tc.env(t, root, home, workdir)...)
@@ -838,7 +849,7 @@ func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *te
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	appDir := setupPrebuiltAppDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	if err := writeLocalProviderReleaseMetadata(appDir); err != nil {
 		t.Fatalf("write app provider-release metadata: %v", err)
 	}
@@ -920,8 +931,8 @@ func TestE2EValidateStaticRejectsStaleCatalogExposureMetadata(t *testing.T) {
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	callerManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, filepath.Join(dir, "caller")))
-	targetDir := setupPrebuiltAppDir(t, filepath.Join(dir, "target"))
+	callerManifest := componentProviderManifestPath(t, setupAppDir(t, filepath.Join(dir, "caller")))
+	targetDir := setupAppDir(t, filepath.Join(dir, "target"))
 	if err := writeLocalProviderReleaseMetadata(targetDir); err != nil {
 		t.Fatalf("write target provider-release metadata: %v", err)
 	}
@@ -1135,7 +1146,7 @@ func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
 
 	appDir := filepath.Join(baseDir, "app-src")
 	testutil.CopyExampleProviderApp(t, appDir)
-	artifactRel := ".gestalt/build/provider"
+	artifactRel := ".gestaltd/bin/provider"
 	writeGoAppBuildFixture(t, appDir, "github.com/valon-technologies/gestalt/testdata/provider-go", "example", artifactRel)
 	manifest := &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
@@ -1187,7 +1198,7 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/auth/"+name)), 0o644)
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "auth.go", []byte(authProviderSource(name)), 0o644)
-	artifactRel := ".gestalt/build/auth-provider"
+	artifactRel := ".gestaltd/bin/" + name
 	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/auth/"+name, providermanifestv1.KindIdentity, artifactRel)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIdentity,
@@ -1212,31 +1223,30 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
 	}
 
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "gestalt-"+name))
-	binDest := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(binDest), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(binDest), err)
-	}
-
+	artifactRel := ".gestaltd/bin/" + name
 	switch kind {
 	case providermanifestv1.KindWorkflow:
 		writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/workflow/"+name)), 0o644)
 		writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 		writeTestFile(t, providerDir, "workflow.go", []byte(testutil.GeneratedWorkflowPackageSource()), 0o644)
-		artifactRel = ".gestalt/build/workflow-provider"
 		writeGoComponentBuildFixture(t, providerDir, "example.com/providers/workflow/"+name, providermanifestv1.KindWorkflow, artifactRel)
 	case providermanifestv1.KindAgent:
-		if err := testutil.BuildSDKTestMainBinary(testutil.MustSDKTestProviderPath("agent"), binDest); err != nil {
+		staging := filepath.Join(providerDir, "agent-staging")
+		if err := testutil.BuildSDKTestMainBinary(testutil.MustSDKTestProviderPath("agent"), staging); err != nil {
 			t.Fatalf("build agent provider fixture: %v", err)
 		}
+		buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp agent-staging %s\nchmod +x %s\n", artifactRel, artifactRel)
+		writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
 	default:
 		binData, err := os.ReadFile(appBin)
 		if err != nil {
 			t.Fatalf("read provider binary: %v", err)
 		}
-		if err := os.WriteFile(binDest, binData, 0o755); err != nil {
-			t.Fatalf("write provider binary: %v", err)
+		if err := os.WriteFile(filepath.Join(providerDir, "provider-staging"), binData, 0o755); err != nil {
+			t.Fatalf("write provider staging binary: %v", err)
 		}
+		buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp provider-staging %s\nchmod +x %s\n", artifactRel, artifactRel)
+		writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
 	}
 	manifest := &providermanifestv1.Manifest{
 		Kind:        kind,
@@ -1250,6 +1260,16 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 		manifest.Build = &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "workflow.go", "cmd", "build.sh"},
+		}
+	} else if kind == providermanifestv1.KindAgent {
+		manifest.Build = &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "agent-staging"},
+		}
+	} else {
+		manifest.Build = &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "provider-staging"},
 		}
 	}
 	writeManifestFile(t, providerDir, manifest)
@@ -1404,9 +1424,20 @@ providers:
 
 func writeManifestFile(t *testing.T, appDir string, manifest *providermanifestv1.Manifest) {
 	t.Helper()
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeTestManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), data, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+}
+
+func writePackageManifestFile(t *testing.T, appDir string, manifest *providermanifestv1.Manifest) {
+	t.Helper()
+	data, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
@@ -1440,30 +1471,42 @@ func releasePortHoldersAndStart(t *testing.T, holders []net.Listener, start func
 
 func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 	t.Helper()
+	return setupIndexedDBProviderDirForInstance(t, baseDir, "inmem")
+}
+
+func setupIndexedDBProviderDirForInstance(t *testing.T, baseDir, instanceName string) string {
+	t.Helper()
 
 	providerDir := filepath.Join(baseDir, "indexeddb-provider")
 	if err := os.MkdirAll(providerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
 	}
 
-	binDest := filepath.Join(providerDir, filepath.Base(indexedDBBin))
 	data, err := os.ReadFile(indexedDBBin)
 	if err != nil {
 		t.Fatalf("read indexeddb binary: %v", err)
 	}
-	if err := os.WriteFile(binDest, data, 0o755); err != nil {
-		t.Fatalf("write indexeddb binary: %v", err)
+	if err := os.WriteFile(filepath.Join(providerDir, "indexeddb-staging"), data, 0o755); err != nil {
+		t.Fatalf("write indexeddb staging binary: %v", err)
 	}
-
-	artifactRel := filepath.Base(binDest)
+	buildOutput := ".gestaltd/bin/relationaldb"
+	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp indexeddb-staging %s\nchmod +x %s\n", buildOutput, buildOutput)
+	if err := os.WriteFile(filepath.Join(providerDir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write indexeddb build script: %v", err)
+	}
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIndexedDB,
 		Source:      "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
-		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "indexeddb-staging"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: buildOutput},
 	})
+	_ = instanceName
 	return providerDir
 }
 
@@ -1475,65 +1518,30 @@ func setupExternalCredentialsProviderDir(t *testing.T, baseDir string) string {
 		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
 	}
 
-	binDest := filepath.Join(providerDir, filepath.Base(externalCredentialsBin))
 	data, err := os.ReadFile(externalCredentialsBin)
 	if err != nil {
 		t.Fatalf("read external credentials binary: %v", err)
 	}
-	if err := os.WriteFile(binDest, data, 0o755); err != nil {
-		t.Fatalf("write external credentials binary: %v", err)
+	if err := os.WriteFile(filepath.Join(providerDir, "external-credentials-staging"), data, 0o755); err != nil {
+		t.Fatalf("write external credentials staging binary: %v", err)
 	}
-
-	artifactRel := filepath.Base(binDest)
+	buildOutput := ".gestaltd/bin/external-credentials-default"
+	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp external-credentials-staging %s\nchmod +x %s\n", buildOutput, buildOutput)
+	if err := os.WriteFile(filepath.Join(providerDir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write external credentials build script: %v", err)
+	}
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindExternalCredentials,
 		Source:      "github.com/test/providers/external-credentials-default",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default External Credentials",
 		Spec:        &providermanifestv1.Spec{},
-		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "external-credentials-staging"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: buildOutput},
 	})
-	return providerDir
-}
-
-func setupPrebuiltAppDir(t *testing.T, baseDir string) string {
-	t.Helper()
-
-	providerDir := filepath.Join(baseDir, "app-prebuilt")
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
-	}
-
-	binDest := filepath.Join(providerDir, "gestalt-app-example")
-	binData, err := os.ReadFile(appBin)
-	if err != nil {
-		t.Fatalf("read app binary: %v", err)
-	}
-	if err := os.WriteFile(binDest, binData, 0o755); err != nil {
-		t.Fatalf("write app binary: %v", err)
-	}
-
-	srcDir := testutil.MustExampleProviderAppPath()
-	catalogData, err := os.ReadFile(filepath.Join(srcDir, "catalog.yaml"))
-	if err != nil {
-		t.Fatalf("read catalog.yaml: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(providerDir, "catalog.yaml"), catalogData, 0o644); err != nil {
-		t.Fatalf("write catalog.yaml: %v", err)
-	}
-
-	_, srcManifest, err := providerpkg.ReadSourceManifestFile(filepath.Join(srcDir, "manifest.yaml"))
-	if err != nil {
-		t.Fatalf("read source manifest: %v", err)
-	}
-
-	artifactRel := filepath.Base(binDest)
-	srcManifest.Source = "github.com/test/apps/provider"
-	srcManifest.Version = "0.0.1-alpha.1"
-	srcManifest.Build = nil
-	srcManifest.Artifacts = nil
-	srcManifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactRel}
-	writeManifestFile(t, providerDir, srcManifest)
 	return providerDir
 }
 
@@ -1627,43 +1635,54 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 	if err := os.MkdirAll(indexedDBDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", indexedDBDir, err)
 	}
-
-	indexedDBBinDest := filepath.Join(indexedDBDir, filepath.Base(indexedDBBin))
 	indexedDBData, err := os.ReadFile(indexedDBBin)
 	if err != nil {
 		t.Fatalf("read indexeddb binary: %v", err)
 	}
-	if err := os.WriteFile(indexedDBBinDest, indexedDBData, 0o755); err != nil {
-		t.Fatalf("write indexeddb binary: %v", err)
+	if err := os.WriteFile(filepath.Join(indexedDBDir, "indexeddb-staging"), indexedDBData, 0o755); err != nil {
+		t.Fatalf("write indexeddb staging binary: %v", err)
 	}
+	indexedDBBuildOutput := ".gestaltd/bin/relationaldb"
+	indexedDBBuildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp indexeddb-staging %s\nchmod +x %s\n", indexedDBBuildOutput, indexedDBBuildOutput)
+	writeTestFile(t, indexedDBDir, "build.sh", []byte(indexedDBBuildScript), 0o755)
 	writeManifestFile(t, indexedDBDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIndexedDB,
 		Source:      "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
-		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(indexedDBBinDest)},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "indexeddb-staging"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: indexedDBBuildOutput},
 	})
 
 	externalCredentialsDir := filepath.Join(providersDir, "externalcredentials", "default")
 	if err := os.MkdirAll(externalCredentialsDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", externalCredentialsDir, err)
 	}
-	externalCredentialsBinDest := filepath.Join(externalCredentialsDir, filepath.Base(externalCredentialsBin))
 	externalCredentialsData, err := os.ReadFile(externalCredentialsBin)
 	if err != nil {
 		t.Fatalf("read external credentials binary: %v", err)
 	}
-	if err := os.WriteFile(externalCredentialsBinDest, externalCredentialsData, 0o755); err != nil {
-		t.Fatalf("write external credentials binary: %v", err)
+	if err := os.WriteFile(filepath.Join(externalCredentialsDir, "external-credentials-staging"), externalCredentialsData, 0o755); err != nil {
+		t.Fatalf("write external credentials staging binary: %v", err)
 	}
+	externalCredentialsBuildOutput := ".gestaltd/bin/external-credentials-default"
+	externalCredentialsBuildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp external-credentials-staging %s\nchmod +x %s\n", externalCredentialsBuildOutput, externalCredentialsBuildOutput)
+	writeTestFile(t, externalCredentialsDir, "build.sh", []byte(externalCredentialsBuildScript), 0o755)
 	writeManifestFile(t, externalCredentialsDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindExternalCredentials,
 		Source:      "github.com/test/providers/external-credentials-default",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default External Credentials",
 		Spec:        &providermanifestv1.Spec{},
-		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(externalCredentialsBinDest)},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "external-credentials-staging"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: externalCredentialsBuildOutput},
 	})
 
 	rootUIDir := filepath.Join(providersDir, "ui", "default")
@@ -1703,7 +1722,7 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
 	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
-	appDir := setupPrebuiltAppDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	appManifest, err := providerpkg.FindManifestFile(appDir)
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
@@ -1749,7 +1768,7 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
 	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
-	appDir := setupPrebuiltAppDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	appManifest, err := providerpkg.FindManifestFile(appDir)
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
@@ -2089,7 +2108,7 @@ func TestRunLockSyncLocalProviders(t *testing.T) {
 	if err := runSync([]string{"--locked", "--config", cfgPath}); err != nil {
 		t.Fatalf("runSync: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "providers", "example")); err != nil {
 		t.Fatalf("expected synced app artifact: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "indexeddb", "inmem")); err != nil {
@@ -2132,7 +2151,7 @@ func TestRunSyncStaleLocalProviderRemediation(t *testing.T) {
 	if err := runSync([]string{"--locked", "--config", staleCfgPath, "--artifacts-dir", staleArtifactsDir}); err != nil {
 		t.Fatalf("runSync with renamed local provider: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(staleArtifactsDir, ".gestaltd", "providers", "renamed")); err != nil {
+	if _, err := os.Stat(filepath.Join(staleArtifactsDir, "providers", "renamed")); err != nil {
 		t.Fatalf("renamed local provider should be prepared from source, stat err=%v", err)
 	}
 
@@ -2249,7 +2268,7 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
+	appManifest := componentProviderManifestPath(t, setupAppDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v7
@@ -2322,7 +2341,7 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
+	appManifest := componentProviderManifestPath(t, setupAppDir(t, dir))
 	authManifest := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, "local"))
 
 	indexedDBRel, err := filepath.Rel(deployDir, indexedDBManifest)

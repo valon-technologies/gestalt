@@ -15,15 +15,17 @@ func TestStageSourcePreparedInstallDir_BuildsHostBinaryWhenSourcePackageExists(t
 	t.Parallel()
 
 	root := t.TempDir()
-	artifactPath := ".gestalt/build/provider"
-	buildScript := `mkdir -p .gestalt/build
-cat > .gestalt/build/provider <<'SH'
+	const source = "github.com/test/apps/provider"
+	buildOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
+	stagedEntrypoint := stagedExecutableRel("prepared-stage-test", runtime.GOOS)
+	buildScript := `mkdir -p .gestaltd/bin
+cat > ` + buildOutputRel + ` <<'SH'
 #!/bin/sh
 if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
   printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 SH
-chmod +x .gestalt/build/provider
+chmod +x ` + buildOutputRel + `
 `
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	mustWriteFile(t, filepath.Join(root, "catalog.sh"), []byte(`#!/bin/sh
@@ -34,7 +36,7 @@ fi
 `), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/provider",
+		Source:      source,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
@@ -42,8 +44,7 @@ fi
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
-		Run:        []string{"./catalog.sh"},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		Run: []string{"./catalog.sh"},
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
@@ -57,18 +58,18 @@ fi
 		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
 	}
 
-	if staged.Manifest == nil || staged.Manifest.Entrypoint == nil || staged.Manifest.Entrypoint.ArtifactPath != artifactPath {
+	if staged.Manifest == nil || staged.Manifest.Entrypoint == nil || staged.Manifest.Entrypoint.ArtifactPath != stagedEntrypoint {
 		var entrypoint any
 		if staged.Manifest != nil {
 			entrypoint = staged.Manifest.Entrypoint
 		}
-		t.Fatalf("staged manifest entrypoint = %#v, want artifact path %q", entrypoint, artifactPath)
+		t.Fatalf("staged manifest entrypoint = %#v, want artifact path %q", entrypoint, stagedEntrypoint)
 	}
 	if staged.Manifest.Build != nil || staged.Manifest.Run != nil {
 		t.Fatalf("staged manifest retained source execution metadata: build=%#v run=%#v", staged.Manifest.Build, staged.Manifest.Run)
 	}
 
-	stagedBinaryPath := filepath.Join(stagingDir, filepath.FromSlash(artifactPath))
+	stagedBinaryPath := filepath.Join(stagingDir, filepath.FromSlash(stagedEntrypoint))
 	data, err := os.ReadFile(stagedBinaryPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", stagedBinaryPath, err)
@@ -90,15 +91,16 @@ func TestStageSourcePreparedInstallDir_ReplacesRunGeneratedCatalog(t *testing.T)
 	t.Parallel()
 
 	root := t.TempDir()
-	artifactPath := ".gestalt/build/provider"
-	buildScript := `mkdir -p .gestalt/build
-cat > .gestalt/build/provider <<'SH'
+	const source = "github.com/test/apps/provider"
+	buildOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
+	buildScript := `mkdir -p .gestaltd/bin
+cat > ` + buildOutputRel + ` <<'SH'
 #!/bin/sh
 if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
   printf 'name: provider\noperations:\n  - id: packaged_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 SH
-chmod +x .gestalt/build/provider
+chmod +x ` + buildOutputRel + `
 `
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	mustWriteFile(t, filepath.Join(root, "run.sh"), []byte(`#!/bin/sh
@@ -109,15 +111,14 @@ fi
 `), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:    providermanifestv1.KindApp,
-		Source:  "github.com/test/apps/provider",
+		Source:  source,
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
-		Run:        []string{"./run.sh"},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		Run: []string{"./run.sh"},
 	}))
 
 	if _, _, err := PrepareSourceManifest(manifestPath); err != nil {
@@ -174,9 +175,6 @@ func TestValidateExplicitRunPackaging_AllowsManifestBackedRunOnlyPlugin(t *testi
 	if ReleaseRequiresBuild(manifest) {
 		t.Fatal("manifest-backed app should not require a release build")
 	}
-	if _, err := EffectiveSourceEntrypointForKind(manifest, providermanifestv1.KindApp); err == nil {
-		t.Fatal("expected effective entrypoint error for non-executable manifest-backed app")
-	}
 	if err := ValidateExplicitRunPackaging(t.TempDir(), manifest); err != nil {
 		t.Fatalf("ValidateExplicitRunPackaging: %v", err)
 	}
@@ -196,7 +194,7 @@ func TestValidatePreparedInstallDeclaredBuild_RequiresArtifactWhenReleaseBuildRe
 		},
 	}
 	err := validatePreparedInstallDeclaredBuild(root, manifest, providermanifestv1.KindAgent)
-	if err == nil || !strings.Contains(err.Error(), "declare object-form build.command and entrypoint.artifactPath") {
+	if err == nil || !strings.Contains(err.Error(), "declare object-form build.command") {
 		t.Fatalf("validatePreparedInstallDeclaredBuild err = %v, want missing declared build error", err)
 	}
 }
@@ -224,9 +222,8 @@ func TestSourceRunCommand(t *testing.T) {
 						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
 						PrepareOnly: true,
 					},
-					Run:        []string{fakeUVPath, "run", "--frozen", "./provider.sh", "--dev"},
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider.sh", Args: []string{"--serve"}},
-					Spec:       &providermanifestv1.Spec{},
+					Run:  []string{fakeUVPath, "run", "--frozen", "./provider.sh", "--dev"},
+					Spec: &providermanifestv1.Spec{},
 				}))
 
 				execution, err := SourceManifestExecution(manifestPath, providermanifestv1.KindApp, SourceBuildOptions{})
@@ -263,9 +260,8 @@ fi
 						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
 						PrepareOnly: true,
 					},
-					Run:        []string{fakeUVPath, "run", "--frozen", "./provider.sh"},
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider.sh"},
-					Spec:       &providermanifestv1.Spec{},
+					Run:  []string{fakeUVPath, "run", "--frozen", "./provider.sh"},
+					Spec: &providermanifestv1.Spec{},
 				}))
 
 				if _, _, err := PrepareSourceManifest(manifestPath); err != nil {
@@ -302,9 +298,8 @@ fi
 					Build: &providermanifestv1.SourceBuild{
 						Command: []string{"./fail-build.sh"},
 					},
-					Run:        []string{"./provider.sh"},
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: ".gestalt/build/provider"},
-					Spec:       &providermanifestv1.Spec{},
+					Run:  []string{"./provider.sh"},
+					Spec: &providermanifestv1.Spec{},
 				}))
 
 				execution, err := SourceManifestExecution(manifestPath, providermanifestv1.KindApp, SourceBuildOptions{})
@@ -396,19 +391,22 @@ func TestStageSourcePreparedInstallDir_GeneratesCatalogBeforeTargetBuild(t *test
 	}
 
 	root := t.TempDir()
-	artifactPath := ".gestalt/build/provider"
+	const source = "github.com/test/apps/provider"
+	buildOutputRel := sourceBuildOutputRel(t, source, targetGOOS)
+	hostBuildOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
 	hostPlatform := runtime.GOOS + "/" + runtime.GOARCH
 	buildScript := `set -eu
-mkdir -p .gestalt/build
+mkdir -p .gestaltd/bin
 if [ "${GOOS:-}/` + "${GOARCH:-}" + `" = "` + hostPlatform + `" ]; then
-  cat > .gestalt/build/provider <<'SH'
+  cat > ` + hostBuildOutputRel + ` <<'SH'
 #!/bin/sh
 if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
   printf 'name: provider\noperations:\n  - id: host_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 SH
+  chmod +x ` + hostBuildOutputRel + `
 else
-  cat > .gestalt/build/provider <<'SH'
+  cat > ` + buildOutputRel + ` <<'SH'
 #!/bin/sh
 if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
   echo "target artifact should not generate catalogs" >&2
@@ -416,13 +414,13 @@ if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
 fi
 echo target artifact
 SH
+  chmod +x ` + buildOutputRel + `
 fi
-chmod +x .gestalt/build/provider
 `
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/provider",
+		Source:      source,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
@@ -430,13 +428,13 @@ chmod +x .gestalt/build/provider
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
+	appName := "prepared-stage-test"
 	_, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
 		Kind:    providermanifestv1.KindApp,
-		AppName: "prepared-stage-test",
+		AppName: appName,
 		GOOS:    targetGOOS,
 		GOARCH:  targetGOARCH,
 	})
@@ -452,7 +450,7 @@ chmod +x .gestalt/build/provider
 		t.Fatalf("staged catalog was not generated by host artifact: %s", catalogData)
 	}
 
-	stagedBinary, err := os.ReadFile(filepath.Join(stagingDir, filepath.FromSlash(artifactPath)))
+	stagedBinary, err := os.ReadFile(filepath.Join(stagingDir, filepath.FromSlash(stagedExecutableRel(appName, targetGOOS))))
 	if err != nil {
 		t.Fatalf("ReadFile(staged binary): %v", err)
 	}
@@ -536,11 +534,13 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
-func TestStagePreparedInstallDir_WithEntrypointCopiesGeneratedCatalog(t *testing.T) {
+func TestStagePreparedInstallDir_CopiesGeneratedCatalog(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	mustWriteFile(t, filepath.Join(root, "provider"), []byte(`#!/bin/sh
+	const source = "github.com/test/apps/provider"
+	buildOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
+	mustWriteFile(t, filepath.Join(root, filepath.FromSlash(buildOutputRel)), []byte(`#!/bin/sh
 if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
   printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
@@ -548,11 +548,13 @@ fi
 
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/provider",
+		Source:      source,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
-		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "-c", "exit 0"},
+		},
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
@@ -574,22 +576,13 @@ fi
 	}
 }
 
-func TestStagedReleaseBinaryNameAddsWindowsSuffix(t *testing.T) {
-	t.Parallel()
-
-	if got := stagedReleaseBinaryName("release-test", "windows"); got != "gestalt-app-release-test.exe" {
-		t.Fatalf("windows binary name = %q, want %q", got, "gestalt-app-release-test.exe")
-	}
-	if got := stagedReleaseBinaryName("release-test", "linux"); got != "gestalt-app-release-test" {
-		t.Fatalf("linux binary name = %q, want %q", got, "gestalt-app-release-test")
-	}
-}
-
 func TestStageSourcePreparedInstallDir_RunsInstallBeforeBuild(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	artifactPath := ".gestalt/build/provider"
+	const source = "github.com/test/apps/install-phase"
+	buildOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
+	stagedEntrypoint := stagedExecutableRel("install-phase-test", runtime.GOOS)
 	installScript := `#!/bin/sh
 set -eu
 printf 'install-marker\n' > install-ran.txt
@@ -597,20 +590,20 @@ printf 'install-marker\n' > install-ran.txt
 	buildScript := `#!/bin/sh
 set -eu
 test -f install-ran.txt
-mkdir -p .gestalt/build
-cat > .gestalt/build/provider <<'SH'
+mkdir -p .gestaltd/bin
+cat > ` + buildOutputRel + ` <<'SH'
 #!/bin/sh
 if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
   printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 SH
-chmod +x .gestalt/build/provider
+chmod +x ` + buildOutputRel + `
 `
 	mustWriteFile(t, filepath.Join(root, "install.sh"), []byte(installScript), 0o755)
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/install-phase",
+		Source:      source,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Install Phase",
 		Spec:        &providermanifestv1.Spec{},
@@ -622,7 +615,6 @@ chmod +x .gestalt/build/provider
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh", "install-ran.txt"},
 		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
@@ -640,7 +632,7 @@ chmod +x .gestalt/build/provider
 		t.Fatalf("staged manifest should strip install: %#v", staged.Manifest)
 	}
 
-	stagedBinaryPath := filepath.Join(stagingDir, filepath.FromSlash(artifactPath))
+	stagedBinaryPath := filepath.Join(stagingDir, filepath.FromSlash(stagedEntrypoint))
 	if _, err := os.Stat(stagedBinaryPath); err != nil {
 		t.Fatalf("staged binary not produced: %v", err)
 	}
@@ -651,11 +643,13 @@ func TestRunSourceInstall_NoopWithoutInstall(t *testing.T) {
 
 	root := t.TempDir()
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindApp,
-		Source:     "github.com/test/apps/no-install",
-		Version:    "0.0.1-alpha.1",
-		Spec:       &providermanifestv1.Spec{},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: ".gestalt/build/provider"},
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/test/apps/no-install",
+		Version: "0.0.1-alpha.1",
+		Spec:    &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "-c", "exit 0"},
+		},
 	}))
 	_, manifest, err := ReadSourceManifestFile(manifestPath)
 	if err != nil {
@@ -674,7 +668,8 @@ func TestSourceManifestExecution_RunsInstallBeforeBuild(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	artifactPath := ".gestalt/build/provider"
+	const source = "github.com/test/apps/exec-install-phase"
+	buildOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
 	installScript := `#!/bin/sh
 set -eu
 printf 'install-marker\n' > install-ran.txt
@@ -682,15 +677,15 @@ printf 'install-marker\n' > install-ran.txt
 	buildScript := `#!/bin/sh
 set -eu
 test -f install-ran.txt
-mkdir -p .gestalt/build
-printf '#!/bin/sh\nexit 0\n' > .gestalt/build/provider
-chmod +x .gestalt/build/provider
+mkdir -p .gestaltd/bin
+printf '#!/bin/sh\nexit 0\n' > ` + buildOutputRel + `
+chmod +x ` + buildOutputRel + `
 `
 	mustWriteFile(t, filepath.Join(root, "install.sh"), []byte(installScript), 0o755)
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:    providermanifestv1.KindApp,
-		Source:  "github.com/test/apps/exec-install-phase",
+		Source:  source,
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
 		Install: &providermanifestv1.SourceInstall{
@@ -701,7 +696,6 @@ chmod +x .gestalt/build/provider
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh", "install-ran.txt"},
 		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}))
 
 	if _, err := SourceManifestExecution(manifestPath, providermanifestv1.KindApp, SourceBuildOptions{}); err != nil {
