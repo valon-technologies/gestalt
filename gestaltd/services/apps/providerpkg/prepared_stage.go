@@ -78,7 +78,7 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
-	if SourceBuildProducesOutput(manifest) && (!hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts)) {
+	if sourceBuildProducesOutputOrImplicitGo(filepath.Dir(manifestPath), manifest) && (!hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts)) {
 		if err := EnsureSourceBuildOutput(manifestPath, manifest, targetOpts); err != nil {
 			return nil, err
 		}

@@ -60,7 +60,19 @@ func HasSourceReleaseTarget(root, kind string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return SourceBuildProducesOutput(manifest), nil
+	if SourceBuildProducesOutput(manifest) {
+		return true, nil
+	}
+	// A Go provider that declares an entrypoint but no build.command is built
+	// implicitly by gestaltd (synthesized wrapper main), so it has a release
+	// target even without a declared build phase.
+	if HasGoProviderPackage(root) {
+		resolved, kerr := ManifestKind(manifest)
+		if kerr == nil && EntrypointForKind(manifest, resolved) != nil {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func MissingDeclaredSourceBuildError(manifest *providermanifestv1.Manifest, kind string) error {

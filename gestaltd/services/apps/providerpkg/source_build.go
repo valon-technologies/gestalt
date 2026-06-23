@@ -96,6 +96,24 @@ func SourceBuildProducesOutput(manifest *providermanifestv1.Manifest) bool {
 	return build != nil && !build.PrepareOnly
 }
 
+// sourceBuildProducesOutputOrImplicitGo reports whether a build output will be
+// produced for the provider at root: either a declared build phase that
+// produces output, or a Go provider with an entrypoint (built implicitly by
+// gestaltd via a synthesized wrapper main).
+func sourceBuildProducesOutputOrImplicitGo(root string, manifest *providermanifestv1.Manifest) bool {
+	if SourceBuildProducesOutput(manifest) {
+		return true
+	}
+	if !HasGoProviderPackage(root) {
+		return false
+	}
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		return false
+	}
+	return EntrypointForKind(manifest, kind) != nil
+}
+
 func EffectiveSourceInstall(manifest *providermanifestv1.Manifest) *ResolvedSourceInstall {
 	if manifest == nil || manifest.Install == nil {
 		return nil
@@ -138,7 +156,7 @@ func envMapToSlice(env map[string]string) []string {
 func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	build := EffectiveSourceBuild(manifest)
 	if build == nil {
-		return nil
+		return runImplicitGoBuild(manifestPath, manifest, opts)
 	}
 	if len(build.Command) == 0 {
 		return fmt.Errorf("%s.command is required", build.Label)
@@ -165,6 +183,37 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 		return nil
 	}
 	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
+}
+
+// runImplicitGoBuild is the fallback build path for a Go provider that declares
+// an entrypoint but no build.command: gestaltd synthesizes a wrapper main that
+// serves the provider via the SDK Serve<Kind>Provider call and compiles it with
+// `go build` to the entrypoint.artifactPath. Non-Go providers with no declared
+// build are a no-op (the caller enforces that a declared build is required for
+// release packaging elsewhere).
+func runImplicitGoBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
+	rootDir := filepath.Dir(manifestPath)
+	if !HasGoProviderPackage(rootDir) {
+		return nil
+	}
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		return err
+	}
+	entry := EntrypointForKind(manifest, kind)
+	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+		return fmt.Errorf("entrypoint.artifactPath is required to build a Go provider without a declared build.command")
+	}
+	outputRel := entry.ArtifactPath
+	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
+	if err := os.RemoveAll(outputPath); err != nil {
+		return fmt.Errorf("remove build output %q: %w", outputRel, err)
+	}
+	goos, goarch := SourceBuildTarget(opts)
+	if err := BuildGoProviderBinary(rootDir, outputPath, kind, goos, goarch); err != nil {
+		return err
+	}
+	return verifySourceBuildOutput(outputPath, outputRel, "executable", opts)
 }
 
 // runSourcePhase execs a declared phase command (no shell) from the source
