@@ -207,12 +207,20 @@ func runImplicitGoBuild(manifestPath string, manifest *providermanifestv1.Manife
 	}
 	outputRel := entry.ArtifactPath
 	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
-	if err := os.RemoveAll(outputPath); err != nil {
-		return fmt.Errorf("remove build output %q: %w", outputRel, err)
-	}
 	goos, goarch := SourceBuildTarget(opts)
-	if err := BuildGoProviderBinary(rootDir, outputPath, kind, goos, goarch); err != nil {
+	// Build to a sibling temp path first so a failed build does not delete a
+	// pre-existing entrypoint artifact; only replace the entrypoint on success.
+	tmpOutput := outputPath + ".build"
+	if err := os.RemoveAll(tmpOutput); err != nil {
+		return fmt.Errorf("remove staged build output %q: %w", outputRel, err)
+	}
+	if err := BuildGoProviderBinary(rootDir, tmpOutput, kind, goos, goarch); err != nil {
+		_ = os.RemoveAll(tmpOutput)
 		return err
+	}
+	if err := os.Rename(tmpOutput, outputPath); err != nil {
+		_ = os.RemoveAll(tmpOutput)
+		return fmt.Errorf("install build output %q: %w", outputRel, err)
 	}
 	return verifySourceBuildOutput(outputPath, outputRel, "executable", opts)
 }
