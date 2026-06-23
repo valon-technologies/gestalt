@@ -6,11 +6,7 @@ import (
 	"maps"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,11 +20,7 @@ func buildExecutableRuntime(ctx context.Context, name string, entry *config.Runt
 		return nil, err
 	}
 
-	var sessionLogs runtimelogs.Store
-	if deps.Services != nil {
-		sessionLogs = deps.Services.RuntimeSessionLogs
-	}
-	hostServices, err := buildRuntimeProviderHostServices(name, deps)
+	hostServices, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -43,26 +35,7 @@ func buildExecutableRuntime(ctx context.Context, name string, entry *config.Runt
 		HostBinary:   entry.HostBinary,
 		HostServices: hostServices,
 		Telemetry:    deps.Telemetry,
-		SessionLogs:  sessionLogs,
 	})
-}
-
-func buildRuntimeProviderHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
-	hostServices, err := buildProviderHostServices(name, deps)
-	if err != nil {
-		return nil, err
-	}
-	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil {
-		return hostServices, nil
-	}
-	hostServices = append(hostServices, runtimehost.HostService{
-		Name:           "runtime_log_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.RuntimeLogHost_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			runtimehost.RegisterRuntimeLogHostServer(srv, name, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
-		},
-	})
-	return hostServices, nil
 }
 
 func runtimeProviderConfigMap(name string, entry *config.RuntimeProviderEntry) (map[string]any, error) {

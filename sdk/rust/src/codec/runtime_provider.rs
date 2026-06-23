@@ -3,38 +3,14 @@
 //! Generated wire conversions for runtime_provider.proto.
 
 use crate::codec::agent::{from_wire_prepared_agent_workspace, to_wire_agent_workspace};
-use crate::codec::support::{from_wire_timestamp, to_wire_timestamp};
+use crate::codec::support::from_wire_timestamp;
 use crate::generated::v1;
 use crate::runtime_provider::{
-    AppendRuntimeLogsRequest, AppendRuntimeLogsResponse, GetRuntimeSessionRequest, HostedApp,
-    ListRuntimeSessionsRequest, ListRuntimeSessionsResponse, PrepareRuntimeWorkspaceRequest,
-    PrepareRuntimeWorkspaceResponse, RemoveRuntimeWorkspaceRequest, RuntimeImagePullAuth,
-    RuntimeLogEntry, RuntimeSession, RuntimeSessionLifecycle, RuntimeSupport,
+    GetRuntimeSessionRequest, HostedApp, ListRuntimeSessionsRequest, ListRuntimeSessionsResponse,
+    PrepareRuntimeWorkspaceRequest, PrepareRuntimeWorkspaceResponse, RemoveRuntimeWorkspaceRequest,
+    RuntimeImagePullAuth, RuntimeSession, RuntimeSessionLifecycle, RuntimeSupport,
     StartHostedAppRequest, StartRuntimeSessionRequest, StopRuntimeSessionRequest,
 };
-
-/// Converts a native `AppendRuntimeLogsRequest` to its wire message.
-pub(crate) fn to_wire_append_runtime_logs_request(
-    value: AppendRuntimeLogsRequest,
-) -> v1::AppendRuntimeLogsRequest {
-    v1::AppendRuntimeLogsRequest {
-        session_id: value.session_id,
-        logs: value
-            .logs
-            .into_iter()
-            .map(to_wire_runtime_log_entry)
-            .collect(),
-    }
-}
-
-/// Converts a wire `AppendRuntimeLogsResponse` to its native message.
-pub(crate) fn from_wire_append_runtime_logs_response(
-    value: v1::AppendRuntimeLogsResponse,
-) -> AppendRuntimeLogsResponse {
-    AppendRuntimeLogsResponse {
-        last_seq: value.last_seq,
-    }
-}
 
 /// Converts a native `GetRuntimeSessionRequest` to its wire message.
 pub(crate) fn to_wire_get_runtime_session_request(
@@ -115,16 +91,6 @@ pub(crate) fn to_wire_runtime_image_pull_auth(
 ) -> v1::RuntimeImagePullAuth {
     v1::RuntimeImagePullAuth {
         docker_config_json: value.docker_config_json,
-    }
-}
-
-/// Converts a native `RuntimeLogEntry` to its wire message.
-pub(crate) fn to_wire_runtime_log_entry(value: RuntimeLogEntry) -> v1::RuntimeLogEntry {
-    v1::RuntimeLogEntry {
-        stream: value.stream,
-        message: value.message,
-        observed_at: value.observed_at.map(to_wire_timestamp),
-        source_seq: value.source_seq,
     }
 }
 

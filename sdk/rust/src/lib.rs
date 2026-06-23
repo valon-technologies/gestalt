@@ -44,8 +44,7 @@ pub mod rpc_support;
 pub mod runtime;
 /// Runtime entrypoints for serving Gestalt provider surfaces over Unix sockets.
 pub mod runtime_impl;
-mod runtime_log_host;
-/// Generated Runtime and RuntimeLogHost client and native types.
+/// Generated Runtime client and native types.
 pub mod runtime_provider;
 mod runtime_provider_impl;
 mod runtime_server;
@@ -126,10 +125,6 @@ pub use invoke_support::{
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
-pub use runtime_log_host::{
-    AppendRuntimeLogsRequest, AppendRuntimeLogsResponse, ENV_RUNTIME_SESSION_ID, RuntimeLogEntry,
-    RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream, runtime_session_id,
-};
 pub use runtime_provider_impl::{
     GetRuntimeSessionRequest, HostedApp, ListRuntimeSessionsRequest, ListRuntimeSessionsResponse,
     PrepareRuntimeWorkspaceRequest, PrepareRuntimeWorkspaceResponse, RemoveRuntimeWorkspaceRequest,

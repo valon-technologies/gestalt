@@ -2991,29 +2991,6 @@ pub struct HostedApp {
     #[prost(string, tag = "4")]
     pub dial_target: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RuntimeLogEntry {
-    #[prost(enumeration = "RuntimeLogStream", tag = "1")]
-    pub stream: i32,
-    #[prost(string, tag = "2")]
-    pub message: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int64, tag = "4")]
-    pub source_seq: i64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppendRuntimeLogsRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "2")]
-    pub logs: ::prost::alloc::vec::Vec<RuntimeLogEntry>,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendRuntimeLogsResponse {
-    #[prost(int64, tag = "1")]
-    pub last_seq: i64,
-}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum RuntimeEgressMode {
@@ -3042,38 +3019,6 @@ impl RuntimeEgressMode {
             "RUNTIME_EGRESS_MODE_NONE" => Some(Self::None),
             "RUNTIME_EGRESS_MODE_CIDR" => Some(Self::Cidr),
             "RUNTIME_EGRESS_MODE_HOSTNAME" => Some(Self::Hostname),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum RuntimeLogStream {
-    Unspecified = 0,
-    Stdout = 1,
-    Stderr = 2,
-    Runtime = 3,
-}
-impl RuntimeLogStream {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "RUNTIME_LOG_STREAM_UNSPECIFIED",
-            Self::Stdout => "RUNTIME_LOG_STREAM_STDOUT",
-            Self::Stderr => "RUNTIME_LOG_STREAM_STDERR",
-            Self::Runtime => "RUNTIME_LOG_STREAM_RUNTIME",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "RUNTIME_LOG_STREAM_UNSPECIFIED" => Some(Self::Unspecified),
-            "RUNTIME_LOG_STREAM_STDOUT" => Some(Self::Stdout),
-            "RUNTIME_LOG_STREAM_STDERR" => Some(Self::Stderr),
-            "RUNTIME_LOG_STREAM_RUNTIME" => Some(Self::Runtime),
             _ => None,
         }
     }

@@ -3,17 +3,12 @@ package server
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
-
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -44,19 +39,9 @@ type adminRuntimeSessionListResponse struct {
 	NextPageToken string                    `json:"nextPageToken,omitempty"`
 }
 
-type adminRuntimeLogEntry struct {
-	Seq        int64      `json:"seq"`
-	SourceSeq  int64      `json:"sourceSeq,omitempty"`
-	Stream     string     `json:"stream"`
-	Message    string     `json:"message"`
-	ObservedAt *time.Time `json:"observedAt,omitempty"`
-	AppendedAt *time.Time `json:"appendedAt,omitempty"`
-}
-
 func (s *Server) mountAdminRuntimeRoutes(r chi.Router) {
 	r.Get("/runtime/providers", s.listAdminRuntimeProviders)
 	r.Get("/runtime/providers/{provider}/sessions", s.listAdminRuntimeProviderSessions)
-	r.Get("/runtime/providers/{provider}/sessions/{session}/logs", s.listAdminRuntimeProviderSessionLogs)
 }
 
 func (s *Server) listAdminRuntimeProviders(w http.ResponseWriter, r *http.Request) {
@@ -134,55 +119,6 @@ func adminRuntimeSessionApp(session *proto.RuntimeSession) string {
 	return strings.TrimSpace(session.GetMetadata()["provider_name"])
 }
 
-func (s *Server) listAdminRuntimeProviderSessionLogs(w http.ResponseWriter, r *http.Request) {
-	providerName := strings.TrimSpace(chi.URLParam(r, "provider"))
-	sessionID := strings.TrimSpace(chi.URLParam(r, "session"))
-	if providerName == "" || sessionID == "" {
-		writeError(w, http.StatusBadRequest, "provider and session are required")
-		return
-	}
-	afterSeq, ok := parseAdminRuntimeLogCursor(w, r)
-	if !ok {
-		return
-	}
-	limit, ok := parseAdminRuntimeLogLimit(w, r)
-	if !ok {
-		return
-	}
-	if s.pluginRuntimes == nil {
-		writeJSON(w, http.StatusOK, []adminRuntimeLogEntry{})
-		return
-	}
-	logs, err := s.pluginRuntimes.ListRuntimeSessionLogs(r.Context(), providerName, sessionID, afterSeq, limit)
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) || errors.Is(err, runtimelogs.ErrSessionNotFound) {
-			writeError(w, http.StatusNotFound, "runtime session not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to load runtime session logs")
-		return
-	}
-	out := make([]adminRuntimeLogEntry, 0, len(logs))
-	for _, entry := range logs {
-		value := adminRuntimeLogEntry{
-			Seq:       entry.Seq,
-			SourceSeq: entry.SourceSeq,
-			Stream:    strings.TrimSpace(string(entry.Stream)),
-			Message:   entry.Message,
-		}
-		if !entry.ObservedAt.IsZero() {
-			observedAt := entry.ObservedAt
-			value.ObservedAt = &observedAt
-		}
-		if !entry.AppendedAt.IsZero() {
-			appendedAt := entry.AppendedAt
-			value.AppendedAt = &appendedAt
-		}
-		out = append(out, value)
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
 func (s *Server) adminRuntimeSnapshots(r *http.Request) ([]bootstrap.RuntimeProviderSnapshot, error) {
 	if s.pluginRuntimes == nil {
 		return nil, nil
@@ -207,8 +143,6 @@ func adminRuntimeProfileFromBootstrap(profile bootstrap.RuntimePlacementPlan) ad
 const (
 	defaultAdminRuntimeSessionPageSize = 100
 	maxAdminRuntimeSessionPageSize     = 200
-	defaultAdminRuntimeLogLimit        = 200
-	maxAdminRuntimeLogLimit            = 1000
 )
 
 func adminRuntimeSessionListRequestFromQuery(w http.ResponseWriter, r *http.Request) (*proto.ListRuntimeSessionsRequest, bool) {
@@ -235,33 +169,4 @@ func adminRuntimeSessionListRequestFromQuery(w http.ResponseWriter, r *http.Requ
 		PageSize:  int32(pageSize),
 		PageToken: pageToken,
 	}, true
-}
-
-func parseAdminRuntimeLogCursor(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	raw := strings.TrimSpace(r.URL.Query().Get("after"))
-	if raw == "" {
-		return 0, true
-	}
-	afterSeq, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || afterSeq < 0 {
-		writeError(w, http.StatusBadRequest, "after must be a non-negative integer")
-		return 0, false
-	}
-	return afterSeq, true
-}
-
-func parseAdminRuntimeLogLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
-	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
-	if raw == "" {
-		return defaultAdminRuntimeLogLimit, true
-	}
-	limit64, err := strconv.ParseInt(raw, 10, 32)
-	if err != nil || limit64 < 1 {
-		writeError(w, http.StatusBadRequest, "limit must be a positive integer")
-		return 0, false
-	}
-	if limit64 > maxAdminRuntimeLogLimit {
-		limit64 = maxAdminRuntimeLogLimit
-	}
-	return int(limit64), true
 }

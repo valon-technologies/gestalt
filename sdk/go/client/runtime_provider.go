@@ -6,7 +6,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -26,32 +25,6 @@ const (
 	// RuntimeEgressModeHostname is the RUNTIME_EGRESS_MODE_HOSTNAME value of RuntimeEgressMode.
 	RuntimeEgressModeHostname RuntimeEgressMode = 3
 )
-
-// RuntimeLogStream is the gestalt.provider.v1.RuntimeLogStream enum. It is open:
-// numeric values outside the named constants are preserved.
-type RuntimeLogStream int32
-
-const (
-	// RuntimeLogStreamUnspecified is the RUNTIME_LOG_STREAM_UNSPECIFIED value of RuntimeLogStream.
-	RuntimeLogStreamUnspecified RuntimeLogStream = 0
-	// RuntimeLogStreamStdout is the RUNTIME_LOG_STREAM_STDOUT value of RuntimeLogStream.
-	RuntimeLogStreamStdout RuntimeLogStream = 1
-	// RuntimeLogStreamStderr is the RUNTIME_LOG_STREAM_STDERR value of RuntimeLogStream.
-	RuntimeLogStreamStderr RuntimeLogStream = 2
-	// RuntimeLogStreamRuntime is the RUNTIME_LOG_STREAM_RUNTIME value of RuntimeLogStream.
-	RuntimeLogStreamRuntime RuntimeLogStream = 3
-)
-
-// AppendRuntimeLogsRequest is the native message type for gestalt.provider.v1.AppendRuntimeLogsRequest.
-type AppendRuntimeLogsRequest struct {
-	SessionId string
-	Logs      []*RuntimeLogEntry
-}
-
-// AppendRuntimeLogsResponse is the native message type for gestalt.provider.v1.AppendRuntimeLogsResponse.
-type AppendRuntimeLogsResponse struct {
-	LastSeq int64
-}
 
 // GetRuntimeSessionRequest is the native message type for gestalt.provider.v1.GetRuntimeSessionRequest.
 type GetRuntimeSessionRequest struct {
@@ -104,14 +77,6 @@ type RemoveRuntimeWorkspaceRequest struct {
 // RuntimeImagePullAuth is the native message type for gestalt.provider.v1.RuntimeImagePullAuth.
 type RuntimeImagePullAuth struct {
 	DockerConfigJson string
-}
-
-// RuntimeLogEntry is the native message type for gestalt.provider.v1.RuntimeLogEntry.
-type RuntimeLogEntry struct {
-	Stream     RuntimeLogStream
-	Message    string
-	ObservedAt *time.Time
-	SourceSeq  int64
 }
 
 // RuntimeSession is the native message type for gestalt.provider.v1.RuntimeSession.
@@ -308,55 +273,4 @@ func (c *Runtime) StartAppRaw(ctx context.Context, request *StartHostedAppReques
 		return nil, toGestaltError(err)
 	}
 	return FromWireHostedApp(response), nil
-}
-
-// RuntimeLogHost is the generated client for gestalt.provider.v1.RuntimeLogHost.
-// Every transport error is converted to *GestaltError.
-type RuntimeLogHost struct {
-	client proto.RuntimeLogHostClient
-}
-
-// NewRuntimeLogHost creates a RuntimeLogHost client over an injected gRPC connection.
-func NewRuntimeLogHost(conn grpc.ClientConnInterface) *RuntimeLogHost {
-	return &RuntimeLogHost{client: proto.NewRuntimeLogHostClient(conn)}
-}
-
-var connectRuntimeLogHostConns host.ConnPool
-
-// ConnectRuntimeLogHost dials the "runtime log host" host service advertised through the
-// GESTALT_HOST_SERVICE_SOCKET environment and returns a connected client.
-// name selects a named binding; the empty string selects the default
-// binding. Connections are pooled per binding and shared across clients for
-// the life of the process. The first dial blocks until the connection is
-// ready or ctx is done.
-func ConnectRuntimeLogHost(ctx context.Context, name string) (*RuntimeLogHost, error) {
-	target, token, err := host.Target("runtime log host")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectRuntimeLogHostConns.Conn(ctx, "runtime log host", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewRuntimeLogHost(conn), nil
-}
-
-// AppendLogs is the ergonomic form of [RuntimeLogHost.AppendLogsRaw].
-// The response collapses to its lastSeq field.
-func (c *RuntimeLogHost) AppendLogs(ctx context.Context, sessionId string, logs []*RuntimeLogEntry) (int64, error) {
-	request := &AppendRuntimeLogsRequest{SessionId: sessionId, Logs: logs}
-	response, err := c.client.AppendLogs(ctx, ToWireAppendRuntimeLogsRequest(request))
-	if err != nil {
-		return 0, toGestaltError(err)
-	}
-	return FromWireAppendRuntimeLogsResponse(response).LastSeq, nil
-}
-
-// AppendLogsRaw is the faithful form of [RuntimeLogHost.AppendLogs].
-func (c *RuntimeLogHost) AppendLogsRaw(ctx context.Context, request *AppendRuntimeLogsRequest) (*AppendRuntimeLogsResponse, error) {
-	response, err := c.client.AppendLogs(ctx, ToWireAppendRuntimeLogsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireAppendRuntimeLogsResponse(response), nil
 }

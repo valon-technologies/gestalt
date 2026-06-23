@@ -3,16 +3,12 @@ package runtimeprovider
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"strings"
 	"sync"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -27,7 +23,6 @@ type ExecutableConfig struct {
 	HostBinary   string
 	HostServices []runtimehost.HostService
 	Telemetry    metricutil.TelemetryProviders
-	SessionLogs  runtimelogs.Store
 }
 
 type executableProvider struct {
@@ -35,11 +30,10 @@ type executableProvider struct {
 	runtime   proto.RuntimeClient
 	lifecycle proto.ProviderLifecycleClient
 
-	name        string
-	telemetry   metricutil.TelemetryProviders
-	sessionLogs runtimelogs.Store
-	mu          sync.Mutex
-	sessions    map[string]*proto.RuntimeSession
+	name      string
+	telemetry metricutil.TelemetryProviders
+	mu        sync.Mutex
+	sessions  map[string]*proto.RuntimeSession
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider, error) {
@@ -64,13 +58,12 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 	}
 
 	return &executableProvider{
-		proc:        proc,
-		runtime:     proto.NewRuntimeClient(proc.Conn()),
-		lifecycle:   lifecycle,
-		name:        cfg.Name,
-		telemetry:   cfg.Telemetry,
-		sessionLogs: cfg.SessionLogs,
-		sessions:    make(map[string]*proto.RuntimeSession),
+		proc:      proc,
+		runtime:   proto.NewRuntimeClient(proc.Conn()),
+		lifecycle: lifecycle,
+		name:      cfg.Name,
+		telemetry: cfg.Telemetry,
+		sessions:  make(map[string]*proto.RuntimeSession),
 	}, nil
 }
 
@@ -95,19 +88,6 @@ func (p *executableProvider) StartSession(ctx context.Context, req *proto.StartR
 		return nil, fmt.Errorf("start runtime session: %w", err)
 	}
 	p.trackSession(resp)
-	if p.sessionLogs != nil && resp != nil {
-		metadata := cloneStringMap(resp.GetMetadata())
-		if len(metadata) == 0 {
-			metadata = cloneStringMap(req.GetMetadata())
-		}
-		if err := p.sessionLogs.RegisterSession(ctx, runtimelogs.SessionRegistration{
-			RuntimeProviderName: p.name,
-			SessionID:           resp.GetId(),
-			Metadata:            metadata,
-		}); err != nil {
-			slog.WarnContext(ctx, "failed to register runtime session logs", "runtime_provider", p.name, "session", resp.GetId(), "error", err)
-		}
-	}
 	return resp, nil
 }
 
@@ -142,9 +122,6 @@ func (p *executableProvider) StopSession(ctx context.Context, req *proto.StopRun
 	p.mu.Lock()
 	delete(p.sessions, req.GetSessionId())
 	p.mu.Unlock()
-	if p.sessionLogs != nil {
-		_ = p.sessionLogs.MarkSessionStopped(ctx, p.name, req.GetSessionId(), time.Now().UTC())
-	}
 	if err != nil {
 		return fmt.Errorf("stop runtime session: %w", err)
 	}
@@ -170,7 +147,7 @@ func (p *executableProvider) RemoveWorkspace(ctx context.Context, req *proto.Rem
 func (p *executableProvider) StartApp(ctx context.Context, req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
 	resp, err := p.runtime.StartApp(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("start hosted app: %w", p.enrichStartAppError(req.GetSessionId(), err))
+		return nil, fmt.Errorf("start hosted app: %w", err)
 	}
 	p.mu.Lock()
 	if session, ok := p.sessions[req.GetSessionId()]; ok && session != nil {
@@ -178,35 +155,6 @@ func (p *executableProvider) StartApp(ctx context.Context, req *proto.StartHoste
 	}
 	p.mu.Unlock()
 	return resp, nil
-}
-
-func (p *executableProvider) enrichStartAppError(sessionID string, err error) error {
-	if p == nil || p.sessionLogs == nil || sessionID == "" {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	logs, logErr := p.sessionLogs.TailSessionLogs(ctx, p.name, sessionID, 20)
-	if logErr != nil || len(logs) == 0 {
-		return err
-	}
-	var b strings.Builder
-	for _, entry := range logs {
-		if entry.Message == "" {
-			continue
-		}
-		b.WriteString("[")
-		b.WriteString(string(entry.Stream))
-		b.WriteString("] ")
-		b.WriteString(entry.Message)
-		if !strings.HasSuffix(entry.Message, "\n") {
-			b.WriteByte('\n')
-		}
-	}
-	if b.Len() == 0 {
-		return err
-	}
-	return fmt.Errorf("%w\nrecent runtime logs:\n%s", err, b.String())
 }
 
 func (p *executableProvider) Close() error {

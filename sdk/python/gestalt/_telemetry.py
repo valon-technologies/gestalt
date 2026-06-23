@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import logging
 import os
 import time
 import urllib.parse
@@ -9,7 +10,10 @@ from types import TracebackType
 from typing import Any
 
 from opentelemetry import metrics, trace
+from opentelemetry._logs import set_logger_provider
 from opentelemetry.metrics import Histogram
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
@@ -29,6 +33,7 @@ _OPERATION_DURATION_BUCKETS = (0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2
 _TOKEN_USAGE_BUCKETS = (1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864)
 _configured = False
 _atexit_registered = False
+_logger_provider: LoggerProvider | None = None
 _operation_duration: Histogram | None = None
 _token_usage: Histogram | None = None
 
@@ -41,14 +46,30 @@ def configure_from_environment(*, service_name: str = "gestalt-provider") -> Non
         return
 
     resource = Resource.create(_resource_attributes(service_name))
+    configured_any = False
+
     try:
         tracer_provider = TracerProvider(resource=resource)
         tracer_provider.add_span_processor(BatchSpanProcessor(_trace_exporter()))
         trace.set_tracer_provider(tracer_provider)
+        configured_any = True
+    except Exception:
+        pass
 
+    try:
         metric_reader = PeriodicExportingMetricReader(_metric_exporter())
         metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[metric_reader]))
+        configured_any = True
     except Exception:
+        pass
+
+    try:
+        _configure_logging(resource)
+        configured_any = True
+    except Exception:
+        pass
+
+    if not configured_any:
         return
 
     _configured = True
@@ -62,6 +83,7 @@ def shutdown() -> None:
 
     _shutdown_provider(trace.get_tracer_provider())
     _shutdown_provider(metrics.get_meter_provider())
+    _shutdown_provider(_logger_provider)
 
 
 def model_operation(
@@ -348,6 +370,45 @@ def _metric_exporter() -> Any:
     return OTLPMetricExporter()
 
 
+def _log_exporter() -> Any:
+    if _otel_protocol().startswith("http"):
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+
+        return OTLPLogExporter()
+
+    from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+
+    return OTLPLogExporter()
+
+
+def _configure_logging(resource: Resource) -> None:
+    global _logger_provider
+    _logger_provider = LoggerProvider(resource=resource)
+    _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter()))
+    set_logger_provider(_logger_provider)
+
+    level = _log_level()
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    otel_handler = LoggingHandler(level=level, logger_provider=_logger_provider)
+    otel_handler.setLevel(level)
+    root.addHandler(otel_handler)
+
+    stderr_handler = logging.StreamHandler()
+    stderr_handler.setLevel(level)
+    stderr_handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+    root.addHandler(stderr_handler)
+
+
+def _log_level() -> int:
+    # Use getLevelName instead of getattr so aliases like "warn" resolve
+    # to the same level as "warning".
+    level_name = os.getenv("GESTALT_PROVIDER_LOG_LEVEL", "INFO").strip().upper()
+    resolved = logging.getLevelName(level_name)
+    return resolved if isinstance(resolved, int) else logging.INFO
+
+
 def _resource_attributes(service_name: str) -> dict[str, str]:
     attrs = _resource_attrs_from_env()
     attrs["service.name"] = os.getenv("OTEL_SERVICE_NAME", service_name)
@@ -457,6 +518,7 @@ def _otel_export_enabled() -> bool:
             "OTEL_EXPORTER_OTLP_ENDPOINT",
             "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
             "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
         )
     )
 

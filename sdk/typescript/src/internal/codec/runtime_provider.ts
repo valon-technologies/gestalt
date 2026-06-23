@@ -4,8 +4,6 @@ import { create } from "@bufbuild/protobuf";
 
 import * as wire from "../gen/v1/runtime_provider_pb.ts";
 import type {
-  AppendRuntimeLogsRequest,
-  AppendRuntimeLogsResponse,
   GetRuntimeSessionRequest,
   HostedApp,
   ListRuntimeSessionsRequest,
@@ -14,7 +12,6 @@ import type {
   PrepareRuntimeWorkspaceResponse,
   RemoveRuntimeWorkspaceRequest,
   RuntimeImagePullAuth,
-  RuntimeLogEntry,
   RuntimeSession,
   RuntimeSessionLifecycle,
   RuntimeSupport,
@@ -30,40 +27,6 @@ import {
 } from "./agent.ts";
 import { fromWireTimestamp, toWireTimestamp } from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
-
-export function toWireAppendRuntimeLogsRequest(
-  value: Init<AppendRuntimeLogsRequest>,
-): wire.AppendRuntimeLogsRequest {
-  return create(wire.AppendRuntimeLogsRequestSchema, {
-    sessionId: value.sessionId ?? "",
-    logs: (value.logs ?? []).map(toWireRuntimeLogEntry),
-  });
-}
-
-export function fromWireAppendRuntimeLogsRequest(
-  value: wire.AppendRuntimeLogsRequest,
-): AppendRuntimeLogsRequest {
-  return {
-    sessionId: value.sessionId,
-    logs: value.logs.map(fromWireRuntimeLogEntry),
-  };
-}
-
-export function toWireAppendRuntimeLogsResponse(
-  value: Init<AppendRuntimeLogsResponse>,
-): wire.AppendRuntimeLogsResponse {
-  return create(wire.AppendRuntimeLogsResponseSchema, {
-    lastSeq: value.lastSeq ?? 0n,
-  });
-}
-
-export function fromWireAppendRuntimeLogsResponse(
-  value: wire.AppendRuntimeLogsResponse,
-): AppendRuntimeLogsResponse {
-  return {
-    lastSeq: value.lastSeq,
-  };
-}
 
 export function toWireGetRuntimeSessionRequest(
   value: Init<GetRuntimeSessionRequest>,
@@ -210,32 +173,6 @@ export function fromWireRuntimeImagePullAuth(
 ): RuntimeImagePullAuth {
   return {
     dockerConfigJson: value.dockerConfigJson,
-  };
-}
-
-export function toWireRuntimeLogEntry(
-  value: Init<RuntimeLogEntry>,
-): wire.RuntimeLogEntry {
-  return create(wire.RuntimeLogEntrySchema, {
-    stream: (value.stream ?? 0) as wire.RuntimeLogStream,
-    message: value.message ?? "",
-    ...(value.observedAt !== undefined
-      ? { observedAt: toWireTimestamp(value.observedAt) }
-      : {}),
-    sourceSeq: value.sourceSeq ?? 0n,
-  });
-}
-
-export function fromWireRuntimeLogEntry(
-  value: wire.RuntimeLogEntry,
-): RuntimeLogEntry {
-  return {
-    stream: value.stream,
-    message: value.message,
-    ...(value.observedAt !== undefined
-      ? { observedAt: fromWireTimestamp(value.observedAt) }
-      : {}),
-    sourceSeq: value.sourceSeq,
   };
 }
 

@@ -9,23 +9,14 @@
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
-import {
-  createHostServiceGrpcTransport,
-  hostServiceMetadataInterceptors,
-  parseHostServiceTarget,
-  requireHostServiceTarget,
-} from "./host-service.ts";
-
 import * as wire from "./internal/gen/v1/runtime_provider_pb.ts";
 import { type AgentWorkspace, type PreparedAgentWorkspace } from "./agent.ts";
 import {
-  fromWireAppendRuntimeLogsResponse,
   fromWireHostedApp,
   fromWireListRuntimeSessionsResponse,
   fromWirePrepareRuntimeWorkspaceResponse,
   fromWireRuntimeSession,
   fromWireRuntimeSupport,
-  toWireAppendRuntimeLogsRequest,
   toWireGetRuntimeSessionRequest,
   toWireListRuntimeSessionsRequest,
   toWirePrepareRuntimeWorkspaceRequest,
@@ -45,24 +36,6 @@ export const RuntimeEgressMode = {
 } as const;
 
 export type RuntimeEgressMode = number;
-
-export const RuntimeLogStream = {
-  UNSPECIFIED: 0,
-  STDOUT: 1,
-  STDERR: 2,
-  RUNTIME: 3,
-} as const;
-
-export type RuntimeLogStream = number;
-
-export interface AppendRuntimeLogsRequest {
-  sessionId: string;
-  logs: RuntimeLogEntry[];
-}
-
-export interface AppendRuntimeLogsResponse {
-  lastSeq: bigint;
-}
 
 export interface GetRuntimeSessionRequest {
   sessionId: string;
@@ -111,13 +84,6 @@ export interface RemoveRuntimeWorkspaceRequest {
 
 export interface RuntimeImagePullAuth {
   dockerConfigJson: string;
-}
-
-export interface RuntimeLogEntry {
-  stream: RuntimeLogStream;
-  message: string;
-  observedAt?: Date;
-  sourceSeq: bigint;
 }
 
 export interface RuntimeSession {
@@ -378,61 +344,5 @@ export class Runtime {
       ),
     );
     return fromWireHostedApp(response);
-  }
-}
-
-export class RuntimeLogHost {
-  private readonly client: Client<typeof wire.RuntimeLogHost>;
-  private readonly timeoutMs: number | undefined;
-
-  constructor(
-    transport: Transport,
-    options?: { timeoutMs?: number | undefined },
-  ) {
-    this.client = createClient(wire.RuntimeLogHost, transport);
-    this.timeoutMs = options?.timeoutMs;
-  }
-
-  static connect(options?: {
-    name?: string | undefined;
-    timeoutMs?: number | undefined;
-  }): RuntimeLogHost {
-    const { target, token } = requireHostServiceTarget("runtime log host");
-    const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("runtime log host", target),
-      hostServiceMetadataInterceptors(token, options?.name?.trim() ?? ""),
-    );
-    return new RuntimeLogHost(transport, options);
-  }
-
-  async appendLogs(
-    sessionId: string,
-    logs: Init<RuntimeLogEntry>[],
-  ): Promise<bigint> {
-    const request = {
-      sessionId,
-      logs,
-    } satisfies Init<AppendRuntimeLogsRequest>;
-    const response = fromWireAppendRuntimeLogsResponse(
-      await callUnary(() =>
-        this.client.appendLogs(
-          toWireAppendRuntimeLogsRequest(request),
-          callOptions(this.timeoutMs),
-        ),
-      ),
-    );
-    return response.lastSeq;
-  }
-
-  async appendLogsRaw(
-    request: Init<AppendRuntimeLogsRequest>,
-  ): Promise<AppendRuntimeLogsResponse> {
-    const response = await callUnary(() =>
-      this.client.appendLogs(
-        toWireAppendRuntimeLogsRequest(request),
-        callOptions(this.timeoutMs),
-      ),
-    );
-    return fromWireAppendRuntimeLogsResponse(response);
   }
 }

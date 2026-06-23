@@ -51,7 +51,6 @@ func TestRealProtosValidateCleanly(t *testing.T) {
 		"gestalt.provider.v1.IndexedDB",
 		"gestalt.provider.v1.ProviderLifecycle",
 		"gestalt.provider.v1.Runtime",
-		"gestalt.provider.v1.RuntimeLogHost",
 		"gestalt.provider.v1.S3",
 		"gestalt.provider.v1.S3ObjectAccess",
 		"gestalt.provider.v1.Secrets",

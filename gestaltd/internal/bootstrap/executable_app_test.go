@@ -6524,11 +6524,8 @@ func TestRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].GetEnv()[runtimehost.DefaultRuntimeSessionIDEnv]; got != startRequests[0].GetSessionId() {
-		t.Fatalf("StartApp %s = %q, want session id %q", runtimehost.DefaultRuntimeSessionIDEnv, got, startRequests[0].GetSessionId())
-	}
 	if got := startRequests[0].GetEnv()[runtimehost.HostServiceSocketEnv]; got != "tls://gestalt.example.test:443" {
-		t.Fatalf("runtime log host relay target = %q, want public relay target", got)
+		t.Fatalf("host service socket = %q, want public relay target", got)
 	}
 	if got := startRequests[0].GetEnv()[runtimehost.HostServiceTokenEnv]; got == "" {
 		t.Fatalf("StartApp env missing %s", runtimehost.HostServiceTokenEnv)

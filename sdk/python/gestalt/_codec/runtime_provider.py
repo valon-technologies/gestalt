@@ -12,38 +12,6 @@ from . import agent
 from .support import from_wire_timestamp, to_wire_enum, to_wire_timestamp
 
 
-def to_wire_append_runtime_logs_request(value: native.AppendRuntimeLogsRequest) -> Any:
-    return _runtime_provider_pb2.AppendRuntimeLogsRequest(
-        session_id=value.session_id,
-        logs=[to_wire_runtime_log_entry(item) for item in value.logs],
-    )
-
-
-def from_wire_append_runtime_logs_request(
-    value: Any,
-) -> native.AppendRuntimeLogsRequest:
-    return native.AppendRuntimeLogsRequest(
-        session_id=value.session_id,
-        logs=[from_wire_runtime_log_entry(item) for item in value.logs],
-    )
-
-
-def to_wire_append_runtime_logs_response(
-    value: native.AppendRuntimeLogsResponse,
-) -> Any:
-    return _runtime_provider_pb2.AppendRuntimeLogsResponse(
-        last_seq=value.last_seq,
-    )
-
-
-def from_wire_append_runtime_logs_response(
-    value: Any,
-) -> native.AppendRuntimeLogsResponse:
-    return native.AppendRuntimeLogsResponse(
-        last_seq=value.last_seq,
-    )
-
-
 def to_wire_get_runtime_session_request(value: native.GetRuntimeSessionRequest) -> Any:
     return _runtime_provider_pb2.GetRuntimeSessionRequest(
         session_id=value.session_id,
@@ -183,28 +151,6 @@ def to_wire_runtime_image_pull_auth(value: native.RuntimeImagePullAuth) -> Any:
 def from_wire_runtime_image_pull_auth(value: Any) -> native.RuntimeImagePullAuth:
     return native.RuntimeImagePullAuth(
         docker_config_json=value.docker_config_json,
-    )
-
-
-def to_wire_runtime_log_entry(value: native.RuntimeLogEntry) -> Any:
-    return _runtime_provider_pb2.RuntimeLogEntry(
-        stream=to_wire_enum(value.stream),
-        message=value.message,
-        observed_at=None
-        if value.observed_at is None
-        else to_wire_timestamp(value.observed_at),
-        source_seq=value.source_seq,
-    )
-
-
-def from_wire_runtime_log_entry(value: Any) -> native.RuntimeLogEntry:
-    return native.RuntimeLogEntry(
-        stream=value.stream,
-        message=value.message,
-        observed_at=from_wire_timestamp(value.observed_at)
-        if value.HasField("observed_at")
-        else None,
-        source_seq=value.source_seq,
     )
 
 
