@@ -1,8 +1,10 @@
 package runtimeprovider
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -284,5 +286,173 @@ func runWorkspaceGit(t *testing.T, dir string, args ...string) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestLocalProviderTeesSessionLogsToStderr(t *testing.T) {
+	store := runtimelogs.NewMemoryStore()
+	var sessionID string
+	captured := captureStderr(t, func() {
+		runtime := NewLocalProvider(WithLocalRuntimeSessionLogs("local", store))
+		defer func() { _ = runtime.Close() }()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		session, err := runtime.StartSession(ctx, &proto.StartRuntimeSessionRequest{AppName: "log-tee"})
+		if err != nil {
+			t.Fatalf("StartSession: %v", err)
+		}
+		sessionID = session.GetId()
+
+		_, _ = runtime.StartApp(ctx, &proto.StartHostedAppRequest{
+			SessionId: sessionID,
+			AppName:   "log-tee",
+			Command:   "/bin/sh",
+			Args: []string{
+				"-c",
+				"printf 'hello stdout\n'; printf 'hello stderr\n' >&2; exit 17",
+			},
+		})
+	})
+	if sessionID == "" {
+		t.Fatal("session ID was not set")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	logs, err := store.ListSessionLogs(ctx, "local", sessionID, 0, 100)
+	if err != nil {
+		t.Fatalf("ListSessionLogs: %v", err)
+	}
+	byStream := map[runtimelogs.Stream]string{}
+	for _, entry := range logs {
+		byStream[entry.Stream] += entry.Message
+	}
+	if got := byStream[runtimelogs.StreamStdout]; !strings.Contains(got, "hello stdout") {
+		t.Fatalf("stdout logs = %q, want hello stdout", got)
+	}
+	if got := byStream[runtimelogs.StreamStderr]; !strings.Contains(got, "hello stderr") {
+		t.Fatalf("stderr logs = %q, want hello stderr", got)
+	}
+
+	if !strings.Contains(captured, "provider=log-tee hello stdout") {
+		t.Fatalf("captured stderr = %q, want provider=log-tee hello stdout", captured)
+	}
+	if !strings.Contains(captured, "provider=log-tee hello stderr") {
+		t.Fatalf("captured stderr = %q, want provider=log-tee hello stderr", captured)
+	}
+}
+
+func TestLocalProviderNoSessionLogsDefaultsToStderr(t *testing.T) {
+	var sessionID string
+	captured := captureStderr(t, func() {
+		runtime := NewLocalProvider()
+		defer func() { _ = runtime.Close() }()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		session, err := runtime.StartSession(ctx, &proto.StartRuntimeSessionRequest{AppName: "no-log-tee"})
+		if err != nil {
+			t.Fatalf("StartSession: %v", err)
+		}
+		sessionID = session.GetId()
+
+		_, _ = runtime.StartApp(ctx, &proto.StartHostedAppRequest{
+			SessionId: sessionID,
+			AppName:   "no-log-tee",
+			Command:   "/bin/sh",
+			Args: []string{
+				"-c",
+				"printf 'hello stdout\n'; printf 'hello stderr\n' >&2; exit 17",
+			},
+		})
+	})
+
+	if !strings.Contains(captured, "hello stdout") {
+		t.Fatalf("captured stderr = %q, want hello stdout", captured)
+	}
+	if !strings.Contains(captured, "hello stderr") {
+		t.Fatalf("captured stderr = %q, want hello stderr", captured)
+	}
+	if strings.Contains(captured, "provider=") {
+		t.Fatalf("captured stderr = %q, want no provider prefix", captured)
+	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stderr pipe: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("read stderr pipe: %v", err)
+	}
+	_ = r.Close()
+	return buf.String()
+}
+
+func TestProviderLogWriterPrefixesLines(t *testing.T) {
+	var buf bytes.Buffer
+	w := newProviderLogWriter(&buf, "codeReview")
+	if _, err := w.Write([]byte("first line\nsecond line\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	want := "provider=codeReview first line\nprovider=codeReview second line\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestProviderLogWriterBuffersPartialLines(t *testing.T) {
+	var buf bytes.Buffer
+	w := newProviderLogWriter(&buf, "codeReview")
+	if _, err := w.Write([]byte("first")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if _, err := w.Write([]byte(" second\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	want := "provider=codeReview first second\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestProviderLogWriterFlushWithoutNewline(t *testing.T) {
+	var buf bytes.Buffer
+	w := newProviderLogWriter(&buf, "codeReview")
+	if _, err := w.Write([]byte("partial")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	want := "provider=codeReview partial"
+	if got := buf.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestProviderLogWriterEmptyNameFallsBack(t *testing.T) {
+	var buf bytes.Buffer
+	w := newProviderLogWriter(&buf, "")
+	if _, err := w.Write([]byte("line\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if got := buf.String(); got != "provider=unknown line\n" {
+		t.Fatalf("output = %q", got)
 	}
 }

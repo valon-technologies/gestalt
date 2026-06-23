@@ -315,9 +315,23 @@ func (p *LocalProvider) StartApp(ctx context.Context, req *proto.StartHostedAppR
 
 	stdout := io.Writer(nil)
 	stderr := io.Writer(nil)
+	var processCleanup func()
 	if p.sessionLogs != nil {
-		stdout = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStdout, &session.logSeq)
-		stderr = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStderr, &session.logSeq)
+		sessionStdout := newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStdout, &session.logSeq)
+		sessionStderr := newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStderr, &session.logSeq)
+		// Tee provider output to the container stderr so it is visible in Cloud
+		// Logging, while preserving the in-memory session log stream. Use a separate
+		// prefix writer per stream so partial lines from stdout and stderr are not
+		// mixed together.
+		providerStdout := newProviderLogWriter(os.Stderr, req.GetAppName())
+		providerStderr := newProviderLogWriter(os.Stderr, req.GetAppName())
+		stdout = io.MultiWriter(sessionStdout, providerStdout)
+		stderr = io.MultiWriter(sessionStderr, providerStderr)
+		// Flush any trailing partial line when the process is closed.
+		processCleanup = func() {
+			_ = providerStdout.Close()
+			_ = providerStderr.Close()
+		}
 		_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.GetSessionId(), []runtimelogs.AppendEntry{{
 			SourceSeq:  int64(atomic.AddUint64(&session.logSeq, 1)),
 			Stream:     runtimelogs.StreamRuntime,
@@ -341,6 +355,7 @@ func (p *LocalProvider) StartApp(ctx context.Context, req *proto.StartHostedAppR
 		Telemetry:    p.telemetry,
 		Stdout:       stdout,
 		Stderr:       stderr,
+		Cleanup:      processCleanup,
 	})
 	if err != nil {
 		p.mu.Lock()
