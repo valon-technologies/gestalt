@@ -66,6 +66,27 @@ func TestMaterializedCacheRestoresSharedArchiveForDifferentSubjects(t *testing.T
 	defer func() { _ = restore.cleanup() }()
 }
 
+func TestMaterializedCacheSeparatesExecutableArchiveByConfiguredName(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := writeMaterializedCacheExecutableSource(t, dir, "source", "alpha")
+	cache := materializedCache{dir: filepath.Join(dir, "cache")}
+	req := materializedCacheExecutableRequest(dir, "alpha", "dest-alpha")
+	if _, err := cache.Put(context.Background(), req, source); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	aliasReq := materializedCacheExecutableRequest(dir, "beta", "dest-beta")
+	restore, err := cache.Restore(aliasReq)
+	if err != nil {
+		t.Fatalf("Restore alias archive: %v", err)
+	}
+	if restore == nil || restore.Result != materializedCacheMiss {
+		t.Fatalf("alias Restore result = %#v, want miss", restore)
+	}
+}
+
 func TestMaterializedCachePrefetchesRequestedRemoteEntriesBeforeRestore(t *testing.T) {
 	t.Parallel()
 
@@ -259,6 +280,31 @@ func materializedCacheUIRequest(dir, name, destName string) materializedCacheReq
 		Version:        "0.0.1",
 		DestinationDir: filepath.Join(dir, destName),
 	}
+}
+
+func writeMaterializedCacheExecutableSource(t *testing.T, dir, name, executableName string) string {
+	t.Helper()
+	source := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Join(source, "bin"), 0o755); err != nil {
+		t.Fatalf("create executable source bin: %v", err)
+	}
+	executable := filepath.Join(source, "bin", executableName)
+	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write executable: %v", err)
+	}
+	manifest := []byte("kind: agent\nsource: github.com/acme/pkg/agent\nversion: 0.0.1\ndisplayName: Test Agent\ndescription: Test Agent\nentrypoint:\n  artifactPath: bin/" + executableName + "\n")
+	if err := os.WriteFile(filepath.Join(source, "manifest.yaml"), manifest, 0o644); err != nil {
+		t.Fatalf("write executable manifest: %v", err)
+	}
+	return source
+}
+
+func materializedCacheExecutableRequest(dir, name, destName string) materializedCacheRequest {
+	req := materializedCacheUIRequest(dir, name, destName)
+	req.Subject = `agent "` + name + `"`
+	req.Kind = "agent"
+	req.Package = "github.com/acme/pkg/agent"
+	return req
 }
 
 func TestMaterializedCacheTreatsUnsafeMetadataAsInvalid(t *testing.T) {

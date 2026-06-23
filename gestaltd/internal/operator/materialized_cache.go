@@ -118,9 +118,22 @@ func materializedCacheKeyForRequest(req materializedCacheRequest) (materializedC
 	if strings.TrimSpace(req.Platform) == "" || strings.TrimSpace(req.ResolvedKey) == "" {
 		return materializedCacheKey{}, false, nil
 	}
-	resolvedHash := sha256Hex([]byte(req.ResolvedKey))
+	resolvedIdentity := req.ResolvedKey
+	if variant := materializedCacheInstallVariant(req); variant != "" {
+		resolvedIdentity += "\ninstall:" + variant
+	}
+	resolvedHash := sha256Hex([]byte(resolvedIdentity))
 	platformPath := strings.ReplaceAll(req.Platform, "/", "_")
 	return materializedCacheKeyForParts(req.Platform, platformPath, sha, resolvedHash), true, nil
+}
+
+func materializedCacheInstallVariant(req materializedCacheRequest) string {
+	kind := strings.TrimSpace(req.Kind)
+	name := strings.TrimSpace(req.Name)
+	if kind == "" || name == "" || kind == "ui" {
+		return ""
+	}
+	return kind + ":" + name
 }
 
 func materializedCacheKeyForParts(platform, platformPath, sha, resolvedHash string) materializedCacheKey {
