@@ -412,12 +412,15 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(args.goos, "darwin")
         self.assertEqual(args.goarch, "arm64")
 
-    def test_derive_build_args_missing_entrypoint_returns_none(self) -> None:
-        """A manifest without entrypoint.artifactPath surfaces a derivation error."""
+    def test_derive_build_args_missing_entrypoint_uses_default_output(self) -> None:
+        """A manifest without entrypoint.artifactPath derives the default output path."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
             (root / "manifest.yaml").write_text(
-                "kind: app\nsource: github.com/x/y\n",
+                "kind: agent\n"
+                "source: github.com/valon-technologies/gestalt-providers/agent/example-agent\n"
+                "build:\n"
+                "  command: [python, -m, build]\n",
                 encoding="utf-8",
             )
             (root / "pyproject.toml").write_text(
@@ -427,7 +430,10 @@ class BuildTests(unittest.TestCase):
             with mock.patch.dict(_build.os.environ, {}, clear=False):
                 result = _build.derive_build_args(root)
 
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.output_path, pathlib.Path(".gestalt/build/example-agent"))
+        self.assertEqual(result.app_name, "example-agent")
 
 
 if __name__ == "__main__":

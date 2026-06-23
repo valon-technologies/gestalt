@@ -9,20 +9,6 @@ type releasePlatform struct {
 	GOARCH string
 }
 
-type releaseBuildMode int
-
-const (
-	releaseBuildNone releaseBuildMode = iota
-	releaseBuildDeclared
-	releaseBuildImplicitGo
-	releaseBuildPrebuilt
-)
-
-type releaseBuildTarget struct {
-	Kind string
-	Mode releaseBuildMode
-}
-
 type releaseArchive struct {
 	Path   string
 	SHA256 string

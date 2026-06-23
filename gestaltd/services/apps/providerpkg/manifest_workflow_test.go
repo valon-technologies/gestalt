@@ -522,6 +522,27 @@ spec:
 			},
 			wantError: "run metadata is only allowed in source manifests",
 		},
+		{
+			name: "released package requires entrypoint when artifacts present",
+			buildData: func(t *testing.T, dir string) string {
+				artifactPath := testArtifactPath("oidc")
+				manifest := &providermanifestv1.Manifest{
+					Kind:    providermanifestv1.KindIdentity,
+					Source:  "github.com/valon-technologies/gestalt-providers/auth/oidc",
+					Version: "0.0.1-alpha.2",
+					Spec:    &providermanifestv1.Spec{},
+					Artifacts: []providermanifestv1.Artifact{{
+						OS:     testArtifactOS,
+						Arch:   testArtifactArch,
+						Path:   artifactPath,
+						SHA256: sha256Hex("oidc"),
+					}},
+				}
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("oidc"), 0o755)
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
+			},
+			wantError: "entrypoint is required",
+		},
 	}
 
 	for _, tc := range tests {
@@ -667,6 +688,22 @@ spec:
 `,
 			readSource: true,
 			wantErr:    "build.inputs[0] does not support glob syntax",
+		},
+		{
+			name: "source ui rejects entrypoint",
+			manifest: `
+kind: ui
+source: github.com/test/ui/example
+version: 0.0.1-alpha.1
+entrypoint:
+  artifactPath: dist/index.html
+build:
+  command: [npm, run, build]
+spec:
+  assetRoot: dist
+`,
+			readSource: true,
+			wantErr:    "ui manifests may not define entrypoints",
 		},
 	}
 

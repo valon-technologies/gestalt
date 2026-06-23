@@ -81,14 +81,15 @@ def derive_build_args(root: pathlib.Path) -> BuildArgs | None:
     """
     try:
         manifest = read_source_manifest(root)
-        if manifest.entrypoint_artifact_path is None:
-            raise RuntimeError("manifest entrypoint.artifactPath is required")
         if manifest.source is None:
             raise RuntimeError("manifest source is required")
+        output_path = manifest.entrypoint_artifact_path
+        if output_path is None:
+            output_path = f".gestalt/build/{manifest.source.rsplit('/', 1)[-1]}"
         return BuildArgs(
             root=root,
             target=read_pyproject_provider(root),
-            output_path=pathlib.Path(manifest.entrypoint_artifact_path),
+            output_path=pathlib.Path(output_path),
             app_name=manifest.source.rsplit("/", 1)[-1],
             runtime_kind=_runtime_kind_for_manifest_kind(manifest.kind),
             goos=_target_goos(),

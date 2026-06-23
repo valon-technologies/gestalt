@@ -16,14 +16,25 @@ func ReleaseRequiresBuild(manifest *providermanifestv1.Manifest) bool {
 }
 
 func releaseRequiresBuildForKind(manifest *providermanifestv1.Manifest, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindApp:
-		return manifest != nil && manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
-	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return EntrypointForKind(manifest, kind) == nil
-	default:
+	if kind == providermanifestv1.KindUI {
 		return false
 	}
+	if manifest == nil {
+		return false
+	}
+	if kind == providermanifestv1.KindApp && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
+		return false
+	}
+	if SourceBuildProducesOutput(manifest) {
+		return false
+	}
+	if manifest.Entrypoint != nil && strings.TrimSpace(manifest.Entrypoint.ArtifactPath) != "" {
+		return false
+	}
+	if HasExplicitSourceRun(manifest) {
+		return true
+	}
+	return manifest.Entrypoint == nil
 }
 
 func HasExplicitSourceRun(manifest *providermanifestv1.Manifest) bool {
@@ -41,11 +52,11 @@ func ValidateExplicitRunPackaging(root string, manifest *providermanifestv1.Mani
 	if kind == providermanifestv1.KindUI || !releaseRequiresBuildForKind(manifest, kind) {
 		return nil
 	}
-	hasDeclaredBuild, err := HasSourceReleaseTarget(root, kind)
+	resolved, err := ResolveSourceReleaseBuild(root, manifest)
 	if err != nil {
 		return fmt.Errorf("validate %s release build: %w", kind, err)
 	}
-	if hasDeclaredBuild {
+	if resolved.Mode != SourceReleaseBuildNone {
 		return nil
 	}
 	return LocalOnlyRunReleaseError(kind)
@@ -60,14 +71,11 @@ func HasSourceReleaseTarget(root, kind string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if SourceBuildProducesOutput(manifest) {
-		return true, nil
-	}
-	ok, err := ImplicitGoBuildTarget(root, manifest)
+	resolved, err := ResolveSourceReleaseBuild(root, manifest)
 	if err != nil {
 		return false, err
 	}
-	return ok, nil
+	return resolved.Mode != SourceReleaseBuildNone, nil
 }
 
 func MissingDeclaredSourceBuildError(manifest *providermanifestv1.Manifest, kind string) error {

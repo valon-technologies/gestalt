@@ -208,20 +208,23 @@ test("deriveBuildArgs derives identity name from manifest source not package nam
   }
 });
 
-test("deriveBuildArgs returns undefined when entrypoint.artifactPath is missing", () => {
+test("deriveBuildArgs returns default output when entrypoint.artifactPath is missing", () => {
   const root = mkdtempSync(join(tmpdir(), "gestalt-derive-noentry-"));
   writeFileSync(
     join(root, "manifest.yaml"),
-    "kind: app\nsource: github.com/x/y\n",
+    "kind: agent\nsource: github.com/valon-technologies/gestalt-providers/agent/example-agent\nbuild:\n  command: [npm, run, build]\n",
     "utf8",
   );
   writeFileSync(
     join(root, "package.json"),
-    JSON.stringify({ gestalt: { provider: { kind: "app", target: "./provider.ts#provider" } } }),
+    JSON.stringify({ gestalt: { provider: { kind: "agent", target: "./provider.ts#provider" } } }),
     "utf8",
   );
   try {
-    expect(deriveBuildArgs(root)).toBeUndefined();
+    const args = deriveBuildArgs(root);
+    expect(args).toBeDefined();
+    expect(args!.outputPath).toBe(".gestalt/build/example-agent");
+    expect(args!.providerName).toBe("example-agent");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

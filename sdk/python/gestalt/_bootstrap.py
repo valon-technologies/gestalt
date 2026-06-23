@@ -26,7 +26,8 @@ def read_source_manifest(root: pathlib.Path) -> SourceManifest:
     """Read the build-relevant fields from a provider source manifest.
 
     Dispatches on the manifest file extension. Raises ``FileNotFoundError`` if
-    no manifest is present in ``root``.
+    no manifest is present in ``root``. ``entrypoint_artifact_path`` is optional;
+    when omitted, build derivation defaults to ``.gestalt/build/<source-name>``.
     """
     for name in _MANIFEST_BASENAMES:
         path = root / name
