@@ -54,6 +54,9 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 	_ = os.RemoveAll(tmpDir)
+	if goSourceSecretsBinaryRoot != "" {
+		_ = os.RemoveAll(goSourceSecretsBinaryRoot)
+	}
 	os.Exit(code)
 }
 
