@@ -3,15 +3,13 @@
 //! Generated native types and clients for runtime_provider.proto.
 
 use crate::agent::{AgentWorkspace, PreparedAgentWorkspace};
-use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::codec::runtime_provider::{
-    from_wire_append_runtime_logs_response, from_wire_hosted_app,
-    from_wire_list_runtime_sessions_response, from_wire_prepare_runtime_workspace_response,
-    from_wire_runtime_session, from_wire_runtime_support, to_wire_append_runtime_logs_request,
-    to_wire_get_runtime_session_request, to_wire_list_runtime_sessions_request,
-    to_wire_prepare_runtime_workspace_request, to_wire_remove_runtime_workspace_request,
-    to_wire_start_hosted_app_request, to_wire_start_runtime_session_request,
-    to_wire_stop_runtime_session_request,
+    from_wire_hosted_app, from_wire_list_runtime_sessions_response,
+    from_wire_prepare_runtime_workspace_response, from_wire_runtime_session,
+    from_wire_runtime_support, to_wire_get_runtime_session_request,
+    to_wire_list_runtime_sessions_request, to_wire_prepare_runtime_workspace_request,
+    to_wire_remove_runtime_workspace_request, to_wire_start_hosted_app_request,
+    to_wire_start_runtime_session_request, to_wire_stop_runtime_session_request,
 };
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
@@ -29,37 +27,6 @@ pub mod runtime_egress_mode {
     pub const RUNTIME_EGRESS_MODE_CIDR: i32 = 2;
     /// RUNTIME_EGRESS_MODE_HOSTNAME.
     pub const RUNTIME_EGRESS_MODE_HOSTNAME: i32 = 3;
-}
-
-/// Open enum for `gestalt.provider.v1.RuntimeLogStream`; unknown numeric values are preserved.
-pub type RuntimeLogStream = i32;
-
-/// Named values of `RuntimeLogStream`.
-pub mod runtime_log_stream {
-    /// RUNTIME_LOG_STREAM_UNSPECIFIED.
-    pub const RUNTIME_LOG_STREAM_UNSPECIFIED: i32 = 0;
-    /// RUNTIME_LOG_STREAM_STDOUT.
-    pub const RUNTIME_LOG_STREAM_STDOUT: i32 = 1;
-    /// RUNTIME_LOG_STREAM_STDERR.
-    pub const RUNTIME_LOG_STREAM_STDERR: i32 = 2;
-    /// RUNTIME_LOG_STREAM_RUNTIME.
-    pub const RUNTIME_LOG_STREAM_RUNTIME: i32 = 3;
-}
-
-/// Native message type for `gestalt.provider.v1.AppendRuntimeLogsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct AppendRuntimeLogsRequest {
-    /// The `session_id` field.
-    pub session_id: String,
-    /// The `logs` field.
-    pub logs: Vec<RuntimeLogEntry>,
-}
-
-/// Native message type for `gestalt.provider.v1.AppendRuntimeLogsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct AppendRuntimeLogsResponse {
-    /// The `last_seq` field.
-    pub last_seq: i64,
 }
 
 /// Native message type for `gestalt.provider.v1.GetRuntimeSessionRequest`.
@@ -139,19 +106,6 @@ pub struct RemoveRuntimeWorkspaceRequest {
 pub struct RuntimeImagePullAuth {
     /// The `docker_config_json` field.
     pub docker_config_json: String,
-}
-
-/// Native message type for `gestalt.provider.v1.RuntimeLogEntry`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct RuntimeLogEntry {
-    /// The `stream` field.
-    pub stream: RuntimeLogStream,
-    /// The `message` field.
-    pub message: String,
-    /// The `observed_at` field; None when unset.
-    pub observed_at: Option<std::time::SystemTime>,
-    /// The `source_seq` field.
-    pub source_seq: i64,
 }
 
 /// Native message type for `gestalt.provider.v1.RuntimeSession`.
@@ -495,75 +449,5 @@ impl Runtime {
         }
         let response = self.inner.start_app(tonic_request).await?;
         Ok(from_wire_hosted_app(response.into_inner()))
-    }
-}
-
-/// Client for the `gestalt.provider.v1.RuntimeLogHost` service.
-pub struct RuntimeLogHost {
-    inner: v1::runtime_log_host_client::RuntimeLogHostClient<HostServiceChannel>,
-    timeout: Option<std::time::Duration>,
-}
-
-impl RuntimeLogHost {
-    /// Creates a client over an established channel.
-    pub fn new(channel: tonic::transport::Channel) -> Self {
-        Self {
-            inner: v1::runtime_log_host_client::RuntimeLogHostClient::new(plain_channel(channel)),
-            timeout: None,
-        }
-    }
-
-    /// Sets a deadline applied to every unary call; calls that run past it
-    /// fail with DEADLINE_EXCEEDED. Streaming calls are unaffected.
-    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    /// Connects to the `runtime log host` host service described by the environment.
-    pub async fn connect() -> Result<Self, GestaltError> {
-        Self::connect_named("").await
-    }
-
-    /// Connects to the named `runtime log host` host-service binding.
-    pub async fn connect_named(name: &str) -> Result<Self, GestaltError> {
-        Ok(Self {
-            inner: v1::runtime_log_host_client::RuntimeLogHostClient::new(
-                connect_host_service("runtime log host", name).await?,
-            ),
-            timeout: None,
-        })
-    }
-
-    /// Calls `gestalt.provider.v1.RuntimeLogHost.AppendLogs`.
-    pub async fn append_logs(
-        &mut self,
-        session_id: String,
-        logs: Vec<RuntimeLogEntry>,
-    ) -> Result<i64, GestaltError> {
-        let request = AppendRuntimeLogsRequest { session_id, logs };
-        let mut tonic_request = tonic::Request::new(to_wire_append_runtime_logs_request(request));
-        if let Some(timeout) = self.timeout {
-            tonic_request.set_timeout(timeout);
-        }
-        let response = from_wire_append_runtime_logs_response(
-            self.inner.append_logs(tonic_request).await?.into_inner(),
-        );
-        Ok(response.last_seq)
-    }
-
-    /// Calls `gestalt.provider.v1.RuntimeLogHost.AppendLogs` with the full request and response messages.
-    pub async fn append_logs_raw(
-        &mut self,
-        request: AppendRuntimeLogsRequest,
-    ) -> Result<AppendRuntimeLogsResponse, GestaltError> {
-        let mut tonic_request = tonic::Request::new(to_wire_append_runtime_logs_request(request));
-        if let Some(timeout) = self.timeout {
-            tonic_request.set_timeout(timeout);
-        }
-        let response = self.inner.append_logs(tonic_request).await?;
-        Ok(from_wire_append_runtime_logs_response(
-            response.into_inner(),
-        ))
     }
 }

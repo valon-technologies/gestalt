@@ -3,17 +3,7 @@
 package runtimehost
 
 import (
-	"context"
-
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
-	"google.golang.org/grpc"
 )
 
 type TelemetryProviders = metricutil.TelemetryProviders
-type AppendRuntimeLogEntry = runtimelogs.AppendEntry
-
-func RegisterRuntimeLogHostServer(srv *grpc.Server, runtimeProviderName string, appendLogs func(context.Context, string, string, []AppendRuntimeLogEntry) (int64, error)) {
-	proto.RegisterRuntimeLogHostServer(srv, NewRuntimeLogHostServer(runtimeProviderName, appendLogs))
-}

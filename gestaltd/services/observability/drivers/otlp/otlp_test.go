@@ -63,3 +63,21 @@ func TestProviderTelemetryEnvUsesOTLPConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderTelemetryEnvPropagatesLogLevel(t *testing.T) {
+	t.Parallel()
+
+	p := &Provider{
+		providerEnv: buildProviderTelemetryEnv(yamlConfig{
+			Endpoint: "otel-collector:4317",
+			Protocol: "grpc",
+			Insecure: true,
+			Logs:     logsConfig{Level: "debug"},
+		}),
+	}
+
+	env := p.ProviderTelemetryEnv("simple")
+	if got := env["GESTALT_PROVIDER_LOG_LEVEL"]; got != "debug" {
+		t.Fatalf("GESTALT_PROVIDER_LOG_LEVEL = %q, want debug", got)
+	}
+}

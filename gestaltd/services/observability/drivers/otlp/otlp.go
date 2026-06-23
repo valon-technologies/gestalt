@@ -221,6 +221,7 @@ func buildProviderTelemetryEnv(cfg yamlConfig) map[string]string {
 		env["OTEL_METRIC_EXPORT_INTERVAL"] = strconv.FormatInt(interval.Milliseconds(), 10)
 	}
 	env["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] = "delta"
+	env["GESTALT_PROVIDER_LOG_LEVEL"] = cfg.Logs.Level
 	return env
 }
 

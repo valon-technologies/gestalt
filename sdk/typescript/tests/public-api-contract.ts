@@ -1,11 +1,9 @@
 import {
   RuntimeEgressMode,
-  RuntimeLogHost,
   WorkflowRunStatus,
   type AgentWorkspace,
   type JsonObject,
   type JsonValue,
-  type RuntimeLogAppendResponse,
   type WorkflowEvent,
 } from "@valon-technologies/gestalt";
 
@@ -15,10 +13,6 @@ import { StructSchema as RootStructSchema } from "@valon-technologies/gestalt";
 import type { Struct as RootStruct } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose generated protocol schemas.
 import { CheckAccessRequestSchema as RootCheckAccessRequestSchema } from "@valon-technologies/gestalt";
-// @ts-expect-error Root package must not expose runtime-log generated request schemas.
-import { AppendRuntimeLogsRequestSchema as RootAppendRuntimeLogsRequestSchema } from "@valon-technologies/gestalt";
-// @ts-expect-error Root package must not expose runtime-log generated enums.
-import { RuntimeLogStream as RootRuntimeLogStream } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protobuf message helper types.
 import type { MessageInitShape } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose provider metadata wire helpers.
@@ -106,7 +100,6 @@ import type { CheckAccessRequest as ProtocolRequest } from "@valon-technologies/
 // @ts-expect-error Generated agent contract helpers are not public.
 import type { agentContractSchemas } from "@valon-technologies/gestalt/test/agent-contract";
 
-const appendResponse: RuntimeLogAppendResponse = { lastSeq: 1n };
 const event: WorkflowEvent = { id: "event-1", type: "fixture.event" };
 const workspace: AgentWorkspace = {
   cwd: "/workspace",
@@ -116,9 +109,7 @@ const jsonObject: JsonObject = { ok: true };
 const jsonValue: JsonValue = { nested: ["value"] };
 const egressMode: RuntimeEgressMode = RuntimeEgressMode.NONE;
 
-void RuntimeLogHost;
 void WorkflowRunStatus;
-void appendResponse;
 void event;
 void workspace;
 void jsonObject;

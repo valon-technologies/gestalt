@@ -48,7 +48,6 @@ func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *conf
 	if err != nil {
 		return nil, err
 	}
-	hostServices = appendRuntimeLogHostService(hostServices, launch.runtimeConfig, deps, launch.runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimeProvider)
 	if err != nil {
 		launch.close()
@@ -201,7 +200,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		return nil, fmt.Errorf("hosted workflow runtime session is not compatible: %s", reason)
 	}
 
-	startEnv := withRuntimeSessionEnv(maps.Clone(launch.cfg.Env), sessionID)
+	startEnv := maps.Clone(launch.cfg.Env)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
 	workflowAllowedHosts := launch.cfg.EgressPolicy("").AllowedHosts
 	if len(workflowAllowedHosts) == 0 {

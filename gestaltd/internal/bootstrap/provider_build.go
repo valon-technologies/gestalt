@@ -983,7 +983,6 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	if err != nil {
 		return nil, err
 	}
-	hostServices = appendRuntimeLogHostService(hostServices, runtimeConfig, deps, runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimeProvider)
 	if err != nil {
 		return nil, err
@@ -991,7 +990,6 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	cleanup = chainCleanup(launchCleanup, publicHostServicesCleanup)
 	launchCleanup = nil
 	startEnv := maps.Clone(env)
-	startEnv = withRuntimeSessionEnv(startEnv, sessionID)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
 	egressPolicy := deps.Egress.ProviderPolicy(entry)
 	allowedHosts := entry.EffectiveAllowedHosts()
@@ -1063,7 +1061,6 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 		launch.close()
 		return nil, fmt.Errorf("parse hosted agent runtime lifecycle policy: %w", err)
 	}
-	hostServices = appendRuntimeLogHostService(hostServices, launch.runtimeConfig, deps, launch.runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimeProvider)
 	if err != nil {
 		launch.close()
@@ -1229,7 +1226,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, nil)
 
-	startEnv := withRuntimeSessionEnv(maps.Clone(cfg.Env), sessionID)
+	startEnv := maps.Clone(cfg.Env)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
 	agentAllowedHosts := cfg.EgressPolicy("").AllowedHosts
 	if len(agentAllowedHosts) == 0 {
@@ -1408,15 +1405,12 @@ func localRuntimePlacementConfig(runtimeConfig config.EffectiveRuntimePlacement)
 }
 
 func newLocalRuntime(runtimeProviderName string, deps Deps) runtimeprovider.Provider {
-	runtimeProviderName = strings.TrimSpace(runtimeProviderName)
-	if runtimeProviderName == "" {
-		runtimeProviderName = "local"
+	name := strings.TrimSpace(runtimeProviderName)
+	if name == "" {
+		name = "local"
 	}
-	opts := []runtimeprovider.LocalOption{runtimeprovider.WithLocalTelemetry(deps.Telemetry)}
-	if deps.Services != nil && deps.Services.RuntimeSessionLogs != nil {
-		opts = append(opts, runtimeprovider.WithLocalRuntimeSessionLogs(runtimeProviderName, deps.Services.RuntimeSessionLogs))
-	}
-	return runtimeprovider.NewLocalProvider(opts...)
+	_ = name
+	return runtimeprovider.NewLocalProvider(runtimeprovider.WithLocalTelemetry(deps.Telemetry))
 }
 
 const (

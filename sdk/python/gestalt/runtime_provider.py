@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import datetime
-import os
 from dataclasses import dataclass, field
 from typing import Any, overload
 
@@ -15,11 +14,6 @@ from google.protobuf import empty_pb2 as _empty_pb2
 from ._codec import runtime_provider as _codec
 from ._codec import support as _support
 from ._gen.v1 import runtime_provider_pb2_grpc as _runtime_provider_pb2_grpc
-from ._grpc_transport import (
-    ENV_HOST_SERVICE_SOCKET,
-    ENV_HOST_SERVICE_TOKEN,
-    host_service_channel,
-)
 from .agent import AgentWorkspace, PreparedAgentWorkspace
 
 _empty: Any = _empty_pb2
@@ -36,30 +30,6 @@ class RuntimeEgressModeValues:
     NONE: RuntimeEgressMode = 1
     CIDR: RuntimeEgressMode = 2
     HOSTNAME: RuntimeEgressMode = 3
-
-
-# Open enum: unknown numeric values are preserved, so the type is int.
-RuntimeLogStream = int
-
-
-class RuntimeLogStreamValues:
-    """Named values for the open RuntimeLogStream enum."""
-
-    UNSPECIFIED: RuntimeLogStream = 0
-    STDOUT: RuntimeLogStream = 1
-    STDERR: RuntimeLogStream = 2
-    RUNTIME: RuntimeLogStream = 3
-
-
-@dataclass(frozen=True, slots=True)
-class AppendRuntimeLogsRequest:
-    session_id: str = ""
-    logs: list[RuntimeLogEntry] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class AppendRuntimeLogsResponse:
-    last_seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,14 +83,6 @@ class RemoveRuntimeWorkspaceRequest:
 @dataclass(frozen=True, slots=True)
 class RuntimeImagePullAuth:
     docker_config_json: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeLogEntry:
-    stream: RuntimeLogStream = 0
-    message: str = ""
-    observed_at: datetime.datetime | None = None
-    source_seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -436,69 +398,3 @@ class Runtime:
             )
         )
         return _codec.from_wire_hosted_app(response)
-
-
-class RuntimeLogHost:
-    """Client for the gestalt.provider.v1.RuntimeLogHost service."""
-
-    def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:
-        self._stub = _runtime_provider_pb2_grpc.RuntimeLogHostStub(channel)
-        self._timeout = timeout
-
-    @classmethod
-    def connect(
-        cls, name: str | None = None, *, timeout: float | None = None
-    ) -> RuntimeLogHost:
-        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
-        if not target:
-            raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
-        channel = host_service_channel(
-            "runtime log host",
-            target,
-            token=token.strip(),
-            binding=(name or "").strip(),
-        )
-        return cls(channel, timeout=timeout)
-
-    @overload
-    def append_logs(self, request: AppendRuntimeLogsRequest) -> int: ...
-
-    @overload
-    def append_logs(
-        self, *, session_id: str = ..., logs: list[RuntimeLogEntry] = ...
-    ) -> int: ...
-
-    def append_logs(
-        self,
-        request: AppendRuntimeLogsRequest | None = None,
-        *,
-        session_id: str | None = None,
-        logs: list[RuntimeLogEntry] | None = None,
-    ) -> int:
-        if request is None:
-            request = AppendRuntimeLogsRequest(
-                session_id=session_id or "", logs=logs if logs is not None else []
-            )
-        elif session_id is not None or logs is not None:
-            raise ValueError("pass either request or keyword arguments, not both")
-        response = _codec.from_wire_append_runtime_logs_response(
-            _support.call_unary(
-                lambda: self._stub.AppendLogs(
-                    _codec.to_wire_append_runtime_logs_request(request),
-                    timeout=self._timeout,
-                )
-            )
-        )
-        return response.last_seq
-
-    def append_logs_raw(
-        self, request: AppendRuntimeLogsRequest
-    ) -> AppendRuntimeLogsResponse:
-        response = _support.call_unary(
-            lambda: self._stub.AppendLogs(
-                _codec.to_wire_append_runtime_logs_request(request),
-                timeout=self._timeout,
-            )
-        )
-        return _codec.from_wire_append_runtime_logs_response(response)

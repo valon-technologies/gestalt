@@ -140,39 +140,6 @@ func scopedS3Bindings(names []string, bindings map[string]s3sdk.S3) map[string]s
 	return scoped
 }
 
-func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveRuntimePlacement, deps Deps, runtimePlan RuntimePlacementPlan) []runtimehost.HostService {
-	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil {
-		return hostServices
-	}
-	runtimeProviderName := runtimeSessionLogProviderName(runtimeConfig)
-	return append(hostServices, runtimehost.HostService{
-		Name:           "runtime_log_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.RuntimeLogHost_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			runtimehost.RegisterRuntimeLogHostServer(srv, runtimeProviderName, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
-		},
-	})
-}
-
-func runtimeSessionLogProviderName(runtimeConfig config.EffectiveRuntimePlacement) string {
-	if name := strings.TrimSpace(runtimeConfig.ProviderName); name != "" {
-		return name
-	}
-	return "local"
-}
-
-func withRuntimeSessionEnv(env map[string]string, sessionID string) map[string]string {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return env
-	}
-	if env == nil {
-		env = map[string]string{}
-	}
-	env[runtimehost.DefaultRuntimeSessionIDEnv] = sessionID
-	return env
-}
-
 func withHostServiceTLSCAEnv(env map[string]string, deps Deps) map[string]string {
 	caPEM := strings.TrimSpace(deps.HostServiceTLSCAPEM)
 	caFile := strings.TrimSpace(deps.HostServiceTLSCAFile)

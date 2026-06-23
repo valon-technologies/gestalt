@@ -6,52 +6,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func ToWireAppendRuntimeLogsRequest(value *AppendRuntimeLogsRequest) *proto.AppendRuntimeLogsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AppendRuntimeLogsRequest{
-		SessionId: value.SessionId,
-	}
-	for _, item := range value.Logs {
-		out.Logs = append(out.Logs, ToWireRuntimeLogEntry(item))
-	}
-	return out
-}
-
-func FromWireAppendRuntimeLogsRequest(value *proto.AppendRuntimeLogsRequest) *AppendRuntimeLogsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &AppendRuntimeLogsRequest{
-		SessionId: value.SessionId,
-	}
-	for _, item := range value.Logs {
-		out.Logs = append(out.Logs, FromWireRuntimeLogEntry(item))
-	}
-	return out
-}
-
-func ToWireAppendRuntimeLogsResponse(value *AppendRuntimeLogsResponse) *proto.AppendRuntimeLogsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AppendRuntimeLogsResponse{
-		LastSeq: value.LastSeq,
-	}
-	return out
-}
-
-func FromWireAppendRuntimeLogsResponse(value *proto.AppendRuntimeLogsResponse) *AppendRuntimeLogsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &AppendRuntimeLogsResponse{
-		LastSeq: value.LastSeq,
-	}
-	return out
-}
-
 func ToWireGetRuntimeSessionRequest(value *GetRuntimeSessionRequest) *proto.GetRuntimeSessionRequest {
 	if value == nil {
 		return nil
@@ -228,32 +182,6 @@ func FromWireRuntimeImagePullAuth(value *proto.RuntimeImagePullAuth) *RuntimeIma
 	}
 	out := &RuntimeImagePullAuth{
 		DockerConfigJson: value.DockerConfigJson,
-	}
-	return out
-}
-
-func ToWireRuntimeLogEntry(value *RuntimeLogEntry) *proto.RuntimeLogEntry {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RuntimeLogEntry{
-		Stream:     proto.RuntimeLogStream(value.Stream),
-		Message:    value.Message,
-		ObservedAt: toWireTimestamp(value.ObservedAt),
-		SourceSeq:  value.SourceSeq,
-	}
-	return out
-}
-
-func FromWireRuntimeLogEntry(value *proto.RuntimeLogEntry) *RuntimeLogEntry {
-	if value == nil {
-		return nil
-	}
-	out := &RuntimeLogEntry{
-		Stream:     RuntimeLogStream(value.Stream),
-		Message:    value.Message,
-		ObservedAt: fromWireTimestamp(value.ObservedAt),
-		SourceSeq:  value.SourceSeq,
 	}
 	return out
 }

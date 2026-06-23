@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,25 +13,21 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 
 type LocalProvider struct {
 	nextID uint64
 
-	runtimeProviderName string
-	telemetry           metricutil.TelemetryProviders
-	sessionLogs         runtimelogs.Store
-	mu                  sync.Mutex
-	sessions            map[string]*localSession
-	closed              bool
+	telemetry metricutil.TelemetryProviders
+	mu        sync.Mutex
+	sessions  map[string]*localSession
+	closed    bool
 }
 
 type localSession struct {
@@ -42,7 +36,6 @@ type localSession struct {
 	state    string
 	metadata map[string]string
 	app      *localApp
-	logSeq   uint64
 }
 
 type localApp struct {
@@ -56,13 +49,6 @@ type LocalOption func(*LocalProvider)
 func WithLocalTelemetry(telemetry metricutil.TelemetryProviders) LocalOption {
 	return func(p *LocalProvider) {
 		p.telemetry = telemetry
-	}
-}
-
-func WithLocalRuntimeSessionLogs(runtimeProviderName string, store runtimelogs.Store) LocalOption {
-	return func(p *LocalProvider) {
-		p.runtimeProviderName = runtimeProviderName
-		p.sessionLogs = store
 	}
 }
 
@@ -111,15 +97,6 @@ func (p *LocalProvider) StartSession(_ context.Context, req *proto.StartRuntimeS
 	}
 	if session.metadata == nil {
 		session.metadata = map[string]string{}
-	}
-	if p.sessionLogs != nil {
-		if err := p.sessionLogs.RegisterSession(context.Background(), runtimelogs.SessionRegistration{
-			RuntimeProviderName: p.runtimeProviderName,
-			SessionID:           sessionID,
-			Metadata:            cloneStringMap(session.metadata),
-		}); err != nil {
-			slog.Warn("failed to register runtime session logs", "runtime_provider", p.runtimeProviderName, "session", sessionID, "error", err)
-		}
 	}
 	p.sessions[sessionID] = session
 	return cloneSession(session), nil
@@ -203,9 +180,6 @@ func (p *LocalProvider) StopSession(_ context.Context, req *proto.StopRuntimeSes
 		if err := os.RemoveAll(rootDir); err != nil {
 			errs = append(errs, fmt.Errorf("remove runtime session dir: %w", err))
 		}
-	}
-	if p.sessionLogs != nil {
-		_ = p.sessionLogs.MarkSessionStopped(context.Background(), p.runtimeProviderName, req.GetSessionId(), time.Now().UTC())
 	}
 	return errors.Join(errs...)
 }
@@ -313,19 +287,6 @@ func (p *LocalProvider) StartApp(ctx context.Context, req *proto.StartHostedAppR
 		env = map[string]string{}
 	}
 
-	stdout := io.Writer(nil)
-	stderr := io.Writer(nil)
-	if p.sessionLogs != nil {
-		stdout = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStdout, &session.logSeq)
-		stderr = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStderr, &session.logSeq)
-		_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.GetSessionId(), []runtimelogs.AppendEntry{{
-			SourceSeq:  int64(atomic.AddUint64(&session.logSeq, 1)),
-			Stream:     runtimelogs.StreamRuntime,
-			Message:    fmt.Sprintf("starting app %q", req.GetAppName()),
-			ObservedAt: time.Now().UTC(),
-		}})
-	}
-
 	process, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
 		Command: req.GetCommand(),
 		Args:    req.GetArgs(),
@@ -339,8 +300,6 @@ func (p *LocalProvider) StartApp(ctx context.Context, req *proto.StartHostedAppR
 		SocketDir:    rootDir,
 		ProviderName: req.GetAppName(),
 		Telemetry:    p.telemetry,
-		Stdout:       stdout,
-		Stderr:       stderr,
 	})
 	if err != nil {
 		p.mu.Lock()
@@ -348,14 +307,6 @@ func (p *LocalProvider) StartApp(ctx context.Context, req *proto.StartHostedAppR
 			session.state = SessionStateFailed
 		}
 		p.mu.Unlock()
-		if p.sessionLogs != nil {
-			_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.GetSessionId(), []runtimelogs.AppendEntry{{
-				SourceSeq:  int64(atomic.AddUint64(&session.logSeq, 1)),
-				Stream:     runtimelogs.StreamRuntime,
-				Message:    err.Error(),
-				ObservedAt: time.Now().UTC(),
-			}})
-		}
 		return nil, err
 	}
 

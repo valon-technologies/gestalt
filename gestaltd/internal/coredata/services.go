@@ -6,14 +6,12 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 
 type Services struct {
 	Users               *UserService
 	ExternalCredentials core.ExternalCredentialProvider
 	ManagedSubjects     *ManagedSubjectService
-	RuntimeSessionLogs  runtimelogs.Store
 	DB                  indexeddb.IndexedDB
 }
 
@@ -31,15 +29,12 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 	if _, err := ds.CreateObjectStore(ctx, StoreManagedSubjects, ManagedSubjectsSchema); err != nil {
 		return nil, fmt.Errorf("create managed_subjects store: %w", err)
 	}
-	runtimeSessionLogs := runtimelogs.NewMemoryStore()
-
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
 	return &Services{
 		ExternalCredentials: nil,
 		Users:               users,
 		ManagedSubjects:     managedSubjects,
-		RuntimeSessionLogs:  runtimeSessionLogs,
 		DB:                  ds,
 	}, nil
 }

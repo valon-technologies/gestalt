@@ -109,16 +109,6 @@ export {
   type RpcStatus,
 } from "./rpc_support.ts";
 export {
-  ENV_RUNTIME_SESSION_ID,
-  RuntimeLogHost,
-  type RuntimeLogAppendInput,
-  type RuntimeLogAppendLogsInput,
-  type RuntimeLogAppendResponse,
-  type RuntimeLogStreamInput,
-  type RuntimeLogStreamName,
-  type RuntimeLogWriterOptions,
-} from "./runtime-log-host.ts";
-export {
   Authorization,
   relationshipTargetKindResource,
   relationshipTargetKindSubject,

@@ -19,21 +19,10 @@ class RuntimeEgressMode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     RUNTIME_EGRESS_MODE_NONE: _ClassVar[RuntimeEgressMode]
     RUNTIME_EGRESS_MODE_CIDR: _ClassVar[RuntimeEgressMode]
     RUNTIME_EGRESS_MODE_HOSTNAME: _ClassVar[RuntimeEgressMode]
-
-class RuntimeLogStream(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    RUNTIME_LOG_STREAM_UNSPECIFIED: _ClassVar[RuntimeLogStream]
-    RUNTIME_LOG_STREAM_STDOUT: _ClassVar[RuntimeLogStream]
-    RUNTIME_LOG_STREAM_STDERR: _ClassVar[RuntimeLogStream]
-    RUNTIME_LOG_STREAM_RUNTIME: _ClassVar[RuntimeLogStream]
 RUNTIME_EGRESS_MODE_UNSPECIFIED: RuntimeEgressMode
 RUNTIME_EGRESS_MODE_NONE: RuntimeEgressMode
 RUNTIME_EGRESS_MODE_CIDR: RuntimeEgressMode
 RUNTIME_EGRESS_MODE_HOSTNAME: RuntimeEgressMode
-RUNTIME_LOG_STREAM_UNSPECIFIED: RuntimeLogStream
-RUNTIME_LOG_STREAM_STDOUT: RuntimeLogStream
-RUNTIME_LOG_STREAM_STDERR: RuntimeLogStream
-RUNTIME_LOG_STREAM_RUNTIME: RuntimeLogStream
 
 class RuntimeSupport(_message.Message):
     __slots__ = ()
@@ -197,29 +186,3 @@ class HostedApp(_message.Message):
     app_name: str
     dial_target: str
     def __init__(self, id: _Optional[str] = ..., session_id: _Optional[str] = ..., app_name: _Optional[str] = ..., dial_target: _Optional[str] = ...) -> None: ...
-
-class RuntimeLogEntry(_message.Message):
-    __slots__ = ()
-    STREAM_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    OBSERVED_AT_FIELD_NUMBER: _ClassVar[int]
-    SOURCE_SEQ_FIELD_NUMBER: _ClassVar[int]
-    stream: RuntimeLogStream
-    message: str
-    observed_at: _timestamp_pb2.Timestamp
-    source_seq: int
-    def __init__(self, stream: _Optional[_Union[RuntimeLogStream, str]] = ..., message: _Optional[str] = ..., observed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., source_seq: _Optional[int] = ...) -> None: ...
-
-class AppendRuntimeLogsRequest(_message.Message):
-    __slots__ = ()
-    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
-    LOGS_FIELD_NUMBER: _ClassVar[int]
-    session_id: str
-    logs: _containers.RepeatedCompositeFieldContainer[RuntimeLogEntry]
-    def __init__(self, session_id: _Optional[str] = ..., logs: _Optional[_Iterable[_Union[RuntimeLogEntry, _Mapping]]] = ...) -> None: ...
-
-class AppendRuntimeLogsResponse(_message.Message):
-    __slots__ = ()
-    LAST_SEQ_FIELD_NUMBER: _ClassVar[int]
-    last_seq: int
-    def __init__(self, last_seq: _Optional[int] = ...) -> None: ...
