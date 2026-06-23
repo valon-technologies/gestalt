@@ -9,11 +9,18 @@ type releasePlatform struct {
 	GOARCH string
 }
 
+type releaseBuildMode int
+
+const (
+	releaseBuildNone releaseBuildMode = iota
+	releaseBuildDeclared
+	releaseBuildImplicitGo
+	releaseBuildPrebuilt
+)
+
 type releaseBuildTarget struct {
-	Kind            string
-	DeclaredBuild   bool
-	Prebuilt        bool
-	ImplicitGoBuild bool
+	Kind string
+	Mode releaseBuildMode
 }
 
 type releaseArchive struct {
