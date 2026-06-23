@@ -26,23 +26,43 @@ func ReadPackageManifest(packagePath string) (_ []byte, _ *providermanifestv1.Ma
 }
 
 func ReadPackageManifestIn(packagePath string, names []string) (_ []byte, _ *providermanifestv1.Manifest, err error) {
-	var firstErr error
+	// Collect every candidate manifest in a single pass instead of walking
+	// (and fully decompressing) the archive once per candidate name. Packages
+	// using a manifest later in the priority list (e.g. manifest.yaml) would
+	// otherwise pay a full decompression for each earlier miss.
+	wanted := make(map[string]struct{}, len(names))
 	for _, name := range names {
-		data, err := ReadArchiveEntry(packagePath, name)
+		wanted[name] = struct{}{}
+	}
+	found := make(map[string][]byte, len(names))
+	if err := walkPackageArchive(packagePath, func(entry packageArchiveEntry) error {
+		if entry.Header.Typeflag == tar.TypeDir {
+			return nil
+		}
+		if _, ok := wanted[entry.Path]; !ok {
+			return nil
+		}
+		data, err := io.ReadAll(entry.Reader)
 		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
+			return fmt.Errorf("read %s: %w", entry.Path, err)
+		}
+		found[entry.Path] = data
+		return nil
+	}); err != nil {
+		return nil, nil, err
+	}
+	for _, name := range names {
+		data, ok := found[name]
+		if !ok {
 			continue
 		}
-		format := ManifestFormatFromPath(name)
-		manifest, err := DecodeManifestFormat(data, format)
+		manifest, err := DecodeManifestFormat(data, ManifestFormatFromPath(name))
 		if err != nil {
 			return nil, nil, err
 		}
 		return data, manifest, nil
 	}
-	return nil, nil, firstErr
+	return nil, nil, fmt.Errorf("package %q does not contain a manifest (%s)", packagePath, strings.Join(names, ", "))
 }
 
 func InspectPackage(packagePath string) (*providermanifestv1.Manifest, error) {

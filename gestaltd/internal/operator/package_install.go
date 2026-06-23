@@ -1,8 +1,6 @@
 package operator
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -64,14 +62,6 @@ func installPackage(packagePath, destDir string) (*installedPackage, error) {
 		if err != nil {
 			return nil, err
 		}
-		artifactBytes, err := packageio.ReadArchiveEntry(packagePath, artifact.Path)
-		if err != nil {
-			return nil, err
-		}
-		sum := sha256.Sum256(artifactBytes)
-		if got := hex.EncodeToString(sum[:]); got != artifact.SHA256 {
-			return nil, fmt.Errorf("artifact digest mismatch for %s: package has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
-		}
 	}
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {
@@ -79,6 +69,19 @@ func installPackage(packagePath, destDir string) (*installedPackage, error) {
 	}
 	if err := packageio.ExtractPackage(packagePath, destDir); err != nil {
 		return nil, err
+	}
+
+	if artifact != nil {
+		// Verify the artifact digest against the extracted file rather than
+		// decompressing the whole archive a second time to read it. The package
+		// is never executed before this check succeeds.
+		got, err := packageio.FileSHA256(filepath.Join(destDir, filepath.FromSlash(artifact.Path)))
+		if err != nil {
+			return nil, err
+		}
+		if got != artifact.SHA256 {
+			return nil, fmt.Errorf("artifact digest mismatch for %s: package has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
+		}
 	}
 
 	manifestPath, _ := packageio.FindManifestFile(destDir)
