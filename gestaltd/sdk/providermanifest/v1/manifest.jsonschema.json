@@ -46,6 +46,9 @@
     "build": {
       "$ref": "#/$defs/sourceBuild"
     },
+    "install": {
+      "$ref": "#/$defs/sourceInstall"
+    },
     "run": {
       "$ref": "#/$defs/sourceRun"
     },
@@ -109,6 +112,40 @@
       "items": {
         "type": "string",
         "minLength": 1
+      }
+    },
+    "sourceInstall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "workdir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
       }
     },
     "spec": {

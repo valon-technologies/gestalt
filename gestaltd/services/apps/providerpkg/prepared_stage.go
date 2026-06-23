@@ -253,6 +253,7 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	}
 	uiAssetRoot := SourceUIBuildOutput(manifest)
 	manifest.Version = version
+	manifest.Install = nil
 	manifest.Build = nil
 	manifest.Run = nil
 	manifest.Dev = nil

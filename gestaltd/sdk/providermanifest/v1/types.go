@@ -32,18 +32,19 @@ func NormalizeKind(kind string) string {
 }
 
 type Manifest struct {
-	Kind        string       `json:"kind,omitempty" yaml:"kind,omitempty"`
-	Source      string       `json:"source,omitempty" yaml:"source,omitempty"`
-	Version     string       `json:"version" yaml:"version"`
-	DisplayName string       `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string       `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
-	Build       *SourceBuild `json:"build,omitempty" yaml:"build,omitempty"`
-	Dev         *SourceDev   `json:"dev,omitempty" yaml:"dev,omitempty"`
-	Run         []string     `json:"run,omitempty" yaml:"run,omitempty"`
-	Artifacts   []Artifact   `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
-	Entrypoint  *Entrypoint  `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
-	Spec        *Spec        `json:"spec,omitempty" yaml:"spec,omitempty"`
+	Kind        string         `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Source      string         `json:"source,omitempty" yaml:"source,omitempty"`
+	Version     string         `json:"version" yaml:"version"`
+	DisplayName string         `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
+	IconFile    string         `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
+	Install     *SourceInstall `json:"install,omitempty" yaml:"install,omitempty"`
+	Build       *SourceBuild   `json:"build,omitempty" yaml:"build,omitempty"`
+	Dev         *SourceDev     `json:"dev,omitempty" yaml:"dev,omitempty"`
+	Run         []string       `json:"run,omitempty" yaml:"run,omitempty"`
+	Artifacts   []Artifact     `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Entrypoint  *Entrypoint    `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
+	Spec        *Spec          `json:"spec,omitempty" yaml:"spec,omitempty"`
 }
 
 type SourceBuild struct {
@@ -146,6 +147,85 @@ func (b SourceBuild) MarshalYAML() (any, error) {
 		Command: b.Command,
 		Inputs:  b.Inputs,
 	}, nil
+}
+
+// SourceInstall declares a pre-build dependency-install command. It is a peer
+// to Build and Dev: gestaltd execs Command directly (no shell) once before any
+// Build or Dev execution for a local-source provider. Side-effect only — it
+// never declares an entrypoint artifact and its output is not verified, like a
+// prepare-only build. Inputs is the cache-key allowlist (typically the
+// lockfile). Env may carry registry credentials.
+type SourceInstall struct {
+	Command []string          `json:"command"            yaml:"command"`
+	Workdir string            `json:"workdir,omitempty"  yaml:"workdir,omitempty"`
+	Inputs  []string          `json:"inputs,omitempty"   yaml:"inputs,omitempty"`
+	Env     map[string]string `json:"env,omitempty"      yaml:"env,omitempty"`
+}
+
+type sourceInstallWire struct {
+	Command []string          `json:"command"            yaml:"command"`
+	Workdir string            `json:"workdir,omitempty"  yaml:"workdir,omitempty"`
+	Inputs  []string          `json:"inputs,omitempty"   yaml:"inputs,omitempty"`
+	Env     map[string]string `json:"env,omitempty"      yaml:"env,omitempty"`
+}
+
+func (i *SourceInstall) UnmarshalJSON(data []byte) error {
+	if i == nil {
+		return nil
+	}
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		*i = SourceInstall{}
+		return nil
+	}
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		return fmt.Errorf("install must be a mapping")
+	}
+	if err := validateJSONWireObjectFields(trimmed, sourceInstallWireFields); err != nil {
+		return err
+	}
+	var raw sourceInstallWire
+	if err := decodeJSONKnownFields(trimmed, &raw); err != nil {
+		return err
+	}
+	if len(raw.Command) == 0 {
+		return fmt.Errorf("install.command is required")
+	}
+	*i = SourceInstall(raw)
+	return nil
+}
+
+func (i SourceInstall) MarshalJSON() ([]byte, error) {
+	return json.Marshal(sourceInstallWire(i))
+}
+
+func (i *SourceInstall) UnmarshalYAML(value *yaml.Node) error {
+	if i == nil {
+		return nil
+	}
+	if value == nil {
+		*i = SourceInstall{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("install must be a mapping")
+	}
+	if err := validateYAMLWireObjectFields(value, sourceInstallWireFields, "install"); err != nil {
+		return err
+	}
+	var raw sourceInstallWire
+	if err := decodeYAMLKnownFields(value, &raw); err != nil {
+		return err
+	}
+	if len(raw.Command) == 0 {
+		return fmt.Errorf("install.command is required")
+	}
+	*i = SourceInstall(raw)
+	return nil
+}
+
+func (i SourceInstall) MarshalYAML() (any, error) {
+	return sourceInstallWire(i), nil
 }
 
 // SourceDev declares a long-running development command that owns its own file
@@ -1005,6 +1085,13 @@ var sourceBuildWireFields = map[string]struct{}{
 	"workdir": {},
 	"command": {},
 	"inputs":  {},
+}
+
+var sourceInstallWireFields = map[string]struct{}{
+	"command": {},
+	"workdir": {},
+	"inputs":  {},
+	"env":     {},
 }
 
 var sourceDevWireFields = map[string]struct{}{

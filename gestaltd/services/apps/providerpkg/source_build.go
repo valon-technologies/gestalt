@@ -20,6 +20,13 @@ type ResolvedSourceBuild struct {
 	PrepareOnly bool
 }
 
+type ResolvedSourceInstall struct {
+	Workdir string
+	Command []string
+	Inputs  []string
+	Env     map[string]string
+}
+
 type ResolvedSourceDev struct {
 	Workdir      string
 	Command      []string
@@ -89,6 +96,45 @@ func SourceBuildProducesOutput(manifest *providermanifestv1.Manifest) bool {
 	return build != nil && !build.PrepareOnly
 }
 
+func EffectiveSourceInstall(manifest *providermanifestv1.Manifest) *ResolvedSourceInstall {
+	if manifest == nil || manifest.Install == nil {
+		return nil
+	}
+	return &ResolvedSourceInstall{
+		Workdir: manifest.Install.Workdir,
+		Command: append([]string(nil), manifest.Install.Command...),
+		Inputs:  append([]string(nil), manifest.Install.Inputs...),
+		Env:     maps.Clone(manifest.Install.Env),
+	}
+}
+
+// RunSourceInstall execs the declared install command (no shell) from the
+// source root. Side-effect only: no entrypoint artifact is verified. A nil
+// install phase is a no-op. opts carries the target platform env that
+// sourceBuildEnv injects; install.Env is merged on top (install wins).
+func RunSourceInstall(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
+	install := EffectiveSourceInstall(manifest)
+	if install == nil {
+		return nil
+	}
+	return runSourcePhase(manifestPath, "install", install.Workdir, install.Command, envMapToSlice(install.Env), opts)
+}
+
+func envMapToSlice(env map[string]string) []string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(env))
+	for key, value := range env {
+		out = append(out, key+"="+value)
+	}
+	return out
+}
+
+// RunSourceBuild execs the declared build command (no shell) and, when the
+// build is not prepare-only, verifies the entrypoint artifact. It does NOT run
+// the install phase; callers that need install-before-build should use
+// EnsureSourceBuildOutput, which is the canonical install-then-build entry.
 func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	build := EffectiveSourceBuild(manifest)
 	if build == nil {
@@ -99,19 +145,6 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 	}
 
 	rootDir := filepath.Dir(manifestPath)
-	workdir := rootDir
-	if build.Workdir != "" && build.Workdir != "." {
-		workdir = filepath.Join(rootDir, filepath.FromSlash(build.Workdir))
-	}
-
-	info, err := os.Stat(workdir)
-	if err != nil {
-		return fmt.Errorf("stat %s.workdir %q: %w", build.Label, build.Workdir, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s.workdir %q is not a directory", build.Label, build.Workdir)
-	}
-
 	var outputRel, outputKind, outputPath string
 	if !build.PrepareOnly {
 		var err error
@@ -125,18 +158,92 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 		}
 	}
 
-	cmd := exec.Command(build.Command[0], build.Command[1:]...)
-	cmd.Dir = workdir
-	cmd.Env = sourceBuildEnv(os.Environ(), opts)
-	cmd.Stdout = commandStdout(opts.Output)
-	cmd.Stderr = commandStderr(opts.Output)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("run %s.command: %w", build.Label, err)
+	if err := runSourcePhase(manifestPath, build.Label, build.Workdir, build.Command, nil, opts); err != nil {
+		return err
 	}
 	if build.PrepareOnly {
 		return nil
 	}
 	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
+}
+
+// runSourcePhase execs a declared phase command (no shell) from the source
+// root, resolving the optional relative workdir and merging phase env over the
+// target-platform env. Shared by install and build.
+func runSourcePhase(manifestPath, label, workdir string, command, envOverrides []string, opts SourceBuildOptions) error {
+	if len(command) == 0 {
+		return fmt.Errorf("%s.command is required", label)
+	}
+
+	rootDir := filepath.Dir(manifestPath)
+	phaseWorkdir := rootDir
+	if workdir != "" && workdir != "." {
+		phaseWorkdir = filepath.Join(rootDir, filepath.FromSlash(workdir))
+	}
+
+	info, err := os.Stat(phaseWorkdir)
+	if err != nil {
+		return fmt.Errorf("stat %s.workdir %q: %w", label, workdir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s.workdir %q is not a directory", label, workdir)
+	}
+
+	cmd := exec.Command(command[0], command[1:]...)
+	cmd.Dir = phaseWorkdir
+	cmd.Env = mergePhaseEnv(sourceBuildEnv(os.Environ(), opts), envOverrides)
+	cmd.Stdout = commandStdout(opts.Output)
+	cmd.Stderr = commandStderr(opts.Output)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run %s.command: %w", label, err)
+	}
+	return nil
+}
+
+// mergePhaseEnv folds a phase's env overrides (as "KEY=VALUE" strings) over the
+// target-platform env; phase values win.
+func mergePhaseEnv(base, overrides []string) []string {
+	if len(overrides) == 0 {
+		return base
+	}
+	overridden := make(map[string]struct{}, len(overrides))
+	merged := make([]string, 0, len(base)+len(overrides))
+	for _, kv := range base {
+		key, _, ok := strings.Cut(kv, "=")
+		if ok {
+			if _, hit := overridden[key]; hit {
+				continue
+			}
+			if override, hit := lookupEnv(overrides, key); hit {
+				overridden[key] = struct{}{}
+				merged = append(merged, key+"="+override)
+				continue
+			}
+		}
+		merged = append(merged, kv)
+	}
+	for _, kv := range overrides {
+		key, value, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		if _, hit := overridden[key]; hit {
+			continue
+		}
+		overridden[key] = struct{}{}
+		merged = append(merged, key+"="+value)
+	}
+	return merged
+}
+
+func lookupEnv(env []string, key string) (string, bool) {
+	for _, kv := range env {
+		k, v, ok := strings.Cut(kv, "=")
+		if ok && k == key {
+			return v, true
+		}
+	}
+	return "", false
 }
 
 func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind string, err error) {
@@ -223,7 +330,14 @@ func SourceBuildTarget(opts SourceBuildOptions) (string, string) {
 	return goos, goarch
 }
 
+// EnsureSourceBuildOutput is the canonical install-then-build entry for a
+// source provider: it runs the install phase (if declared) before the build,
+// then verifies the entrypoint artifact. Callers that need a build output
+// should use this rather than RunSourceBuild, which is build-only.
 func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
+	if err := RunSourceInstall(manifestPath, manifest, opts); err != nil {
+		return err
+	}
 	if err := RunSourceBuild(manifestPath, manifest, opts); err != nil {
 		return err
 	}
@@ -257,6 +371,14 @@ func SourceBuildInputs(manifest *providermanifestv1.Manifest) []string {
 	return append([]string(nil), build.Inputs...)
 }
 
+func SourceInstallInputs(manifest *providermanifestv1.Manifest) []string {
+	install := EffectiveSourceInstall(manifest)
+	if install == nil {
+		return nil
+	}
+	return append([]string(nil), install.Inputs...)
+}
+
 func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions) (SourceExecution, error) {
 	absoluteManifestPath, err := filepath.Abs(manifestPath)
 	if err != nil {
@@ -268,6 +390,9 @@ func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions)
 		return SourceExecution{}, err
 	}
 	if HasExplicitSourceRun(manifest) {
+		if err := RunSourceInstall(manifestPath, manifest, opts); err != nil {
+			return SourceExecution{}, err
+		}
 		if err := ensurePrepareOnlyBuild(manifestPath, manifest, opts); err != nil {
 			return SourceExecution{}, err
 		}

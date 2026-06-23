@@ -2667,7 +2667,64 @@ func fingerprintLocalSourceDigest(sourcePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return providerpkg.DirectoryDigest(normalized.sourceDir, normalized.manifestPath, manifest)
+	digest, err := providerpkg.DirectoryDigest(normalized.sourceDir, normalized.manifestPath, manifest)
+	if err != nil {
+		return "", err
+	}
+	installInputs := providerpkg.SourceInstallInputs(manifest)
+	if len(installInputs) == 0 {
+		return digest, nil
+	}
+	return foldInstallInputsDigest(normalized.sourceDir, digest, installInputs)
+}
+
+func foldInstallInputsDigest(sourceDir, baseDigest string, installInputs []string) (string, error) {
+	var digests []string
+	seen := map[string]struct{}{}
+	addFile := func(path string) error {
+		rel, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if _, ok := seen[rel]; ok {
+			return nil
+		}
+		seen[rel] = struct{}{}
+		sum, err := providerpkg.FileSHA256(path)
+		if err != nil {
+			return err
+		}
+		digests = append(digests, rel+"="+sum)
+		return nil
+	}
+	for _, input := range installInputs {
+		inputAbs := filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(input)))
+		info, err := os.Stat(inputAbs)
+		if err != nil {
+			return "", fmt.Errorf("stat install input %q: %w", input, err)
+		}
+		if info.IsDir() {
+			if err := filepath.WalkDir(inputAbs, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() {
+					return nil
+				}
+				return addFile(path)
+			}); err != nil {
+				return "", fmt.Errorf("digest install input %q: %w", input, err)
+			}
+			continue
+		}
+		if err := addFile(inputAbs); err != nil {
+			return "", fmt.Errorf("digest install input %q: %w", input, err)
+		}
+	}
+	slices.Sort(digests)
+	combined := sha256.Sum256([]byte(baseDigest + "\n" + strings.Join(digests, "\n")))
+	return hex.EncodeToString(combined[:]), nil
 }
 
 func fingerprintLocalBuildInputs(sourceDir, manifestPath string, manifest *providermanifestv1.Manifest, build *providerpkg.ResolvedSourceBuild) (string, error) {
@@ -2750,6 +2807,7 @@ func fingerprintLocalBuildInputs(sourceDir, manifestPath string, manifest *provi
 	}
 
 	inputs := append([]string(nil), build.Inputs...)
+	inputs = append(inputs, providerpkg.SourceInstallInputs(manifest)...)
 	if len(inputs) == 0 {
 		workdir := "."
 		if strings.TrimSpace(build.Workdir) != "" {

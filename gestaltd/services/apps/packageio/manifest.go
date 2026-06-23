@@ -157,6 +157,14 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			return err
 		}
 	}
+	if manifest.Install != nil {
+		if !sourceMode {
+			return fmt.Errorf("install metadata is only allowed in source manifests")
+		}
+		if err := validateSourceInstall(manifest.Install); err != nil {
+			return err
+		}
+	}
 	if manifest.Run != nil {
 		if !sourceMode {
 			return fmt.Errorf("run metadata is only allowed in source manifests")
@@ -478,6 +486,35 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	}
 	for i, input := range build.Inputs {
 		label := fmt.Sprintf("build.inputs[%d]", i)
+		if strings.ContainsAny(input, "*?[") {
+			return fmt.Errorf("%s does not support glob syntax", label)
+		}
+		if err := validateRelativeSourcePath(input, label); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateSourceInstall(install *providermanifestv1.SourceInstall) error {
+	if install == nil {
+		return nil
+	}
+	if install.Workdir != "" {
+		if err := validateRelativeSourcePath(install.Workdir, "install.workdir"); err != nil {
+			return err
+		}
+	}
+	if len(install.Command) == 0 {
+		return fmt.Errorf("install.command is required")
+	}
+	for i, arg := range install.Command {
+		if strings.TrimSpace(arg) == "" {
+			return fmt.Errorf("install.command[%d] is required", i)
+		}
+	}
+	for i, input := range install.Inputs {
+		label := fmt.Sprintf("install.inputs[%d]", i)
 		if strings.ContainsAny(input, "*?[") {
 			return fmt.Errorf("%s does not support glob syntax", label)
 		}

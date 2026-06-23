@@ -49,6 +49,29 @@ routes, passthrough surfaces, and release metadata. Use Python code for
 executable operations, provider lifecycle hooks, host-service clients, and
 provider-specific runtimes.
 
+## Build entrypoint
+
+The Python build entrypoint freezes a provider into a standalone executable
+with PyInstaller. It accepts seven explicit positional args, or zero args:
+
+```sh
+# explicit
+python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME RUNTIME_KIND GOOS GOARCH
+
+# zero-arg: derive from manifest.yaml + pyproject.toml + env
+python -m gestalt._build
+```
+
+With zero args the entrypoint derives the target from
+`pyproject.toml`'s `[tool.gestalt].provider`, the output path from
+`manifest.yaml#entrypoint.artifactPath`, the plugin name from the last segment
+of `manifest.yaml#source`, the runtime kind from `manifest.yaml#kind`
+(`app` maps to `integration`), and the target platform from the
+`GESTALT_TARGET_OS` / `GESTALT_TARGET_ARCH` env vars (falling back to the host
+platform). This lets a provider declare a fixed
+`build.command: [uv, run, python, -m, gestalt._build]` with no per-provider
+wrapper script.
+
 ## Build cache
 
 Python executable provider builds can opt into the generic Gestalt build cache
