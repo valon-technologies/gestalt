@@ -2,6 +2,7 @@ package packageio
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -383,7 +384,7 @@ func walkPackageArchive(packagePath string, visit func(packageArchiveEntry) erro
 	}
 	defer joinCloseError(&err, fmt.Sprintf("close package %q", packagePath), file)
 
-	gzr, err := gzip.NewReader(file)
+	gzr, err := gzip.NewReader(bufio.NewReaderSize(file, 1<<16))
 	if err != nil {
 		return fmt.Errorf("open gzip stream: %w", err)
 	}
