@@ -78,7 +78,11 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
-	if sourceBuildProducesOutputOrImplicitGo(filepath.Dir(manifestPath), manifest) && (!hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts)) {
+	producesOutput, err := SourceReleaseBuildProducesOutput(filepath.Dir(manifestPath), manifest)
+	if err != nil {
+		return nil, err
+	}
+	if producesOutput && (!hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts)) {
 		if err := EnsureSourceBuildOutput(manifestPath, manifest, targetOpts); err != nil {
 			return nil, err
 		}
@@ -110,7 +114,13 @@ func sourceStaticCatalogShouldBePreparedForPackaging(manifestPath string, manife
 	if manifest == nil || manifest.Kind != providermanifestv1.KindApp {
 		return false, nil
 	}
-	entry := EntrypointForKind(manifest, providermanifestv1.KindApp)
+	if !SourceBuildProducesOutput(manifest) {
+		return false, nil
+	}
+	entry, err := EffectiveSourceEntrypointForKind(manifest, providermanifestv1.KindApp)
+	if err != nil {
+		return false, err
+	}
 	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
 		return false, nil
 	}
@@ -217,8 +227,7 @@ func preparedManifestFileName(format string) string {
 }
 
 func validatePreparedInstallDeclaredBuild(root string, manifest *providermanifestv1.Manifest, kind string) error {
-	kind = strings.TrimSpace(kind)
-	if kind == "" {
+	if strings.TrimSpace(kind) == "" {
 		var err error
 		kind, err = ManifestKind(manifest)
 		if err != nil {
@@ -228,14 +237,20 @@ func validatePreparedInstallDeclaredBuild(root string, manifest *providermanifes
 	if kind == providermanifestv1.KindUI {
 		return nil
 	}
-	entry := EntrypointForKind(manifest, kind)
+	entry, err := EffectiveSourceEntrypointForKind(manifest, kind)
+	if err != nil {
+		if releaseRequiresBuildForKind(manifest, kind) {
+			return missingDeclaredSourceBuildError(manifest, kind)
+		}
+		return nil
+	}
+	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+		return nil
+	}
 	if artifactExistsForEntrypoint(root, entry) {
 		return nil
 	}
-	if releaseRequiresBuildForKind(manifest, kind) {
-		return missingDeclaredSourceBuildError(manifest, kind)
-	}
-	return nil
+	return missingDeclaredSourceBuildError(manifest, kind)
 }
 
 func artifactExistsForEntrypoint(root string, entry *providermanifestv1.Entrypoint) bool {
@@ -246,6 +261,18 @@ func artifactExistsForEntrypoint(root string, entry *providermanifestv1.Entrypoi
 	return err == nil
 }
 
+func preparedInstallEntrypoint(manifest *providermanifestv1.Manifest, kind string) (*providermanifestv1.Entrypoint, error) {
+	if manifest != nil && manifest.Entrypoint != nil && strings.TrimSpace(manifest.Entrypoint.ArtifactPath) != "" {
+		cloned := *manifest.Entrypoint
+		cloned.Args = append([]string(nil), manifest.Entrypoint.Args...)
+		return &cloned, nil
+	}
+	if !SourceEntrypointMayDefault(manifest, kind) {
+		return nil, nil
+	}
+	return EffectiveSourceEntrypointForKind(manifest, kind)
+}
+
 func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest, version, sourceDir, goos, goarch string) (*providermanifestv1.Manifest, error) {
 	manifest, err := cloneManifest(srcManifest)
 	if err != nil {
@@ -253,24 +280,31 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	}
 	uiAssetRoot := SourceUIBuildOutput(manifest)
 	manifest.Version = version
-	manifest.Install = nil
-	manifest.Build = nil
-	manifest.Run = nil
-	manifest.Dev = nil
-	manifest.Artifacts = nil
 
 	kind, err := ManifestKind(manifest)
 	if err != nil {
 		return nil, err
 	}
+	entry, err := preparedInstallEntrypoint(srcManifest, kind)
+	if err != nil {
+		return nil, err
+	}
+	manifest.Install = nil
+	manifest.Build = nil
+	manifest.Run = nil
+	manifest.Dev = nil
+	manifest.Artifacts = nil
 	if kind == providermanifestv1.KindUI && uiAssetRoot != "" {
 		if manifest.Spec == nil {
 			manifest.Spec = &providermanifestv1.Spec{}
 		}
 		manifest.Spec.AssetRoot = uiAssetRoot
 	}
-	entry := EntrypointForKind(manifest, kind)
-	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+	if kind != providermanifestv1.KindUI && entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+		manifest.Entrypoint = &providermanifestv1.Entrypoint{
+			ArtifactPath: entry.ArtifactPath,
+			Args:         append([]string(nil), entry.Args...),
+		}
 		artifactPath := entry.ArtifactPath
 		digest, err := FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifactPath)))
 		if err != nil {

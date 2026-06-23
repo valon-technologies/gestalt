@@ -67,14 +67,12 @@ export function deriveBuildArgs(root: string): BuildArgs | undefined {
   try {
     const manifest = readSourceManifest(root);
     const target = formatProviderTarget(readPackageProviderTarget(root));
-    const artifactPath = manifest.entrypoint?.artifactPath;
-    if (!artifactPath) {
-      throw new Error("manifest entrypoint.artifactPath is required");
-    }
     const source = manifest.source;
     if (!source) {
       throw new Error("manifest source is required");
     }
+    const artifactPath =
+      manifest.entrypoint?.artifactPath ?? `.gestalt/build/${providerNameFromSource(source)}`;
     return {
       root,
       target,

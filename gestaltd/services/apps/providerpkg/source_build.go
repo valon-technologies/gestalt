@@ -96,14 +96,6 @@ func SourceBuildProducesOutput(manifest *providermanifestv1.Manifest) bool {
 	return build != nil && !build.PrepareOnly
 }
 
-func sourceBuildProducesOutputOrImplicitGo(root string, manifest *providermanifestv1.Manifest) bool {
-	if SourceBuildProducesOutput(manifest) {
-		return true
-	}
-	ok, err := ImplicitGoBuildTarget(root, manifest)
-	return err == nil && ok
-}
-
 func EffectiveSourceInstall(manifest *providermanifestv1.Manifest) *ResolvedSourceInstall {
 	if manifest == nil || manifest.Install == nil {
 		return nil
@@ -175,26 +167,30 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
 }
 
-// runImplicitGoBuild only builds; eligibility is decided by ImplicitGoBuildTarget.
+// runImplicitGoBuild synthesizes and compiles a Go provider when no build.command
+// is declared. Eligibility follows ResolveSourceReleaseBuild implicit Go mode.
+// The build writes to a sibling temp path and renames only on success so a
+// failed build does not delete a pre-existing entrypoint artifact.
 func runImplicitGoBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	rootDir := filepath.Dir(manifestPath)
-	ok, err := ImplicitGoBuildTarget(rootDir, manifest)
+	resolved, err := ResolveSourceReleaseBuild(rootDir, manifest)
 	if err != nil {
 		return err
 	}
-	if !ok {
+	if resolved.Mode != SourceReleaseBuildImplicitGo {
 		return nil
 	}
 	kind, err := ManifestKind(manifest)
 	if err != nil {
 		return err
 	}
-	entry := EntrypointForKind(manifest, kind)
+	entry := resolved.Entrypoint
+	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+		return fmt.Errorf("entrypoint.artifactPath is required to build a Go provider without a declared build.command")
+	}
 	outputRel := entry.ArtifactPath
 	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
 	goos, goarch := SourceBuildTarget(opts)
-	// Build to a sibling temp path first so a failed build does not delete a
-	// pre-existing entrypoint artifact; only replace the entrypoint on success.
 	tmpOutput := outputPath + ".build"
 	if err := os.RemoveAll(tmpOutput); err != nil {
 		return fmt.Errorf("remove staged build output %q: %w", outputRel, err)
@@ -304,7 +300,10 @@ func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind 
 		}
 		return output, providermanifestv1.KindUI, nil
 	}
-	entry := EntrypointForKind(manifest, manifestKind)
+	entry, err := EffectiveSourceEntrypointForKind(manifest, manifestKind)
+	if err != nil {
+		return "", "", err
+	}
 	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
 		return "", "", fmt.Errorf("entrypoint.artifactPath is required when build is set")
 	}
@@ -459,7 +458,10 @@ func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Ma
 		return ResolvedSourceExecution{}, err
 	}
 	exec := SourceExecution{Workdir: rootDir}
-	entry := EntrypointForKind(manifest, kind)
+	entry, err := EffectiveSourceEntrypointForKind(manifest, kind)
+	if err != nil {
+		return ResolvedSourceExecution{}, err
+	}
 	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
 		exec.Command = filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
 		exec.Args = append([]string(nil), entry.Args...)

@@ -189,7 +189,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		return fmt.Errorf("artifacts are not allowed in source manifests; prepared and released manifests generate them")
 	}
 
-	allowsSourceEntrypointOmission := sourceMode && manifest.Entrypoint == nil && (manifest.Build == nil || manifest.Build.PrepareOnly)
+	allowsSourceEntrypointOmission := sourceMode && manifest.Entrypoint == nil && sourceEntrypointOmissionAllowed(manifest, kind)
 
 	needsArtifacts := len(manifest.Artifacts) > 0
 	switch kind {
@@ -250,7 +250,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			if err := validateEntrypoint(kind, manifest.Entrypoint, artifactPaths, sourceMode); err != nil {
 				return err
 			}
-		case manifest.Build != nil && !manifest.Build.PrepareOnly:
+		case manifest.Build != nil && !manifest.Build.PrepareOnly && !sourceMode:
 			return fmt.Errorf("entrypoint is required when build is set")
 		case manifest.IsDeclarativeOnlyProvider():
 		case spec != nil && spec.IsSpecLoaded():

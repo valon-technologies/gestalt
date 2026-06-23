@@ -1,6 +1,7 @@
 package providerpkg
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -70,24 +71,11 @@ func HasGoProviderPackage(root string) bool {
 	return strings.TrimSpace(body[i+1:]) != ""
 }
 
-// ImplicitGoBuildTarget is the single eligibility check for the implicit Go
-// build path; callers should not re-derive these conditions.
-func ImplicitGoBuildTarget(root string, manifest *providermanifestv1.Manifest) (bool, error) {
-	if EffectiveSourceBuild(manifest) != nil {
-		return false, nil
-	}
-	kind, err := ManifestKind(manifest)
-	if err != nil {
-		return false, err
-	}
-	if kind == providermanifestv1.KindUI {
-		return false, nil
-	}
-	entry := EntrypointForKind(manifest, kind)
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return false, nil
-	}
-	return HasGoProviderPackage(root), nil
+// SupportsImplicitGoBuild reports whether gestaltd can synthesize a Go provider
+// binary for the given manifest kind.
+func SupportsImplicitGoBuild(kind string) bool {
+	_, err := goProviderServeCall(kind)
+	return err == nil
 }
 
 // goProviderServeCall maps a provider kind to the SDK serve call that runs the
@@ -155,25 +143,22 @@ func goModulePathFromFile(root string) (string, error) {
 	}
 	defer func() { _ = file.Close() }()
 
-	var moduleLine string
-	for {
-		var line string
-		if _, scanErr := fmt.Fscanln(file, &line); scanErr != nil {
-			break
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "module ") {
+			continue
 		}
-		if strings.HasPrefix(line, "module") {
-			moduleLine = line
-			break
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return "", fmt.Errorf("parse go.mod: module path is required")
 		}
+		return strings.Trim(fields[1], `"`), nil
 	}
-	if moduleLine == "" {
-		return "", fmt.Errorf("parse go.mod: module path not found")
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("read go.mod: %w", err)
 	}
-	fields := strings.Fields(moduleLine)
-	if len(fields) < 2 {
-		return "", fmt.Errorf("parse go.mod: module path is required")
-	}
-	return strings.Trim(fields[1], `"`), nil
+	return "", fmt.Errorf("parse go.mod: module path not found")
 }
 
 // BuildGoProviderBinary synthesizes a wrapper main that serves the provider at

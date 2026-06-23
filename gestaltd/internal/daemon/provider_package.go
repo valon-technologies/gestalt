@@ -84,7 +84,7 @@ func runProviderPackage(args []string) (err error) {
 		return err
 	}
 
-	buildTarget, err := resolveReleaseBuildTarget(sourceDir, releaseManifest)
+	buildTarget, err := resolveReleaseBuild(sourceDir, releaseManifest)
 	if err != nil {
 		return err
 	}
@@ -241,52 +241,32 @@ func (s *sourceStaticCatalogSnapshot) Restore() error {
 	return nil
 }
 
-func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifest) (*releaseBuildTarget, error) {
-	kind, err := providerpkg.ManifestKind(manifest)
-	if err != nil {
-		return nil, err
-	}
-	if kind == providermanifestv1.KindUI {
-		return nil, nil
-	}
+func resolveReleaseBuild(root string, manifest *providermanifestv1.Manifest) (*providerpkg.ResolvedSourceReleaseBuild, error) {
 	if err := providerpkg.ValidateExplicitRunPackaging(root, manifest); err != nil {
 		return nil, err
 	}
-	if providerpkg.EffectiveSourceBuild(manifest) != nil {
-		entry := providerpkg.EntrypointForKind(manifest, kind)
-		if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-			if providerpkg.ReleaseRequiresBuild(manifest) {
-				return nil, providerpkg.MissingDeclaredSourceBuildError(manifest, kind)
-			}
-			return nil, nil
-		}
-		return &releaseBuildTarget{Kind: kind, Mode: releaseBuildDeclared}, nil
+	resolved, err := providerpkg.ResolveSourceReleaseBuild(root, manifest)
+	if err != nil {
+		return nil, err
 	}
-	entry := providerpkg.EntrypointForKind(manifest, kind)
-	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
-		if implicit, err := providerpkg.ImplicitGoBuildTarget(root, manifest); err == nil && implicit {
-			return &releaseBuildTarget{Kind: kind, Mode: releaseBuildImplicitGo}, nil
-		}
-		return &releaseBuildTarget{Kind: kind, Mode: releaseBuildPrebuilt}, nil
-	}
-	if providerpkg.ReleaseRequiresBuild(manifest) {
-		return nil, providerpkg.MissingDeclaredSourceBuildError(manifest, kind)
-	}
-	return nil, nil
-}
-
-func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
-	if target == nil {
+	if resolved.Mode == providerpkg.SourceReleaseBuildNone {
 		return nil, nil
 	}
-	if target.Mode == releaseBuildPrebuilt {
+	return &resolved, nil
+}
+
+func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, build *providerpkg.ResolvedSourceReleaseBuild, value string, explicit bool) ([]releasePlatform, error) {
+	if build == nil {
+		return nil, nil
+	}
+	if build.Mode == providerpkg.SourceReleaseBuildPrebuilt {
 		if explicit {
 			return nil, fmt.Errorf("--platform requires build.command for executable source providers")
 		}
 		return nil, fmt.Errorf("provider package requires build.command for executable source providers")
 	}
 
-	buildRequired := target.Mode == releaseBuildDeclared || target.Mode == releaseBuildImplicitGo || providerpkg.ReleaseRequiresBuild(manifest)
+	buildRequired := build.Mode.RequiresPlatformBuild() || providerpkg.ReleaseRequiresBuild(manifest)
 	if !buildRequired && !explicit {
 		return nil, nil
 	}

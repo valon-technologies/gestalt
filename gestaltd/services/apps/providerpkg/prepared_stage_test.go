@@ -174,8 +174,30 @@ func TestValidateExplicitRunPackaging_AllowsManifestBackedRunOnlyPlugin(t *testi
 	if ReleaseRequiresBuild(manifest) {
 		t.Fatal("manifest-backed app should not require a release build")
 	}
+	if _, err := EffectiveSourceEntrypointForKind(manifest, providermanifestv1.KindApp); err == nil {
+		t.Fatal("expected effective entrypoint error for non-executable manifest-backed app")
+	}
 	if err := ValidateExplicitRunPackaging(t.TempDir(), manifest); err != nil {
 		t.Fatalf("ValidateExplicitRunPackaging: %v", err)
+	}
+}
+
+func TestValidatePreparedInstallDeclaredBuild_RequiresArtifactWhenReleaseBuildRequired(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindAgent,
+		Source:  "github.com/test/providers/example-agent",
+		Version: "0.0.1-alpha.1",
+		Spec:    &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+		},
+	}
+	err := validatePreparedInstallDeclaredBuild(root, manifest, providermanifestv1.KindAgent)
+	if err == nil || !strings.Contains(err.Error(), "declare object-form build.command and entrypoint.artifactPath") {
+		t.Fatalf("validatePreparedInstallDeclaredBuild err = %v, want missing declared build error", err)
 	}
 }
 

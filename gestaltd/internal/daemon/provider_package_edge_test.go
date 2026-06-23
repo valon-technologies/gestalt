@@ -563,6 +563,23 @@ func TestRun_ProviderPackageAndReleaseCompilesProviderWithoutSourceArtifacts(t *
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixtureWithoutCatalog(t, t.TempDir())
+	const defaultArtifactPath = ".gestalt/build/release-test"
+	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      releaseTestSource,
+		Version:     "0.0.1",
+		DisplayName: "Release Test",
+		IconFile:    releaseTestIconPath,
+		Spec: &providermanifestv1.Spec{
+			ConfigSchemaPath: releaseProviderSchemaPath,
+		},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
+		},
+	})
+	writeTestFile(t, pluginDir, "build.sh", []byte("mkdir -p .gestalt/build\ngo build -o "+defaultArtifactPath+" ./cmd/provider\n"), 0o755)
+	_ = os.Remove(filepath.Join(pluginDir, providerpkg.StaticCatalogFile))
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-source.1"
 
@@ -576,10 +593,10 @@ func TestRun_ProviderPackageAndReleaseCompilesProviderWithoutSourceArtifacts(t *
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != ".gestalt/build/provider" {
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != defaultArtifactPath {
 		t.Fatalf("artifacts = %+v", manifest.Artifacts)
 	}
-	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != ".gestalt/build/provider" {
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != defaultArtifactPath {
 		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoint)
 	}
 	if manifest.Spec == nil || manifest.Spec.ConfigSchemaPath != releaseProviderSchemaPath {
@@ -611,6 +628,9 @@ func TestRun_ProviderPackageRejectsSDKSourceProviderWithoutBuildCommand(t *testi
 	_ = os.Remove(filepath.Join(pluginDir, providerpkg.StaticCatalogFile))
 	_ = os.Remove(filepath.Join(pluginDir, "build.sh"))
 	_ = os.RemoveAll(filepath.Join(pluginDir, "cmd"))
+	_ = os.Remove(filepath.Join(pluginDir, "provider.go"))
+	_ = os.Remove(filepath.Join(pluginDir, "go.mod"))
+	_ = os.Remove(filepath.Join(pluginDir, "go.sum"))
 
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-sdk-source.1"
