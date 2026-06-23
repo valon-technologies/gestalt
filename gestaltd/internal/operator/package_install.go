@@ -170,7 +170,10 @@ func normalizeInstalledExecutable(root string, manifest *providermanifestv1.Mani
 	if err != nil {
 		return fmt.Errorf("hash installed executable %s: %w", targetRel, err)
 	}
-	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: targetRel}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{
+		ArtifactPath: targetRel,
+		Args:         append([]string(nil), entry.Args...),
+	}
 	if len(manifest.Artifacts) > 0 {
 		manifest.Artifacts[0].Path = targetRel
 		manifest.Artifacts[0].SHA256 = digest
