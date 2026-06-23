@@ -1,6 +1,6 @@
 {
   "name": "@valon-technologies/gestalt",
-  "version": "0.0.1-alpha.63",
+  "version": "0.0.1-alpha.64",
   "description": "TypeScript SDK for Gestalt executable providers",
   "type": "module",
   "repository": {
