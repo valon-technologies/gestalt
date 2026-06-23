@@ -111,7 +111,8 @@ func sourceBuildProducesOutputOrImplicitGo(root string, manifest *providermanife
 	if err != nil {
 		return false
 	}
-	return EntrypointForKind(manifest, kind) != nil
+	entry := EntrypointForKind(manifest, kind)
+	return entry != nil && strings.TrimSpace(entry.ArtifactPath) != ""
 }
 
 func EffectiveSourceInstall(manifest *providermanifestv1.Manifest) *ResolvedSourceInstall {

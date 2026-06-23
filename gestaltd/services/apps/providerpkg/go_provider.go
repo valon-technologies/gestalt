@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"text/template"
 
@@ -18,9 +17,8 @@ import (
 const goReadonlyFlag = "-mod=readonly"
 
 var (
-	ErrNoGoProviderPackage  = errors.New("no Go provider package found")
-	ErrGoToolUnavailable    = errors.New("go tool unavailable")
-	goProviderNameSlugRegex = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+	ErrNoGoProviderPackage = errors.New("no Go provider package found")
+	ErrGoToolUnavailable   = errors.New("go tool unavailable")
 )
 
 type goExecutableWrapperData struct {

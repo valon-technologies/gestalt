@@ -68,8 +68,10 @@ func HasSourceReleaseTarget(root, kind string) (bool, error) {
 	// target even without a declared build phase.
 	if HasGoProviderPackage(root) {
 		resolved, kerr := ManifestKind(manifest)
-		if kerr == nil && EntrypointForKind(manifest, resolved) != nil {
-			return true, nil
+		if kerr == nil {
+			if entry := EntrypointForKind(manifest, resolved); entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
