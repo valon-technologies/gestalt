@@ -450,8 +450,7 @@ func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Ma
 	if !skipExplicitRun && HasExplicitSourceRun(manifest) {
 		return explicitRunExecution(rootDir, manifest), nil
 	}
-	kind, err := sourceExecutionKind(manifest, kind)
-	if err != nil {
+	if _, err := sourceExecutionKind(manifest, kind); err != nil {
 		return ResolvedSourceExecution{}, err
 	}
 	exec := SourceExecution{Workdir: rootDir}

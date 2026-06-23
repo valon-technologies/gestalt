@@ -1225,7 +1225,7 @@ func sha256hex(data string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func 	writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent string) {
+func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create source provider dir: %v", err)
