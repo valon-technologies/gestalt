@@ -260,17 +260,14 @@ func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifes
 			}
 			return nil, nil
 		}
-		return &releaseBuildTarget{Kind: kind, DeclaredBuild: true}, nil
+		return &releaseBuildTarget{Kind: kind, Mode: releaseBuildDeclared}, nil
 	}
 	entry := providerpkg.EntrypointForKind(manifest, kind)
 	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
-		// A Go provider with an entrypoint but no build.command is built
-		// implicitly by gestaltd (synthesized wrapper main); otherwise the
-		// entrypoint artifact is assumed to be prebuilt.
-		if providerpkg.HasGoProviderPackage(root) {
-			return &releaseBuildTarget{Kind: kind, ImplicitGoBuild: true}, nil
+		if implicit, err := providerpkg.ImplicitGoBuildTarget(root, manifest); err == nil && implicit {
+			return &releaseBuildTarget{Kind: kind, Mode: releaseBuildImplicitGo}, nil
 		}
-		return &releaseBuildTarget{Kind: kind, Prebuilt: true}, nil
+		return &releaseBuildTarget{Kind: kind, Mode: releaseBuildPrebuilt}, nil
 	}
 	if providerpkg.ReleaseRequiresBuild(manifest) {
 		return nil, providerpkg.MissingDeclaredSourceBuildError(manifest, kind)
@@ -282,14 +279,14 @@ func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Mani
 	if target == nil {
 		return nil, nil
 	}
-	if target.Prebuilt {
+	if target.Mode == releaseBuildPrebuilt {
 		if explicit {
 			return nil, fmt.Errorf("--platform requires build.command for executable source providers")
 		}
 		return nil, fmt.Errorf("provider package requires build.command for executable source providers")
 	}
 
-	buildRequired := target.DeclaredBuild || target.ImplicitGoBuild || providerpkg.ReleaseRequiresBuild(manifest)
+	buildRequired := target.Mode == releaseBuildDeclared || target.Mode == releaseBuildImplicitGo || providerpkg.ReleaseRequiresBuild(manifest)
 	if !buildRequired && !explicit {
 		return nil, nil
 	}

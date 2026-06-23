@@ -96,23 +96,12 @@ func SourceBuildProducesOutput(manifest *providermanifestv1.Manifest) bool {
 	return build != nil && !build.PrepareOnly
 }
 
-// sourceBuildProducesOutputOrImplicitGo reports whether a build output will be
-// produced for the provider at root: either a declared build phase that
-// produces output, or a Go provider with an entrypoint (built implicitly by
-// gestaltd via a synthesized wrapper main).
 func sourceBuildProducesOutputOrImplicitGo(root string, manifest *providermanifestv1.Manifest) bool {
 	if SourceBuildProducesOutput(manifest) {
 		return true
 	}
-	if !HasGoProviderPackage(root) {
-		return false
-	}
-	kind, err := ManifestKind(manifest)
-	if err != nil {
-		return false
-	}
-	entry := EntrypointForKind(manifest, kind)
-	return entry != nil && strings.TrimSpace(entry.ArtifactPath) != ""
+	ok, err := ImplicitGoBuildTarget(root, manifest)
+	return err == nil && ok
 }
 
 func EffectiveSourceInstall(manifest *providermanifestv1.Manifest) *ResolvedSourceInstall {
@@ -186,15 +175,14 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
 }
 
-// runImplicitGoBuild is the fallback build path for a Go provider that declares
-// an entrypoint but no build.command: gestaltd synthesizes a wrapper main that
-// serves the provider via the SDK Serve<Kind>Provider call and compiles it with
-// `go build` to the entrypoint.artifactPath. Non-Go providers with no declared
-// build are a no-op (the caller enforces that a declared build is required for
-// release packaging elsewhere).
+// runImplicitGoBuild only builds; eligibility is decided by ImplicitGoBuildTarget.
 func runImplicitGoBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	rootDir := filepath.Dir(manifestPath)
-	if !HasGoProviderPackage(rootDir) {
+	ok, err := ImplicitGoBuildTarget(rootDir, manifest)
+	if err != nil {
+		return err
+	}
+	if !ok {
 		return nil
 	}
 	kind, err := ManifestKind(manifest)
@@ -202,9 +190,6 @@ func runImplicitGoBuild(manifestPath string, manifest *providermanifestv1.Manife
 		return err
 	}
 	entry := EntrypointForKind(manifest, kind)
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return fmt.Errorf("entrypoint.artifactPath is required to build a Go provider without a declared build.command")
-	}
 	outputRel := entry.ArtifactPath
 	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
 	goos, goarch := SourceBuildTarget(opts)
@@ -388,10 +373,8 @@ func SourceBuildTarget(opts SourceBuildOptions) (string, string) {
 	return goos, goarch
 }
 
-// EnsureSourceBuildOutput is the canonical install-then-build entry for a
-// source provider: it runs the install phase (if declared) before the build,
-// then verifies the entrypoint artifact. Callers that need a build output
-// should use this rather than RunSourceBuild, which is build-only.
+// EnsureSourceBuildOutput is the canonical install-then-build entry; callers
+// that need a build output should use this rather than RunSourceBuild.
 func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	if err := RunSourceInstall(manifestPath, manifest, opts); err != nil {
 		return err

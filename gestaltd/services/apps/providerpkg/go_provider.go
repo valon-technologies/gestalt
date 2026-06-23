@@ -52,9 +52,8 @@ func main() {
 
 var goExecutableWrapperTemplate = template.Must(template.New("go-executable-wrapper").Parse(goExecutableWrapperSource))
 
-// HasGoProviderPackage reports whether root looks like a Go source provider:
-// `go list .` (which walks up to the nearest go.mod) resolves a package with
-// .go files in root. The go.mod may live in root or an ancestor directory.
+// HasGoProviderPackage reports whether root is a Go source provider. The
+// go.mod may live in root or an ancestor directory; go list walks up to it.
 func HasGoProviderPackage(root string) bool {
 	cmd := exec.Command("go", "list", goReadonlyFlag, "-f", "{{.ImportPath}} {{join .GoFiles \"|\"}}", ".")
 	cmd.Dir = root
@@ -69,6 +68,26 @@ func HasGoProviderPackage(root string) bool {
 		return false
 	}
 	return strings.TrimSpace(body[i+1:]) != ""
+}
+
+// ImplicitGoBuildTarget is the single eligibility check for the implicit Go
+// build path; callers should not re-derive these conditions.
+func ImplicitGoBuildTarget(root string, manifest *providermanifestv1.Manifest) (bool, error) {
+	if EffectiveSourceBuild(manifest) != nil {
+		return false, nil
+	}
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		return false, err
+	}
+	if kind == providermanifestv1.KindUI {
+		return false, nil
+	}
+	entry := EntrypointForKind(manifest, kind)
+	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+		return false, nil
+	}
+	return HasGoProviderPackage(root), nil
 }
 
 // goProviderServeCall maps a provider kind to the SDK serve call that runs the
