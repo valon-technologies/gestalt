@@ -6,6 +6,8 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/blevesearch/bleve/v2 v2.6.0
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-git/go-billy/v5 v5.9.0
+	github.com/go-git/go-git/v5 v5.19.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/landlock-lsm/go-landlock v0.8.1
@@ -46,8 +48,12 @@ require (
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/blevesearch/zapx/v17 v17.1.2 // indirect
+	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
+	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
+	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/wundergraph/go-arena v1.1.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
+	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
 
 require (
