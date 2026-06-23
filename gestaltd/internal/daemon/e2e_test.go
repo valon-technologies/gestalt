@@ -1256,17 +1256,18 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 		Spec:        &providermanifestv1.Spec{},
 		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}
-	if kind == providermanifestv1.KindWorkflow {
+	switch kind {
+	case providermanifestv1.KindWorkflow:
 		manifest.Build = &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "workflow.go", "cmd", "build.sh"},
 		}
-	} else if kind == providermanifestv1.KindAgent {
+	case providermanifestv1.KindAgent:
 		manifest.Build = &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh", "agent-staging"},
 		}
-	} else {
+	default:
 		manifest.Build = &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh", "provider-staging"},
@@ -1427,17 +1428,6 @@ func writeManifestFile(t *testing.T, appDir string, manifest *providermanifestv1
 	data, err := encodeTestManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), data, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-}
-
-func writePackageManifestFile(t *testing.T, appDir string, manifest *providermanifestv1.Manifest) {
-	t.Helper()
-	data, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)

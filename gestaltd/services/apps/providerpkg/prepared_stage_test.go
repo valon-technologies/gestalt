@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -177,6 +178,50 @@ func TestValidateExplicitRunPackaging_AllowsManifestBackedRunOnlyPlugin(t *testi
 	}
 	if err := ValidateExplicitRunPackaging(t.TempDir(), manifest); err != nil {
 		t.Fatalf("ValidateExplicitRunPackaging: %v", err)
+	}
+}
+
+func TestStageSourcePreparedInstallDir_AllowsImplicitGoProviderWithoutBuildCommand(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	const source = "github.com/test/providers/cache/local-cache"
+	const configuredName = "configured-cache"
+	mustWriteFile(t, filepath.Join(root, "go.mod"), []byte(testutil.GeneratedProviderModuleSource(t, "example.com/implicit-cache")), 0o644)
+	mustWriteFile(t, filepath.Join(root, "go.sum"), testutil.GeneratedProviderModuleSum(t), 0o644)
+	mustWriteFile(t, filepath.Join(root, "provider.go"), []byte(testutil.GeneratedCachePackageSource()), 0o644)
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindCache,
+		Source:      source,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Implicit Cache",
+		Spec:        &providermanifestv1.Spec{},
+	}))
+
+	stagingDir := filepath.Join(t.TempDir(), "prepared")
+	staged, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
+		Kind:    providermanifestv1.KindCache,
+		AppName: configuredName,
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
+	})
+	if err != nil {
+		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
+	}
+
+	stagedEntrypoint := stagedExecutableRel(configuredName, runtime.GOOS)
+	if staged.Manifest == nil || staged.Manifest.Entrypoint == nil || staged.Manifest.Entrypoint.ArtifactPath != stagedEntrypoint {
+		var entrypoint any
+		if staged.Manifest != nil {
+			entrypoint = staged.Manifest.Entrypoint
+		}
+		t.Fatalf("staged manifest entrypoint = %#v, want artifact path %q", entrypoint, stagedEntrypoint)
+	}
+	if staged.Manifest.Build != nil || staged.Manifest.Run != nil {
+		t.Fatalf("staged manifest retained source execution metadata: build=%#v run=%#v", staged.Manifest.Build, staged.Manifest.Run)
+	}
+	if _, err := os.Stat(filepath.Join(stagingDir, filepath.FromSlash(stagedEntrypoint))); err != nil {
+		t.Fatalf("staged implicit Go executable: %v", err)
 	}
 }
 

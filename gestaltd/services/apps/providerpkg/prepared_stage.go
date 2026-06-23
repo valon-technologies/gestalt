@@ -240,7 +240,7 @@ func validatePreparedInstallDeclaredBuild(root string, manifest *providermanifes
 	if err != nil {
 		return err
 	}
-	if resolved.Mode.RequiresPlatformBuild() {
+	if resolved.Mode == SourceReleaseBuildDeclared {
 		return missingDeclaredSourceBuildError(manifest, kind)
 	}
 	return nil

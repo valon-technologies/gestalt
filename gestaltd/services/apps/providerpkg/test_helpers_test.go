@@ -120,15 +120,6 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 	}
 }
 
-func mustManifestJSON(t *testing.T, manifest *providermanifestv1.Manifest) []byte {
-	t.Helper()
-	data, err := EncodeSourceManifestFormat(manifest, ManifestFormatJSON)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat(JSON): %v", err)
-	}
-	return data
-}
-
 func mustManifestYAML(t *testing.T, manifest *providermanifestv1.Manifest) []byte {
 	t.Helper()
 	data, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
