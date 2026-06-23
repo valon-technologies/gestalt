@@ -181,8 +181,28 @@ func ValidateMetadata(metadata *Metadata) error {
 	if version := strings.TrimSpace(manifest.Version); version != "" && version != strings.TrimSpace(metadata.Version) {
 		return fmt.Errorf("provider release validation manifest version %q does not match %q", version, metadata.Version)
 	}
-	if runtime := RuntimeForManifest(metadataKind, manifest); metadata.Runtime != runtime {
-		return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, runtime)
+	// The validation manifest is a platform-neutral projection of the packaged
+	// manifest: it intentionally strips Entrypoint and Artifacts (see staticvalidation.ProjectManifest).
+	// Because the entrypoint signal is gone, RuntimeForManifest on the projection cannot distinguish a
+	// hybrid app provider (manifest-backed spec surface plus a hosted binary) from a declarative-only
+	// app provider (manifest-backed spec surface, no binary) - both project to RuntimeDeclarative. The
+	// real classification lives in metadata.Runtime, which is derived from the full packaged manifest.
+	// Validate against the projection accordingly: a declarative release must project to declarative,
+	// and an executable release must project to declarative or executable (never UI).
+	validationRuntime := RuntimeForManifest(metadataKind, manifest)
+	switch metadata.Runtime {
+	case RuntimeDeclarative:
+		if validationRuntime != RuntimeDeclarative {
+			return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, validationRuntime)
+		}
+	case RuntimeExecutable:
+		if validationRuntime == RuntimeUI {
+			return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, validationRuntime)
+		}
+	case RuntimeUI:
+		if validationRuntime != RuntimeUI {
+			return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, validationRuntime)
+		}
 	}
 	if len(manifest.Artifacts) != 0 {
 		return fmt.Errorf("provider release validation manifest must not include platform artifacts")
@@ -206,8 +226,8 @@ func ValidateMetadata(metadata *Metadata) error {
 	case CatalogRequired(metadataKind, manifest) && staticCatalog == nil && !metadata.StaticValidation.CatalogSessionOnly && !CatalogSessionModeAllowed(metadataKind, manifest):
 		return fmt.Errorf("provider release validation for package %q must include catalog metadata unless the validation manifest is MCP-only", metadata.Package)
 	}
-	if _, ok := metadata.Artifacts[GenericTarget]; ok && metadataKind == providermanifestv1.KindApp && RuntimeForManifest(metadataKind, manifest) != RuntimeDeclarative {
-		return fmt.Errorf("provider release generic app artifact requires declarative-only validation manifest")
+	if _, ok := metadata.Artifacts[GenericTarget]; ok && metadataKind == providermanifestv1.KindApp && metadata.Runtime != RuntimeDeclarative {
+		return fmt.Errorf("provider release generic app artifact requires a declarative-only provider")
 	}
 	return nil
 }

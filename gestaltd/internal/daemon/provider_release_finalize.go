@@ -252,7 +252,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		Package:       manifest.Source,
 		Kind:          manifest.Kind,
 		Version:       version,
-		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, staticManifest),
+		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, manifest),
 		Artifacts:     providerrelease.Artifacts{},
 		StaticValidation: &providerrelease.StaticValidation{
 			Manifest: staticManifest,

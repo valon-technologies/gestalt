@@ -411,7 +411,7 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 		Package:       manifest.Source,
 		Kind:          manifest.Kind,
 		Version:       manifest.Version,
-		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, staticManifest),
+		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, manifest),
 		Artifacts: providerrelease.Artifacts{
 			providerpkg.CurrentPlatformString(): {
 				Path:   filepath.ToSlash(filepath.Join("..", filepath.Base(archivePath))),
