@@ -15,16 +15,40 @@ import (
 )
 
 // fingerprintSkipper is the fingerprint exclusion policy: which paths a source
-// fingerprint walk excludes. Two structural invariants apply regardless of
+// fingerprint walk excludes. Structural invariants apply regardless of
 // .gitignore: the declared build output (never hash the artifact about to be
-// produced) and the .git directory itself (git metadata, never a build input).
-// Everything else is decided by the enclosing repo's .gitignore rules. Explicit
-// per-input file listings are honored verbatim by the callers; shouldSkip is
-// only consulted on directory walks and on the walk root.
+// produced), the .git directory (git metadata, never a build input), and
+// gestalt's own managed directories (see reservedFingerprintDir). Everything
+// else is decided by the enclosing repo's .gitignore rules. Explicit per-input
+// file listings are honored verbatim by the callers; shouldSkip is only
+// consulted on directory walks and on the walk root.
 type fingerprintSkipper struct {
 	matcher   gitignore.Matcher
 	repoRoot  string
 	outputAbs string
+}
+
+// gestaltStateDirName is the daemon's prepared-artifacts/state directory, created
+// inside --artifacts-dir. gestaltBuildDirName is a provider's build scratch/output
+// directory. Both are gestalt-managed and must never count as source inputs: when
+// --artifacts-dir nests under a provider source tree, materializing an artifact
+// (staging→final rename, lock-metadata write) mutates these dirs, so including
+// them would make the source-input fingerprint unstable and sync's post-
+// materialize re-check would never converge (it would always see a "stale" input).
+const (
+	gestaltStateDirName = ".gestaltd"
+	gestaltBuildDirName = ".gestalt"
+)
+
+// reservedFingerprintDir reports whether a directory name is gestalt- or
+// git-managed and therefore excluded from every source fingerprint walk.
+func reservedFingerprintDir(name string) bool {
+	switch name {
+	case gitDirName, gestaltStateDirName, gestaltBuildDirName:
+		return true
+	default:
+		return false
+	}
 }
 
 func newFingerprintSkipper(sourceDir, outputAbs string) (fingerprintSkipper, error) {
@@ -40,7 +64,7 @@ func (s fingerprintSkipper) shouldSkip(path string, d os.DirEntry) bool {
 	if s.outputAbs != "" && pathWithinRoot(s.outputAbs, cleanPath) {
 		return true
 	}
-	if d != nil && d.IsDir() && d.Name() == gitDirName {
+	if d != nil && d.IsDir() && reservedFingerprintDir(d.Name()) {
 		return true
 	}
 	components := gitignorePathComponents(s.repoRoot, cleanPath)

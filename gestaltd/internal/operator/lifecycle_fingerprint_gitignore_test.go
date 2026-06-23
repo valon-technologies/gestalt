@@ -68,6 +68,59 @@ func fingerprintOf(t *testing.T, manifestPath string) string {
 	return digest
 }
 
+// TestFingerprintExcludesNestedGestaltManagedDirs asserts the source-input
+// fingerprint ignores gestalt-managed directories that may nest under a provider
+// source tree: the daemon's .gestaltd artifacts/state dir (when --artifacts-dir
+// is placed under the source) and a .gestalt build scratch dir. Regression for
+// sync's post-materialize re-check never converging: materializing an artifact
+// (staging→final rename + lock-metadata write) mutated these nested dirs, so the
+// SourceInputDigest/InputDigest shifted between write and re-check and every sync
+// reported the just-built artifact "stale".
+func TestFingerprintExcludesNestedGestaltManagedDirs(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := filepath.Join(dir, "provider")
+	writeBuildableSourceProviderTree(t, src, "github.com/acme/apps/alpha", "dist/out", nil)
+	initGitRepo(t, dir)
+	manifestPath := filepath.Join(src, "manifest.yaml")
+
+	base := fingerprintOf(t, manifestPath)
+
+	mustWrite := func(rel, content string) {
+		t.Helper()
+		p := filepath.Join(src, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	// A nested artifacts dir mid-materialize (staging temp provider) plus a build
+	// scratch dir. Neither is gitignored, so without the reserved-dir skip the
+	// walk would include them.
+	mustWrite(".local/.art/.gestaltd/providers/gIssues.tmp-123/catalog.yaml", "a: 1\n")
+	mustWrite(".local/.art/.gestaltd/providers/gIssues.tmp-123/manifest.yaml", "kind: app\n")
+	mustWrite(".gestalt/build/extra", "scratch\n")
+
+	if got := fingerprintOf(t, manifestPath); got != base {
+		t.Fatalf("fingerprint changed when gestalt-managed dirs nested under source:\n base=%s\n got =%s", base, got)
+	}
+
+	// Simulate commit: staging→final rename + lock-metadata write (the exact churn
+	// that destabilized the digest between write and re-check).
+	art := filepath.Join(src, ".local", ".art", ".gestaltd", "providers")
+	if err := os.Rename(filepath.Join(art, "gIssues.tmp-123"), filepath.Join(art, "gIssues")); err != nil {
+		t.Fatalf("rename staging→final: %v", err)
+	}
+	mustWrite(".local/.art/.gestaltd/providers/gIssues/.gestaltd-lock-metadata.json", "{}\n")
+
+	if got := fingerprintOf(t, manifestPath); got != base {
+		t.Fatalf("fingerprint changed after simulated staging→final commit:\n base=%s\n got =%s", base, got)
+	}
+}
+
 // TestFingerprintGitignoreRepoRootExclusion asserts the core repo-root
 // anchoring contract: with no inputs, the fingerprint walks the whole provider
 // dir, excludes gitignored paths (node_modules, .venv) resolved from the
