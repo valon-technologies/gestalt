@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"golang.org/x/net/websocket"
 )
 
@@ -35,9 +33,13 @@ func TestReverseProxyWebSocketThroughH2C(t *testing.T) {
 	root.Handle("/mount/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proxy.ServeHTTP(w, r)
 	}))
-	handler := h2c.NewHandler(root, &http2.Server{})
-
-	server := httptest.NewServer(handler)
+	protocols := &http.Protocols{}
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+	server := httptest.NewUnstartedServer(root)
+	server.EnableHTTP2 = true
+	server.Config.Protocols = protocols
+	server.Start()
 	t.Cleanup(server.Close)
 
 	ws, err := websocket.Dial(strings.Replace(server.URL, "http://", "ws://", 1)+"/mount/ws", "", server.URL+"/mount/")
