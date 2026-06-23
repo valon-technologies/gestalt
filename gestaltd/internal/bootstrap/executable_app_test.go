@@ -51,6 +51,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
@@ -8266,5 +8267,119 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 	}
 	if got := err.Error(); got != `bootstrap: provider validation failed: integration "echoext": integration "echoext" must resolve to a provider manifest` {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// stubTelemetryWithEnv is a core.TelemetryProvider that also implements
+// runtimehost's ProviderTelemetryEnv, so tests can verify OTLP env vars
+// are propagated to hosted provider StartApp requests.
+type stubTelemetryWithEnv struct {
+	telemetrynoop.Provider
+	env map[string]string
+}
+
+func (s *stubTelemetryWithEnv) ProviderTelemetryEnv(providerName string) map[string]string {
+	out := make(map[string]string, len(s.env))
+	maps.Copy(out, s.env)
+	return out
+}
+
+func TestHostedAppStartAppReceivesTelemetryEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	artifactBytes, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("ReadFile(bin): %v", err)
+	}
+	artifactFile := filepath.Join(manifestRoot, filepath.Base(bin))
+	if err := os.WriteFile(artifactFile, artifactBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile(artifact): %v", err)
+	}
+	artifactDigest, err := providerpkg.FileSHA256(artifactFile)
+	if err != nil {
+		t.Fatalf("FileSHA256: %v", err)
+	}
+	manifest.Artifacts = []providermanifestv1.Artifact{{
+		OS:     runtime.GOOS,
+		Arch:   runtime.GOARCH,
+		Path:   filepath.Base(bin),
+		SHA256: artifactDigest,
+	}}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(bin)}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+
+	runtimeProvider := newCapturingBundleRuntime()
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Apps: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				Runtime:              &config.RuntimePlacementConfig{},
+			},
+		},
+	}
+
+	deps := testRuntimePublicEndpointDeps(t, Deps{})
+	deps.Telemetry = &stubTelemetryWithEnv{
+		env: map[string]string{
+			"OTEL_EXPORTER_OTLP_ENDPOINT": "otel-collector:4317",
+			"OTEL_SERVICE_NAME":           "test-echoext",
+		},
+	}
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get(echoext): %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "echo", map[string]any{"name": "test"}, ""); err != nil {
+		t.Fatalf("Execute(echo): %v", err)
+	}
+
+	requests := runtimeProvider.startAppRequestsCopy()
+	if len(requests) != 1 {
+		t.Fatalf("start app requests = %d, want 1", len(requests))
+	}
+	env := requests[0].GetEnv()
+	if got := env["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "otel-collector:4317" {
+		t.Fatalf("StartApp OTEL_EXPORTER_OTLP_ENDPOINT = %q, want otel-collector:4317", got)
+	}
+	if got := env["OTEL_SERVICE_NAME"]; got != "test-echoext" {
+		t.Fatalf("StartApp OTEL_SERVICE_NAME = %q, want test-echoext", got)
 	}
 }

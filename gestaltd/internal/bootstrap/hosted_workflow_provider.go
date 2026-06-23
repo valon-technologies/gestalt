@@ -202,6 +202,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 
 	startEnv := maps.Clone(launch.cfg.Env)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
+	maps.Copy(startEnv, runtimehost.ProviderTelemetryEnv(deps.Telemetry, name))
 	workflowAllowedHosts := launch.cfg.EgressPolicy("").AllowedHosts
 	if len(workflowAllowedHosts) == 0 {
 		workflowAllowedHosts = append([]string(nil), launch.allowedHosts...)

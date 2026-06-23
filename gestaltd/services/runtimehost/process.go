@@ -491,7 +491,7 @@ func mergeExecEnv(base, extra map[string]string) map[string]string {
 }
 
 func providerProcessEnv(cfg ProcessConfig, execEnv map[string]string) map[string]string {
-	env := mergeExecEnv(providerTelemetryEnv(cfg.Telemetry, cfg.ProviderName), cfg.Env)
+	env := mergeExecEnv(ProviderTelemetryEnv(cfg.Telemetry, cfg.ProviderName), cfg.Env)
 	return mergeExecEnv(env, execEnv)
 }
 
@@ -499,7 +499,7 @@ type providerTelemetryEnvProvider interface {
 	ProviderTelemetryEnv(providerName string) map[string]string
 }
 
-func providerTelemetryEnv(telemetry metricutil.TelemetryProviders, providerName string) map[string]string {
+func ProviderTelemetryEnv(telemetry metricutil.TelemetryProviders, providerName string) map[string]string {
 	if telemetry == nil {
 		return nil
 	}
