@@ -181,7 +181,7 @@ func ValidateMetadata(metadata *Metadata) error {
 	if version := strings.TrimSpace(manifest.Version); version != "" && version != strings.TrimSpace(metadata.Version) {
 		return fmt.Errorf("provider release validation manifest version %q does not match %q", version, metadata.Version)
 	}
-	if runtime := RuntimeForManifest(metadataKind, manifest); metadata.Runtime != runtime {
+	if runtime := RuntimeForRelease(metadataKind, manifest, metadata.Artifacts); metadata.Runtime != runtime {
 		return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, runtime)
 	}
 	if len(manifest.Artifacts) != 0 {
@@ -274,6 +274,35 @@ func RuntimeForManifest(kind string, manifest *providermanifestv1.Manifest) stri
 		}
 	}
 	return RuntimeExecutable
+}
+
+// RuntimeForRelease classifies the runtime for a provider release using the
+// validation manifest and the published artifact targets. A release with
+// platform-specific artifacts is executable regardless of whether the
+// platform-neutral validation manifest retains an entrypoint, because
+// ProjectManifest strips entrypoint and artifacts for static validation.
+func RuntimeForRelease(kind string, manifest *providermanifestv1.Manifest, artifacts Artifacts) string {
+	switch providermanifestv1.NormalizeKind(kind) {
+	case providermanifestv1.KindUI:
+		return RuntimeUI
+	case providermanifestv1.KindApp:
+		if hasPlatformArtifacts(artifacts) {
+			return RuntimeExecutable
+		}
+		if manifest != nil && manifest.IsDeclarativeOnlyProvider() {
+			return RuntimeDeclarative
+		}
+	}
+	return RuntimeExecutable
+}
+
+func hasPlatformArtifacts(artifacts Artifacts) bool {
+	for target := range artifacts {
+		if strings.TrimSpace(target) != "" && strings.TrimSpace(target) != GenericTarget {
+			return true
+		}
+	}
+	return false
 }
 
 func CatalogRequired(kind string, manifest *providermanifestv1.Manifest) bool {

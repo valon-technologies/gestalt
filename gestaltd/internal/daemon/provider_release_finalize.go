@@ -252,7 +252,6 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		Package:       manifest.Source,
 		Kind:          manifest.Kind,
 		Version:       version,
-		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, staticManifest),
 		Artifacts:     providerrelease.Artifacts{},
 		StaticValidation: &providerrelease.StaticValidation{
 			Manifest: staticManifest,
@@ -269,6 +268,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		}
 		metadata.Artifacts[target] = providerrelease.Artifact{Path: filepath.Base(archive.Path), SHA256: archive.SHA256}
 	}
+	metadata.Runtime = providerrelease.RuntimeForRelease(manifest.Kind, staticManifest, metadata.Artifacts)
 	if err := providerrelease.ValidateMetadata(metadata); err != nil {
 		return nil, fmt.Errorf("validate provider release metadata: %w", err)
 	}

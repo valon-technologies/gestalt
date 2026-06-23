@@ -487,3 +487,111 @@ func uiReleaseManifestForTest(version string) *providermanifestv1.Manifest {
 		Spec:        &providermanifestv1.Spec{AssetRoot: uiTestAssetRoot},
 	}
 }
+
+func TestProviderReleaseMetadataClassifiesHybridAppAsExecutable(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
+source: github.com/testowner/apps/hybrid-test
+version: 1.0.0
+displayName: Hybrid App
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    openapi:
+      connection: default
+      document: openapi.yaml
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"provider": "",
+		"openapi.yaml": `openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: ok
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.Runtime != providerrelease.RuntimeExecutable {
+		t.Fatalf("runtime = %q, want %q for hybrid app with entrypoint + spec surface", metadata.Runtime, providerrelease.RuntimeExecutable)
+	}
+}
+
+func TestProviderReleaseMetadataClassifiesSpecOnlyAppAsDeclarative(t *testing.T) {
+	t.Parallel()
+
+	packageDir := t.TempDir()
+	rawManifest := `kind: app
+source: github.com/testowner/apps/spec-only-test
+version: 1.0.0
+displayName: Spec Only App
+spec:
+  surfaces:
+    openapi:
+      connection: default
+      document: openapi.yaml
+  connections:
+    default:
+      auth:
+        type: none
+`
+	if err := os.WriteFile(filepath.Join(packageDir, "manifest.yaml"), []byte(rawManifest), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, "openapi.yaml"), []byte(`openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: ok
+`), 0o644); err != nil {
+		t.Fatalf("write openapi: %v", err)
+	}
+	_, manifest, _, err := providerpkg.LoadManifestFromPath(packageDir)
+	if err != nil {
+		t.Fatalf("LoadManifestFromPath: %v", err)
+	}
+	outputDir := t.TempDir()
+	archive := filepath.Join(outputDir, "gestalt-app-spec-only-test_v1.0.0.tar.gz")
+	if err := providerpkg.CreatePackageFromDir(packageDir, archive); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	archiveSHA, err := providerpkg.ArchiveDigest(archive)
+	if err != nil {
+		t.Fatalf("ArchiveDigest: %v", err)
+	}
+
+	metadata, err := buildProviderReleaseMetadata(
+		manifest,
+		"1.0.0",
+		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerrelease.GenericTarget}},
+	)
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.Runtime != providerrelease.RuntimeDeclarative {
+		t.Fatalf("runtime = %q, want %q for spec-only app without entrypoint", metadata.Runtime, providerrelease.RuntimeDeclarative)
+	}
+}
