@@ -84,10 +84,11 @@ type LockEntry struct {
 	ValidationManifest *providermanifestv1.Manifest `json:"manifest,omitempty"`
 	CatalogAvailable   bool                         `json:"catalogAvailable,omitempty"`
 	CatalogFingerprint string                       `json:"catalogFingerprint,omitempty"`
-	CatalogSessionOnly bool                         `json:"catalogSessionOnly,omitempty"`
-	ArtifactManifest   string                       `json:"-"`
-	Executable         string                       `json:"-"`
-	AssetRoot          string                       `json:"-"`
+	CatalogSessionOnly    bool                         `json:"catalogSessionOnly,omitempty"`
+	SynthesizedValidation bool                         `json:"synthesizedValidation,omitempty"`
+	ArtifactManifest      string                       `json:"-"`
+	Executable            string                       `json:"-"`
+	AssetRoot             string                       `json:"-"`
 }
 
 type StaticValidationOptions struct {
@@ -3064,6 +3065,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	entry.ValidationManifest = staticManifest
 	entry.CatalogAvailable = bundle.Catalog != nil
 	entry.CatalogSessionOnly = bundle.Catalog == nil && providerrelease.CatalogSessionModeAllowed(metadata.Kind, bundle.Manifest)
+	entry.SynthesizedValidation = bundle.Synthesized
 
 	currentPlatform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, currentPlatform)
@@ -3125,7 +3127,16 @@ func validateInstalledPackageMatchesReleaseBundle(subject string, installed *ins
 		return fmt.Errorf("%s project installed validation manifest: %w", subject, err)
 	}
 	addCatalogOperationIDsToManifest(manifest, bundle.Catalog)
-	if !providerManifestsEqual(manifest, entry.ValidationManifest) {
+	if entry.SynthesizedValidation {
+		// The release metadata predates staticValidation; the validation
+		// manifest was synthesized from identity fields. Only check that
+		// the installed manifest's identity matches, not the full JSON.
+		if manifest.Kind != entry.ValidationManifest.Kind ||
+			strings.TrimSpace(manifest.Source) != strings.TrimSpace(entry.ValidationManifest.Source) ||
+			strings.TrimSpace(manifest.Version) != strings.TrimSpace(entry.ValidationManifest.Version) {
+			return fmt.Errorf("%s installed package identity does not match release metadata", subject)
+		}
+	} else if !providerManifestsEqual(manifest, entry.ValidationManifest) {
 		return fmt.Errorf("%s installed package manifest does not match provider release validation manifest", subject)
 	}
 	if entry.CatalogSessionOnly {

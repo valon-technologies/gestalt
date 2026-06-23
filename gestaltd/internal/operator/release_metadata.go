@@ -55,9 +55,10 @@ type gitHubReleaseByTagResponse struct {
 }
 
 type providerReleaseValidationBundle struct {
-	Metadata *providerrelease.Metadata
-	Manifest *providermanifestv1.Manifest
-	Catalog  *catalog.Catalog
+	Metadata    *providerrelease.Metadata
+	Manifest    *providermanifestv1.Manifest
+	Catalog     *catalog.Catalog
+	Synthesized bool
 }
 
 type sidecarProviderReleaseMetadata struct {
@@ -122,9 +123,10 @@ func fetchProviderReleaseBundle(ctx context.Context, client *http.Client, metada
 		return providerReleaseValidationBundle{}, "", nil, err
 	}
 	return providerReleaseValidationBundle{
-		Metadata: metadata,
-		Manifest: metadata.StaticValidation.Manifest,
-		Catalog:  metadata.StaticValidation.Catalog,
+		Metadata:    metadata,
+		Manifest:    metadata.StaticValidation.Manifest,
+		Catalog:     metadata.StaticValidation.Catalog,
+		Synthesized: metadata.StaticValidation.Synthesized,
 	}, resolvedMetadataLocation, gitHubReleaseAssets, nil
 }
 

@@ -47,6 +47,10 @@ type StaticValidation struct {
 	Manifest           *providermanifestv1.Manifest `yaml:"manifest,omitempty"`
 	Catalog            *catalog.Catalog             `yaml:"catalog,omitempty"`
 	CatalogSessionOnly bool                         `yaml:"catalogSessionOnly,omitempty"`
+	// Synthesized is true when the Manifest was derived from the release
+	// metadata's own identity fields because the original provider-release.yaml
+	// lacked a staticValidation section. This is not serialized to YAML.
+	Synthesized bool `yaml:"-"`
 }
 
 type staticValidationYAML struct {
@@ -164,8 +168,22 @@ func ValidateMetadata(metadata *Metadata) error {
 	default:
 		return fmt.Errorf("provider release runtime %q is not supported", metadata.Runtime)
 	}
-	if metadata.StaticValidation == nil || metadata.StaticValidation.Manifest == nil {
-		return fmt.Errorf("provider release validation manifest is required")
+	if metadata.StaticValidation == nil {
+		metadata.StaticValidation = &StaticValidation{}
+	}
+	if metadata.StaticValidation.Manifest == nil {
+		// Backward compatibility: older provider-release.yaml metadata
+		// published before staticValidation was added lacks a validation
+		// manifest. Synthesize a minimal one from the metadata's own
+		// identity fields so the release remains usable without requiring
+		// a re-publish. The cross-validation below is effectively a no-op
+		// since the manifest is derived from the metadata itself.
+		metadata.StaticValidation.Manifest = &providermanifestv1.Manifest{
+			Kind:    metadata.Kind,
+			Source:  strings.TrimSpace(metadata.Package),
+			Version: strings.TrimSpace(metadata.Version),
+		}
+		metadata.StaticValidation.Synthesized = true
 	}
 	manifest := metadata.StaticValidation.Manifest
 	inheritValidationManifestIdentity(metadata, manifest)

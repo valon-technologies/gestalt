@@ -115,3 +115,40 @@ func validReleaseMetadataForTest() *Metadata {
 		},
 	}
 }
+
+const releaseMetadataWithoutStaticValidationYAML = `schema: gestaltd-provider-release
+schemaVersion: 1
+package: github.com/valon-technologies/gestalt-providers/externalcredentials/default
+kind: externalcredentials
+version: 0.0.1-alpha.1
+runtime: executable
+artifacts:
+  darwin/arm64:
+    path: gestalt-app-default_v0.0.1-alpha.1_darwin_arm64.tar.gz
+    sha256: afd9532e25e44bd3664412d59837e5c8bb0e5f6e8966c61b8577a81fdb0c3111
+  linux/amd64:
+    path: gestalt-app-default_v0.0.1-alpha.1_linux_amd64.tar.gz
+    sha256: 08d7c8aa0e8f7995573f8b2c7292a0218fa35f4c3902b0d71e51756e98d05616
+`
+
+func TestDecodeMetadataWithoutStaticValidationSynthesizesManifest(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := Decode([]byte(releaseMetadataWithoutStaticValidationYAML))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Manifest == nil {
+		t.Fatalf("expected synthesized StaticValidation.Manifest, got nil")
+	}
+	manifest := metadata.StaticValidation.Manifest
+	if manifest.Kind != "externalcredentials" {
+		t.Fatalf("manifest.Kind = %q, want %q", manifest.Kind, "externalcredentials")
+	}
+	if manifest.Source != "github.com/valon-technologies/gestalt-providers/externalcredentials/default" {
+		t.Fatalf("manifest.Source = %q, want package", manifest.Source)
+	}
+	if manifest.Version != "0.0.1-alpha.1" {
+		t.Fatalf("manifest.Version = %q, want version", manifest.Version)
+	}
+}
