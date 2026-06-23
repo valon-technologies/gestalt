@@ -83,9 +83,8 @@ def derive_build_args(root: pathlib.Path) -> BuildArgs | None:
         manifest = read_source_manifest(root)
         if manifest.source is None:
             raise RuntimeError("manifest source is required")
-        output_path = manifest.entrypoint_artifact_path
-        if output_path is None:
-            output_path = f".gestalt/build/{manifest.source.rsplit('/', 1)[-1]}"
+        source_name = manifest.source.rsplit("/", 1)[-1]
+        output_path = f".gestaltd/bin/{source_name}"
         return BuildArgs(
             root=root,
             target=read_pyproject_provider(root),

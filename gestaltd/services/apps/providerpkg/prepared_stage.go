@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	releaseOwnedUIRoot          = "_owned_ui"
-	preparedReleaseBinaryPrefix = "gestalt-app-"
-	windowsOS                   = "windows"
-	windowsExecutableSuffix     = ".exe"
+	releaseOwnedUIRoot      = "_owned_ui"
+	windowsOS               = "windows"
+	windowsExecutableSuffix = ".exe"
 )
 
 type StagePreparedInstallOptions struct {
@@ -117,13 +116,6 @@ func sourceStaticCatalogShouldBePreparedForPackaging(manifestPath string, manife
 	if !SourceBuildProducesOutput(manifest) {
 		return false, nil
 	}
-	entry, err := EffectiveSourceEntrypointForKind(manifest, providermanifestv1.KindApp)
-	if err != nil {
-		return false, err
-	}
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return false, nil
-	}
 	if explicitRunStaleCatalog(manifest) {
 		return true, nil
 	}
@@ -196,11 +188,18 @@ func stagePreparedInstallDir(manifestPath, stagingDir string, srcManifest *provi
 			return nil, err
 		}
 	}
-	stagedManifest, err := buildPreparedInstallSourceManifest(srcManifest, version, sourceDir, goos, goarch)
+	stagedManifest, err := buildPreparedInstallSourceManifest(srcManifest, version, sourceDir, preparedExecutableName(opts.AppName, srcManifest), goos, goarch)
 	if err != nil {
 		return nil, err
 	}
-	if err := copyPreparedInstallSupportFiles(stagedManifest, sourceDir, stagingDir, true); err != nil {
+	includeArtifacts := true
+	if stagedManifest.Entrypoint != nil && strings.TrimSpace(stagedManifest.Entrypoint.ArtifactPath) != "" {
+		if err := stagePreparedExecutable(sourceDir, stagingDir, srcManifest, preparedExecutableName(opts.AppName, srcManifest), goos); err != nil {
+			return nil, err
+		}
+		includeArtifacts = false
+	}
+	if err := copyPreparedInstallSupportFiles(stagedManifest, sourceDir, stagingDir, includeArtifacts); err != nil {
 		return nil, err
 	}
 
@@ -237,43 +236,47 @@ func validatePreparedInstallDeclaredBuild(root string, manifest *providermanifes
 	if kind == providermanifestv1.KindUI {
 		return nil
 	}
-	entry, err := EffectiveSourceEntrypointForKind(manifest, kind)
+	resolved, err := ResolveSourceReleaseBuild(root, manifest)
 	if err != nil {
-		if releaseRequiresBuildForKind(manifest, kind) {
-			return missingDeclaredSourceBuildError(manifest, kind)
+		return err
+	}
+	if resolved.Mode.RequiresPlatformBuild() {
+		return missingDeclaredSourceBuildError(manifest, kind)
+	}
+	return nil
+}
+
+func preparedExecutableName(configuredName string, manifest *providermanifestv1.Manifest) string {
+	if strings.TrimSpace(configuredName) != "" {
+		return strings.TrimSpace(configuredName)
+	}
+	name, err := SourceNameFromManifest(manifest)
+	if err != nil {
+		return "provider"
+	}
+	return name
+}
+
+func stagePreparedExecutable(sourceDir, stagingDir string, manifest *providermanifestv1.Manifest, configuredName, goos string) error {
+	sourceRel, err := SourceBuildOutputPath(manifest, goos)
+	if err != nil {
+		return err
+	}
+	stagedRel := PackageExecutablePath(configuredName, goos)
+	srcPath := filepath.Join(sourceDir, filepath.FromSlash(sourceRel))
+	dstPath := filepath.Join(stagingDir, filepath.FromSlash(stagedRel))
+	if err := copyPreparedInstallFile(srcPath, dstPath); err != nil {
+		return fmt.Errorf("stage executable %s: %w", stagedRel, err)
+	}
+	if goos != windowsOS {
+		if err := os.Chmod(dstPath, 0o755); err != nil {
+			return fmt.Errorf("chmod staged executable %s: %w", stagedRel, err)
 		}
-		return nil
 	}
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return nil
-	}
-	if artifactExistsForEntrypoint(root, entry) {
-		return nil
-	}
-	return missingDeclaredSourceBuildError(manifest, kind)
+	return nil
 }
 
-func artifactExistsForEntrypoint(root string, entry *providermanifestv1.Entrypoint) bool {
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return false
-	}
-	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)))
-	return err == nil
-}
-
-func preparedInstallEntrypoint(manifest *providermanifestv1.Manifest, kind string) (*providermanifestv1.Entrypoint, error) {
-	if manifest != nil && manifest.Entrypoint != nil && strings.TrimSpace(manifest.Entrypoint.ArtifactPath) != "" {
-		cloned := *manifest.Entrypoint
-		cloned.Args = append([]string(nil), manifest.Entrypoint.Args...)
-		return &cloned, nil
-	}
-	if !SourceEntrypointMayDefault(manifest, kind) {
-		return nil, nil
-	}
-	return EffectiveSourceEntrypointForKind(manifest, kind)
-}
-
-func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest, version, sourceDir, goos, goarch string) (*providermanifestv1.Manifest, error) {
+func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest, version, sourceDir, configuredName, goos, goarch string) (*providermanifestv1.Manifest, error) {
 	manifest, err := cloneManifest(srcManifest)
 	if err != nil {
 		return nil, fmt.Errorf("clone manifest: %w", err)
@@ -282,10 +285,6 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	manifest.Version = version
 
 	kind, err := ManifestKind(manifest)
-	if err != nil {
-		return nil, err
-	}
-	entry, err := preparedInstallEntrypoint(srcManifest, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -300,18 +299,23 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 		}
 		manifest.Spec.AssetRoot = uiAssetRoot
 	}
-	if kind != providermanifestv1.KindUI && entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
-		manifest.Entrypoint = &providermanifestv1.Entrypoint{
-			ArtifactPath: entry.ArtifactPath,
-			Args:         append([]string(nil), entry.Args...),
-		}
-		artifactPath := entry.ArtifactPath
-		digest, err := FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifactPath)))
+	producesOutput, err := SourceReleaseBuildProducesOutput(sourceDir, srcManifest)
+	if err != nil {
+		return nil, err
+	}
+	if kind != providermanifestv1.KindUI && producesOutput {
+		sourceRel, err := SourceBuildOutputPath(srcManifest, goos)
 		if err != nil {
-			return nil, fmt.Errorf("hash artifact %s: %w", artifactPath, err)
+			return nil, err
 		}
+		stagedRel := PackageExecutablePath(configuredName, goos)
+		digest, err := FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(sourceRel)))
+		if err != nil {
+			return nil, fmt.Errorf("hash artifact %s: %w", sourceRel, err)
+		}
+		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: stagedRel}
 		manifest.Artifacts = []providermanifestv1.Artifact{
-			{OS: goos, Arch: goarch, Path: artifactPath, SHA256: digest},
+			{OS: goos, Arch: goarch, Path: stagedRel, SHA256: digest},
 		}
 	}
 
@@ -485,14 +489,6 @@ func packagedOwnedUIDir(rel string) string {
 		return releaseOwnedUIRoot
 	}
 	return path.Join(releaseOwnedUIRoot, parent)
-}
-
-func stagedReleaseBinaryName(pluginName, goos string) string {
-	binaryName := preparedReleaseBinaryPrefix + pluginName
-	if goos == windowsOS {
-		return binaryName + windowsExecutableSuffix
-	}
-	return binaryName
 }
 
 func normalizePreparedInstallPath(rel string) (string, error) {

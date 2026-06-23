@@ -369,11 +369,12 @@ func TestRun_ProviderPackageAndReleasePreservesYAMLManifestFormatAndConnectionDe
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: ".gestalt/build/provider"},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "bin/release-test"},
 	})
 	if err := os.Remove(filepath.Join(pluginDir, providerpkg.ManifestFile)); err != nil {
 		t.Fatalf("remove manifest.json: %v", err)
 	}
+	writeTestFile(t, pluginDir, "build.sh", []byte("mkdir -p .gestaltd/bin\ngo build -o .gestaltd/bin/provider-yaml ./cmd/provider\n"), 0o755)
 
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-yaml.1"
@@ -527,7 +528,7 @@ func TestRun_ProviderPackageRejectsHybridExecutableDuplicateEffectiveOperation(t
 	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
 		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
 	}
-	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatFromPath(manifestPath))
+	manifestData, err := encodeTestManifestFormat(manifest, providerpkg.ManifestFormatFromPath(manifestPath))
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
@@ -563,7 +564,7 @@ func TestRun_ProviderPackageAndReleaseCompilesProviderWithoutSourceArtifacts(t *
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixtureWithoutCatalog(t, t.TempDir())
-	const defaultArtifactPath = ".gestalt/build/release-test"
+	const defaultArtifactPath = ".gestaltd/bin/release-test"
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
 		Source:      releaseTestSource,
@@ -578,7 +579,7 @@ func TestRun_ProviderPackageAndReleaseCompilesProviderWithoutSourceArtifacts(t *
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
 	})
-	writeTestFile(t, pluginDir, "build.sh", []byte("mkdir -p .gestalt/build\ngo build -o "+defaultArtifactPath+" ./cmd/provider\n"), 0o755)
+	writeTestFile(t, pluginDir, "build.sh", []byte("mkdir -p .gestaltd/bin\ngo build -o "+defaultArtifactPath+" ./cmd/provider\n"), 0o755)
 	_ = os.Remove(filepath.Join(pluginDir, providerpkg.StaticCatalogFile))
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-source.1"
@@ -593,10 +594,11 @@ func TestRun_ProviderPackageAndReleaseCompilesProviderWithoutSourceArtifacts(t *
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != defaultArtifactPath {
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != providerpkg.PackageExecutablePath(releaseTestAppName, runtime.GOOS) {
 		t.Fatalf("artifacts = %+v", manifest.Artifacts)
 	}
-	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != defaultArtifactPath {
+	packageBinary := providerpkg.PackageExecutablePath(releaseTestAppName, runtime.GOOS)
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != packageBinary {
 		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoint)
 	}
 	if manifest.Spec == nil || manifest.Spec.ConfigSchemaPath != releaseProviderSchemaPath {
@@ -642,7 +644,7 @@ func TestRun_ProviderPackageRejectsSDKSourceProviderWithoutBuildCommand(t *testi
 	if err == nil {
 		t.Fatalf("expected provider release to reject SDK source provider without build.command\n%s", out)
 	}
-	if !strings.Contains(string(out), "declare object-form build.command and entrypoint.artifactPath") {
+	if !strings.Contains(string(out), "declare object-form build.command") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -661,7 +663,7 @@ func TestRun_ProviderPackageRejectsPrebuiltExecutableProvider(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected provider release to reject executable provider without build.command\n%s", out)
 	}
-	if !strings.Contains(string(out), "provider package requires build.command for executable source providers") {
+	if !strings.Contains(string(out), "declare object-form build.command") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -680,7 +682,7 @@ func TestRun_ProviderPackageRejectsExplicitPlatformForPrebuiltProvider(t *testin
 	if err == nil {
 		t.Fatalf("expected provider release to reject explicit platform for prebuilt provider\n%s", out)
 	}
-	if !strings.Contains(string(out), "--platform requires build.command for executable source providers") {
+	if !strings.Contains(string(out), "declare object-form build.command") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -701,7 +703,7 @@ func TestRun_ProviderPackageRejectsGoModuleWithoutBuildCommand(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected provider release to reject executable provider without build.command\n%s", out)
 	}
-	if !strings.Contains(string(out), "provider package requires build.command for executable source providers") {
+	if !strings.Contains(string(out), "declare object-form build.command") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }

@@ -333,9 +333,7 @@ class BuildTests(unittest.TestCase):
             root = pathlib.Path(tmpdir)
             (root / "manifest.yaml").write_text(
                 "kind: app\n"
-                "source: github.com/valon-technologies/valon-tools/apps/code-review\n"
-                "entrypoint:\n"
-                "  artifactPath: .gestalt/build/provider\n",
+                "source: github.com/valon-technologies/valon-tools/apps/code-review\n",
                 encoding="utf-8",
             )
             (root / "pyproject.toml").write_text(
@@ -353,7 +351,7 @@ class BuildTests(unittest.TestCase):
         assert args is not None
         self.assertEqual(args.root, root)
         self.assertEqual(args.target, "provider")
-        self.assertEqual(args.output_path, pathlib.Path(".gestalt/build/provider"))
+        self.assertEqual(args.output_path, pathlib.Path(".gestaltd/bin/code-review"))
         self.assertEqual(args.app_name, "code-review")
         self.assertEqual(args.runtime_kind, "integration")
         self.assertEqual(args.goos, "linux")
@@ -365,9 +363,7 @@ class BuildTests(unittest.TestCase):
             root = pathlib.Path(tmpdir)
             (root / "manifest.yaml").write_text(
                 "kind: identity\n"
-                "source: github.com/valon-technologies/valon-tools/identity/local\n"
-                "entrypoint:\n"
-                "  artifactPath: .gestalt/build/local\n",
+                "source: github.com/valon-technologies/valon-tools/identity/local\n",
                 encoding="utf-8",
             )
             (root / "pyproject.toml").write_text(
@@ -388,9 +384,7 @@ class BuildTests(unittest.TestCase):
             root = pathlib.Path(tmpdir)
             (root / "manifest.yaml").write_text(
                 "kind: app\n"
-                "source: github.com/x/y\n"
-                "entrypoint:\n"
-                "  artifactPath: out\n",
+                "source: github.com/x/y\n",
                 encoding="utf-8",
             )
             (root / "pyproject.toml").write_text(
@@ -412,8 +406,8 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(args.goos, "darwin")
         self.assertEqual(args.goarch, "arm64")
 
-    def test_derive_build_args_missing_entrypoint_uses_default_output(self) -> None:
-        """A manifest without entrypoint.artifactPath derives the default output path."""
+    def test_derive_build_args_derives_output_from_source(self) -> None:
+        """Build output path is always .gestaltd/bin/<source-name>."""
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
             (root / "manifest.yaml").write_text(
@@ -432,7 +426,7 @@ class BuildTests(unittest.TestCase):
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result.output_path, pathlib.Path(".gestalt/build/example-agent"))
+        self.assertEqual(result.output_path, pathlib.Path(".gestaltd/bin/example-agent"))
         self.assertEqual(result.app_name, "example-agent")
 
 

@@ -1,8 +1,6 @@
 package providerpkg
 
 import (
-	"strings"
-
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -12,7 +10,6 @@ const (
 	SourceReleaseBuildNone SourceReleaseBuildMode = iota
 	SourceReleaseBuildDeclared
 	SourceReleaseBuildImplicitGo
-	SourceReleaseBuildPrebuilt
 )
 
 func (m SourceReleaseBuildMode) RequiresPlatformBuild() bool {
@@ -20,9 +17,8 @@ func (m SourceReleaseBuildMode) RequiresPlatformBuild() bool {
 }
 
 type ResolvedSourceReleaseBuild struct {
-	Kind       string
-	Mode       SourceReleaseBuildMode
-	Entrypoint *providermanifestv1.Entrypoint
+	Kind string
+	Mode SourceReleaseBuildMode
 }
 
 // ResolveSourceReleaseBuild is the canonical release-build decision for a source
@@ -42,44 +38,16 @@ func ResolveSourceReleaseBuild(root string, manifest *providermanifestv1.Manifes
 		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildNone}, nil
 	}
 
-	entry, err := effectiveReleaseEntrypoint(manifest, kind)
-	if err != nil {
-		return ResolvedSourceReleaseBuild{}, err
-	}
-	if entry == nil {
-		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildNone}, nil
-	}
-
 	if SourceBuildProducesOutput(manifest) {
-		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildDeclared, Entrypoint: entry}, nil
+		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildDeclared}, nil
 	}
 	if root != "" && HasGoProviderPackage(root) && SupportsImplicitGoBuild(kind) {
-		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildImplicitGo, Entrypoint: entry}, nil
-	}
-	if manifest.Entrypoint != nil && strings.TrimSpace(manifest.Entrypoint.ArtifactPath) != "" {
-		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildPrebuilt, Entrypoint: entry}, nil
+		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildImplicitGo}, nil
 	}
 	if releaseRequiresBuildForKind(manifest, kind) {
 		return ResolvedSourceReleaseBuild{}, missingDeclaredSourceBuildError(manifest, kind)
 	}
-	return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildNone, Entrypoint: entry}, nil
-}
-
-func effectiveReleaseEntrypoint(manifest *providermanifestv1.Manifest, kind string) (*providermanifestv1.Entrypoint, error) {
-	entry, err := EffectiveSourceEntrypointForKind(manifest, kind)
-	if err != nil {
-		if releaseRequiresBuildForKind(manifest, kind) {
-			return nil, missingDeclaredSourceBuildError(manifest, kind)
-		}
-		return nil, nil
-	}
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		if releaseRequiresBuildForKind(manifest, kind) {
-			return nil, missingDeclaredSourceBuildError(manifest, kind)
-		}
-		return nil, nil
-	}
-	return entry, nil
+	return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildNone}, nil
 }
 
 func SourceReleaseBuildProducesOutput(root string, manifest *providermanifestv1.Manifest) (bool, error) {

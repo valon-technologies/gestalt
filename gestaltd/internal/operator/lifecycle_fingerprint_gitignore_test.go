@@ -11,9 +11,9 @@ import (
 
 // writeBuildableSourceProviderTree writes a provider dir whose manifest declares
 // a build phase (so fingerprintLocalSourceDigest takes the build-inputs path)
-// with a no-op build command and the given entrypoint artifact path. The
-// provider binary at artifactPath is written so SourceBuildOutput can resolve.
-func writeBuildableSourceProviderTree(t *testing.T, dir, source, artifactPath string, buildInputs []string) {
+// with a no-op build command and the given build output path. The provider
+// binary at buildOutput is written so SourceBuildOutput can resolve.
+func writeBuildableSourceProviderTree(t *testing.T, dir, source, buildOutput string, buildInputs []string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir provider dir: %v", err)
@@ -28,9 +28,8 @@ func writeBuildableSourceProviderTree(t *testing.T, dir, source, artifactPath st
 			Command: []string{"true"},
 			Inputs:  buildInputs,
 		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
@@ -40,10 +39,10 @@ func writeBuildableSourceProviderTree(t *testing.T, dir, source, artifactPath st
 	if err := os.WriteFile(filepath.Join(dir, "provider.ts"), []byte("export const provider = {};\n"), 0o644); err != nil {
 		t.Fatalf("write provider.ts: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, artifactPath)), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, buildOutput)), 0o755); err != nil {
 		t.Fatalf("mkdir artifact parent: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, artifactPath), []byte("binary"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, buildOutput), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("write artifact: %v", err)
 	}
 }
@@ -78,7 +77,7 @@ func TestFingerprintGitignoreRepoRootExclusion(t *testing.T) {
 
 	repoDir := t.TempDir()
 	providerDir := filepath.Join(repoDir, "apps", "alpha")
-	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", "provider", nil)
+	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", ".gestaltd/bin/alpha", nil)
 	if err := os.WriteFile(filepath.Join(repoDir, ".gitignore"), []byte("node_modules/\n.venv/\n"), 0o644); err != nil {
 		t.Fatalf("write repo gitignore: %v", err)
 	}
@@ -90,7 +89,7 @@ func TestFingerprintGitignoreRepoRootExclusion(t *testing.T) {
 	for _, ignored := range []string{
 		filepath.Join(providerDir, "node_modules", "dep", "index.js"),
 		filepath.Join(providerDir, ".venv", "lib", "x.py"),
-		filepath.Join(providerDir, "provider"), // declared build output
+		filepath.Join(providerDir, ".gestaltd", "bin", "alpha"), // declared build output
 	} {
 		if err := os.MkdirAll(filepath.Dir(ignored), 0o755); err != nil {
 			t.Fatalf("mkdir ignored: %v", err)
@@ -118,7 +117,7 @@ func TestFingerprintNestedGitignoreHonored(t *testing.T) {
 
 	repoDir := t.TempDir()
 	providerDir := filepath.Join(repoDir, "apps", "alpha")
-	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", "provider", nil)
+	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", ".gestaltd/bin/alpha", nil)
 	if err := os.WriteFile(filepath.Join(repoDir, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
 		t.Fatalf("write repo gitignore: %v", err)
 	}
@@ -149,7 +148,7 @@ func TestFingerprintHashesNonGitignoredTargetDir(t *testing.T) {
 
 	repoDir := t.TempDir()
 	providerDir := filepath.Join(repoDir, "apps", "alpha")
-	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", "provider", nil)
+	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", ".gestaltd/bin/alpha", nil)
 	targetDir := filepath.Join(providerDir, "target")
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		t.Fatalf("mkdir target: %v", err)
@@ -179,7 +178,7 @@ func TestFingerprintExplicitInputsBeatGitignore(t *testing.T) {
 	repoDir := t.TempDir()
 	providerDir := filepath.Join(repoDir, "apps", "alpha")
 	const lockedFile = "bun.lock"
-	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", "provider", []string{lockedFile})
+	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", ".gestaltd/bin/alpha", []string{lockedFile})
 	if err := os.WriteFile(filepath.Join(repoDir, ".gitignore"), []byte("bun.lock\nnode_modules/\n"), 0o644); err != nil {
 		t.Fatalf("write repo gitignore: %v", err)
 	}
@@ -206,7 +205,7 @@ func TestFingerprintNoEnclosingRepo(t *testing.T) {
 	t.Parallel()
 
 	providerDir := t.TempDir()
-	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", "provider", nil)
+	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", ".gestaltd/bin/alpha", nil)
 	if err := os.WriteFile(filepath.Join(providerDir, "extra.txt"), []byte("tracked\n"), 0o644); err != nil {
 		t.Fatalf("write extra.txt: %v", err)
 	}
@@ -242,7 +241,7 @@ func writeInstallOnlyProviderTree(t *testing.T, dir, source string, installInput
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
 	}
-	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	data, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
@@ -254,6 +253,13 @@ func writeInstallOnlyProviderTree(t *testing.T, dir, source string, installInput
 	providerScript := "#!/bin/sh\ncat > \"$GESTALT_APP_WRITE_CATALOG\" <<'CATALOG'\nname: alpha\noperations:\n  - id: ping\n    method: GET\nCATALOG\n"
 	if err := os.WriteFile(filepath.Join(dir, "provider"), []byte(providerScript), 0o755); err != nil {
 		t.Fatalf("write provider: %v", err)
+	}
+	buildOutputDir := filepath.Join(dir, ".gestaltd", "bin")
+	if err := os.MkdirAll(buildOutputDir, 0o755); err != nil {
+		t.Fatalf("mkdir build output dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(buildOutputDir, "alpha"), []byte(providerScript), 0o755); err != nil {
+		t.Fatalf("write build output: %v", err)
 	}
 }
 
@@ -300,7 +306,7 @@ func TestFingerprintBuildInputsDirHonorsMatcher(t *testing.T) {
 
 	repoDir := t.TempDir()
 	providerDir := filepath.Join(repoDir, "apps", "alpha")
-	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", "provider", []string{"deps"})
+	writeBuildableSourceProviderTree(t, providerDir, "github.com/acme/apps/alpha", ".gestaltd/bin/alpha", []string{"deps"})
 	if err := os.WriteFile(filepath.Join(repoDir, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
 		t.Fatalf("write repo gitignore: %v", err)
 	}

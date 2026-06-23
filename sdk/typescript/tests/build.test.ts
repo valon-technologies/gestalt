@@ -134,11 +134,11 @@ test("build arg parsing validates required arguments", () => {
   );
 });
 
-function writeDerivationFixture(kind: string, source: string, artifactPath: string, providerTarget: string): string {
+function writeDerivationFixture(kind: string, source: string, providerTarget: string): string {
   const root = mkdtempSync(join(tmpdir(), "gestalt-derive-"));
   writeFileSync(
     join(root, "manifest.yaml"),
-    `kind: ${kind}\nsource: ${source}\nentrypoint:\n  artifactPath: ${artifactPath}\n`,
+    `kind: ${kind}\nsource: ${source}\n`,
     "utf8",
   );
   writeFileSync(
@@ -156,7 +156,6 @@ test("deriveBuildArgs reads manifest and package metadata", () => {
   const root = writeDerivationFixture(
     "app",
     "github.com/valon-technologies/valon-tools/apps/agent-trace-viewer",
-    ".gestalt/build/provider",
     "./provider.ts#provider",
   );
   try {
@@ -169,7 +168,7 @@ test("deriveBuildArgs reads manifest and package metadata", () => {
       expect(args).toBeDefined();
       expect(args!.root).toBe(root);
       expect(args!.target).toBe("app:./provider.ts#provider");
-      expect(args!.outputPath).toBe(".gestalt/build/provider");
+      expect(args!.outputPath).toBe(".gestaltd/bin/agent-trace-viewer");
       expect(args!.providerName).toBe("agent-trace-viewer");
       expect(args!.goos).toBe("linux");
       expect(args!.goarch).toBe("arm64");
@@ -194,7 +193,6 @@ test("deriveBuildArgs derives identity name from manifest source not package nam
   const root = writeDerivationFixture(
     "identity",
     "github.com/valon-technologies/valon-tools/identity/local",
-    ".gestalt/build/local",
     "./provider.ts#provider",
   );
   try {
@@ -202,13 +200,13 @@ test("deriveBuildArgs derives identity name from manifest source not package nam
     expect(args).toBeDefined();
     expect(args!.target).toBe("identity:./provider.ts#provider");
     expect(args!.providerName).toBe("local");
-    expect(args!.outputPath).toBe(".gestalt/build/local");
+    expect(args!.outputPath).toBe(".gestaltd/bin/local");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("deriveBuildArgs returns default output when entrypoint.artifactPath is missing", () => {
+test("deriveBuildArgs derives output path from manifest source", () => {
   const root = mkdtempSync(join(tmpdir(), "gestalt-derive-noentry-"));
   writeFileSync(
     join(root, "manifest.yaml"),
@@ -223,7 +221,7 @@ test("deriveBuildArgs returns default output when entrypoint.artifactPath is mis
   try {
     const args = deriveBuildArgs(root);
     expect(args).toBeDefined();
-    expect(args!.outputPath).toBe(".gestalt/build/example-agent");
+    expect(args!.outputPath).toBe(".gestaltd/bin/example-agent");
     expect(args!.providerName).toBe("example-agent");
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -209,7 +209,7 @@ func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePa
 		return "", fmt.Errorf("source.git is required")
 	}
 	repo, ref, manifestRel := git.NormalizedLocationParts()
-	cacheRoot := filepath.Join(paths.artifactsDir, ".gestaltd", "git-source-cache")
+	cacheRoot := filepath.Join(paths.artifactsDir, "git-source-cache")
 	cacheKey := sha256.Sum256([]byte(repo + "\x00" + ref))
 	checkoutDir := filepath.Join(cacheRoot, hex.EncodeToString(cacheKey[:]))
 	if err := ensureGitCheckout(ctx, checkoutDir, repo, ref); err != nil {

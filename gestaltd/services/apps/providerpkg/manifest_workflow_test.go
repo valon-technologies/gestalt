@@ -157,7 +157,7 @@ spec:
 	}
 }
 
-func TestManifestWorkflow_SourceExecutableDeclaresEntrypointNotArtifacts(t *testing.T) {
+func TestManifestWorkflow_SourceExecutableRejectsEntrypoint(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -171,15 +171,26 @@ func TestManifestWorkflow_SourceExecutableDeclaresEntrypointNotArtifacts(t *test
 		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 		DisplayName: "Source Only",
 	}
-	manifestPath := mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
-	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("source-only"), 0o755)
-
-	_, manifest, err := ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile: %v", err)
+	manifestPath := mustWriteManifestData(t, sourceDir, ManifestFile, mustRawManifestJSON(t, manifest))
+	if _, _, err := ReadSourceManifestFile(manifestPath); err == nil || !strings.Contains(err.Error(), "source manifests do not declare entrypoint.artifactPath") {
+		t.Fatalf("ReadSourceManifestFile error = %v, want source entrypoint rejection", err)
 	}
-	if len(manifest.Artifacts) != 0 {
-		t.Fatalf("source artifacts = %+v, want none", manifest.Artifacts)
+
+	buildOnlyPath := mustWriteManifestData(t, filepath.Join(root, "build-only"), "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/acme/apps/build-only",
+		Version: "0.0.1-alpha.1",
+		Spec:    &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"npm", "run", "build"},
+		},
+	}))
+	_, buildOnly, err := ReadSourceManifestFile(buildOnlyPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(build-only): %v", err)
+	}
+	if len(buildOnly.Artifacts) != 0 {
+		t.Fatalf("source artifacts = %+v, want none", buildOnly.Artifacts)
 	}
 
 	rejected := mustProviderManifest("github.com/acme/apps/source-only-artifacts", "0.0.1-alpha.1", testArtifactOS, testArtifactArch, artifactPath, "")
@@ -415,8 +426,6 @@ version: 1.0.0
 build:
   command: [sh, ./build.sh]
   typo: bad
-entrypoint:
-  artifactPath: provider
 spec:
   connections:
     default:
@@ -435,8 +444,6 @@ kind: app
 source: github.com/acme/apps/empty-source-run-command
 version: 1.0.0
 run: []
-entrypoint:
-  artifactPath: provider
 spec:
   connections:
     default:
@@ -455,8 +462,6 @@ kind: app
 source: github.com/acme/apps/empty-source-run-arg
 version: 1.0.0
 run: [uv, ""]
-entrypoint:
-  artifactPath: provider
 spec:
   connections:
     default:
@@ -476,8 +481,6 @@ source: github.com/acme/apps/legacy-source-run-prefix
 version: 1.0.0
 run:
   commandPrefix: [uv, run, --frozen]
-entrypoint:
-  artifactPath: provider
 spec:
   connections:
     default:
@@ -745,8 +748,6 @@ func TestManifestWorkflow_AcceptsAppRouteAuthReference(t *testing.T) {
 kind: app
 source: github.com/acme/apps/route-auth
 version: 1.0.0
-entrypoint:
-  artifactPath: provider
 spec:
   auth:
     provider: server
@@ -788,8 +789,6 @@ func TestManifestWorkflow_AcceptsNullAppRouteAuth(t *testing.T) {
 kind: app
 source: github.com/acme/apps/null-route-auth
 version: 1.0.0
-entrypoint:
-  artifactPath: provider
 spec:
   auth:
   connections:
@@ -851,8 +850,6 @@ func TestManifestWorkflow_AcceptsHostedHTTPBindingsAndSecuritySchemes(t *testing
 kind: app
 source: github.com/acme/apps/signed
 version: 1.0.0
-entrypoint:
-  artifactPath: provider
 spec:
   securitySchemes:
     signed:
@@ -1102,10 +1099,9 @@ func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testi
 	t.Parallel()
 
 	programmatic := &providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindApp,
-		Source:     "github.com/acme/apps/programmatic-default-connection",
-		Version:    "1.0.0",
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/acme/apps/programmatic-default-connection",
+		Version: "1.0.0",
 		Spec: &providermanifestv1.Spec{
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 				"default": {

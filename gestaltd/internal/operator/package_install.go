@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -31,6 +33,10 @@ func manifestNeedsExecutableArtifact(manifest *providermanifestv1.Manifest) bool
 }
 
 func installPackage(packagePath, destDir string) (*installedPackage, error) {
+	return installPackageAs(packagePath, destDir, "")
+}
+
+func installPackageAs(packagePath, destDir, configuredName string) (*installedPackage, error) {
 	_, manifest, err := packageio.ReadPackageManifest(packagePath)
 	if err != nil {
 		return nil, err
@@ -89,6 +95,12 @@ func installPackage(packagePath, destDir string) (*installedPackage, error) {
 		manifestPath = filepath.Join(destDir, packageio.ManifestFile)
 	}
 	manifest = packageio.ResolveManifestLocalReferences(manifest, manifestPath)
+	if configuredName == "" {
+		configuredName = filepath.Base(destDir)
+	}
+	if err := normalizeInstalledExecutable(destDir, manifest, configuredName); err != nil {
+		return nil, err
+	}
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
 		return nil, err
@@ -124,4 +136,56 @@ func executablePathForManifest(root string, manifest *providermanifestv1.Manifes
 		return "", fmt.Errorf("manifest entrypoint artifact_path is required")
 	}
 	return filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)), nil
+}
+
+func normalizeInstalledExecutable(root string, manifest *providermanifestv1.Manifest, configuredName string) error {
+	if manifest == nil || isUIOnly(manifest) {
+		return nil
+	}
+	kind, err := packageio.ManifestKind(manifest)
+	if err != nil {
+		return err
+	}
+	entry := packageio.EntrypointForKind(manifest, kind)
+	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+		return nil
+	}
+	goos := runtime.GOOS
+	if len(manifest.Artifacts) > 0 && manifest.Artifacts[0].OS != "" {
+		goos = manifest.Artifacts[0].OS
+	}
+	targetRel := packageio.InstalledExecutablePath(configuredName, goos)
+	if entry.ArtifactPath == targetRel {
+		return nil
+	}
+	currentPath := filepath.Join(root, filepath.FromSlash(entry.ArtifactPath))
+	targetPath := filepath.Join(root, filepath.FromSlash(targetRel))
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		return fmt.Errorf("create installed executable directory: %w", err)
+	}
+	if err := os.Rename(currentPath, targetPath); err != nil {
+		return fmt.Errorf("rename installed executable to %s: %w", targetRel, err)
+	}
+	digest, err := packageio.FileSHA256(targetPath)
+	if err != nil {
+		return fmt.Errorf("hash installed executable %s: %w", targetRel, err)
+	}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{
+		ArtifactPath: targetRel,
+		Args:         append([]string(nil), entry.Args...),
+	}
+	if len(manifest.Artifacts) > 0 {
+		manifest.Artifacts[0].Path = targetRel
+		manifest.Artifacts[0].SHA256 = digest
+	}
+	manifestPath, _ := packageio.FindManifestFile(root)
+	if manifestPath == "" {
+		manifestPath = filepath.Join(root, packageio.ManifestFile)
+	}
+	format := packageio.ManifestFormatFromPath(manifestPath)
+	data, err := packageio.EncodeManifestFormat(manifest, format)
+	if err != nil {
+		return fmt.Errorf("encode installed manifest: %w", err)
+	}
+	return os.WriteFile(manifestPath, data, 0o644)
 }

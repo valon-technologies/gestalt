@@ -79,8 +79,6 @@ install:
 build:
   command: [uv, run, python, -m, gestalt._build]
   inputs: [provider.py]
-entrypoint:
-  artifactPath: .gestalt/build/provider
 spec:
   connections:
     default:
@@ -134,8 +132,6 @@ version: 0.0.1-alpha.1
 install: [uv, sync, --frozen]
 build:
   command: [uv, run, python, -m, gestalt._build]
-entrypoint:
-  artifactPath: .gestalt/build/provider
 spec:
   connections:
     default:

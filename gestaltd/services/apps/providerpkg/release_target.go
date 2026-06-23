@@ -28,13 +28,10 @@ func releaseRequiresBuildForKind(manifest *providermanifestv1.Manifest, kind str
 	if SourceBuildProducesOutput(manifest) {
 		return false
 	}
-	if manifest.Entrypoint != nil && strings.TrimSpace(manifest.Entrypoint.ArtifactPath) != "" {
-		return false
-	}
 	if HasExplicitSourceRun(manifest) {
 		return true
 	}
-	return manifest.Entrypoint == nil
+	return true
 }
 
 func HasExplicitSourceRun(manifest *providermanifestv1.Manifest) bool {
@@ -85,9 +82,9 @@ func MissingDeclaredSourceBuildError(manifest *providermanifestv1.Manifest, kind
 func LocalOnlyRunReleaseError(kind string) error {
 	switch kind {
 	case providermanifestv1.KindApp:
-		return fmt.Errorf("run is local-only and cannot be packaged; add object-form build.command with entrypoint.artifactPath")
+		return fmt.Errorf("run is local-only and cannot be packaged; add object-form build.command")
 	case providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return fmt.Errorf("run is local-only and cannot be packaged; add object-form build.command with entrypoint.artifactPath for kind %s", kind)
+		return fmt.Errorf("run is local-only and cannot be packaged; add object-form build.command for kind %s", kind)
 	default:
 		return fmt.Errorf("run is local-only and cannot be packaged for %q", kind)
 	}
@@ -97,9 +94,9 @@ func missingDeclaredSourceBuildError(manifest *providermanifestv1.Manifest, kind
 	name := providerDisplayName(manifest)
 	switch kind {
 	case providermanifestv1.KindApp:
-		return fmt.Errorf("%s: declare object-form build.command and entrypoint.artifactPath", name)
+		return fmt.Errorf("%s: declare object-form build.command", name)
 	default:
-		return fmt.Errorf("%s: declare object-form build.command and entrypoint.artifactPath for kind %s", name, kind)
+		return fmt.Errorf("%s: declare object-form build.command for kind %s", name, kind)
 	}
 }
 

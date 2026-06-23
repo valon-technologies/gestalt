@@ -71,8 +71,7 @@ export function deriveBuildArgs(root: string): BuildArgs | undefined {
     if (!source) {
       throw new Error("manifest source is required");
     }
-    const artifactPath =
-      manifest.entrypoint?.artifactPath ?? `.gestalt/build/${providerNameFromSource(source)}`;
+    const artifactPath = `.gestaltd/bin/${providerNameFromSource(source)}`;
     return {
       root,
       target,

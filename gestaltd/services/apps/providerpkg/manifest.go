@@ -54,16 +54,20 @@ func EntrypointForKind(manifest *providermanifestv1.Manifest, kind string) *prov
 	return packageio.EntrypointForKind(manifest, kind)
 }
 
-func DefaultSourceEntrypointArtifactPath(manifest *providermanifestv1.Manifest) (string, error) {
-	return packageio.DefaultSourceEntrypointArtifactPath(manifest)
+func SourceBuildOutputPath(manifest *providermanifestv1.Manifest, goos string) (string, error) {
+	return packageio.SourceBuildOutputPath(manifest, goos)
 }
 
-func EffectiveSourceEntrypointForKind(manifest *providermanifestv1.Manifest, kind string) (*providermanifestv1.Entrypoint, error) {
-	return packageio.EffectiveSourceEntrypointForKind(manifest, kind)
+func SourceNameFromManifest(manifest *providermanifestv1.Manifest) (string, error) {
+	return packageio.SourceNameFromManifest(manifest)
 }
 
-func SourceEntrypointMayDefault(manifest *providermanifestv1.Manifest, kind string) bool {
-	return packageio.SourceEntrypointMayDefault(manifest, kind)
+func PackageExecutablePath(name, goos string) string {
+	return packageio.PackageExecutablePath(name, goos)
+}
+
+func InstalledExecutablePath(configuredName, goos string) string {
+	return packageio.InstalledExecutablePath(configuredName, goos)
 }
 
 func EnsureEntrypoint(manifest *providermanifestv1.Manifest) *providermanifestv1.Entrypoint {

@@ -144,7 +144,11 @@ func writeDefaultProvidersDir(baseDir, binaryPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dest := filepath.Join(dir, filepath.Base(binaryPath))
+	executableRel := providerpkg.InstalledExecutablePath("default", runtime.GOOS)
+	dest := filepath.Join(dir, filepath.FromSlash(executableRel))
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(dest, data, 0o755); err != nil {
 		return "", err
 	}
@@ -159,10 +163,10 @@ func writeDefaultProvidersDir(baseDir, binaryPath string) (string, error) {
 		Artifacts: []providermanifestv1.Artifact{{
 			OS:     runtime.GOOS,
 			Arch:   runtime.GOARCH,
-			Path:   filepath.Base(dest),
+			Path:   executableRel,
 			SHA256: fmt.Sprintf("%x", sum[:]),
 		}},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(dest)},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: executableRel},
 	}
 	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {

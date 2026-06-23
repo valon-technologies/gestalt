@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -301,22 +300,31 @@ server:
 func writeStubIndexedDBManifestForTest(t *testing.T, dir string) string {
 	t.Helper()
 
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "indexeddb"))
-	artifactFullPath := filepath.Join(dir, filepath.FromSlash(artifactPath))
-	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
-		t.Fatalf("mkdir indexeddb artifact dir: %v", err)
+	providerDir := filepath.Join(dir, "indexeddb-stub-src")
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("mkdir indexeddb stub dir: %v", err)
 	}
+	stagingBinary := filepath.Join(providerDir, "indexeddb-stub-binary")
 	artifactContent := []byte("indexeddb-stub-binary")
-	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
-		t.Fatalf("write indexeddb artifact: %v", err)
+	if err := os.WriteFile(stagingBinary, artifactContent, 0o755); err != nil {
+		t.Fatalf("write indexeddb staging binary: %v", err)
 	}
-	manifestPath := filepath.Join(dir, "indexeddb-manifest.yaml")
-	data, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:     "github.com/test/providers/indexeddb-stub",
-		Version:    "0.0.1-alpha.1",
-		Kind:       providermanifestv1.KindIndexedDB,
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
-		Spec:       &providermanifestv1.Spec{},
+	buildOutput := ".gestaltd/bin/indexeddb-stub"
+	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp indexeddb-stub-binary %s\nchmod +x %s\n", buildOutput, buildOutput)
+	if err := os.WriteFile(filepath.Join(providerDir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write indexeddb build script: %v", err)
+	}
+	manifestPath := filepath.Join(providerDir, "manifest.yaml")
+	data, err := encodeTestManifestFormat(&providermanifestv1.Manifest{
+		Source:      "github.com/test/providers/indexeddb-stub",
+		Version:     "0.0.1-alpha.1",
+		Kind:        providermanifestv1.KindIndexedDB,
+		DisplayName: "IndexedDB Stub",
+		Spec:        &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "indexeddb-stub-binary"},
+		},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode indexeddb manifest: %v", err)
@@ -345,7 +353,7 @@ func newSourceComponentReleaseFixture(t *testing.T, dir string, p sourceComponen
 	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/"+p.appName)), 0o644)
 	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, pluginDir, p.sourceFile, []byte(p.sourceCode), 0o644)
-	artifactRel := ".gestalt/build/provider"
+	artifactRel := ".gestaltd/bin/" + p.appName
 	writeGoComponentBuildFixture(t, pluginDir, "example.com/"+p.appName, p.manifest.Kind, artifactRel)
 	p.manifest.Build = &providermanifestv1.SourceBuild{
 		Command: []string{"sh", "./build.sh"},
@@ -402,7 +410,7 @@ func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
 	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, releaseTestModule)), 0644)
 	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0644)
 	writeStaticCatalogProviderMain(t, pluginDir)
-	artifactRel := ".gestalt/build/provider"
+	artifactRel := ".gestaltd/bin/" + releaseTestAppName
 	writeGoAppBuildFixture(t, pluginDir, releaseTestModule, releaseTestAppName, artifactRel)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
@@ -431,7 +439,7 @@ func newBuiltSourceProviderReleaseFixture(t *testing.T, dir string) string {
 	if err := os.Remove(filepath.Join(pluginDir, releaseProviderSchemaPath)); err != nil {
 		t.Fatalf("Remove(%s): %v", releaseProviderSchemaPath, err)
 	}
-	buildScript := "mkdir -p .gestalt/build\ngo build -o .gestalt/build/provider ./cmd/provider\nmkdir -p schemas\nprintf '{\"type\":\"object\"}\\n' > " + releaseProviderSchemaPath + "\n"
+	buildScript := "mkdir -p .gestaltd/bin\ngo build -o .gestaltd/bin/" + releaseTestAppName + " ./cmd/provider\nmkdir -p schemas\nprintf '{\"type\":\"object\"}\\n' > " + releaseProviderSchemaPath + "\n"
 	writeTestFile(t, pluginDir, "build.sh", []byte(buildScript), 0o755)
 	return pluginDir
 }
@@ -441,7 +449,7 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 
 	pluginDir := filepath.Join(dir, releaseTestAppName)
 	testutil.CopyExampleProviderPlugin(t, pluginDir)
-	artifactRel := ".gestalt/build/provider"
+	artifactRel := ".gestaltd/bin/" + releaseTestAppName
 	writeGoAppBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", releaseTestAppName, artifactRel)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
@@ -831,7 +839,12 @@ func populateMissingArtifactDigests(t *testing.T, dir string, manifest *provider
 }
 
 func encodeTestManifestFormat(manifest *providermanifestv1.Manifest, format string) ([]byte, error) {
-	return providerpkg.EncodeSourceManifestFormat(manifest, format)
+	if manifest == nil {
+		return providerpkg.EncodeSourceManifestFormat(nil, format)
+	}
+	clone := *manifest
+	clone.Entrypoint = nil
+	return providerpkg.EncodeSourceManifestFormat(&clone, format)
 }
 
 func writeTestFile(t *testing.T, dir, rel string, data []byte, mode os.FileMode) {

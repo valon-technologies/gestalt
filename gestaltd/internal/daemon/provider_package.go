@@ -259,12 +259,6 @@ func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Mani
 	if build == nil {
 		return nil, nil
 	}
-	if build.Mode == providerpkg.SourceReleaseBuildPrebuilt {
-		if explicit {
-			return nil, fmt.Errorf("--platform requires build.command for executable source providers")
-		}
-		return nil, fmt.Errorf("provider package requires build.command for executable source providers")
-	}
 
 	buildRequired := build.Mode.RequiresPlatformBuild() || providerpkg.ReleaseRequiresBuild(manifest)
 	if !buildRequired && !explicit {
