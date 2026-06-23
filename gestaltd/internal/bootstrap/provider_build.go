@@ -991,6 +991,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	launchCleanup = nil
 	startEnv := maps.Clone(env)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
+	maps.Copy(startEnv, runtimehost.ProviderTelemetryEnv(deps.Telemetry, name))
 	egressPolicy := deps.Egress.ProviderPolicy(entry)
 	allowedHosts := entry.EffectiveAllowedHosts()
 	startEnv, allowedHosts, err = applyHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServices, runtimePlan, deps, startEnv, allowedHosts)
@@ -1228,6 +1229,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 
 	startEnv := maps.Clone(cfg.Env)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
+	maps.Copy(startEnv, runtimehost.ProviderTelemetryEnv(deps.Telemetry, name))
 	agentAllowedHosts := cfg.EgressPolicy("").AllowedHosts
 	if len(agentAllowedHosts) == 0 {
 		agentAllowedHosts = slices.Clone(launch.allowedHosts)
