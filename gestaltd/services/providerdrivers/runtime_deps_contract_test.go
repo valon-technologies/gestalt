@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -111,11 +113,15 @@ func main() {
 	}
 }
 `, "example.com/providers/"+kind+"/"+name)), 0o644)
-	artifactRel := ".gestalt/build/provider"
-	writeTestFile(t, providerDir, "build.sh", []byte("mkdir -p .gestalt/build\ngo build -o .gestalt/build/provider ./cmd/provider\n"), 0o755)
+	providerSource := "github.com/test/providers/" + name
+	artifactRel, err := providerpkg.SourceBuildOutputPath(&providermanifestv1.Manifest{Source: providerSource}, runtime.GOOS)
+	if err != nil {
+		t.Fatalf("SourceBuildOutputPath: %v", err)
+	}
+	writeTestFile(t, providerDir, "build.sh", []byte(fmt.Sprintf("mkdir -p %q\ngo build -o %q ./cmd/provider\n", path.Dir(artifactRel), artifactRel)), 0o755)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        kind,
-		Source:      "github.com/test/providers/" + name,
+		Source:      providerSource,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: name,
 		Spec:        &providermanifestv1.Spec{},
@@ -123,7 +129,6 @@ func main() {
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
 	return providerDir
 }
