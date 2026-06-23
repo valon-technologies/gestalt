@@ -16,14 +16,39 @@ from typing import Final
 from ._bootstrap import (
     BUNDLED_CONFIG_NAME,
     parse_plugin_target,
+    read_pyproject_provider,
+    read_source_manifest,
     write_bundled_plugin_config,
 )
 
 USAGE: Final[str] = (
-    "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME RUNTIME_KIND GOOS GOARCH"
+    "usage: python -m gestalt._build [ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME RUNTIME_KIND GOOS GOARCH]\n"
+    "  (zero args: derive from manifest.yaml + pyproject.toml + env)"
 )
 BUILD_CACHE_DIR_ENV_VAR: Final[str] = "GESTALT_BUILD_CACHE_DIR"
 BUILD_CACHE_SCHEMA_VERSION: Final[str] = "python-provider-package-v1"
+TARGET_OS_ENV: Final[str] = "GESTALT_TARGET_OS"
+TARGET_ARCH_ENV: Final[str] = "GESTALT_TARGET_ARCH"
+
+_RUNTIME_KIND_BY_MANIFEST_KIND: Final[dict[str, str]] = {
+    "app": "integration",
+    "identity": "identity",
+    "authorization": "authorization",
+    "externalcredentials": "externalcredentials",
+    "indexeddb": "indexeddb",
+    "cache": "cache",
+    "s3": "s3",
+    "workflow": "workflow",
+    "agent": "agent",
+    "secrets": "secrets",
+    "runtime": "runtime",
+    "telemetry": "telemetry",
+}
+_DEFAULT_RUNTIME_KIND: Final[str] = "integration"
+_ARCH_ALIASES: Final[dict[str, str]] = {
+    "x86_64": "amd64",
+    "aarch64": "arm64",
+}
 
 
 @dataclass(frozen=True)
@@ -38,13 +63,62 @@ class BuildArgs:
 
 
 def main(argv: list[str] | None = None) -> int:
-    build_args = _parse_build_args(sys.argv[1:] if argv is None else argv)
+    args = sys.argv[1:] if argv is None else argv
+    build_args = derive_build_args(pathlib.Path.cwd()) if len(args) == 0 else _parse_build_args(args)
     if build_args is None:
         print(USAGE, file=sys.stderr)
         return 2
 
     build_plugin_binary(build_args)
     return 0
+
+
+def derive_build_args(root: pathlib.Path) -> BuildArgs | None:
+    """Derive build args from manifest.yaml + pyproject.toml + env.
+
+    Used when the build entrypoint is invoked with zero positional args.
+    Returns ``None`` (after printing the error) so ``main`` surfaces USAGE.
+    """
+    try:
+        manifest = read_source_manifest(root)
+        if manifest.entrypoint_artifact_path is None:
+            raise RuntimeError("manifest entrypoint.artifactPath is required")
+        if manifest.source is None:
+            raise RuntimeError("manifest source is required")
+        return BuildArgs(
+            root=root,
+            target=read_pyproject_provider(root),
+            output_path=pathlib.Path(manifest.entrypoint_artifact_path),
+            app_name=manifest.source.rsplit("/", 1)[-1],
+            runtime_kind=_runtime_kind_for_manifest_kind(manifest.kind),
+            goos=_target_goos(),
+            goarch=_target_goarch(),
+        )
+    except (OSError, RuntimeError, ValueError) as err:
+        print(str(err) if str(err) else repr(err), file=sys.stderr)
+        return None
+
+
+def _runtime_kind_for_manifest_kind(kind: str | None) -> str:
+    if kind is None:
+        return _DEFAULT_RUNTIME_KIND
+    normalized = kind.strip().lower()
+    return _RUNTIME_KIND_BY_MANIFEST_KIND.get(normalized, _DEFAULT_RUNTIME_KIND)
+
+
+def _target_goos() -> str:
+    raw = os.environ.get(TARGET_OS_ENV, "").strip()
+    if raw:
+        return raw
+    return platform.system().lower()
+
+
+def _target_goarch() -> str:
+    raw = os.environ.get(TARGET_ARCH_ENV, "").strip()
+    if raw:
+        return raw
+    machine = platform.machine().lower()
+    return _ARCH_ALIASES.get(machine, machine)
 
 
 def _parse_build_args(args: list[str]) -> BuildArgs | None:

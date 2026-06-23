@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { create } from "@bufbuild/protobuf";
@@ -48,6 +49,7 @@ import {
 import {
   buildProviderBinary,
   bunTarget,
+  deriveBuildArgs,
   parseBuildArgs,
 } from "../src/build.ts";
 import { Cache } from "../src/index.ts";
@@ -130,6 +132,99 @@ test("build arg parsing validates required arguments", () => {
   expect(() => bunTarget("plan9", "amd64")).toThrow(
     "unsupported Bun target for plan9/amd64",
   );
+});
+
+function writeDerivationFixture(kind: string, source: string, artifactPath: string, providerTarget: string): string {
+  const root = mkdtempSync(join(tmpdir(), "gestalt-derive-"));
+  writeFileSync(
+    join(root, "manifest.yaml"),
+    `kind: ${kind}\nsource: ${source}\nentrypoint:\n  artifactPath: ${artifactPath}\n`,
+    "utf8",
+  );
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({
+      name: "@valon-technologies/does-not-matter",
+      gestalt: { provider: { kind, target: providerTarget } },
+    }),
+    "utf8",
+  );
+  return root;
+}
+
+test("deriveBuildArgs reads manifest and package metadata", () => {
+  const root = writeDerivationFixture(
+    "app",
+    "github.com/valon-technologies/valon-tools/apps/agent-trace-viewer",
+    ".gestalt/build/provider",
+    "./provider.ts#provider",
+  );
+  try {
+    const originalOs = process.env.GESTALT_TARGET_OS;
+    const originalArch = process.env.GESTALT_TARGET_ARCH;
+    process.env.GESTALT_TARGET_OS = "linux";
+    process.env.GESTALT_TARGET_ARCH = "arm64";
+    try {
+      const args = deriveBuildArgs(root);
+      expect(args).toBeDefined();
+      expect(args!.root).toBe(root);
+      expect(args!.target).toBe("app:./provider.ts#provider");
+      expect(args!.outputPath).toBe(".gestalt/build/provider");
+      expect(args!.providerName).toBe("agent-trace-viewer");
+      expect(args!.goos).toBe("linux");
+      expect(args!.goarch).toBe("arm64");
+    } finally {
+      if (originalOs === undefined) {
+        delete process.env.GESTALT_TARGET_OS;
+      } else {
+        process.env.GESTALT_TARGET_OS = originalOs;
+      }
+      if (originalArch === undefined) {
+        delete process.env.GESTALT_TARGET_ARCH;
+      } else {
+        process.env.GESTALT_TARGET_ARCH = originalArch;
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("deriveBuildArgs derives identity name from manifest source not package name", () => {
+  const root = writeDerivationFixture(
+    "identity",
+    "github.com/valon-technologies/valon-tools/identity/local",
+    ".gestalt/build/local",
+    "./provider.ts#provider",
+  );
+  try {
+    const args = deriveBuildArgs(root);
+    expect(args).toBeDefined();
+    expect(args!.target).toBe("identity:./provider.ts#provider");
+    expect(args!.providerName).toBe("local");
+    expect(args!.outputPath).toBe(".gestalt/build/local");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("deriveBuildArgs returns undefined when entrypoint.artifactPath is missing", () => {
+  const root = mkdtempSync(join(tmpdir(), "gestalt-derive-noentry-"));
+  writeFileSync(
+    join(root, "manifest.yaml"),
+    "kind: app\nsource: github.com/x/y\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ gestalt: { provider: { kind: "app", target: "./provider.ts#provider" } } }),
+    "utf8",
+  );
+  try {
+    expect(deriveBuildArgs(root)).toBeUndefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("buildProviderBinary compiles a runnable identity provider executable", async () => {

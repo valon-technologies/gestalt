@@ -350,6 +350,40 @@ See [Provider Manifests](/reference/app-manifests) for the full field reference.
   </Tabs.Tab>
 </Tabs>
 
+### Install and build phases
+
+A source provider declares up to three inline phases, each an argv list that
+gestaltd execs directly with no shell:
+
+- `install` — runs once before any build or dev execution. Use it for
+  dependency installation (`bun install`, `uv sync`). Side-effect only; its
+  output is not verified. `inputs` is the cache-key allowlist, typically the
+  lockfile.
+- `build` — compiles the provider into the entrypoint artifact. Its output is
+  verified against `entrypoint.artifactPath`.
+- `dev` — a long-running dev server for local `gestaltd serve` only.
+
+Run order is `install` → `build` (for packaging/lock/sync) and `install` →
+`dev` (for local serve). All three are optional and additive; providers that
+only need `build` continue to work without `install`.
+
+```yaml
+install:
+  command: [bun, install, --frozen-lockfile]
+  inputs: [package.json, bun.lock]
+build:
+  command: [bun, run, gestalt-ts-build]
+  inputs: [provider.ts, tsconfig.json, package.json]
+entrypoint:
+  artifactPath: .gestalt/build/provider
+```
+
+The TypeScript and Python SDK build entrypoints derive their arguments from
+`manifest.yaml` plus the language package manifest when invoked with zero
+positional args, so `build.command` is a fixed per-language argv (`bun run
+gestalt-ts-build` for TypeScript, `uv run python -m gestalt._build` for
+Python) with no per-provider wrapper script.
+
 ### Defining operations
 
 Operations are the callable units of an app. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source apps can use SDK-native source package metadata, declare `run` for local source execution, or declare `build.command` and `entrypoint.artifactPath` when they need a compiled release artifact.

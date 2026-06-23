@@ -327,5 +327,108 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result.goarch, "amd64")
 
 
+    def test_derive_build_args_reads_manifest_and_pyproject(self) -> None:
+        """Zero-arg derivation reads target, output, name, and runtime kind."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "manifest.yaml").write_text(
+                "kind: app\n"
+                "source: github.com/valon-technologies/valon-tools/apps/code-review\n"
+                "entrypoint:\n"
+                "  artifactPath: .gestalt/build/provider\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                "[tool.gestalt]\nprovider = \"provider\"\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                _build.os.environ,
+                {_build.TARGET_OS_ENV: "linux", _build.TARGET_ARCH_ENV: "arm64"},
+                clear=False,
+            ):
+                args = _build.derive_build_args(root)
+
+        self.assertIsNotNone(args)
+        assert args is not None
+        self.assertEqual(args.root, root)
+        self.assertEqual(args.target, "provider")
+        self.assertEqual(args.output_path, pathlib.Path(".gestalt/build/provider"))
+        self.assertEqual(args.app_name, "code-review")
+        self.assertEqual(args.runtime_kind, "integration")
+        self.assertEqual(args.goos, "linux")
+        self.assertEqual(args.goarch, "arm64")
+
+    def test_derive_build_args_maps_identity_kind_to_identity_runtime(self) -> None:
+        """A non-app manifest kind derives the matching runtime kind."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "manifest.yaml").write_text(
+                "kind: identity\n"
+                "source: github.com/valon-technologies/valon-tools/identity/local\n"
+                "entrypoint:\n"
+                "  artifactPath: .gestalt/build/local\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                "[tool.gestalt]\nprovider = \"provider:provider\"\n",
+                encoding="utf-8",
+            )
+            args = _build.derive_build_args(root)
+
+        self.assertIsNotNone(args)
+        assert args is not None
+        self.assertEqual(args.app_name, "local")
+        self.assertEqual(args.runtime_kind, "identity")
+        self.assertEqual(args.target, "provider:provider")
+
+    def test_derive_build_args_falls_back_to_host_platform(self) -> None:
+        """Missing target env vars fall back to the host platform."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "manifest.yaml").write_text(
+                "kind: app\n"
+                "source: github.com/x/y\n"
+                "entrypoint:\n"
+                "  artifactPath: out\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                "[tool.gestalt]\nprovider = \"provider\"\n",
+                encoding="utf-8",
+            )
+            env = {
+                _build.TARGET_OS_ENV: "",
+                _build.TARGET_ARCH_ENV: "",
+            }
+            with (
+                mock.patch.dict(_build.os.environ, env, clear=False),
+                mock.patch.object(_build.platform, "system", lambda: "Darwin"),
+                mock.patch.object(_build.platform, "machine", lambda: "arm64"),
+            ):
+                args = _build.derive_build_args(root)
+
+        assert args is not None
+        self.assertEqual(args.goos, "darwin")
+        self.assertEqual(args.goarch, "arm64")
+
+    def test_derive_build_args_missing_entrypoint_returns_none(self) -> None:
+        """A manifest without entrypoint.artifactPath surfaces a derivation error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "manifest.yaml").write_text(
+                "kind: app\nsource: github.com/x/y\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                "[tool.gestalt]\nprovider = \"provider\"\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict(_build.os.environ, {}, clear=False):
+                result = _build.derive_build_args(root)
+
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()

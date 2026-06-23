@@ -51,6 +51,11 @@ func prepareSourceManifest(manifestPath string, packaging bool, buildOpts Source
 	if err != nil {
 		return nil, nil, err
 	}
+	if !packaging {
+		if err := RunSourceInstall(manifestPath, manifest, buildOpts); err != nil {
+			return nil, nil, err
+		}
+	}
 	if err := ensurePrepareOnlyBuild(manifestPath, manifest, buildOpts); err != nil {
 		return nil, nil, err
 	}

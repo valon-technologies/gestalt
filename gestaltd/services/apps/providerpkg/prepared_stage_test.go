@@ -562,3 +562,127 @@ func TestStagedReleaseBinaryNameAddsWindowsSuffix(t *testing.T) {
 		t.Fatalf("linux binary name = %q, want %q", got, "gestalt-app-release-test")
 	}
 }
+
+func TestStageSourcePreparedInstallDir_RunsInstallBeforeBuild(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	artifactPath := ".gestalt/build/provider"
+	installScript := `#!/bin/sh
+set -eu
+printf 'install-marker\n' > install-ran.txt
+`
+	buildScript := `#!/bin/sh
+set -eu
+test -f install-ran.txt
+mkdir -p .gestalt/build
+cat > .gestalt/build/provider <<'SH'
+#!/bin/sh
+if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
+fi
+SH
+chmod +x .gestalt/build/provider
+`
+	mustWriteFile(t, filepath.Join(root, "install.sh"), []byte(installScript), 0o755)
+	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/install-phase",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Install Phase",
+		Spec:        &providermanifestv1.Spec{},
+		Install: &providermanifestv1.SourceInstall{
+			Command: []string{"sh", "./install.sh"},
+			Inputs:  []string{"install.sh"},
+		},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "install-ran.txt"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}))
+
+	stagingDir := filepath.Join(t.TempDir(), "prepared")
+	staged, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
+		Kind:    providermanifestv1.KindApp,
+		AppName: "install-phase-test",
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
+	})
+	if err != nil {
+		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
+	}
+
+	if staged.Manifest == nil || staged.Manifest.Install != nil {
+		t.Fatalf("staged manifest should strip install: %#v", staged.Manifest)
+	}
+
+	stagedBinaryPath := filepath.Join(stagingDir, filepath.FromSlash(artifactPath))
+	if _, err := os.Stat(stagedBinaryPath); err != nil {
+		t.Fatalf("staged binary not produced: %v", err)
+	}
+}
+
+func TestRunSourceInstall_NoopWithoutInstall(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:       providermanifestv1.KindApp,
+		Source:     "github.com/test/apps/no-install",
+		Version:    "0.0.1-alpha.1",
+		Spec:       &providermanifestv1.Spec{},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: ".gestalt/build/provider"},
+	}))
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if err := RunSourceInstall(manifestPath, manifest, SourceBuildOptions{}); err != nil {
+		t.Fatalf("RunSourceInstall with nil install should be a no-op, got: %v", err)
+	}
+}
+
+func TestSourceManifestExecution_RunsInstallBeforeBuild(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("install marker fixture uses POSIX shell")
+	}
+
+	root := t.TempDir()
+	artifactPath := ".gestalt/build/provider"
+	installScript := `#!/bin/sh
+set -eu
+printf 'install-marker\n' > install-ran.txt
+`
+	buildScript := `#!/bin/sh
+set -eu
+test -f install-ran.txt
+mkdir -p .gestalt/build
+printf '#!/bin/sh\nexit 0\n' > .gestalt/build/provider
+chmod +x .gestalt/build/provider
+`
+	mustWriteFile(t, filepath.Join(root, "install.sh"), []byte(installScript), 0o755)
+	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/test/apps/exec-install-phase",
+		Version: "0.0.1-alpha.1",
+		Spec:    &providermanifestv1.Spec{},
+		Install: &providermanifestv1.SourceInstall{
+			Command: []string{"sh", "./install.sh"},
+			Inputs:  []string{"install.sh"},
+		},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh", "install-ran.txt"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}))
+
+	if _, err := SourceManifestExecution(manifestPath, providermanifestv1.KindApp, SourceBuildOptions{}); err != nil {
+		t.Fatalf("SourceManifestExecution: %v (install should run before build)", err)
+	}
+}

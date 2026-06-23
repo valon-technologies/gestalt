@@ -16,13 +16,15 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { defaultProviderExportNames } from "./provider-kind.ts";
-import { parseProviderTarget, resolveProviderModulePath, type ProviderTarget } from "./target.ts";
+import { readSourceManifest } from "./manifest.ts";
+import { parseProviderTarget, readPackageProviderTarget, resolveProviderModulePath, formatProviderTarget, type ProviderTarget } from "./target.ts";
 
 /**
  * Command-line usage for the bundled build entrypoint.
  */
 export const USAGE =
-  "usage: bun run build.ts ROOT PROVIDER_TARGET OUTPUT PROVIDER_NAME GOOS GOARCH";
+  "usage: bun run build.ts [ROOT PROVIDER_TARGET OUTPUT PROVIDER_NAME GOOS GOARCH]\n" +
+  "  (zero args: derive ROOT/PROVIDER_TARGET/OUTPUT/PROVIDER_NAME/GOOS/GOARCH from manifest.yaml + package.json + env)";
 
 /**
  * Parsed arguments for the build entrypoint.
@@ -39,15 +41,77 @@ export type BuildArgs = {
 
 /**
  * CLI entrypoint that compiles a provider into a standalone Bun executable.
+ *
+ * With no positional args, derives every field from `manifest.yaml` +
+ * `package.json` + the `GESTALT_TARGET_OS`/`GESTALT_TARGET_ARCH` env vars that
+ * gestaltd injects. With six positional args, uses the explicit contract.
  */
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
-  const args = parseBuildArgs(argv);
+  const args = argv.length === 0 ? deriveBuildArgs(process.cwd()) : parseBuildArgs(argv);
   if (!args) {
     console.error(USAGE);
     return 2;
   }
   buildProviderBinary(args);
   return 0;
+}
+
+const TARGET_OS_ENV = "GESTALT_TARGET_OS";
+const TARGET_ARCH_ENV = "GESTALT_TARGET_ARCH";
+
+/**
+ * Derives build args from the source manifest + package metadata + env. Used
+ * when the build entrypoint is invoked with zero positional args.
+ */
+export function deriveBuildArgs(root: string): BuildArgs | undefined {
+  try {
+    const manifest = readSourceManifest(root);
+    const target = formatProviderTarget(readPackageProviderTarget(root));
+    const artifactPath = manifest.entrypoint?.artifactPath;
+    if (!artifactPath) {
+      throw new Error("manifest entrypoint.artifactPath is required");
+    }
+    const source = manifest.source;
+    if (!source) {
+      throw new Error("manifest source is required");
+    }
+    return {
+      root,
+      target,
+      outputPath: artifactPath,
+      providerName: providerNameFromSource(source),
+      goos: targetGoos(),
+      goarch: targetGoarch(),
+    };
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return undefined;
+  }
+}
+
+function providerNameFromSource(source: string): string {
+  return source.split("/").pop()!.trim();
+}
+
+function targetGoos(): string {
+  const env = process.env[TARGET_OS_ENV];
+  if (env && env.trim()) {
+    return env.trim();
+  }
+  return process.platform === "win32" ? "windows" : process.platform;
+}
+
+const ARCH_ALIASES: Record<string, string> = {
+  x64: "amd64",
+  aarch64: "arm64",
+};
+
+function targetGoarch(): string {
+  const env = process.env[TARGET_ARCH_ENV];
+  if (env && env.trim()) {
+    return env.trim();
+  }
+  return ARCH_ALIASES[process.arch] ?? process.arch;
 }
 
 /**
