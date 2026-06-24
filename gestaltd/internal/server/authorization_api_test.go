@@ -11,7 +11,11 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -184,6 +188,56 @@ func TestAuthorizationAPIGetActiveModelRef(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPIAddsProviderGatewayCallerToken(t *testing.T) {
+	authz := &authorizationAPITestProvider{}
+	svc := testutil.NewStubServices(t)
+	user := seedUser(t, svc, "authorization-user@test.local")
+	plaintext := scopedTestBearerToken(user.ID, "")
+	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
+	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = testAuthStubForScopedBearer()
+		cfg.Authorization = authz
+		cfg.CallerTokenIssuer = issuer
+		cfg.Services = svc
+	})
+	defer ts.Close()
+	t.Parallel()
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/models/active", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET active model: %v", err)
+	}
+	defer closeResponseBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if authz.callerToken == "" {
+		t.Fatal("authorization provider did not receive caller token")
+	}
+	if authz.entry != invocation.EntryHTTP {
+		t.Fatalf("entry = %q, want %q", authz.entry, invocation.EntryHTTP)
+	}
+	claims, err := providergateway.Verify(authz.callerToken, publicKeyPEM)
+	if err != nil {
+		t.Fatalf("Verify caller token: %v", err)
+	}
+	wantSubjectID := principal.UserSubjectID(user.ID)
+	if claims.SubjectID != wantSubjectID {
+		t.Fatalf("SubjectID = %q, want %q", claims.SubjectID, wantSubjectID)
+	}
+}
+
 func TestAuthorizationAPIListActiveModelResourceTypes(t *testing.T) {
 	authz := &authorizationAPITestProvider{}
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -241,6 +295,8 @@ type authorizationAPITestProvider struct {
 	checkAccessDenied        bool
 	listRelationshipsRequest *proto.ListRelationshipsRequest
 	listResourceTypesRequest *proto.ListActiveModelResourceTypesRequest
+	callerToken              string
+	entry                    invocation.Entry
 }
 
 func (p *authorizationAPITestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -275,7 +331,9 @@ func (p *authorizationAPITestProvider) DeleteRelationship(_ context.Context, req
 	return &proto.DeleteRelationshipResponse{}, nil
 }
 
-func (p *authorizationAPITestProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+func (p *authorizationAPITestProvider) GetActiveModelRef(ctx context.Context) (*proto.GetActiveModelRefResponse, error) {
+	p.callerToken = providergateway.CallerTokenFromContext(ctx)
+	p.entry = invocation.EntryFromContext(ctx)
 	return &proto.GetActiveModelRefResponse{
 		Model: &proto.AuthorizationModelRef{
 			Id:        "model-1",
