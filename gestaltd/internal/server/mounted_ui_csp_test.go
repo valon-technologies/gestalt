@@ -70,6 +70,7 @@ func TestMountedUISameOriginFraming(t *testing.T) {
 	}
 
 	t.Run("opted-in mount permits same-origin framing", func(t *testing.T) {
+		t.Parallel()
 		h := get(t, "/framed/")
 		if csp := h.Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'self'") {
 			t.Errorf("Content-Security-Policy = %q; want frame-ancestors 'self'", csp)
@@ -80,6 +81,7 @@ func TestMountedUISameOriginFraming(t *testing.T) {
 	})
 
 	t.Run("default mount forbids all framing", func(t *testing.T) {
+		t.Parallel()
 		h := get(t, "/locked/")
 		if csp := h.Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'none'") {
 			t.Errorf("Content-Security-Policy = %q; want frame-ancestors 'none'", csp)
