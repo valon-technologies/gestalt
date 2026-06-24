@@ -25,6 +25,15 @@ var validMountedHTTPBindingMethods = map[string]bool{
 	http.MethodDelete: true,
 }
 
+var coreAPIRouteNamespaces = []string{
+	"/api/v1/auth",
+	"/api/v1/tokens",
+	"/api/v1/workflow",
+	"/api/v1/apps",
+	"/api/v1/s3",
+	"/api/v1/authorization",
+}
+
 func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], mountedUIs []MountedUI) ([]MountedHTTPBinding, error) {
 	if len(entries) == 0 {
 		return nil, nil
@@ -227,7 +236,7 @@ func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs 
 		if binding.Path == "" {
 			return fmt.Errorf("http binding %s.%s path is required", binding.AppName, binding.Name)
 		}
-		for _, prefix := range []string{"/api/v1/auth", "/api/v1/tokens", "/api/v1/workflow", "/api/v1/apps", "/api/v1/s3"} {
+		for _, prefix := range coreAPIRouteNamespaces {
 			if binding.Path == prefix || strings.HasPrefix(binding.Path, prefix+"/") {
 				return fmt.Errorf("http binding %s.%s path %q conflicts with core route namespace %q", binding.AppName, binding.Name, binding.Path, prefix)
 			}
