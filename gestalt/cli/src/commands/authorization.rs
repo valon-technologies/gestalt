@@ -158,7 +158,15 @@ fn active_model_resource_types_path(
 fn print_value(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
-        Format::Table => output::print_json_table(&table_value(value)),
+        Format::Table => {
+            output::print_json_table(&table_value(value));
+            if let Some(token) = next_page_token(value) {
+                eprintln!("Next page token: {token}");
+            }
+            if let Some(model_id) = model_id(value) {
+                eprintln!("Model ID: {model_id}");
+            }
+        }
     }
 }
 
@@ -175,6 +183,22 @@ fn table_value(value: &Value) -> Value {
     value.clone()
 }
 
+fn next_page_token(value: &Value) -> Option<&str> {
+    value
+        .get("nextPageToken")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+}
+
+fn model_id(value: &Value) -> Option<&str> {
+    value
+        .get("modelId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|model_id| !model_id.is_empty())
+}
+
 fn json_path_str<'a>(value: Option<&'a Value>, path: &[&str]) -> Option<&'a str> {
     let mut current = value?;
     for segment in path {
@@ -189,4 +213,32 @@ fn json_path_u32(value: Option<&Value>, path: &[&str]) -> Option<u32> {
         current = current.get(*segment)?;
     }
     current.as_u64().and_then(|value| u32::try_from(value).ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{model_id, next_page_token};
+
+    #[test]
+    fn next_page_token_returns_trimmed_non_empty_token() {
+        let value = json!({"nextPageToken": " next "});
+
+        assert_eq!(next_page_token(&value), Some("next"));
+    }
+
+    #[test]
+    fn next_page_token_ignores_blank_tokens() {
+        let value = json!({"nextPageToken": " "});
+
+        assert_eq!(next_page_token(&value), None);
+    }
+
+    #[test]
+    fn model_id_returns_trimmed_non_empty_id() {
+        let value = json!({"modelId": " model-1 "});
+
+        assert_eq!(model_id(&value), Some("model-1"));
+    }
 }
