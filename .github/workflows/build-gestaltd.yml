@@ -11,6 +11,9 @@ on:
       - '!gestaltd/rpc/protov1/**'
   pull_request:
 
+  schedule:
+    - cron: '17 * * * *'
+
   workflow_dispatch:
     inputs:
       gestalt_ref:
@@ -254,6 +257,7 @@ jobs:
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         with:
           ref: ${{ needs.resolve-ref.outputs.sha }}
+          fetch-depth: 0
 
       - name: Set up Go
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
@@ -277,16 +281,13 @@ jobs:
 
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             packages=$("$GITHUB_WORKSPACE/.github/scripts/collect-go-test-packages.sh" "$GITHUB_WORKSPACE/gestaltd")
+            go test -run '^$' ./...
             if [[ -z "$packages" ]]; then
               echo "No Go packages affected by this pull request."
               exit 0
             fi
           else
             packages="./..."
-          fi
-
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            go test -run '^$' ./...
           fi
 
           echo "$packages"
