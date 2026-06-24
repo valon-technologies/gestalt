@@ -1,13 +1,16 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/protobuf/encoding/protojson"
 	gproto "google.golang.org/protobuf/proto"
 )
@@ -20,7 +23,11 @@ func (s *Server) checkAuthorizationAccess(w http.ResponseWriter, r *http.Request
 	if !decodeProtoJSONBody(w, r, &req) {
 		return
 	}
-	resp, err := s.authorization.CheckAccess(r.Context(), &req)
+	ctx, ok := s.authorizationHTTPContext(w, r)
+	if !ok {
+		return
+	}
+	resp, err := s.authorization.CheckAccess(ctx, &req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -36,7 +43,11 @@ func (s *Server) listAuthorizationRelationships(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	resp, err := s.authorization.ListRelationships(r.Context(), req)
+	ctx, ok := s.authorizationHTTPContext(w, r)
+	if !ok {
+		return
+	}
+	resp, err := s.authorization.ListRelationships(ctx, req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -48,7 +59,11 @@ func (s *Server) getAuthorizationActiveModelRef(w http.ResponseWriter, r *http.R
 	if !s.requireAuthorizationProvider(w) {
 		return
 	}
-	resp, err := s.authorization.GetActiveModelRef(r.Context())
+	ctx, ok := s.authorizationHTTPContext(w, r)
+	if !ok {
+		return
+	}
+	resp, err := s.authorization.GetActiveModelRef(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -64,12 +79,27 @@ func (s *Server) listAuthorizationActiveModelResourceTypes(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	resp, err := s.authorization.ListActiveModelResourceTypes(r.Context(), req)
+	ctx, ok := s.authorizationHTTPContext(w, r)
+	if !ok {
+		return
+	}
+	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeProtoJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) authorizationHTTPContext(w http.ResponseWriter, r *http.Request) (context.Context, bool) {
+	ctx := invocation.WithEntry(r.Context(), invocation.EntryHTTP)
+	ctx, err := s.withProviderGatewayCallerToken(ctx, PrincipalFromContext(r.Context()))
+	if err != nil {
+		slog.ErrorContext(r.Context(), "issue authorization provider gateway caller token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to prepare authorization context")
+		return nil, false
+	}
+	return ctx, true
 }
 
 func (s *Server) requireAuthorizationProvider(w http.ResponseWriter) bool {
