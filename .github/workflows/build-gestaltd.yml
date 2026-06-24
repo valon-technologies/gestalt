@@ -143,6 +143,7 @@ jobs:
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         with:
           ref: ${{ needs.resolve-ref.outputs.sha }}
+          fetch-depth: 0
 
       - name: Set up Go
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
@@ -192,14 +193,50 @@ jobs:
             gestaltd/services/s3/routing_s3_gen.go \
             gestaltd/services/s3/routing_s3_object_access_gen.go
 
-      - name: Run golangci-lint
+      - name: Collect lint packages
+        id: collect-lint-packages
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha || needs.resolve-ref.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            import_packages=$("$GITHUB_WORKSPACE/.github/scripts/collect-go-test-packages.sh" "$GITHUB_WORKSPACE/gestaltd")
+            if [[ -z "$import_packages" ]]; then
+              packages=""
+            elif [[ "$import_packages" == "./..." ]]; then
+              packages="./..."
+            else
+              packages=""
+              while IFS= read -r import_package; do
+                package_dir=$(cd "$GITHUB_WORKSPACE/gestaltd" && go list -f '{{.Dir}}' "$import_package")
+                if [[ "$package_dir" == "$GITHUB_WORKSPACE/gestaltd" ]]; then
+                  relative_package_dir="."
+                else
+                  relative_package_dir=${package_dir#"$GITHUB_WORKSPACE/gestaltd"/}
+                fi
+                packages="${packages} ./${relative_package_dir}"
+              done <<< "$import_packages"
+              packages=$(echo "$packages" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+            fi
+          else
+            packages="./..."
+          fi
+
+          echo "$packages"
+          echo "packages=${packages}" >> "$GITHUB_OUTPUT"
+
+      - name: Run golangci-lint
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' && steps.collect-lint-packages.outputs.packages != '' }}
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
           version: v2.11.3
           working-directory: gestaltd
           verify: false
           skip-cache: true
+          args: ${{ steps.collect-lint-packages.outputs.packages }}
 
   test:
     name: Go Tests
@@ -232,7 +269,28 @@ jobs:
       - name: Run tests
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         working-directory: gestaltd
-        run: go test ./...
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha || needs.resolve-ref.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            packages=$("$GITHUB_WORKSPACE/.github/scripts/collect-go-test-packages.sh" "$GITHUB_WORKSPACE/gestaltd")
+            if [[ -z "$packages" ]]; then
+              echo "No Go packages affected by this pull request."
+              exit 0
+            fi
+          else
+            packages="./..."
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            go test -run '^$' ./...
+          fi
+
+          echo "$packages"
+          go test $packages
 
   coverage:
     name: Go Coverage
