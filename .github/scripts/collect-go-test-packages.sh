@@ -64,7 +64,7 @@ while IFS= read -r changed_file; do
 	relative_path=${changed_file#"$module_rel"/}
 
 	case "$relative_path" in
-		go.mod|go.sum)
+		go.mod|go.sum|*/go.mod|*/go.sum|.golangci.yml|.golangci.yaml|.golangci.toml|.golangci.json|golangci.yml|golangci.yaml|golangci.toml|golangci.json)
 			echo "./..."
 			exit 0
 			;;
