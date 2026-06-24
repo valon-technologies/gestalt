@@ -83,7 +83,8 @@ func isS3ObjectAccessRequest(r *http.Request) bool {
 // contentSecurityPolicy is the CSP applied to all responses. script-src and
 // style-src require 'unsafe-inline' because the Next.js static export embeds
 // inline <script> tags for RSC flight data that change with every build,
-// making hash-based policies impractical.
+// making hash-based policies impractical. frame-ancestors 'self' blocks all
+// external embedding while allowing same-origin iframes (e.g. Storybook).
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self' 'unsafe-inline'; " +
 	"style-src 'self' 'unsafe-inline'; " +
@@ -93,7 +94,7 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"object-src 'none'; " +
 	"base-uri 'self'; " +
 	"form-action 'self'; " +
-	"frame-ancestors 'none'"
+	"frame-ancestors 'self'"
 
 const devContentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
@@ -104,7 +105,7 @@ const devContentSecurityPolicy = "default-src 'self'; " +
 	"object-src 'none'; " +
 	"base-uri 'self'; " +
 	"form-action 'self'; " +
-	"frame-ancestors 'none'"
+	"frame-ancestors 'self'"
 
 func withDevContentSecurityPolicy(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,30 +114,11 @@ func withDevContentSecurityPolicy(next http.Handler) http.Handler {
 	})
 }
 
-const (
-	frameAncestorsNone      = "frame-ancestors 'none'"
-	frameAncestorsSelf      = "frame-ancestors 'self'"
-	xFrameOptionsSameOrigin = "SAMEORIGIN"
-)
-
-// withSameOriginFraming overrides the anti-clickjacking headers set upstream
-// (the global security middleware and the dev CSP) so an opted-in mount may
-// embed its own same-origin iframes. Cross-origin framing stays blocked.
-func withSameOriginFraming(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if csp := w.Header().Get("Content-Security-Policy"); csp != "" {
-			w.Header().Set("Content-Security-Policy", strings.Replace(csp, frameAncestorsNone, frameAncestorsSelf, 1))
-		}
-		w.Header().Set("X-Frame-Options", xFrameOptionsSameOrigin)
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		if s.secureCookies {
 			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 		}

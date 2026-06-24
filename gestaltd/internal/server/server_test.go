@@ -3452,8 +3452,8 @@ func TestSecurityHeaders(t *testing.T) {
 		if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
 			t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
 		}
-		if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
-			t.Errorf("X-Frame-Options = %q, want %q", got, "DENY")
+		if got := resp.Header.Get("X-Frame-Options"); got != "SAMEORIGIN" {
+			t.Errorf("X-Frame-Options = %q, want %q", got, "SAMEORIGIN")
 		}
 		if got := resp.Header.Get("Strict-Transport-Security"); got != "" {
 			t.Errorf("Strict-Transport-Security = %q, want empty (secureCookies=false)", got)
@@ -3464,7 +3464,7 @@ func TestSecurityHeaders(t *testing.T) {
 			"script-src 'self' 'unsafe-inline'",
 			"style-src 'self' 'unsafe-inline'",
 			"object-src 'none'",
-			"frame-ancestors 'none'",
+			"frame-ancestors 'self'",
 		} {
 			if !strings.Contains(csp, directive) {
 				t.Errorf("Content-Security-Policy missing directive %q; got %q", directive, csp)
@@ -3488,8 +3488,8 @@ func TestSecurityHeaders(t *testing.T) {
 		if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
 			t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
 		}
-		if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
-			t.Errorf("X-Frame-Options = %q, want %q", got, "DENY")
+		if got := resp.Header.Get("X-Frame-Options"); got != "SAMEORIGIN" {
+			t.Errorf("X-Frame-Options = %q, want %q", got, "SAMEORIGIN")
 		}
 		const wantHSTS = "max-age=63072000; includeSubDomains"
 		if got := resp.Header.Get("Strict-Transport-Security"); got != wantHSTS {

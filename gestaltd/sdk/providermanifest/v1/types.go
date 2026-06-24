@@ -326,11 +326,6 @@ type Spec struct {
 	// UI-specific fields
 	AssetRoot string    `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
 	Routes    []UIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
-	// AllowSameOriginFraming relaxes this mount's anti-clickjacking headers to
-	// frame-ancestors 'self' / X-Frame-Options SAMEORIGIN so the UI may embed
-	// its own same-origin iframes (e.g. Storybook's manager/preview split).
-	// Cross-origin framing stays blocked. Defaults false (no framing).
-	AllowSameOriginFraming bool `json:"allowSameOriginFraming,omitempty" yaml:"allowSameOriginFraming,omitempty"`
 }
 
 type RouteAuthRef struct {
@@ -779,9 +774,8 @@ type specJSONWire struct {
 	Pagination             *ManifestPaginationConfig             `json:"pagination,omitempty"`
 	Requires               []string                              `json:"requires,omitempty"`
 	UI                     *OwnedUI                              `json:"ui,omitempty"`
-	AssetRoot              string                                `json:"assetRoot,omitempty"`
-	Routes                 []UIRoute                             `json:"routes,omitempty"`
-	AllowSameOriginFraming bool                                  `json:"allowSameOriginFraming,omitempty"`
+	AssetRoot string    `json:"assetRoot,omitempty"`
+	Routes    []UIRoute `json:"routes,omitempty"`
 }
 
 type specYAMLWire struct {
@@ -800,9 +794,8 @@ type specYAMLWire struct {
 	Pagination             *ManifestPaginationConfig             `yaml:"pagination,omitempty"`
 	Requires               []string                              `yaml:"requires,omitempty"`
 	UI                     *OwnedUI                              `yaml:"ui,omitempty"`
-	AssetRoot              string                                `yaml:"assetRoot,omitempty"`
-	Routes                 []UIRoute                             `yaml:"routes,omitempty"`
-	AllowSameOriginFraming bool                                  `yaml:"allowSameOriginFraming,omitempty"`
+	AssetRoot string    `yaml:"assetRoot,omitempty"`
+	Routes    []UIRoute `yaml:"routes,omitempty"`
 }
 
 type specWire struct {
@@ -821,9 +814,8 @@ type specWire struct {
 	Pagination             *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	Requires               []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 	UI                     *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
-	AssetRoot              string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	Routes                 []UIRoute                             `json:"routes,omitempty" yaml:"routes,omitempty"`
-	AllowSameOriginFraming bool                                  `json:"allowSameOriginFraming,omitempty" yaml:"allowSameOriginFraming,omitempty"`
+	AssetRoot string    `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+	Routes    []UIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 func (s *Spec) UnmarshalJSON(data []byte) error {
@@ -852,9 +844,8 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 		Pagination:             raw.Pagination,
 		Requires:               raw.Requires,
 		UI:                     raw.UI,
-		AssetRoot:              raw.AssetRoot,
-		Routes:                 raw.Routes,
-		AllowSameOriginFraming: raw.AllowSameOriginFraming,
+		AssetRoot: raw.AssetRoot,
+		Routes:    raw.Routes,
 	}
 
 	*s = spec
@@ -902,9 +893,8 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 		Pagination:             raw.Pagination,
 		Requires:               raw.Requires,
 		UI:                     raw.UI,
-		AssetRoot:              raw.AssetRoot,
-		Routes:                 raw.Routes,
-		AllowSameOriginFraming: raw.AllowSameOriginFraming,
+		AssetRoot: raw.AssetRoot,
+		Routes:    raw.Routes,
 	}
 
 	*s = spec
@@ -935,9 +925,8 @@ func (s Spec) canonicalWire() (specWire, error) {
 		Pagination:             s.Pagination,
 		Requires:               s.Requires,
 		UI:                     s.UI,
-		AssetRoot:              s.AssetRoot,
-		Routes:                 s.Routes,
-		AllowSameOriginFraming: s.AllowSameOriginFraming,
+		AssetRoot: s.AssetRoot,
+		Routes:    s.Routes,
 	}, nil
 }
 
@@ -1128,9 +1117,8 @@ var specWireFields = map[string]struct{}{
 	"pagination":             {},
 	"requires":               {},
 	"ui":                     {},
-	"assetRoot":              {},
-	"routes":                 {},
-	"allowSameOriginFraming": {},
+	"assetRoot": {},
+	"routes":    {},
 }
 
 //go:embed manifest.jsonschema.json
