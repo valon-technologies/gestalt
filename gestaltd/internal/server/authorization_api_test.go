@@ -104,6 +104,8 @@ func TestAuthorizationAPIListRelationships(t *testing.T) {
 }
 
 func TestAuthorizationAPIListRelationshipsRejectsPartialEntityFilters(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name  string
 		query string

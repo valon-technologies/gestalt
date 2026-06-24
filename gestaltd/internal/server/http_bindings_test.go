@@ -7,6 +7,8 @@ import (
 )
 
 func TestValidateMountedHTTPBindingRoutesRejectsAuthorizationNamespace(t *testing.T) {
+	t.Parallel()
+
 	err := validateMountedHTTPBindingRoutes([]MountedHTTPBinding{
 		{
 			AppName: "authorization",
