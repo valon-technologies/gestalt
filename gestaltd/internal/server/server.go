@@ -59,7 +59,11 @@ type MountedUI struct {
 	ThemeStylesheet string
 	ThemeAssetsDir  string
 	IsDev           bool
-	builtInAdmin    bool
+	// AllowSameOriginFraming relaxes this mount's anti-clickjacking headers to
+	// frame-ancestors 'self' / X-Frame-Options SAMEORIGIN so it may embed its
+	// own same-origin iframes (e.g. Storybook). Cross-origin framing stays blocked.
+	AllowSameOriginFraming bool
+	builtInAdmin           bool
 }
 
 type MountedHTTPBinding struct {

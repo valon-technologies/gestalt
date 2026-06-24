@@ -113,6 +113,25 @@ func withDevContentSecurityPolicy(next http.Handler) http.Handler {
 	})
 }
 
+const (
+	frameAncestorsNone      = "frame-ancestors 'none'"
+	frameAncestorsSelf      = "frame-ancestors 'self'"
+	xFrameOptionsSameOrigin = "SAMEORIGIN"
+)
+
+// withSameOriginFraming overrides the anti-clickjacking headers set upstream
+// (the global security middleware and the dev CSP) so an opted-in mount may
+// embed its own same-origin iframes. Cross-origin framing stays blocked.
+func withSameOriginFraming(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if csp := w.Header().Get("Content-Security-Policy"); csp != "" {
+			w.Header().Set("Content-Security-Policy", strings.Replace(csp, frameAncestorsNone, frameAncestorsSelf, 1))
+		}
+		w.Header().Set("X-Frame-Options", xFrameOptionsSameOrigin)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)

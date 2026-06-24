@@ -118,6 +118,7 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry, devHandlers map[s
 		}
 
 		routes := mountedUIRoutesFromEntry(entry)
+		allowFraming := mountedUIAllowsSameOriginFraming(entry)
 
 		if entry.DevActive {
 			handler := devHandlers[name]
@@ -125,15 +126,16 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry, devHandlers map[s
 				return nil, fmt.Errorf("ui %q is dev-active but no dev handler was started", name)
 			}
 			mounted = append(mounted, MountedUI{
-				Name:                name,
-				Path:                entry.Path,
-				AppName:             entry.OwnerApp,
-				AuthorizationPolicy: entry.AuthorizationPolicy,
-				Routes:              routes,
-				Handler:             handler,
-				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
-				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
-				IsDev:               true,
+				Name:                   name,
+				Path:                   entry.Path,
+				AppName:                entry.OwnerApp,
+				AuthorizationPolicy:    entry.AuthorizationPolicy,
+				Routes:                 routes,
+				Handler:                handler,
+				ThemeStylesheet:        entry.ResolvedThemeStylesheet,
+				ThemeAssetsDir:         entry.ResolvedThemeAssetsDir,
+				IsDev:                  true,
+				AllowSameOriginFraming: allowFraming,
 			})
 			continue
 		}
@@ -148,18 +150,26 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry, devHandlers map[s
 		}
 
 		mounted = append(mounted, MountedUI{
-			Name:                name,
-			Path:                entry.Path,
-			AppName:             entry.OwnerApp,
-			AuthorizationPolicy: entry.AuthorizationPolicy,
-			Routes:              routes,
-			Handler:             handler,
-			ThemeStylesheet:     entry.ResolvedThemeStylesheet,
-			ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+			Name:                   name,
+			Path:                   entry.Path,
+			AppName:                entry.OwnerApp,
+			AuthorizationPolicy:    entry.AuthorizationPolicy,
+			Routes:                 routes,
+			Handler:                handler,
+			ThemeStylesheet:        entry.ResolvedThemeStylesheet,
+			ThemeAssetsDir:         entry.ResolvedThemeAssetsDir,
+			AllowSameOriginFraming: allowFraming,
 		})
 	}
 
 	return mounted, nil
+}
+
+// mountedUIAllowsSameOriginFraming reports whether the mount's manifest opted
+// into same-origin framing via spec.allowSameOriginFraming.
+func mountedUIAllowsSameOriginFraming(entry *config.UIEntry) bool {
+	spec := entry.ManifestSpec()
+	return spec != nil && spec.AllowSameOriginFraming
 }
 
 func mountedUIRoutesFromEntry(entry *config.UIEntry) []MountedUIRoute {
@@ -353,6 +363,12 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	inner := mounted.Handler
 	if inner == nil {
 		return http.NotFoundHandler()
+	}
+	// Innermost wrapper: relax the anti-clickjacking headers set by the global
+	// security middleware (and the dev CSP) so an opted-in mount may frame its
+	// own same-origin content. Runs last, so it overrides those defaults.
+	if mounted.AllowSameOriginFraming {
+		inner = withSameOriginFraming(inner)
 	}
 	if mounted.IsDev {
 		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
