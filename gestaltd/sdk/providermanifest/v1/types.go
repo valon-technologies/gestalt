@@ -759,63 +759,63 @@ type Entrypoint struct {
 }
 
 type specJSONWire struct {
-	ConfigSchemaPath       string                                `json:"configSchemaPath,omitempty"`
-	Auth                   *RouteAuthRef                         `json:"auth,omitempty"`
-	SecuritySchemes        map[string]*HTTPSecurityScheme        `json:"securitySchemes,omitempty"`
-	HTTP                   map[string]*HTTPBinding               `json:"http,omitempty"`
-	MCP                    bool                                  `json:"mcp,omitempty"`
-	Headers                map[string]string                     `json:"headers,omitempty"`
-	ManagedParameters      []ManagedParameter                    `json:"managedParameters,omitempty"`
-	Surfaces               *ProviderSurfaces                     `json:"surfaces,omitempty"`
-	AllowedOperations      map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty"`
-	DefaultConnection      string                                `json:"defaultConnection,omitempty"`
-	Connections            map[string]*ManifestConnectionDef     `json:"connections,omitempty"`
-	ResponseMapping        *ManifestResponseMapping              `json:"responseMapping,omitempty"`
-	Pagination             *ManifestPaginationConfig             `json:"pagination,omitempty"`
-	Requires               []string                              `json:"requires,omitempty"`
-	UI                     *OwnedUI                              `json:"ui,omitempty"`
-	AssetRoot string    `json:"assetRoot,omitempty"`
-	Routes    []UIRoute `json:"routes,omitempty"`
+	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty"`
+	Auth              *RouteAuthRef                         `json:"auth,omitempty"`
+	SecuritySchemes   map[string]*HTTPSecurityScheme        `json:"securitySchemes,omitempty"`
+	HTTP              map[string]*HTTPBinding               `json:"http,omitempty"`
+	MCP               bool                                  `json:"mcp,omitempty"`
+	Headers           map[string]string                     `json:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty"`
+	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty"`
+	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty"`
+	DefaultConnection string                                `json:"defaultConnection,omitempty"`
+	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty"`
+	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty"`
+	Requires          []string                              `json:"requires,omitempty"`
+	UI                *OwnedUI                              `json:"ui,omitempty"`
+	AssetRoot         string                                `json:"assetRoot,omitempty"`
+	Routes            []UIRoute                             `json:"routes,omitempty"`
 }
 
 type specYAMLWire struct {
-	ConfigSchemaPath       string                                `yaml:"configSchemaPath,omitempty"`
-	Auth                   *RouteAuthRef                         `yaml:"auth,omitempty"`
-	SecuritySchemes        map[string]*HTTPSecurityScheme        `yaml:"securitySchemes,omitempty"`
-	HTTP                   map[string]*HTTPBinding               `yaml:"http,omitempty"`
-	MCP                    bool                                  `yaml:"mcp,omitempty"`
-	Headers                map[string]string                     `yaml:"headers,omitempty"`
-	ManagedParameters      []ManagedParameter                    `yaml:"managedParameters,omitempty"`
-	Surfaces               *ProviderSurfaces                     `yaml:"surfaces,omitempty"`
-	AllowedOperations      map[string]*ManifestOperationOverride `yaml:"allowedOperations,omitempty"`
-	DefaultConnection      string                                `yaml:"defaultConnection,omitempty"`
-	Connections            map[string]*ManifestConnectionDef     `yaml:"connections,omitempty"`
-	ResponseMapping        *ManifestResponseMapping              `yaml:"responseMapping,omitempty"`
-	Pagination             *ManifestPaginationConfig             `yaml:"pagination,omitempty"`
-	Requires               []string                              `yaml:"requires,omitempty"`
-	UI                     *OwnedUI                              `yaml:"ui,omitempty"`
-	AssetRoot string    `yaml:"assetRoot,omitempty"`
-	Routes    []UIRoute `yaml:"routes,omitempty"`
+	ConfigSchemaPath  string                                `yaml:"configSchemaPath,omitempty"`
+	Auth              *RouteAuthRef                         `yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*HTTPSecurityScheme        `yaml:"securitySchemes,omitempty"`
+	HTTP              map[string]*HTTPBinding               `yaml:"http,omitempty"`
+	MCP               bool                                  `yaml:"mcp,omitempty"`
+	Headers           map[string]string                     `yaml:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                    `yaml:"managedParameters,omitempty"`
+	Surfaces          *ProviderSurfaces                     `yaml:"surfaces,omitempty"`
+	AllowedOperations map[string]*ManifestOperationOverride `yaml:"allowedOperations,omitempty"`
+	DefaultConnection string                                `yaml:"defaultConnection,omitempty"`
+	Connections       map[string]*ManifestConnectionDef     `yaml:"connections,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `yaml:"responseMapping,omitempty"`
+	Pagination        *ManifestPaginationConfig             `yaml:"pagination,omitempty"`
+	Requires          []string                              `yaml:"requires,omitempty"`
+	UI                *OwnedUI                              `yaml:"ui,omitempty"`
+	AssetRoot         string                                `yaml:"assetRoot,omitempty"`
+	Routes            []UIRoute                             `yaml:"routes,omitempty"`
 }
 
 type specWire struct {
-	ConfigSchemaPath       string                                `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
-	Auth                   *RouteAuthRef                         `json:"auth,omitempty" yaml:"auth,omitempty"`
-	SecuritySchemes        map[string]*HTTPSecurityScheme        `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
-	HTTP                   map[string]*HTTPBinding               `json:"http,omitempty" yaml:"http,omitempty"`
-	MCP                    bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
-	Headers                map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
-	ManagedParameters      []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
-	Surfaces               *ProviderSurfaces                     `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
-	AllowedOperations      map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
-	DefaultConnection      string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
-	Connections            map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
-	ResponseMapping        *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
-	Pagination             *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
-	Requires               []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
-	UI                     *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
-	AssetRoot string    `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	Routes    []UIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
+	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
+	Auth              *RouteAuthRef                         `json:"auth,omitempty" yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*HTTPSecurityScheme        `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
+	HTTP              map[string]*HTTPBinding               `json:"http,omitempty" yaml:"http,omitempty"`
+	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
+	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
+	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
+	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
+	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
+	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
+	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
+	UI                *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
+	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+	Routes            []UIRoute                             `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 func (s *Spec) UnmarshalJSON(data []byte) error {
@@ -829,23 +829,23 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 	}
 
 	spec := Spec{
-		ConfigSchemaPath:       raw.ConfigSchemaPath,
-		RouteAuth:              raw.Auth,
-		SecuritySchemes:        cloneHTTPSecuritySchemes(raw.SecuritySchemes),
-		HTTP:                   cloneHTTPBindings(raw.HTTP),
-		MCP:                    raw.MCP,
-		Headers:                raw.Headers,
-		ManagedParameters:      raw.ManagedParameters,
-		Surfaces:               raw.Surfaces,
-		AllowedOperations:      raw.AllowedOperations,
-		DefaultConnection:      raw.DefaultConnection,
-		Connections:            raw.Connections,
-		ResponseMapping:        raw.ResponseMapping,
-		Pagination:             raw.Pagination,
-		Requires:               raw.Requires,
-		UI:                     raw.UI,
-		AssetRoot: raw.AssetRoot,
-		Routes:    raw.Routes,
+		ConfigSchemaPath:  raw.ConfigSchemaPath,
+		RouteAuth:         raw.Auth,
+		SecuritySchemes:   cloneHTTPSecuritySchemes(raw.SecuritySchemes),
+		HTTP:              cloneHTTPBindings(raw.HTTP),
+		MCP:               raw.MCP,
+		Headers:           raw.Headers,
+		ManagedParameters: raw.ManagedParameters,
+		Surfaces:          raw.Surfaces,
+		AllowedOperations: raw.AllowedOperations,
+		DefaultConnection: raw.DefaultConnection,
+		Connections:       raw.Connections,
+		ResponseMapping:   raw.ResponseMapping,
+		Pagination:        raw.Pagination,
+		Requires:          raw.Requires,
+		UI:                raw.UI,
+		AssetRoot:         raw.AssetRoot,
+		Routes:            raw.Routes,
 	}
 
 	*s = spec
@@ -878,23 +878,23 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	spec := Spec{
-		ConfigSchemaPath:       raw.ConfigSchemaPath,
-		RouteAuth:              raw.Auth,
-		SecuritySchemes:        cloneHTTPSecuritySchemes(raw.SecuritySchemes),
-		HTTP:                   cloneHTTPBindings(raw.HTTP),
-		MCP:                    raw.MCP,
-		Headers:                raw.Headers,
-		ManagedParameters:      raw.ManagedParameters,
-		Surfaces:               raw.Surfaces,
-		AllowedOperations:      raw.AllowedOperations,
-		DefaultConnection:      raw.DefaultConnection,
-		Connections:            raw.Connections,
-		ResponseMapping:        raw.ResponseMapping,
-		Pagination:             raw.Pagination,
-		Requires:               raw.Requires,
-		UI:                     raw.UI,
-		AssetRoot: raw.AssetRoot,
-		Routes:    raw.Routes,
+		ConfigSchemaPath:  raw.ConfigSchemaPath,
+		RouteAuth:         raw.Auth,
+		SecuritySchemes:   cloneHTTPSecuritySchemes(raw.SecuritySchemes),
+		HTTP:              cloneHTTPBindings(raw.HTTP),
+		MCP:               raw.MCP,
+		Headers:           raw.Headers,
+		ManagedParameters: raw.ManagedParameters,
+		Surfaces:          raw.Surfaces,
+		AllowedOperations: raw.AllowedOperations,
+		DefaultConnection: raw.DefaultConnection,
+		Connections:       raw.Connections,
+		ResponseMapping:   raw.ResponseMapping,
+		Pagination:        raw.Pagination,
+		Requires:          raw.Requires,
+		UI:                raw.UI,
+		AssetRoot:         raw.AssetRoot,
+		Routes:            raw.Routes,
 	}
 
 	*s = spec
@@ -910,23 +910,23 @@ func (s *Spec) MarshalYAML() (any, error) {
 
 func (s Spec) canonicalWire() (specWire, error) {
 	return specWire{
-		ConfigSchemaPath:       s.ConfigSchemaPath,
-		Auth:                   s.RouteAuth,
-		SecuritySchemes:        cloneHTTPSecuritySchemes(s.SecuritySchemes),
-		HTTP:                   cloneHTTPBindings(s.HTTP),
-		MCP:                    s.MCP,
-		Headers:                s.Headers,
-		ManagedParameters:      s.ManagedParameters,
-		Surfaces:               s.Surfaces,
-		AllowedOperations:      s.AllowedOperations,
-		DefaultConnection:      s.DefaultConnection,
-		Connections:            cloneManifestConnections(s.Connections),
-		ResponseMapping:        s.ResponseMapping,
-		Pagination:             s.Pagination,
-		Requires:               s.Requires,
-		UI:                     s.UI,
-		AssetRoot: s.AssetRoot,
-		Routes:    s.Routes,
+		ConfigSchemaPath:  s.ConfigSchemaPath,
+		Auth:              s.RouteAuth,
+		SecuritySchemes:   cloneHTTPSecuritySchemes(s.SecuritySchemes),
+		HTTP:              cloneHTTPBindings(s.HTTP),
+		MCP:               s.MCP,
+		Headers:           s.Headers,
+		ManagedParameters: s.ManagedParameters,
+		Surfaces:          s.Surfaces,
+		AllowedOperations: s.AllowedOperations,
+		DefaultConnection: s.DefaultConnection,
+		Connections:       cloneManifestConnections(s.Connections),
+		ResponseMapping:   s.ResponseMapping,
+		Pagination:        s.Pagination,
+		Requires:          s.Requires,
+		UI:                s.UI,
+		AssetRoot:         s.AssetRoot,
+		Routes:            s.Routes,
 	}, nil
 }
 
@@ -1102,23 +1102,23 @@ var sourceDevWireFields = map[string]struct{}{
 }
 
 var specWireFields = map[string]struct{}{
-	"configSchemaPath":       {},
-	"auth":                   {},
-	"securitySchemes":        {},
-	"http":                   {},
-	"mcp":                    {},
-	"headers":                {},
-	"managedParameters":      {},
-	"surfaces":               {},
-	"allowedOperations":      {},
-	"defaultConnection":      {},
-	"connections":            {},
-	"responseMapping":        {},
-	"pagination":             {},
-	"requires":               {},
-	"ui":                     {},
-	"assetRoot": {},
-	"routes":    {},
+	"configSchemaPath":  {},
+	"auth":              {},
+	"securitySchemes":   {},
+	"http":              {},
+	"mcp":               {},
+	"headers":           {},
+	"managedParameters": {},
+	"surfaces":          {},
+	"allowedOperations": {},
+	"defaultConnection": {},
+	"connections":       {},
+	"responseMapping":   {},
+	"pagination":        {},
+	"requires":          {},
+	"ui":                {},
+	"assetRoot":         {},
+	"routes":            {},
 }
 
 //go:embed manifest.jsonschema.json
