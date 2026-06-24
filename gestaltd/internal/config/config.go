@@ -1946,6 +1946,7 @@ type AuthorizationModelDef struct {
 
 type AuthorizationResourceTypeDef struct {
 	DefaultAccessPolicy string                                `yaml:"defaultAccessPolicy,omitempty"`
+	DefaultRole         string                                `yaml:"defaultRole,omitempty"`
 	Relations           map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
 	Actions             map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
 	Dynamic             AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
@@ -3628,6 +3629,8 @@ func normalizedAuthorizationModelDef(def AuthorizationModelDef) AuthorizationMod
 }
 
 func normalizedAuthorizationResourceTypeDef(def AuthorizationResourceTypeDef) AuthorizationResourceTypeDef {
+	def.DefaultAccessPolicy = strings.TrimSpace(def.DefaultAccessPolicy)
+	def.DefaultRole = strings.TrimSpace(def.DefaultRole)
 	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
 	if len(def.Relations) == 0 {
 		def.Relations = nil

@@ -488,12 +488,12 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 		}
 	}
 
-	defaultAllow, err := s.mountedUIResourceDefaultAllows(ctx, resourceName)
+	defaultRole, err := s.mountedUIResourceDefaultRole(ctx, resourceName)
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
-	if defaultAllow && mountedUIRoleAllowed("viewer", route.AllowedRoles) {
-		return invocation.AccessContext{Policy: resourceName, Role: "viewer"}, true, nil
+	if defaultRole != "" && mountedUIRoleAllowed(defaultRole, route.AllowedRoles) {
+		return invocation.AccessContext{Policy: resourceName, Role: defaultRole}, true, nil
 	}
 	return invocation.AccessContext{}, false, nil
 }
@@ -551,20 +551,26 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 	}
 }
 
-func (s *Server) mountedUIResourceDefaultAllows(ctx context.Context, resourceName string) (bool, error) {
+func (s *Server) mountedUIResourceDefaultRole(ctx context.Context, resourceName string) (string, error) {
 	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
 		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(resourceName)},
 		PageSize: 1,
 	})
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	for _, resourceType := range resp.GetResourceTypes() {
 		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(resourceName) {
-			return resourceType.GetDefaultAccessPolicy() == proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW, nil
+			if role := strings.TrimSpace(resourceType.GetDefaultRole()); role != "" {
+				return role, nil
+			}
+			if resourceType.GetDefaultAccessPolicy() == proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW {
+				return "viewer", nil
+			}
+			return "", nil
 		}
 	}
-	return false, nil
+	return "", nil
 }
 
 func (s *Server) resolveMountedUIPrincipal(r *http.Request, mounted MountedUI) (*principal.Principal, bool, error) {

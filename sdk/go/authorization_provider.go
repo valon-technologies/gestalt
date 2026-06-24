@@ -172,6 +172,7 @@ type AuthorizationModelResourceType struct {
 	Actions             []*ModelAction
 	SourceLayer         SourceLayer
 	DefaultAccessPolicy DefaultAccessPolicy
+	DefaultRole         string
 }
 
 // ModelRelation is the native message type for gestalt.provider.v1.ModelRelation.

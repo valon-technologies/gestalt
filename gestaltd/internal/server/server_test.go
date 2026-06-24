@@ -2526,6 +2526,10 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW,
 			},
 			{
+				Name:        "readerPolicy",
+				DefaultRole: "reader",
+			},
+			{
 				Name:                "gestaltAdmin",
 				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
 			},
@@ -2584,6 +2588,19 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 					_, _ = w.Write([]byte("brain-shell"))
 				}),
 			},
+			{
+				Name:                "reader-ui",
+				Path:                "/reader",
+				AppName:             "reader",
+				AuthorizationPolicy: "readerPolicy",
+				Routes: []server.MountedUIRoute{
+					{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+					{Path: "/*", AllowedRoles: []string{"reader"}},
+				},
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("reader-shell"))
+				}),
+			},
 		}
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("admin-shell"))
@@ -2628,6 +2645,33 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 	}
 	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "brainPolicy" {
 		t.Fatalf("relationship resource type = %q, want explicit AuthorizationPolicy brainPolicy", got)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/reader/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET default-role mounted UI: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("default-role mounted UI status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if !bytes.Contains(body, []byte("reader-shell")) {
+		t.Fatalf("default-role mounted UI body = %q, want shell", body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/reader/admin/settings", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET default-role admin mounted UI: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("default-role admin mounted UI status = %d, want 403: %s", resp.StatusCode, body)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/admin/settings", nil)

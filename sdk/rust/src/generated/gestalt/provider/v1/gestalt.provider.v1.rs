@@ -1479,6 +1479,8 @@ pub struct AuthorizationModelResourceType {
     pub source_layer: i32,
     #[prost(enumeration = "DefaultAccessPolicy", tag = "5")]
     pub default_access_policy: i32,
+    #[prost(string, tag = "6")]
+    pub default_role: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ModelRelation {

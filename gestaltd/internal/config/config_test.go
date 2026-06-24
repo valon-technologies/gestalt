@@ -893,6 +893,18 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 			wantErr: `authorization.models.default.resourceTypes.team.defaultAccessPolicy must be "allow" or "deny"`,
 		},
 		{
+			name: "unknown default role relation",
+			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
+				"default": model(map[string]AuthorizationResourceTypeDef{
+					"team": {
+						DefaultRole: "viewer",
+						Relations:   map[string]AuthorizationRelationDef{"member": subjectRelation("subject")},
+					},
+				}),
+			}},
+			wantErr: `authorization.models.default.resourceTypes.team.defaultRole references undefined relation "viewer"`,
+		},
+		{
 			name: "model key has surrounding whitespace",
 			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
 				" default ": model(map[string]AuthorizationResourceTypeDef{

@@ -145,11 +145,22 @@ func defaultAccessPolicy(value string) proto.DefaultAccessPolicy {
 	return proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY
 }
 
+func defaultRole(def config.AuthorizationResourceTypeDef) string {
+	if role := strings.TrimSpace(def.DefaultRole); role != "" {
+		return role
+	}
+	if strings.EqualFold(strings.TrimSpace(def.DefaultAccessPolicy), "allow") {
+		return "viewer"
+	}
+	return ""
+}
+
 func staticAuthorizationResourceType(name string, def config.AuthorizationResourceTypeDef) (*proto.AuthorizationModelResourceType, error) {
 	resourceType := &proto.AuthorizationModelResourceType{
 		Name:                strings.TrimSpace(name),
 		SourceLayer:         proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
 		DefaultAccessPolicy: defaultAccessPolicy(def.DefaultAccessPolicy),
+		DefaultRole:         defaultRole(def),
 	}
 	for _, relationName := range slices.Sorted(maps.Keys(def.Relations)) {
 		relation := def.Relations[relationName]

@@ -225,12 +225,14 @@ class AuthorizationModelResourceType(_message.Message):
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
     SOURCE_LAYER_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_ACCESS_POLICY_FIELD_NUMBER: _ClassVar[int]
+    DEFAULT_ROLE_FIELD_NUMBER: _ClassVar[int]
     name: str
     relations: _containers.RepeatedCompositeFieldContainer[ModelRelation]
     actions: _containers.RepeatedCompositeFieldContainer[ModelAction]
     source_layer: SourceLayer
     default_access_policy: DefaultAccessPolicy
-    def __init__(self, name: _Optional[str] = ..., relations: _Optional[_Iterable[_Union[ModelRelation, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ModelAction, _Mapping]]] = ..., source_layer: _Optional[_Union[SourceLayer, str]] = ..., default_access_policy: _Optional[_Union[DefaultAccessPolicy, str]] = ...) -> None: ...
+    default_role: str
+    def __init__(self, name: _Optional[str] = ..., relations: _Optional[_Iterable[_Union[ModelRelation, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ModelAction, _Mapping]]] = ..., source_layer: _Optional[_Union[SourceLayer, str]] = ..., default_access_policy: _Optional[_Union[DefaultAccessPolicy, str]] = ..., default_role: _Optional[str] = ...) -> None: ...
 
 class ModelRelation(_message.Message):
     __slots__ = ()
