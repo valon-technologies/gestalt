@@ -25,7 +25,7 @@ func (s *Server) checkAuthorizationAccess(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeProtoJSON(w, http.StatusOK, resp)
+	writeCheckAccessProtoJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) listAuthorizationRelationships(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +99,18 @@ func decodeProtoJSONBody(w http.ResponseWriter, r *http.Request, msg gproto.Mess
 
 func writeProtoJSON(w http.ResponseWriter, status int, msg gproto.Message) {
 	body, err := (protojson.MarshalOptions{EmitUnpopulated: false}).Marshal(msg)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode response")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
+	_, _ = w.Write([]byte("\n"))
+}
+
+func writeCheckAccessProtoJSON(w http.ResponseWriter, status int, msg *proto.CheckAccessResponse) {
+	body, err := (protojson.MarshalOptions{EmitUnpopulated: true}).Marshal(msg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to encode response")
 		return

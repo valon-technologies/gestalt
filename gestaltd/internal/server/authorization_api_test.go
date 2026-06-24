@@ -45,6 +45,34 @@ func TestAuthorizationAPICheckAccess(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPICheckAccessDeniedIncludesAllowedFalse(t *testing.T) {
+	authz := &authorizationAPITestProvider{checkAccessDenied: true}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Authorization = authz
+	})
+	defer ts.Close()
+	t.Parallel()
+
+	resp := doAuthorizationJSONRequest(t, http.MethodPost, ts.URL+"/api/v1/authorization/check-access", `{
+		"subject": {"type": "subject", "id": "user:alice"},
+		"action": {"name": "admin"},
+		"resource": {"type": "group", "id": "engineering"}
+	}`)
+	defer closeResponseBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	allowed, ok := body["allowed"].(bool)
+	if !ok || allowed {
+		t.Fatalf("allowed = %#v, want explicit false", body["allowed"])
+	}
+}
+
 func TestAuthorizationAPIListRelationships(t *testing.T) {
 	authz := &authorizationAPITestProvider{}
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -208,13 +236,14 @@ type authorizationAPITestProvider struct {
 	core.AuthorizationProvider
 
 	checkAccessRequest       *proto.CheckAccessRequest
+	checkAccessDenied        bool
 	listRelationshipsRequest *proto.ListRelationshipsRequest
 	listResourceTypesRequest *proto.ListActiveModelResourceTypesRequest
 }
 
 func (p *authorizationAPITestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.checkAccessRequest = req
-	return &proto.CheckAccessResponse{Allowed: true, ModelId: "model-1"}, nil
+	return &proto.CheckAccessResponse{Allowed: !p.checkAccessDenied, ModelId: "model-1"}, nil
 }
 
 func (p *authorizationAPITestProvider) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
