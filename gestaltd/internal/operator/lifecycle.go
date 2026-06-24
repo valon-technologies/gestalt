@@ -3051,7 +3051,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	entry := LockEntry{
 		Package:  metadata.Package,
 		Kind:     metadata.Kind,
-		Runtime:  providerrelease.RuntimeForManifest(metadata.Kind, bundle.Manifest),
+		Runtime:  metadata.Runtime,
 		Source:   providerSourceLockLocation(app, configDir),
 		Version:  metadata.Version,
 		Archives: archives,
