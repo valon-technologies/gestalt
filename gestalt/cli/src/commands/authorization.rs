@@ -7,7 +7,6 @@ use crate::cli::{
     AuthorizationCommands, AuthorizationModelCommands, AuthorizationRelationshipCommands,
 };
 use crate::output::{self, Format};
-use crate::params;
 use crate::query;
 
 const CHECK_ACCESS_PATH: &str = "/api/v1/authorization/check-access";
@@ -77,78 +76,16 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
 }
 
 fn relationships_list_path(args: &crate::cli::AuthorizationRelationshipListArgs) -> Result<String> {
-    let input = match args.input_file.as_deref() {
-        Some(path) => Some(Value::Object(params::load_input_file(path)?)),
-        None => None,
-    };
-    let subject_id = args
-        .subject_id
-        .as_deref()
-        .or_else(|| json_path_str(input.as_ref(), &["filter", "target", "subject", "id"]));
-    let subject_type = args
-        .subject_type
-        .as_deref()
-        .or_else(|| json_path_str(input.as_ref(), &["filter", "target", "subject", "type"]));
-    validate_pair(
-        subject_type,
-        subject_id,
-        "subjectType and subjectId must be provided together",
-    )?;
-    let resource_type = args
-        .resource_type
-        .as_deref()
-        .or_else(|| json_path_str(input.as_ref(), &["filter", "resourceType"]))
-        .or_else(|| json_path_str(input.as_ref(), &["filter", "resource", "type"]));
-    let resource_id = args
-        .resource_id
-        .as_deref()
-        .or_else(|| json_path_str(input.as_ref(), &["filter", "resource", "id"]));
-    validate_pair(
-        resource_type,
-        resource_id,
-        "resourceType and resourceId must be provided together",
-    )?;
-
     let mut params = Vec::new();
-    query::push_opt_param(&mut params, "subjectId", subject_id);
-    query::push_opt_param(&mut params, "subjectType", subject_type);
-    query::push_opt_param(
-        &mut params,
-        "relation",
-        args.relation
-            .as_deref()
-            .or_else(|| json_path_str(input.as_ref(), &["filter", "relation"])),
-    );
-    query::push_opt_param(&mut params, "resourceType", resource_type);
-    query::push_opt_param(&mut params, "resourceId", resource_id);
-    query::push_opt_param(
-        &mut params,
-        "sourceLayer",
-        args.source_layer
-            .as_deref()
-            .or_else(|| json_path_str(input.as_ref(), &["filter", "sourceLayer"])),
-    );
-    query::push_opt_u32(
-        &mut params,
-        "pageSize",
-        args.page_size
-            .or_else(|| json_path_u32(input.as_ref(), &["pageSize"])),
-    );
-    query::push_opt_param(
-        &mut params,
-        "pageToken",
-        args.page_token
-            .as_deref()
-            .or_else(|| json_path_str(input.as_ref(), &["pageToken"])),
-    );
+    query::push_opt_param(&mut params, "subjectId", args.subject_id.as_deref());
+    query::push_opt_param(&mut params, "subjectType", args.subject_type.as_deref());
+    query::push_opt_param(&mut params, "relation", args.relation.as_deref());
+    query::push_opt_param(&mut params, "resourceType", args.resource_type.as_deref());
+    query::push_opt_param(&mut params, "resourceId", args.resource_id.as_deref());
+    query::push_opt_param(&mut params, "sourceLayer", args.source_layer.as_deref());
+    query::push_opt_u32(&mut params, "pageSize", args.page_size);
+    query::push_opt_param(&mut params, "pageToken", args.page_token.as_deref());
     query::append_query(RELATIONSHIPS_PATH, &params)
-}
-
-fn validate_pair(left: Option<&str>, right: Option<&str>, message: &str) -> Result<()> {
-    if left.is_some() != right.is_some() {
-        anyhow::bail!("{message}");
-    }
-    Ok(())
 }
 
 fn active_model_resource_types_path(
@@ -209,27 +146,11 @@ fn model_id(value: &Value) -> Option<&str> {
         .filter(|model_id| !model_id.is_empty())
 }
 
-fn json_path_str<'a>(value: Option<&'a Value>, path: &[&str]) -> Option<&'a str> {
-    let mut current = value?;
-    for segment in path {
-        current = current.get(*segment)?;
-    }
-    current.as_str()
-}
-
-fn json_path_u32(value: Option<&Value>, path: &[&str]) -> Option<u32> {
-    let mut current = value?;
-    for segment in path {
-        current = current.get(*segment)?;
-    }
-    current.as_u64().and_then(|value| u32::try_from(value).ok())
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
-    use super::{model_id, next_page_token, validate_pair};
+    use super::{model_id, next_page_token};
 
     #[test]
     fn next_page_token_returns_trimmed_non_empty_token() {
@@ -250,17 +171,5 @@ mod tests {
         let value = json!({"modelId": " model-1 "});
 
         assert_eq!(model_id(&value), Some("model-1"));
-    }
-
-    #[test]
-    fn validate_pair_accepts_absent_or_complete_pairs() {
-        assert!(validate_pair(None, None, "missing pair").is_ok());
-        assert!(validate_pair(Some("type"), Some("id"), "missing pair").is_ok());
-    }
-
-    #[test]
-    fn validate_pair_rejects_partial_pairs() {
-        assert!(validate_pair(Some("type"), None, "missing pair").is_err());
-        assert!(validate_pair(None, Some("id"), "missing pair").is_err());
     }
 }

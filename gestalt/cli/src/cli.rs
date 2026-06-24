@@ -280,9 +280,6 @@ pub struct AuthorizationRelationshipListArgs {
     /// Pagination cursor returned by a previous list response
     #[arg(long = "page-token")]
     pub page_token: Option<String>,
-    /// Optional path to a full ListRelationshipsRequest JSON file; use - to read from stdin
-    #[arg(long = "input-file")]
-    pub input_file: Option<String>,
 }
 
 #[derive(Subcommand)]
