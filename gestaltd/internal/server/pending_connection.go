@@ -113,6 +113,12 @@ var pendingConnectionSelectionPage = template.Must(template.New("pending-connect
     <p class="footer">{{.Footer}}</p>
     {{end}}
   </main>
+  {{if .AutoClose}}
+  <script>
+    try { if (window.opener) { window.opener.postMessage({ type: "gestalt:connection-complete" }, "*"); } } catch (e) {}
+    setTimeout(function () { window.close(); }, 600);
+  </script>
+  {{end}}
 </body>
 </html>
 `))
@@ -126,6 +132,7 @@ type pendingConnectionPageView struct {
 	LinkURL      string
 	LinkLabel    string
 	Footer       string
+	AutoClose    bool
 }
 
 func writePendingConnectionPage(w http.ResponseWriter, status int, view pendingConnectionPageView, renderErr string) {
@@ -227,6 +234,24 @@ func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, stat
 		Candidates:   state.Candidates,
 		Footer:       "If you did not expect this screen, close this tab and restart the connect flow.",
 	}, "failed to render pending connection page")
+}
+
+// writeConnectionCompletePage renders the OAuth-callback success page for a
+// browser popup: it closes itself (window.close) since, post-OAuth, the opener
+// can't close it — Cross-Origin-Opener-Policy on the provider's pages severs the
+// opener↔popup link. A visible message + link is the fallback if close is blocked.
+func writeConnectionCompletePage(w http.ResponseWriter, integration string) {
+	linkURL := "/apps"
+	if connectedURL, err := setURLQueryParam(linkURL, "connected", integration); err == nil {
+		linkURL = connectedURL
+	}
+	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
+		Title:     integration + " connected",
+		Message:   "Your connection has been saved. This window will close automatically.",
+		LinkURL:   linkURL,
+		LinkLabel: "Open integrations",
+		AutoClose: true,
+	}, "failed to render connection success page")
 }
 
 func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string) {
