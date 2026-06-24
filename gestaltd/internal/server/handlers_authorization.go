@@ -128,22 +128,33 @@ func listAuthorizationRelationshipsRequestFromQuery(w http.ResponseWriter, r *ht
 		Relation:         strings.TrimSpace(query.Get("relation")),
 		TargetType:       targetType,
 		TargetEntityType: strings.TrimSpace(queryValue(query, "targetEntityType", "target_entity_type")),
-		ResourceType:     strings.TrimSpace(queryValue(query, "resourceType", "resource_type")),
 		SourceLayer:      sourceLayer,
 	}
-	if subjectID := strings.TrimSpace(queryValue(query, "subjectId", "subject_id", "targetSubjectId", "target_subject_id")); subjectID != "" {
+	subjectType := strings.TrimSpace(queryValue(query, "subjectType", "subject_type", "targetSubjectType", "target_subject_type"))
+	subjectID := strings.TrimSpace(queryValue(query, "subjectId", "subject_id", "targetSubjectId", "target_subject_id"))
+	if (subjectType == "") != (subjectID == "") {
+		writeError(w, http.StatusBadRequest, "subjectType and subjectId must be provided together")
+		return nil, false
+	}
+	if subjectType != "" {
 		filter.Target = &proto.RelationshipTarget{
 			Kind: &proto.RelationshipTarget_Subject{
 				Subject: &proto.Subject{
-					Type: strings.TrimSpace(queryValue(query, "subjectType", "subject_type", "targetSubjectType", "target_subject_type")),
+					Type: subjectType,
 					Id:   subjectID,
 				},
 			},
 		}
 	}
-	if resourceID := strings.TrimSpace(queryValue(query, "resourceId", "resource_id")); resourceID != "" || filter.ResourceType != "" {
+	resourceType := strings.TrimSpace(queryValue(query, "resourceType", "resource_type"))
+	resourceID := strings.TrimSpace(queryValue(query, "resourceId", "resource_id"))
+	if (resourceType == "") != (resourceID == "") {
+		writeError(w, http.StatusBadRequest, "resourceType and resourceId must be provided together")
+		return nil, false
+	}
+	if resourceType != "" {
 		filter.Resource = &proto.Resource{
-			Type: strings.TrimSpace(queryValue(query, "resourceType", "resource_type")),
+			Type: resourceType,
 			Id:   resourceID,
 		}
 	}

@@ -75,6 +75,37 @@ func TestAuthorizationAPIListRelationships(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPIListRelationshipsRejectsPartialEntityFilters(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{name: "subject type only", query: "subjectType=subject"},
+		{name: "subject id only", query: "subjectId=user%3Aalice"},
+		{name: "resource type only", query: "resourceType=group"},
+		{name: "resource id only", query: "resourceId=engineering"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			authz := &authorizationAPITestProvider{}
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Authorization = authz
+			})
+			defer ts.Close()
+			t.Parallel()
+
+			resp := doAuthorizationJSONRequest(t, http.MethodGet, ts.URL+"/api/v1/authorization/relationships?"+tc.query, "")
+			defer closeResponseBody(t, resp)
+			if resp.StatusCode != http.StatusBadRequest {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status = %d, want 400: %s", resp.StatusCode, body)
+			}
+			if authz.listRelationshipsRequest != nil {
+				t.Fatalf("ListRelationships request = %#v, want nil", authz.listRelationshipsRequest)
+			}
+		})
+	}
+}
+
 func TestAuthorizationAPIRelationshipMutationsNotExposed(t *testing.T) {
 	authz := &authorizationAPITestProvider{}
 	ts := newTestServer(t, func(cfg *server.Config) {
