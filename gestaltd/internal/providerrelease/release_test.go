@@ -62,6 +62,39 @@ func TestDecodeMetadataInheritsStaticValidationManifestIdentity(t *testing.T) {
 	}
 }
 
+func TestValidateMetadataAllowsExecutableForHybridProjection(t *testing.T) {
+	t.Parallel()
+
+	// A hybrid app provider (manifest-backed spec surface plus a hosted binary) projects to a
+	// validation manifest whose entrypoint is stripped, so RuntimeForManifest on the projection
+	// returns declarative. The release metadata runtime is executable (the binary exists), and
+	// ValidateMetadata must accept this because the projection cannot carry the entrypoint signal.
+	metadata := validReleaseMetadataForTest()
+	metadata.Runtime = RuntimeExecutable
+	metadata.StaticValidation.Manifest = &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  metadata.Package,
+		Version: metadata.Version,
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					Connection: "default",
+					BaseURL:    "https://api.example.test",
+					Operations: []providermanifestv1.ProviderOperation{{
+						Name:   "listThings",
+						Method: "GET",
+						Path:   "/things",
+					}},
+				},
+			},
+		},
+	}
+
+	if err := ValidateMetadata(metadata); err != nil {
+		t.Fatalf("ValidateMetadata error = %v, want nil for executable release with declarative projection", err)
+	}
+}
+
 func TestValidateMetadataRejectsRuntimeMismatch(t *testing.T) {
 	t.Parallel()
 

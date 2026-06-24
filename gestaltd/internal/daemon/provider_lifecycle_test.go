@@ -504,7 +504,7 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 		Package:       pkg,
 		Kind:          providermanifestv1.KindApp,
 		Version:       version,
-		Runtime:       providerrelease.RuntimeForManifest(providermanifestv1.KindApp, staticManifest),
+		Runtime:       providerrelease.RuntimeForManifest(providermanifestv1.KindApp, manifest),
 		Artifacts: providerrelease.Artifacts{
 			providerpkg.CurrentPlatformString(): {
 				Path:   archiveName,

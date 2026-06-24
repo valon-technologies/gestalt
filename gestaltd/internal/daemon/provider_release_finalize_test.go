@@ -327,6 +327,93 @@ paths:
 	}
 }
 
+func TestProviderReleaseMetadataClassifiesHybridProviderAsExecutable(t *testing.T) {
+	t.Parallel()
+
+	// A hybrid app provider has both a manifest-backed spec surface (REST) and a
+	// build-produced entrypoint. It must be classified as executable in the release
+	// metadata, not declarative, even though the static validation projection strips
+	// the entrypoint. This is the regression guard for gmail/bigquery/hex/vercel-style
+	// providers whose custom operations would otherwise never be served.
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/hybrid
+version: 1.0.0
+displayName: Hybrid App
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    rest:
+      connection: default
+      baseUrl: https://api.example.test
+      operations:
+        - name: listThings
+          method: GET
+          path: /things
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"provider": "",
+		"catalog.yaml": `name: hybrid
+operations:
+  - id: staticOp
+    method: POST
+    description: Static plugin operation
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.Runtime != providerrelease.RuntimeExecutable {
+		t.Fatalf("runtime = %q, want %q for hybrid provider with entrypoint and spec surface", metadata.Runtime, providerrelease.RuntimeExecutable)
+	}
+}
+
+func TestProviderReleaseMetadataClassifiesDeclarativeOnlyApp(t *testing.T) {
+	t.Parallel()
+
+	// An app provider with a manifest-backed spec surface and no entrypoint is purely
+	// declarative and must remain classified as declarative.
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/declarative
+version: 1.0.0
+displayName: Declarative App
+spec:
+  surfaces:
+    rest:
+      connection: default
+      baseUrl: https://api.example.test
+      operations:
+        - name: listThings
+          method: GET
+          path: /things
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"catalog.yaml": `name: declarative
+operations:
+  - id: staticOp
+    method: POST
+    description: Static plugin operation
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.Runtime != providerrelease.RuntimeDeclarative {
+		t.Fatalf("runtime = %q, want %q for declarative-only provider", metadata.Runtime, providerrelease.RuntimeDeclarative)
+	}
+}
+
 func TestProviderReleaseMetadataBuildsGraphQLCatalog(t *testing.T) {
 	t.Parallel()
 
