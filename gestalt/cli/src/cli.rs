@@ -257,19 +257,19 @@ pub enum AuthorizationRelationshipCommands {
 #[derive(Args)]
 pub struct AuthorizationRelationshipListArgs {
     /// Filter by target subject id
-    #[arg(long = "subject-id")]
+    #[arg(long = "subject-id", requires = "subject_type")]
     pub subject_id: Option<String>,
     /// Filter by target subject type
-    #[arg(long = "subject-type")]
+    #[arg(long = "subject-type", requires = "subject_id")]
     pub subject_type: Option<String>,
     /// Filter to relationships with this relation name
     #[arg(long)]
     pub relation: Option<String>,
     /// Resource type on the relationship tuple
-    #[arg(long = "resource-type")]
+    #[arg(long = "resource-type", requires = "resource_id")]
     pub resource_type: Option<String>,
     /// Filter to relationships whose resource has this id
-    #[arg(long = "resource-id")]
+    #[arg(long = "resource-id", requires = "resource_type")]
     pub resource_id: Option<String>,
     /// Filter by source layer, such as static_config or runtime
     #[arg(long = "source-layer")]
