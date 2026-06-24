@@ -75,7 +75,7 @@ func TestAuthorizationAPIListRelationships(t *testing.T) {
 	}
 }
 
-func TestAuthorizationAPIAddRelationship(t *testing.T) {
+func TestAuthorizationAPIRelationshipMutationsNotExposed(t *testing.T) {
 	authz := &authorizationAPITestProvider{}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Authorization = authz
@@ -83,48 +83,20 @@ func TestAuthorizationAPIAddRelationship(t *testing.T) {
 	defer ts.Close()
 	t.Parallel()
 
-	resp := doAuthorizationJSONRequest(t, http.MethodPost, ts.URL+"/api/v1/authorization/relationships", `{
-		"relationship": {
-			"tuple": {
+	for _, method := range []string{http.MethodPost, http.MethodDelete} {
+		resp := doAuthorizationJSONRequest(t, method, ts.URL+"/api/v1/authorization/relationships", `{
+			"relationshipTuple": {
 				"target": {"subject": {"type": "subject", "id": "user:alice"}},
 				"relation": "member",
 				"resource": {"type": "group", "id": "engineering"}
-			},
-			"sourceLayer": "SOURCE_LAYER_RUNTIME"
+			}
+		}`)
+		closeResponseBody(t, resp)
+		switch resp.StatusCode {
+		case http.StatusNotFound, http.StatusMethodNotAllowed:
+		default:
+			t.Fatalf("%s status = %d, want 404 or 405", method, resp.StatusCode)
 		}
-	}`)
-	defer closeResponseBody(t, resp)
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	if got := authz.addRelationshipRequest.GetRelationship().GetTuple().GetRelation(); got != "member" {
-		t.Fatalf("relation = %q, want member", got)
-	}
-}
-
-func TestAuthorizationAPIDeleteRelationship(t *testing.T) {
-	authz := &authorizationAPITestProvider{}
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Authorization = authz
-	})
-	defer ts.Close()
-	t.Parallel()
-
-	resp := doAuthorizationJSONRequest(t, http.MethodDelete, ts.URL+"/api/v1/authorization/relationships", `{
-		"relationshipTuple": {
-			"target": {"subject": {"type": "subject", "id": "user:alice"}},
-			"relation": "member",
-			"resource": {"type": "group", "id": "engineering"}
-		}
-	}`)
-	defer closeResponseBody(t, resp)
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	if got := authz.deleteRelationshipRequest.GetRelationshipTuple().GetResource().GetId(); got != "engineering" {
-		t.Fatalf("resource id = %q, want engineering", got)
 	}
 }
 
@@ -204,11 +176,9 @@ func closeResponseBody(t *testing.T, resp *http.Response) {
 type authorizationAPITestProvider struct {
 	core.AuthorizationProvider
 
-	checkAccessRequest        *proto.CheckAccessRequest
-	listRelationshipsRequest  *proto.ListRelationshipsRequest
-	addRelationshipRequest    *proto.AddRelationshipRequest
-	deleteRelationshipRequest *proto.DeleteRelationshipRequest
-	listResourceTypesRequest  *proto.ListActiveModelResourceTypesRequest
+	checkAccessRequest       *proto.CheckAccessRequest
+	listRelationshipsRequest *proto.ListRelationshipsRequest
+	listResourceTypesRequest *proto.ListActiveModelResourceTypesRequest
 }
 
 func (p *authorizationAPITestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -236,12 +206,10 @@ func (p *authorizationAPITestProvider) ListRelationships(_ context.Context, req 
 }
 
 func (p *authorizationAPITestProvider) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	p.addRelationshipRequest = req
 	return &proto.AddRelationshipResponse{Relationship: req.GetRelationship()}, nil
 }
 
 func (p *authorizationAPITestProvider) DeleteRelationship(_ context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
-	p.deleteRelationshipRequest = req
 	return &proto.DeleteRelationshipResponse{}, nil
 }
 

@@ -44,38 +44,6 @@ func (s *Server) listAuthorizationRelationships(w http.ResponseWriter, r *http.R
 	writeProtoJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) addAuthorizationRelationship(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAuthorizationProvider(w) {
-		return
-	}
-	var req proto.AddRelationshipRequest
-	if !decodeProtoJSONBody(w, r, &req) {
-		return
-	}
-	resp, err := s.authorization.AddRelationship(r.Context(), &req)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeProtoJSON(w, http.StatusOK, resp)
-}
-
-func (s *Server) deleteAuthorizationRelationship(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAuthorizationProvider(w) {
-		return
-	}
-	var req proto.DeleteRelationshipRequest
-	if !decodeProtoJSONBody(w, r, &req) {
-		return
-	}
-	resp, err := s.authorization.DeleteRelationship(r.Context(), &req)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeProtoJSON(w, http.StatusOK, resp)
-}
-
 func (s *Server) getAuthorizationActiveModelRef(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAuthorizationProvider(w) {
 		return

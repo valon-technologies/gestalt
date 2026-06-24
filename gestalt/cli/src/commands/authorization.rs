@@ -46,36 +46,6 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                 print_value(&resp, format);
                 Ok(())
             }
-            AuthorizationRelationshipCommands::Add(args) => {
-                let body = Value::Object(params::load_input_file(&args.input_file)?);
-                let resp = client
-                    .post(RELATIONSHIPS_PATH, &body)
-                    .context("failed to add authorization relationship")?;
-                print_value(&resp, format);
-                Ok(())
-            }
-            AuthorizationRelationshipCommands::Delete(args) => {
-                let body = json!({
-                    "relationshipTuple": {
-                        "target": {
-                            "subject": {
-                                "type": args.target_subject_type,
-                                "id": args.target_subject_id,
-                            },
-                        },
-                        "relation": args.relation,
-                        "resource": {
-                            "type": args.resource_type,
-                            "id": args.resource_id,
-                        },
-                    },
-                });
-                let resp = client
-                    .delete_json(RELATIONSHIPS_PATH, &body)
-                    .context("failed to delete authorization relationship")?;
-                print_value(&resp, format);
-                Ok(())
-            }
         },
         AuthorizationCommands::Models { command } => match command {
             AuthorizationModelCommands::Active { command } => match command {
