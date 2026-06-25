@@ -453,17 +453,19 @@ func TestE2EProviderValidateReusesConfiguredAppKey(t *testing.T) {
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	appDir := setupAppDir(t, dir)
+	manifestPath := componentProviderManifestPath(t, appDir)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v8
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
 apps:
   provider_go:
-    source: https://example.test/provider-release.yaml
-`
+    source:
+      path: %s
+`, manifestPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", appDir, "--config", cfgPath, "--name", "provider_go")
+	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", appDir, "--config", cfgPath)
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
