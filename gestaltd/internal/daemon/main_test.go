@@ -55,7 +55,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve --path PATH", "--port PORT", "--no-sync", "dev:"},
+			wantParts: []string{"gestaltd serve [PATH]", "--port PORT", "--no-sync", "--name", "dev:"},
 		},
 		{
 			name:      "provider repo",
@@ -470,9 +470,9 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			wantPart: "unexpected arguments: extra",
 		},
 		{
-			name:     "serve trailing args",
-			args:     []string{"serve", "--config", "foo.yaml", "extra"},
-			wantPart: "unexpected arguments: extra",
+			name:     "serve rejects legacy path flag",
+			args:     []string{"serve", "--path", "."},
+			wantPart: "flag provided but not defined: -path",
 		},
 		{
 			name:     "validate trailing args",
@@ -487,11 +487,6 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 		{
 			name:     "provider validate trailing args",
 			args:     []string{"provider", "validate", "--path", ".", "extra"},
-			wantPart: "unexpected arguments: extra",
-		},
-		{
-			name:     "serve path trailing args",
-			args:     []string{"serve", "--path", ".", "extra"},
 			wantPart: "unexpected arguments: extra",
 		},
 	}

@@ -96,12 +96,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	var pathFlags repeatedStringFlag
 	var nameFlag *string
 	portFlag := fs.Int("port", 0, "public listener port; overrides server.public.port. If in use, gestaltd tries the next free port unless --port was given explicitly")
 	if opts.allowProviderLocal {
-		fs.Var(&pathFlags, "path", "provider manifest path or directory for local source serve (repeatable)")
-		nameFlag = fs.String("name", "", "provider key override for --path")
+		nameFlag = fs.String("name", "", "provider key override for a single PATH")
 	}
 	var lockedFlag *bool
 	var noSyncFlag *bool
@@ -109,11 +107,12 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		lockedFlag = fs.Bool("locked", false, "require a fresh lockfile; do not re-resolve metadata")
 		noSyncFlag = fs.Bool("no-sync", false, "do not materialize artifacts; serve pinned artifacts as-is")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := parseInterspersed(fs, args); err != nil {
 		return err
 	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	positionals := fs.Args()
+	if !opts.allowProviderLocal && len(positionals) > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(positionals, " "))
 	}
 
 	var resolvedConfigPaths []string
@@ -142,7 +141,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if opts.allowProviderLocal {
 		ranProviderLocal, err := maybeRunServeProviderLocal(serveProviderLocalOptions{
 			ConfigPaths:   []string(configPaths),
-			Paths:         []string(pathFlags),
+			Paths:         positionals,
 			Name:          flagStringValue(nameFlag),
 			Port:          flagIntValue(portFlag),
 			ArtifactsDir:  *artifactsDir,
@@ -192,18 +191,18 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 
 	if len(paths) == 0 {
 		if name != "" {
-			return false, fmt.Errorf("--name requires --path")
+			return false, fmt.Errorf("--name requires a PATH argument")
 		}
 		return false, nil
 	}
 	if len(paths) > 1 && name != "" {
-		return true, fmt.Errorf("--name cannot be used with multiple --path flags")
+		return true, fmt.Errorf("--name cannot be used with multiple PATH arguments")
 	}
 	if opts.LockedAllowed && opts.Locked && len(opts.ConfigPaths) == 0 {
-		return true, fmt.Errorf("--locked requires --config when using --path")
+		return true, fmt.Errorf("--locked requires --config when serving local PATH arguments")
 	}
 	if len(opts.ConfigPaths) == 0 && (opts.ArtifactsDir != "" || opts.LockfilePath != "") {
-		return true, fmt.Errorf("--artifacts-dir and --lockfile require --config when using --path")
+		return true, fmt.Errorf("--artifacts-dir and --lockfile require --config when serving local PATH arguments")
 	}
 	return true, runServeProviderLocal(providerLocalCommandOptions{
 		Paths:        paths,
@@ -484,8 +483,8 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT]")
-	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
@@ -507,14 +506,13 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT]")
-	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
 	writeUsageLine(w, "--port overrides server.public.port; if the port is in use, gestaltd tries the next free port unless --port was given explicitly.")
-	writeUsageLine(w, "Use --path (repeatable) to override selected UIs to local source trees; with --config and --locked,")
-	writeUsageLine(w, "the fleet loads pinned artifacts while --path UIs with a manifest dev: block hot-reload.")
-	writeUsageLine(w, "Without --config, --path runs an isolated synthesized baseline (unlocked).")
+	writeUsageLine(w, "PATH arguments (repeatable) override selected UIs to local source trees; with --config and --locked,")
+	writeUsageLine(w, "the fleet loads pinned artifacts while PATH UIs with a manifest dev: block hot-reload.")
+	writeUsageLine(w, "Without --config, PATH arguments run an isolated synthesized baseline (unlocked).")
 	writeUsageLine(w, "Local UIs with a manifest dev: block are proxied to a hot-reload dev server automatically.")
 	writeUsageLine(w, "For production, use --locked --no-sync to trust the committed lockfile and prebuilt")
 	writeUsageLine(w, "artifacts without materialization or staleness checks.")
