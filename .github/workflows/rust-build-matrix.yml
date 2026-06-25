@@ -75,14 +75,6 @@ jobs:
             goos: linux
             goarch: arm
             goarm: '7'
-          - name: Windows-x86_64
-            runs-on: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: windows-x86_64
-            windows: true
-            goos: windows
-            goarch: amd64
-
     runs-on: ${{ matrix.platform.runs-on }}
 
     steps:
