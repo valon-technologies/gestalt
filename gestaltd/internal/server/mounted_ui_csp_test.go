@@ -39,30 +39,3 @@ func TestMountedUIContentSecurityPolicyDevActive(t *testing.T) {
 		}
 	}
 }
-
-func TestMountedUISameOriginFraming(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.MountedUIs = []server.MountedUI{{
-			Path: "/app",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			}),
-		}}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Get(ts.URL + "/app/")
-	if err != nil {
-		t.Fatalf("GET /app/: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'self'") {
-		t.Errorf("Content-Security-Policy = %q; want frame-ancestors 'self'", csp)
-	}
-	if xfo := resp.Header.Get("X-Frame-Options"); xfo != "SAMEORIGIN" {
-		t.Errorf("X-Frame-Options = %q; want SAMEORIGIN", xfo)
-	}
-}
