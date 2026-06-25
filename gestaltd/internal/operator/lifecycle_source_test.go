@@ -108,7 +108,7 @@ apps:
 	if err := os.RemoveAll(filepath.Join(artifactsDir, "providers", "alpha")); err != nil {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths after removing prepared provider: %v", err)
 	}
 	preparedManifest := filepath.Join(artifactsDir, "providers", "alpha", "manifest.yaml")
@@ -175,7 +175,7 @@ server:
 	if err := os.RemoveAll(filepath.Join(artifactsDir, "ui", "roadmap")); err != nil {
 		t.Fatalf("remove prepared ui: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths after removing prepared ui: %v", err)
 	}
 	if _, err := os.Stat(preparedIndex); err != nil {
@@ -590,7 +590,7 @@ printf '<html>alpha</html>\n' > dist/index.html
 		"alpha": filepath.Join(uiDir, "manifest.yaml"),
 	})
 	err := NewLifecycle().CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2})
-	if err == nil || !strings.Contains(err.Error(), `prepared artifact`) {
+	if err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
 		t.Fatalf("CheckSyncAtPathsWithStatePathsOptions error = %v, want stale prepared artifact", err)
 	}
 	if _, err := os.Stat(startedPath); !os.IsNotExist(err) {
@@ -663,7 +663,7 @@ apps:
 	if _, ok := lock.Providers.UI["roadmap"]; ok {
 		t.Fatalf("restored local source ui lock entry should be omitted: %#v", lock.Providers.UI)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 
@@ -695,9 +695,9 @@ apps:
 		t.Fatalf("remove ui source tree: %v", err)
 	}
 
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, true, true)
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true) without local source tree: %v", err)
+		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true) without local source tree: %v", err)
 	}
 	app := cfg.Apps["alpha"]
 	if app == nil || app.ResolvedManifest == nil {
@@ -713,10 +713,10 @@ apps:
 	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(preparedUI); got != want {
 		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
+	if err := lc.CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
 		t.Fatalf("CheckSyncAtPathsWithStatePaths without local source tree error = %v, want stale provider artifact", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `manifest for app "alpha" not found`) {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err == nil || !strings.Contains(err.Error(), `manifest for app "alpha" not found`) {
 		t.Fatalf("SyncAtPathsWithStatePaths without local source tree error = %v, want missing source manifest", err)
 	}
 
@@ -731,10 +731,10 @@ apps:
 	if err := os.Remove(preparedUIMetadata); err != nil {
 		t.Fatalf("remove prepared ui lock metadata: %v", err)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
+	if err := lc.CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
 		t.Fatalf("CheckSyncAtPathsWithStatePaths without prepared lock metadata error = %v, want stale provider artifact", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths backfilling prepared lock metadata: %v", err)
 	}
 	if _, err := os.Stat(preparedProviderMetadata); err != nil {
@@ -755,7 +755,7 @@ apps:
 	if err := os.WriteFile(preparedUIMetadata, []byte(`{"inputDigest":"stale","kind":"ui","name":"roadmap"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared ui lock metadata before sync: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths re-materializing stale prepared lock metadata: %v", err)
 	}
 	providerData, err := os.ReadFile(preparedProvider)
@@ -778,15 +778,17 @@ apps:
 	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
 		t.Fatalf("remove ui source tree after backfill: %v", err)
 	}
-	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true) after metadata backfill: %v", err)
+	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, true, true); err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true) after metadata backfill: %v", err)
 	}
 
+	writeSourceProviderTree(t, appDir, appSource, version, "alpha-binary")
+	writeSourceUITree(t, uiDir, uiSource, version)
 	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"app","name":"alpha"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared provider lock metadata: %v", err)
 	}
-	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
-		t.Fatalf("LoadForExecutionAtPath with stale prepared provider metadata error = %v, want stale provider artifact", err)
+	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true) with stale prepared provider metadata should re-materialize: %v", err)
 	}
 	if err := os.WriteFile(preparedProviderMetadata, providerMetadata, 0o644); err != nil {
 		t.Fatalf("restore prepared provider lock metadata: %v", err)
@@ -794,8 +796,8 @@ apps:
 	if err := os.WriteFile(preparedUIMetadata, []byte(`{"inputDigest":"stale","kind":"ui","name":"roadmap"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared ui lock metadata: %v", err)
 	}
-	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), `prepared artifact for ui "roadmap" is missing or stale`) {
-		t.Fatalf("LoadForExecutionAtPath with stale prepared ui metadata error = %v, want stale ui artifact", err)
+	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, true, true); err != nil {
+		t.Fatalf("LoadForExecutionAtPathsWithStatePaths(locked=true, noSync=true) with stale prepared ui metadata: %v", err)
 	}
 }
 
@@ -2557,7 +2559,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 
 			metadataBefore := metadataCount.Load()
 			currentBefore := currentArchiveCount.Load()
-			err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+			err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
 			if tc.tamperLocalArchive {
 				if handlerErr := nextHandlerErr(); handlerErr != nil {
 					t.Fatal(handlerErr)
@@ -2633,8 +2635,8 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 						},
 					},
 				})
-				if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), `lock entry for provider "alpha" is stale`) {
-					t.Fatalf("LoadForExecutionAtPath after stale local metadata error = %v, want stale lock entry", err)
+				if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), "lockfile stale") {
+					t.Fatalf("LoadForExecutionAtPath after stale local metadata error = %v, want stale lockfile", err)
 				}
 			}
 		})
@@ -2826,7 +2828,7 @@ packages:
 	indexBefore := indexCount.Load()
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
@@ -3191,7 +3193,7 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
 	if err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
@@ -3362,7 +3364,7 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
 	if err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
@@ -3539,7 +3541,7 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
 	if err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
@@ -3799,7 +3801,7 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
 	if err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
@@ -4522,7 +4524,7 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	}
 
 	downloadsBefore := downloadCount.Load()
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -4683,7 +4685,7 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	}
 
 	downloadsBefore := downloadCount.Load()
-	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
 	if err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths after cache removal: %v", err)
 	}
@@ -4902,10 +4904,10 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("CheckSyncAtPathsWithStatePaths: %v", err)
 	}
 	if fullResolverCalled.Load() {
@@ -5282,7 +5284,7 @@ packages:
 	appMetadataBefore := appMetadataCount.Load()
 	secretsArchivesBefore := secretsArchiveCount.Load()
 	appArchivesBefore := appArchiveCount.Load()
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
@@ -5985,7 +5987,7 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	authMetadataBefore := authMetadataCount.Load()
 	secretsDownloadsBefore := secretsDownloads.Load()
 	authDownloadsBefore := authDownloads.Load()
-	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
 	if err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}

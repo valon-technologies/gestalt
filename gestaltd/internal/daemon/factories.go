@@ -34,13 +34,13 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithConfigPaths(configPaths []string, state operator.StatePaths, locked bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
+func setupBootstrapWithConfigPaths(configPaths []string, state operator.StatePaths, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, state, locked, forcedDevUIKeys...)
+	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, state, locked, noSync, forcedDevUIKeys...)
 }
 
-func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, state operator.StatePaths, locked bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
-	cfg, err := loadConfigForExecutionAtPathsWithStatePaths(configPaths, state, locked, forcedDevUIKeys...)
+func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, state operator.StatePaths, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
+	cfg, err := loadConfigForExecutionAtPathsWithStatePaths(configPaths, state, locked, noSync, forcedDevUIKeys...)
 	if err != nil {
 		stop()
 		return nil, err

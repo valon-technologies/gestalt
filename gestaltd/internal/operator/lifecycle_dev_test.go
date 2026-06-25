@@ -222,7 +222,7 @@ server:
 	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 	preparedUI := filepath.Join(artifactsDir, "ui", "demo", "dist", "index.html")
@@ -284,7 +284,7 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	loaded, _, err := NewLifecycle().WithDevServeEligible(true).LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, StatePaths{}, false)
+	loaded, _, err := NewLifecycle().WithDevServeEligible(true).LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, StatePaths{}, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPathsWithStatePaths: %v", err)
 	}

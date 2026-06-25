@@ -104,8 +104,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		nameFlag = fs.String("name", "", "provider key override for --path")
 	}
 	var lockedFlag *bool
+	var noSyncFlag *bool
 	if opts.allowLocked {
-		lockedFlag = fs.Bool("locked", false, "require exact lock state; do not auto lock/sync")
+		lockedFlag = fs.Bool("locked", false, "require a fresh lockfile; do not re-resolve metadata")
+		noSyncFlag = fs.Bool("no-sync", false, "do not materialize artifacts; serve pinned artifacts as-is")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -126,8 +128,15 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	}
 
 	locked := false
+	noSync := false
 	if lockedFlag != nil {
 		locked = *lockedFlag
+	}
+	if noSyncFlag != nil {
+		noSync = *noSyncFlag
+	}
+	if noSync && !locked {
+		return fmt.Errorf("--no-sync requires --locked")
 	}
 
 	if opts.allowProviderLocal {
@@ -139,6 +148,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			ArtifactsDir:  *artifactsDir,
 			LockfilePath:  *lockfilePath,
 			Locked:        locked,
+			NoSync:        noSync,
 			LockedAllowed: lockedFlag != nil,
 		})
 		if ranProviderLocal || err != nil {
@@ -148,7 +158,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-	}, locked)
+	}, locked, noSync)
 	if err != nil {
 		return err
 	}
@@ -167,6 +177,7 @@ type serveProviderLocalOptions struct {
 	ArtifactsDir  string
 	LockfilePath  string
 	Locked        bool
+	NoSync        bool
 	LockedAllowed bool
 }
 
@@ -200,6 +211,7 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 		Name:         name,
 		Port:         opts.Port,
 		Locked:       opts.Locked,
+		NoSync:       opts.NoSync,
 		ArtifactsDir: opts.ArtifactsDir,
 		LockfilePath: opts.LockfilePath,
 	})
@@ -302,9 +314,6 @@ func runSync(args []string) error {
 	if err := validateSyncOutputFormat(*outputFormat); err != nil {
 		return err
 	}
-	if !*locked {
-		return fmt.Errorf("gestaltd sync currently requires --locked")
-	}
 
 	verbose := *verboseLong || *verboseShort
 	observabilityRequested := verbose || *outputFormat == syncOutputFormatJSON
@@ -319,6 +328,7 @@ func runSync(args []string) error {
 		observability.BuildOutput = providerpkg.CommandOutput{Stdout: os.Stderr, Stderr: os.Stderr}
 	}
 	opts := operator.SyncOptions{
+		Locked:        *locked,
 		Parallelism:   *parallelism,
 		CacheDir:      *cacheDir,
 		Observability: observability,
@@ -473,9 +483,9 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
-	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--port PORT]")
-	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
+	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
@@ -485,7 +495,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  lock        Resolve provider metadata and write lock state")
 	writeUsageLine(w, "  sync        Materialize prepared artifacts from lock state")
 	writeUsageLine(w, "  provider    Develop, validate, or build provider release archives")
-	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
+	writeUsageLine(w, "  serve       Start the server (use --locked --no-sync for production)")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
 	writeUsageLine(w, "  version     Print the version and exit")
 	writeUsageLine(w, "")
@@ -497,8 +507,8 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--port PORT]")
-	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
 	writeUsageLine(w, "--port overrides server.public.port; if the port is in use, gestaltd tries the next free port unless --port was given explicitly.")
@@ -506,8 +516,9 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "the fleet loads pinned artifacts while --path UIs with a manifest dev: block hot-reload.")
 	writeUsageLine(w, "Without --config, --path runs an isolated synthesized baseline (unlocked).")
 	writeUsageLine(w, "Local UIs with a manifest dev: block are proxied to a hot-reload dev server automatically.")
-	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
-	writeUsageLine(w, "lockfile and prepared artifacts instead of resolving or mutating state.")
+	writeUsageLine(w, "For production, use --locked --no-sync to trust the committed lockfile and prebuilt")
+	writeUsageLine(w, "artifacts without materialization or staleness checks.")
+	writeUsageLine(w, "Use --locked alone when artifacts may need to be materialized at startup.")
 	writeUsageLine(w, "When locked, run `gestaltd lock` before deploy and `gestaltd sync --locked` during build.")
 	writeUsageLine(w, "When repeated, --config files merge left-to-right. Maps deep-merge,")
 	writeUsageLine(w, "later scalars win, lists replace, and null deletes inherited keys.")
@@ -530,10 +541,11 @@ func printLockUsage(w io.Writer) {
 
 func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
+	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Materialize prepared artifacts from the existing lockfile.")
-	writeUsageLine(w, "Does not resolve new metadata or rewrite the lockfile.")
+	writeUsageLine(w, "Materialize prepared artifacts from lock state.")
+	writeUsageLine(w, "By default, re-locks when the lockfile is stale, then materializes artifacts.")
+	writeUsageLine(w, "--locked requires a fresh lockfile and only materializes artifacts.")
 	writeUsageLine(w, "--cache-dir reuses materialized prepared artifacts keyed by locked archive identity; --check remains read-only.")
 	writeUsageLine(w, "--parallelism caps concurrent local source UI preparation.")
 	writeUsageLine(w, "--output-format=json writes one machine-readable metrics document to stdout on success.")
@@ -544,7 +556,7 @@ func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory; relative paths use the current working directory")
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	writeUsageLine(w, "  --locked          Require an existing lockfile")
+	writeUsageLine(w, "  --locked          Require a fresh lockfile; do not re-resolve metadata")
 	writeUsageLine(w, "  --parallelism     Maximum concurrent local source UI preparations")
 	writeUsageLine(w, "  --cache-dir       Opt-in cache for materialized prepared artifacts; relative paths use the current working directory")
 	writeUsageLine(w, "  --output-format   Output format: text or json")

@@ -114,6 +114,7 @@ type StatePaths struct {
 }
 
 type SyncOptions struct {
+	Locked        bool
 	Parallelism   int
 	CacheDir      string
 	Observability SyncObservability
@@ -142,7 +143,7 @@ type artifactMode int
 const (
 	artifactModeMaterialize artifactMode = iota
 	artifactModeCheck
-	artifactModeReadOnly
+	artifactModeBind
 )
 
 type configSecretResolutionMode int
@@ -154,6 +155,10 @@ const (
 
 func (m artifactMode) canMaterialize() bool {
 	return m == artifactModeMaterialize
+}
+
+func (m artifactMode) toleratesStale() bool {
+	return m == artifactModeBind
 }
 
 func NewLifecycle() *Lifecycle {
@@ -295,14 +300,6 @@ func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state S
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
 	return nil
-}
-
-func (l *Lifecycle) SyncAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
-	return l.SyncAtPathsWithStatePathsOptions(configPaths, state, SyncOptions{})
-}
-
-func (l *Lifecycle) CheckSyncAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
-	return l.CheckSyncAtPathsWithStatePathsOptions(configPaths, state, SyncOptions{})
 }
 
 func (l *Lifecycle) SyncAtPathsWithStatePathsOptions(configPaths []string, state StatePaths, opts SyncOptions) error {
@@ -1023,10 +1020,10 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 }
 
 func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, locked bool) (*config.Config, map[string]string, error) {
-	return l.LoadForExecutionAtPathsWithStatePaths(configPaths, StatePaths{}, locked)
+	return l.LoadForExecutionAtPathsWithStatePaths(configPaths, StatePaths{}, locked, false)
 }
 
-func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, state StatePaths, locked bool) (*config.Config, map[string]string, error) {
+func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, state StatePaths, locked, noSync bool) (*config.Config, map[string]string, error) {
 	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
@@ -1043,8 +1040,8 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 		}
 	}
 	mode := artifactModeMaterialize
-	if locked {
-		mode = artifactModeReadOnly
+	if locked && noSync {
+		mode = artifactModeBind
 	}
 	secretsLock, err := l.lockForSecretsBootstrap(configPaths, state, paths, cfg, locked)
 	if err != nil {
@@ -1184,12 +1181,22 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err != nil {
 		if os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
 			lock = newLockfile()
-		} else {
-			return fmt.Errorf("source-backed providers require lock metadata; run `%s`: %w", formatLockCommand(paths), err)
+			err = nil
 		}
 	}
+	relockLocked := opts.Locked || mode == artifactModeCheck
+	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, relockLocked, err)
+	if err != nil {
+		if relockLocked && os.IsNotExist(err) && configRequiresCommittedLock(cfg) {
+			return fmt.Errorf("lockfile required")
+		}
+		return fmt.Errorf("source-backed providers require lock metadata; run `%s`: %w", formatLockCommand(paths), err)
+	}
+	if relockLocked && configRequiresCommittedLock(cfg) && lock == nil {
+		return fmt.Errorf("lockfile required")
+	}
 	if !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{}) {
-		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
+		return lockMetadataStaleError(paths, "lockfile stale")
 	}
 	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, mode, configSecretResolutionSourceAuth); err != nil {
 		return err
@@ -1722,6 +1729,16 @@ func preparedArtifactStaleError(paths lifecyclePaths, format string, args ...any
 	return fmt.Errorf(format+"; run `%s`", append(args, formatSyncLockedCommand(paths))...)
 }
 
+func artifactMaterializeDeniedError(paths lifecyclePaths, mode artifactMode, format string, args ...any) error {
+	if mode == artifactModeCheck {
+		return fmt.Errorf("artifacts would be materialized")
+	}
+	if mode == artifactModeBind {
+		return preparedArtifactStaleError(paths, "artifacts missing")
+	}
+	return preparedArtifactStaleError(paths, format, args...)
+}
+
 func lockMetadataStaleError(paths lifecyclePaths, format string, args ...any) error {
 	return fmt.Errorf(format+"; run `%s`", append(args, formatLockCommand(paths))...)
 }
@@ -2229,7 +2246,7 @@ func inspectPreparedLockMetadata(paths lifecyclePaths, install *preparedInstall,
 		strings.TrimSpace(metadata.Name) != strings.TrimSpace(name) {
 		return preparedLockMetadataStale
 	}
-	expected, err := expectedPreparedLockMetadata(paths, install, kind, name, provider, mode != artifactModeReadOnly)
+	expected, err := expectedPreparedLockMetadata(paths, install, kind, name, provider, !mode.toleratesStale())
 	if err != nil {
 		return preparedLockMetadataStale
 	}
@@ -2241,7 +2258,7 @@ func inspectPreparedLockMetadata(paths lifecyclePaths, install *preparedInstall,
 		strings.TrimSpace(metadata.OutputDigest) != strings.TrimSpace(expected.OutputDigest) {
 		return preparedLockMetadataStale
 	}
-	if mode != artifactModeReadOnly {
+	if !mode.toleratesStale() {
 		if strings.TrimSpace(metadata.InputDigest) != strings.TrimSpace(expected.InputDigest) ||
 			strings.TrimSpace(metadata.SourceIdentity) != strings.TrimSpace(expected.SourceIdentity) ||
 			strings.TrimSpace(metadata.SourceInputDigest) != strings.TrimSpace(expected.SourceInputDigest) {
@@ -2547,7 +2564,7 @@ func lockEntryFingerprintMatchesProvider(name string, provider *config.ProviderE
 }
 
 func lockEntryFingerprintMatchesProviderForMode(name string, provider *config.ProviderEntry, configDir string, entry LockEntry, mode artifactMode) (bool, error) {
-	if mode == artifactModeReadOnly && providerHasReadOnlyLocalSource(provider) {
+	if mode.toleratesStale() && providerHasReadOnlyLocalSource(provider) {
 		return true, nil
 	}
 	if providerHasReadOnlyLocalSource(provider) && localSourcePathMissing(provider) {
@@ -3532,14 +3549,25 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 	var err error
 	if lock == nil {
 		lock, err = ReadLockfile(paths.lockfilePath)
-		if locked && err != nil && os.IsNotExist(err) {
+		if locked && err != nil && os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
 			lock = newLockfile()
 			err = nil
+		}
+	}
+	if locked && configRequiresCommittedLock(cfg) {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("lockfile required")
+			}
+			return fmt.Errorf("lockfile required: %w", err)
 		}
 	}
 	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, locked, err)
 	if err != nil {
 		return fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+	}
+	if locked && configRequiresCommittedLock(cfg) && !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{}) {
+		return lockMetadataStaleError(paths, "lockfile stale")
 	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1}); err != nil {
 		return err
@@ -4438,7 +4466,7 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil
 	reason := syncArtifactReasonPreparedMissing
-	if !needMaterialize {
+	if !needMaterialize && !mode.toleratesStale() {
 		switch inspectPreparedLockMetadata(paths, install, kind, name, provider, mode) {
 		case preparedLockMetadataMatch:
 			needMaterialize = false
@@ -4450,7 +4478,7 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 	}
 	if needMaterialize {
 		if !mode.canMaterialize() {
-			return nil, preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
+			return nil, artifactMaterializeDeniedError(paths, mode, "prepared artifact for %s is missing or stale", subject)
 		}
 		prepareStart := time.Now()
 		stagedInstall, cleanupStaged, commitStaged, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir, paths.stageOptions())
@@ -4481,8 +4509,8 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 		}
 		recordSyncArtifact(paths, kind, name, subject, destDir, syncArtifactSourceLocalSource, syncArtifactResultMaterialized, reason, start, prepareDuration, activateDuration)
 	}
-	if inspectPreparedLockMetadata(paths, install, kind, name, provider, mode) != preparedLockMetadataMatch {
-		return nil, preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
+	if !mode.toleratesStale() && inspectPreparedLockMetadata(paths, install, kind, name, provider, mode) != preparedLockMetadataMatch {
+		return nil, artifactMaterializeDeniedError(paths, mode, "prepared artifact for %s is missing or stale", subject)
 	}
 	if !needMaterialize {
 		recordSyncArtifact(paths, kind, name, subject, destDir, syncArtifactSourceLocalSource, syncArtifactResultReused, syncArtifactReasonFresh, start, 0, 0)
@@ -4614,7 +4642,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 		}
 		start := time.Now()
 		install, err := inspectPreparedInstall(destDir)
-		needMaterialize := err != nil || !preparedInstallMatchesLockForMode(providermanifestv1.KindUI, logicalName, provider, *lockEntry, install, mode)
+		needMaterialize := err != nil || (!mode.toleratesStale() && !preparedInstallMatchesLockForMode(providermanifestv1.KindUI, logicalName, provider, *lockEntry, install, mode))
 		reason := syncArtifactReasonPreparedMissing
 		if err == nil && needMaterialize {
 			reason = syncArtifactReasonManifestStale
@@ -4631,11 +4659,11 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 		}
 		if needMaterialize {
 			if !mode.canMaterialize() {
-				return "", preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
+				return "", artifactMaterializeDeniedError(paths, mode, "prepared artifact for %s is missing or stale", subject)
 			}
 			if len(lockEntry.Archives) == 0 {
 				if !provider.HasLocalSource() && !provider.HasGitSource() {
-					return "", preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
+					return "", artifactMaterializeDeniedError(paths, mode, "prepared artifact for %s is missing or stale", subject)
 				}
 				var prepareDuration time.Duration
 				if stagedInstall == nil {
@@ -4760,7 +4788,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 
 	start := time.Now()
 	install, err := inspectPreparedInstall(destDir)
-	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(providermanifestv1.KindApp, name, app, entry, install, mode)
+	needMaterialize := err != nil || (!mode.toleratesStale() && !preparedInstallMatchesLockForMode(providermanifestv1.KindApp, name, app, entry, install, mode))
 	reason := syncArtifactReasonPreparedMissing
 	if err == nil && needMaterialize {
 		reason = syncArtifactReasonManifestStale
@@ -4781,7 +4809,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	}
 	if needMaterialize {
 		if !mode.canMaterialize() {
-			return preparedArtifactStaleError(paths, "prepared artifact for provider %q is missing or stale", name)
+			return artifactMaterializeDeniedError(paths, mode, "prepared artifact for provider %q is missing or stale", name)
 		}
 		if len(entry.Archives) == 0 {
 			if !app.HasLocalSource() && !app.HasGitSource() {
@@ -4870,7 +4898,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 
 	start := time.Now()
 	install, err := inspectPreparedInstall(destDir)
-	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(kind, name, app, *entry, install, mode)
+	needMaterialize := err != nil || (!mode.toleratesStale() && !preparedInstallMatchesLockForMode(kind, name, app, *entry, install, mode))
 	reason := syncArtifactReasonPreparedMissing
 	if err == nil && needMaterialize {
 		reason = syncArtifactReasonManifestStale
@@ -4895,11 +4923,11 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 	}
 	if needMaterialize {
 		if !mode.canMaterialize() {
-			return preparedArtifactStaleError(paths, "prepared artifact for %s %q is missing or stale", kind, name)
+			return artifactMaterializeDeniedError(paths, mode, "prepared artifact for %s %q is missing or stale", kind, name)
 		}
 		if len(entry.Archives) == 0 {
 			if !app.HasLocalSource() && !app.HasGitSource() {
-				return preparedArtifactStaleError(paths, "prepared artifact for %s %q is missing or stale", kind, name)
+				return artifactMaterializeDeniedError(paths, mode, "prepared artifact for %s %q is missing or stale", kind, name)
 			}
 			var prepareDuration time.Duration
 			if stagedInstall == nil {

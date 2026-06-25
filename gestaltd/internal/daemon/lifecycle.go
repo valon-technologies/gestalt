@@ -37,12 +37,12 @@ func syncConfigWithStatePathsOptions(configFlags []string, state operator.StateP
 	return operatorLifecycle().SyncAtPathsWithStatePathsOptions(configPaths, state, opts)
 }
 
-func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool, forcedDevUIKeys ...string) (*config.Config, error) {
+func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked, noSync bool, forcedDevUIKeys ...string) (*config.Config, error) {
 	lc := operatorLifecycle().WithDevServeEligible(!locked)
 	if len(forcedDevUIKeys) > 0 {
 		lc = lc.WithForcedDevUIKeys(forcedDevUIKeys)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
+	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked, noSync)
 	if err != nil {
 		return nil, err
 	}

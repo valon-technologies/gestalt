@@ -2091,8 +2091,8 @@ func TestRunLockSyncLocalProviders(t *testing.T) {
 	if err == nil {
 		t.Fatal("runSync --check before sync unexpectedly succeeded")
 	}
-	if !strings.Contains(err.Error(), "gestaltd sync --locked") {
-		t.Fatalf("sync --check error should point at sync, got: %v", err)
+	if !strings.Contains(err.Error(), "artifacts would be materialized") {
+		t.Fatalf("sync --check error should report artifacts would be materialized, got: %v", err)
 	}
 
 	if err := runSync([]string{"--locked", "--config", cfgPath}); err != nil {
@@ -2125,16 +2125,8 @@ func TestRunSyncStaleLocalProviderRemediation(t *testing.T) {
 	if err == nil {
 		t.Fatal("runSync --check with stale lock unexpectedly succeeded")
 	}
-	if !strings.Contains(err.Error(), "prepared artifact for provider") ||
-		!strings.Contains(err.Error(), "renamed") ||
-		!strings.Contains(err.Error(), "gestaltd sync --locked") {
-		t.Fatalf("stale local source error should point at sync, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "--artifacts-dir") {
-		t.Fatalf("sync remediation should include --artifacts-dir, got: %v", err)
-	}
-	if strings.Contains(err.Error(), "--lockfile") {
-		t.Fatalf("sync remediation should not include default --lockfile, got: %v", err)
+	if !strings.Contains(err.Error(), "artifacts would be materialized") {
+		t.Fatalf("stale local source sync --check error = %v", err)
 	}
 
 	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
@@ -2149,11 +2141,8 @@ func TestRunSyncStaleLocalProviderRemediation(t *testing.T) {
 	if err == nil {
 		t.Fatal("runSync --check with stale explicit lock unexpectedly succeeded")
 	}
-	if !strings.Contains(err.Error(), "--lockfile "+lockPath) {
-		t.Fatalf("sync remediation should preserve explicit --lockfile, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "--artifacts-dir") {
-		t.Fatalf("sync remediation should include --artifacts-dir, got: %v", err)
+	if !strings.Contains(err.Error(), "artifacts would be materialized") {
+		t.Fatalf("sync --check with stale explicit lock error = %v", err)
 	}
 }
 
@@ -2209,7 +2198,7 @@ func TestRunLockSyncLayeredConfigs(t *testing.T) {
 		t.Fatalf("runSync with layered configs: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, operator.StatePaths{}, true)
+	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, operator.StatePaths{}, true, false)
 	if err != nil {
 		t.Fatalf("setupBootstrapWithConfigPaths locked layered configs: %v", err)
 	}
@@ -2235,7 +2224,7 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 		t.Fatalf("runSync with --lockfile: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, operator.StatePaths{LockfilePath: lockPath}, true)
+	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, operator.StatePaths{LockfilePath: lockPath}, true, false)
 	if err != nil {
 		t.Fatalf("setupBootstrapWithConfigPaths locked with --lockfile: %v", err)
 	}
