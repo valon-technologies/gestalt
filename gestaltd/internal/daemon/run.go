@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -96,11 +98,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	var pathFlags repeatedStringFlag
 	var nameFlag *string
-	var portFlag *int
+	portFlag := fs.Int("port", 0, "public listener port; overrides server.public.port. If in use, gestaltd tries the next free port unless --port was given explicitly")
 	if opts.allowProviderLocal {
 		fs.Var(&pathFlags, "path", "provider manifest path or directory for local source serve (repeatable)")
 		nameFlag = fs.String("name", "", "provider key override for --path")
-		portFlag = fs.Int("port", 0, "public port for --path isolated serve (defaults to a free localhost port)")
 	}
 	var lockedFlag *bool
 	if opts.allowLocked {
@@ -151,6 +152,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if err != nil {
 		return err
 	}
+	if err := resolveServePort(env.Config, flagIntValue(portFlag)); err != nil {
+		env.Close()
+		return err
+	}
 	return runServer(env)
 }
 
@@ -177,9 +182,6 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 	if len(paths) == 0 {
 		if name != "" {
 			return false, fmt.Errorf("--name requires --path")
-		}
-		if opts.Port != 0 {
-			return false, fmt.Errorf("--port requires --path")
 		}
 		return false, nil
 	}
@@ -220,6 +222,39 @@ func flagIntValue(flag *int) int {
 func runServer(env *bootstrapEnv) error {
 	defer env.Close()
 	return server.Run(env.Ctx, env.Config, env.Result)
+}
+
+const maxServePortScan = 100
+
+// resolveServePort sets cfg.Server.Public.Port to a bindable port. When
+// portFlag is non-zero it pins that port and fails if it is in use;
+// otherwise it starts from the configured port and tries the next free
+// one, logging any move.
+func resolveServePort(cfg *config.Config, portFlag int) error {
+	requested := portFlag
+	if requested == 0 {
+		requested = cfg.Server.PublicListener().Port
+	}
+	host := cfg.Server.Public.Host
+	for offset := 0; ; offset++ {
+		if portFlag != 0 && offset > 0 {
+			return fmt.Errorf("port %d is in use; free it or specify a different port", requested)
+		}
+		if offset > maxServePortScan {
+			return fmt.Errorf("no free port found near %d; specify --port or free a port", requested)
+		}
+		candidate := requested + offset
+		l, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(candidate)))
+		if err != nil {
+			continue
+		}
+		_ = l.Close()
+		if candidate != requested {
+			slog.Info("gestaltd port in use; using next free port", "requested", requested, "actual", candidate)
+		}
+		cfg.Server.Public.Port = candidate
+		return nil
+	}
 }
 
 func runLock(args []string) error {
@@ -439,7 +474,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--port PORT]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
@@ -462,10 +497,11 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--port PORT]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
+	writeUsageLine(w, "--port overrides server.public.port; if the port is in use, gestaltd tries the next free port unless --port was given explicitly.")
 	writeUsageLine(w, "Use --path (repeatable) to override selected UIs to local source trees; with --config and --locked,")
 	writeUsageLine(w, "the fleet loads pinned artifacts while --path UIs with a manifest dev: block hot-reload.")
 	writeUsageLine(w, "Without --config, --path runs an isolated synthesized baseline (unlocked).")

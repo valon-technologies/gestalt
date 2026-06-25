@@ -187,7 +187,7 @@ authorization:
               relations: [viewer, admin]
 ```
 
-`public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
+`public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`; if the port is in use, `gestaltd serve` tries the next free port (use `--port` to pin a specific port).
 
 `management.host` and `management.port` bind a separate listener for operator traffic. When `management.port` is omitted, `/admin` and `/metrics` stay on the public listener, a mode best kept to local development or other trusted-network deployments. For production, prefer configuring `server.management` so the operator surface leaves the public listener entirely.
 
