@@ -4326,26 +4326,34 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
-	if got := metadataCount.Load(); got <= metadataBefore {
-		t.Fatalf("metadata request count after unlocked load = %d, want > %d", got, metadataBefore)
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count after unlocked load = %d, want %d (fresh lockfile should not re-resolve metadata)", got, metadataBefore)
 	}
-	if got := archiveCount.Load(); got <= archiveBefore {
-		t.Fatalf("archive request count after unlocked load = %d, want > %d", got, archiveBefore)
+	if got := archiveCount.Load(); got != archiveBefore {
+		t.Fatalf("archive request count after unlocked load = %d, want %d (fresh lockfile should not re-materialize artifacts)", got, archiveBefore)
 	}
 	if cfg.Apps["alpha"] == nil || cfg.Apps["alpha"].ResolvedManifest == nil {
 		t.Fatal("resolved metadata app manifest missing after unlocked refresh")
 		return
 	}
-	if got := cfg.Apps["alpha"].ResolvedManifest.Version; got != updatedVersion {
-		t.Fatalf("resolved manifest version after unlocked refresh = %q, want %q", got, updatedVersion)
+	if got := cfg.Apps["alpha"].ResolvedManifest.Version; got != initialVersion {
+		t.Fatalf("resolved manifest version after unlocked load = %q, want %q", got, initialVersion)
 	}
 
 	updatedLock, err := ReadLockfile(filepath.Join(dir, LockfileName))
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if got := updatedLock.Providers.App["alpha"].Version; got != updatedVersion {
-		t.Fatalf("updated lock version = %q, want %q", got, updatedVersion)
+	if got := updatedLock.Providers.App["alpha"].Version; got != initialVersion {
+		t.Fatalf("lock version after unlocked load = %q, want %q", got, initialVersion)
+	}
+
+	lock, err = lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths after remote metadata drift: %v", err)
+	}
+	if got := lock.Providers.App["alpha"].Version; got != updatedVersion {
+		t.Fatalf("lock version after explicit re-lock = %q, want %q", got, updatedVersion)
 	}
 }
 
