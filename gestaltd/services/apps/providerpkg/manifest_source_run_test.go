@@ -18,7 +18,8 @@ kind: app
 source: github.com/acme/apps/uv-source
 version: 0.0.1-alpha.1
 build: [uv, sync, --frozen, --no-install-project]
-run: [uv, run, --frozen, provider.py, --serve]
+run:
+  command: [uv, run, --frozen, provider.py, --serve]
 spec:
   connections:
     default:
@@ -36,8 +37,8 @@ spec:
 	if got := strings.Join(manifest.Build.Command, " "); got != "uv sync --frozen --no-install-project" {
 		t.Fatalf("build.command = %q", got)
 	}
-	if strings.Join(manifest.Run, " ") != "uv run --frozen provider.py --serve" {
-		t.Fatalf("run = %#v", manifest.Run)
+	if got := strings.Join(manifest.Run.Command, " "); got != "uv run --frozen provider.py --serve" {
+		t.Fatalf("run.command = %q", got)
 	}
 
 	cloned, err := cloneManifest(manifest)
@@ -163,7 +164,7 @@ func TestPrepareSourceManifest_RunsInstallBeforeRunCatalog(t *testing.T) {
 			Command: []string{"sh", "./install.sh"},
 			Inputs:  []string{"install.sh"},
 		},
-		Run:  []string{"sh", "./run.sh"},
+		Run: sourceRunCommand("sh", "./run.sh"),
 		Spec: &providermanifestv1.Spec{},
 	}))
 

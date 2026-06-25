@@ -41,6 +41,9 @@ gestalt = ["py.typed", "_gen/v1/*.pyi"]
 Documentation = "https://gestaltd.ai/api/python/index.html"
 Repository = "https://github.com/valon-technologies/gestalt"
 
+[project.scripts]
+gestalt = "gestalt._cli:main"
+
 [tool.ruff]
 target-version = "py310"
 exclude = ["gestalt/_gen"]

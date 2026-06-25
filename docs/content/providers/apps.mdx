@@ -372,7 +372,7 @@ install:
   command: [bun, install, --frozen-lockfile]
   inputs: [package.json, bun.lock]
 build:
-  command: [bun, run, gestalt-ts-build]
+  command: [bun, run, gestalt, build]
   inputs: [provider.ts, tsconfig.json, package.json]
 entrypoint:
   artifactPath: .gestalt/build/provider
@@ -381,8 +381,8 @@ entrypoint:
 The TypeScript and Python SDK build entrypoints derive their arguments from
 `manifest.yaml` plus the language package manifest when invoked with zero
 positional args, so `build.command` is a fixed per-language argv (`bun run
-gestalt-ts-build` for TypeScript, `uv run python -m gestalt._build` for
-Python) with no per-provider wrapper script.
+gestalt build` for TypeScript, `uv run gestalt build` for Python) with no
+per-provider wrapper script.
 
 ### Defining operations
 

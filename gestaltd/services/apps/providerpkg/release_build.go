@@ -9,11 +9,10 @@ type SourceReleaseBuildMode int
 const (
 	SourceReleaseBuildNone SourceReleaseBuildMode = iota
 	SourceReleaseBuildDeclared
-	SourceReleaseBuildImplicitGo
 )
 
 func (m SourceReleaseBuildMode) RequiresPlatformBuild() bool {
-	return m == SourceReleaseBuildDeclared || m == SourceReleaseBuildImplicitGo
+	return m == SourceReleaseBuildDeclared
 }
 
 type ResolvedSourceReleaseBuild struct {
@@ -40,9 +39,6 @@ func ResolveSourceReleaseBuild(root string, manifest *providermanifestv1.Manifes
 
 	if SourceBuildProducesOutput(manifest) {
 		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildDeclared}, nil
-	}
-	if root != "" && HasGoProviderPackage(root) && SupportsImplicitGoBuild(kind) {
-		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildImplicitGo}, nil
 	}
 	if releaseRequiresBuildForKind(manifest, kind) {
 		return ResolvedSourceReleaseBuild{}, missingDeclaredSourceBuildError(manifest, kind)

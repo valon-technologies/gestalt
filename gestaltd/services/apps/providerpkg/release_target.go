@@ -35,7 +35,7 @@ func releaseRequiresBuildForKind(manifest *providermanifestv1.Manifest, kind str
 }
 
 func HasExplicitSourceRun(manifest *providermanifestv1.Manifest) bool {
-	return manifest != nil && len(manifest.Run) > 0
+	return manifest != nil && manifest.Run != nil && len(manifest.Run.Command) > 0
 }
 
 func ValidateExplicitRunPackaging(root string, manifest *providermanifestv1.Manifest) error {

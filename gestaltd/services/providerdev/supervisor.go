@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -77,29 +78,26 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 		if entry == nil || !entry.DevActive {
 			continue
 		}
-		dev := providerpkg.EffectiveDev(entry.ResolvedManifest)
-		if dev == nil {
-			return nil, fmt.Errorf("ui %q: dev-active without dev manifest", name)
+		run := providerpkg.EffectiveSourceRun(entry.ResolvedManifest)
+		if run == nil {
+			return nil, fmt.Errorf("ui %q: dev-active without run manifest", name)
 		}
 		if err := providerpkg.RunSourceInstall(entry.ResolvedManifestPath, entry.ResolvedManifest, providerpkg.SourceBuildOptions{}); err != nil {
 			return nil, fmt.Errorf("ui %q: install: %w", name, err)
 		}
-		readyTimeout := defaultReadyTimeout
-		if strings.TrimSpace(dev.ReadyTimeout) != "" {
-			parsed, err := config.ParseDuration(dev.ReadyTimeout)
-			if err != nil {
-				return nil, fmt.Errorf("ui %q: parse dev.readyTimeout: %w", name, err)
-			}
-			readyTimeout = parsed
+		workdir := entry.ResolvedDevWorkdir
+		if run.Workdir != "" && run.Workdir != "." {
+			root := filepath.Dir(entry.ResolvedManifestPath)
+			workdir = filepath.Join(root, filepath.FromSlash(run.Workdir))
 		}
 		targets = append(targets, Target{
 			Name:         name,
 			Kind:         "ui",
 			BasePath:     entry.Path,
-			Workdir:      entry.ResolvedDevWorkdir,
-			Command:      append([]string(nil), dev.Command...),
-			Env:          dev.Env,
-			ReadyTimeout: readyTimeout,
+			Workdir:      workdir,
+			Command:      append([]string(nil), run.Command...),
+			Env:          run.Env,
+			ReadyTimeout: defaultReadyTimeout,
 		})
 	}
 	return targets, nil

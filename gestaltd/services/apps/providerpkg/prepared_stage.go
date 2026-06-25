@@ -291,7 +291,6 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	manifest.Install = nil
 	manifest.Build = nil
 	manifest.Run = nil
-	manifest.Dev = nil
 	manifest.Artifacts = nil
 	if kind == providermanifestv1.KindUI && uiAssetRoot != "" {
 		if manifest.Spec == nil {

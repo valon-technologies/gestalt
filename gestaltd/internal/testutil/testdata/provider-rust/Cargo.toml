@@ -6,6 +6,10 @@ edition = "2024"
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "provider-rust"
+path = "src/main.rs"
+
 [dependencies]
 gestalt = { path = "../../../../../sdk/rust" }
 schemars = "0.8"

@@ -31,8 +31,7 @@
     "./services/workflow": "./src/workflow.ts"
   },
   "bin": {
-    "gestalt-ts-build": "src/build.ts",
-    "gestalt-ts-runtime": "src/providers/runtime.ts"
+    "gestalt": "src/cli.ts"
   },
   "files": [
     "src",
