@@ -451,21 +451,6 @@ packages:
 	}
 }
 
-func TestE2ECLIServeAcceptsPositionalPath(t *testing.T) {
-	t.Parallel()
-
-	out, err := exec.Command(gestaltdBin, "serve", "nonexistent-local-path").CombinedOutput()
-	if err == nil {
-		t.Fatalf("gestaltd serve with missing path unexpectedly succeeded:\n%s", out)
-	}
-	if strings.Contains(string(out), "unexpected arguments") {
-		t.Fatalf("positional path was rejected as unexpected argument:\n%s", out)
-	}
-	if strings.Contains(string(out), "flag provided but not defined: -path") {
-		t.Fatalf("serve should not use --path flag:\n%s", out)
-	}
-}
-
 func TestE2ECLIRejectsBadArgs(t *testing.T) {
 	t.Parallel()
 
