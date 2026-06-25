@@ -25,7 +25,7 @@ func TestRun_ProviderPublishDryRunPlansSourceRefUploads(t *testing.T) {
 	)
 	configPath := filepath.Join(t.TempDir(), "gestaltd.yaml")
 	if err := os.WriteFile(configPath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerSnapshotRepositories:
   valon:
     url: https://storage.example.test/providers
@@ -79,7 +79,7 @@ func TestRun_ProviderPublishDryRunJSONPlansSourceRefUploads(t *testing.T) {
 	)
 	configPath := filepath.Join(t.TempDir(), "gestaltd.yaml")
 	if err := os.WriteFile(configPath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerSnapshotRepositories:
   valon:
     url: https://storage.example.test/providers
@@ -188,7 +188,7 @@ func TestRun_ProviderPublishPreflightsConflictsBeforeUploading(t *testing.T) {
 	)
 	configPath := filepath.Join(t.TempDir(), "gestaltd.yaml")
 	if err := os.WriteFile(configPath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerSnapshotRepositories:
   valon:
     url: https://storage.example.test/providers
@@ -268,7 +268,7 @@ func TestRun_ProviderPublishDoesNotTreatDescribeErrorsAsMissing(t *testing.T) {
 	)
 	configPath := filepath.Join(t.TempDir(), "gestaltd.yaml")
 	if err := os.WriteFile(configPath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerSnapshotRepositories:
   valon:
     url: https://storage.example.test/providers
@@ -340,7 +340,7 @@ func TestRun_ProviderPublishUploadsArchivesBeforeMetadata(t *testing.T) {
 	)
 	configPath := filepath.Join(t.TempDir(), "gestaltd.yaml")
 	if err := os.WriteFile(configPath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerSnapshotRepositories:
   valon:
     url: https://storage.example.test/providers

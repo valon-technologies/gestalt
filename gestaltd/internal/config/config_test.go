@@ -147,7 +147,7 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: google
@@ -349,7 +349,7 @@ func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   encryptionKey: server-key
   providers:
@@ -418,7 +418,7 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: local
@@ -478,7 +478,7 @@ func TestLoadConfigAcceptsIdentityConfig(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: local
@@ -777,7 +777,6 @@ authorization:
     default:
       resourceTypes:
         team:
-          defaultAccessPolicy: deny
           relations:
             member:
               subjectTypes: [subject]
@@ -820,9 +819,6 @@ authorization:
 		t.Fatalf("Load: %v", err)
 	}
 	team := cfg.Authorization.Models["default"].ResourceTypes["team"]
-	if got := team.DefaultAccessPolicy; got != "deny" {
-		t.Fatalf("team defaultAccessPolicy = %q, want deny", got)
-	}
 	if !team.Dynamic.AllowAdditionalRelationships {
 		t.Fatal("team dynamic allowAdditionalRelationships = false, want true")
 	}
@@ -879,18 +875,6 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				}),
 			}},
 			wantErr: `references unknown relation "admin"`,
-		},
-		{
-			name: "invalid default access policy",
-			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
-				"default": model(map[string]AuthorizationResourceTypeDef{
-					"team": {
-						DefaultAccessPolicy: "sometimes",
-						Relations:           map[string]AuthorizationRelationDef{"member": subjectRelation("subject")},
-					},
-				}),
-			}},
-			wantErr: `authorization.models.default.resourceTypes.team.defaultAccessPolicy must be "allow" or "deny"`,
 		},
 		{
 			name: "unknown default role relation",
@@ -1498,7 +1482,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -1521,7 +1505,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -1541,7 +1525,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -1567,7 +1551,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   workflow:
     demo:
@@ -1588,7 +1572,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   ui:
     dashboard:
@@ -1610,7 +1594,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -1693,7 +1677,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: corporate
@@ -1772,7 +1756,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: corporate
@@ -1833,7 +1817,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -1891,7 +1875,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -1932,7 +1916,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -1979,7 +1963,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   secrets:
     default:
@@ -2016,7 +2000,7 @@ apps:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   encryptionKey: server-key
 providers:
@@ -2492,7 +2476,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   externalCredentials:
     default:
@@ -5163,7 +5147,7 @@ func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   encryptionKey: server-key
 apps:
@@ -5184,7 +5168,7 @@ runtime:
 		t.Fatalf("writing base config: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 apps:
   service:
     runtime: null
@@ -5211,7 +5195,7 @@ func TestLoadConfigProviderPackageSources(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteRawConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
@@ -5260,7 +5244,7 @@ func TestLoadConfigProviderPackageSourcesDoNotGetBuiltinDefaults(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteRawConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
@@ -5317,7 +5301,7 @@ func TestLoadConfigProviderPackageSourceValidation(t *testing.T) {
 		{
 			name: "package and url are mutually exclusive",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 apps:
   service:
     source:
@@ -5354,7 +5338,7 @@ func TestLoadPathsProviderPackageSourceLayering(t *testing.T) {
 		basePath := filepath.Join(dir, "base.yaml")
 		overridePath := filepath.Join(dir, "override.yaml")
 		if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 apps:
   service:
     source: https://example.com/service/provider-release.yaml
@@ -5362,7 +5346,7 @@ apps:
 			t.Fatalf("write base: %v", err)
 		}
 		if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
@@ -5465,7 +5449,7 @@ providers:
 		{
 			name: "external provider source",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   identity:
     primary:
@@ -5475,7 +5459,7 @@ providers:
 		{
 			name: "apiVersion scalar local source",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5485,7 +5469,7 @@ apps:
 		{
 			name: "apiVersion metadata url with app route auth",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: corporate
@@ -5503,7 +5487,7 @@ apps:
 		{
 			name: "apiVersion metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5516,7 +5500,7 @@ apps:
 		{
 			name: "provider metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   identity:
     primary:
@@ -5593,7 +5577,7 @@ apps:
 		{
 			name: "provider auth override is rejected outside apps",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   cache:
     shared:
@@ -5672,7 +5656,7 @@ func TestLoadPathsRequiresAPIVersionInEveryFile(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
   external:
@@ -5773,7 +5757,7 @@ func TestValidConfigurations(t *testing.T) {
 		{
 			name: "metadata source app only",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     custom_tool:
@@ -5859,7 +5843,7 @@ apps:
 		{
 			name: "apiVersion route auth override is valid",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: corporate
@@ -5877,7 +5861,7 @@ apps:
 		{
 			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5893,7 +5877,7 @@ apps:
 		{
 			name: "apiVersion github release source requires repo",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5907,7 +5891,7 @@ apps:
 		{
 			name: "apiVersion github release source requires owner slash name",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5922,7 +5906,7 @@ apps:
 		{
 			name: "apiVersion nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5935,7 +5919,7 @@ apps:
 		{
 			name: "app auth override is valid alongside nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   providers:
     identity: corporate
@@ -5956,7 +5940,7 @@ apps:
 		{
 			name: "app auth override rejects source auth token mix",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5970,7 +5954,7 @@ apps:
 		{
 			name: "app auth override rejects unknown auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5983,7 +5967,7 @@ apps:
 		{
 			name: "app auth override rejects server alias without configured auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -5996,7 +5980,7 @@ apps:
 		{
 			name: "apiVersion local source rejects sibling auth",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6009,7 +5993,7 @@ apps:
 		{
 			name: "apiVersion v5 local provider-release metadata is valid",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6019,7 +6003,7 @@ apps:
 		{
 			name: "apiVersion v5 local provider-release metadata allows current-directory file",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6029,7 +6013,7 @@ apps:
 		{
 			name: "apiVersion v5 local provider-release metadata accepts nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6042,7 +6026,7 @@ apps:
 		{
 			name: "apiVersion accepts local source manifests",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6052,7 +6036,7 @@ apps:
 		{
 			name: "apiVersion accepts absolute http metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6062,7 +6046,7 @@ apps:
 		{
 			name: "apiVersion rejects git scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6073,7 +6057,7 @@ apps:
 		{
 			name: "apiVersion rejects unsupported ssh scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6084,7 +6068,7 @@ apps:
 		{
 			name: "apiVersion rejects unsupported file scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6095,7 +6079,7 @@ apps:
 		{
 			name: "apiVersion rejects malformed hostless https metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
 apps:
     external:
@@ -6106,7 +6090,7 @@ apps:
 		{
 			name: "apiVersion accepts absolute telemetry metadata source before builtin defaulting",
 			yaml: `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   telemetry:
     default:
@@ -6526,7 +6510,7 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   identity:
     identity:
@@ -6578,7 +6562,7 @@ func TestLoadPaths_ResolvesRelativePathsPerFile(t *testing.T) {
 		t.Fatalf("MkdirAll base: %v", err)
 	}
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   artifactsDir: ../base-artifacts
 providers:
@@ -6594,7 +6578,7 @@ apps:
 		t.Fatalf("MkdirAll override: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   artifactsDir: ./override-artifacts
 providers:
@@ -6623,7 +6607,7 @@ func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   identity:
     identity:
@@ -6698,7 +6682,7 @@ func TestLoad_ResolvesRelativeAppSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v7
+	cfg := `apiVersion: gestaltd.config/v8
 providers:
 apps:
     sample:

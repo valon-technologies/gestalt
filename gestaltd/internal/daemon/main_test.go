@@ -398,7 +398,7 @@ func TestE2EProviderAddPackageSourceUpdatesConfig(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("apiVersion: gestaltd.config/v7\napps:\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("apiVersion: gestaltd.config/v8\napps:\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	indexPath := filepath.Join(dir, "provider-index.yaml")

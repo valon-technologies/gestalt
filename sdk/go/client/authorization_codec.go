@@ -125,10 +125,9 @@ func ToWireAuthorizationModelResourceType(value *AuthorizationModelResourceType)
 		return nil
 	}
 	out := &proto.AuthorizationModelResourceType{
-		Name:                value.Name,
-		SourceLayer:         proto.SourceLayer(value.SourceLayer),
-		DefaultAccessPolicy: proto.DefaultAccessPolicy(value.DefaultAccessPolicy),
-		DefaultRole:         value.DefaultRole,
+		Name:        value.Name,
+		SourceLayer: proto.SourceLayer(value.SourceLayer),
+		DefaultRole: value.DefaultRole,
 	}
 	for _, item := range value.Relations {
 		out.Relations = append(out.Relations, ToWireModelRelation(item))
@@ -144,10 +143,9 @@ func FromWireAuthorizationModelResourceType(value *proto.AuthorizationModelResou
 		return nil
 	}
 	out := &AuthorizationModelResourceType{
-		Name:                value.Name,
-		SourceLayer:         SourceLayer(value.SourceLayer),
-		DefaultAccessPolicy: DefaultAccessPolicy(value.DefaultAccessPolicy),
-		DefaultRole:         value.DefaultRole,
+		Name:        value.Name,
+		SourceLayer: SourceLayer(value.SourceLayer),
+		DefaultRole: value.DefaultRole,
 	}
 	for _, item := range value.Relations {
 		out.Relations = append(out.Relations, FromWireModelRelation(item))

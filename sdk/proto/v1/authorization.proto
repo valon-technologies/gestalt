@@ -129,17 +129,14 @@ message AuthorizationModel {
   repeated AuthorizationModelResourceType resource_types = 3;
 }
 
-enum DefaultAccessPolicy {
-  DEFAULT_ACCESS_POLICY_DENY = 0;
-  DEFAULT_ACCESS_POLICY_ALLOW = 1;
-}
-
 message AuthorizationModelResourceType {
+  reserved 5;
+  reserved "default_access_policy";
+
   string name = 1;
   repeated ModelRelation relations = 2;
   repeated ModelAction actions = 3;
   SourceLayer source_layer = 4;
-  DefaultAccessPolicy default_access_policy = 5;
   string default_role = 6;
 }
 

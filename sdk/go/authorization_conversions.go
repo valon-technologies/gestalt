@@ -415,12 +415,11 @@ func authorizationModelResourceTypeFromProto(in *proto.AuthorizationModelResourc
 		return nil
 	}
 	return &AuthorizationModelResourceType{
-		Name:                in.GetName(),
-		Relations:           modelRelationsFromProto(in.GetRelations()),
-		Actions:             modelActionsFromProto(in.GetActions()),
-		SourceLayer:         SourceLayer(in.GetSourceLayer()),
-		DefaultAccessPolicy: DefaultAccessPolicy(in.GetDefaultAccessPolicy()),
-		DefaultRole:         in.GetDefaultRole(),
+		Name:        in.GetName(),
+		Relations:   modelRelationsFromProto(in.GetRelations()),
+		Actions:     modelActionsFromProto(in.GetActions()),
+		SourceLayer: SourceLayer(in.GetSourceLayer()),
+		DefaultRole: in.GetDefaultRole(),
 	}
 }
 
@@ -433,12 +432,11 @@ func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) (*p
 		return nil, err
 	}
 	return &proto.AuthorizationModelResourceType{
-		Name:                in.Name,
-		Relations:           allowedRelations,
-		Actions:             protoModelActions(in.Actions),
-		SourceLayer:         proto.SourceLayer(in.SourceLayer),
-		DefaultAccessPolicy: proto.DefaultAccessPolicy(in.DefaultAccessPolicy),
-		DefaultRole:         in.DefaultRole,
+		Name:        in.Name,
+		Relations:   allowedRelations,
+		Actions:     protoModelActions(in.Actions),
+		SourceLayer: proto.SourceLayer(in.SourceLayer),
+		DefaultRole: in.DefaultRole,
 	}, nil
 }
 

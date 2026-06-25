@@ -164,7 +164,6 @@ _AUTHORIZATION_AUTHORED_EXPORTS = (
     "CheckAccessManyResponse",
     "CheckAccessRequest",
     "CheckAccessResponse",
-    "DefaultAccessPolicyValues",
     "DeleteRelationshipRequest",
     "DeleteRelationshipResponse",
     "GetActiveModelRefResponse",

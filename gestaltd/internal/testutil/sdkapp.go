@@ -536,8 +536,7 @@ func (p *Provider) ListActiveModelResourceTypes(context.Context, *gestalt.ListAc
 				Name:      "invoke",
 				Relations: []string{"viewer"},
 			}},
-			SourceLayer:         gestalt.SourceLayerRuntime,
-			DefaultAccessPolicy: gestalt.DefaultAccessPolicyDeny,
+			SourceLayer: gestalt.SourceLayerRuntime,
 		}},
 		ModelId: "model-v1",
 	}, nil

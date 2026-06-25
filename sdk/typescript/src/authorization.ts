@@ -40,13 +40,6 @@ import {
 import { callOptions, callUnary } from "./internal/codec/support.ts";
 import type { Init } from "./rpc_support.ts";
 
-export const DefaultAccessPolicy = {
-  DENY: 0,
-  ALLOW: 1,
-} as const;
-
-export type DefaultAccessPolicy = number;
-
 export const RelationshipTargetType = {
   UNSPECIFIED: 0,
   SUBJECT: 1,
@@ -94,7 +87,6 @@ export interface AuthorizationModelResourceType {
   relations: ModelRelation[];
   actions: ModelAction[];
   sourceLayer: SourceLayer;
-  defaultAccessPolicy: DefaultAccessPolicy;
   defaultRole: string;
 }
 

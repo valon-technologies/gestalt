@@ -1477,8 +1477,6 @@ pub struct AuthorizationModelResourceType {
     pub actions: ::prost::alloc::vec::Vec<ModelAction>,
     #[prost(enumeration = "SourceLayer", tag = "4")]
     pub source_layer: i32,
-    #[prost(enumeration = "DefaultAccessPolicy", tag = "5")]
-    pub default_access_policy: i32,
     #[prost(string, tag = "6")]
     pub default_role: ::prost::alloc::string::String,
 }
@@ -1597,32 +1595,6 @@ impl RelationshipTargetType {
             "RELATIONSHIP_TARGET_TYPE_SUBJECT" => Some(Self::Subject),
             "RELATIONSHIP_TARGET_TYPE_RESOURCE" => Some(Self::Resource),
             "RELATIONSHIP_TARGET_TYPE_SUBJECT_SET" => Some(Self::SubjectSet),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum DefaultAccessPolicy {
-    Deny = 0,
-    Allow = 1,
-}
-impl DefaultAccessPolicy {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Deny => "DEFAULT_ACCESS_POLICY_DENY",
-            Self::Allow => "DEFAULT_ACCESS_POLICY_ALLOW",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "DEFAULT_ACCESS_POLICY_DENY" => Some(Self::Deny),
-            "DEFAULT_ACCESS_POLICY_ALLOW" => Some(Self::Allow),
             _ => None,
         }
     }

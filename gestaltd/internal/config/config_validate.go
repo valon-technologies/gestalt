@@ -1560,11 +1560,6 @@ func validateAuthorizationResourceTypeDef(parentPath, name, path string, def Aut
 	if err := validateAuthorizationSourceMetadata(path+".source", def.Source); err != nil {
 		return err
 	}
-	switch strings.TrimSpace(def.DefaultAccessPolicy) {
-	case "", "allow", "deny":
-	default:
-		return fmt.Errorf("config validation: %s.defaultAccessPolicy must be %q or %q", path, "allow", "deny")
-	}
 	defaultRole := strings.TrimSpace(def.DefaultRole)
 	if defaultRole != "" {
 		if err := validateAuthorizationMapKey(path, defaultRole); err != nil {

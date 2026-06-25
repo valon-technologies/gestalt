@@ -156,23 +156,13 @@ type AuthorizationModel struct {
 	ResourceTypes []*AuthorizationModelResourceType
 }
 
-// DefaultAccessPolicy is the native message type for gestalt.provider.v1.DefaultAccessPolicy.
-type DefaultAccessPolicy int32
-
-// The default access policies.
-const (
-	DefaultAccessPolicyDeny  DefaultAccessPolicy = 0
-	DefaultAccessPolicyAllow DefaultAccessPolicy = 1
-)
-
 // AuthorizationModelResourceType is the native message type for gestalt.provider.v1.AuthorizationModelResourceType.
 type AuthorizationModelResourceType struct {
-	Name                string
-	Relations           []*ModelRelation
-	Actions             []*ModelAction
-	SourceLayer         SourceLayer
-	DefaultAccessPolicy DefaultAccessPolicy
-	DefaultRole         string
+	Name        string
+	Relations   []*ModelRelation
+	Actions     []*ModelAction
+	SourceLayer SourceLayer
+	DefaultRole string
 }
 
 // ModelRelation is the native message type for gestalt.provider.v1.ModelRelation.
