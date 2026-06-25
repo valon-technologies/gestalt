@@ -41,7 +41,7 @@ type providerLocalCommandOptions struct {
 	NoSync       bool
 	ArtifactsDir string
 	LockfilePath string
-	// FleetOverlay is true for serve --path with --config. Validate always leaves
+	// FleetOverlay is true for serve PATH arguments with --config. Validate always leaves
 	// this false so it keeps the synthesized baseline even with --config.
 	FleetOverlay bool
 }
@@ -141,7 +141,7 @@ func buildProviderLocalTargetOverlay(sessionDir string, index int, opts provider
 		return nil, err
 	}
 	if kind != providermanifestv1.KindApp && kind != providermanifestv1.KindUI {
-		return nil, fmt.Errorf("gestaltd serve --path and provider validate only support kind: app or ui in v1 (got %q)", kind)
+		return nil, fmt.Errorf("gestaltd serve PATH arguments and provider validate only support kind: app or ui in v1 (got %q)", kind)
 	}
 	targetManifestPath, err := canonicalPath(manifestPath)
 	if err != nil {

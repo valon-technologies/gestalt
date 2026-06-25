@@ -28,8 +28,8 @@ func TestMaybeRunServeProviderLocalRejectsNameWithMultiplePaths(t *testing.T) {
 		ConfigPaths: []string{filepath.Join(t.TempDir(), "config.yaml")},
 		Name:        "demo",
 	})
-	if err == nil || !strings.Contains(err.Error(), "multiple --path") {
-		t.Fatalf("error = %v, want multiple --path name error", err)
+	if err == nil || !strings.Contains(err.Error(), "multiple PATH") {
+		t.Fatalf("error = %v, want multiple PATH name error", err)
 	}
 }
 

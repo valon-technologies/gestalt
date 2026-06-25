@@ -994,7 +994,7 @@ func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
 		}
 		if providerpkg.EffectiveDev(manifest) == nil {
 			if l.forcedDevUIKeys[name] {
-				return fmt.Errorf("--path target %q has no dev: block; cannot dev-serve under --locked", name)
+				return fmt.Errorf("PATH argument %q has no dev: block; cannot dev-serve under --locked", name)
 			}
 			continue
 		}
@@ -1496,7 +1496,7 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 	}
 	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, locked, err)
 	if err != nil {
-		return nil, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return nil, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	return lock, nil
 }
@@ -3564,7 +3564,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 	}
 	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, locked, err)
 	if err != nil {
-		return fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	if locked && configRequiresCommittedLock(cfg) && !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{}) {
 		return lockMetadataStaleError(paths, "lockfile stale")
