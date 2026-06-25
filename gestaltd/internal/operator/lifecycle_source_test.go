@@ -60,7 +60,7 @@ func TestLifecycleGitSourceBuildLockSyncContract(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 %s
 server:
   providers:
@@ -138,7 +138,7 @@ func TestLifecycleGitSourceUIBuildLockSyncContract(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 %s
   ui:
     roadmap:
@@ -619,7 +619,7 @@ func TestLifecycleLocalSourceLockedExecutionUsesPreparedArtifactsWithoutSourceTr
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 %s  ui:
     roadmap:
       source:
@@ -806,7 +806,7 @@ func TestLockAtPathsSkipsMissingConfiguredLocalSources(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 %s  ui:
     missing:
       source:
@@ -883,7 +883,7 @@ func TestLockAtPathsRejectsCommittedProviderInvokesField(t *testing.T) {
 		t.Helper()
 
 		configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 %sapps:
   target:
     source: %s
@@ -957,7 +957,7 @@ func TestCheckLockAtPathsReportsMissingProviderDrift(t *testing.T) {
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 %sapps:
   target:
     source: ./%s
@@ -1045,7 +1045,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerSnapshotRepositories:
   valon:
     url: %s/snapshots
@@ -1161,7 +1161,7 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providerSnapshotRepositories:
   valon:
     url: %s/snapshots
@@ -1375,7 +1375,7 @@ func writeNamedBlockingSourceUIManifest(t *testing.T, dir, manifestName, source,
 func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]string) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("apiVersion: gestaltd.config/v7\n")
+	b.WriteString("apiVersion: gestaltd.config/v8\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
 	b.WriteString("  ui:\n")
 	for _, name := range slices.Sorted(maps.Keys(uiManifests)) {
@@ -1403,7 +1403,7 @@ func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]str
 func writeOwnedUIAppTestConfig(t *testing.T, dir string, apps map[string]string) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("apiVersion: gestaltd.config/v7\n")
+	b.WriteString("apiVersion: gestaltd.config/v8\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
 	b.WriteString("apps:\n")
 	for _, name := range slices.Sorted(maps.Keys(apps)) {
@@ -1432,7 +1432,7 @@ func writeOwnedUIAppTestConfig(t *testing.T, dir string, apps map[string]string)
 func writeAppBoundLocalUITestConfig(t *testing.T, dir string, apps, uiManifests map[string]string) (string, *Lockfile) {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("apiVersion: gestaltd.config/v7\n")
+	b.WriteString("apiVersion: gestaltd.config/v8\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
 	b.WriteString("  ui:\n")
 	for _, name := range slices.Sorted(maps.Keys(uiManifests)) {

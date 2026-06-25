@@ -12,7 +12,6 @@ import {
   AuthorizationModelResourceTypeSchema,
   CheckAccessManyResponseSchema,
   CheckAccessResponseSchema,
-  DefaultAccessPolicy as ProtoDefaultAccessPolicy,
   DeleteRelationshipResponseSchema,
   GetActiveModelRefResponseSchema,
   ListActiveModelResourceTypesResponseSchema,
@@ -73,13 +72,6 @@ export const SourceLayer = {
   RUNTIME: ProtoSourceLayer.RUNTIME,
 } as const;
 export type SourceLayer = (typeof SourceLayer)[keyof typeof SourceLayer];
-
-export const DefaultAccessPolicy = {
-  DENY: ProtoDefaultAccessPolicy.DENY,
-  ALLOW: ProtoDefaultAccessPolicy.ALLOW,
-} as const;
-export type DefaultAccessPolicy =
-  (typeof DefaultAccessPolicy)[keyof typeof DefaultAccessPolicy];
 
 export interface AuthorizationSubject {
   type?: string | undefined;
@@ -195,7 +187,7 @@ export interface AuthorizationModelResourceType {
   relations?: readonly ModelRelation[] | undefined;
   actions?: readonly ModelAction[] | undefined;
   sourceLayer?: SourceLayer | undefined;
-  defaultAccessPolicy?: DefaultAccessPolicy | undefined;
+  defaultRole?: string | undefined;
 }
 
 export interface ModelRelation {
@@ -863,7 +855,7 @@ function authorizationModelResourceTypeFromProto(
       relations: [...action.relations],
     })),
     sourceLayer: value.sourceLayer,
-    defaultAccessPolicy: value.defaultAccessPolicy,
+    defaultRole: value.defaultRole,
   };
 }
 
@@ -887,7 +879,7 @@ function authorizationModelResourceTypeToProto(
       })
     ),
     sourceLayer: value.sourceLayer ?? SourceLayer.UNSPECIFIED,
-    defaultAccessPolicy: value.defaultAccessPolicy ?? DefaultAccessPolicy.DENY,
+    defaultRole: value.defaultRole ?? "",
   });
 }
 

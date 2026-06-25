@@ -70,9 +70,8 @@ func OperationResourceID(appName, operation string) string {
 
 func OperationResourceType() *proto.AuthorizationModelResourceType {
 	return &proto.AuthorizationModelResourceType{
-		Name:                ResourceTypeOperation,
-		SourceLayer:         proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
-		DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+		Name:        ResourceTypeOperation,
+		SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
 		Relations: []*proto.ModelRelation{{
 			Name: RelationInvoker,
 			AllowedTargets: []*proto.ModelAllowedTarget{{

@@ -116,7 +116,6 @@ export {
 } from "./authorization.ts";
 export {
   AuthorizationProvider,
-  DefaultAccessPolicy,
   RelationshipTargetType,
   SourceLayer,
   createAuthorizationProviderService,

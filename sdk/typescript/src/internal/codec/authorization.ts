@@ -153,8 +153,6 @@ export function toWireAuthorizationModelResourceType(
     relations: (value.relations ?? []).map(toWireModelRelation),
     actions: (value.actions ?? []).map(toWireModelAction),
     sourceLayer: (value.sourceLayer ?? 0) as wire.SourceLayer,
-    defaultAccessPolicy: (value.defaultAccessPolicy ??
-      0) as wire.DefaultAccessPolicy,
     defaultRole: value.defaultRole ?? "",
   });
 }
@@ -167,7 +165,6 @@ export function fromWireAuthorizationModelResourceType(
     relations: value.relations.map(fromWireModelRelation),
     actions: value.actions.map(fromWireModelAction),
     sourceLayer: value.sourceLayer,
-    defaultAccessPolicy: value.defaultAccessPolicy,
     defaultRole: value.defaultRole,
   };
 }

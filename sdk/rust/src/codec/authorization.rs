@@ -84,7 +84,6 @@ pub(crate) fn to_wire_authorization_model_resource_type(
             .map(to_wire_model_action)
             .collect(),
         source_layer: value.source_layer,
-        default_access_policy: value.default_access_policy,
         default_role: value.default_role,
     }
 }
@@ -106,7 +105,6 @@ pub(crate) fn from_wire_authorization_model_resource_type(
             .map(from_wire_model_action)
             .collect(),
         source_layer: value.source_layer,
-        default_access_policy: value.default_access_policy,
         default_role: value.default_role,
     }
 }

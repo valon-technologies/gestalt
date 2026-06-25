@@ -26,17 +26,6 @@ _empty: Any = _empty_pb2
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
-DefaultAccessPolicy = int
-
-
-class DefaultAccessPolicyValues:
-    """Named values for the open DefaultAccessPolicy enum."""
-
-    DENY: DefaultAccessPolicy = 0
-    ALLOW: DefaultAccessPolicy = 1
-
-
-# Open enum: unknown numeric values are preserved, so the type is int.
 RelationshipTargetType = int
 
 
@@ -97,7 +86,6 @@ class AuthorizationModelResourceType:
     relations: list[ModelRelation] = field(default_factory=list)
     actions: list[ModelAction] = field(default_factory=list)
     source_layer: SourceLayer = 0
-    default_access_policy: DefaultAccessPolicy = 0
     default_role: str = ""
 
 

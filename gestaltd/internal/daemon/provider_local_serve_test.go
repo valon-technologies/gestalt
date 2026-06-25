@@ -71,7 +71,7 @@ spec:
 	}
 
 	baseCfg := filepath.Join(dir, "base.yaml")
-	baseYAML := `apiVersion: gestaltd.config/v7
+	baseYAML := `apiVersion: gestaltd.config/v8
 providers:
   ui:
     demo:

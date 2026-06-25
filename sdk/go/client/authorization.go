@@ -12,17 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// DefaultAccessPolicy is the gestalt.provider.v1.DefaultAccessPolicy enum. It is open:
-// numeric values outside the named constants are preserved.
-type DefaultAccessPolicy int32
-
-const (
-	// DefaultAccessPolicyDeny is the DEFAULT_ACCESS_POLICY_DENY value of DefaultAccessPolicy.
-	DefaultAccessPolicyDeny DefaultAccessPolicy = 0
-	// DefaultAccessPolicyAllow is the DEFAULT_ACCESS_POLICY_ALLOW value of DefaultAccessPolicy.
-	DefaultAccessPolicyAllow DefaultAccessPolicy = 1
-)
-
 // RelationshipTargetType is the gestalt.provider.v1.RelationshipTargetType enum. It is open:
 // numeric values outside the named constants are preserved.
 type RelationshipTargetType int32
@@ -83,12 +72,11 @@ type AuthorizationModelRef struct {
 
 // AuthorizationModelResourceType is the native message type for gestalt.provider.v1.AuthorizationModelResourceType.
 type AuthorizationModelResourceType struct {
-	Name                string
-	Relations           []*ModelRelation
-	Actions             []*ModelAction
-	SourceLayer         SourceLayer
-	DefaultAccessPolicy DefaultAccessPolicy
-	DefaultRole         string
+	Name        string
+	Relations   []*ModelRelation
+	Actions     []*ModelAction
+	SourceLayer SourceLayer
+	DefaultRole string
 }
 
 // AuthorizationModelResourceTypeFilter is the native message type for gestalt.provider.v1.AuthorizationModelResourceTypeFilter.

@@ -3,7 +3,7 @@ import { Tabs } from 'nextra/components'
 # Config File
 
 Every `gestaltd` deployment reads one or more YAML config files. The current
-config API version is `gestaltd.config/v7`, and every config file must declare
+config API version is `gestaltd.config/v8`, and every config file must declare
 it with `apiVersion`. When you pass multiple `--config` flags, Gestalt merges
 them left-to-right before validation and bootstrap. The top-level keys are
 `server` (listener, encryption, egress, and host-provider selection),
@@ -16,7 +16,7 @@ definitions), and `apps` (executable integrations and optional app-backed UI
 mounts):
 
 ```yaml
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 server:
   # listener, encryption, egress, host-provider selectors
 authorization:
@@ -177,7 +177,6 @@ authorization:
     default:
       resourceTypes:
         support:
-          defaultAccessPolicy: deny
           relations:
             viewer:
               subjectTypes: [subject]
@@ -208,7 +207,7 @@ authorization:
 
 `admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
 
-`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and per-resource `defaultAccessPolicy`. `authorization.relationships` defines static relationship tuples against those resource types.
+`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and optional per-resource `defaultRole` values. `authorization.relationships` defines static relationship tuples against those resource types.
 
 ```yaml
 authorization:
@@ -1298,7 +1297,7 @@ source:
 App route auth overrides are declared separately:
 
 ```yaml
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 apps:
   slack_bot:
     source: ./dist/provider-release.yaml
@@ -1751,8 +1750,6 @@ Each name in `apps.<name>.s3` must reference an existing enabled
 Mounted UI bundles are served on the public listener only. The built-in admin UI remains at `/admin`.
 
 `server.egress.defaultAction` must be `allow` or `deny`.
-
-`authorization.models.<model>.resourceTypes.<type>.defaultAccessPolicy` must be `allow` or `deny` when set.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 

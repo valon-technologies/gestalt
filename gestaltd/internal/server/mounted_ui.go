@@ -561,13 +561,7 @@ func (s *Server) mountedUIResourceDefaultRole(ctx context.Context, resourceName 
 	}
 	for _, resourceType := range resp.GetResourceTypes() {
 		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(resourceName) {
-			if role := strings.TrimSpace(resourceType.GetDefaultRole()); role != "" {
-				return role, nil
-			}
-			if resourceType.GetDefaultAccessPolicy() == proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW {
-				return "viewer", nil
-			}
-			return "", nil
+			return strings.TrimSpace(resourceType.GetDefaultRole()), nil
 		}
 	}
 	return "", nil

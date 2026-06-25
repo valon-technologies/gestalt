@@ -117,7 +117,6 @@ def to_wire_authorization_model_resource_type(
         relations=[to_wire_model_relation(item) for item in value.relations],
         actions=[to_wire_model_action(item) for item in value.actions],
         source_layer=to_wire_enum(value.source_layer),
-        default_access_policy=to_wire_enum(value.default_access_policy),
         default_role=value.default_role,
     )
 
@@ -130,7 +129,6 @@ def from_wire_authorization_model_resource_type(
         relations=[from_wire_model_relation(item) for item in value.relations],
         actions=[from_wire_model_action(item) for item in value.actions],
         source_layer=value.source_layer,
-        default_access_policy=value.default_access_policy,
         default_role=value.default_role,
     )
 

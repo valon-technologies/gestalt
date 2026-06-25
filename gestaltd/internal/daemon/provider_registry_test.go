@@ -15,7 +15,7 @@ func TestUpdateProviderVersionConstraintFindsProviderCollections(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "gestalt.yaml")
 	if err := os.WriteFile(path, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   identity:
     authn:
@@ -57,7 +57,7 @@ func TestUpdateProviderVersionConstraintRequiresKindForAmbiguousName(t *testing.
 
 	path := filepath.Join(t.TempDir(), "gestalt.yaml")
 	if err := os.WriteFile(path, []byte(`
-apiVersion: gestaltd.config/v7
+apiVersion: gestaltd.config/v8
 providers:
   ui:
     shared:

@@ -17,17 +17,6 @@ use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
 
-/// Open enum for `gestalt.provider.v1.DefaultAccessPolicy`; unknown numeric values are preserved.
-pub type DefaultAccessPolicy = i32;
-
-/// Named values of `DefaultAccessPolicy`.
-pub mod default_access_policy {
-    /// DEFAULT_ACCESS_POLICY_DENY.
-    pub const DEFAULT_ACCESS_POLICY_DENY: i32 = 0;
-    /// DEFAULT_ACCESS_POLICY_ALLOW.
-    pub const DEFAULT_ACCESS_POLICY_ALLOW: i32 = 1;
-}
-
 /// Open enum for `gestalt.provider.v1.RelationshipTargetType`; unknown numeric values are preserved.
 pub type RelationshipTargetType = i32;
 
@@ -112,8 +101,6 @@ pub struct AuthorizationModelResourceType {
     pub actions: Vec<ModelAction>,
     /// The `source_layer` field.
     pub source_layer: SourceLayer,
-    /// The `default_access_policy` field.
-    pub default_access_policy: DefaultAccessPolicy,
     /// The `default_role` field.
     pub default_role: String,
 }

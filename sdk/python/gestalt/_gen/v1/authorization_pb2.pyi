@@ -20,11 +20,6 @@ class RelationshipTargetType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     RELATIONSHIP_TARGET_TYPE_RESOURCE: _ClassVar[RelationshipTargetType]
     RELATIONSHIP_TARGET_TYPE_SUBJECT_SET: _ClassVar[RelationshipTargetType]
 
-class DefaultAccessPolicy(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    DEFAULT_ACCESS_POLICY_DENY: _ClassVar[DefaultAccessPolicy]
-    DEFAULT_ACCESS_POLICY_ALLOW: _ClassVar[DefaultAccessPolicy]
-
 class SourceLayer(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     SOURCE_LAYER_UNSPECIFIED: _ClassVar[SourceLayer]
@@ -34,8 +29,6 @@ RELATIONSHIP_TARGET_TYPE_UNSPECIFIED: RelationshipTargetType
 RELATIONSHIP_TARGET_TYPE_SUBJECT: RelationshipTargetType
 RELATIONSHIP_TARGET_TYPE_RESOURCE: RelationshipTargetType
 RELATIONSHIP_TARGET_TYPE_SUBJECT_SET: RelationshipTargetType
-DEFAULT_ACCESS_POLICY_DENY: DefaultAccessPolicy
-DEFAULT_ACCESS_POLICY_ALLOW: DefaultAccessPolicy
 SOURCE_LAYER_UNSPECIFIED: SourceLayer
 SOURCE_LAYER_STATIC_CONFIG: SourceLayer
 SOURCE_LAYER_RUNTIME: SourceLayer
@@ -224,15 +217,13 @@ class AuthorizationModelResourceType(_message.Message):
     RELATIONS_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
     SOURCE_LAYER_FIELD_NUMBER: _ClassVar[int]
-    DEFAULT_ACCESS_POLICY_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_ROLE_FIELD_NUMBER: _ClassVar[int]
     name: str
     relations: _containers.RepeatedCompositeFieldContainer[ModelRelation]
     actions: _containers.RepeatedCompositeFieldContainer[ModelAction]
     source_layer: SourceLayer
-    default_access_policy: DefaultAccessPolicy
     default_role: str
-    def __init__(self, name: _Optional[str] = ..., relations: _Optional[_Iterable[_Union[ModelRelation, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ModelAction, _Mapping]]] = ..., source_layer: _Optional[_Union[SourceLayer, str]] = ..., default_access_policy: _Optional[_Union[DefaultAccessPolicy, str]] = ..., default_role: _Optional[str] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., relations: _Optional[_Iterable[_Union[ModelRelation, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ModelAction, _Mapping]]] = ..., source_layer: _Optional[_Union[SourceLayer, str]] = ..., default_role: _Optional[str] = ...) -> None: ...
 
 class ModelRelation(_message.Message):
     __slots__ = ()

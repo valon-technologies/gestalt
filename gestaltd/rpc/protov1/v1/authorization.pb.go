@@ -76,52 +76,6 @@ func (RelationshipTargetType) EnumDescriptor() ([]byte, []int) {
 	return file_v1_authorization_proto_rawDescGZIP(), []int{0}
 }
 
-type DefaultAccessPolicy int32
-
-const (
-	DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY  DefaultAccessPolicy = 0
-	DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW DefaultAccessPolicy = 1
-)
-
-// Enum value maps for DefaultAccessPolicy.
-var (
-	DefaultAccessPolicy_name = map[int32]string{
-		0: "DEFAULT_ACCESS_POLICY_DENY",
-		1: "DEFAULT_ACCESS_POLICY_ALLOW",
-	}
-	DefaultAccessPolicy_value = map[string]int32{
-		"DEFAULT_ACCESS_POLICY_DENY":  0,
-		"DEFAULT_ACCESS_POLICY_ALLOW": 1,
-	}
-)
-
-func (x DefaultAccessPolicy) Enum() *DefaultAccessPolicy {
-	p := new(DefaultAccessPolicy)
-	*p = x
-	return p
-}
-
-func (x DefaultAccessPolicy) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (DefaultAccessPolicy) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_authorization_proto_enumTypes[1].Descriptor()
-}
-
-func (DefaultAccessPolicy) Type() protoreflect.EnumType {
-	return &file_v1_authorization_proto_enumTypes[1]
-}
-
-func (x DefaultAccessPolicy) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use DefaultAccessPolicy.Descriptor instead.
-func (DefaultAccessPolicy) EnumDescriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{1}
-}
-
 type SourceLayer int32
 
 const (
@@ -155,11 +109,11 @@ func (x SourceLayer) String() string {
 }
 
 func (SourceLayer) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_authorization_proto_enumTypes[2].Descriptor()
+	return file_v1_authorization_proto_enumTypes[1].Descriptor()
 }
 
 func (SourceLayer) Type() protoreflect.EnumType {
-	return &file_v1_authorization_proto_enumTypes[2]
+	return &file_v1_authorization_proto_enumTypes[1]
 }
 
 func (x SourceLayer) Number() protoreflect.EnumNumber {
@@ -168,7 +122,7 @@ func (x SourceLayer) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SourceLayer.Descriptor instead.
 func (SourceLayer) EnumDescriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{2}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{1}
 }
 
 type Subject struct {
@@ -1342,15 +1296,14 @@ func (x *AuthorizationModel) GetResourceTypes() []*AuthorizationModelResourceTyp
 }
 
 type AuthorizationModelResourceType struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Relations           []*ModelRelation       `protobuf:"bytes,2,rep,name=relations,proto3" json:"relations,omitempty"`
-	Actions             []*ModelAction         `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`
-	SourceLayer         SourceLayer            `protobuf:"varint,4,opt,name=source_layer,json=sourceLayer,proto3,enum=gestalt.provider.v1.SourceLayer" json:"source_layer,omitempty"`
-	DefaultAccessPolicy DefaultAccessPolicy    `protobuf:"varint,5,opt,name=default_access_policy,json=defaultAccessPolicy,proto3,enum=gestalt.provider.v1.DefaultAccessPolicy" json:"default_access_policy,omitempty"`
-	DefaultRole         string                 `protobuf:"bytes,6,opt,name=default_role,json=defaultRole,proto3" json:"default_role,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Relations     []*ModelRelation       `protobuf:"bytes,2,rep,name=relations,proto3" json:"relations,omitempty"`
+	Actions       []*ModelAction         `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`
+	SourceLayer   SourceLayer            `protobuf:"varint,4,opt,name=source_layer,json=sourceLayer,proto3,enum=gestalt.provider.v1.SourceLayer" json:"source_layer,omitempty"`
+	DefaultRole   string                 `protobuf:"bytes,6,opt,name=default_role,json=defaultRole,proto3" json:"default_role,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuthorizationModelResourceType) Reset() {
@@ -1409,13 +1362,6 @@ func (x *AuthorizationModelResourceType) GetSourceLayer() SourceLayer {
 		return x.SourceLayer
 	}
 	return SourceLayer_SOURCE_LAYER_UNSPECIFIED
-}
-
-func (x *AuthorizationModelResourceType) GetDefaultAccessPolicy() DefaultAccessPolicy {
-	if x != nil {
-		return x.DefaultAccessPolicy
-	}
-	return DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY
 }
 
 func (x *AuthorizationModelResourceType) GetDefaultRole() string {
@@ -2128,14 +2074,13 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\x12AuthorizationModel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12Z\n" +
-	"\x0eresource_types\x18\x03 \x03(\v23.gestalt.provider.v1.AuthorizationModelResourceTypeR\rresourceTypes\"\xf8\x02\n" +
+	"\x0eresource_types\x18\x03 \x03(\v23.gestalt.provider.v1.AuthorizationModelResourceTypeR\rresourceTypes\"\xb7\x02\n" +
 	"\x1eAuthorizationModelResourceType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12@\n" +
 	"\trelations\x18\x02 \x03(\v2\".gestalt.provider.v1.ModelRelationR\trelations\x12:\n" +
 	"\aactions\x18\x03 \x03(\v2 .gestalt.provider.v1.ModelActionR\aactions\x12C\n" +
-	"\fsource_layer\x18\x04 \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\x12\\\n" +
-	"\x15default_access_policy\x18\x05 \x01(\x0e2(.gestalt.provider.v1.DefaultAccessPolicyR\x13defaultAccessPolicy\x12!\n" +
-	"\fdefault_role\x18\x06 \x01(\tR\vdefaultRole\"u\n" +
+	"\fsource_layer\x18\x04 \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\x12!\n" +
+	"\fdefault_role\x18\x06 \x01(\tR\vdefaultRoleJ\x04\b\x05\x10\x06R\x15default_access_policy\"u\n" +
 	"\rModelRelation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12P\n" +
 	"\x0fallowed_targets\x18\x02 \x03(\v2'.gestalt.provider.v1.ModelAllowedTargetR\x0eallowedTargets\"?\n" +
@@ -2177,10 +2122,7 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"$RELATIONSHIP_TARGET_TYPE_UNSPECIFIED\x10\x00\x12$\n" +
 	" RELATIONSHIP_TARGET_TYPE_SUBJECT\x10\x01\x12%\n" +
 	"!RELATIONSHIP_TARGET_TYPE_RESOURCE\x10\x02\x12(\n" +
-	"$RELATIONSHIP_TARGET_TYPE_SUBJECT_SET\x10\x03*V\n" +
-	"\x13DefaultAccessPolicy\x12\x1e\n" +
-	"\x1aDEFAULT_ACCESS_POLICY_DENY\x10\x00\x12\x1f\n" +
-	"\x1bDEFAULT_ACCESS_POLICY_ALLOW\x10\x01*e\n" +
+	"$RELATIONSHIP_TARGET_TYPE_SUBJECT_SET\x10\x03*e\n" +
 	"\vSourceLayer\x12\x1c\n" +
 	"\x18SOURCE_LAYER_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aSOURCE_LAYER_STATIC_CONFIG\x10\x01\x12\x18\n" +
@@ -2211,116 +2153,114 @@ func file_v1_authorization_proto_rawDescGZIP() []byte {
 	return file_v1_authorization_proto_rawDescData
 }
 
-var file_v1_authorization_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_v1_authorization_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_v1_authorization_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_v1_authorization_proto_goTypes = []any{
 	(RelationshipTargetType)(0),                  // 0: gestalt.provider.v1.RelationshipTargetType
-	(DefaultAccessPolicy)(0),                     // 1: gestalt.provider.v1.DefaultAccessPolicy
-	(SourceLayer)(0),                             // 2: gestalt.provider.v1.SourceLayer
-	(*Subject)(nil),                              // 3: gestalt.provider.v1.Subject
-	(*Action)(nil),                               // 4: gestalt.provider.v1.Action
-	(*Resource)(nil),                             // 5: gestalt.provider.v1.Resource
-	(*CheckAccessRequest)(nil),                   // 6: gestalt.provider.v1.CheckAccessRequest
-	(*CheckAccessResponse)(nil),                  // 7: gestalt.provider.v1.CheckAccessResponse
-	(*CheckAccessManyRequest)(nil),               // 8: gestalt.provider.v1.CheckAccessManyRequest
-	(*CheckAccessManyResponse)(nil),              // 9: gestalt.provider.v1.CheckAccessManyResponse
-	(*ListRelationshipsRequest)(nil),             // 10: gestalt.provider.v1.ListRelationshipsRequest
-	(*RelationshipFilter)(nil),                   // 11: gestalt.provider.v1.RelationshipFilter
-	(*ListRelationshipsResponse)(nil),            // 12: gestalt.provider.v1.ListRelationshipsResponse
-	(*AddRelationshipRequest)(nil),               // 13: gestalt.provider.v1.AddRelationshipRequest
-	(*AddRelationshipResponse)(nil),              // 14: gestalt.provider.v1.AddRelationshipResponse
-	(*DeleteRelationshipRequest)(nil),            // 15: gestalt.provider.v1.DeleteRelationshipRequest
-	(*DeleteRelationshipResponse)(nil),           // 16: gestalt.provider.v1.DeleteRelationshipResponse
-	(*SetAuthorizationStateRequest)(nil),         // 17: gestalt.provider.v1.SetAuthorizationStateRequest
-	(*SetAuthorizationStateResponse)(nil),        // 18: gestalt.provider.v1.SetAuthorizationStateResponse
-	(*Relationship)(nil),                         // 19: gestalt.provider.v1.Relationship
-	(*RelationshipTuple)(nil),                    // 20: gestalt.provider.v1.RelationshipTuple
-	(*RelationshipTarget)(nil),                   // 21: gestalt.provider.v1.RelationshipTarget
-	(*SubjectSet)(nil),                           // 22: gestalt.provider.v1.SubjectSet
-	(*AuthorizationModel)(nil),                   // 23: gestalt.provider.v1.AuthorizationModel
-	(*AuthorizationModelResourceType)(nil),       // 24: gestalt.provider.v1.AuthorizationModelResourceType
-	(*ModelRelation)(nil),                        // 25: gestalt.provider.v1.ModelRelation
-	(*ModelAction)(nil),                          // 26: gestalt.provider.v1.ModelAction
-	(*ModelAllowedTarget)(nil),                   // 27: gestalt.provider.v1.ModelAllowedTarget
-	(*SubjectSetType)(nil),                       // 28: gestalt.provider.v1.SubjectSetType
-	(*AuthorizationModelRef)(nil),                // 29: gestalt.provider.v1.AuthorizationModelRef
-	(*GetActiveModelRefResponse)(nil),            // 30: gestalt.provider.v1.GetActiveModelRefResponse
-	(*SetActiveModelRequest)(nil),                // 31: gestalt.provider.v1.SetActiveModelRequest
-	(*SetActiveModelResponse)(nil),               // 32: gestalt.provider.v1.SetActiveModelResponse
-	(*ListActiveModelResourceTypesRequest)(nil),  // 33: gestalt.provider.v1.ListActiveModelResourceTypesRequest
-	(*AuthorizationModelResourceTypeFilter)(nil), // 34: gestalt.provider.v1.AuthorizationModelResourceTypeFilter
-	(*ListActiveModelResourceTypesResponse)(nil), // 35: gestalt.provider.v1.ListActiveModelResourceTypesResponse
-	(*structpb.Struct)(nil),                      // 36: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),                // 37: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                        // 38: google.protobuf.Empty
+	(SourceLayer)(0),                             // 1: gestalt.provider.v1.SourceLayer
+	(*Subject)(nil),                              // 2: gestalt.provider.v1.Subject
+	(*Action)(nil),                               // 3: gestalt.provider.v1.Action
+	(*Resource)(nil),                             // 4: gestalt.provider.v1.Resource
+	(*CheckAccessRequest)(nil),                   // 5: gestalt.provider.v1.CheckAccessRequest
+	(*CheckAccessResponse)(nil),                  // 6: gestalt.provider.v1.CheckAccessResponse
+	(*CheckAccessManyRequest)(nil),               // 7: gestalt.provider.v1.CheckAccessManyRequest
+	(*CheckAccessManyResponse)(nil),              // 8: gestalt.provider.v1.CheckAccessManyResponse
+	(*ListRelationshipsRequest)(nil),             // 9: gestalt.provider.v1.ListRelationshipsRequest
+	(*RelationshipFilter)(nil),                   // 10: gestalt.provider.v1.RelationshipFilter
+	(*ListRelationshipsResponse)(nil),            // 11: gestalt.provider.v1.ListRelationshipsResponse
+	(*AddRelationshipRequest)(nil),               // 12: gestalt.provider.v1.AddRelationshipRequest
+	(*AddRelationshipResponse)(nil),              // 13: gestalt.provider.v1.AddRelationshipResponse
+	(*DeleteRelationshipRequest)(nil),            // 14: gestalt.provider.v1.DeleteRelationshipRequest
+	(*DeleteRelationshipResponse)(nil),           // 15: gestalt.provider.v1.DeleteRelationshipResponse
+	(*SetAuthorizationStateRequest)(nil),         // 16: gestalt.provider.v1.SetAuthorizationStateRequest
+	(*SetAuthorizationStateResponse)(nil),        // 17: gestalt.provider.v1.SetAuthorizationStateResponse
+	(*Relationship)(nil),                         // 18: gestalt.provider.v1.Relationship
+	(*RelationshipTuple)(nil),                    // 19: gestalt.provider.v1.RelationshipTuple
+	(*RelationshipTarget)(nil),                   // 20: gestalt.provider.v1.RelationshipTarget
+	(*SubjectSet)(nil),                           // 21: gestalt.provider.v1.SubjectSet
+	(*AuthorizationModel)(nil),                   // 22: gestalt.provider.v1.AuthorizationModel
+	(*AuthorizationModelResourceType)(nil),       // 23: gestalt.provider.v1.AuthorizationModelResourceType
+	(*ModelRelation)(nil),                        // 24: gestalt.provider.v1.ModelRelation
+	(*ModelAction)(nil),                          // 25: gestalt.provider.v1.ModelAction
+	(*ModelAllowedTarget)(nil),                   // 26: gestalt.provider.v1.ModelAllowedTarget
+	(*SubjectSetType)(nil),                       // 27: gestalt.provider.v1.SubjectSetType
+	(*AuthorizationModelRef)(nil),                // 28: gestalt.provider.v1.AuthorizationModelRef
+	(*GetActiveModelRefResponse)(nil),            // 29: gestalt.provider.v1.GetActiveModelRefResponse
+	(*SetActiveModelRequest)(nil),                // 30: gestalt.provider.v1.SetActiveModelRequest
+	(*SetActiveModelResponse)(nil),               // 31: gestalt.provider.v1.SetActiveModelResponse
+	(*ListActiveModelResourceTypesRequest)(nil),  // 32: gestalt.provider.v1.ListActiveModelResourceTypesRequest
+	(*AuthorizationModelResourceTypeFilter)(nil), // 33: gestalt.provider.v1.AuthorizationModelResourceTypeFilter
+	(*ListActiveModelResourceTypesResponse)(nil), // 34: gestalt.provider.v1.ListActiveModelResourceTypesResponse
+	(*structpb.Struct)(nil),                      // 35: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),                // 36: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                        // 37: google.protobuf.Empty
 }
 var file_v1_authorization_proto_depIdxs = []int32{
-	36, // 0: gestalt.provider.v1.Subject.properties:type_name -> google.protobuf.Struct
-	36, // 1: gestalt.provider.v1.Action.properties:type_name -> google.protobuf.Struct
-	36, // 2: gestalt.provider.v1.Resource.properties:type_name -> google.protobuf.Struct
-	3,  // 3: gestalt.provider.v1.CheckAccessRequest.subject:type_name -> gestalt.provider.v1.Subject
-	4,  // 4: gestalt.provider.v1.CheckAccessRequest.action:type_name -> gestalt.provider.v1.Action
-	5,  // 5: gestalt.provider.v1.CheckAccessRequest.resource:type_name -> gestalt.provider.v1.Resource
-	6,  // 6: gestalt.provider.v1.CheckAccessManyRequest.requests:type_name -> gestalt.provider.v1.CheckAccessRequest
-	7,  // 7: gestalt.provider.v1.CheckAccessManyResponse.decisions:type_name -> gestalt.provider.v1.CheckAccessResponse
-	11, // 8: gestalt.provider.v1.ListRelationshipsRequest.filter:type_name -> gestalt.provider.v1.RelationshipFilter
-	21, // 9: gestalt.provider.v1.RelationshipFilter.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	5,  // 10: gestalt.provider.v1.RelationshipFilter.resource:type_name -> gestalt.provider.v1.Resource
+	35, // 0: gestalt.provider.v1.Subject.properties:type_name -> google.protobuf.Struct
+	35, // 1: gestalt.provider.v1.Action.properties:type_name -> google.protobuf.Struct
+	35, // 2: gestalt.provider.v1.Resource.properties:type_name -> google.protobuf.Struct
+	2,  // 3: gestalt.provider.v1.CheckAccessRequest.subject:type_name -> gestalt.provider.v1.Subject
+	3,  // 4: gestalt.provider.v1.CheckAccessRequest.action:type_name -> gestalt.provider.v1.Action
+	4,  // 5: gestalt.provider.v1.CheckAccessRequest.resource:type_name -> gestalt.provider.v1.Resource
+	5,  // 6: gestalt.provider.v1.CheckAccessManyRequest.requests:type_name -> gestalt.provider.v1.CheckAccessRequest
+	6,  // 7: gestalt.provider.v1.CheckAccessManyResponse.decisions:type_name -> gestalt.provider.v1.CheckAccessResponse
+	10, // 8: gestalt.provider.v1.ListRelationshipsRequest.filter:type_name -> gestalt.provider.v1.RelationshipFilter
+	20, // 9: gestalt.provider.v1.RelationshipFilter.target:type_name -> gestalt.provider.v1.RelationshipTarget
+	4,  // 10: gestalt.provider.v1.RelationshipFilter.resource:type_name -> gestalt.provider.v1.Resource
 	0,  // 11: gestalt.provider.v1.RelationshipFilter.target_type:type_name -> gestalt.provider.v1.RelationshipTargetType
-	2,  // 12: gestalt.provider.v1.RelationshipFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	19, // 13: gestalt.provider.v1.ListRelationshipsResponse.relationships:type_name -> gestalt.provider.v1.Relationship
-	19, // 14: gestalt.provider.v1.AddRelationshipRequest.relationship:type_name -> gestalt.provider.v1.Relationship
-	19, // 15: gestalt.provider.v1.AddRelationshipResponse.relationship:type_name -> gestalt.provider.v1.Relationship
-	20, // 16: gestalt.provider.v1.DeleteRelationshipRequest.relationship_tuple:type_name -> gestalt.provider.v1.RelationshipTuple
-	23, // 17: gestalt.provider.v1.SetAuthorizationStateRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
-	19, // 18: gestalt.provider.v1.SetAuthorizationStateRequest.relationships:type_name -> gestalt.provider.v1.Relationship
-	29, // 19: gestalt.provider.v1.SetAuthorizationStateResponse.active_model:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	20, // 20: gestalt.provider.v1.Relationship.tuple:type_name -> gestalt.provider.v1.RelationshipTuple
-	36, // 21: gestalt.provider.v1.Relationship.properties:type_name -> google.protobuf.Struct
-	2,  // 22: gestalt.provider.v1.Relationship.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	21, // 23: gestalt.provider.v1.RelationshipTuple.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	5,  // 24: gestalt.provider.v1.RelationshipTuple.resource:type_name -> gestalt.provider.v1.Resource
-	3,  // 25: gestalt.provider.v1.RelationshipTarget.subject:type_name -> gestalt.provider.v1.Subject
-	5,  // 26: gestalt.provider.v1.RelationshipTarget.resource:type_name -> gestalt.provider.v1.Resource
-	22, // 27: gestalt.provider.v1.RelationshipTarget.subject_set:type_name -> gestalt.provider.v1.SubjectSet
-	5,  // 28: gestalt.provider.v1.SubjectSet.resource:type_name -> gestalt.provider.v1.Resource
-	24, // 29: gestalt.provider.v1.AuthorizationModel.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
-	25, // 30: gestalt.provider.v1.AuthorizationModelResourceType.relations:type_name -> gestalt.provider.v1.ModelRelation
-	26, // 31: gestalt.provider.v1.AuthorizationModelResourceType.actions:type_name -> gestalt.provider.v1.ModelAction
-	2,  // 32: gestalt.provider.v1.AuthorizationModelResourceType.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	1,  // 33: gestalt.provider.v1.AuthorizationModelResourceType.default_access_policy:type_name -> gestalt.provider.v1.DefaultAccessPolicy
-	27, // 34: gestalt.provider.v1.ModelRelation.allowed_targets:type_name -> gestalt.provider.v1.ModelAllowedTarget
-	28, // 35: gestalt.provider.v1.ModelAllowedTarget.subject_set_type:type_name -> gestalt.provider.v1.SubjectSetType
-	37, // 36: gestalt.provider.v1.AuthorizationModelRef.created_at:type_name -> google.protobuf.Timestamp
-	29, // 37: gestalt.provider.v1.GetActiveModelRefResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	23, // 38: gestalt.provider.v1.SetActiveModelRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
-	29, // 39: gestalt.provider.v1.SetActiveModelResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	34, // 40: gestalt.provider.v1.ListActiveModelResourceTypesRequest.filter:type_name -> gestalt.provider.v1.AuthorizationModelResourceTypeFilter
-	2,  // 41: gestalt.provider.v1.AuthorizationModelResourceTypeFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
-	24, // 42: gestalt.provider.v1.ListActiveModelResourceTypesResponse.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
-	6,  // 43: gestalt.provider.v1.Authorization.CheckAccess:input_type -> gestalt.provider.v1.CheckAccessRequest
-	8,  // 44: gestalt.provider.v1.Authorization.CheckAccessMany:input_type -> gestalt.provider.v1.CheckAccessManyRequest
-	10, // 45: gestalt.provider.v1.Authorization.ListRelationships:input_type -> gestalt.provider.v1.ListRelationshipsRequest
-	13, // 46: gestalt.provider.v1.Authorization.AddRelationship:input_type -> gestalt.provider.v1.AddRelationshipRequest
-	15, // 47: gestalt.provider.v1.Authorization.DeleteRelationship:input_type -> gestalt.provider.v1.DeleteRelationshipRequest
-	17, // 48: gestalt.provider.v1.Authorization.SetAuthorizationState:input_type -> gestalt.provider.v1.SetAuthorizationStateRequest
-	38, // 49: gestalt.provider.v1.Authorization.GetActiveModelRef:input_type -> google.protobuf.Empty
-	31, // 50: gestalt.provider.v1.Authorization.SetActiveModel:input_type -> gestalt.provider.v1.SetActiveModelRequest
-	33, // 51: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:input_type -> gestalt.provider.v1.ListActiveModelResourceTypesRequest
-	7,  // 52: gestalt.provider.v1.Authorization.CheckAccess:output_type -> gestalt.provider.v1.CheckAccessResponse
-	9,  // 53: gestalt.provider.v1.Authorization.CheckAccessMany:output_type -> gestalt.provider.v1.CheckAccessManyResponse
-	12, // 54: gestalt.provider.v1.Authorization.ListRelationships:output_type -> gestalt.provider.v1.ListRelationshipsResponse
-	14, // 55: gestalt.provider.v1.Authorization.AddRelationship:output_type -> gestalt.provider.v1.AddRelationshipResponse
-	16, // 56: gestalt.provider.v1.Authorization.DeleteRelationship:output_type -> gestalt.provider.v1.DeleteRelationshipResponse
-	18, // 57: gestalt.provider.v1.Authorization.SetAuthorizationState:output_type -> gestalt.provider.v1.SetAuthorizationStateResponse
-	30, // 58: gestalt.provider.v1.Authorization.GetActiveModelRef:output_type -> gestalt.provider.v1.GetActiveModelRefResponse
-	32, // 59: gestalt.provider.v1.Authorization.SetActiveModel:output_type -> gestalt.provider.v1.SetActiveModelResponse
-	35, // 60: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:output_type -> gestalt.provider.v1.ListActiveModelResourceTypesResponse
-	52, // [52:61] is the sub-list for method output_type
-	43, // [43:52] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	1,  // 12: gestalt.provider.v1.RelationshipFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	18, // 13: gestalt.provider.v1.ListRelationshipsResponse.relationships:type_name -> gestalt.provider.v1.Relationship
+	18, // 14: gestalt.provider.v1.AddRelationshipRequest.relationship:type_name -> gestalt.provider.v1.Relationship
+	18, // 15: gestalt.provider.v1.AddRelationshipResponse.relationship:type_name -> gestalt.provider.v1.Relationship
+	19, // 16: gestalt.provider.v1.DeleteRelationshipRequest.relationship_tuple:type_name -> gestalt.provider.v1.RelationshipTuple
+	22, // 17: gestalt.provider.v1.SetAuthorizationStateRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
+	18, // 18: gestalt.provider.v1.SetAuthorizationStateRequest.relationships:type_name -> gestalt.provider.v1.Relationship
+	28, // 19: gestalt.provider.v1.SetAuthorizationStateResponse.active_model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	19, // 20: gestalt.provider.v1.Relationship.tuple:type_name -> gestalt.provider.v1.RelationshipTuple
+	35, // 21: gestalt.provider.v1.Relationship.properties:type_name -> google.protobuf.Struct
+	1,  // 22: gestalt.provider.v1.Relationship.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	20, // 23: gestalt.provider.v1.RelationshipTuple.target:type_name -> gestalt.provider.v1.RelationshipTarget
+	4,  // 24: gestalt.provider.v1.RelationshipTuple.resource:type_name -> gestalt.provider.v1.Resource
+	2,  // 25: gestalt.provider.v1.RelationshipTarget.subject:type_name -> gestalt.provider.v1.Subject
+	4,  // 26: gestalt.provider.v1.RelationshipTarget.resource:type_name -> gestalt.provider.v1.Resource
+	21, // 27: gestalt.provider.v1.RelationshipTarget.subject_set:type_name -> gestalt.provider.v1.SubjectSet
+	4,  // 28: gestalt.provider.v1.SubjectSet.resource:type_name -> gestalt.provider.v1.Resource
+	23, // 29: gestalt.provider.v1.AuthorizationModel.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
+	24, // 30: gestalt.provider.v1.AuthorizationModelResourceType.relations:type_name -> gestalt.provider.v1.ModelRelation
+	25, // 31: gestalt.provider.v1.AuthorizationModelResourceType.actions:type_name -> gestalt.provider.v1.ModelAction
+	1,  // 32: gestalt.provider.v1.AuthorizationModelResourceType.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	26, // 33: gestalt.provider.v1.ModelRelation.allowed_targets:type_name -> gestalt.provider.v1.ModelAllowedTarget
+	27, // 34: gestalt.provider.v1.ModelAllowedTarget.subject_set_type:type_name -> gestalt.provider.v1.SubjectSetType
+	36, // 35: gestalt.provider.v1.AuthorizationModelRef.created_at:type_name -> google.protobuf.Timestamp
+	28, // 36: gestalt.provider.v1.GetActiveModelRefResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	22, // 37: gestalt.provider.v1.SetActiveModelRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
+	28, // 38: gestalt.provider.v1.SetActiveModelResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	33, // 39: gestalt.provider.v1.ListActiveModelResourceTypesRequest.filter:type_name -> gestalt.provider.v1.AuthorizationModelResourceTypeFilter
+	1,  // 40: gestalt.provider.v1.AuthorizationModelResourceTypeFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	23, // 41: gestalt.provider.v1.ListActiveModelResourceTypesResponse.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
+	5,  // 42: gestalt.provider.v1.Authorization.CheckAccess:input_type -> gestalt.provider.v1.CheckAccessRequest
+	7,  // 43: gestalt.provider.v1.Authorization.CheckAccessMany:input_type -> gestalt.provider.v1.CheckAccessManyRequest
+	9,  // 44: gestalt.provider.v1.Authorization.ListRelationships:input_type -> gestalt.provider.v1.ListRelationshipsRequest
+	12, // 45: gestalt.provider.v1.Authorization.AddRelationship:input_type -> gestalt.provider.v1.AddRelationshipRequest
+	14, // 46: gestalt.provider.v1.Authorization.DeleteRelationship:input_type -> gestalt.provider.v1.DeleteRelationshipRequest
+	16, // 47: gestalt.provider.v1.Authorization.SetAuthorizationState:input_type -> gestalt.provider.v1.SetAuthorizationStateRequest
+	37, // 48: gestalt.provider.v1.Authorization.GetActiveModelRef:input_type -> google.protobuf.Empty
+	30, // 49: gestalt.provider.v1.Authorization.SetActiveModel:input_type -> gestalt.provider.v1.SetActiveModelRequest
+	32, // 50: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:input_type -> gestalt.provider.v1.ListActiveModelResourceTypesRequest
+	6,  // 51: gestalt.provider.v1.Authorization.CheckAccess:output_type -> gestalt.provider.v1.CheckAccessResponse
+	8,  // 52: gestalt.provider.v1.Authorization.CheckAccessMany:output_type -> gestalt.provider.v1.CheckAccessManyResponse
+	11, // 53: gestalt.provider.v1.Authorization.ListRelationships:output_type -> gestalt.provider.v1.ListRelationshipsResponse
+	13, // 54: gestalt.provider.v1.Authorization.AddRelationship:output_type -> gestalt.provider.v1.AddRelationshipResponse
+	15, // 55: gestalt.provider.v1.Authorization.DeleteRelationship:output_type -> gestalt.provider.v1.DeleteRelationshipResponse
+	17, // 56: gestalt.provider.v1.Authorization.SetAuthorizationState:output_type -> gestalt.provider.v1.SetAuthorizationStateResponse
+	29, // 57: gestalt.provider.v1.Authorization.GetActiveModelRef:output_type -> gestalt.provider.v1.GetActiveModelRefResponse
+	31, // 58: gestalt.provider.v1.Authorization.SetActiveModel:output_type -> gestalt.provider.v1.SetActiveModelResponse
+	34, // 59: gestalt.provider.v1.Authorization.ListActiveModelResourceTypes:output_type -> gestalt.provider.v1.ListActiveModelResourceTypesResponse
+	51, // [51:60] is the sub-list for method output_type
+	42, // [42:51] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_v1_authorization_proto_init() }
@@ -2344,7 +2284,7 @@ func file_v1_authorization_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_authorization_proto_rawDesc), len(file_v1_authorization_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      2,
 			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,

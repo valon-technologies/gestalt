@@ -149,7 +149,7 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 	}
 }
 
-func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicyAndRole(t *testing.T) {
+func TestStaticAuthorizationModelCarriesResourceTypeDefaultRole(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
@@ -158,12 +158,8 @@ func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicyAndRole(t
 				"default": {
 					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
 						"github": {
-							DefaultAccessPolicy: "allow",
-							Relations:           map[string]config.AuthorizationRelationDef{"viewer": {SubjectTypes: []string{"subject"}}},
-						},
-						"slack": {
-							DefaultAccessPolicy: "deny",
-							Relations:           map[string]config.AuthorizationRelationDef{"viewer": {SubjectTypes: []string{"subject"}}},
+							DefaultRole: "viewer",
+							Relations:   map[string]config.AuthorizationRelationDef{"viewer": {SubjectTypes: []string{"subject"}}},
 						},
 						"docs": {
 							DefaultRole: "reader",
@@ -182,25 +178,12 @@ func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicyAndRole(t
 	if err != nil {
 		t.Fatalf("staticAuthorizationModel: %v", err)
 	}
-	policies := map[string]proto.DefaultAccessPolicy{}
-	for _, resourceType := range model.GetResourceTypes() {
-		policies[resourceType.GetName()] = resourceType.GetDefaultAccessPolicy()
-	}
-	if got := policies["github"]; got != proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW {
-		t.Fatalf("github default policy = %v, want allow", got)
-	}
-	if got := policies["slack"]; got != proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY {
-		t.Fatalf("slack default policy = %v, want deny", got)
-	}
-	if got := policies["team"]; got != proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY {
-		t.Fatalf("team default policy = %v, want deny", got)
-	}
 	roles := map[string]string{}
 	for _, resourceType := range model.GetResourceTypes() {
 		roles[resourceType.GetName()] = resourceType.GetDefaultRole()
 	}
 	if got := roles["github"]; got != "viewer" {
-		t.Fatalf("github default role = %q, want viewer compatibility role", got)
+		t.Fatalf("github default role = %q, want viewer", got)
 	}
 	if got := roles["docs"]; got != "reader" {
 		t.Fatalf("docs default role = %q, want reader", got)

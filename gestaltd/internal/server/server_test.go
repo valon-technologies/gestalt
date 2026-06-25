@@ -2433,8 +2433,7 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 	user := seedUserRecord(t, svc, "theme-user", "theme-user@example.test", time.Now())
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{{
-			Name:                "brandPolicy",
-			DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+			Name: "brandPolicy",
 		}},
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(
@@ -2518,20 +2517,18 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{
 			{
-				Name:                "dealHub",
-				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+				Name: "dealHub",
 			},
 			{
-				Name:                "brainPolicy",
-				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW,
+				Name:        "brainPolicy",
+				DefaultRole: "viewer",
 			},
 			{
 				Name:        "readerPolicy",
 				DefaultRole: "reader",
 			},
 			{
-				Name:                "gestaltAdmin",
-				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+				Name: "gestaltAdmin",
 			},
 		},
 		relationships: []*proto.Relationship{

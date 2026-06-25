@@ -45,7 +45,7 @@ const (
 
 const AppConnectionName = core.AppConnectionName
 const AppConnectionAlias = core.AppConnectionAlias
-const ConfigAPIVersion = "gestaltd.config/v7"
+const ConfigAPIVersion = "gestaltd.config/v8"
 
 type Config struct {
 	APIVersion                   string                                      `yaml:"apiVersion,omitempty"`
@@ -1945,12 +1945,11 @@ type AuthorizationModelDef struct {
 }
 
 type AuthorizationResourceTypeDef struct {
-	DefaultAccessPolicy string                                `yaml:"defaultAccessPolicy,omitempty"`
-	DefaultRole         string                                `yaml:"defaultRole,omitempty"`
-	Relations           map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
-	Actions             map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
-	Dynamic             AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
-	Source              AuthorizationSourceMetadataDef        `yaml:"source,omitempty"`
+	DefaultRole string                                `yaml:"defaultRole,omitempty"`
+	Relations   map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
+	Actions     map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
+	Dynamic     AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
+	Source      AuthorizationSourceMetadataDef        `yaml:"source,omitempty"`
 }
 
 type AuthorizationRelationDef struct {
@@ -3629,7 +3628,6 @@ func normalizedAuthorizationModelDef(def AuthorizationModelDef) AuthorizationMod
 }
 
 func normalizedAuthorizationResourceTypeDef(def AuthorizationResourceTypeDef) AuthorizationResourceTypeDef {
-	def.DefaultAccessPolicy = strings.TrimSpace(def.DefaultAccessPolicy)
 	def.DefaultRole = strings.TrimSpace(def.DefaultRole)
 	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
 	if len(def.Relations) == 0 {
