@@ -27,7 +27,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "root",
 			args:      []string{"--help"},
-			wantParts: []string{"gestaltd validate", "gestaltd lock", "gestaltd sync --locked", "gestaltd agent <command> [flags]", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked", "[--config PATH]...", "--lockfile PATH"},
+			wantParts: []string{"gestaltd validate", "gestaltd lock", "gestaltd sync [--locked]", "gestaltd agent <command> [flags]", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked", "--no-sync", "[--config PATH]...", "--lockfile PATH"},
 			notWant:   []string{"gestaltd lock [--config PATH]... [--lockfile PATH] [--platform", "gestaltd bundle", "gestaltd dev", "gestaltd init", "\n  init"},
 		},
 		{
@@ -44,7 +44,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "sync",
 			args:      []string{"sync", "--help"},
-			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--parallelism", "--cache-dir", "--output-format", "-v, --verbose", "--check"},
+			wantParts: []string{"gestaltd sync [--locked]", "Materialize prepared artifacts", "--artifacts-dir", "--parallelism", "--cache-dir", "--output-format", "-v, --verbose", "--check"},
 		},
 		{
 			name:      "provider",
@@ -55,7 +55,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve --path PATH", "--port PORT", "dev:"},
+			wantParts: []string{"gestaltd serve --path PATH", "--port PORT", "--no-sync", "dev:"},
 		},
 		{
 			name:      "provider repo",
@@ -136,33 +136,33 @@ func TestRunSyncParallelismValidation(t *testing.T) {
 		},
 		{
 			name:      "one accepted",
-			args:      []string{"--parallelism", "1"},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"--parallelism", "1", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "two accepted",
-			args:      []string{"--parallelism", "2"},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"--parallelism", "2", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "cache dir accepted",
-			args:      []string{"--cache-dir", filepath.Join(t.TempDir(), "cache")},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"--cache-dir", filepath.Join(t.TempDir(), "cache"), "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "verbose long accepted",
-			args:      []string{"--verbose"},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"--verbose", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "verbose short accepted",
-			args:      []string{"-v"},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"-v", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "repeated verbose short accepted",
-			args:      []string{"-v", "-v"},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"-v", "-v", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "condensed verbose short rejected",
@@ -171,13 +171,13 @@ func TestRunSyncParallelismValidation(t *testing.T) {
 		},
 		{
 			name:      "output format text accepted",
-			args:      []string{"--output-format", "text"},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"--output-format", "text", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "output format json accepted",
-			args:      []string{"--output-format=json"},
-			wantError: "gestaltd sync currently requires --locked",
+			args:      []string{"--output-format=json", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "loading config",
 		},
 		{
 			name:      "output format invalid",

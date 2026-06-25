@@ -38,6 +38,7 @@ type providerLocalCommandOptions struct {
 	Name         string
 	Port         int
 	Locked       bool
+	NoSync       bool
 	ArtifactsDir string
 	LockfilePath string
 	// FleetOverlay is true for serve --path with --config. Validate always leaves
@@ -55,6 +56,7 @@ type providerLocalSession struct {
 	ConfigPaths       []string
 	State             operator.StatePaths
 	Locked            bool
+	NoSync            bool
 	PublicURL         string
 	AdminURL          string
 	PublicUIPaths     []string
@@ -121,7 +123,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	if session.Locked {
 		forcedDevUIKeys = session.DevUIKeys
 	}
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, session.Locked, forcedDevUIKeys...)
+	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, session.Locked, session.NoSync, forcedDevUIKeys...)
 	if err != nil {
 		return err
 	}
@@ -276,6 +278,7 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		LockfilePath: opts.LockfilePath,
 	}
 	locked := opts.Locked && opts.FleetOverlay
+	noSync := opts.NoSync && opts.FleetOverlay
 	port := opts.Port
 	if opts.FleetOverlay {
 		configPaths = append([]string(nil), opts.ConfigPaths...)
@@ -343,6 +346,7 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		ConfigPaths:   configPaths,
 		State:         state,
 		Locked:        locked,
+		NoSync:        noSync,
 		PublicURL:     providerLocalPublicURL(loadedCfg),
 		AdminURL:      strings.TrimRight(providerLocalPublicURL(loadedCfg), "/") + "/admin/",
 		PublicUIPaths: publicUIPaths,

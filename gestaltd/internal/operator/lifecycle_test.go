@@ -1879,7 +1879,7 @@ server:
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
-	if err := lc.SyncAtPathsWithStatePaths([]string{cfgPath}, StatePaths{}); err != nil {
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{cfgPath}, StatePaths{}, SyncOptions{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
@@ -2547,9 +2547,9 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 		}
 	}
 
-	locked, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
+	locked, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, StatePaths{}, true, true)
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true): %v", err)
 	}
 	intg := locked.Apps["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
