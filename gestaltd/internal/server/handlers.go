@@ -228,6 +228,13 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
+	ctx, err := s.withProviderGatewayCallerToken(r.Context(), p)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "issue provider gateway caller token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to prepare app list context")
+		return
+	}
+	r = r.WithContext(ctx)
 	connected, err := s.subjectConnectedIntegrations(r)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "listing integrations", "error", err)
@@ -600,6 +607,13 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		Surface:        metricutil.InvocationSurfaceHTTP,
 	})
 	p := PrincipalFromContext(r.Context())
+	ctx, err := s.withProviderGatewayCallerToken(r.Context(), p)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "issue provider gateway caller token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to prepare operation list context")
+		return
+	}
+	r = r.WithContext(ctx)
 	requestedConnection := r.URL.Query().Get(httpConnectionParam)
 	if requestedConnection != "" {
 		var ok bool
@@ -635,7 +649,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	} else if core.SupportsSessionCatalog(prov) {
 		strictCatalog = true
 	}
-	ctx := core.WithCatalogSurface(r.Context(), core.CatalogSurfaceAPI)
+	ctx = core.WithCatalogSurface(r.Context(), core.CatalogSurfaceAPI)
 	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
 		ctx,
 		prov,

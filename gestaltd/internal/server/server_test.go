@@ -2711,9 +2711,11 @@ type serverTestAuthorizationProvider struct {
 	resourceTypes            []*proto.AuthorizationModelResourceType
 	relationships            []*proto.Relationship
 	listRelationshipRequests []*proto.ListRelationshipsRequest
+	callerTokens             []string
 }
 
-func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+func (p *serverTestAuthorizationProvider) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	p.callerTokens = append(p.callerTokens, providergateway.CallerTokenFromContext(ctx))
 	p.listRelationshipRequests = append(p.listRelationshipRequests, req)
 	filter := req.GetFilter()
 	out := []*proto.Relationship{}
@@ -2724,6 +2726,13 @@ func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, r
 		out = append(out, relationship)
 	}
 	return &proto.ListRelationshipsResponse{Relationships: out}, nil
+}
+
+func (p *serverTestAuthorizationProvider) lastCallerToken() string {
+	if p == nil || len(p.callerTokens) == 0 {
+		return ""
+	}
+	return p.callerTokens[len(p.callerTokens)-1]
 }
 
 type serviceAccountCredentialAuthorizationProvider struct {
@@ -4100,6 +4109,74 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	}
 	if integrations[0].MountedPath != "/github" {
 		t.Fatalf("expected mounted path /github, got %q", integrations[0].MountedPath)
+	}
+}
+
+func TestListIntegrationsIssuesProviderGatewayCallerTokenForMountedUIAuthorization(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	user := seedUser(t, svc, "app-list-user@test.local")
+	plaintext := scopedTestBearerToken(user.ID, "")
+	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
+	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	authz := &serverTestAuthorizationProvider{
+		resourceTypes: []*proto.AuthorizationModelResourceType{
+			{Name: "github", DefaultRole: "viewer"},
+		},
+	}
+	stub := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = testAuthStubForScopedBearer()
+		cfg.Authorization = authz
+		cfg.CallerTokenIssuer = issuer
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"github": {MountPath: "/github"},
+		}
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:    "github",
+			AppName: "github",
+			Path:    "/github",
+			Routes: []server.MountedUIRoute{{
+				Path:         "/*",
+				AllowedRoles: []string{"viewer"},
+			}},
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}),
+		}}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	callerToken := authz.lastCallerToken()
+	if callerToken == "" {
+		t.Fatal("authorization provider did not receive caller token")
+	}
+	claims, err := providergateway.Verify(callerToken, publicKeyPEM)
+	if err != nil {
+		t.Fatalf("Verify caller token: %v", err)
+	}
+	wantSubjectID := principal.UserSubjectID(user.ID)
+	if claims.SubjectID != wantSubjectID {
+		t.Fatalf("SubjectID = %q, want %q", claims.SubjectID, wantSubjectID)
 	}
 }
 
