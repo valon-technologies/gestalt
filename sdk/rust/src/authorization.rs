@@ -114,6 +114,8 @@ pub struct AuthorizationModelResourceType {
     pub source_layer: SourceLayer,
     /// The `default_access_policy` field.
     pub default_access_policy: DefaultAccessPolicy,
+    /// The `default_role` field.
+    pub default_role: String,
 }
 
 /// Native message type for `gestalt.provider.v1.AuthorizationModelResourceTypeFilter`.

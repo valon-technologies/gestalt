@@ -155,6 +155,7 @@ export function toWireAuthorizationModelResourceType(
     sourceLayer: (value.sourceLayer ?? 0) as wire.SourceLayer,
     defaultAccessPolicy: (value.defaultAccessPolicy ??
       0) as wire.DefaultAccessPolicy,
+    defaultRole: value.defaultRole ?? "",
   });
 }
 
@@ -167,6 +168,7 @@ export function fromWireAuthorizationModelResourceType(
     actions: value.actions.map(fromWireModelAction),
     sourceLayer: value.sourceLayer,
     defaultAccessPolicy: value.defaultAccessPolicy,
+    defaultRole: value.defaultRole,
   };
 }
 

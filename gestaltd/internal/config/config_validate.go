@@ -1565,6 +1565,15 @@ func validateAuthorizationResourceTypeDef(parentPath, name, path string, def Aut
 	default:
 		return fmt.Errorf("config validation: %s.defaultAccessPolicy must be %q or %q", path, "allow", "deny")
 	}
+	defaultRole := strings.TrimSpace(def.DefaultRole)
+	if defaultRole != "" {
+		if err := validateAuthorizationMapKey(path, defaultRole); err != nil {
+			return fmt.Errorf("config validation: %s.defaultRole: %w", path, err)
+		}
+		if _, ok := def.Relations[defaultRole]; !ok {
+			return fmt.Errorf("config validation: %s.defaultRole references undefined relation %q", path, defaultRole)
+		}
+	}
 	for relationName, relation := range def.Relations {
 		relationPath := path + ".relations." + relationName
 		if err := validateAuthorizationMapKey(path+".relations", relationName); err != nil {

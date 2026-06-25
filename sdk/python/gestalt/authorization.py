@@ -98,6 +98,7 @@ class AuthorizationModelResourceType:
     actions: list[ModelAction] = field(default_factory=list)
     source_layer: SourceLayer = 0
     default_access_policy: DefaultAccessPolicy = 0
+    default_role: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -95,6 +95,7 @@ export interface AuthorizationModelResourceType {
   actions: ModelAction[];
   sourceLayer: SourceLayer;
   defaultAccessPolicy: DefaultAccessPolicy;
+  defaultRole: string;
 }
 
 export interface AuthorizationModelResourceTypeFilter {

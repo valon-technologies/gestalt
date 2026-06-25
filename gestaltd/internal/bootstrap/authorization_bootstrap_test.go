@@ -149,7 +149,7 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 	}
 }
 
-func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicy(t *testing.T) {
+func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicyAndRole(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
@@ -164,6 +164,10 @@ func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicy(t *testi
 						"slack": {
 							DefaultAccessPolicy: "deny",
 							Relations:           map[string]config.AuthorizationRelationDef{"viewer": {SubjectTypes: []string{"subject"}}},
+						},
+						"docs": {
+							DefaultRole: "reader",
+							Relations:   map[string]config.AuthorizationRelationDef{"reader": {SubjectTypes: []string{"subject"}}},
 						},
 						"team": {
 							Relations: map[string]config.AuthorizationRelationDef{"member": {SubjectTypes: []string{"subject"}}},
@@ -190,6 +194,19 @@ func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicy(t *testi
 	}
 	if got := policies["team"]; got != proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY {
 		t.Fatalf("team default policy = %v, want deny", got)
+	}
+	roles := map[string]string{}
+	for _, resourceType := range model.GetResourceTypes() {
+		roles[resourceType.GetName()] = resourceType.GetDefaultRole()
+	}
+	if got := roles["github"]; got != "viewer" {
+		t.Fatalf("github default role = %q, want viewer compatibility role", got)
+	}
+	if got := roles["docs"]; got != "reader" {
+		t.Fatalf("docs default role = %q, want reader", got)
+	}
+	if got := roles["team"]; got != "" {
+		t.Fatalf("team default role = %q, want empty", got)
 	}
 }
 

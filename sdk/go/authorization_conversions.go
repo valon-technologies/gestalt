@@ -420,6 +420,7 @@ func authorizationModelResourceTypeFromProto(in *proto.AuthorizationModelResourc
 		Actions:             modelActionsFromProto(in.GetActions()),
 		SourceLayer:         SourceLayer(in.GetSourceLayer()),
 		DefaultAccessPolicy: DefaultAccessPolicy(in.GetDefaultAccessPolicy()),
+		DefaultRole:         in.GetDefaultRole(),
 	}
 }
 
@@ -437,6 +438,7 @@ func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) (*p
 		Actions:             protoModelActions(in.Actions),
 		SourceLayer:         proto.SourceLayer(in.SourceLayer),
 		DefaultAccessPolicy: proto.DefaultAccessPolicy(in.DefaultAccessPolicy),
+		DefaultRole:         in.DefaultRole,
 	}, nil
 }
 

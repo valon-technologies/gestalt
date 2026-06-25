@@ -140,6 +140,7 @@ message AuthorizationModelResourceType {
   repeated ModelAction actions = 3;
   SourceLayer source_layer = 4;
   DefaultAccessPolicy default_access_policy = 5;
+  string default_role = 6;
 }
 
 message ModelRelation {

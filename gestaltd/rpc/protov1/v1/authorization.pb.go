@@ -1348,6 +1348,7 @@ type AuthorizationModelResourceType struct {
 	Actions             []*ModelAction         `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`
 	SourceLayer         SourceLayer            `protobuf:"varint,4,opt,name=source_layer,json=sourceLayer,proto3,enum=gestalt.provider.v1.SourceLayer" json:"source_layer,omitempty"`
 	DefaultAccessPolicy DefaultAccessPolicy    `protobuf:"varint,5,opt,name=default_access_policy,json=defaultAccessPolicy,proto3,enum=gestalt.provider.v1.DefaultAccessPolicy" json:"default_access_policy,omitempty"`
+	DefaultRole         string                 `protobuf:"bytes,6,opt,name=default_role,json=defaultRole,proto3" json:"default_role,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1415,6 +1416,13 @@ func (x *AuthorizationModelResourceType) GetDefaultAccessPolicy() DefaultAccessP
 		return x.DefaultAccessPolicy
 	}
 	return DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY
+}
+
+func (x *AuthorizationModelResourceType) GetDefaultRole() string {
+	if x != nil {
+		return x.DefaultRole
+	}
+	return ""
 }
 
 type ModelRelation struct {
@@ -2120,13 +2128,14 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\x12AuthorizationModel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12Z\n" +
-	"\x0eresource_types\x18\x03 \x03(\v23.gestalt.provider.v1.AuthorizationModelResourceTypeR\rresourceTypes\"\xd5\x02\n" +
+	"\x0eresource_types\x18\x03 \x03(\v23.gestalt.provider.v1.AuthorizationModelResourceTypeR\rresourceTypes\"\xf8\x02\n" +
 	"\x1eAuthorizationModelResourceType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12@\n" +
 	"\trelations\x18\x02 \x03(\v2\".gestalt.provider.v1.ModelRelationR\trelations\x12:\n" +
 	"\aactions\x18\x03 \x03(\v2 .gestalt.provider.v1.ModelActionR\aactions\x12C\n" +
 	"\fsource_layer\x18\x04 \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\x12\\\n" +
-	"\x15default_access_policy\x18\x05 \x01(\x0e2(.gestalt.provider.v1.DefaultAccessPolicyR\x13defaultAccessPolicy\"u\n" +
+	"\x15default_access_policy\x18\x05 \x01(\x0e2(.gestalt.provider.v1.DefaultAccessPolicyR\x13defaultAccessPolicy\x12!\n" +
+	"\fdefault_role\x18\x06 \x01(\tR\vdefaultRole\"u\n" +
 	"\rModelRelation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12P\n" +
 	"\x0fallowed_targets\x18\x02 \x03(\v2'.gestalt.provider.v1.ModelAllowedTargetR\x0eallowedTargets\"?\n" +

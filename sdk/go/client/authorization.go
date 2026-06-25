@@ -88,6 +88,7 @@ type AuthorizationModelResourceType struct {
 	Actions             []*ModelAction
 	SourceLayer         SourceLayer
 	DefaultAccessPolicy DefaultAccessPolicy
+	DefaultRole         string
 }
 
 // AuthorizationModelResourceTypeFilter is the native message type for gestalt.provider.v1.AuthorizationModelResourceTypeFilter.
