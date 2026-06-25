@@ -242,7 +242,15 @@ func (l *Lifecycle) PrepareAtPathsWithStatePaths(configPaths []string, state Sta
 }
 
 func (l *Lifecycle) LockAtPathsWithStatePaths(configPaths []string, state StatePaths) (*Lockfile, error) {
-	lock, _, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
+	return l.lockAtPathsWithStatePaths(configPaths, state, lockAtPathsOptions{})
+}
+
+type lockAtPathsOptions struct {
+	allowLocalSourceAuthSecrets bool
+}
+
+func (l *Lifecycle) lockAtPathsWithStatePaths(configPaths []string, state StatePaths, opts lockAtPathsOptions) (*Lockfile, error) {
+	lock, _, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state, opts)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -257,7 +265,7 @@ func (l *Lifecycle) LockAtPathsWithStatePaths(configPaths []string, state StateP
 }
 
 func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
-	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
+	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state, lockAtPathsOptions{})
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -337,7 +345,7 @@ func (l *Lifecycle) prepareLockAtPathsInScratch(configPaths []string, state Stat
 	return lock, cfg, paths, cleanup, nil
 }
 
-func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, state StatePaths) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
+func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, state StatePaths, opts lockAtPathsOptions) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
 	scratchDir, err := os.MkdirTemp("", "gestaltd-lock-*")
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, nil, fmt.Errorf("create lock scratch dir: %w", err)
@@ -345,7 +353,7 @@ func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, s
 	cleanup := func() { _ = os.RemoveAll(scratchDir) }
 	scratchState := state
 	scratchState.ArtifactsDir = scratchDir
-	lock, cfg, paths, err := l.prepareCommittedLockAtPaths(configPaths, scratchState, state)
+	lock, cfg, paths, err := l.prepareCommittedLockAtPaths(configPaths, scratchState, opts, state)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, cleanup, err
 	}
@@ -355,7 +363,7 @@ func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, s
 	return lock, cfg, paths, cleanup, nil
 }
 
-func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
+func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, opts lockAtPathsOptions, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
 	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
@@ -372,8 +380,10 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 			return nil, nil, lifecyclePaths{}, err
 		}
 	}
-	if err := rejectLocalSourceSecretsForSourceAuthLock(cfg); err != nil {
-		return nil, nil, lifecyclePaths{}, err
+	if !opts.allowLocalSourceAuthSecrets {
+		if err := rejectLocalSourceSecretsForSourceAuthLock(cfg); err != nil {
+			return nil, nil, lifecyclePaths{}, err
+		}
 	}
 	lock, err := l.prepareCommittedRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
 	if err != nil {
@@ -1036,7 +1046,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	if locked {
 		mode = artifactModeReadOnly
 	}
-	secretsLock, secretsValidated, err := l.lockForSecretsBootstrap(configPaths, state, paths, cfg, locked)
+	secretsLock, err := l.lockForSecretsBootstrap(configPaths, state, paths, cfg, locked)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1050,17 +1060,14 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 		return nil, nil, err
 	}
 
-	dependenciesValidated, err := l.applyLockedProviders(configPaths, state, cfg, locked, secretsLock, mode)
-	if err != nil {
+	if err := l.applyLockedProviders(configPaths, state, cfg, locked, secretsLock, mode); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, err
 	}
-	if !secretsValidated && !dependenciesValidated {
-		if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
-			return nil, nil, err
-		}
+	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
+		return nil, nil, err
 	}
 	return cfg, nil, nil
 }
@@ -1453,13 +1460,13 @@ func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name str
 	return nil
 }
 
-func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePaths, paths lifecyclePaths, cfg *config.Config, locked bool) (*Lockfile, bool, error) {
+func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePaths, paths lifecyclePaths, cfg *config.Config, locked bool) (*Lockfile, error) {
 	if cfg == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 	referenced, err := referencedConfigSecretsProviders(cfg)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	needsPreparedSecrets := false
 	for _, provider := range referenced {
@@ -1469,26 +1476,22 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 		}
 	}
 	if !needsPreparedSecrets {
-		return nil, false, nil
+		return nil, nil
 	}
 	if !configHasProviderLoading(cfg) {
-		return nil, false, nil
+		return nil, nil
 	}
 
 	lock, err := ReadLockfile(paths.lockfilePath)
-	validatedDuringPrepare := false
 	if locked && err != nil && os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
 		lock = newLockfile()
 		err = nil
 	}
-	if !locked && (err != nil || !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{RequireArtifacts: true}) || configHasLocalProviderSources(cfg) || configHasMetadataProviderSources(cfg)) {
-		lock, err = l.PrepareAtPathsWithStatePaths(configPaths, state)
-		validatedDuringPrepare = err == nil
-	}
+	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, locked, err)
 	if err != nil {
-		return nil, false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return nil, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
-	return lock, validatedDuringPrepare, nil
+	return lock, nil
 }
 
 func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context, paths lifecyclePaths, cfg *config.Config, lock *Lockfile, mode artifactMode, secretMode configSecretResolutionMode) (map[string]LockEntry, error) {
@@ -1842,40 +1845,15 @@ func configHasLocalProviderSources(cfg *config.Config) bool {
 	return false
 }
 
-func configHasMetadataProviderSources(cfg *config.Config) bool {
-	for _, entry := range cfg.Apps {
-		if entry != nil && entry.HasMetadataSource() {
-			return true
-		}
+func (l *Lifecycle) autoRelockAtPathsIfNeeded(configPaths []string, state StatePaths, cfg *config.Config, paths lifecyclePaths, lock *Lockfile, locked bool, err error) (*Lockfile, error) {
+	if locked || (err == nil && lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{})) {
+		return lock, err
 	}
-	for _, collection := range hostProviderCollections(cfg) {
-		for _, entry := range collection.entries {
-			if entry != nil && entry.HasMetadataSource() {
-				return true
-			}
-		}
+	lock, err = l.lockAtPathsWithStatePaths(configPaths, state, lockAtPathsOptions{allowLocalSourceAuthSecrets: true})
+	if err != nil {
+		return nil, fmt.Errorf("auto-lock: %w", err)
 	}
-	for _, entry := range cfg.Runtime.Providers {
-		if entry != nil && entry.HasMetadataSource() {
-			return true
-		}
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil && entry.HasMetadataSource() {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && def.HasMetadataSource() {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.S3 {
-		if def != nil && def.HasMetadataSource() {
-			return true
-		}
-	}
-	return false
+	return lock, nil
 }
 
 func resolveLockPath(baseDir, provider string) string {
@@ -3544,15 +3522,14 @@ func sourceBuildPathDomains(sourceDir string, manifest *providermanifestv1.Manif
 	return domains, nil
 }
 
-func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) (bool, error) {
+func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) error {
 	if !configHasProviderLoading(cfg) {
-		return false, nil
+		return nil
 	}
 
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	lock := bootstrapLock
 	var err error
-	validatedDuringPrepare := false
 	if lock == nil {
 		lock, err = ReadLockfile(paths.lockfilePath)
 		if locked && err != nil && os.IsNotExist(err) {
@@ -3560,17 +3537,14 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 			err = nil
 		}
 	}
-	if !locked && (err != nil || !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{RequireArtifacts: true}) || (bootstrapLock == nil && configHasLocalProviderSources(cfg)) || (bootstrapLock == nil && configHasMetadataProviderSources(cfg))) {
-		lock, err = l.PrepareAtPathsWithStatePaths(configPaths, state)
-		validatedDuringPrepare = err == nil
-	}
+	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, locked, err)
 	if err != nil {
-		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1}); err != nil {
-		return false, err
+		return err
 	}
-	return validatedDuringPrepare, nil
+	return nil
 }
 
 func installLockedPackageAtomic(packagePath, destDir string) (*installedPackage, func() error, func() error, error) {
@@ -4609,8 +4583,11 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				assetRoot, err := bindPathBackedUIManifest(provider, configMap)
 				if err == nil {
 					recordSyncArtifact(paths, providermanifestv1.KindUI, logicalName, subject, assetRoot, syncArtifactSourcePathBacked, syncArtifactResultPathBacked, syncArtifactReasonSourcePathBacked, start, 0, 0)
+					return assetRoot, nil
 				}
-				return assetRoot, err
+				if !mode.canMaterialize() {
+					return "", err
+				}
 			}
 			return l.applyLocalUIProvider(paths, provider, logicalName, subject, destDir, configMap, mode)
 		}
