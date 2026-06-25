@@ -152,8 +152,8 @@ gestaltd validate --config ./config.yaml
 gestaltd validate --config ./deploy/base.yaml --config ./deploy/overrides/local.yaml
 ```
 
-Gestalt defaults `server.public.port` to `8080`, the runtime secrets manager to
-built-in `env` when `providers.secrets` is omitted,
+Gestalt defaults `server.public.port` to `8080`; if it is in use, `gestaltd serve` tries the
+next free port. The runtime secrets manager defaults to built-in `env` when `providers.secrets` is omitted,
 `providers.telemetry.default` to `stdout`, and `providers.audit.default` to
 `inherit`.
 
