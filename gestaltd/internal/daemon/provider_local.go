@@ -57,6 +57,7 @@ type providerLocalSession struct {
 	State             operator.StatePaths
 	Locked            bool
 	NoSync            bool
+	PublicPort        int
 	PublicURL         string
 	AdminURL          string
 	PublicUIPaths     []string
@@ -127,6 +128,12 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	if err != nil {
 		return err
 	}
+	if err := resolveServePort(env.Config, session.PublicPort); err != nil {
+		env.Close()
+		return err
+	}
+	session.PublicURL = providerLocalPublicURL(env.Config)
+	session.AdminURL = strings.TrimRight(session.PublicURL, "/") + "/admin/"
 	logProviderLocalSummary("local provider ready", session)
 	return runServer(env)
 }
@@ -279,10 +286,9 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 	}
 	locked := opts.Locked && opts.FleetOverlay
 	noSync := opts.NoSync && opts.FleetOverlay
-	port := opts.Port
+	devPort := 0
 	if opts.FleetOverlay {
 		configPaths = append([]string(nil), opts.ConfigPaths...)
-		port = 0
 	} else {
 		baseConfigPath := filepath.Join(sessionDir, "provider-base.yaml")
 		dbPath := filepath.Join(sessionDir, "provider.db")
@@ -295,13 +301,11 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 			LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json"),
 		}
 		locked = false
-		if port == 0 {
-			selectedPort, err := reserveLocalPort()
-			if err != nil {
-				return nil, err
-			}
-			port = selectedPort
+		selectedPort, err := reserveLocalPort()
+		if err != nil {
+			return nil, err
 		}
+		devPort = selectedPort
 	}
 
 	var (
@@ -311,7 +315,7 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		lastOverlay *providerLocalTargetOverlay
 	)
 	for i, path := range opts.Paths {
-		overlay, err := buildProviderLocalTargetOverlay(sessionDir, i, opts, path, port, configPaths)
+		overlay, err := buildProviderLocalTargetOverlay(sessionDir, i, opts, path, devPort, configPaths)
 		if err != nil {
 			return nil, err
 		}
@@ -347,6 +351,7 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		State:         state,
 		Locked:        locked,
 		NoSync:        noSync,
+		PublicPort:    opts.Port,
 		PublicURL:     providerLocalPublicURL(loadedCfg),
 		AdminURL:      strings.TrimRight(providerLocalPublicURL(loadedCfg), "/") + "/admin/",
 		PublicUIPaths: publicUIPaths,
