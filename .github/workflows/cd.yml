@@ -1,0 +1,80 @@
+name: CD (gestaltd)
+
+# Continuous delivery for gestaltd. Re-runs the validation suite (including the
+# race matrix), builds the docs, and builds + pushes the per-commit CI image to
+# Artifact Registry. Every CD run publishes: it is triggered by pushes to main
+# and by manual dispatch for a specific commit SHA. The hourly health check runs
+# in ci.yml instead.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.dockerignore'
+      - '.github/workflows/cd.yml'
+      - '.github/workflows/validate-gestaltd.yml'
+      - '.github/actions/build-gestaltd-image/**'
+      - 'gestaltd/**'
+      - '!gestaltd/rpc/protov1/**'
+  workflow_dispatch:
+    inputs:
+      gestalt_ref:
+        description: Full commit SHA to validate, build, and publish as a CI image.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate-gestaltd.yml
+    with:
+      ref: ${{ inputs.gestalt_ref }}
+      run-race: true
+      run-coverage: true
+
+  docs-build:
+    name: Docs Build
+    needs: validate
+    if: ${{ needs.validate.outputs.publish == 'true' }}
+    uses: ./.github/workflows/build-docs.yml
+    with:
+      gestalt_ref: ${{ needs.validate.outputs.sha }}
+    permissions:
+      contents: read
+
+  build-and-push:
+    name: Build & Publish CI Image
+    needs: [validate, docs-build]
+    # docs-build is skipped on non-publishing runs (schedule, kill-switch off).
+    # GitHub skips a job when a needed job is skipped unless the condition
+    # tolerates it, so gate explicitly with !cancelled(): require validation to
+    # succeed and accept a skipped docs-build (but require it to succeed when it
+    # does run on publishing runs).
+    if: >-
+      ${{ !cancelled()
+        && needs.validate.result == 'success'
+        && needs.validate.outputs.should-validate == 'true'
+        && (needs.docs-build.result == 'success' || needs.docs-build.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - uses: ./.github/actions/build-gestaltd-image
+        with:
+          push: ${{ needs.validate.outputs.publish == 'true' }}
+          build-alpine: 'false'
+          sha: ${{ needs.validate.outputs.sha }}
+          version: ${{ needs.validate.outputs.version }}
+          registry-host: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
+          image-repository: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
+          gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
+          gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}

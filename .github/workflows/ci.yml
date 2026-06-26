@@ -1,0 +1,43 @@
+name: CI (gestaltd)
+
+# Pull-request checks for gestaltd. Runs the shared validation suite and builds
+# the CI image without pushing (build-only, plus alpine packaging validation).
+# Also runs hourly as a health check against the default branch. Publishing
+# happens in cd.yml on main / dispatch.
+
+on:
+  pull_request:
+  schedule:
+    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate-gestaltd.yml
+    with:
+      # Pull requests run the light check set (no race, no coverage). The hourly
+      # schedule runs the full suite as a default-branch health check.
+      run-race: ${{ github.event_name == 'schedule' }}
+      run-coverage: ${{ github.event_name == 'schedule' }}
+
+  build:
+    name: Build CI Image
+    needs: validate
+    if: ${{ needs.validate.outputs.should-validate == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - uses: ./.github/actions/build-gestaltd-image
+        with:
+          push: 'false'
+          build-alpine: 'true'
+          sha: ${{ needs.validate.outputs.sha }}
+          version: ${{ needs.validate.outputs.version }}
