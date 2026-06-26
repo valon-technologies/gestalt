@@ -355,16 +355,18 @@ See [Provider Manifests](/reference/app-manifests) for the full field reference.
 A source provider declares up to three inline phases, each an argv list that
 gestaltd execs directly with no shell:
 
-- `install` — runs once before any build or dev execution. Use it for
+- `install` — runs once before any build or run execution. Use it for
   dependency installation (`bun install`, `uv sync`). Side-effect only; its
   output is not verified. `inputs` is the cache-key allowlist, typically the
   lockfile.
-- `build` — compiles the provider into the entrypoint artifact. Its output is
-  verified against `entrypoint.artifactPath`.
-- `dev` — a long-running dev server for local `gestaltd serve` only.
+- `build` — compiles the provider into the release artifact at
+  `.gestaltd/bin/<name>` (derived from `source`). gestaltd verifies the output
+  after `build.command` completes.
+- `run` — serves the provider from source (backend kinds) or runs a long-lived
+  dev server (UI kind) for local `gestaltd serve`.
 
 Run order is `install` → `build` (for packaging/lock/sync) and `install` →
-`dev` (for local serve). All three are optional and additive; providers that
+`run` (for local serve). All three are optional and additive; providers that
 only need `build` continue to work without `install`.
 
 ```yaml
@@ -372,21 +374,21 @@ install:
   command: [bun, install, --frozen-lockfile]
   inputs: [package.json, bun.lock]
 build:
-  command: [bun, run, gestalt-ts-build]
+  command: [bun, run, gestalt, build]
   inputs: [provider.ts, tsconfig.json, package.json]
-entrypoint:
-  artifactPath: .gestalt/build/provider
+run:
+  command: [bun, run, gestalt, run, ".", "./provider.ts#provider"]
 ```
 
 The TypeScript and Python SDK build entrypoints derive their arguments from
 `manifest.yaml` plus the language package manifest when invoked with zero
 positional args, so `build.command` is a fixed per-language argv (`bun run
-gestalt-ts-build` for TypeScript, `uv run python -m gestalt._build` for
-Python) with no per-provider wrapper script.
+gestalt build` for TypeScript, `uv run gestalt build` for Python) with no
+per-provider wrapper script.
 
 ### Defining operations
 
-Operations are the callable units of an app. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source apps can use SDK-native source package metadata, declare `run` for local source execution, or declare `build.command` and `entrypoint.artifactPath` when they need a compiled release artifact.
+Operations are the callable units of an app. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source apps can use SDK-native source package metadata, declare `run` for local source execution, or declare `build.command` when they need a compiled release artifact (gestaltd derives the output path as `.gestaltd/bin/<name>`).
 
 The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the resolved runtime token from the request context to call the Slack API.
 

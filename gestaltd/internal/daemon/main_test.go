@@ -55,7 +55,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve [PATH]", "--port PORT", "--no-sync", "dev:"},
+			wantParts: []string{"gestaltd serve [PATH]", "--port PORT", "--no-sync", "run:"},
 		},
 		{
 			name:      "provider repo",
@@ -362,7 +362,7 @@ func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
 		},
 	}
 	writeTestFile(t, appDir, "run.sh", []byte("#!/bin/sh\nexit 0\n"), 0o755)
-	manifest.Run = []string{"./run.sh"}
+	manifest.Run = &providermanifestv1.SourceRun{Command: []string{"./run.sh"}}
 	writeManifestFile(t, appDir, manifest)
 	configPath := writeE2EConfig(t, dir, appDir, 18080)
 

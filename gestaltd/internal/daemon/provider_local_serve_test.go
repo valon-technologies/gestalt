@@ -43,7 +43,7 @@ func TestPrepareProviderLocalOverlaySessionCollectsDevUIKeys(t *testing.T) {
 	manifest := `kind: ui
 source: github.com/acme/apps/demo-ui
 version: "1.0.0"
-dev:
+run:
   command: [sh, -c, echo]
 build:
   command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
@@ -102,7 +102,7 @@ func TestPrepareProviderLocalOverlaySessionForwardsNoSync(t *testing.T) {
 	manifest := `kind: ui
 source: github.com/acme/apps/demo-ui
 version: "1.0.0"
-dev:
+run:
   command: [sh, -c, echo]
 build:
   command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]

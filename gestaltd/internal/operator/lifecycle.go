@@ -99,7 +99,7 @@ type Lifecycle struct {
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
 	httpClient               *http.Client
 	providerResolver         *providerregistry.Resolver
-	// devServeEligible enables manifest dev: activation. Set true only for an
+	// devServeEligible enables manifest run: activation. Set true only for an
 	// unlocked `gestaltd serve`; false for lock/sync/validate and serve --locked,
 	// so committed lockfiles build and pin dev UIs normally.
 	devServeEligible bool
@@ -992,9 +992,9 @@ func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
 			}
 			continue
 		}
-		if providerpkg.EffectiveDev(manifest) == nil {
+		if providerpkg.EffectiveSourceRun(manifest) == nil {
 			if l.forcedDevUIKeys[name] {
-				return fmt.Errorf("PATH argument %q has no dev: block; cannot dev-serve under --locked", name)
+				return fmt.Errorf("PATH argument %q has no run: block; cannot dev-serve under --locked", name)
 			}
 			continue
 		}
@@ -1006,7 +1006,7 @@ func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
 			return fmt.Errorf("ui %q: %w", name, err)
 		}
 		workdir := normalized.sourceDir
-		if w := strings.TrimSpace(manifest.Dev.Workdir); w != "" && w != "." {
+		if w := strings.TrimSpace(manifest.Run.Workdir); w != "" && w != "." {
 			workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(w))
 		}
 		entry.DevActive = true

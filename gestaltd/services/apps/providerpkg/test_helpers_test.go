@@ -33,6 +33,10 @@ func sha256Hex(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func sourceRunCommand(command ...string) *providermanifestv1.SourceRun {
+	return &providermanifestv1.SourceRun{Command: command}
+}
+
 func artifactPathFor(osName, arch, binary string) string {
 	return filepath.ToSlash(filepath.Join("artifacts", osName, arch, binary))
 }

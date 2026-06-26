@@ -52,11 +52,11 @@ async fn greet(
     }))
 }
 
-fn new() -> Provider {
+pub fn new() -> Provider {
     Provider::default()
 }
 
-fn router() -> gestalt::Result<gestalt::Router<Provider>> {
+pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
     gestalt::Router::new()
         .register(
             gestalt::Operation::<GreetInput, GreetOutput>::new("greet")
@@ -67,4 +67,3 @@ fn router() -> gestalt::Result<gestalt::Router<Provider>> {
         )
 }
 
-gestalt::export_provider!(constructor = new, router = router);

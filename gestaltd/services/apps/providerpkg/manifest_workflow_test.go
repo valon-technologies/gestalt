@@ -443,7 +443,8 @@ spec:
 kind: app
 source: github.com/acme/apps/empty-source-run-command
 version: 1.0.0
-run: []
+run:
+  command: []
 spec:
   connections:
     default:
@@ -452,7 +453,7 @@ spec:
 `))
 			},
 			readSource: true,
-			wantError:  "run command is required",
+			wantError:  "run.command is required",
 		},
 		{
 			name: "rejects empty source run arg",
@@ -461,7 +462,8 @@ spec:
 kind: app
 source: github.com/acme/apps/empty-source-run-arg
 version: 1.0.0
-run: [uv, ""]
+run:
+  command: [uv, ""]
 spec:
   connections:
     default:
@@ -470,7 +472,7 @@ spec:
 `))
 			},
 			readSource: true,
-			wantError:  "run[1] is required",
+			wantError:  "run.command[1] is required",
 		},
 		{
 			name: "rejects legacy source run prefix object",
@@ -489,24 +491,25 @@ spec:
 `))
 			},
 			readSource: true,
-			wantError:  "cannot unmarshal",
+			wantError:  "run.commandPrefix is not supported",
 		},
 		{
-			name: "rejects source ui run metadata",
+			name: "rejects sequence-form source run metadata",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
-kind: ui
-source: github.com/acme/apps/source-ui-run
+kind: app
+source: github.com/acme/apps/sequence-source-run
 version: 1.0.0
-build:
-  command: [npm, run, build]
-run: [npm, run, dev]
+run: [uv, run, --frozen, provider.py]
 spec:
-  assetRoot: dist
+  connections:
+    default:
+      auth:
+        type: none
 `))
 			},
 			readSource: true,
-			wantError:  "run metadata is not supported for ui manifests",
+			wantError:  "run must be a mapping",
 		},
 		{
 			name: "released package rejects run metadata",
@@ -515,7 +518,8 @@ spec:
 kind: app
 source: github.com/acme/apps/released-run-metadata
 version: 1.0.0
-run: [uv, run, --frozen, provider.py]
+run:
+  command: [uv, run, --frozen, provider.py]
 spec:
   connections:
     default:

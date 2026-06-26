@@ -1,6 +1,6 @@
 {
   "name": "@valon-technologies/gestalt",
-  "version": "0.0.1-alpha.66",
+  "version": "0.0.1-alpha.67",
   "description": "TypeScript SDK for Gestalt executable providers",
   "type": "module",
   "repository": {
@@ -31,8 +31,7 @@
     "./services/workflow": "./src/workflow.ts"
   },
   "bin": {
-    "gestalt-ts-build": "src/build.ts",
-    "gestalt-ts-runtime": "src/providers/runtime.ts"
+    "gestalt": "src/cli.ts"
   },
   "files": [
     "src",

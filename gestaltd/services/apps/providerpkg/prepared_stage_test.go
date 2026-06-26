@@ -45,7 +45,7 @@ fi
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
-		Run: []string{"./catalog.sh"},
+		Run: sourceRunCommand("./catalog.sh"),
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
@@ -119,7 +119,7 @@ fi
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
-		Run: []string{"./run.sh"},
+		Run: sourceRunCommand("./run.sh"),
 	}))
 
 	if _, _, err := PrepareSourceManifest(manifestPath); err != nil {
@@ -159,7 +159,7 @@ func TestValidateExplicitRunPackaging_AllowsManifestBackedRunOnlyPlugin(t *testi
 		Kind:    providermanifestv1.KindApp,
 		Source:  "github.com/test/apps/manifest-backed",
 		Version: "0.0.1-alpha.1",
-		Run:     []string{"npm", "run", "dev"},
+		Run:     sourceRunCommand("npm", "run", "dev"),
 		Spec: &providermanifestv1.Spec{
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				REST: &providermanifestv1.RESTSurface{
@@ -181,7 +181,7 @@ func TestValidateExplicitRunPackaging_AllowsManifestBackedRunOnlyPlugin(t *testi
 	}
 }
 
-func TestStageSourcePreparedInstallDir_AllowsImplicitGoProviderWithoutBuildCommand(t *testing.T) {
+func TestStageSourcePreparedInstallDir_BuildsDeclaredGoProvider(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -194,8 +194,15 @@ func TestStageSourcePreparedInstallDir_AllowsImplicitGoProviderWithoutBuildComma
 		Kind:        providermanifestv1.KindCache,
 		Source:      source,
 		Version:     "0.0.1-alpha.1",
-		DisplayName: "Implicit Cache",
+		DisplayName: "Declared Cache",
 		Spec:        &providermanifestv1.Spec{},
+		Install: &providermanifestv1.SourceInstall{
+			Command: []string{"go", "mod", "download"},
+		},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"go", "run", "github.com/valon-technologies/gestalt/sdk/go/cmd/gestalt", "build"},
+		},
+		Run: sourceRunCommand("go", "run", "github.com/valon-technologies/gestalt/sdk/go/cmd/gestalt", "run"),
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
@@ -221,7 +228,7 @@ func TestStageSourcePreparedInstallDir_AllowsImplicitGoProviderWithoutBuildComma
 		t.Fatalf("staged manifest retained source execution metadata: build=%#v run=%#v", staged.Manifest.Build, staged.Manifest.Run)
 	}
 	if _, err := os.Stat(filepath.Join(stagingDir, filepath.FromSlash(stagedEntrypoint))); err != nil {
-		t.Fatalf("staged implicit Go executable: %v", err)
+		t.Fatalf("staged declared Go executable: %v", err)
 	}
 }
 
@@ -267,7 +274,7 @@ func TestSourceRunCommand(t *testing.T) {
 						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
 						PrepareOnly: true,
 					},
-					Run:  []string{fakeUVPath, "run", "--frozen", "./provider.sh", "--dev"},
+					Run:  sourceRunCommand(fakeUVPath, "run", "--frozen", "./provider.sh", "--dev"),
 					Spec: &providermanifestv1.Spec{},
 				}))
 
@@ -305,7 +312,7 @@ fi
 						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
 						PrepareOnly: true,
 					},
-					Run:  []string{fakeUVPath, "run", "--frozen", "./provider.sh"},
+					Run:  sourceRunCommand(fakeUVPath, "run", "--frozen", "./provider.sh"),
 					Spec: &providermanifestv1.Spec{},
 				}))
 
@@ -343,7 +350,7 @@ fi
 					Build: &providermanifestv1.SourceBuild{
 						Command: []string{"./fail-build.sh"},
 					},
-					Run:  []string{"./provider.sh"},
+					Run:  sourceRunCommand("./provider.sh"),
 					Spec: &providermanifestv1.Spec{},
 				}))
 
@@ -369,7 +376,7 @@ fi
 					Kind:    providermanifestv1.KindApp,
 					Source:  "github.com/test/apps/run-only",
 					Version: "0.0.1-alpha.1",
-					Run:     []string{"./provider.sh"},
+					Run:     sourceRunCommand("./provider.sh"),
 					Spec:    &providermanifestv1.Spec{},
 				}))
 
@@ -395,7 +402,7 @@ fi
 					Kind:    providermanifestv1.KindIdentity,
 					Source:  "github.com/test/providers/auth",
 					Version: "0.0.1-alpha.1",
-					Run:     []string{"./auth.sh", "--serve"},
+					Run:     sourceRunCommand("./auth.sh", "--serve"),
 					Spec:    &providermanifestv1.Spec{},
 				}))
 
@@ -518,7 +525,7 @@ fi
 		Kind:    providermanifestv1.KindApp,
 		Source:  "github.com/test/apps/run-only",
 		Version: "0.0.1-alpha.1",
-		Run:     []string{"./provider.sh"},
+		Run:     sourceRunCommand("./provider.sh"),
 		Spec:    &providermanifestv1.Spec{},
 	}))
 

@@ -213,6 +213,32 @@ macro_rules! export_provider {
             let router = $crate::into_router_result($router())?.with_name(name);
             $crate::runtime_impl::write_catalog_path(&router, path)
         }
+
+        pub fn main() {
+            let name = std::env::var("GESTALT_APP_NAME").unwrap_or_else(|_| "provider".to_string());
+            let result = match std::env::var("GESTALT_APP_WRITE_CATALOG") {
+                Ok(path) => __gestalt_write_catalog(&name, &path),
+                Err(_) => __gestalt_serve(&name),
+            };
+            if let Err(error) = result {
+                eprintln!("error: {error}");
+                std::process::exit(1);
+            }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __gestalt_kind_provider_main {
+    ($serve:ident) => {
+        pub fn main() {
+            let name = std::env::var("GESTALT_APP_NAME").unwrap_or_else(|_| "provider".to_string());
+            if let Err(error) = $serve(&name) {
+                eprintln!("error: {error}");
+                std::process::exit(1);
+            }
+        }
     };
 }
 
@@ -224,6 +250,8 @@ macro_rules! export_identity_provider {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_identity_provider(provider)
         }
+
+        $crate::__gestalt_kind_provider_main!(__gestalt_serve_identity);
     };
 }
 
@@ -235,6 +263,8 @@ macro_rules! export_cache_provider {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_cache_provider(provider)
         }
+
+        $crate::__gestalt_kind_provider_main!(__gestalt_serve_cache);
     };
 }
 
@@ -246,6 +276,8 @@ macro_rules! export_secrets_provider {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_secrets_provider(provider)
         }
+
+        $crate::__gestalt_kind_provider_main!(__gestalt_serve_secrets);
     };
 }
 
@@ -257,6 +289,8 @@ macro_rules! export_s3_provider {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_s3_provider(provider)
         }
+
+        $crate::__gestalt_kind_provider_main!(__gestalt_serve_s3);
     };
 }
 
@@ -268,6 +302,8 @@ macro_rules! export_runtime_provider {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_runtime_provider(provider)
         }
+
+        $crate::__gestalt_kind_provider_main!(__gestalt_serve_runtime);
     };
 }
 
@@ -279,6 +315,8 @@ macro_rules! export_workflow_provider {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_workflow_provider(provider)
         }
+
+        $crate::__gestalt_kind_provider_main!(__gestalt_serve_workflow);
     };
 }
 
@@ -290,5 +328,7 @@ macro_rules! export_agent_provider {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime_impl::run_agent_provider(provider)
         }
+
+        $crate::__gestalt_kind_provider_main!(__gestalt_serve_agent);
     };
 }

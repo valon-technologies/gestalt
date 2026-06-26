@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/httpbinding"
@@ -169,18 +170,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if !sourceMode {
 			return fmt.Errorf("run metadata is only allowed in source manifests")
 		}
-		if kind == providermanifestv1.KindUI {
-			return fmt.Errorf("run metadata is not supported for ui manifests")
-		}
 		if err := validateSourceRun(manifest.Run); err != nil {
-			return err
-		}
-	}
-	if manifest.Dev != nil {
-		if !sourceMode {
-			return fmt.Errorf("dev metadata is only allowed in source manifests")
-		}
-		if err := validateSourceDev(manifest.Dev); err != nil {
 			return err
 		}
 	}
@@ -526,36 +516,26 @@ func validateSourceInstall(install *providermanifestv1.SourceInstall) error {
 	return nil
 }
 
-func validateSourceDev(dev *providermanifestv1.SourceDev) error {
-	if dev == nil {
-		return nil
-	}
-	if dev.Workdir != "" {
-		if err := validateRelativeSourcePath(dev.Workdir, "dev.workdir"); err != nil {
-			return err
-		}
-	}
-	if len(dev.Command) == 0 {
-		return fmt.Errorf("dev.command is required")
-	}
-	for i, arg := range dev.Command {
-		if strings.TrimSpace(arg) == "" {
-			return fmt.Errorf("dev.command[%d] is required", i)
-		}
-	}
-	return nil
-}
-
-func validateSourceRun(run []string) error {
+func validateSourceRun(run *providermanifestv1.SourceRun) error {
 	if run == nil {
 		return nil
 	}
-	if len(run) == 0 {
-		return fmt.Errorf("run command is required")
+	if run.Workdir != "" {
+		if err := validateRelativeSourcePath(run.Workdir, "run.workdir"); err != nil {
+			return err
+		}
 	}
-	for i, arg := range run {
+	if len(run.Command) == 0 {
+		return fmt.Errorf("run.command is required")
+	}
+	for i, arg := range run.Command {
 		if strings.TrimSpace(arg) == "" {
-			return fmt.Errorf("run[%d] is required", i)
+			return fmt.Errorf("run.command[%d] is required", i)
+		}
+	}
+	if strings.TrimSpace(run.ReadyTimeout) != "" {
+		if _, err := time.ParseDuration(strings.TrimSpace(run.ReadyTimeout)); err != nil {
+			return fmt.Errorf("run.readyTimeout: %w", err)
 		}
 	}
 	return nil

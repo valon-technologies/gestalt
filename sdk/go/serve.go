@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -137,7 +138,7 @@ func watchProviderParent(parentPID int, srv *grpc.Server) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
-		if os.Getppid() == parentPID {
+		if err := syscall.Kill(parentPID, 0); err == nil {
 			continue
 		}
 		srv.GracefulStop()

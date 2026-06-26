@@ -1190,7 +1190,7 @@ type UIEntry struct {
 	ResolvedThemeAssetsDir  string `yaml:"-"`
 
 	// DevActive is set when the provider has a local source and its manifest
-	// declares dev:. ResolvedDevWorkdir is the absolute cwd for the dev command.
+	// declares run:. ResolvedDevWorkdir is the absolute cwd for the run command.
 	DevActive          bool   `yaml:"-"`
 	ResolvedDevWorkdir string `yaml:"-"`
 }

@@ -21,7 +21,7 @@ func TestLoadConfigForLifecycleMarksDevActiveUI(t *testing.T) {
 	manifest := `kind: ui
 source: github.com/acme/apps/demo-ui
 version: "1.0.0"
-dev:
+run:
   command: [sh, -c, echo]
 build:
   command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
@@ -62,8 +62,8 @@ providers:
 	if entry.ResolvedDevWorkdir != uiDir {
 		t.Fatalf("ResolvedDevWorkdir = %q, want %q", entry.ResolvedDevWorkdir, uiDir)
 	}
-	if entry.ResolvedManifest == nil || entry.ResolvedManifest.Dev == nil {
-		t.Fatal("expected resolved manifest with dev block")
+	if entry.ResolvedManifest == nil || entry.ResolvedManifest.Run == nil {
+		t.Fatal("expected resolved manifest with run block")
 	}
 }
 
@@ -78,7 +78,7 @@ func TestLoadConfigForLifecycleDevServeIneligibleSkipsDevActive(t *testing.T) {
 	manifest := `kind: ui
 source: github.com/acme/apps/demo-ui
 version: "1.0.0"
-dev:
+run:
   command: [sh, -c, echo]
 build:
   command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
@@ -182,7 +182,7 @@ func TestLockSyncBuildsLocalDevUI(t *testing.T) {
 	manifest := `kind: ui
 source: github.com/acme/apps/demo-ui
 version: "1.0.0"
-dev:
+run:
   command: [sh, -c, echo]
 build:
   command: [sh, ./build.sh]
@@ -250,7 +250,7 @@ func TestUnlockedServeResolvesDevUITheme(t *testing.T) {
 	manifest := `kind: ui
 source: github.com/acme/apps/demo-ui
 version: "1.0.0"
-dev:
+run:
   command: [sh, -c, echo]
 build:
   command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
@@ -312,7 +312,7 @@ func TestForcedDevUIKeysActivatesUnderLocked(t *testing.T) {
 	manifest := `kind: ui
 source: github.com/acme/apps/demo-ui
 version: "1.0.0"
-dev:
+run:
   command: [sh, -c, echo]
 build:
   command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
@@ -389,8 +389,8 @@ providers:
 	}
 
 	_, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
-	if err == nil || !strings.Contains(err.Error(), `no dev: block`) {
-		t.Fatalf("loadConfigForLifecycle error = %v, want no dev: block error", err)
+	if err == nil || !strings.Contains(err.Error(), `no run: block`) {
+		t.Fatalf("loadConfigForLifecycle error = %v, want no run: block error", err)
 	}
 }
 

@@ -140,13 +140,13 @@ that need to classify GraphQL errors themselves.
 Source-mode runtime:
 
 ```sh
-gestalt-ts-runtime ROOT app:./provider.ts#app
+bun run gestalt run ROOT app:./provider.ts#app
 ```
 
 Release build:
 
 ```sh
-gestalt-ts-build ROOT app:./provider.ts#app OUTPUT PROVIDER_NAME GOOS GOARCH
+bun run gestalt build ROOT app:./provider.ts#app OUTPUT PROVIDER_NAME GOOS GOARCH
 ```
 
 With no positional args, the build entrypoint derives every field from
@@ -154,15 +154,14 @@ With no positional args, the build entrypoint derives every field from
 `GESTALT_TARGET_ARCH` env vars that gestaltd injects:
 
 ```sh
-gestalt-ts-build
+bun run gestalt build
 ```
 
 The derivation reads the provider target from `package.json#gestalt.provider`,
-the output path from `manifest.yaml#entrypoint.artifactPath`, the provider
-name from the last segment of `manifest.yaml#source`, and the target platform
-from env (falling back to the host platform). This lets a provider declare a
-fixed `build.command: [bun, run, gestalt-ts-build]` with no per-provider
-wrapper script.
+the output path as `.gestaltd/bin/<name>` (derived from `manifest.yaml#source`),
+the provider name from the last segment of `manifest.yaml#source`, and the target
+platform from env (falling back to the host platform). This lets a provider declare a
+fixed `build.command: [bun, run, gestalt, build]` with no per-provider wrapper script.
 
 The build entrypoint compiles a standalone executable with Bun and bundles the
 provider source into the result.

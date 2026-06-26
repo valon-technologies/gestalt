@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -27,14 +28,11 @@ type ResolvedSourceInstall struct {
 	Env     map[string]string
 }
 
-type ResolvedSourceDev struct {
+type ResolvedSourceRun struct {
 	Workdir      string
 	Command      []string
-	ReadyTimeout string
-	// Env is copied into the child process before the reserved GESTALT_DEV*
-	// contract variables (GESTALT_DEV, GESTALT_DEV_PORT, GESTALT_DEV_BASE_PATH),
-	// which cannot be overridden via manifest dev.env.
-	Env map[string]string
+	Env          map[string]string
+	ReadyTimeout time.Duration
 }
 
 type SourceBuildOptions struct {
@@ -55,6 +53,7 @@ type SourceExecution struct {
 	Command string
 	Args    []string
 	Workdir string
+	Env     map[string]string
 	Cleanup func()
 }
 
@@ -63,16 +62,28 @@ type ResolvedSourceExecution struct {
 	Intent SourceExecutionIntent
 }
 
-func EffectiveDev(manifest *providermanifestv1.Manifest) *ResolvedSourceDev {
-	if manifest == nil || manifest.Dev == nil {
+func EffectiveSourceRun(manifest *providermanifestv1.Manifest) *ResolvedSourceRun {
+	if manifest == nil || manifest.Run == nil {
 		return nil
 	}
-	return &ResolvedSourceDev{
-		Workdir:      manifest.Dev.Workdir,
-		Command:      append([]string(nil), manifest.Dev.Command...),
-		ReadyTimeout: manifest.Dev.ReadyTimeout,
-		Env:          maps.Clone(manifest.Dev.Env),
+	readyTimeout, err := parseSourceRunReadyTimeout(manifest.Run.ReadyTimeout)
+	if err != nil {
+		readyTimeout = 0
 	}
+	return &ResolvedSourceRun{
+		Workdir:      manifest.Run.Workdir,
+		Command:      append([]string(nil), manifest.Run.Command...),
+		Env:          maps.Clone(manifest.Run.Env),
+		ReadyTimeout: readyTimeout,
+	}
+}
+
+func parseSourceRunReadyTimeout(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	return time.ParseDuration(raw)
 }
 
 func EffectiveSourceBuild(manifest *providermanifestv1.Manifest) *ResolvedSourceBuild {
@@ -138,7 +149,7 @@ func envMapToSlice(env map[string]string) []string {
 func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	build := EffectiveSourceBuild(manifest)
 	if build == nil {
-		return runImplicitGoBuild(manifestPath, manifest, opts)
+		return nil
 	}
 	if len(build.Command) == 0 {
 		return fmt.Errorf("%s.command is required", build.Label)
@@ -165,44 +176,6 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 		return nil
 	}
 	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
-}
-
-// runImplicitGoBuild synthesizes and compiles a Go provider when no build.command
-// is declared. Eligibility follows ResolveSourceReleaseBuild implicit Go mode.
-// The build writes to a sibling temp path and renames only on success so a
-// failed build does not delete a pre-existing entrypoint artifact.
-func runImplicitGoBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
-	rootDir := filepath.Dir(manifestPath)
-	resolved, err := ResolveSourceReleaseBuild(rootDir, manifest)
-	if err != nil {
-		return err
-	}
-	if resolved.Mode != SourceReleaseBuildImplicitGo {
-		return nil
-	}
-	kind, err := ManifestKind(manifest)
-	if err != nil {
-		return err
-	}
-	goos, goarch := SourceBuildTarget(opts)
-	outputRel, err := SourceBuildOutputPath(manifest, goos)
-	if err != nil {
-		return err
-	}
-	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
-	tmpOutput := outputPath + ".build"
-	if err := os.RemoveAll(tmpOutput); err != nil {
-		return fmt.Errorf("remove staged build output %q: %w", outputRel, err)
-	}
-	if err := BuildGoProviderBinary(rootDir, tmpOutput, kind, goos, goarch); err != nil {
-		_ = os.RemoveAll(tmpOutput)
-		return err
-	}
-	if err := os.Rename(tmpOutput, outputPath); err != nil {
-		_ = os.RemoveAll(tmpOutput)
-		return fmt.Errorf("install build output %q: %w", outputRel, err)
-	}
-	return verifySourceBuildOutput(outputPath, outputRel, "executable", opts)
 }
 
 // runSourcePhase execs a declared phase command (no shell) from the source
@@ -467,11 +440,23 @@ func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Ma
 }
 
 func explicitRunExecution(rootDir string, manifest *providermanifestv1.Manifest) ResolvedSourceExecution {
+	run := EffectiveSourceRun(manifest)
+	workdir := rootDir
+	if run != nil && run.Workdir != "" && run.Workdir != "." {
+		workdir = filepath.Join(rootDir, filepath.FromSlash(run.Workdir))
+	}
+	command := ""
+	var args []string
+	if run != nil && len(run.Command) > 0 {
+		command = run.Command[0]
+		args = append([]string(nil), run.Command[1:]...)
+	}
 	return ResolvedSourceExecution{
 		SourceExecution: SourceExecution{
-			Command: manifest.Run[0],
-			Args:    append([]string(nil), manifest.Run[1:]...),
-			Workdir: rootDir,
+			Command: command,
+			Args:    args,
+			Workdir: workdir,
+			Env:     maps.Clone(run.Env),
 		},
 		Intent: SourceExecutionIntentLocalRun,
 	}

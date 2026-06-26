@@ -40,8 +40,7 @@ type Manifest struct {
 	IconFile    string         `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
 	Install     *SourceInstall `json:"install,omitempty" yaml:"install,omitempty"`
 	Build       *SourceBuild   `json:"build,omitempty" yaml:"build,omitempty"`
-	Dev         *SourceDev     `json:"dev,omitempty" yaml:"dev,omitempty"`
-	Run         []string       `json:"run,omitempty" yaml:"run,omitempty"`
+	Run         *SourceRun     `json:"run,omitempty" yaml:"run,omitempty"`
 	Artifacts   []Artifact     `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoint  *Entrypoint    `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
 	Spec        *Spec          `json:"spec,omitempty" yaml:"spec,omitempty"`
@@ -150,8 +149,8 @@ func (b SourceBuild) MarshalYAML() (any, error) {
 }
 
 // SourceInstall declares a pre-build dependency-install command. It is a peer
-// to Build and Dev: gestaltd execs Command directly (no shell) once before any
-// Build or Dev execution for a local-source provider. Side-effect only — it
+// to Build and Run: gestaltd execs Command directly (no shell) once before any
+// Build or Run execution for a local-source provider. Side-effect only — it
 // never declares an entrypoint artifact and its output is not verified, like a
 // prepare-only build. Inputs is the cache-key allowlist (typically the
 // lockfile). Env may carry registry credentials.
@@ -228,77 +227,81 @@ func (i SourceInstall) MarshalYAML() (any, error) {
 	return sourceInstallWire(i), nil
 }
 
-// SourceDev declares a long-running development command that owns its own file
-// watching and hot reload. Honored only in an unlocked local serve when the
-// provider's source is a local working tree; ignored by lock/sync/--locked/prod.
-type SourceDev struct {
+// SourceRun declares how a local-source provider is executed from source.
+// For backend kinds gestaltd execs Command directly (no shell) with the
+// GESTALT_PROVIDER_SOCKET contract env vars set. For ui kind the command is a
+// long-lived HTTP dev server that gestaltd reverse-proxies.
+type SourceRun struct {
 	Command      []string          `json:"command" yaml:"command"`
 	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
-	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
 }
 
-type sourceDevWire struct {
+type sourceRunWire struct {
 	Command      []string          `json:"command" yaml:"command"`
 	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
-	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
 }
 
-func (d *SourceDev) UnmarshalJSON(data []byte) error {
-	if d == nil {
+func (r *SourceRun) UnmarshalJSON(data []byte) error {
+	if r == nil {
 		return nil
 	}
 	trimmed := bytes.TrimSpace(data)
 	if bytes.Equal(trimmed, []byte("null")) {
-		*d = SourceDev{}
+		*r = SourceRun{}
 		return nil
 	}
-	if err := validateJSONWireObjectFields(trimmed, sourceDevWireFields); err != nil {
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		return fmt.Errorf("run must be a mapping")
+	}
+	if err := validateJSONWireObjectFields(trimmed, sourceRunWireFields); err != nil {
 		return err
 	}
-	var raw sourceDevWire
+	var raw sourceRunWire
 	if err := decodeJSONKnownFields(trimmed, &raw); err != nil {
 		return err
 	}
 	if len(raw.Command) == 0 {
-		return fmt.Errorf("dev.command is required")
+		return fmt.Errorf("run.command is required")
 	}
-	*d = SourceDev(raw)
+	*r = SourceRun(raw)
 	return nil
 }
 
-func (d SourceDev) MarshalJSON() ([]byte, error) {
-	return json.Marshal(sourceDevWire(d))
+func (r SourceRun) MarshalJSON() ([]byte, error) {
+	return json.Marshal(sourceRunWire(r))
 }
 
-func (d *SourceDev) UnmarshalYAML(value *yaml.Node) error {
-	if d == nil {
+func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
+	if r == nil {
 		return nil
 	}
 	if value == nil {
-		*d = SourceDev{}
+		*r = SourceRun{}
 		return nil
 	}
 	if value.Kind != yaml.MappingNode {
-		return fmt.Errorf("dev must be a mapping")
+		return fmt.Errorf("run must be a mapping")
 	}
-	if err := validateYAMLWireObjectFields(value, sourceDevWireFields, "dev"); err != nil {
+	if err := validateYAMLWireObjectFields(value, sourceRunWireFields, "run"); err != nil {
 		return err
 	}
-	var raw sourceDevWire
+	var raw sourceRunWire
 	if err := decodeYAMLKnownFields(value, &raw); err != nil {
 		return err
 	}
 	if len(raw.Command) == 0 {
-		return fmt.Errorf("dev.command is required")
+		return fmt.Errorf("run.command is required")
 	}
-	*d = SourceDev(raw)
+	*r = SourceRun(raw)
 	return nil
 }
 
-func (d SourceDev) MarshalYAML() (any, error) {
-	return sourceDevWire(d), nil
+func (r SourceRun) MarshalYAML() (any, error) {
+	return sourceRunWire(r), nil
 }
 
 // Spec is a union type validated per kind. For auth/indexeddb/secrets only
@@ -1094,11 +1097,11 @@ var sourceInstallWireFields = map[string]struct{}{
 	"env":     {},
 }
 
-var sourceDevWireFields = map[string]struct{}{
+var sourceRunWireFields = map[string]struct{}{
 	"command":      {},
 	"workdir":      {},
-	"readyTimeout": {},
 	"env":          {},
+	"readyTimeout": {},
 }
 
 var specWireFields = map[string]struct{}{

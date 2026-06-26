@@ -2,6 +2,7 @@ package componentprovider
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/egress"
@@ -66,6 +67,11 @@ func PrepareExecution(params PrepareParams) (PreparedConfig, error) {
 		cfg.Command = execution.Command
 		cfg.Args = execution.Args
 		cfg.Workdir = execution.Workdir
+		if len(execution.Env) > 0 {
+			merged := maps.Clone(execution.Env)
+			maps.Copy(merged, cfg.Env)
+			cfg.Env = merged
+		}
 		cleanup = execution.Cleanup
 	}
 
