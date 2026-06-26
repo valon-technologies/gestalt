@@ -5,7 +5,6 @@ output "github_actions_variables" {
     GESTALTD_CHART_REPOSITORY                  = local.chart_repository
     GESTALTD_CI_GCP_SERVICE_ACCOUNT            = google_service_account.ci_image_publisher.email
     GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER = local.ci_image_workload_identity_provider
-    GESTALTD_CI_IMAGE_PUBLISH_ENABLED          = "false"
     GESTALTD_CI_IMAGE_REPOSITORY               = local.ci_image_repository
     GESTALTD_GCP_SERVICE_ACCOUNT               = google_service_account.chart_publisher.email
     GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER    = local.workload_identity_provider

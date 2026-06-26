@@ -27,7 +27,6 @@ GESTALTD_ARTIFACT_REGISTRY_HOST
 GESTALTD_CHART_REPOSITORY
 GESTALTD_CI_GCP_SERVICE_ACCOUNT
 GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER
-GESTALTD_CI_IMAGE_PUBLISH_ENABLED
 GESTALTD_CI_IMAGE_REPOSITORY
 GESTALTD_GCP_SERVICE_ACCOUNT
 GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER
@@ -45,15 +44,10 @@ Consumers should pin full image references with digests:
 ${GESTALTD_CI_IMAGE_REPOSITORY}:sha-<40-character-commit-sha>@sha256:<manifest-digest>
 ```
 
-The `Build Gestaltd` workflow publishes CI images after its validation jobs pass
+The `CD (gestaltd)` workflow publishes CI images after its validation jobs pass
 on `main`. To backfill an older commit, run that workflow manually with
 `gestalt_ref` set to the full commit SHA. Manual backfill runs the same
 validation jobs before publishing the image.
-
-Set `GESTALTD_CI_IMAGE_PUBLISH_ENABLED=true` only after the CI image repository,
-publisher service account, Workload Identity binding, reader grants, and
-repository variables are ready. Until then, the publish job is skipped and the
-existing validation jobs continue to run normally.
 
 The legacy GCS CI binary bucket remains managed so Terraform does not destroy
 historical artifacts during this migration. Current workflows do not publish new
