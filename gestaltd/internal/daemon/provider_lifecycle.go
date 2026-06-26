@@ -332,8 +332,8 @@ func providerSourceBacked(entry *config.ProviderEntry) bool {
 	return entry != nil && (entry.Source.IsPackage() || entry.Source.IsMetadataURL() || entry.Source.IsGitHubRelease() || entry.Source.IsLocal() || entry.Source.IsLocalMetadataPath())
 }
 
-func readProviderListLockfile(configPath, lockfilePath string) (*operator.Lockfile, error) {
-	path := resolveProviderLockfilePath(configPath, lockfilePath)
+func readProviderListLockfile(lockfilePath string) (*operator.Lockfile, error) {
+	path := resolveProviderLockfilePath(lockfilePath)
 	lock, err := operator.ReadLockfile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -344,9 +344,12 @@ func readProviderListLockfile(configPath, lockfilePath string) (*operator.Lockfi
 	return lock, nil
 }
 
-func resolveProviderLockfilePath(configPath, lockfilePath string) string {
+func resolveProviderLockfilePath(lockfilePath string) string {
 	if strings.TrimSpace(lockfilePath) == "" {
-		return filepath.Join(filepath.Dir(configPath), operator.LockfileName)
+		if cwd, err := os.Getwd(); err == nil {
+			return filepath.Join(cwd, operator.LockfileName)
+		}
+		return operator.LockfileName
 	}
 	if filepath.IsAbs(lockfilePath) {
 		return lockfilePath
@@ -421,11 +424,9 @@ func preflightProviderConfigMutation(configPath string, root *yaml.Node, lockfil
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(scratchDir) }()
-	scratchState := operator.StatePaths{
-		ArtifactsDir: filepath.Join(scratchDir, "artifacts"),
-		LockfilePath: filepath.Join(scratchDir, operator.LockfileName),
-	}
-	lock, err := operatorLifecycle().LockAtPathsWithStatePaths([]string{tempConfigPath}, scratchState)
+	scratchArtifactsDir := filepath.Join(scratchDir, "artifacts")
+	scratchLockfilePath := filepath.Join(scratchDir, operator.LockfileName)
+	lock, err := operatorLifecycle().LockAtPaths([]string{tempConfigPath}, scratchLockfilePath, scratchArtifactsDir)
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +434,7 @@ func preflightProviderConfigMutation(configPath string, root *yaml.Node, lockfil
 		ConfigPath: configPath,
 		Root:       root,
 		Lock:       lock,
-		LockPath:   resolveProviderLockfilePath(configPath, lockfilePath),
+		LockPath:   resolveProviderLockfilePath(lockfilePath),
 	}, nil
 }
 

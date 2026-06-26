@@ -16,49 +16,49 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
-func lockConfigWithStatePaths(configFlags []string, state operator.StatePaths, check bool) error {
+func lockConfig(configFlags []string, lockfilePath, artifactsDir string, check bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	if check {
-		return operatorLifecycle().CheckLockAtPathsWithStatePaths(configPaths, state)
+		return operatorLifecycle().CheckLockAtPaths(configPaths, lockfilePath, artifactsDir)
 	}
-	_, err := operatorLifecycle().LockAtPathsWithStatePaths(configPaths, state)
+	_, err := operatorLifecycle().LockAtPaths(configPaths, lockfilePath, artifactsDir)
 	return err
 }
 
-func syncConfigWithStatePaths(configFlags []string, state operator.StatePaths, check bool) error {
-	return syncConfigWithStatePathsOptions(configFlags, state, check, operator.SyncOptions{Parallelism: 1})
+func syncConfig(configFlags []string, lockfilePath, artifactsDir string, check bool) error {
+	return syncConfigOptions(configFlags, lockfilePath, artifactsDir, check, operator.SyncOptions{Parallelism: 1})
 }
 
-func syncConfigWithStatePathsOptions(configFlags []string, state operator.StatePaths, check bool, opts operator.SyncOptions) error {
+func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, check bool, opts operator.SyncOptions) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	if check {
-		return operatorLifecycle().CheckSyncAtPathsWithStatePathsOptions(configPaths, state, opts)
+		return operatorLifecycle().CheckSyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 	}
-	return operatorLifecycle().SyncAtPathsWithStatePathsOptions(configPaths, state, opts)
+	return operatorLifecycle().SyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 }
 
-func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked, noSync bool, forcedDevUIKeys ...string) (*config.Config, error) {
+func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevUIKeys ...string) (*config.Config, error) {
 	lc := operatorLifecycle().WithDevServeEligible(!locked)
 	if len(forcedDevUIKeys) > 0 {
 		lc = lc.WithForcedDevUIKeys(forcedDevUIKeys)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked, noSync)
+	cfg, _, err := lc.LoadForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync)
 	if err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-func loadConfigForValidationWithStatePaths(configFlags []string, state operator.StatePaths, opts validateConfigOptions) ([]string, *config.Config, error) {
+func loadConfigForValidation(configFlags []string, lockfilePath, artifactsDir string, opts validateConfigOptions) ([]string, *config.Config, error) {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	var (
 		cfg *config.Config
 		err error
 	)
 	if opts.Runtime {
-		cfg, err = operatorLifecycle().LoadForValidationAtPathsWithStatePaths(configPaths, state)
+		cfg, err = operatorLifecycle().LoadForValidationAtPaths(configPaths, lockfilePath, artifactsDir)
 	} else {
-		cfg, err = operatorLifecycle().LoadForStaticValidationAtPathsWithStatePaths(configPaths, state, operator.StaticValidationOptions{Platform: opts.Platform})
+		cfg, err = operatorLifecycle().LoadForStaticValidationAtPaths(configPaths, lockfilePath, artifactsDir, operator.StaticValidationOptions{Platform: opts.Platform})
 	}
 	if err != nil {
 		return nil, nil, err

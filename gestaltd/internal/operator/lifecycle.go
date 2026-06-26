@@ -108,11 +108,6 @@ type Lifecycle struct {
 	forcedDevUIKeys map[string]bool
 }
 
-type StatePaths struct {
-	ArtifactsDir string
-	LockfilePath string
-}
-
 type SyncOptions struct {
 	Locked        bool
 	Parallelism   int
@@ -234,28 +229,24 @@ func (l *Lifecycle) providerPackageResolver() *providerregistry.Resolver {
 }
 
 func (l *Lifecycle) PrepareAtPath(configPath string) (*Lockfile, error) {
-	return l.PrepareAtPaths([]string{configPath})
+	return l.PrepareAtPaths([]string{configPath}, "", "")
 }
 
-func (l *Lifecycle) PrepareAtPaths(configPaths []string) (*Lockfile, error) {
-	return l.PrepareAtPathsWithStatePaths(configPaths, StatePaths{})
-}
-
-func (l *Lifecycle) PrepareAtPathsWithStatePaths(configPaths []string, state StatePaths) (*Lockfile, error) {
-	lock, _, _, err := l.prepareAtPathsAndWriteLock(configPaths, state)
+func (l *Lifecycle) PrepareAtPaths(configPaths []string, lockfilePath, artifactsDir string) (*Lockfile, error) {
+	lock, _, _, err := l.prepareAtPathsAndWriteLock(configPaths, lockfilePath, artifactsDir)
 	return lock, err
 }
 
-func (l *Lifecycle) LockAtPathsWithStatePaths(configPaths []string, state StatePaths) (*Lockfile, error) {
-	return l.lockAtPathsWithStatePaths(configPaths, state, lockAtPathsOptions{})
+func (l *Lifecycle) LockAtPaths(configPaths []string, lockfilePath, artifactsDir string) (*Lockfile, error) {
+	return l.lockAtPaths(configPaths, lockfilePath, artifactsDir, lockAtPathsOptions{})
 }
 
 type lockAtPathsOptions struct {
 	allowLocalSourceAuthSecrets bool
 }
 
-func (l *Lifecycle) lockAtPathsWithStatePaths(configPaths []string, state StatePaths, opts lockAtPathsOptions) (*Lockfile, error) {
-	lock, _, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state, opts)
+func (l *Lifecycle) lockAtPaths(configPaths []string, lockfilePath, artifactsDir string, opts lockAtPathsOptions) (*Lockfile, error) {
+	lock, _, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, lockfilePath, artifactsDir, opts)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -269,8 +260,8 @@ func (l *Lifecycle) lockAtPathsWithStatePaths(configPaths []string, state StateP
 	return normalizeLockfile(lock), nil
 }
 
-func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
-	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state, lockAtPathsOptions{})
+func (l *Lifecycle) CheckLockAtPaths(configPaths []string, lockfilePath, artifactsDir string) error {
+	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, lockfilePath, artifactsDir, lockAtPathsOptions{})
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -302,16 +293,16 @@ func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state S
 	return nil
 }
 
-func (l *Lifecycle) SyncAtPathsWithStatePathsOptions(configPaths []string, state StatePaths, opts SyncOptions) error {
-	return l.syncAtPathsWithStatePaths(configPaths, state, artifactModeMaterialize, opts)
+func (l *Lifecycle) SyncAtPathsOptions(configPaths []string, lockfilePath, artifactsDir string, opts SyncOptions) error {
+	return l.syncAtPaths(configPaths, lockfilePath, artifactsDir, artifactModeMaterialize, opts)
 }
 
-func (l *Lifecycle) CheckSyncAtPathsWithStatePathsOptions(configPaths []string, state StatePaths, opts SyncOptions) error {
-	return l.syncAtPathsWithStatePaths(configPaths, state, artifactModeCheck, opts)
+func (l *Lifecycle) CheckSyncAtPathsOptions(configPaths []string, lockfilePath, artifactsDir string, opts SyncOptions) error {
+	return l.syncAtPaths(configPaths, lockfilePath, artifactsDir, artifactModeCheck, opts)
 }
 
-func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, state StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	lock, cfg, paths, err := l.prepareLockAtPaths(configPaths, state)
+func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, lockfilePath, artifactsDir string) (*Lockfile, *config.Config, lifecyclePaths, error) {
+	lock, cfg, paths, err := l.prepareLockAtPaths(configPaths, lockfilePath, artifactsDir, "", "")
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
@@ -324,53 +315,55 @@ func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, state State
 	return lock, cfg, paths, nil
 }
 
-func (l *Lifecycle) prepareLockAtPathsInScratch(configPaths []string, state StatePaths) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
+func (l *Lifecycle) prepareLockAtPathsInScratch(configPaths []string, lockfilePath, artifactsDir string) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
 	scratchDir, err := os.MkdirTemp("", "gestaltd-lock-*")
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, nil, fmt.Errorf("create lock scratch dir: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(scratchDir) }
-	scratchState := state
-	scratchState.ArtifactsDir = scratchDir
-	lock, cfg, paths, err := l.prepareLockAtPaths(configPaths, scratchState, state)
+	lock, cfg, paths, err := l.prepareLockAtPaths(configPaths, lockfilePath, scratchDir, lockfilePath, artifactsDir)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, cleanup, err
 	}
-	actualPaths := resolveLifecyclePaths(configPaths, cfg, state)
+	actualPaths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	paths.lockfilePath = actualPaths.lockfilePath
 	paths.lockFlags = actualPaths.lockFlags
 	return lock, cfg, paths, cleanup, nil
 }
 
-func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, state StatePaths, opts lockAtPathsOptions) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
+func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, lockfilePath, artifactsDir string, opts lockAtPathsOptions) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
 	scratchDir, err := os.MkdirTemp("", "gestaltd-lock-*")
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, nil, fmt.Errorf("create lock scratch dir: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(scratchDir) }
-	scratchState := state
-	scratchState.ArtifactsDir = scratchDir
-	lock, cfg, paths, err := l.prepareCommittedLockAtPaths(configPaths, scratchState, opts, state)
+	lock, cfg, paths, err := l.prepareCommittedLockAtPaths(configPaths, lockfilePath, scratchDir, opts, lockfilePath, artifactsDir)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, cleanup, err
 	}
-	actualPaths := resolveLifecyclePaths(configPaths, cfg, state)
+	actualPaths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	paths.lockfilePath = actualPaths.lockfilePath
 	paths.lockFlags = actualPaths.lockFlags
 	return lock, cfg, paths, cleanup, nil
 }
 
-func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, opts lockAtPathsOptions, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
+func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, lockfilePath, artifactsDir string, opts lockAtPathsOptions, displayLockfilePath, displayArtifactsDir string) (*Lockfile, *config.Config, lifecyclePaths, error) {
+	cfg, err := l.loadConfigForLifecycle(configPaths, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
-	paths := resolveLifecyclePaths(configPaths, cfg, state)
-	if len(displayState) > 0 {
-		paths.configFlags = formatConfigStateFlags(configPaths, displayState[0])
+	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
+	if displayLockfilePath != "" || displayArtifactsDir != "" {
+		if displayLockfilePath == "" {
+			displayLockfilePath = lockfilePath
+		}
+		if displayArtifactsDir == "" {
+			displayArtifactsDir = artifactsDir
+		}
+		paths.configFlags = formatConfigStateFlags(configPaths, displayArtifactsDir, displayLockfilePath)
 	}
 	if l.sourceAuthSecretResolver == nil {
 		if err := requireSourceAuthSecretResolver(cfg); err != nil {
@@ -399,17 +392,23 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 	return lock, cfg, paths, nil
 }
 
-func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
+func (l *Lifecycle) prepareLockAtPaths(configPaths []string, lockfilePath, artifactsDir string, displayLockfilePath, displayArtifactsDir string) (*Lockfile, *config.Config, lifecyclePaths, error) {
+	cfg, err := l.loadConfigForLifecycle(configPaths, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
-	paths := resolveLifecyclePaths(configPaths, cfg, state)
-	if len(displayState) > 0 {
-		paths.configFlags = formatConfigStateFlags(configPaths, displayState[0])
+	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
+	if displayLockfilePath != "" || displayArtifactsDir != "" {
+		if displayLockfilePath == "" {
+			displayLockfilePath = lockfilePath
+		}
+		if displayArtifactsDir == "" {
+			displayArtifactsDir = artifactsDir
+		}
+		paths.configFlags = formatConfigStateFlags(configPaths, displayArtifactsDir, displayLockfilePath)
 	}
 	lock, err := l.prepareRuntimeLockFromLoadedConfigWithSecretMode(context.Background(), paths, cfg, configSecretResolutionSourceAuth)
 	if err != nil {
@@ -934,17 +933,7 @@ func cloneProviderRepositories(repos []providerregistry.NamedRepository) []provi
 	return append([]providerregistry.NamedRepository(nil), repos...)
 }
 
-func defaultLockfilePath(configPath string) string {
-	dir := filepath.Dir(configPath)
-	if !filepath.IsAbs(dir) {
-		if abs, err := filepath.Abs(dir); err == nil {
-			dir = abs
-		}
-	}
-	return filepath.Join(dir, LockfileName)
-}
-
-func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
+func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, allowMissingEnv bool) (*config.Config, error) {
 	var cfg *config.Config
 	var err error
 	if allowMissingEnv {
@@ -1016,19 +1005,15 @@ func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
 }
 
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
-	return l.LoadForExecutionAtPaths([]string{configPath}, locked)
+	return l.LoadForExecutionAtPaths([]string{configPath}, "", "", locked, false)
 }
 
-func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, locked bool) (*config.Config, map[string]string, error) {
-	return l.LoadForExecutionAtPathsWithStatePaths(configPaths, StatePaths{}, locked, false)
-}
-
-func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, state StatePaths, locked, noSync bool) (*config.Config, map[string]string, error) {
-	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
+func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool) (*config.Config, map[string]string, error) {
+	cfg, err := l.loadConfigForLifecycle(configPaths, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
-	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	if l.devServeEligible || len(l.forcedDevUIKeys) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
 			entry := cfg.Providers.UI[name]
@@ -1043,7 +1028,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	if locked && noSync {
 		mode = artifactModeBind
 	}
-	secretsLock, err := l.lockForSecretsBootstrap(configPaths, state, paths, cfg, locked)
+	secretsLock, err := l.lockForSecretsBootstrap(configPaths, lockfilePath, artifactsDir, paths, cfg, locked)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1057,7 +1042,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 		return nil, nil, err
 	}
 
-	if err := l.applyLockedProviders(configPaths, state, cfg, locked, secretsLock, mode); err != nil {
+	if err := l.applyLockedProviders(configPaths, lockfilePath, artifactsDir, cfg, locked, secretsLock, mode); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -1069,12 +1054,12 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	return cfg, nil, nil
 }
 
-func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string, state StatePaths) (*config.Config, error) {
-	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
+func (l *Lifecycle) LoadForValidationAtPaths(configPaths []string, lockfilePath, artifactsDir string) (*config.Config, error) {
+	cfg, err := l.loadConfigForLifecycle(configPaths, false)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
-	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	lock, err := l.prepareRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
 	if err != nil {
 		return nil, err
@@ -1094,15 +1079,15 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 	return cfg, nil
 }
 
-func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []string, state StatePaths, opts StaticValidationOptions) (*config.Config, error) {
-	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
+func (l *Lifecycle) LoadForStaticValidationAtPaths(configPaths []string, lockfilePath, artifactsDir string, opts StaticValidationOptions) (*config.Config, error) {
+	cfg, err := l.loadConfigForLifecycle(configPaths, true)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
-	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	platform := strings.TrimSpace(opts.Platform)
 	if platform == "" {
 		platform = providerpkg.CurrentPlatformString()
@@ -1119,7 +1104,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 			if !canPrepareScratchLock {
 				return nil, fmt.Errorf("lockfile is missing or unreadable; run `%s`: %w", formatLockCommand(paths), lockErr)
 			}
-			_, scratchCfg, _, cleanup, err := l.prepareLockAtPathsInScratch(configPaths, state)
+			_, scratchCfg, _, cleanup, err := l.prepareLockAtPathsInScratch(configPaths, lockfilePath, artifactsDir)
 			if cleanup != nil {
 				defer cleanup()
 			}
@@ -1153,7 +1138,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 	return cfg, nil
 }
 
-func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StatePaths, mode artifactMode, opts SyncOptions) error {
+func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir string, mode artifactMode, opts SyncOptions) error {
 	opts = normalizeSyncOptions(opts)
 	syncCache, err := materializedCacheFromSyncOptions(mode, opts)
 	if err != nil {
@@ -1163,14 +1148,14 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if recorder != nil {
 		recorder.Begin(syncActionForArtifactMode(mode), configPaths, mode == artifactModeCheck, opts.Parallelism)
 	}
-	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, true)
 	if err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
-	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	paths.syncCache = syncCache
 	paths.syncMetrics = recorder
 	paths.syncBuildOutput = opts.Observability.BuildOutput
@@ -1185,7 +1170,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 		}
 	}
 	relockLocked := opts.Locked || mode == artifactModeCheck
-	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, relockLocked, err)
+	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, lockfilePath, artifactsDir, cfg, paths, lock, relockLocked, err)
 	if err != nil {
 		if relockLocked && os.IsNotExist(err) && configRequiresCommittedLock(cfg) {
 			return fmt.Errorf("lockfile required")
@@ -1467,7 +1452,7 @@ func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name str
 	return nil
 }
 
-func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePaths, paths lifecyclePaths, cfg *config.Config, locked bool) (*Lockfile, error) {
+func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, lockfilePath, artifactsDir string, paths lifecyclePaths, cfg *config.Config, locked bool) (*Lockfile, error) {
 	if cfg == nil {
 		return nil, nil
 	}
@@ -1494,7 +1479,7 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 		lock = newLockfile()
 		err = nil
 	}
-	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, locked, err)
+	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, lockfilePath, artifactsDir, cfg, paths, lock, locked, err)
 	if err != nil {
 		return nil, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
@@ -1678,7 +1663,7 @@ func primaryConfigPath(paths []string) string {
 	return paths[0]
 }
 
-func formatConfigStateFlags(paths []string, state StatePaths) string {
+func formatConfigStateFlags(paths []string, artifactsDir, lockfilePath string) string {
 	if len(paths) == 0 {
 		return ""
 	}
@@ -1686,25 +1671,25 @@ func formatConfigStateFlags(paths []string, state StatePaths) string {
 	for _, path := range paths {
 		args = append(args, "--config", path)
 	}
-	if state.ArtifactsDir != "" {
-		args = append(args, "--artifacts-dir", state.ArtifactsDir)
+	if artifactsDir != "" {
+		args = append(args, "--artifacts-dir", artifactsDir)
 	}
-	if state.LockfilePath != "" {
-		args = append(args, "--lockfile", state.LockfilePath)
+	if lockfilePath != "" {
+		args = append(args, "--lockfile", lockfilePath)
 	}
 	return strings.Join(args, " ")
 }
 
-func formatLockFlags(paths []string, state StatePaths) string {
-	if len(paths) == 0 && state.LockfilePath == "" {
+func formatLockFlags(paths []string, lockfilePath string) string {
+	if len(paths) == 0 && lockfilePath == "" {
 		return ""
 	}
 	args := make([]string, 0, len(paths)*2+2)
 	for _, path := range paths {
 		args = append(args, "--config", path)
 	}
-	if state.LockfilePath != "" {
-		args = append(args, "--lockfile", state.LockfilePath)
+	if lockfilePath != "" {
+		args = append(args, "--lockfile", lockfilePath)
 	}
 	return strings.Join(args, " ")
 }
@@ -1862,11 +1847,11 @@ func configHasLocalProviderSources(cfg *config.Config) bool {
 	return false
 }
 
-func (l *Lifecycle) autoRelockAtPathsIfNeeded(configPaths []string, state StatePaths, cfg *config.Config, paths lifecyclePaths, lock *Lockfile, locked bool, err error) (*Lockfile, error) {
+func (l *Lifecycle) autoRelockAtPathsIfNeeded(configPaths []string, lockfilePath, artifactsDir string, cfg *config.Config, paths lifecyclePaths, lock *Lockfile, locked bool, err error) (*Lockfile, error) {
 	if locked || (err == nil && lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{})) {
 		return lock, err
 	}
-	lock, err = l.lockAtPathsWithStatePaths(configPaths, state, lockAtPathsOptions{allowLocalSourceAuthSecrets: true})
+	lock, err = l.lockAtPaths(configPaths, lockfilePath, artifactsDir, lockAtPathsOptions{allowLocalSourceAuthSecrets: true})
 	if err != nil {
 		return nil, fmt.Errorf("auto-lock: %w", err)
 	}
@@ -1884,12 +1869,13 @@ func resolveArtifactsDir(configPath string, cfg *config.Config, override string)
 	if override != "" {
 		return resolveCLIArtifactsDir(override)
 	}
-	if cfg != nil {
-		if cfg.Server.ArtifactsDir != "" {
-			return resolveConfigArtifactsDir(configPath, cfg.Server.ArtifactsDir)
-		}
+	if cfg != nil && cfg.Server.ArtifactsDir != "" {
+		return resolveConfigArtifactsDir(configPath, cfg.Server.ArtifactsDir)
 	}
-	return absoluteConfigDir(configPath)
+	if cwd, err := os.Getwd(); err == nil {
+		return filepath.Clean(cwd)
+	}
+	return "."
 }
 
 func resolveCLIArtifactsDir(dir string) string {
@@ -1906,20 +1892,19 @@ func resolveConfigArtifactsDir(configPath, dir string) string {
 	if filepath.IsAbs(dir) {
 		return filepath.Clean(dir)
 	}
-	return filepath.Join(absoluteConfigDir(configPath), dir)
-}
-
-func absoluteConfigDir(configPath string) string {
-	dir := filepath.Dir(configPath)
-	if abs, err := filepath.Abs(dir); err == nil {
-		return filepath.Clean(abs)
+	configDir := filepath.Dir(configPath)
+	if abs, err := filepath.Abs(configDir); err == nil {
+		configDir = filepath.Clean(abs)
 	}
-	return filepath.Clean(dir)
+	return filepath.Join(configDir, dir)
 }
 
-func resolveLockfilePath(configPath, override string) string {
+func resolveLockfilePath(override string) string {
 	if override == "" {
-		return defaultLockfilePath(configPath)
+		if cwd, err := os.Getwd(); err == nil {
+			return filepath.Join(cwd, LockfileName)
+		}
+		return LockfileName
 	}
 	if filepath.IsAbs(override) {
 		return override
@@ -1930,36 +1915,36 @@ func resolveLockfilePath(configPath, override string) string {
 	return override
 }
 
-func resolveLifecyclePaths(configPaths []string, cfg *config.Config, state StatePaths) lifecyclePaths {
+func resolveLifecyclePaths(configPaths []string, cfg *config.Config, lockfilePath, artifactsDir string) lifecyclePaths {
 	configPath := primaryConfigPath(configPaths)
 	configDir := filepath.Dir(configPath)
-	artifactsDir := resolveArtifactsDir(configPath, cfg, state.ArtifactsDir)
-	lockfilePath := resolveLockfilePath(configPath, state.LockfilePath)
+	resolvedArtifactsDir := resolveArtifactsDir(configPath, cfg, artifactsDir)
+	resolvedLockfilePath := resolveLockfilePath(lockfilePath)
 	return lifecyclePaths{
 		configPaths:            append([]string(nil), configPaths...),
-		configFlags:            formatConfigStateFlags(configPaths, state),
-		lockFlags:              formatLockFlags(configPaths, state),
+		configFlags:            formatConfigStateFlags(configPaths, artifactsDir, lockfilePath),
+		lockFlags:              formatLockFlags(configPaths, lockfilePath),
 		configPath:             configPath,
 		configDir:              configDir,
-		artifactsDir:           artifactsDir,
-		lockfilePath:           lockfilePath,
-		providersDir:           filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
-		authDir:                filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
-		authorizationDir:       filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthorizationDir)),
-		externalCredentialsDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedExternalCredentialsDir)),
-		secretsDir:             filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
-		telemetryDir:           filepath.Join(artifactsDir, filepath.FromSlash(PreparedTelemetryDir)),
-		auditDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
-		cacheDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
-		workflowDir:            filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
-		agentDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedAgentDir)),
-		runtimeDir:             filepath.Join(artifactsDir, filepath.FromSlash(PreparedRuntimeDir)),
-		uiDir:                  filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
+		artifactsDir:           resolvedArtifactsDir,
+		lockfilePath:           resolvedLockfilePath,
+		providersDir:           filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedProvidersDir)),
+		authDir:                filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedAuthDir)),
+		authorizationDir:       filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedAuthorizationDir)),
+		externalCredentialsDir: filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedExternalCredentialsDir)),
+		secretsDir:             filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedSecretsDir)),
+		telemetryDir:           filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedTelemetryDir)),
+		auditDir:               filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedAuditDir)),
+		cacheDir:               filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedCacheDir)),
+		workflowDir:            filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
+		agentDir:               filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedAgentDir)),
+		runtimeDir:             filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedRuntimeDir)),
+		uiDir:                  filepath.Join(resolvedArtifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
 
 func lifecyclePathsForConfig(configPath string) lifecyclePaths {
-	return resolveLifecyclePaths([]string{configPath}, nil, StatePaths{})
+	return resolveLifecyclePaths([]string{configPath}, nil, "", "")
 }
 
 func providerDestDir(paths lifecyclePaths, name string) string {
@@ -3539,12 +3524,12 @@ func sourceBuildPathDomains(sourceDir string, manifest *providermanifestv1.Manif
 	return domains, nil
 }
 
-func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) error {
+func (l *Lifecycle) applyLockedProviders(configPaths []string, lockfilePath, artifactsDir string, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) error {
 	if !configHasProviderLoading(cfg) {
 		return nil
 	}
 
-	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	lock := bootstrapLock
 	var err error
 	if lock == nil {
@@ -3562,7 +3547,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 			return fmt.Errorf("lockfile required: %w", err)
 		}
 	}
-	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, state, cfg, paths, lock, locked, err)
+	lock, err = l.autoRelockAtPathsIfNeeded(configPaths, lockfilePath, artifactsDir, cfg, paths, lock, locked, err)
 	if err != nil {
 		return fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}

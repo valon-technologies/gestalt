@@ -109,10 +109,11 @@ them with these rules:
 - Later lists replace inherited lists.
 - `null` deletes inherited keys.
 
-Relative paths resolve from the file that declared them. By default, lockfiles
-and prepared-artifact paths stay rooted at the leftmost config file.
-`--lockfile` overrides only the lockfile path and resolves like a normal CLI
-path.
+Relative paths resolve from the file that declared them. The lockfile
+defaults to the current working directory (`./gestalt.lock.json`); `--lockfile`
+overrides only the lockfile path and resolves like a normal CLI path. Prepared
+artifact paths default to the current working directory; `server.artifactsDir`
+and `--artifacts-dir` override that location.
 
 ## Environment And Secrets
 

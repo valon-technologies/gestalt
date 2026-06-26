@@ -13,7 +13,6 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/services/observability/drivers/otlp"
@@ -34,13 +33,13 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithConfigPaths(configPaths []string, state operator.StatePaths, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
+func setupBootstrapWithConfigPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, state, locked, noSync, forcedDevUIKeys...)
+	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevUIKeys...)
 }
 
-func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, state operator.StatePaths, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
-	cfg, err := loadConfigForExecutionAtPathsWithStatePaths(configPaths, state, locked, noSync, forcedDevUIKeys...)
+func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
+	cfg, err := loadConfigForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevUIKeys...)
 	if err != nil {
 		stop()
 		return nil, err

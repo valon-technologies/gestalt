@@ -48,7 +48,7 @@ providers:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	cfg, err := NewLifecycle().WithDevServeEligible(true).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	cfg, err := NewLifecycle().WithDevServeEligible(true).loadConfigForLifecycle([]string{cfgPath}, false)
 	if err != nil {
 		t.Fatalf("loadConfigForLifecycle: %v", err)
 	}
@@ -105,7 +105,7 @@ providers:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	cfg, err := NewLifecycle().loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	cfg, err := NewLifecycle().loadConfigForLifecycle([]string{cfgPath}, false)
 	if err != nil {
 		t.Fatalf("loadConfigForLifecycle: %v", err)
 	}
@@ -134,7 +134,7 @@ providers:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	cfg, err := NewLifecycle().WithDevServeEligible(true).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, true)
+	cfg, err := NewLifecycle().WithDevServeEligible(true).loadConfigForLifecycle([]string{cfgPath}, true)
 	if err != nil {
 		t.Fatalf("loadConfigForLifecycle: %v", err)
 	}
@@ -201,6 +201,7 @@ spec:
 	}
 
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := `apiVersion: gestaltd.config/v8
 ` + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + `  ui:
@@ -219,11 +220,11 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	if _, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
+		t.Fatalf("LockAtPaths: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	preparedUI := filepath.Join(artifactsDir, "ui", "demo", "dist", "index.html")
 	if _, err := os.Stat(preparedUI); err != nil {
@@ -235,6 +236,7 @@ func TestUnlockedServeResolvesDevUITheme(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	themeDir := filepath.Join(dir, "theme")
 	if err := os.MkdirAll(themeDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll theme: %v", err)
@@ -284,9 +286,9 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	loaded, _, err := NewLifecycle().WithDevServeEligible(true).LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, StatePaths{}, false, false)
+	loaded, _, err := NewLifecycle().WithDevServeEligible(true).LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LoadForExecutionAtPaths: %v", err)
 	}
 	entry := loaded.Providers.UI["demo"]
 	if entry == nil {
@@ -339,7 +341,7 @@ providers:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	cfg, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	cfg, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, false)
 	if err != nil {
 		t.Fatalf("loadConfigForLifecycle: %v", err)
 	}
@@ -388,7 +390,7 @@ providers:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	_, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, false)
 	if err == nil || !strings.Contains(err.Error(), `no run: block`) {
 		t.Fatalf("loadConfigForLifecycle error = %v, want no run: block error", err)
 	}
@@ -411,7 +413,7 @@ providers:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	_, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, false)
 	if err == nil || !strings.Contains(err.Error(), `--path target "demo"`) {
 		t.Fatalf("loadConfigForLifecycle error = %v, want forced --path target error", err)
 	}

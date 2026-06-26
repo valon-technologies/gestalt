@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -74,7 +73,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := exec.Command(gestaltdBin, tc.args...).CombinedOutput()
+			out, err := gestaltdCommand(tc.args...).CombinedOutput()
 			if err != nil {
 				t.Fatalf("gestaltd %s: %v\n%s", strings.Join(tc.args, " "), err, out)
 			}
@@ -95,7 +94,7 @@ func TestE2ECLIHelp(t *testing.T) {
 func TestRunLockRejectsPlatformFlag(t *testing.T) {
 	t.Parallel()
 
-	out, err := exec.Command(gestaltdBin, "lock", "--platform", "linux/amd64").CombinedOutput()
+	out, err := gestaltdCommand("lock", "--platform", "linux/amd64").CombinedOutput()
 	if err == nil {
 		t.Fatalf("gestaltd lock --platform unexpectedly succeeded:\n%s", out)
 	}
@@ -107,7 +106,7 @@ func TestRunLockRejectsPlatformFlag(t *testing.T) {
 func TestE2ECLITopLevelVersionShortFlag(t *testing.T) {
 	t.Parallel()
 
-	out, err := exec.Command(gestaltdBin, "-v").CombinedOutput()
+	out, err := gestaltdCommand("-v").CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd -v: %v\n%s", err, out)
 	}
@@ -223,7 +222,7 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 		t.Fatalf("close unrelated sparse file: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "lock", "--config", configPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", configPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
 	}
@@ -231,7 +230,7 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--verbose", "--output-format=json", "--config", configPath)
+	cmd := gestaltdCommand("sync", "--locked", "--verbose", "--output-format=json", "--config", configPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -260,7 +259,7 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	cmd = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--output-format=json", "--config", configPath)
+	cmd = gestaltdCommand("sync", "--locked", "--check", "--output-format=json", "--config", configPath)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -296,7 +295,7 @@ func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
 	}
 	configPath := writeE2EConfig(t, dir, appDir, 18080)
 
-	out, err := exec.Command(gestaltdBin, "lock", "--config", configPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", configPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
 	}
@@ -304,7 +303,7 @@ func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--config", configPath)
+	cmd := gestaltdCommand("sync", "--locked", "--config", configPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -323,7 +322,7 @@ func TestE2ESyncJSONFailureLeavesStdoutEmpty(t *testing.T) {
 	t.Parallel()
 
 	missingConfig := filepath.Join(t.TempDir(), "missing.yaml")
-	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--output-format=json", "--config", missingConfig)
+	cmd := gestaltdCommand("sync", "--locked", "--output-format=json", "--config", missingConfig)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -366,7 +365,7 @@ func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
 	writeManifestFile(t, appDir, manifest)
 	configPath := writeE2EConfig(t, dir, appDir, 18080)
 
-	out, err := exec.Command(gestaltdBin, "lock", "--config", configPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", configPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
 	}
@@ -374,7 +373,7 @@ func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--output-format=json", "--config", configPath)
+	cmd := gestaltdCommand("sync", "--locked", "--output-format=json", "--config", configPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -419,11 +418,11 @@ packages:
 	}
 	indexURL := (&url.URL{Scheme: "file", Path: indexPath}).String()
 
-	out, err := exec.Command(gestaltdBin, "provider", "repo", "add", "local", indexURL, "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("provider", "repo", "add", "local", indexURL, "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("provider repo add failed: %v\n%s", err, out)
 	}
-	out, err = exec.Command(gestaltdBin, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock").CombinedOutput()
+	out, err = gestaltdCommand("provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock").CombinedOutput()
 	if err != nil {
 		t.Fatalf("provider add failed: %v\n%s", err, out)
 	}
@@ -496,7 +495,7 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := exec.Command(gestaltdBin, tc.args...).CombinedOutput()
+			out, err := gestaltdCommand(tc.args...).CombinedOutput()
 			if err == nil {
 				t.Fatalf("expected gestaltd %s to fail, output: %s", strings.Join(tc.args, " "), out)
 			}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -129,7 +128,7 @@ func TestE2EProviderPackageAndReleaseBigquery(t *testing.T) {
 	const testVersion = "0.0.1-test"
 	const testPlatform = "linux/amd64"
 
-	cmd := exec.Command(gestaltdBin, "provider", "package",
+	cmd := gestaltdCommand("provider", "package",
 		"--version", testVersion,
 		"--platform", testPlatform,
 		"--output", outputDir,
@@ -139,7 +138,7 @@ func TestE2EProviderPackageAndReleaseBigquery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider package failed: %v\n%s", err, out)
 	}
-	cmd = exec.Command(gestaltdBin, "provider", "release",
+	cmd = gestaltdCommand("provider", "release",
 		"--version", testVersion,
 		"--dist-dir", outputDir,
 	)

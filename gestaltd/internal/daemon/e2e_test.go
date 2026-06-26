@@ -48,7 +48,7 @@ apps:
 		t.Fatalf("write config audit: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected gestaltd validate to fail, got success\n%s", out)
 	}
@@ -106,7 +106,7 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 				t.Fatalf("write config audit: %v", err)
 			}
 
-			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 			if err == nil {
 				t.Fatalf("expected gestaltd validate to fail, got success\n%s", out)
 			}
@@ -181,7 +181,7 @@ apps:
 				t.Fatalf("write config: %v", err)
 			}
 
-			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 			if err != nil {
 				t.Fatalf("gestaltd validate failed: %v\noutput: %s", err, out)
 			}
@@ -314,7 +314,7 @@ workflows:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd validate failed: %v\noutput: %s", err, out)
 	}
@@ -384,7 +384,7 @@ apps:
 				t.Fatalf("write invalid config: %v", err)
 			}
 
-			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 			if err == nil {
 				t.Fatalf("expected gestaltd validate to fail, got success\n%s", out)
 			}
@@ -402,7 +402,7 @@ func TestE2EProviderValidateIsolatedSourceApp(t *testing.T) {
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	appDir := setupAppDir(t, dir)
 
-	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", appDir)
+	cmd := gestaltdCommand("provider", "validate", "--path", appDir)
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -427,7 +427,7 @@ func TestE2EProviderValidateSourceUI(t *testing.T) {
 	mountedUI := setupMountedUIDir(t, dir)
 	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
 
-	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", mountedUI.ManifestPath)
+	cmd := gestaltdCommand("provider", "validate", "--path", mountedUI.ManifestPath)
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -465,7 +465,7 @@ apps:
 		t.Fatalf("write config: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", appDir, "--config", cfgPath)
+	cmd := gestaltdCommand("provider", "validate", "--path", appDir, "--config", cfgPath)
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -485,7 +485,7 @@ func TestE2EProviderValidateRejectsNonAppManifest(t *testing.T) {
 	dir := t.TempDir()
 	manifestPath := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
-	out, err := exec.Command(gestaltdBin, "provider", "validate", "--path", manifestPath).CombinedOutput()
+	out, err := gestaltdCommand("provider", "validate", "--path", manifestPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected gestaltd provider validate to fail for non-app manifest\n%s", out)
 	}
@@ -546,7 +546,7 @@ apps:
 		t.Fatalf("write support override: %v", err)
 	}
 
-	failingCmd := exec.Command(gestaltdBin, "provider", "validate", "--path", targetDir, "--config", baseCfgPath)
+	failingCmd := gestaltdCommand("provider", "validate", "--path", targetDir, "--config", baseCfgPath)
 	failingCmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -559,7 +559,7 @@ apps:
 		t.Fatalf("expected mount collision error, got: %s", failingOut)
 	}
 
-	successCmd := exec.Command(gestaltdBin, "provider", "validate", "--path", targetDir, "--config", baseCfgPath, "--config", overrideCfgPath)
+	successCmd := gestaltdCommand("provider", "validate", "--path", targetDir, "--config", baseCfgPath, "--config", overrideCfgPath)
 	successCmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -670,7 +670,7 @@ func TestE2EValidateConfigPathPrecedence(t *testing.T) {
 				args = append(args, tc.before(t, root, home, workdir)...)
 			}
 
-			cmd := exec.Command(gestaltdBin, args...)
+			cmd := gestaltdCommand(args...)
 			cmd.Dir = workdir
 			cmd.Env = append(os.Environ(),
 				"HOME="+home,
@@ -742,7 +742,7 @@ apps:
 		t.Fatalf("WriteFile override config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", baseConfigPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--config", baseConfigPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected base config validate to fail, output: %s", out)
 	}
@@ -750,7 +750,7 @@ apps:
 		t.Fatalf("expected base config failure to mention missing manifest, got: %s", out)
 	}
 
-	out, err = exec.Command(gestaltdBin, "validate", "--config", baseConfigPath, "--config", overrideConfigPath).CombinedOutput()
+	out, err = gestaltdCommand("validate", "--config", baseConfigPath, "--config", overrideConfigPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected layered config validate to succeed: %v\n%s", err, out)
 	}
@@ -790,7 +790,7 @@ apps:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected validate to succeed: %v\n%s", err, out)
 	}
@@ -804,7 +804,7 @@ apps:
 		t.Fatalf("validate should not leave prepared artifacts in config dir, got err=%v", err)
 	}
 	overrideLockfilePath := filepath.Join(dir, "state", "validate", operator.LockfileName)
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--lockfile", overrideLockfilePath).CombinedOutput()
+	out, err = gestaltdCommand("validate", "--config", cfgPath, "--lockfile", overrideLockfilePath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected validate with --lockfile to succeed: %v\n%s", err, out)
 	}
@@ -813,7 +813,7 @@ apps:
 	}
 
 	providedArtifactsDir := filepath.Join(dir, "artifacts", "validate")
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--artifacts-dir", providedArtifactsDir).CombinedOutput()
+	out, err = gestaltdCommand("validate", "--config", cfgPath, "--artifacts-dir", providedArtifactsDir).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected validate with --artifacts-dir to fail, got success:\n%s", out)
 	}
@@ -836,7 +836,7 @@ func TestE2EValidateStaticAcceptsMissingRuntimeEnvPlaceholder(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected static validate to succeed with missing runtime env placeholder: %v\n%s", err, out)
 	}
@@ -880,7 +880,7 @@ apps:
 		t.Fatalf("write config: %v", err)
 	}
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
-	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock failed: %v\n%s", err, out)
 	}
@@ -918,7 +918,7 @@ apps:
 		t.Fatalf("write lockfile: %v", err)
 	}
 
-	out, err = exec.Command(gestaltdBin, "validate", "--platform", "linux/amd64", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err = gestaltdCommand("validate", "--platform", "linux/amd64", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected platform validate to use locked static metadata: %v\n%s", err, out)
 	}
@@ -973,13 +973,13 @@ apps:
 		}
 	}
 	writeConfig("echo")
-	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock failed: %v\n%s", err, out)
 	}
 
 	writeConfig("greet")
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err = gestaltdCommand("validate", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected stale static catalog metadata to fail validation:\n%s", out)
 	}
@@ -1019,7 +1019,7 @@ apps:
 		t.Fatalf("write config: %v", err)
 	}
 	lockPath := filepath.Join(dir, "missing.lock.json")
-	out, err := exec.Command(gestaltdBin, "validate", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected explicit missing lockfile to fail:\n%s", out)
 	}
@@ -1061,7 +1061,7 @@ apps:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected validate to fail, got success:\n%s", out)
 	}
@@ -1129,7 +1129,7 @@ apps:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected validate to fail, got success:\n%s", out)
 	}
@@ -1898,7 +1898,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	managementURL := fmt.Sprintf("http://127.0.0.1:%d", managementPort)
 	cfgPath := writeServeConfigWithManagement(t, dir, publicPort, managementPort, mountedUI)
 
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
+	cmd := gestaltdCommand("serve", "--config", cfgPath)
 	releasePortHoldersAndStart(t, []net.Listener{publicHolder, managementHolder}, func() {
 		startCommandAndWaitReadyForURLs(t, cmd, []string{publicURL, managementURL})
 	})
@@ -1989,7 +1989,7 @@ func TestE2ELockLocalProviders(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 
-	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock failed: %v\noutput: %s", err, out)
 	}
@@ -2053,15 +2053,15 @@ providers:
 	}
 
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
-	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock should not resolve runtime secret refs: %v\n%s", err, out)
 	}
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err = gestaltdCommand("sync", "--locked", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd sync should not resolve runtime secret refs: %v\n%s", err, out)
 	}
-	out, err = exec.Command(gestaltdBin, "validate", "--runtime", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err = gestaltdCommand("validate", "--runtime", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("gestaltd validate --runtime unexpectedly succeeded without runtime secret:\n%s", out)
 	}
@@ -2074,22 +2074,24 @@ func TestRunLockSyncLocalProviders(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	artifactsDir := filepath.Join(dir, "artifacts")
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 
-	if err := runLock([]string{"--config", cfgPath}); err != nil {
+	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); err != nil {
-		t.Fatalf("expected default lockfile: %v", err)
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Fatalf("expected lockfile at %s: %v", lockPath, err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("lock should not prepare final artifacts, got err=%v", err)
 	}
-	if err := runLock([]string{"--check", "--config", cfgPath}); err != nil {
+	if err := runLock([]string{"--check", "--config", cfgPath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock --check: %v", err)
 	}
 
-	err := runSync([]string{"--locked", "--check", "--config", cfgPath})
+	err := runSync([]string{"--locked", "--check", "--config", cfgPath, "--lockfile", lockPath, "--artifacts-dir", artifactsDir})
 	if err == nil {
 		t.Fatal("runSync --check before sync unexpectedly succeeded")
 	}
@@ -2097,17 +2099,17 @@ func TestRunLockSyncLocalProviders(t *testing.T) {
 		t.Fatalf("sync --check error should report artifacts would be materialized, got: %v", err)
 	}
 
-	if err := runSync([]string{"--locked", "--config", cfgPath}); err != nil {
+	if err := runSync([]string{"--locked", "--config", cfgPath, "--lockfile", lockPath, "--artifacts-dir", artifactsDir}); err != nil {
 		t.Fatalf("runSync: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "providers", "example")); err != nil {
+	if _, err := os.Stat(filepath.Join(artifactsDir, "providers", "example")); err != nil {
 		t.Fatalf("expected synced app artifact: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "indexeddb", "inmem")); err != nil {
+	if _, err := os.Stat(filepath.Join(artifactsDir, "indexeddb", "inmem")); err != nil {
 		t.Fatalf("expected synced indexeddb artifact: %v", err)
 	}
 
-	if err := runSync([]string{"--locked", "--check", "--config", cfgPath}); err != nil {
+	if err := runSync([]string{"--locked", "--check", "--config", cfgPath, "--lockfile", lockPath, "--artifacts-dir", artifactsDir}); err != nil {
 		t.Fatalf("runSync --check after sync: %v", err)
 	}
 }
@@ -2118,12 +2120,12 @@ func TestRunSyncStaleLocalProviderRemediation(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
-	if err := runLock([]string{"--config", cfgPath}); err != nil {
+	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock: %v", err)
 	}
 
 	staleCfgPath := writeRenamedProviderConfig(t, dir, cfgPath)
-	err := runSync([]string{"--locked", "--check", "--config", staleCfgPath, "--artifacts-dir", filepath.Join(dir, "prepared")})
+	err := runSync([]string{"--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared")})
 	if err == nil {
 		t.Fatal("runSync --check with stale lock unexpectedly succeeded")
 	}
@@ -2132,7 +2134,7 @@ func TestRunSyncStaleLocalProviderRemediation(t *testing.T) {
 	}
 
 	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
-	if err := runSync([]string{"--locked", "--config", staleCfgPath, "--artifacts-dir", staleArtifactsDir}); err != nil {
+	if err := runSync([]string{"--locked", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", staleArtifactsDir}); err != nil {
 		t.Fatalf("runSync with renamed local provider: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(staleArtifactsDir, "providers", "renamed")); err != nil {
@@ -2188,19 +2190,19 @@ func TestRunLockSyncLayeredConfigs(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	basePath, overridePath, lockPath, _ := writeLayeredE2EConfigs(t, dir, 0)
+	basePath, overridePath, lockPath, artifactsDir := writeLayeredE2EConfigs(t, dir, 0)
 
-	if err := runLock([]string{"--config", basePath, "--config", overridePath}); err != nil {
+	if err := runLock([]string{"--config", basePath, "--config", overridePath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock with layered configs: %v", err)
 	}
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Fatalf("expected lock file at %s: %v", lockPath, err)
 	}
-	if err := runSync([]string{"--locked", "--config", basePath, "--config", overridePath}); err != nil {
+	if err := runSync([]string{"--locked", "--config", basePath, "--config", overridePath, "--lockfile", lockPath, "--artifacts-dir", artifactsDir}); err != nil {
 		t.Fatalf("runSync with layered configs: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, operator.StatePaths{}, true, false)
+	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, lockPath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("setupBootstrapWithConfigPaths locked layered configs: %v", err)
 	}
@@ -2222,11 +2224,12 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock with --lockfile: %v", err)
 	}
-	if err := runSync([]string{"--locked", "--config", cfgPath, "--lockfile", lockPath}); err != nil {
+	artifactsDir := filepath.Join(dir, "artifacts")
+	if err := runSync([]string{"--locked", "--config", cfgPath, "--lockfile", lockPath, "--artifacts-dir", artifactsDir}); err != nil {
 		t.Fatalf("runSync with --lockfile: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, operator.StatePaths{LockfilePath: lockPath}, true, false)
+	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, lockPath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("setupBootstrapWithConfigPaths locked with --lockfile: %v", err)
 	}
