@@ -51,6 +51,10 @@ func TestMain(m *testing.M) {
 	wg.Add(4)
 	go func() {
 		defer wg.Done()
+		if prebuilt, ok := testutil.PrebuiltBinary("gestaltd"); ok {
+			gestaltdBin = prebuilt
+			return
+		}
 		errs[0] = buildTarget(".", "github.com/valon-technologies/gestalt/server/cmd/gestaltd", gestaltdBin)
 	}()
 	go func() {

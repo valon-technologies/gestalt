@@ -66,12 +66,19 @@ func TestMain(m *testing.M) {
 			output:    sharedAgentProviderBin,
 			sdkModule: true,
 		},
-		{
+	}
+
+	// Reuse a prebuilt gestaltd binary (shared across CI test jobs) when one is
+	// available; otherwise build it alongside the provider fixtures.
+	if prebuilt, ok := testutil.PrebuiltBinary("gestaltd"); ok {
+		sharedGestaltdBin = prebuilt
+	} else {
+		specs = append(specs, buildSpec{
 			name:   "gestaltd",
 			dir:    filepath.Join(root, "gestaltd"),
 			target: "./cmd/gestaltd",
 			output: sharedGestaltdBin,
-		},
+		})
 	}
 
 	errs := make([]error, len(specs))
