@@ -1023,7 +1023,7 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 			continue
 		}
 		if providerpkg.EffectiveSourceBuild(manifest) != nil || manifest.Entrypoint != nil {
-			return fmt.Errorf("app %q: local-source apps must declare run:", name)
+			return fmt.Errorf("app %q: local-source apps must declare run", name)
 		}
 	}
 	return nil

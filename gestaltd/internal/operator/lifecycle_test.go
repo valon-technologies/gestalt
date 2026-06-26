@@ -432,75 +432,6 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 	return manifestPath
 }
 
-func writeLocalExecutableOpenAPIPlugin(t *testing.T, dir, name string, staticOperations, openAPIOperations []string) string {
-	t.Helper()
-
-	root := filepath.Join(dir, name)
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", root, err)
-	}
-
-	var openAPI strings.Builder
-	openAPI.WriteString(`openapi: "3.1.0"
-info:
-  title: Hybrid
-  version: "1.0.0"
-paths:
-`)
-	for _, operation := range openAPIOperations {
-		openAPI.WriteString("  /" + operation + ":\n")
-		openAPI.WriteString("    get:\n")
-		openAPI.WriteString("      operationId: " + operation + "\n")
-		openAPI.WriteString("      responses:\n")
-		openAPI.WriteString("        \"200\":\n")
-		openAPI.WriteString("          description: OK\n")
-	}
-	openAPIPath := filepath.Join(root, "openapi.yaml")
-	if err := os.WriteFile(openAPIPath, []byte(openAPI.String()), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", openAPIPath, err)
-	}
-
-	buildOutput := ".gestaltd/bin/" + name
-	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\nprintf '%s' > %s\nchmod +x %s\n", name+"-binary", buildOutput, buildOutput)
-	if err := os.WriteFile(filepath.Join(root, "build.sh"), []byte(buildScript), 0o755); err != nil {
-		t.Fatalf("WriteFile(build.sh): %v", err)
-	}
-	manifestPath := filepath.Join(root, "manifest.yaml")
-	manifest, err := encodeSourceManifestForTest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/" + name,
-		Version:     "0.0.1-alpha.1",
-		DisplayName: testDisplayName(name),
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
-		Run: localAppSourceRunCommand(buildOutput),
-		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
-			Surfaces: &providermanifestv1.ProviderSurfaces{
-				OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
-			},
-		}),
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", manifestPath, err)
-	}
-
-	var catalogBuilder strings.Builder
-	catalogBuilder.WriteString("name: " + name + "\noperations:\n")
-	for _, operation := range staticOperations {
-		catalogBuilder.WriteString("  - id: " + operation + "\n")
-		catalogBuilder.WriteString("    method: GET\n")
-	}
-	if err := os.WriteFile(filepath.Join(root, "catalog.yaml"), []byte(catalogBuilder.String()), 0o644); err != nil {
-		t.Fatalf("WriteFile(catalog.yaml): %v", err)
-	}
-	return manifestPath
-}
-
 func requiredIndexedDBConfigYAML(t *testing.T, dir, dbPath string) string {
 	return requiredComponentConfigYAML(t, dir, dbPath)
 }
@@ -540,7 +471,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
 		Kind:        providermanifestv1.KindApp, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
-		Run:         localAppSourceRunCommand(buildOutput),
+		Run: localAppSourceRunCommand(buildOutput),
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
@@ -2762,7 +2693,7 @@ operations:
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
 		Kind:        providermanifestv1.KindApp, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
-		Run:         localAppSourceRunCommand(buildOutput),
+		Run: localAppSourceRunCommand(buildOutput),
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},

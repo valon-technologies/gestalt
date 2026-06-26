@@ -261,7 +261,7 @@ apps:
 	}
 
 	_, err := NewLifecycle().loadConfigForLifecycle([]string{cfgPath}, false)
-	if err == nil || !strings.Contains(err.Error(), `local-source apps must declare run:`) {
+	if err == nil || !strings.Contains(err.Error(), `local-source apps must declare run`) {
 		t.Fatalf("loadConfigForLifecycle error = %v, want must declare run error", err)
 	}
 }
