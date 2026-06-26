@@ -35,7 +35,6 @@ const (
 type providerLocalCommandOptions struct {
 	Paths        []string
 	ConfigPaths  []string
-	Name         string
 	Port         int
 	Locked       bool
 	NoSync       bool
@@ -79,7 +78,6 @@ func runProviderValidate(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	pathFlag := fs.String("path", "", "provider manifest path or directory (defaults to current working directory)")
-	nameFlag := fs.String("name", "", "provider key override")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -90,7 +88,6 @@ func runProviderValidate(args []string) error {
 	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
 		Paths:       []string{*pathFlag},
 		ConfigPaths: []string(configPaths),
-		Name:        *nameFlag,
 		Port:        8080,
 	})
 	if err != nil {
@@ -164,7 +161,7 @@ func buildProviderLocalTargetOverlay(sessionDir string, index int, opts provider
 
 	switch kind {
 	case providermanifestv1.KindUI:
-		resolvedKey, err := resolveProviderLocalUIKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
+		resolvedKey, err := resolveProviderLocalUIKey(opts.ConfigPaths, targetManifestPath, manifest)
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +179,7 @@ func buildProviderLocalTargetOverlay(sessionDir string, index int, opts provider
 		result.mountPath = mountPath
 		return result, nil
 	case providermanifestv1.KindApp:
-		resolvedKey, err := resolveProviderLocalPluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
+		resolvedKey, err := resolveProviderPluginKey(opts.ConfigPaths, targetManifestPath, manifest, loadConfiguredPlugins)
 		if err != nil {
 			return nil, err
 		}
@@ -393,11 +390,7 @@ func resolveProviderTargetManifest(pathFlag string) (string, *providermanifestv1
 	return manifestPath, manifest, nil
 }
 
-func resolveProviderLocalPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string) (string, error) {
-	return resolveProviderPluginKey(configPaths, targetManifestPath, manifest, explicitName, loadConfiguredPlugins)
-}
-
-func resolveProviderPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string, loadApps func([]string) (map[string]*config.ProviderEntry, error)) (string, error) {
+func resolveProviderPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, loadApps func([]string) (map[string]*config.ProviderEntry, error)) (string, error) {
 	plugins, err := loadApps(configPaths)
 	if err != nil {
 		return "", err
@@ -407,24 +400,11 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 		return "", err
 	}
 
-	if explicitName != "" {
-		if !isValidExplicitPluginKey(explicitName) {
-			return "", fmt.Errorf("invalid --name %q: use only letters, numbers, and underscores", explicitName)
-		}
-		if len(matchingKeys) == 1 && matchingKeys[0] != explicitName {
-			return "", fmt.Errorf("target manifest is already configured as apps.%s; pass --name %q or remove the conflicting config entry", matchingKeys[0], matchingKeys[0])
-		}
-		if len(matchingKeys) > 1 && !slices.Contains(matchingKeys, explicitName) {
-			return "", fmt.Errorf("target manifest is configured by multiple app keys (%s); remove the ambiguity before using --name", strings.Join(matchingKeys, ", "))
-		}
-		return explicitName, nil
-	}
-
 	if len(matchingKeys) == 1 {
 		return matchingKeys[0], nil
 	}
 	if len(matchingKeys) > 1 {
-		return "", fmt.Errorf("target manifest is configured by multiple app keys (%s); pass --name to choose the target key", strings.Join(matchingKeys, ", "))
+		return "", fmt.Errorf("target manifest is configured by multiple app keys (%s); remove the ambiguity in config", strings.Join(matchingKeys, ", "))
 	}
 
 	if name := derivedPluginKey(manifest, targetManifestPath); name != "" {
@@ -433,7 +413,7 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 		}
 		return name, nil
 	}
-	return "", fmt.Errorf("unable to derive an app key for %s; pass --name", targetManifestPath)
+	return "", fmt.Errorf("unable to derive an app key for %s; set a manifest source app name or rename the directory", targetManifestPath)
 }
 
 func writeProviderLocalBaseConfig(path, dbPath string) error {
@@ -850,17 +830,27 @@ func sanitizeProviderLocalMountSlug(value string) string {
 	return strings.Trim(b.String(), "-_.")
 }
 
-func isValidExplicitPluginKey(value string) bool {
-	if value == "" {
-		return false
+func resolveProviderLocalUIKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest) (string, error) {
+	uis, err := loadConfiguredUIs(configPaths)
+	if err != nil {
+		return "", err
 	}
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			continue
-		}
-		return false
+	matchingKeys, err := matchingUIKeys(uis, targetManifestPath)
+	if err != nil {
+		return "", err
 	}
-	return true
+
+	if len(matchingKeys) == 1 {
+		return matchingKeys[0], nil
+	}
+	if len(matchingKeys) > 1 {
+		return "", fmt.Errorf("target manifest is configured by multiple ui keys (%s); remove the ambiguity in config", strings.Join(matchingKeys, ", "))
+	}
+
+	if name := derivedPluginKey(manifest, targetManifestPath); name != "" {
+		return name, nil
+	}
+	return "", fmt.Errorf("unable to derive a ui key for %s; set a manifest source app name or rename the directory", targetManifestPath)
 }
 
 func loadConfiguredPlugins(configPaths []string) (map[string]*config.ProviderEntry, error) {
@@ -906,42 +896,6 @@ func matchingPluginKeys(plugins map[string]*config.ProviderEntry, targetManifest
 	}
 	slices.Sort(matches)
 	return matches, nil
-}
-
-func resolveProviderLocalUIKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string) (string, error) {
-	uis, err := loadConfiguredUIs(configPaths)
-	if err != nil {
-		return "", err
-	}
-	matchingKeys, err := matchingUIKeys(uis, targetManifestPath)
-	if err != nil {
-		return "", err
-	}
-
-	if explicitName != "" {
-		if !isValidExplicitPluginKey(explicitName) {
-			return "", fmt.Errorf("invalid --name %q: use only letters, numbers, and underscores", explicitName)
-		}
-		if len(matchingKeys) == 1 && matchingKeys[0] != explicitName {
-			return "", fmt.Errorf("target manifest is already configured as providers.ui.%s; pass --name %q or remove the conflicting config entry", matchingKeys[0], matchingKeys[0])
-		}
-		if len(matchingKeys) > 1 && !slices.Contains(matchingKeys, explicitName) {
-			return "", fmt.Errorf("target manifest is configured by multiple ui keys (%s); remove the ambiguity before using --name", strings.Join(matchingKeys, ", "))
-		}
-		return explicitName, nil
-	}
-
-	if len(matchingKeys) == 1 {
-		return matchingKeys[0], nil
-	}
-	if len(matchingKeys) > 1 {
-		return "", fmt.Errorf("target manifest is configured by multiple ui keys (%s); pass --name to choose the target key", strings.Join(matchingKeys, ", "))
-	}
-
-	if name := derivedPluginKey(manifest, targetManifestPath); name != "" {
-		return name, nil
-	}
-	return "", fmt.Errorf("unable to derive a ui key for %s; pass --name", targetManifestPath)
 }
 
 func matchingUIKeys(entries map[string]*config.UIEntry, targetManifestPath string) ([]string, error) {
@@ -1004,7 +958,7 @@ func writeYAMLFile(path string, value any) error {
 
 func printProviderValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd provider validate [--path PATH] [--config PATH]... [--name NAME]")
+	writeUsageLine(w, "  gestaltd provider validate [--path PATH] [--config PATH]...")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate a local source app or ui inside a synthesized Gestalt config.")
 	writeUsageLine(w, "v1 supports kind: app and kind: ui manifests.")
@@ -1013,5 +967,4 @@ func printProviderValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")
 	writeUsageLine(w, "  --config   Additional config file to merge; repeat to add support providers or null deletions")
-	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
 }
