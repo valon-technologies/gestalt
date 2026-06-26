@@ -1,10 +1,10 @@
 name: CD (gestaltd)
 
 # Continuous delivery for gestaltd. Re-runs the validation suite (including the
-# race matrix), builds the docs, and builds + pushes the per-commit CI image to
-# Artifact Registry. Every CD run publishes: it is triggered by pushes to main
-# and by manual dispatch for a specific commit SHA. The hourly health check runs
-# in ci.yml instead.
+# race matrix), builds + pushes the per-commit CI image to Artifact Registry,
+# and then builds the docs. Every CD run publishes: it is triggered by pushes to
+# main and by manual dispatch for a specific commit SHA. The hourly health check
+# runs in ci.yml instead.
 
 on:
   push:
@@ -35,29 +35,10 @@ jobs:
       run-race: true
       run-coverage: true
 
-  docs-build:
-    name: Docs Build
-    needs: validate
-    if: ${{ needs.validate.outputs.publish == 'true' }}
-    uses: ./.github/workflows/build-docs.yml
-    with:
-      gestalt_ref: ${{ needs.validate.outputs.sha }}
-    permissions:
-      contents: read
-
   build-and-push:
     name: Build & Publish CI Image
-    needs: [validate, docs-build]
-    # docs-build is skipped on non-publishing runs (schedule, kill-switch off).
-    # GitHub skips a job when a needed job is skipped unless the condition
-    # tolerates it, so gate explicitly with !cancelled(): require validation to
-    # succeed and accept a skipped docs-build (but require it to succeed when it
-    # does run on publishing runs).
-    if: >-
-      ${{ !cancelled()
-        && needs.validate.result == 'success'
-        && needs.validate.outputs.should-validate == 'true'
-        && (needs.docs-build.result == 'success' || needs.docs-build.result == 'skipped') }}
+    needs: validate
+    if: ${{ needs.validate.outputs.should-validate == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -78,3 +59,16 @@ jobs:
           image-repository: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
           gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+  # Docs build runs after the CI image is built and pushed, so a docs failure
+  # never blocks the image publish. It is skipped if the image build did not
+  # succeed (default needs gating).
+  docs-build:
+    name: Docs Build
+    needs: [validate, build-and-push]
+    if: ${{ needs.validate.outputs.publish == 'true' }}
+    uses: ./.github/workflows/build-docs.yml
+    with:
+      gestalt_ref: ${{ needs.validate.outputs.sha }}
+    permissions:
+      contents: read
