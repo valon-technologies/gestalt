@@ -41,9 +41,17 @@ jobs:
       run-race: true
       run-coverage: true
 
-  # Build the image (no push) in parallel with the validation suite. This warms
-  # the shared GHA layer cache so the publish step below is a fast cache hit
-  # rather than a second full compile.
+  # Build AND publish the per-commit CI image in parallel with the validation
+  # suite. This depends only on resolve-ref, so it runs alongside the Go + Helm
+  # checks. Pushing the immutable sha-<commit> tag here (rather than only warming
+  # a layer cache) means build-and-push below finds the image already present
+  # and skips the compile entirely — eliminating the second full build that the
+  # cache-warming approach failed to avoid (the COPY . . / `go build` layers did
+  # not reliably cache-hit across jobs).
+  #
+  # Trade-off: the image lands in Artifact Registry before validation finishes.
+  # It is immutable and addressed by commit SHA, so an image for a commit whose
+  # tests later fail is a harmless orphan, not a promoted artifact.
   build-image:
     name: Build CI Image
     needs: resolve-ref
@@ -52,6 +60,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -59,19 +68,25 @@ jobs:
 
       - uses: ./.github/actions/build-gestaltd-image
         with:
-          push: 'false'
+          push: ${{ needs.resolve-ref.outputs.publish == 'true' }}
           build-alpine: 'false'
           sha: ${{ needs.resolve-ref.outputs.sha }}
           version: ${{ needs.resolve-ref.outputs.version }}
+          registry-host: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
+          image-repository: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
+          gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
+          gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
-  # Publish only after validation passes. Reuses the layer cache warmed by
-  # build-image, so this is build (cache hit) + push + attest + smoke test.
+  # Runs only after validation passes. By now build-image has already pushed the
+  # immutable sha-<commit> image, so the build action's existing-image check
+  # short-circuits: it skips the build + push and just smoke-tests the published
+  # image. This is the post-validation gate and final verification.
   #
-  # build-image is in `needs` only to wait for that warmed cache; it is an
-  # optional optimization, so its failure must not block a publish the tests
-  # have already cleared. The `if` therefore gates on validate + resolve-ref
-  # succeeding (not on build-image) and uses !cancelled() so a failed warmup
-  # still lets this run — it just falls back to a full compile.
+  # build-image is in `needs` only to order this after it, not to gate on its
+  # success: if its push failed, this job must still be able to build + push the
+  # image the tests have cleared. The `if` therefore gates on validate +
+  # resolve-ref succeeding (not on build-image) and uses !cancelled() so a failed
+  # build-image still lets this run — it just falls back to a full build + push.
   build-and-push:
     name: Build & Publish CI Image
     needs: [resolve-ref, validate, build-image]
