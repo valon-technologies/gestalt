@@ -12,7 +12,14 @@
         --muted: #657386;
         --border: #d9e0ea;
         --surface: #ffffff;
+        --surface-2: #f1f4f9;
         --accent: #2764c7;
+        --danger: #c7384a;
+        --danger-bg: #fdecee;
+        --ok: #1f9d6b;
+        --shadow: 0 1px 2px rgba(20, 33, 61, 0.04), 0 8px 24px rgba(20, 33, 61, 0.06);
+        --radius: 10px;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -21,7 +28,12 @@
           --muted: #a8b3c3;
           --border: #273244;
           --surface: #171e2a;
+          --surface-2: #1d2634;
           --accent: #82aaff;
+          --danger: #ff8b95;
+          --danger-bg: #2a1a1e;
+          --ok: #57d6a0;
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
         }
       }
       * {
@@ -32,26 +44,37 @@
         background: var(--bg);
         color: var(--fg);
         font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
       main {
         width: min(1100px, calc(100vw - 32px));
         margin: 0 auto;
-        padding: 40px 0;
+        padding: 40px 0 56px;
+      }
+      header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
       }
       h1 {
         margin: 0;
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 650;
+        letter-spacing: -0.01em;
       }
-      p {
-        margin: 8px 0 0;
+      .subtitle {
+        margin: 6px 0 0;
         color: var(--muted);
+        max-width: 56ch;
       }
       .panel {
         margin-top: 24px;
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: var(--radius);
         background: var(--surface);
+        box-shadow: var(--shadow);
         overflow: hidden;
       }
       .toolbar {
@@ -59,56 +82,325 @@
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        padding: 14px 16px;
+        flex-wrap: wrap;
+        padding: 12px 16px;
         border-bottom: 1px solid var(--border);
+        background: var(--surface-2);
       }
       .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
         color: var(--muted);
+        min-height: 28px;
       }
-      button {
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+        flex: none;
+        transition: background 0.2s ease;
+      }
+      .status[data-state="loading"] .dot {
+        background: var(--accent);
+        animation: pulse 1s ease-in-out infinite;
+      }
+      .status[data-state="ok"] .dot {
+        background: var(--ok);
+      }
+      .status[data-state="error"] .dot {
+        background: var(--danger);
+      }
+      .status[data-state="error"] {
+        color: var(--danger);
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
+      }
+      .meta {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+      }
+      .toggle input {
+        accent-color: var(--accent);
+        width: 15px;
+        height: 15px;
+        cursor: pointer;
+      }
+      select {
+        font: inherit;
+        color: var(--fg);
+        background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 6px;
-        background: transparent;
+        padding: 5px 8px;
+        cursor: pointer;
+      }
+      select:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
         color: var(--fg);
         cursor: pointer;
         font: inherit;
-        padding: 6px 10px;
+        font-weight: 550;
+        padding: 6px 12px;
+        transition: border-color 0.15s ease, background 0.15s ease;
       }
-      button:hover {
+      button:hover:not(:disabled) {
         border-color: var(--accent);
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .spinner {
+        width: 13px;
+        height: 13px;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .body {
+        position: relative;
+        min-height: 480px;
+        max-height: calc(100vh - 240px);
+        overflow: auto;
       }
       pre {
         margin: 0;
-        min-height: 480px;
-        max-height: calc(100vh - 220px);
-        overflow: auto;
         padding: 16px;
         white-space: pre-wrap;
         word-break: break-word;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.6;
+        tab-size: 2;
+      }
+      pre:empty {
+        display: none;
+      }
+      /* Skeleton loading state */
+      .skeleton {
+        padding: 18px 16px;
+        display: grid;
+        gap: 10px;
+      }
+      .skeleton span {
+        height: 11px;
+        border-radius: 4px;
+        background: linear-gradient(
+          90deg,
+          var(--surface-2) 25%,
+          var(--border) 37%,
+          var(--surface-2) 63%
+        );
+        background-size: 400% 100%;
+        animation: shimmer 1.3s ease infinite;
+      }
+      @keyframes shimmer {
+        0% { background-position: 100% 0; }
+        100% { background-position: 0 0; }
+      }
+      /* Error state */
+      .error {
+        margin: 16px;
+        padding: 14px 16px;
+        border: 1px solid var(--danger);
+        border-radius: 8px;
+        background: var(--danger-bg);
+        color: var(--danger);
+      }
+      .error strong {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 600;
+      }
+      .error code {
+        font-family: var(--mono);
+        font-size: 12.5px;
+        word-break: break-word;
+      }
+      /* Charts */
+      .charts {
+        margin-top: 24px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .chart-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        padding: 14px 16px 8px;
+        min-width: 0;
+      }
+      .chart-card h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.01em;
+      }
+      .chart-card .value {
+        margin: 2px 0 0;
+        font-size: 22px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+      .chart {
+        height: 150px;
+        width: 100%;
+      }
+      [hidden] {
+        display: none !important;
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>Gestalt Admin</h1>
-      <p>Inspect the live Prometheus telemetry exposed by this process.</p>
+      <header>
+        <div>
+          <h1>Gestalt Admin</h1>
+          <p class="subtitle">Inspect the live Prometheus telemetry exposed by this process.</p>
+        </div>
+      </header>
+
+      <section id="charts" class="charts" aria-label="Telemetry charts" hidden>
+        <div class="chart-card">
+          <h2>Goroutines</h2>
+          <p id="stat-goroutines" class="value">—</p>
+          <div id="chart-goroutines" class="chart" role="img" aria-label="Goroutines over time"></div>
+        </div>
+        <div class="chart-card">
+          <h2>Heap memory</h2>
+          <p id="stat-heap" class="value">—</p>
+          <div id="chart-heap" class="chart" role="img" aria-label="Heap in use versus next GC goal over time"></div>
+        </div>
+        <div class="chart-card">
+          <h2>GC pause quantiles</h2>
+          <p id="stat-gc" class="value">—</p>
+          <div id="chart-gc" class="chart" role="img" aria-label="Garbage collection pause duration by quantile"></div>
+        </div>
+      </section>
 
       <section class="panel">
         <div class="toolbar">
-          <span id="status" class="status">Loading metrics...</span>
-          <button id="refresh-button" type="button">Refresh</button>
+          <span id="status" class="status" role="status" aria-live="polite" data-state="loading">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="status-text">Loading metrics…</span>
+            <span id="status-meta" class="meta"></span>
+          </span>
+          <div class="controls">
+            <label class="toggle">
+              <input id="auto-refresh" type="checkbox" />
+              <span>Auto-refresh</span>
+            </label>
+            <select id="interval" aria-label="Auto-refresh interval" disabled>
+              <option value="2000">2s</option>
+              <option value="5000" selected>5s</option>
+              <option value="10000">10s</option>
+              <option value="30000">30s</option>
+            </select>
+            <button id="refresh-button" type="button">
+              <span id="refresh-icon" hidden class="spinner" aria-hidden="true"></span>
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
-        <pre id="metrics-output"></pre>
+
+        <div class="body">
+          <div id="skeleton" class="skeleton" aria-hidden="true">
+            <span style="width: 38%"></span>
+            <span style="width: 72%"></span>
+            <span style="width: 64%"></span>
+            <span style="width: 80%"></span>
+            <span style="width: 46%"></span>
+            <span style="width: 70%"></span>
+            <span style="width: 58%"></span>
+          </div>
+          <div id="error" class="error" role="alert" hidden>
+            <strong>Couldn’t load metrics</strong>
+            <code id="error-detail"></code>
+          </div>
+          <pre id="metrics-output"></pre>
+        </div>
       </section>
     </main>
+
+    <script src="echarts.min.js"></script>
     <script>
       (function () {
         const status = document.getElementById("status");
+        const statusText = document.getElementById("status-text");
+        const statusMeta = document.getElementById("status-meta");
         const output = document.getElementById("metrics-output");
+        const skeleton = document.getElementById("skeleton");
+        const errorBox = document.getElementById("error");
+        const errorDetail = document.getElementById("error-detail");
         const refreshButton = document.getElementById("refresh-button");
+        const refreshIcon = document.getElementById("refresh-icon");
+        const autoRefresh = document.getElementById("auto-refresh");
+        const intervalSelect = document.getElementById("interval");
+
+        let timer = null;
+        let inFlight = false;
+        let hasLoadedOnce = false;
+
+        function setState(state, text) {
+          status.dataset.state = state;
+          statusText.textContent = text;
+        }
+
+        function timeString() {
+          return new Date().toLocaleTimeString();
+        }
+
+        function countSeries(text) {
+          let n = 0;
+          for (const line of text.split("\n")) {
+            if (line && line[0] !== "#") n++;
+          }
+          return n;
+        }
 
         async function loadMetrics() {
-          status.textContent = "Loading metrics...";
+          if (inFlight) return;
+          inFlight = true;
+          refreshButton.disabled = true;
+          refreshIcon.hidden = false;
+          setState("loading", hasLoadedOnce ? "Refreshing…" : "Loading metrics…");
+          if (!hasLoadedOnce) skeleton.hidden = false;
+
           try {
             const response = await fetch("/metrics", {
               headers: { Accept: "text/plain" },
@@ -117,15 +409,265 @@
             if (!response.ok) {
               throw new Error("Metrics request failed with HTTP " + response.status);
             }
-            output.textContent = await response.text();
-            status.textContent = "Last refreshed " + new Date().toLocaleTimeString();
+            const text = await response.text();
+            output.textContent = text;
+            errorBox.hidden = true;
+            skeleton.hidden = true;
+            hasLoadedOnce = true;
+            statusMeta.textContent = "· " + countSeries(text).toLocaleString() + " series";
+            setState("ok", "Updated " + timeString());
+            charts.update(text);
           } catch (error) {
-            output.textContent = "";
-            status.textContent = error instanceof Error ? error.message : "Failed to load metrics.";
+            const message = error instanceof Error ? error.message : "Failed to load metrics.";
+            statusMeta.textContent = "";
+            setState("error", "Failed at " + timeString());
+            errorDetail.textContent = message;
+            errorBox.hidden = false;
+            skeleton.hidden = true;
+            if (!hasLoadedOnce) output.textContent = "";
+          } finally {
+            inFlight = false;
+            refreshButton.disabled = false;
+            refreshIcon.hidden = true;
+          }
+        }
+
+        function restartTimer() {
+          if (timer !== null) {
+            clearInterval(timer);
+            timer = null;
+          }
+          if (autoRefresh.checked) {
+            timer = setInterval(loadMetrics, Number(intervalSelect.value));
           }
         }
 
         refreshButton.addEventListener("click", loadMetrics);
+        autoRefresh.addEventListener("change", function () {
+          intervalSelect.disabled = !autoRefresh.checked;
+          restartTimer();
+          if (autoRefresh.checked) loadMetrics();
+        });
+        intervalSelect.addEventListener("change", restartTimer);
+
+        // Pause auto-refresh while the tab is hidden; resume on return.
+        document.addEventListener("visibilitychange", function () {
+          if (document.hidden) {
+            if (timer !== null) {
+              clearInterval(timer);
+              timer = null;
+            }
+          } else if (autoRefresh.checked) {
+            restartTimer();
+            loadMetrics();
+          }
+        });
+
+        // ---- Charts -----------------------------------------------------
+        // Time-series charts accumulate a bounded rolling history sampled on
+        // each successful poll; the GC chart is a per-poll snapshot. The whole
+        // module degrades to a no-op if ECharts failed to load, leaving the
+        // rest of the page fully functional.
+        const charts = (function () {
+          const MAX_POINTS = 120; // rolling window cap (bounds memory)
+          const PALETTE = ["#4f8cff", "#2bb673", "#e0a458"]; // readable on light + dark
+
+          if (typeof echarts === "undefined") {
+            return { update: function () {} };
+          }
+
+          const section = document.getElementById("charts");
+          const statGoroutines = document.getElementById("stat-goroutines");
+          const statHeap = document.getElementById("stat-heap");
+          const statGc = document.getElementById("stat-gc");
+
+          const goroutines = echarts.init(document.getElementById("chart-goroutines"));
+          const heap = echarts.init(document.getElementById("chart-heap"));
+          const gc = echarts.init(document.getElementById("chart-gc"));
+          const all = [goroutines, heap, gc];
+
+          // Rolling history: parallel arrays of [timestamp, value].
+          const history = { goroutines: [], heapInuse: [], nextGc: [] };
+          let lastMap = null; // latest parsed sample, for re-skinning the GC chart
+
+          function cssVar(name) {
+            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+          }
+
+          // Parse the Prometheus exposition text into a lookup of
+          // trimmed-series-id -> numeric value (single pass).
+          function parseMetrics(text) {
+            const map = new Map();
+            const lines = text.split("\n");
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              if (!line || line[0] === "#") continue;
+              const sp = line.lastIndexOf(" ");
+              if (sp < 0) continue;
+              const key = line.slice(0, sp).replace(/\s+/g, "");
+              const value = Number(line.slice(sp + 1));
+              if (!Number.isNaN(value)) map.set(key, value);
+            }
+            return map;
+          }
+
+          function formatBytes(n) {
+            if (!Number.isFinite(n)) return "—";
+            const units = ["B", "KB", "MB", "GB"];
+            let u = 0;
+            while (n >= 1024 && u < units.length - 1) {
+              n /= 1024;
+              u++;
+            }
+            return n.toFixed(u === 0 ? 0 : 1) + " " + units[u];
+          }
+
+          function formatMs(seconds) {
+            return (seconds * 1000).toFixed(2) + " ms";
+          }
+
+          function push(arr, t, v) {
+            arr.push([t, v]);
+            if (arr.length > MAX_POINTS) arr.shift();
+          }
+
+          // Theme-dependent axis/grid styling, recomputed on demand so the
+          // charts re-skin instantly when the OS color scheme changes.
+          function axisCommon() {
+            const muted = cssVar("--muted");
+            const border = cssVar("--border");
+            return {
+              textStyle: { color: muted, fontFamily: "inherit" },
+              grid: { left: 8, right: 12, top: 18, bottom: 6, containLabel: true },
+              xAxisLine: { lineStyle: { color: border } },
+              splitLine: { lineStyle: { color: border, opacity: 0.6 } },
+            };
+          }
+
+          function lineOption(seriesList) {
+            const c = axisCommon();
+            return {
+              color: PALETTE,
+              textStyle: c.textStyle,
+              grid: c.grid,
+              tooltip: {
+                trigger: "axis",
+                confine: true,
+                valueFormatter: seriesList.valueFormatter,
+              },
+              legend: seriesList.legend
+                ? { top: 0, right: 0, textStyle: c.textStyle, itemHeight: 8, itemWidth: 12 }
+                : undefined,
+              xAxis: {
+                type: "time",
+                axisLine: c.xAxisLine,
+                axisLabel: { color: cssVar("--muted"), hideOverlap: true },
+                splitLine: { show: false },
+              },
+              yAxis: {
+                type: "value",
+                scale: true,
+                axisLabel: { color: cssVar("--muted"), formatter: seriesList.yFormatter },
+                splitLine: c.splitLine,
+              },
+              animationDuration: 300,
+              series: seriesList.series,
+            };
+          }
+
+          function render() {
+            goroutines.setOption(
+              lineOption({
+                valueFormatter: function (v) { return Math.round(v); },
+                series: [{
+                  name: "goroutines",
+                  type: "line",
+                  showSymbol: false,
+                  smooth: true,
+                  areaStyle: { opacity: 0.12 },
+                  data: history.goroutines,
+                }],
+              })
+            );
+
+            heap.setOption(
+              lineOption({
+                legend: true,
+                yFormatter: formatBytes,
+                valueFormatter: formatBytes,
+                series: [
+                  { name: "in use", type: "line", showSymbol: false, smooth: true, areaStyle: { opacity: 0.12 }, data: history.heapInuse },
+                  { name: "GC goal", type: "line", showSymbol: false, smooth: true, lineStyle: { type: "dashed" }, data: history.nextGc },
+                ],
+              })
+            );
+          }
+
+          function renderGc(map) {
+            const quantiles = ["0", "0.25", "0.5", "0.75", "1"];
+            const labels = ["min", "p25", "p50", "p75", "max"];
+            const data = quantiles.map(function (q) {
+              const v = map.get('go_gc_duration_seconds{quantile="' + q + '"}');
+              return Number.isFinite(v) ? v * 1000 : 0; // ms
+            });
+            const c = axisCommon();
+            gc.setOption({
+              color: PALETTE,
+              textStyle: c.textStyle,
+              grid: c.grid,
+              tooltip: { trigger: "axis", confine: true, valueFormatter: function (v) { return v.toFixed(3) + " ms"; } },
+              xAxis: { type: "category", data: labels, axisLine: c.xAxisLine, axisLabel: { color: cssVar("--muted") }, axisTick: { show: false } },
+              yAxis: { type: "value", scale: false, axisLabel: { color: cssVar("--muted"), formatter: function (v) { return v + " ms"; } }, splitLine: c.splitLine },
+              animationDuration: 300,
+              series: [{ type: "bar", data: data, barWidth: "55%", itemStyle: { borderRadius: [3, 3, 0, 0] } }],
+            });
+          }
+
+          function update(text) {
+            const map = parseMetrics(text);
+            lastMap = map;
+            const t = Date.now();
+
+            const g = map.get("go_goroutines");
+            const heapInuse = map.get("go_memstats_heap_inuse_bytes");
+            const nextGc = map.get("go_memstats_next_gc_bytes");
+            const p50 = map.get('go_gc_duration_seconds{quantile="0.5"}');
+
+            if (Number.isFinite(g)) push(history.goroutines, t, g);
+            if (Number.isFinite(heapInuse)) push(history.heapInuse, t, heapInuse);
+            if (Number.isFinite(nextGc)) push(history.nextGc, t, nextGc);
+
+            statGoroutines.textContent = Number.isFinite(g) ? String(g) : "—";
+            statHeap.textContent = Number.isFinite(heapInuse) ? formatBytes(heapInuse) : "—";
+            statGc.textContent = Number.isFinite(p50) ? "p50 " + formatMs(p50) : "—";
+
+            section.hidden = false;
+            render();
+            renderGc(map);
+          }
+
+          // Responsive: resize each chart when its container changes size.
+          if (typeof ResizeObserver !== "undefined") {
+            const ro = new ResizeObserver(function () {
+              all.forEach(function (c) { c.resize(); });
+            });
+            ro.observe(section);
+          }
+          window.addEventListener("resize", function () {
+            all.forEach(function (c) { c.resize(); });
+          });
+
+          // Re-skin charts live when the OS color scheme flips.
+          if (window.matchMedia) {
+            window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+              render();
+              if (lastMap) renderGc(lastMap);
+            });
+          }
+
+          return { update: update };
+        })();
+
         loadMetrics();
       })();
     </script>
