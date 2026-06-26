@@ -41,12 +41,15 @@ func TestSourceRunJSONRejectsSequenceForm(t *testing.T) {
 	}
 }
 
-func TestSourceRunJSONRejectsUnknownField(t *testing.T) {
+func TestSourceRunJSONAcceptsReadyTimeout(t *testing.T) {
 	t.Parallel()
 
 	var run providermanifestv1.SourceRun
-	if err := json.Unmarshal([]byte(`{"command":["bun","run","dev"],"readyTimeout":"30s"}`), &run); err == nil {
-		t.Fatal("want unknown field rejection")
+	if err := json.Unmarshal([]byte(`{"command":["bun","run","dev"],"readyTimeout":"30s"}`), &run); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if run.ReadyTimeout != "30s" {
+		t.Fatalf("readyTimeout = %q, want 30s", run.ReadyTimeout)
 	}
 }
 
@@ -97,13 +100,37 @@ func TestSourceRunYAMLRejectsSequenceForm(t *testing.T) {
 	}
 }
 
-func TestSourceRunYAMLRejectsUnknownField(t *testing.T) {
+func TestSourceRunYAMLAcceptsReadyTimeout(t *testing.T) {
 	t.Parallel()
 
 	var run providermanifestv1.SourceRun
 	if err := yaml.Unmarshal([]byte(`
 command: [bun, run, dev]
 readyTimeout: 30s
+`), &run); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if run.ReadyTimeout != "30s" {
+		t.Fatalf("readyTimeout = %q, want 30s", run.ReadyTimeout)
+	}
+}
+
+func TestSourceRunJSONRejectsUnknownField(t *testing.T) {
+	t.Parallel()
+
+	var run providermanifestv1.SourceRun
+	if err := json.Unmarshal([]byte(`{"command":["bun","run","dev"],"unexpected":"value"}`), &run); err == nil {
+		t.Fatal("want unknown field rejection")
+	}
+}
+
+func TestSourceRunYAMLRejectsUnknownField(t *testing.T) {
+	t.Parallel()
+
+	var run providermanifestv1.SourceRun
+	if err := yaml.Unmarshal([]byte(`
+command: [bun, run, dev]
+unexpected: value
 `), &run); err == nil {
 		t.Fatal("want unknown field rejection")
 	}

@@ -232,15 +232,17 @@ func (i SourceInstall) MarshalYAML() (any, error) {
 // GESTALT_PROVIDER_SOCKET contract env vars set. For ui kind the command is a
 // long-lived HTTP dev server that gestaltd reverse-proxies.
 type SourceRun struct {
-	Command []string          `json:"command" yaml:"command"`
-	Workdir string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
-	Env     map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	Command      []string          `json:"command" yaml:"command"`
+	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
+	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
 }
 
 type sourceRunWire struct {
-	Command []string          `json:"command" yaml:"command"`
-	Workdir string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
-	Env     map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	Command      []string          `json:"command" yaml:"command"`
+	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
+	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
 }
 
 func (r *SourceRun) UnmarshalJSON(data []byte) error {
@@ -1096,9 +1098,10 @@ var sourceInstallWireFields = map[string]struct{}{
 }
 
 var sourceRunWireFields = map[string]struct{}{
-	"command": {},
-	"workdir": {},
-	"env":     {},
+	"command":      {},
+	"workdir":      {},
+	"env":          {},
+	"readyTimeout": {},
 }
 
 var specWireFields = map[string]struct{}{

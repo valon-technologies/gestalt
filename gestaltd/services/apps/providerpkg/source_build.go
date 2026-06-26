@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -28,9 +29,10 @@ type ResolvedSourceInstall struct {
 }
 
 type ResolvedSourceRun struct {
-	Workdir string
-	Command []string
-	Env     map[string]string
+	Workdir      string
+	Command      []string
+	Env          map[string]string
+	ReadyTimeout time.Duration
 }
 
 type SourceBuildOptions struct {
@@ -51,6 +53,7 @@ type SourceExecution struct {
 	Command string
 	Args    []string
 	Workdir string
+	Env     map[string]string
 	Cleanup func()
 }
 
@@ -63,11 +66,24 @@ func EffectiveSourceRun(manifest *providermanifestv1.Manifest) *ResolvedSourceRu
 	if manifest == nil || manifest.Run == nil {
 		return nil
 	}
-	return &ResolvedSourceRun{
-		Workdir: manifest.Run.Workdir,
-		Command: append([]string(nil), manifest.Run.Command...),
-		Env:     maps.Clone(manifest.Run.Env),
+	readyTimeout, err := parseSourceRunReadyTimeout(manifest.Run.ReadyTimeout)
+	if err != nil {
+		readyTimeout = 0
 	}
+	return &ResolvedSourceRun{
+		Workdir:      manifest.Run.Workdir,
+		Command:      append([]string(nil), manifest.Run.Command...),
+		Env:          maps.Clone(manifest.Run.Env),
+		ReadyTimeout: readyTimeout,
+	}
+}
+
+func parseSourceRunReadyTimeout(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	return time.ParseDuration(raw)
 }
 
 func EffectiveSourceBuild(manifest *providermanifestv1.Manifest) *ResolvedSourceBuild {
@@ -440,6 +456,7 @@ func explicitRunExecution(rootDir string, manifest *providermanifestv1.Manifest)
 			Command: command,
 			Args:    args,
 			Workdir: workdir,
+			Env:     maps.Clone(run.Env),
 		},
 		Intent: SourceExecutionIntentLocalRun,
 	}

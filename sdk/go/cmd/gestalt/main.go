@@ -123,12 +123,15 @@ func runCommand() error {
 	}
 	defer cleanup()
 
+	goos := envOr("GESTALT_TARGET_OS", envOr("GOOS", runtime.GOOS))
+	goarch := envOr("GESTALT_TARGET_ARCH", envOr("GOARCH", runtime.GOARCH))
 	binaryPath := filepath.Join(root, ".gestaltd", "run", "provider")
+	if goos == "windows" {
+		binaryPath += ".exe"
+	}
 	if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
 		return fmt.Errorf("create run output directory: %w", err)
 	}
-	goos := envOr("GESTALT_TARGET_OS", envOr("GOOS", runtime.GOOS))
-	goarch := envOr("GESTALT_TARGET_ARCH", envOr("GOARCH", runtime.GOARCH))
 	if err := buildGoWrapperBinary(root, binaryPath, wrapper, goos, goarch); err != nil {
 		return err
 	}

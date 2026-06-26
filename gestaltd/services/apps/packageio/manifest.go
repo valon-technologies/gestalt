@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/httpbinding"
@@ -530,6 +531,11 @@ func validateSourceRun(run *providermanifestv1.SourceRun) error {
 	for i, arg := range run.Command {
 		if strings.TrimSpace(arg) == "" {
 			return fmt.Errorf("run.command[%d] is required", i)
+		}
+	}
+	if strings.TrimSpace(run.ReadyTimeout) != "" {
+		if _, err := time.ParseDuration(strings.TrimSpace(run.ReadyTimeout)); err != nil {
+			return fmt.Errorf("run.readyTimeout: %w", err)
 		}
 	}
 	return nil

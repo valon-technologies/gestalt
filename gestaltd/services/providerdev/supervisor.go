@@ -90,6 +90,10 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 			root := filepath.Dir(entry.ResolvedManifestPath)
 			workdir = filepath.Join(root, filepath.FromSlash(run.Workdir))
 		}
+		readyTimeout := defaultReadyTimeout
+		if run.ReadyTimeout > 0 {
+			readyTimeout = run.ReadyTimeout
+		}
 		targets = append(targets, Target{
 			Name:         name,
 			Kind:         "ui",
@@ -97,7 +101,7 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 			Workdir:      workdir,
 			Command:      append([]string(nil), run.Command...),
 			Env:          run.Env,
-			ReadyTimeout: defaultReadyTimeout,
+			ReadyTimeout: readyTimeout,
 		})
 	}
 	return targets, nil

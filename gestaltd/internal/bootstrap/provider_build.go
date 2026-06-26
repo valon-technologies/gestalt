@@ -939,6 +939,13 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		command = execution.Command
 		args = execution.Args
 		workdir = execution.Workdir
+		if len(execution.Env) > 0 {
+			if env == nil {
+				env = maps.Clone(execution.Env)
+			} else {
+				maps.Copy(env, execution.Env)
+			}
+		}
 		cleanup = execution.Cleanup
 	}
 	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindApp, name, entry, command, args, cleanup, runtimeConfig)
