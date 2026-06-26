@@ -14,6 +14,7 @@ on:
       - '.dockerignore'
       - '.github/workflows/cd.yml'
       - '.github/workflows/validate-gestaltd.yml'
+      - '.github/workflows/resolve-gestaltd-ref.yml'
       - '.github/actions/build-gestaltd-image/**'
       - 'gestaltd/**'
       - '!gestaltd/rpc/protov1/**'
@@ -28,6 +29,11 @@ permissions:
   contents: read
 
 jobs:
+  resolve-ref:
+    uses: ./.github/workflows/resolve-gestaltd-ref.yml
+    with:
+      ref: ${{ inputs.gestalt_ref }}
+
   validate:
     uses: ./.github/workflows/validate-gestaltd.yml
     with:
@@ -35,10 +41,41 @@ jobs:
       run-race: true
       run-coverage: true
 
+  # Build the image (no push) in parallel with the validation suite. This warms
+  # the shared GHA layer cache so the publish step below is a fast cache hit
+  # rather than a second full compile.
+  build-image:
+    name: Build CI Image
+    needs: resolve-ref
+    if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.resolve-ref.outputs.sha }}
+
+      - uses: ./.github/actions/build-gestaltd-image
+        with:
+          push: 'false'
+          build-alpine: 'false'
+          sha: ${{ needs.resolve-ref.outputs.sha }}
+          version: ${{ needs.resolve-ref.outputs.version }}
+
+  # Publish only after validation passes. Reuses the layer cache warmed by
+  # build-image, so this is build (cache hit) + push + attest + smoke test.
+  #
+  # build-image is in `needs` only to wait for that warmed cache; it is an
+  # optional optimization, so its failure must not block a publish the tests
+  # have already cleared. The `if` therefore gates on validate + resolve-ref
+  # succeeding (not on build-image) and uses !cancelled() so a failed warmup
+  # still lets this run — it just falls back to a full compile.
   build-and-push:
     name: Build & Publish CI Image
-    needs: validate
-    if: ${{ needs.validate.outputs.should-validate == 'true' }}
+    needs: [resolve-ref, validate, build-image]
+    if: ${{ !cancelled() && needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -47,14 +84,14 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.resolve-ref.outputs.sha }}
 
       - uses: ./.github/actions/build-gestaltd-image
         with:
-          push: ${{ needs.validate.outputs.publish == 'true' }}
+          push: ${{ needs.resolve-ref.outputs.publish == 'true' }}
           build-alpine: 'false'
-          sha: ${{ needs.validate.outputs.sha }}
-          version: ${{ needs.validate.outputs.version }}
+          sha: ${{ needs.resolve-ref.outputs.sha }}
+          version: ${{ needs.resolve-ref.outputs.version }}
           registry-host: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
           image-repository: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
           gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
@@ -65,10 +102,10 @@ jobs:
   # succeed (default needs gating).
   docs-build:
     name: Docs Build
-    needs: [validate, build-and-push]
-    if: ${{ needs.validate.outputs.publish == 'true' }}
+    needs: [resolve-ref, build-and-push]
+    if: ${{ needs.resolve-ref.outputs.publish == 'true' }}
     uses: ./.github/workflows/build-docs.yml
     with:
-      gestalt_ref: ${{ needs.validate.outputs.sha }}
+      gestalt_ref: ${{ needs.resolve-ref.outputs.sha }}
     permissions:
       contents: read
