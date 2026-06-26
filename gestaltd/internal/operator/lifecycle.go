@@ -4458,6 +4458,19 @@ func equivalentProviderManifestPath(current, expected string) bool {
 		currentManifest.Version == expectedManifest.Version
 }
 
+func sourceManifestCacheRequest(kind, name, subject, destDir, sourceDigest string) materializedCacheRequest {
+	return materializedCacheRequest{
+		Subject:        subject,
+		Kind:           kind,
+		Name:           name,
+		SourceKind:     syncArtifactSourceLocalSource,
+		ArchiveSHA256:  sourceDigest,
+		ResolvedKey:    "source-manifest",
+		Platform:       providerpkg.CurrentPlatformString(),
+		DestinationDir: destDir,
+	}
+}
+
 func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name string, provider *config.ProviderEntry, configMap map[string]any, destDir, subject string, mode artifactMode) (*preparedInstall, error) {
 	if provider == nil || !provider.HasLocalSource() {
 		return nil, fmt.Errorf("%s requires local source configuration", subject)
@@ -4480,6 +4493,48 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 		if !mode.canMaterialize() {
 			return nil, artifactMaterializeDeniedError(paths, mode, "prepared artifact for %s is missing or stale", subject)
 		}
+
+		cache := paths.syncCache
+		var cacheReq materializedCacheRequest
+		cacheEligible := false
+		if cache.dir != "" {
+			sourceDigest, digestErr := fingerprintLocalSourceDigest(provider.SourcePath())
+			if digestErr == nil {
+				cacheEligible = true
+				cacheReq = sourceManifestCacheRequest(kind, name, subject, destDir, sourceDigest)
+				restore, restoreErr := cache.Restore(cacheReq)
+				if restoreErr != nil {
+					return nil, fmt.Errorf("restore materialized cache for %s: %w", subject, restoreErr)
+				}
+				if restore != nil {
+					recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+						Subject: subject, SourceKind: cacheReq.SourceKind,
+						Key: restore.Key.Display, SHA256: restore.Key.ArchiveSHA256,
+						Platform: cacheReq.Platform, Result: string(restore.Result),
+						Lookup: true, Bytes: restore.Bytes, Files: restore.Files,
+					})
+					if restore.Result == materializedCacheHit {
+						defer func() { _ = restore.cleanup() }()
+						if err := validateInstalledManifestKind(kind, name, restore.Install.manifest); err != nil {
+							return nil, err
+						}
+						if err := writePreparedLockMetadata(paths, restore.Install, kind, name, provider); err != nil {
+							return nil, fmt.Errorf("write prepared lock metadata for %s: %w", subject, err)
+						}
+						if err := restore.commit(); err != nil {
+							return nil, fmt.Errorf("activate cached source for %s: %w", subject, err)
+						}
+						install, err = inspectPreparedInstall(destDir)
+						if err != nil {
+							return nil, fmt.Errorf("read prepared manifest for %s: %w", subject, err)
+						}
+						recordSyncArtifact(paths, kind, name, subject, destDir, syncArtifactSourceLocalSource, syncArtifactResultMaterialized, reason, start, 0, 0)
+						return install, nil
+					}
+				}
+			}
+		}
+
 		prepareStart := time.Now()
 		stagedInstall, cleanupStaged, commitStaged, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir, paths.stageOptions())
 		prepareDuration := time.Since(prepareStart)
@@ -4495,8 +4550,17 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 		if err := providerpkg.ValidateConfigForManifest(stagedInstall.manifestPath, stagedInstall.manifest, kind, configMap); err != nil {
 			return nil, fmt.Errorf("provider config validation for %s: %w", subject, err)
 		}
+		if cache.dir != "" && cacheEligible {
+			putResult, putErr := cache.Put(context.Background(), cacheReq, filepath.Dir(stagedInstall.manifestPath))
+			recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+				Subject: subject, SourceKind: cacheReq.SourceKind,
+				Key: putResult.Key.Display, SHA256: putResult.Key.ArchiveSHA256,
+				Platform: cacheReq.Platform, Result: syncCacheResultMiss,
+				Put: true, PutFailed: putErr != nil, Bytes: putResult.Bytes, Files: putResult.Files,
+			})
+		}
 		if err := writePreparedLockMetadata(paths, stagedInstall, kind, name, provider); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("write prepared lock metadata for %s: %w", subject, err)
 		}
 		activateStart := time.Now()
 		if err := commitStaged(); err != nil {
