@@ -1,25 +1,37 @@
-name: Build Gestaltd
+name: Validate Gestaltd
+
+# Reusable validation suite for gestaltd: resolves the build ref and runs the
+# Go + Helm checks. Called by ci.yml (pull requests) and cd.yml (main / dispatch
+# / schedule). The check selection is controlled by inputs so each caller can
+# run the appropriate subset; github context (event name, PR diff) is inherited
+# from the caller, so the ref-resolution logic is unchanged.
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.dockerignore'
-      - '.github/workflows/build-gestaltd.yml'
-      - 'gestaltd/**'
-      - '!gestaltd/rpc/protov1/**'
-  pull_request:
-
-  schedule:
-    - cron: '17 * * * *'
-
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      gestalt_ref:
-        description: Optional full commit SHA to validate, build, and publish as a CI image.
+      ref:
+        description: Optional full commit SHA to validate (defaults to the triggering ref).
         required: false
         type: string
+      run-race:
+        description: Whether to run the race-detector test matrix.
+        required: false
+        default: true
+        type: boolean
+      run-coverage:
+        description: Whether to run the coverage job (uploads to Codecov).
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      sha:
+        value: ${{ jobs.resolve-ref.outputs.sha }}
+      version:
+        value: ${{ jobs.resolve-ref.outputs.version }}
+      should-validate:
+        value: ${{ jobs.resolve-ref.outputs.should_validate }}
+      publish:
+        value: ${{ jobs.resolve-ref.outputs.publish }}
 
 permissions:
   contents: read
@@ -44,13 +56,13 @@ jobs:
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
-          REQUESTED_GESTALT_REF: ${{ github.event.inputs.gestalt_ref || '' }}
+          REQUESTED_GESTALT_REF: ${{ inputs.ref || '' }}
         run: |
           set -euo pipefail
 
           requested_ref="${REQUESTED_GESTALT_REF}"
           if [[ -n "${requested_ref}" && ! "${requested_ref}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "gestalt_ref must be a full lowercase 40-character commit SHA." >&2
+            echo "ref must be a full lowercase 40-character commit SHA." >&2
             exit 1
           fi
 
@@ -73,10 +85,13 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             validate_exact_paths=(
               ".dockerignore"
-              ".github/workflows/build-gestaltd.yml"
+              ".github/workflows/ci.yml"
+              ".github/workflows/cd.yml"
+              ".github/workflows/validate-gestaltd.yml"
             )
             validate_path_prefixes=(
               "gestaltd/"
+              ".github/actions/build-gestaltd-image/"
             )
             ignore_path_prefixes=(
               "gestaltd/rpc/protov1/"
@@ -296,7 +311,7 @@ jobs:
   coverage:
     name: Go Coverage
     needs: resolve-ref
-    if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+    if: ${{ inputs.run-coverage && needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -324,7 +339,7 @@ jobs:
   race:
     name: Go Race Tests (${{ matrix.name }})
     needs: resolve-ref
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ inputs.run-race && needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -466,218 +481,3 @@ jobs:
       - name: Validate Kubernetes schemas (preparation)
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered-preparation.yaml
-
-  docs-build:
-    name: Docs Build
-    needs: resolve-ref
-    if: ${{ needs.resolve-ref.outputs.publish == 'true' && vars.GESTALTD_CI_IMAGE_PUBLISH_ENABLED == 'true' }}
-    uses: ./.github/workflows/build-docs.yml
-    with:
-      gestalt_ref: ${{ needs.resolve-ref.outputs.sha }}
-    permissions:
-      contents: read
-
-  build-image:
-    name: Build CI Image
-    needs: [resolve-ref, lint, test, coverage, race, helm-validate, docs-build]
-    # Some needed jobs are conditionally skipped (race on pull requests;
-    # docs-build when not publishing). GitHub skips a job when any needed job is
-    # skipped unless the condition tolerates it, so gate explicitly on results
-    # with !cancelled(): require the always-run validations to succeed, and
-    # accept the conditionally-skipped jobs as long as they did not fail. This
-    # preserves publish-safety (race/docs-build must succeed when they do run on
-    # publishing runs) while still building on pull requests.
-    if: >-
-      ${{ !cancelled()
-        && needs.resolve-ref.outputs.should_validate == 'true'
-        && needs.resolve-ref.result == 'success'
-        && needs.lint.result == 'success'
-        && needs.test.result == 'success'
-        && needs.helm-validate.result == 'success'
-        && (needs.coverage.result == 'success' || needs.coverage.result == 'skipped')
-        && (needs.race.result == 'success' || needs.race.result == 'skipped')
-        && (needs.docs-build.result == 'success' || needs.docs-build.result == 'skipped') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ needs.resolve-ref.outputs.sha }}
-
-      # Build the image on every validating run (including pull requests) and
-      # push it only when this run is allowed to publish. This builds once: the
-      # static image is compiled a single time and pushed in place, and the
-      # alpine target reuses the compiled build-binary layer from the same
-      # builder. The previous separate "Docker Image Build" job rebuilt the
-      # same image and threw it away.
-      - name: Resolve publish mode
-        id: publish-mode
-        env:
-          PUBLISH: ${{ needs.resolve-ref.outputs.publish }}
-          PUBLISH_ENABLED: ${{ vars.GESTALTD_CI_IMAGE_PUBLISH_ENABLED }}
-        run: |
-          set -euo pipefail
-          if [[ "${PUBLISH}" == "true" && "${PUBLISH_ENABLED}" == "true" ]]; then
-            echo "push=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "push=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Compute image metadata
-        id: meta
-        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
-
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
-
-      - name: Validate image configuration
-        if: ${{ steps.publish-mode.outputs.push == 'true' }}
-        env:
-          GESTALTD_ARTIFACT_REGISTRY_HOST: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
-          GESTALTD_CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
-          GESTALTD_CI_GCP_SERVICE_ACCOUNT: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
-          GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
-        run: |
-          set -euo pipefail
-          : "${GESTALTD_ARTIFACT_REGISTRY_HOST:?GESTALTD_ARTIFACT_REGISTRY_HOST repository variable is required}"
-          : "${GESTALTD_CI_IMAGE_REPOSITORY:?GESTALTD_CI_IMAGE_REPOSITORY repository variable is required}"
-          : "${GESTALTD_CI_GCP_SERVICE_ACCOUNT:?GESTALTD_CI_GCP_SERVICE_ACCOUNT repository variable is required}"
-          : "${GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER:?GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER repository variable is required}"
-
-      - name: Authenticate to Google Cloud
-        id: gcp-auth
-        if: ${{ steps.publish-mode.outputs.push == 'true' }}
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
-        with:
-          workload_identity_provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
-          token_format: access_token
-
-      - name: Authenticate to Artifact Registry
-        if: ${{ steps.publish-mode.outputs.push == 'true' }}
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          registry: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
-          username: oauth2accesstoken
-          password: ${{ steps.gcp-auth.outputs.access_token }}
-
-      - name: Check for existing CI image
-        id: existing-image
-        if: ${{ steps.publish-mode.outputs.push == 'true' }}
-        env:
-          GESTALTD_CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
-          GESTALTD_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
-        run: |
-          set -euo pipefail
-          image="${GESTALTD_CI_IMAGE_REPOSITORY}:sha-${GESTALTD_COMMIT}"
-
-          if digest="$(docker buildx imagetools inspect "${image}" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
-            exists="true"
-          else
-            exists="false"
-            digest=""
-          fi
-
-          {
-            echo "image=${image}"
-            echo "exists=${exists}"
-            echo "digest=${digest}"
-          } >> "${GITHUB_OUTPUT}"
-
-      # Static image: built on every run; pushed only when publishing and not
-      # already present. On pull requests this validates the build without a
-      # push (and without attestations, which require an image/oci exporter).
-      - name: Build CI image (static)
-        id: ci-image
-        if: ${{ steps.publish-mode.outputs.push != 'true' || steps.existing-image.outputs.exists != 'true' }}
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
-        with:
-          context: .
-          file: gestaltd/Dockerfile
-          target: static
-          push: ${{ steps.publish-mode.outputs.push == 'true' }}
-          platforms: linux/amd64
-          tags: ${{ steps.publish-mode.outputs.push == 'true' && format('{0}:sha-{1}', vars.GESTALTD_CI_IMAGE_REPOSITORY, needs.resolve-ref.outputs.sha) || 'gestaltd:ci-static' }}
-          build-args: |
-            GESTALT_VERSION=${{ needs.resolve-ref.outputs.version }}
-            GESTALT_REVISION=${{ needs.resolve-ref.outputs.sha }}
-            GESTALT_CREATED=${{ steps.meta.outputs.created }}
-            GESTALT_SOURCE=https://github.com/${{ github.repository }}
-            GESTALT_DOCUMENTATION=https://gestaltd.ai
-            GESTALT_URL=${{ format('{0}:sha-{1}', vars.GESTALTD_CI_IMAGE_REPOSITORY, needs.resolve-ref.outputs.sha) }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          sbom: ${{ steps.publish-mode.outputs.push == 'true' }}
-          provenance: ${{ steps.publish-mode.outputs.push == 'true' && 'mode=max' || 'false' }}
-
-      # Alpine target: build-only validation on pull requests, never pushed.
-      # build-gestaltd.yml only publishes the static image; the shipped alpine
-      # image (alpine-prebuilt) is built and published by release-gestaltd.yml.
-      # This guards the shared alpine packaging early on PRs without adding work
-      # to publishing runs. Reuses the compiled build-binary layer from the
-      # static build above (a few seconds).
-      - name: Build CI image (alpine, validation only)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
-        with:
-          context: .
-          file: gestaltd/Dockerfile
-          target: alpine
-          push: false
-          platforms: linux/amd64
-          tags: gestaltd:ci-alpine
-          build-args: |
-            GESTALT_VERSION=${{ needs.resolve-ref.outputs.version }}
-          cache-from: type=gha
-
-      - name: Resolve published image
-        id: published-image
-        if: ${{ steps.publish-mode.outputs.push == 'true' }}
-        env:
-          EXISTING_DIGEST: ${{ steps.existing-image.outputs.digest }}
-          GESTALTD_CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
-          GESTALTD_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
-          PUSHED_DIGEST: ${{ steps.ci-image.outputs.digest }}
-        run: |
-          set -euo pipefail
-          digest="${PUSHED_DIGEST:-${EXISTING_DIGEST}}"
-          : "${digest:?Expected a pushed or existing image digest}"
-          image="${GESTALTD_CI_IMAGE_REPOSITORY}:sha-${GESTALTD_COMMIT}@${digest}"
-          {
-            echo "digest=${digest}"
-            echo "image=${image}"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Smoke test CI image
-        if: ${{ steps.publish-mode.outputs.push == 'true' }}
-        env:
-          GESTALTD_CI_IMAGE: ${{ steps.published-image.outputs.image }}
-          GESTALTD_VERSION: ${{ needs.resolve-ref.outputs.version }}
-        run: |
-          set -euo pipefail
-          actual_version="$(docker run --rm "${GESTALTD_CI_IMAGE}" version)"
-          if [[ "${actual_version}" != "${GESTALTD_VERSION}" ]]; then
-            echo "gestaltd version output '${actual_version}' did not match expected '${GESTALTD_VERSION}'." >&2
-            exit 1
-          fi
-
-      - name: Summarize CI image
-        if: ${{ steps.publish-mode.outputs.push == 'true' }}
-        env:
-          GESTALTD_CI_IMAGE: ${{ steps.published-image.outputs.image }}
-          GESTALTD_CI_IMAGE_EXISTS: ${{ steps.existing-image.outputs.exists }}
-        run: |
-          set -euo pipefail
-          {
-            echo "## gestaltd CI image"
-            echo
-            if [[ "${GESTALTD_CI_IMAGE_EXISTS}" == "true" ]]; then
-              echo "Existing immutable image reused."
-              echo
-            fi
-            echo '```text'
-            echo "${GESTALTD_CI_IMAGE}"
-            echo '```'
-          } >> "${GITHUB_STEP_SUMMARY}"

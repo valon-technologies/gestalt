@@ -1,0 +1,200 @@
+name: Build gestaltd CI image
+description: >-
+  Build the static gestaltd image and optionally push it to Artifact Registry.
+  When push is false the image is built (and discarded) to validate the
+  Dockerfile; when push is true it is built, pushed by immutable per-commit tag
+  with SBOM + provenance attestations, and smoke-tested. Registry variables and
+  GCP identity are passed in by the caller, which must grant id-token: write
+  when pushing.
+
+inputs:
+  push:
+    description: "'true' to push to Artifact Registry, 'false' to build only."
+    required: true
+  sha:
+    description: Full commit SHA being built.
+    required: true
+  version:
+    description: Version string stamped into the binary (e.g. 0.0.0-ci+g<sha12>).
+    required: true
+  build-alpine:
+    description: "'true' to also build the alpine target for validation (never pushed)."
+    required: false
+    default: 'false'
+  registry-host:
+    description: Artifact Registry host (required when push is true).
+    required: false
+    default: ''
+  image-repository:
+    description: CI image repository, e.g. <host>/<project>/gestaltd-ci/gestaltd (required when push is true).
+    required: false
+    default: ''
+  gcp-service-account:
+    description: GCP service account for Workload Identity Federation (required when push is true).
+    required: false
+    default: ''
+  gcp-workload-identity-provider:
+    description: GCP Workload Identity provider (required when push is true).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Compute image metadata
+      id: meta
+      shell: bash
+      run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
+
+    - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+    - name: Validate image configuration
+      if: ${{ inputs.push == 'true' }}
+      shell: bash
+      env:
+        GESTALTD_ARTIFACT_REGISTRY_HOST: ${{ inputs.registry-host }}
+        GESTALTD_CI_IMAGE_REPOSITORY: ${{ inputs.image-repository }}
+        GESTALTD_CI_GCP_SERVICE_ACCOUNT: ${{ inputs.gcp-service-account }}
+        GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ inputs.gcp-workload-identity-provider }}
+      run: |
+        set -euo pipefail
+        : "${GESTALTD_ARTIFACT_REGISTRY_HOST:?registry-host input is required when pushing}"
+        : "${GESTALTD_CI_IMAGE_REPOSITORY:?image-repository input is required when pushing}"
+        : "${GESTALTD_CI_GCP_SERVICE_ACCOUNT:?gcp-service-account input is required when pushing}"
+        : "${GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER:?gcp-workload-identity-provider input is required when pushing}"
+
+    - name: Authenticate to Google Cloud
+      id: gcp-auth
+      if: ${{ inputs.push == 'true' }}
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+      with:
+        workload_identity_provider: ${{ inputs.gcp-workload-identity-provider }}
+        service_account: ${{ inputs.gcp-service-account }}
+        token_format: access_token
+
+    - name: Authenticate to Artifact Registry
+      if: ${{ inputs.push == 'true' }}
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+      with:
+        registry: ${{ inputs.registry-host }}
+        username: oauth2accesstoken
+        password: ${{ steps.gcp-auth.outputs.access_token }}
+
+    - name: Check for existing CI image
+      id: existing-image
+      if: ${{ inputs.push == 'true' }}
+      shell: bash
+      env:
+        GESTALTD_CI_IMAGE_REPOSITORY: ${{ inputs.image-repository }}
+        GESTALTD_COMMIT: ${{ inputs.sha }}
+      run: |
+        set -euo pipefail
+        image="${GESTALTD_CI_IMAGE_REPOSITORY}:sha-${GESTALTD_COMMIT}"
+
+        if digest="$(docker buildx imagetools inspect "${image}" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+          exists="true"
+        else
+          exists="false"
+          digest=""
+        fi
+
+        {
+          echo "image=${image}"
+          echo "exists=${exists}"
+          echo "digest=${digest}"
+        } >> "${GITHUB_OUTPUT}"
+
+    # Static image: built on every run; pushed only when publishing and not
+    # already present. On build-only runs this validates the build without a
+    # push (and without attestations, which require an image/oci exporter).
+    - name: Build CI image (static)
+      id: ci-image
+      if: ${{ inputs.push != 'true' || steps.existing-image.outputs.exists != 'true' }}
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+      with:
+        context: .
+        file: gestaltd/Dockerfile
+        target: static
+        push: ${{ inputs.push == 'true' }}
+        platforms: linux/amd64
+        tags: ${{ inputs.push == 'true' && format('{0}:sha-{1}', inputs.image-repository, inputs.sha) || 'gestaltd:ci-static' }}
+        build-args: |
+          GESTALT_VERSION=${{ inputs.version }}
+          GESTALT_REVISION=${{ inputs.sha }}
+          GESTALT_CREATED=${{ steps.meta.outputs.created }}
+          GESTALT_SOURCE=https://github.com/${{ github.repository }}
+          GESTALT_DOCUMENTATION=https://gestaltd.ai
+          GESTALT_URL=${{ inputs.push == 'true' && format('{0}:sha-{1}', inputs.image-repository, inputs.sha) || 'gestaltd:ci-static' }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        sbom: ${{ inputs.push == 'true' }}
+        provenance: ${{ inputs.push == 'true' && 'mode=max' || 'false' }}
+
+    # Alpine target: build-only packaging validation, never pushed. Reuses the
+    # compiled build-binary layer from the static build above (a few seconds).
+    - name: Build CI image (alpine, validation only)
+      if: ${{ inputs.build-alpine == 'true' }}
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+      with:
+        context: .
+        file: gestaltd/Dockerfile
+        target: alpine
+        push: false
+        platforms: linux/amd64
+        tags: gestaltd:ci-alpine
+        build-args: |
+          GESTALT_VERSION=${{ inputs.version }}
+        cache-from: type=gha
+
+    - name: Resolve published image
+      id: published-image
+      if: ${{ inputs.push == 'true' }}
+      shell: bash
+      env:
+        EXISTING_DIGEST: ${{ steps.existing-image.outputs.digest }}
+        GESTALTD_CI_IMAGE_REPOSITORY: ${{ inputs.image-repository }}
+        GESTALTD_COMMIT: ${{ inputs.sha }}
+        PUSHED_DIGEST: ${{ steps.ci-image.outputs.digest }}
+      run: |
+        set -euo pipefail
+        digest="${PUSHED_DIGEST:-${EXISTING_DIGEST}}"
+        : "${digest:?Expected a pushed or existing image digest}"
+        image="${GESTALTD_CI_IMAGE_REPOSITORY}:sha-${GESTALTD_COMMIT}@${digest}"
+        {
+          echo "digest=${digest}"
+          echo "image=${image}"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Smoke test CI image
+      if: ${{ inputs.push == 'true' }}
+      shell: bash
+      env:
+        GESTALTD_CI_IMAGE: ${{ steps.published-image.outputs.image }}
+        GESTALTD_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        actual_version="$(docker run --rm "${GESTALTD_CI_IMAGE}" version)"
+        if [[ "${actual_version}" != "${GESTALTD_VERSION}" ]]; then
+          echo "gestaltd version output '${actual_version}' did not match expected '${GESTALTD_VERSION}'." >&2
+          exit 1
+        fi
+
+    - name: Summarize CI image
+      if: ${{ inputs.push == 'true' }}
+      shell: bash
+      env:
+        GESTALTD_CI_IMAGE: ${{ steps.published-image.outputs.image }}
+        GESTALTD_CI_IMAGE_EXISTS: ${{ steps.existing-image.outputs.exists }}
+      run: |
+        set -euo pipefail
+        {
+          echo "## gestaltd CI image"
+          echo
+          if [[ "${GESTALTD_CI_IMAGE_EXISTS}" == "true" ]]; then
+            echo "Existing immutable image reused."
+            echo
+          fi
+          echo '```text'
+          echo "${GESTALTD_CI_IMAGE}"
+          echo '```'
+        } >> "${GITHUB_STEP_SUMMARY}"
