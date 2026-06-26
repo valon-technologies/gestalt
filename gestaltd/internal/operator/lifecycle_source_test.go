@@ -1253,10 +1253,6 @@ func writeLocalSourceRunProviderTree(t *testing.T, dir, source, version, binaryC
 	t.Helper()
 	writeSourceProviderTree(t, dir, source, version, binaryContent)
 	manifestPath := filepath.Join(dir, "manifest.yaml")
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
@@ -1271,7 +1267,6 @@ func writeLocalSourceRunProviderTree(t *testing.T, dir, source, version, binaryC
 	if err := os.WriteFile(manifestPath, updated, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
-	_ = data
 }
 
 func writeOwnedUISourceAppTree(t *testing.T, appDir, uiDir, name, uiBuildScript string) string {

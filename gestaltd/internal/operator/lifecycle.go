@@ -644,7 +644,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 
 	lock := newLockfile()
 	for name, entry := range cfg.Apps {
-		if entry == nil || !sourceBacked(entry) || entry.DevActive || entry.HasLocalSource() {
+		if entry == nil || !sourceBacked(entry) || entry.HasLocalSource() {
 			continue
 		}
 		configMap, err := config.NodeToMap(entry.Config)
@@ -994,17 +994,11 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 		if err != nil {
 			return fmt.Errorf("app %q: read source manifest: %w", name, err)
 		}
-		if manifest.IsDeclarativeOnlyProvider() {
-			configMap, err := config.NodeToMap(entry.Config)
-			if err != nil {
-				return fmt.Errorf("app %q: decode config: %w", name, err)
-			}
-			if err := bindResolvedProviderManifest(name, entry, normalized.manifestPath, manifest, configMap); err != nil {
-				return fmt.Errorf("app %q: %w", name, err)
-			}
-			continue
-		}
-		if providerpkg.HasExplicitSourceRun(manifest) {
+		hasRun := providerpkg.HasExplicitSourceRun(manifest)
+		switch {
+		case hasRun && manifest.Spec != nil && manifest.Spec.IsManifestBacked():
+			return fmt.Errorf("app %q: local-source apps cannot combine run: with a declarative surface", name)
+		case hasRun:
 			configMap, err := config.NodeToMap(entry.Config)
 			if err != nil {
 				return fmt.Errorf("app %q: decode config: %w", name, err)
@@ -1020,9 +1014,15 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 			}
 			entry.DevActive = true
 			entry.ResolvedDevWorkdir = workdir
-			continue
-		}
-		if providerpkg.EffectiveSourceBuild(manifest) != nil || manifest.Entrypoint != nil {
+		case manifest.IsDeclarativeOnlyProvider():
+			configMap, err := config.NodeToMap(entry.Config)
+			if err != nil {
+				return fmt.Errorf("app %q: decode config: %w", name, err)
+			}
+			if err := bindResolvedProviderManifest(name, entry, normalized.manifestPath, manifest, configMap); err != nil {
+				return fmt.Errorf("app %q: %w", name, err)
+			}
+		case providerpkg.EffectiveSourceBuild(manifest) != nil || manifest.Entrypoint != nil:
 			return fmt.Errorf("app %q: local-source apps must declare run", name)
 		}
 	}
