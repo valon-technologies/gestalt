@@ -37,113 +37,14 @@ permissions:
   contents: read
 
 jobs:
+  # Ref resolution lives in its own reusable workflow so the callers (ci.yml /
+  # cd.yml) can resolve the build ref once and start the image build in parallel
+  # with this suite. Its outputs stay accessible here as
+  # needs.resolve-ref.outputs.*.
   resolve-ref:
-    name: Resolve Build Ref
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      publish: ${{ steps.resolve.outputs.publish }}
-      sha: ${{ steps.resolve.outputs.sha }}
-      should_validate: ${{ steps.resolve.outputs.should_validate }}
-      version: ${{ steps.resolve.outputs.version }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 0
-
-      - name: Resolve commit
-        id: resolve
-        env:
-          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
-          REQUESTED_GESTALT_REF: ${{ inputs.ref || '' }}
-        run: |
-          set -euo pipefail
-
-          requested_ref="${REQUESTED_GESTALT_REF}"
-          if [[ -n "${requested_ref}" && ! "${requested_ref}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ref must be a full lowercase 40-character commit SHA." >&2
-            exit 1
-          fi
-
-          ref="${requested_ref:-${GITHUB_SHA}}"
-          sha="$(git rev-parse "${ref}^{commit}")"
-          if [[ ! "${sha}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Resolved ref '${ref}' to invalid commit '${sha}'." >&2
-            exit 1
-          fi
-
-          publish="false"
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            publish="true"
-          fi
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${requested_ref}" ]]; then
-            publish="true"
-          fi
-
-          should_validate="true"
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            validate_exact_paths=(
-              ".dockerignore"
-              ".github/workflows/ci.yml"
-              ".github/workflows/cd.yml"
-              ".github/workflows/validate-gestaltd.yml"
-            )
-            validate_path_prefixes=(
-              "gestaltd/"
-              ".github/actions/build-gestaltd-image/"
-            )
-            ignore_path_prefixes=(
-              "gestaltd/rpc/protov1/"
-            )
-
-            should_validate="false"
-            base_sha="${PULL_REQUEST_BASE_SHA}"
-            head_sha="${PULL_REQUEST_HEAD_SHA:-${sha}}"
-
-            if [[ -z "${base_sha}" ]]; then
-              echo "Pull request base SHA is unavailable; running Gestaltd validation." >&2
-              should_validate="true"
-            elif changed_files="$(git diff --name-only "${base_sha}" "${head_sha}")"; then
-              while IFS= read -r changed_file; do
-                for ignored_prefix in "${ignore_path_prefixes[@]}"; do
-                  if [[ "${changed_file}" == "${ignored_prefix}"* ]]; then
-                    continue 2
-                  fi
-                done
-
-                for exact_path in "${validate_exact_paths[@]}"; do
-                  if [[ "${changed_file}" == "${exact_path}" ]]; then
-                    should_validate="true"
-                    break
-                  fi
-                done
-                if [[ "${should_validate}" == "true" ]]; then
-                  break
-                fi
-
-                for path_prefix in "${validate_path_prefixes[@]}"; do
-                  if [[ "${changed_file}" == "${path_prefix}"* ]]; then
-                    should_validate="true"
-                    break
-                  fi
-                done
-                if [[ "${should_validate}" == "true" ]]; then
-                  break
-                fi
-              done <<< "${changed_files}"
-            else
-              echo "Unable to diff pull request files; running Gestaltd validation." >&2
-              should_validate="true"
-            fi
-          fi
-
-          {
-            echo "sha=${sha}"
-            echo "publish=${publish}"
-            echo "should_validate=${should_validate}"
-            echo "version=0.0.0-ci+g${sha:0:12}"
-          } >> "${GITHUB_OUTPUT}"
+    uses: ./.github/workflows/resolve-gestaltd-ref.yml
+    with:
+      ref: ${{ inputs.ref }}
 
   lint:
     name: Go Lint & Vet
