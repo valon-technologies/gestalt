@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
   id-token: write
 
 jobs:
@@ -231,13 +230,11 @@ jobs:
           sed -i "s/^version:.*/version: ${VERSION}/" "$CHART"
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" "$CHART"
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
-      - name: Package and push Helm chart to GHCR
+      - name: Package Helm chart
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           helm package gestaltd/deploy/helm/gestaltd --destination /tmp/charts
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push "/tmp/charts/gestaltd-${VERSION}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
       - name: Authenticate to Google Cloud
         id: gcp-auth
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
