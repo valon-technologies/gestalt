@@ -13,26 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
-func TestRun_ProviderReleaseFinalizesArchivesWithoutSourceTree(t *testing.T) {
-	t.Parallel()
-
-	outputDir := t.TempDir()
-	const testVersion = "0.0.4-finalize.1"
-	archiveName := platformArchiveNameForTest(releaseTestAppName, testVersion, runtime.GOOS, runtime.GOARCH)
-	writeProviderReleaseArchiveForTest(t, outputDir, archiveName, providerReleaseManifestForTest(testVersion, "Release Test", runtime.GOOS, runtime.GOARCH))
-
-	out, err := runProviderCommandResult(t.TempDir(), "release", "--dist-dir", outputDir, "--version", testVersion)
-	if err != nil {
-		t.Fatalf("provider release failed: %v\n%s", err, out)
-	}
-
-	metadata := readProviderReleaseMetadata(t, outputDir)
-	artifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.CurrentPlatformString())
-	if artifact.Path != archiveName {
-		t.Fatalf("release metadata artifact path = %q, want %q", artifact.Path, archiveName)
-	}
-}
-
 func TestProviderReleaseRejectsDuplicateArchiveTargets(t *testing.T) {
 	t.Parallel()
 

@@ -20,10 +20,9 @@ jobs:
   validate:
     uses: ./.github/workflows/validate-gestaltd.yml
     with:
-      # Pull requests run the light check set (no race, no coverage). The hourly
-      # schedule runs the full suite as a default-branch health check.
+      # PRs run unit tests with coverage; race and e2e run on the hourly schedule.
       run-race: ${{ github.event_name == 'schedule' }}
-      run-coverage: ${{ github.event_name == 'schedule' }}
+      run-e2e: ${{ github.event_name == 'schedule' }}
 
   # Build-only Dockerfile/packaging validation. Depends on resolve-ref rather
   # than validate so it runs in parallel with the Go + Helm checks instead of
