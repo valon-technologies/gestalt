@@ -247,6 +247,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 			cmd.Env = append(safeBaseEnv(), envSlice(env)...)
 			cmd.Stdout = stdout
 			cmd.Stderr = stderr
+			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 			return cmd, nil, nil
 		})
 		if err != nil {
@@ -311,11 +312,7 @@ func (p *providerProcess) Close() error {
 			}
 		}
 		if p.cmd != nil && p.cmd.Process != nil {
-			if p.proxy != nil {
-				_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
-			} else {
-				_ = p.cmd.Process.Signal(syscall.SIGTERM)
-			}
+			_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
 			select {
 			case err := <-p.waitCh:
 				if err != nil && !errors.Is(err, context.Canceled) {
@@ -325,13 +322,7 @@ func (p *providerProcess) Close() error {
 					}
 				}
 			case <-time.After(processShutdownTimeout):
-				if p.proxy != nil {
-					_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
-				} else {
-					if err := p.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-						errs = append(errs, fmt.Errorf("kill app process: %w", err))
-					}
-				}
+				_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
 				if err := <-p.waitCh; err != nil && !errors.Is(err, context.Canceled) {
 					var exitErr *exec.ExitError
 					if !errors.As(err, &exitErr) || exitErr.ExitCode() != -1 {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"text/template"
 
 	"gopkg.in/yaml.v3"
@@ -121,12 +122,16 @@ func runCommand() error {
 	}
 	defer cleanup()
 
-	cmd := exec.Command("go", "run", goReadonlyFlag, wrapper)
-	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOWORK=off")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	binaryPath := filepath.Join(root, ".gestaltd", "run", "provider")
+	if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
+		return fmt.Errorf("create run output directory: %w", err)
+	}
+	goos := envOr("GESTALT_TARGET_OS", envOr("GOOS", runtime.GOOS))
+	goarch := envOr("GESTALT_TARGET_ARCH", envOr("GOARCH", runtime.GOARCH))
+	if err := buildGoWrapperBinary(root, binaryPath, wrapper, goos, goarch); err != nil {
+		return err
+	}
+	return syscall.Exec(binaryPath, []string{filepath.Base(binaryPath)}, os.Environ())
 }
 
 func readManifest(root string) (manifest, error) {
