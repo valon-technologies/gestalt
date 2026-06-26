@@ -55,7 +55,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve [PATH]", "--port PORT", "--no-sync", "--name", "run:"},
+			wantParts: []string{"gestaltd serve [PATH]", "--port PORT", "--no-sync", "run:"},
 		},
 		{
 			name:      "provider repo",

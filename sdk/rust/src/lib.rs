@@ -233,9 +233,6 @@ macro_rules! export_provider {
 macro_rules! __gestalt_kind_provider_main {
     ($serve:ident) => {
         pub fn main() {
-            if std::env::var("GESTALT_APP_WRITE_CATALOG").is_ok() {
-                return;
-            }
             let name = std::env::var("GESTALT_APP_NAME").unwrap_or_else(|_| "provider".to_string());
             if let Err(error) = $serve(&name) {
                 eprintln!("error: {error}");

@@ -8,139 +8,74 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestSourceRunJSONRoundTrip(t *testing.T) {
-	t.Parallel()
+type codec struct {
+	name      string
+	marshal   func(any) ([]byte, error)
+	unmarshal func([]byte, any) error
+}
 
-	raw := `{"command":["bun","run","dev"],"workdir":"ui","env":{"FOO":"bar"}}`
-	var run providermanifestv1.SourceRun
-	if err := json.Unmarshal([]byte(raw), &run); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if len(run.Command) != 3 || run.Command[0] != "bun" || run.Command[1] != "run" || run.Command[2] != "dev" {
-		t.Fatalf("command = %#v", run.Command)
-	}
-	encoded, err := json.Marshal(run)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	var roundTrip providermanifestv1.SourceRun
-	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
-		t.Fatalf("round-trip Unmarshal: %v", err)
-	}
-	if roundTrip.Workdir != "ui" || roundTrip.Env["FOO"] != "bar" {
-		t.Fatalf("roundTrip = %#v", roundTrip)
+func codecs() []codec {
+	return []codec{
+		{"json", json.Marshal, json.Unmarshal},
+		{"yaml", yaml.Marshal, yaml.Unmarshal},
 	}
 }
 
-func TestSourceRunJSONRejectsSequenceForm(t *testing.T) {
+func TestSourceRunRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	var run providermanifestv1.SourceRun
-	if err := json.Unmarshal([]byte(`["bun","run","dev"]`), &run); err == nil {
-		t.Fatal("want sequence-form rejection")
+	for _, c := range codecs() {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			want := providermanifestv1.SourceRun{
+				Command:      []string{"bun", "run", "dev"},
+				Workdir:      "ui",
+				Env:          map[string]string{"FOO": "bar"},
+				ReadyTimeout: "30s",
+			}
+			encoded, err := c.marshal(want)
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			var got providermanifestv1.SourceRun
+			if err := c.unmarshal(encoded, &got); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			if len(got.Command) != 3 || got.Command[0] != "bun" || got.Workdir != "ui" ||
+				got.Env["FOO"] != "bar" || got.ReadyTimeout != "30s" {
+				t.Fatalf("round trip = %#v", got)
+			}
+		})
 	}
 }
 
-func TestSourceRunJSONAcceptsReadyTimeout(t *testing.T) {
+func TestSourceRunRejectsInvalid(t *testing.T) {
 	t.Parallel()
 
-	var run providermanifestv1.SourceRun
-	if err := json.Unmarshal([]byte(`{"command":["bun","run","dev"],"readyTimeout":"30s"}`), &run); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
+	cases := []struct {
+		name string
+		json string
+		yaml string
+	}{
+		{"sequence form", `["bun","run","dev"]`, `[bun, run, dev]`},
+		{"missing command", `{"workdir":"ui"}`, `workdir: ui`},
+		{"unknown field", `{"command":["bun"],"unexpected":"value"}`, "command: [bun]\nunexpected: value"},
 	}
-	if run.ReadyTimeout != "30s" {
-		t.Fatalf("readyTimeout = %q, want 30s", run.ReadyTimeout)
-	}
-}
 
-func TestSourceRunJSONRequiresCommand(t *testing.T) {
-	t.Parallel()
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	var run providermanifestv1.SourceRun
-	if err := json.Unmarshal([]byte(`{"workdir":"ui"}`), &run); err == nil {
-		t.Fatal("want missing command rejection")
-	}
-}
-
-func TestSourceRunYAMLRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	raw := `
-command:
-  - bun
-  - run
-  - dev
-workdir: ui
-env:
-  FOO: bar
-`
-	var run providermanifestv1.SourceRun
-	if err := yaml.Unmarshal([]byte(raw), &run); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	encoded, err := yaml.Marshal(run)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	var roundTrip providermanifestv1.SourceRun
-	if err := yaml.Unmarshal(encoded, &roundTrip); err != nil {
-		t.Fatalf("round-trip Unmarshal: %v", err)
-	}
-	if roundTrip.Workdir != "ui" || roundTrip.Env["FOO"] != "bar" {
-		t.Fatalf("roundTrip = %#v", roundTrip)
-	}
-}
-
-func TestSourceRunYAMLRejectsSequenceForm(t *testing.T) {
-	t.Parallel()
-
-	var run providermanifestv1.SourceRun
-	if err := yaml.Unmarshal([]byte(`[bun, run, dev]`), &run); err == nil {
-		t.Fatal("want sequence-form rejection")
-	}
-}
-
-func TestSourceRunYAMLAcceptsReadyTimeout(t *testing.T) {
-	t.Parallel()
-
-	var run providermanifestv1.SourceRun
-	if err := yaml.Unmarshal([]byte(`
-command: [bun, run, dev]
-readyTimeout: 30s
-`), &run); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if run.ReadyTimeout != "30s" {
-		t.Fatalf("readyTimeout = %q, want 30s", run.ReadyTimeout)
-	}
-}
-
-func TestSourceRunJSONRejectsUnknownField(t *testing.T) {
-	t.Parallel()
-
-	var run providermanifestv1.SourceRun
-	if err := json.Unmarshal([]byte(`{"command":["bun","run","dev"],"unexpected":"value"}`), &run); err == nil {
-		t.Fatal("want unknown field rejection")
-	}
-}
-
-func TestSourceRunYAMLRejectsUnknownField(t *testing.T) {
-	t.Parallel()
-
-	var run providermanifestv1.SourceRun
-	if err := yaml.Unmarshal([]byte(`
-command: [bun, run, dev]
-unexpected: value
-`), &run); err == nil {
-		t.Fatal("want unknown field rejection")
-	}
-}
-
-func TestSourceRunYAMLRequiresCommand(t *testing.T) {
-	t.Parallel()
-
-	var run providermanifestv1.SourceRun
-	if err := yaml.Unmarshal([]byte(`workdir: ui`), &run); err == nil {
-		t.Fatal("want missing command rejection")
+			var run providermanifestv1.SourceRun
+			if err := json.Unmarshal([]byte(tc.json), &run); err == nil {
+				t.Errorf("json: want rejection")
+			}
+			if err := yaml.Unmarshal([]byte(tc.yaml), &run); err == nil {
+				t.Errorf("yaml: want rejection")
+			}
+		})
 	}
 }
