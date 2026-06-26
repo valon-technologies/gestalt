@@ -111,6 +111,9 @@ func walkDigestFiles(root string, skipper fingerprintSkipper, c *digestCollector
 		if d.IsDir() {
 			return nil
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
 		return c.addFile(path)
 	})
 }
