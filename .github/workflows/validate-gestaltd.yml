@@ -198,7 +198,12 @@ jobs:
 
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             packages=$("$GITHUB_WORKSPACE/.github/scripts/collect-go-test-packages.sh" "$GITHUB_WORKSPACE/gestaltd")
-            go test -run '^$' ./...
+            # Compile-check every package (including test files) without running
+            # any tests, so packages whose tests aren't in the affected set still
+            # fail the build if they stop compiling. `go vet ./...` type-checks
+            # and compiles all packages but, unlike `go test -run '^$' ./...`,
+            # never executes TestMain — avoiding its expensive fixture builds.
+            go vet ./...
             if [[ -z "$packages" ]]; then
               echo "No Go packages affected by this pull request."
               exit 0
