@@ -228,6 +228,7 @@ macro_rules! export_provider {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! __gestalt_kind_provider_main {
     ($serve:ident) => {
