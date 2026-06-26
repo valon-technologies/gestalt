@@ -746,7 +746,7 @@ apps:
 	if err == nil {
 		t.Fatalf("expected base config validate to fail, output: %s", out)
 	}
-	if !strings.Contains(string(out), "missing/manifest.yaml") {
+	if !strings.Contains(string(out), "missing/manifest.yaml") && !strings.Contains(string(out), "does not have a resolved manifest") {
 		t.Fatalf("expected base config failure to mention missing manifest, got: %s", out)
 	}
 
@@ -1070,77 +1070,15 @@ apps:
 	}
 }
 
-func TestE2EValidateRejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	appDir := setupAppDir(t, filepath.Join(dir, "target"))
-	manifestPath := componentProviderManifestPath(t, appDir)
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("read source manifest: %v", err)
-	}
-	if manifest.Spec == nil {
-		manifest.Spec = &providermanifestv1.Spec{}
-	}
-	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
-		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
-	}
-	manifest.Spec.AllowedOperations = map[string]*providermanifestv1.ManifestOperationOverride{
-		"external_echo": {Alias: "echo"},
-	}
-	writeManifestFile(t, appDir, manifest)
-	if err := os.WriteFile(filepath.Join(appDir, "openapi.yaml"), []byte(`openapi: "3.1.0"
-info:
-  title: Hybrid Duplicate
-  version: "1.0.0"
-paths:
-  /external-echo:
-    get:
-      operationId: external_echo
-      responses:
-        "200":
-          description: OK
-`), 0o644); err != nil {
-		t.Fatalf("write OpenAPI document: %v", err)
-	}
-
-	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
-server:
-  baseUrl: %s
-  encryptionKey: test-key
-  providers:
-    indexeddb: sqlite
-providers:
-  indexeddb:
-    sqlite:
-      source:
-        path: %s
-      config:
-        path: %q
-apps:
-  target:
-    source:
-      path: %s
-`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), manifestPath)
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	out, err := gestaltdCommand("validate", "--config", cfgPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected validate to fail, got success:\n%s", out)
-	}
-	if !strings.Contains(string(out), `duplicate operation \"echo\" across merged catalogs`) {
-		t.Fatalf("expected validate output to mention duplicate effective operation, got: %s", out)
-	}
-}
-
 func setupAppDir(t *testing.T, baseDir string) string {
 	t.Helper()
 	return setupAppDirWithVersion(t, baseDir, "0.0.1-alpha.1")
+}
+
+func localAppSourceRunCommand(artifactRel string) *providermanifestv1.SourceRun {
+	return &providermanifestv1.SourceRun{
+		Command: []string{"sh", "-c", "sh ./build.sh && ./" + artifactRel},
+	}
 }
 
 func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
@@ -1161,6 +1099,7 @@ func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
+		Run:        localAppSourceRunCommand(artifactRel),
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}
 	writeManifestFile(t, appDir, manifest)

@@ -528,6 +528,10 @@ type ProviderEntry struct {
 	ResolvedCatalogSessionOnly bool                                  `yaml:"-"`
 	StaticManifestUnavailable  bool                                  `yaml:"-"`
 	ResolvedIconFile           string                                `yaml:"-"`
+	// DevActive is set when the provider has a local source and its manifest
+	// declares run:. ResolvedDevWorkdir is the absolute cwd for the run command.
+	DevActive          bool   `yaml:"-"`
+	ResolvedDevWorkdir string   `yaml:"-"`
 	HostBinary                 string                                `yaml:"-"`
 	ConnectionMode             providermanifestv1.ConnectionMode     `yaml:"-"`
 	Auth                       *ConnectionAuthDef                    `yaml:"-"`
@@ -1188,11 +1192,6 @@ type UIEntry struct {
 	// config.theme block, not from YAML).
 	ResolvedThemeStylesheet string `yaml:"-"`
 	ResolvedThemeAssetsDir  string `yaml:"-"`
-
-	// DevActive is set when the provider has a local source and its manifest
-	// declares run:. ResolvedDevWorkdir is the absolute cwd for the run command.
-	DevActive          bool   `yaml:"-"`
-	ResolvedDevWorkdir string `yaml:"-"`
 }
 
 // UIThemeConfig is the typed `theme` block of a ui mount's provider config.

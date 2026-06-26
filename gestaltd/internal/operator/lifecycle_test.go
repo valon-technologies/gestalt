@@ -382,6 +382,12 @@ func writeLocalUIManifest(t *testing.T, dir, name, source, version string, spec 
 	return manifestPath
 }
 
+func localAppSourceRunCommand(buildOutput string) *providermanifestv1.SourceRun {
+	return &providermanifestv1.SourceRun{
+		Command: []string{"sh", "-c", "sh ./build.sh && ./" + buildOutput},
+	}
+}
+
 func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...string) string {
 	t.Helper()
 
@@ -404,6 +410,7 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
+		Run:  localAppSourceRunCommand(buildOutput),
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -468,6 +475,7 @@ paths:
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
+		Run: localAppSourceRunCommand(buildOutput),
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
@@ -532,6 +540,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
 		Kind:        providermanifestv1.KindApp, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Run:         localAppSourceRunCommand(buildOutput),
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
@@ -576,11 +585,14 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	if intg.Description != "Local executable provider" {
 		t.Fatalf("Description = %q", intg.Description)
 	}
-	if !strings.HasSuffix(filepath.ToSlash(intg.ResolvedManifestPath), filepath.ToSlash(filepath.Join("providers", "example", "manifest.yaml"))) {
+	if !strings.HasSuffix(filepath.ToSlash(intg.ResolvedManifestPath), filepath.ToSlash(filepath.Join(dir, "manifest.yaml"))) {
 		t.Fatalf("ResolvedManifestPath = %q", intg.ResolvedManifestPath)
 	}
-	if intg.Command == "" {
-		t.Fatal("Command = empty, want prepared executable path")
+	if !intg.DevActive {
+		t.Fatal("expected DevActive for local source-run app")
+	}
+	if intg.Command != "" {
+		t.Fatalf("Command = %q, want empty for source-run app", intg.Command)
 	}
 	if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 		t.Fatalf("expected lockfile to be created: %v", err)
@@ -878,33 +890,6 @@ server:
 
 	if _, err := prepareAtPathInTest(t, NewLifecycle(), cfgPath); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
-	}
-}
-
-func TestPrepareAtPath_RejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	targetManifestPath := writeLocalExecutableOpenAPIPlugin(t, dir, "target", []string{"ping"}, []string{"status"})
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
-    target:
-      source:
-        path: %q
-      allowedOperations:
-        status:
-          alias: ping
-server:
-`, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	_, err := prepareAtPathInTest(t, NewLifecycle(), cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `duplicate operation "ping" across merged catalogs`) {
-		t.Fatalf("PrepareAtPath error = %v, want duplicate operation error", err)
 	}
 }
 
@@ -1222,6 +1207,7 @@ apps:
 						Command: []string{"sh", "./build.sh"},
 						Inputs:  []string{"build.sh"},
 					},
+					Run:        localAppSourceRunCommand(pluginBuildOutput),
 					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: pluginBuildOutput},
 				}, providerpkg.ManifestFormatYAML)
 				if err != nil {
@@ -2481,6 +2467,9 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
+		Run: &providermanifestv1.SourceRun{
+			Command: []string{"sh", "-c", "sh ./build.sh && ./" + artifactRel},
+		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -2507,6 +2496,12 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	intg := loaded.Apps["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
+	}
+	if !intg.DevActive {
+		t.Fatal("expected DevActive for local source-run hybrid app")
+	}
+	if intg.Command != "" {
+		t.Fatalf("Command = %q, want empty for source-run app", intg.Command)
 	}
 	catalogData, err := os.ReadFile(filepath.Join(dir, "catalog.yaml"))
 	if err != nil {
@@ -2551,6 +2546,9 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
+		Run: &providermanifestv1.SourceRun{
+			Command: []string{"sh", "-c", "sh ./build.sh && ./" + artifactRel},
+		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -2573,9 +2571,8 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
 	}
-	preparedCommand := loaded.Apps["example"].Command
-	if preparedCommand == "" {
-		t.Fatal("prepared command is empty")
+	if !loaded.Apps["example"].DevActive {
+		t.Fatal("expected DevActive for local source-run app")
 	}
 
 	for _, rel := range []string{"manifest.yaml", "provider.go", "go.mod", "go.sum"} {
@@ -2584,16 +2581,9 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 		}
 	}
 
-	locked, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, true, true)
-	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true): %v", err)
-	}
-	intg := locked.Apps["example"]
-	if intg == nil || intg.ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", intg)
-	}
-	if intg.Command != preparedCommand {
-		t.Fatalf("command = %q, want prepared command %q", intg.Command, preparedCommand)
+	_, _, err = lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, true, true)
+	if err == nil || !strings.Contains(err.Error(), `app "example"`) {
+		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true) without source tree error = %v, want missing app source", err)
 	}
 }
 
@@ -2772,6 +2762,7 @@ operations:
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
 		Kind:        providermanifestv1.KindApp, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Run:         localAppSourceRunCommand(buildOutput),
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},

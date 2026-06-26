@@ -35,30 +35,6 @@ func (paths lifecyclePaths) prefetchMaterializedCache(ctx context.Context, reque
 	}
 }
 
-func (l *Lifecycle) prefetchAppMaterializedCache(paths lifecyclePaths, lock *Lockfile, work []*preparedAppWork, mode artifactMode, parallelism int) {
-	if mode != artifactModeMaterialize || paths.syncCache.remote == nil {
-		return
-	}
-	var requests []materializedCacheRequest
-	if lock != nil {
-		for _, work := range work {
-			if work == nil || !providerRequiresCommittedLock(work.entry) {
-				continue
-			}
-			entry, ok := lock.Providers.App[work.name]
-			if !ok || !needsLockedMaterializedCachePrefetch(paths, providermanifestv1.KindApp, work.name, work.name, work.entry, entry, providerDestDir(paths, work.name), mode) {
-				continue
-			}
-			req, ok := l.materializedCacheRequestForLockedEntry(paths, providermanifestv1.KindApp, work.name, "provider "+strconv.Quote(work.name), entry, providerDestDir(paths, work.name))
-			if ok {
-				requests = append(requests, req)
-			}
-		}
-	}
-	requests = append(requests, materializedCacheRequestsForLocalSourceApps(paths, work, mode)...)
-	paths.prefetchMaterializedCache(context.Background(), requests, parallelism)
-}
-
 func (l *Lifecycle) prefetchComponentMaterializedCache(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, parallelism int) {
 	if mode != artifactModeMaterialize || cfg == nil || paths.syncCache.remote == nil {
 		return
@@ -125,6 +101,18 @@ func (l *Lifecycle) prefetchComponentMaterializedCache(paths lifecyclePaths, loc
 	paths.prefetchMaterializedCache(context.Background(), requests, parallelism)
 }
 
+func (l *Lifecycle) prefetchLockedAppMaterializedCache(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, parallelism int) {
+	if mode != artifactModeMaterialize || cfg == nil || paths.syncCache.remote == nil || lock == nil {
+		return
+	}
+	requests := l.materializedCacheRequestsForProviders(paths, lockEntriesForProviderKind(lock, providermanifestv1.KindApp), providermanifestv1.KindApp, cfg.Apps, func(name string) string {
+		return providerDestDir(paths, name)
+	}, func(name string) string {
+		return name
+	})
+	paths.prefetchMaterializedCache(context.Background(), requests, parallelism)
+}
+
 func (l *Lifecycle) materializedCacheRequestsForProviders(paths lifecyclePaths, lockEntries map[string]LockEntry, kind string, entries map[string]*config.ProviderEntry, destDir func(string) string, fingerprintName func(string) string) []materializedCacheRequest {
 	var requests []materializedCacheRequest
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
@@ -144,26 +132,6 @@ func (l *Lifecycle) materializedCacheRequestsForProviders(paths lifecyclePaths, 
 		if ok {
 			requests = append(requests, req)
 		}
-	}
-	return requests
-}
-
-func materializedCacheRequestsForLocalSourceApps(paths lifecyclePaths, work []*preparedAppWork, mode artifactMode) []materializedCacheRequest {
-	var requests []materializedCacheRequest
-	for _, work := range work {
-		if work == nil || work.entry == nil || !work.entry.HasLocalSource() {
-			continue
-		}
-		dest := providerDestDir(paths, work.name)
-		if !needsLocalSourceMaterializedCachePrefetch(paths, providermanifestv1.KindApp, work.name, work.entry, dest, mode) {
-			continue
-		}
-		sourceDigest, err := fingerprintLocalSourceDigest(work.entry.SourcePath())
-		if err != nil {
-			continue
-		}
-		requests = append(requests, sourceManifestCacheRequest(
-			providermanifestv1.KindApp, work.name, "provider "+strconv.Quote(work.name), dest, sourceDigest))
 	}
 	return requests
 }

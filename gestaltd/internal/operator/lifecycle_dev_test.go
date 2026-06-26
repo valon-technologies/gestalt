@@ -155,15 +155,130 @@ func TestConfigHasLocalProviderSourcesIgnoresDevActiveUI(t *testing.T) {
 			UI: map[string]*config.UIEntry{
 				"demo": {
 					ProviderEntry: config.ProviderEntry{
-						Source: config.ProviderSource{Path: "/tmp/ui"},
+						Source:    config.ProviderSource{Path: "/tmp/ui"},
+						DevActive: true,
 					},
-					DevActive: true,
 				},
 			},
 		},
 	}
 	if configHasLocalProviderSources(cfg) {
 		t.Fatal("dev-active UI should not trigger local provider auto-prepare")
+	}
+}
+
+func TestLoadConfigForLifecycleMarksDevActiveLocalSourceApp(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := filepath.Join(dir, "app")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: app
+source: github.com/acme/apps/demo
+version: "1.0.0"
+run:
+  command: [sh, ./provider.sh]
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`
+	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "provider.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile provider.sh: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := `apiVersion: gestaltd.config/v8
+apps:
+  demo:
+    source:
+      path: ./app
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	cfg, err := NewLifecycle().loadConfigForLifecycle([]string{cfgPath}, false)
+	if err != nil {
+		t.Fatalf("loadConfigForLifecycle: %v", err)
+	}
+	entry := cfg.Apps["demo"]
+	if entry == nil {
+		t.Fatal("expected apps.demo entry")
+	}
+	if !entry.DevActive {
+		t.Fatal("expected DevActive")
+	}
+	if entry.ResolvedDevWorkdir != appDir {
+		t.Fatalf("ResolvedDevWorkdir = %q, want %q", entry.ResolvedDevWorkdir, appDir)
+	}
+	if entry.Command != "" {
+		t.Fatalf("Command = %q, want empty for source-run app", entry.Command)
+	}
+	if entry.ResolvedManifestPath == "" {
+		t.Fatal("expected ResolvedManifestPath")
+	}
+}
+
+func TestLoadConfigForLifecycleLocalSourceAppWithoutRunErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := filepath.Join(dir, "app")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: app
+source: github.com/acme/apps/demo
+version: "1.0.0"
+build:
+  command: [sh, -c, echo]
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`
+	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := `apiVersion: gestaltd.config/v8
+apps:
+  demo:
+    source:
+      path: ./app
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	_, err := NewLifecycle().loadConfigForLifecycle([]string{cfgPath}, false)
+	if err == nil || !strings.Contains(err.Error(), `local-source apps must declare run:`) {
+		t.Fatalf("loadConfigForLifecycle error = %v, want must declare run error", err)
+	}
+}
+
+func TestConfigHasLocalProviderSourcesIgnoresDevActiveApp(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"demo": {
+				Source:    config.ProviderSource{Path: "/tmp/app"},
+				DevActive: true,
+			},
+		},
+	}
+	if configHasLocalProviderSources(cfg) {
+		t.Fatal("dev-active app should not trigger local provider auto-prepare")
 	}
 }
 

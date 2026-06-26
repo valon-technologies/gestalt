@@ -424,6 +424,9 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, lockfilePath, artif
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
+	if err := appservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
 	if err := attachStaticValidationMetadata(lock, cfg, catalogs); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
@@ -641,7 +644,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 
 	lock := newLockfile()
 	for name, entry := range cfg.Apps {
-		if entry == nil || !sourceBacked(entry) {
+		if entry == nil || !sourceBacked(entry) || entry.DevActive || entry.HasLocalSource() {
 			continue
 		}
 		configMap, err := config.NodeToMap(entry.Config)
@@ -944,12 +947,86 @@ func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, allowMissingEnv
 	if err != nil {
 		return nil, err
 	}
+	if err := l.markSourceRunAppProviders(cfg); err != nil {
+		return nil, err
+	}
 	if l != nil && (l.devServeEligible || len(l.forcedDevUIKeys) > 0) {
 		if err := l.markDevActiveUIProviders(cfg); err != nil {
 			return nil, err
 		}
 	}
 	return cfg, nil
+}
+
+func (l *Lifecycle) validateLocalSourceAppsForExecution(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
+		entry := cfg.Apps[name]
+		if entry == nil || !entry.HasLocalSource() {
+			continue
+		}
+		if _, err := normalizeLocalSource(entry.SourcePath()); err != nil {
+			return fmt.Errorf("app %q: resolve local source: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
+		entry := cfg.Apps[name]
+		if entry == nil || !entry.HasLocalSource() {
+			continue
+		}
+		normalized, err := normalizeLocalSource(entry.SourcePath())
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("app %q: resolve local source: %w", name, err)
+		}
+		_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
+		if err != nil {
+			return fmt.Errorf("app %q: read source manifest: %w", name, err)
+		}
+		if manifest.IsDeclarativeOnlyProvider() {
+			configMap, err := config.NodeToMap(entry.Config)
+			if err != nil {
+				return fmt.Errorf("app %q: decode config: %w", name, err)
+			}
+			if err := bindResolvedProviderManifest(name, entry, normalized.manifestPath, manifest, configMap); err != nil {
+				return fmt.Errorf("app %q: %w", name, err)
+			}
+			continue
+		}
+		if providerpkg.HasExplicitSourceRun(manifest) {
+			configMap, err := config.NodeToMap(entry.Config)
+			if err != nil {
+				return fmt.Errorf("app %q: decode config: %w", name, err)
+			}
+			if err := bindResolvedProviderManifest(name, entry, normalized.manifestPath, manifest, configMap); err != nil {
+				return fmt.Errorf("app %q: %w", name, err)
+			}
+			workdir := normalized.sourceDir
+			if run := providerpkg.EffectiveSourceRun(manifest); run != nil {
+				if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
+					workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(w))
+				}
+			}
+			entry.DevActive = true
+			entry.ResolvedDevWorkdir = workdir
+			continue
+		}
+		if providerpkg.EffectiveSourceBuild(manifest) != nil || manifest.Entrypoint != nil {
+			return fmt.Errorf("app %q: local-source apps must declare run:", name)
+		}
+	}
+	return nil
 }
 
 func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
@@ -1011,6 +1088,9 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool) (*config.Config, map[string]string, error) {
 	cfg, err := l.loadConfigForLifecycle(configPaths, false)
 	if err != nil {
+		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := l.validateLocalSourceAppsForExecution(cfg); err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
@@ -1744,6 +1824,9 @@ func runtimeSourceBacked(entry *config.RuntimeProviderEntry) bool {
 }
 
 func providerRequiresCommittedLock(entry *config.ProviderEntry) bool {
+	if entry == nil || entry.DevActive {
+		return false
+	}
 	return sourceBacked(entry) && !entry.HasLocalSource()
 }
 
@@ -1813,7 +1896,7 @@ func configRequiresCommittedLock(cfg *config.Config) bool {
 
 func configHasLocalProviderSources(cfg *config.Config) bool {
 	for _, entry := range cfg.Apps {
-		if entry.HasLocalSource() || entry.HasLocalReleaseSource() {
+		if entry != nil && !entry.DevActive && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 			return true
 		}
 	}
@@ -4174,11 +4257,9 @@ func (e lockedArchiveDownloadError) Unwrap() error {
 }
 
 type preparedAppWork struct {
-	name          string
-	entry         *config.ProviderEntry
-	configMap     map[string]any
-	localParallel bool
-	install       *preparedInstall
+	name      string
+	entry     *config.ProviderEntry
+	configMap map[string]any
 }
 
 func (l *Lifecycle) resolveConfiguredPlugins(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode) error {
@@ -4186,7 +4267,6 @@ func (l *Lifecycle) resolveConfiguredPlugins(paths lifecyclePaths, lock *Lockfil
 }
 
 func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, opts SyncOptions) error {
-	var localWork []*preparedAppWork
 	var ordered []*preparedAppWork
 	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
@@ -4197,35 +4277,25 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 		if err != nil {
 			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
 		}
-		work := &preparedAppWork{
-			name:          name,
-			entry:         entry,
-			configMap:     configMap,
-			localParallel: localAppParallelPrepareCandidate(paths, entry, mode),
-		}
-		ordered = append(ordered, work)
-		if work.localParallel {
-			localWork = append(localWork, work)
-		}
+		ordered = append(ordered, &preparedAppWork{
+			name:      name,
+			entry:     entry,
+			configMap: configMap,
+		})
 	}
-	l.prefetchAppMaterializedCache(paths, lock, ordered, mode, opts.Parallelism)
+	l.prefetchLockedAppMaterializedCache(paths, lock, cfg, mode, opts.Parallelism)
 	for _, work := range ordered {
-		if work.localParallel || !sourceBacked(work.entry) {
+		if work.entry.HasLocalSource() || work.entry.DevActive || !sourceBacked(work.entry) {
 			continue
 		}
 		if err := l.applyLockedProviderEntry(paths, lock, work.name, work.entry, work.configMap, mode); err != nil {
 			return err
 		}
 	}
-	if err := l.prepareLocalAppProviders(paths, localWork, opts); err != nil {
+	if err := l.prepareSourceRunProviders(paths, cfg, mode); err != nil {
 		return err
 	}
 	for _, work := range ordered {
-		if work.install != nil {
-			if err := bindPreparedProviderInstall(paths, work.name, work.entry, work.configMap, work.install); err != nil {
-				return err
-			}
-		}
 		if manifest := work.entry.ResolvedManifest; manifest != nil {
 			work.entry.DisplayName = cmp.Or(work.entry.DisplayName, manifest.DisplayName)
 			work.entry.Description = cmp.Or(work.entry.Description, manifest.Description)
@@ -4235,87 +4305,33 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 	return nil
 }
 
-func localAppParallelPrepareCandidate(paths lifecyclePaths, entry *config.ProviderEntry, mode artifactMode) bool {
-	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
-		return false
-	}
-	if pathWithinRoot(paths.artifactsDir, entry.SourcePath()) {
-		return false
-	}
-	return true
-}
-
-func (l *Lifecycle) prepareLocalAppProviders(paths lifecyclePaths, work []*preparedAppWork, opts SyncOptions) error {
-	if len(work) == 0 {
+func (l *Lifecycle) prepareSourceRunProviders(paths lifecyclePaths, cfg *config.Config, mode artifactMode) error {
+	if !mode.canMaterialize() || cfg == nil {
 		return nil
 	}
-	opts = normalizeSyncOptions(opts)
-	tasks := make([]pathDomainTask, 0, len(work))
-	for _, work := range work {
-		work := work
-		domains, err := localAppSourcePathDomains(paths, work.name, work.entry)
-		if err != nil {
-			return err
+	opts := providerpkg.SourceBuildOptions{Output: paths.syncBuildOutput}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
+		entry := cfg.Apps[name]
+		if entry == nil || !entry.DevActive {
+			continue
 		}
-		tasks = append(tasks, pathDomainTask{
-			name:    work.name,
-			domains: domains,
-			run: func() error {
-				install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindApp, work.name, work.entry, work.configMap, providerDestDir(paths, work.name), "provider "+strconv.Quote(work.name), artifactModeMaterialize)
-				if err != nil {
-					return err
-				}
-				work.install = install
-				return nil
-			},
-		})
-	}
-	slices.SortFunc(tasks, func(a, b pathDomainTask) int {
-		return cmp.Compare(a.name, b.name)
-	})
-	return runPathDomainTasks(tasks, opts.Parallelism)
-}
-
-func localAppSourcePathDomains(paths lifecyclePaths, name string, entry *config.ProviderEntry) ([]string, error) {
-	if entry == nil {
-		return nil, nil
-	}
-	normalized, err := normalizeLocalSource(entry.SourcePath())
-	if err != nil {
-		return nil, fmt.Errorf("manifest for app %q not found at %s: %w", name, entry.SourcePath(), err)
-	}
-	domainPaths := []string{
-		normalized.sourceDir,
-		normalized.manifestPath,
-		providerDestDir(paths, name),
-	}
-	_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", normalized.manifestPath, err)
-	}
-	buildDomains, err := sourceBuildPathDomains(normalized.sourceDir, manifest)
-	if err != nil {
-		return nil, err
-	}
-	domainPaths = append(domainPaths, buildDomains...)
-	if manifest != nil && manifest.Kind == providermanifestv1.KindApp && manifest.Spec != nil && manifest.Spec.UI != nil && strings.TrimSpace(manifest.Spec.UI.Path) != "" {
-		uiManifestPath := filepath.Join(normalized.sourceDir, filepath.FromSlash(manifest.Spec.UI.Path))
-		uiNormalized, err := normalizeLocalSource(uiManifestPath)
-		if err != nil {
-			return nil, fmt.Errorf("manifest for provider %q owned ui not found at %s: %w", name, uiManifestPath, err)
+		if err := providerpkg.RunSourceInstall(entry.ResolvedManifestPath, entry.ResolvedManifest, opts); err != nil {
+			return fmt.Errorf("app %q: install: %w", name, err)
 		}
-		domainPaths = append(domainPaths, uiNormalized.sourceDir, uiNormalized.manifestPath)
-		_, uiManifest, err := providerpkg.ReadSourceManifestFile(uiNormalized.manifestPath)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", uiNormalized.manifestPath, err)
+		if err := providerpkg.EnsureSourceStaticCatalog(entry.ResolvedManifestPath, entry.ResolvedManifest); err != nil {
+			return fmt.Errorf("app %q: static catalog: %w", name, err)
 		}
-		uiBuildDomains, err := sourceBuildPathDomains(uiNormalized.sourceDir, uiManifest)
-		if err != nil {
-			return nil, err
-		}
-		domainPaths = append(domainPaths, uiBuildDomains...)
 	}
-	return normalizePathDomains(domainPaths...)
+	for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
+		entry := cfg.Providers.UI[name]
+		if entry == nil || !entry.DevActive {
+			continue
+		}
+		if err := providerpkg.RunSourceInstall(entry.ResolvedManifestPath, entry.ResolvedManifest, opts); err != nil {
+			return fmt.Errorf("ui %q: install: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
@@ -4586,15 +4602,6 @@ func bindPreparedProviderInstall(paths lifecyclePaths, name string, app *config.
 	return nil
 }
 
-func (l *Lifecycle) applyLocalProviderEntry(paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any, mode artifactMode) error {
-	subject := "provider " + strconv.Quote(name)
-	install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindApp, name, app, configMap, providerDestDir(paths, name), subject, mode)
-	if err != nil {
-		return err
-	}
-	return bindPreparedProviderInstall(paths, name, app, configMap, install)
-}
-
 func bindPreparedComponentInstall(paths lifecyclePaths, kind, name string, app *config.ProviderEntry, configMap map[string]any, destDir string, install *preparedInstall) error {
 	if install.executablePath == "" {
 		return preparedArtifactStaleError(paths, "prepared executable for %s %q not found in %s", kind, name, destDir)
@@ -4804,8 +4811,8 @@ func (l *Lifecycle) applyComponentProvider(paths lifecyclePaths, lockEntries map
 }
 
 func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfile, name string, app *config.ProviderEntry, configMap map[string]any, mode artifactMode) error {
-	if app != nil && app.HasLocalSource() {
-		return l.applyLocalProviderEntry(paths, name, app, configMap, mode)
+	if app != nil && app.DevActive {
+		return nil
 	}
 	if lock == nil {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is missing or stale", name)
@@ -4861,17 +4868,13 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			return artifactMaterializeDeniedError(paths, mode, "prepared artifact for provider %q is missing or stale", name)
 		}
 		if len(entry.Archives) == 0 {
-			if !app.HasLocalSource() && !app.HasGitSource() {
+			if !app.HasGitSource() {
 				return preparedArtifactStaleError(paths, "prepared artifact for provider %q is missing or stale", name)
 			}
 			var prepareDuration time.Duration
 			if stagedInstall == nil {
 				prepareStart := time.Now()
-				if app.HasGitSource() {
-					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app, paths.stageOptions())
-				} else {
-					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), destDir, paths.stageOptions())
-				}
+				stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app, paths.stageOptions())
 				prepareDuration = time.Since(prepareStart)
 				if err != nil {
 					return err
@@ -4891,10 +4894,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			if err := commitStaged(); err != nil {
 				return err
 			}
-			sourceKind := syncArtifactSourceLocalSource
-			if app.HasGitSource() {
-				sourceKind = syncArtifactSourceGitSource
-			}
+			sourceKind := syncArtifactSourceGitSource
 			recordSyncArtifact(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, sourceKind, syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 		} else {
 			if err := l.materializeLockedProvider(context.Background(), paths, name, app, entry, reason); err != nil {

@@ -389,6 +389,22 @@ func SourceInstallInputs(manifest *providermanifestv1.Manifest) []string {
 	return append([]string(nil), install.Inputs...)
 }
 
+func SourceRunCommand(manifestPath string) (SourceExecution, error) {
+	absoluteManifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return SourceExecution{}, fmt.Errorf("resolve manifest path: %w", err)
+	}
+	manifestPath = absoluteManifestPath
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return SourceExecution{}, err
+	}
+	if !HasExplicitSourceRun(manifest) {
+		return SourceExecution{}, fmt.Errorf("manifest %s: run command required", manifestPath)
+	}
+	return explicitRunExecution(filepath.Dir(manifestPath), manifest).SourceExecution, nil
+}
+
 func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions) (SourceExecution, error) {
 	absoluteManifestPath, err := filepath.Abs(manifestPath)
 	if err != nil {

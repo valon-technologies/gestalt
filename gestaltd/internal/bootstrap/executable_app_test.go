@@ -2139,6 +2139,8 @@ description: Python source provider fixture
 build:
   command: [/bin/sh, -c, "/bin/mkdir -p .gestaltd/bin && /bin/cp .venv/bin/python .gestaltd/bin/python-source && /bin/chmod +x .gestaltd/bin/python-source"]
   inputs: [.venv/bin/python]
+run:
+  command: [/bin/sh, -c, "/bin/mkdir -p .gestaltd/bin && /bin/cp .venv/bin/python .gestaltd/bin/python-source && /bin/chmod +x .gestaltd/bin/python-source && ./.gestaltd/bin/python-source"]
 spec:
   connections:
     default:
