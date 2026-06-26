@@ -1,11 +1,12 @@
 name: Build gestaltd CI image
 description: >-
-  Build the static gestaltd image and optionally push it to Artifact Registry.
-  When push is false the image is built (and discarded) to validate the
-  Dockerfile; when push is true it is built, pushed by immutable per-commit tag
-  with SBOM + provenance attestations, and smoke-tested. Registry variables and
-  GCP identity are passed in by the caller, which must grant id-token: write
-  when pushing.
+  Compile gestaltd natively (with actions/setup-go caching) and bake the binary
+  into the gestaltd image via the prebuilt Dockerfile targets, optionally pushing
+  it to Artifact Registry. When push is false the image is built (and discarded)
+  to validate the Dockerfile/packaging; when push is true it is built, pushed by
+  immutable per-commit tag with SBOM + provenance attestations, and smoke-tested.
+  Registry variables and GCP identity are passed in by the caller, which must
+  grant id-token: write when pushing.
 
 inputs:
   push:
@@ -104,9 +105,48 @@ runs:
           echo "digest=${digest}"
         } >> "${GITHUB_OUTPUT}"
 
-    # Static image: built on every run; pushed only when publishing and not
-    # already present. On build-only runs this validates the build without a
-    # push (and without attestations, which require an image/oci exporter).
+    # Compile gestaltd on the runner rather than inside the Docker build. The
+    # per-commit CI image changes its source every run, so the in-Docker
+    # `COPY . . && go build` layer cache-missed on essentially every push and
+    # recompiled from scratch. actions/setup-go instead persists the Go module
+    # and build caches across runs (keyed on go.sum), so only changed packages
+    # recompile. The image build below then just COPYs the resulting binary.
+    #
+    # Skipped, along with the image build, when a publish run finds the immutable
+    # sha-<commit> image already present (build-image pushed it earlier).
+    - name: Set up Go
+      if: ${{ inputs.push != 'true' || steps.existing-image.outputs.exists != 'true' }}
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      with:
+        go-version-file: gestaltd/go.mod
+        cache-dependency-path: gestaltd/go.sum
+
+    # Build the static linux/amd64 binary and package it as the dist tarball the
+    # Dockerfile's prebuilt-binary stage expects (gestaltd-linux-x86_64.tar.gz
+    # containing `gestaltd`), matching release-gestaltd.yml's packaging.
+    - name: Build gestaltd binary
+      if: ${{ inputs.push != 'true' || steps.existing-image.outputs.exists != 'true' }}
+      shell: bash
+      env:
+        GESTALT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        rm -rf dist build
+        mkdir -p dist build
+        (
+          cd gestaltd
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags "-X main.version=${GESTALT_VERSION}" \
+              -o ../build/gestaltd ./cmd/gestaltd
+        )
+        tar -czf dist/gestaltd-linux-x86_64.tar.gz -C build gestaltd
+
+    # Bake the prebuilt binary into the scratch image. This is now just a COPY
+    # (plus ca-certificates) since the compile happened above, so there is no
+    # expensive layer left to cache at the Docker level. Pushed only when
+    # publishing and not already present; on build-only runs this validates the
+    # Dockerfile/packaging without a push (and without attestations, which
+    # require an image/oci exporter).
     - name: Build CI image (static)
       id: ci-image
       if: ${{ inputs.push != 'true' || steps.existing-image.outputs.exists != 'true' }}
@@ -114,7 +154,7 @@ runs:
       with:
         context: .
         file: gestaltd/Dockerfile
-        target: static
+        target: static-prebuilt
         push: ${{ inputs.push == 'true' }}
         platforms: linux/amd64
         tags: ${{ inputs.push == 'true' && format('{0}:sha-{1}', inputs.image-repository, inputs.sha) || 'gestaltd:ci-static' }}
@@ -125,26 +165,25 @@ runs:
           GESTALT_SOURCE=https://github.com/${{ github.repository }}
           GESTALT_DOCUMENTATION=https://gestaltd.ai
           GESTALT_URL=${{ inputs.push == 'true' && format('{0}:sha-{1}', inputs.image-repository, inputs.sha) || 'gestaltd:ci-static' }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
         sbom: ${{ inputs.push == 'true' }}
         provenance: ${{ inputs.push == 'true' && 'mode=max' || 'false' }}
 
     # Alpine target: build-only packaging validation, never pushed. Reuses the
-    # compiled build-binary layer from the static build above (a few seconds).
+    # same prebuilt binary via the alpine-prebuilt target, so it must share the
+    # build gate above — when a publish run reuses an existing sha-<commit> image
+    # the compile is skipped and the dist tarball never exists, so this is too.
     - name: Build CI image (alpine, validation only)
-      if: ${{ inputs.build-alpine == 'true' }}
+      if: ${{ inputs.build-alpine == 'true' && (inputs.push != 'true' || steps.existing-image.outputs.exists != 'true') }}
       uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
       with:
         context: .
         file: gestaltd/Dockerfile
-        target: alpine
+        target: alpine-prebuilt
         push: false
         platforms: linux/amd64
         tags: gestaltd:ci-alpine
         build-args: |
           GESTALT_VERSION=${{ inputs.version }}
-        cache-from: type=gha
 
     - name: Resolve published image
       id: published-image
