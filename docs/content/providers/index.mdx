@@ -438,7 +438,7 @@ Source UI manifests must define top-level `build.command` and `spec.assetRoot`.
 Gestalt runs the command before source-manifest preparation, which lets UI
 packages generate static assets without checking built files into source
 control. The environment running
-`gestaltd lock`, `gestaltd sync --locked`, `gestaltd serve --path`, or
+`gestaltd lock`, `gestaltd sync --locked`, `gestaltd serve [PATH]...`, or
 `gestaltd provider package` must have the command's build tools available.
 `gestaltd serve --locked` only serves prepared static assets.
 
