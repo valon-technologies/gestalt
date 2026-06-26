@@ -1167,11 +1167,13 @@ type ProviderRESTSurfaceOverride struct {
 }
 
 type ProviderOpenAPISurfaceOverride struct {
-	BaseURL string `yaml:"baseUrl,omitempty"`
+	BaseURL    string `yaml:"baseUrl,omitempty"`
+	Connection string `yaml:"connection,omitempty"`
 }
 
 type ProviderGraphQLSurfaceOverride struct {
-	URL string `yaml:"url,omitempty"`
+	URL        string `yaml:"url,omitempty"`
+	Connection string `yaml:"connection,omitempty"`
 }
 
 type ProviderMCPSurfaceOverride struct {

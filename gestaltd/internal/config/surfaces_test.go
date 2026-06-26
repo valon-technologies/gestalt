@@ -111,6 +111,32 @@ func TestProviderSurfaceURLOverride(t *testing.T) {
 	}
 }
 
+func TestEffectiveProviderSurfaceConnectionName(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Spec{
+		Surfaces: &providermanifestv1.ProviderSurfaces{
+			OpenAPI: &providermanifestv1.OpenAPISurface{
+				Document:   "openapi.yaml",
+				Connection: "OAuth",
+			},
+		},
+	}
+
+	if got := EffectiveProviderSurfaceConnectionName(nil, manifest, SpecSurfaceOpenAPI); got != "OAuth" {
+		t.Fatalf("EffectiveProviderSurfaceConnectionName(nil) = %q, want OAuth", got)
+	}
+
+	entry := &ProviderEntry{
+		Surfaces: &ProviderSurfaceOverrides{
+			OpenAPI: &ProviderOpenAPISurfaceOverride{Connection: "PAT"},
+		},
+	}
+	if got := EffectiveProviderSurfaceConnectionName(entry, manifest, SpecSurfaceOpenAPI); got != "PAT" {
+		t.Fatalf("EffectiveProviderSurfaceConnectionName(override) = %q, want PAT", got)
+	}
+}
+
 func TestEffectiveProviderSpecBaseURL(t *testing.T) {
 	t.Parallel()
 

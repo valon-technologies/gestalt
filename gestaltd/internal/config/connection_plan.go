@@ -115,7 +115,7 @@ func BuildStaticConnectionPlan(app *ProviderEntry, manifestApp *providermanifest
 		resolved := ResolvedSpecSurface{
 			Surface:        surface,
 			URL:            url,
-			ConnectionName: plan.resolveSurfaceConnectionName(ManifestProviderSurfaceConnectionName(manifestApp, surface)),
+			ConnectionName: plan.resolveSurfaceConnectionName(EffectiveProviderSurfaceConnectionName(app, manifestApp, surface)),
 		}
 		conn, err := plan.connectionDef(resolved.ConnectionName)
 		if err != nil {

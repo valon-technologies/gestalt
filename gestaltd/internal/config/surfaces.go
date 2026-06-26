@@ -57,6 +57,30 @@ func ManifestProviderSurfaceConnectionName(provider *providermanifestv1.Spec, su
 	return provider.SurfaceConnectionName(string(surface))
 }
 
+func ProviderSurfaceConnectionOverride(entry *ProviderEntry, surface SpecSurface) string {
+	if entry == nil || entry.Surfaces == nil {
+		return ""
+	}
+	switch surface {
+	case SpecSurfaceOpenAPI:
+		if entry.Surfaces.OpenAPI != nil {
+			return strings.TrimSpace(entry.Surfaces.OpenAPI.Connection)
+		}
+	case SpecSurfaceGraphQL:
+		if entry.Surfaces.GraphQL != nil {
+			return strings.TrimSpace(entry.Surfaces.GraphQL.Connection)
+		}
+	}
+	return ""
+}
+
+func EffectiveProviderSurfaceConnectionName(entry *ProviderEntry, provider *providermanifestv1.Spec, surface SpecSurface) string {
+	if override := ProviderSurfaceConnectionOverride(entry, surface); override != "" {
+		return override
+	}
+	return ManifestProviderSurfaceConnectionName(provider, surface)
+}
+
 func ProviderSurfaceURLOverride(entry *ProviderEntry, surface SpecSurface) string {
 	if entry != nil && entry.Surfaces != nil {
 		switch surface {

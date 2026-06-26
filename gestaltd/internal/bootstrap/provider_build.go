@@ -746,8 +746,8 @@ func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.St
 	for i := range built {
 		specSurface := &built[i]
 		boundProviders = append(boundProviders, composite.BoundProvider{
-			Provider:   specSurface.provider,
-			Connection: specSurface.resolved.ConnectionName,
+			Provider:           specSurface.provider,
+			FallbackConnection: specSurface.resolved.ConnectionName,
 		})
 		providers = append(providers, specSurface.provider)
 	}
