@@ -82,9 +82,6 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 		if run == nil {
 			return nil, fmt.Errorf("ui %q: dev-active without run manifest", name)
 		}
-		if err := providerpkg.RunSourceInstall(entry.ResolvedManifestPath, entry.ResolvedManifest, providerpkg.SourceBuildOptions{}); err != nil {
-			return nil, fmt.Errorf("ui %q: install: %w", name, err)
-		}
 		workdir := entry.ResolvedDevWorkdir
 		if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
 			root := filepath.Dir(entry.ResolvedManifestPath)

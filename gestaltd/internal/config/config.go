@@ -519,23 +519,27 @@ type ProviderEntry struct {
 	MCP               bool                          `yaml:"mcp,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
-	Command                    string                                `yaml:"-"`
-	Args                       []string                              `yaml:"-"`
-	ResolvedManifestPath       string                                `yaml:"-"`
-	ResolvedManifest           *providermanifestv1.Manifest          `yaml:"-"`
-	ResolvedCatalog            *catalog.Catalog                      `yaml:"-"`
-	ResolvedCatalogAvailable   bool                                  `yaml:"-"`
-	ResolvedCatalogSessionOnly bool                                  `yaml:"-"`
-	StaticManifestUnavailable  bool                                  `yaml:"-"`
-	ResolvedIconFile           string                                `yaml:"-"`
-	HostBinary                 string                                `yaml:"-"`
-	ConnectionMode             providermanifestv1.ConnectionMode     `yaml:"-"`
-	Auth                       *ConnectionAuthDef                    `yaml:"-"`
-	DefaultConnection          string                                `yaml:"-"`
-	ConnectionParams           map[string]ConnectionParamDef         `yaml:"-"`
-	Discovery                  *providermanifestv1.ProviderDiscovery `yaml:"-"`
-	ResolvedAssetRoot          string                                `yaml:"-"`
-	MCPToolPrefix              string                                `yaml:"-"`
+	Command                    string                       `yaml:"-"`
+	Args                       []string                     `yaml:"-"`
+	ResolvedManifestPath       string                       `yaml:"-"`
+	ResolvedManifest           *providermanifestv1.Manifest `yaml:"-"`
+	ResolvedCatalog            *catalog.Catalog             `yaml:"-"`
+	ResolvedCatalogAvailable   bool                         `yaml:"-"`
+	ResolvedCatalogSessionOnly bool                         `yaml:"-"`
+	StaticManifestUnavailable  bool                         `yaml:"-"`
+	ResolvedIconFile           string                       `yaml:"-"`
+	// DevActive is set when the provider has a local source and its manifest
+	// declares run:. ResolvedDevWorkdir is the absolute cwd for the run command.
+	DevActive          bool                                  `yaml:"-"`
+	ResolvedDevWorkdir string                                `yaml:"-"`
+	HostBinary         string                                `yaml:"-"`
+	ConnectionMode     providermanifestv1.ConnectionMode     `yaml:"-"`
+	Auth               *ConnectionAuthDef                    `yaml:"-"`
+	DefaultConnection  string                                `yaml:"-"`
+	ConnectionParams   map[string]ConnectionParamDef         `yaml:"-"`
+	Discovery          *providermanifestv1.ProviderDiscovery `yaml:"-"`
+	ResolvedAssetRoot  string                                `yaml:"-"`
+	MCPToolPrefix      string                                `yaml:"-"`
 }
 
 type providerEntryFields ProviderEntry
@@ -1188,11 +1192,6 @@ type UIEntry struct {
 	// config.theme block, not from YAML).
 	ResolvedThemeStylesheet string `yaml:"-"`
 	ResolvedThemeAssetsDir  string `yaml:"-"`
-
-	// DevActive is set when the provider has a local source and its manifest
-	// declares run:. ResolvedDevWorkdir is the absolute cwd for the run command.
-	DevActive          bool   `yaml:"-"`
-	ResolvedDevWorkdir string `yaml:"-"`
 }
 
 // UIThemeConfig is the typed `theme` block of a ui mount's provider config.

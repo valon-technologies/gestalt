@@ -360,6 +360,7 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 		}
 		manifestCopy := *manifest
 		manifestCopy.Build = nil
+		manifestCopy.Run = nil
 		manifestCopy.Artifacts = nil
 		name, err := providerpkg.SourceNameFromManifest(&manifestCopy)
 		if err != nil {

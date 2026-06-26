@@ -162,13 +162,9 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 
 	hostBin := buildGestaltdBinary(t)
 	sourceRoot := t.TempDir()
-	stagingBinary := filepath.Join(sourceRoot, "provider-staging")
 	binData, err := os.ReadFile(buildExampleProviderBinary(t))
 	if err != nil {
 		t.Fatalf("ReadFile(example provider binary): %v", err)
-	}
-	if err := os.WriteFile(stagingBinary, binData, 0o755); err != nil {
-		t.Fatalf("WriteFile(staging binary): %v", err)
 	}
 	catalogData, err := os.ReadFile(filepath.Join(exampleProviderRoot(t), providerpkg.StaticCatalogFile))
 	if err != nil {
@@ -177,20 +173,21 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sourceRoot, providerpkg.StaticCatalogFile), catalogData, 0o644); err != nil {
 		t.Fatalf("WriteFile(catalog): %v", err)
 	}
-	manifestPath := filepath.Join(sourceRoot, "manifest.yaml")
-	buildScript := "#!/bin/sh\nset -eu\nmkdir -p .gestaltd/bin\ncp provider-staging .gestaltd/bin/provider\nchmod +x .gestaltd/bin/provider\n"
-	if err := os.WriteFile(filepath.Join(sourceRoot, "build.sh"), []byte(buildScript), 0o755); err != nil {
-		t.Fatalf("WriteFile(build.sh): %v", err)
+	if err := os.MkdirAll(filepath.Join(sourceRoot, ".gestaltd", "bin"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.gestaltd/bin): %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(sourceRoot, ".gestaltd", "bin", "provider"), binData, 0o755); err != nil {
+		t.Fatalf("WriteFile(.gestaltd/bin/provider): %v", err)
+	}
+	manifestPath := filepath.Join(sourceRoot, "manifest.yaml")
 	manifestData, err := encodeBootstrapSourceManifest(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
 		Source:      "github.com/test/apps/provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh", "provider-staging", providerpkg.StaticCatalogFile},
+		Run: &providermanifestv1.SourceRun{
+			Command: []string{"./.gestaltd/bin/provider"},
 		},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {

@@ -21,6 +21,10 @@ func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Man
 	return prepareSourceManifest(manifestPath, false, SourceBuildOptions{})
 }
 
+func PrepareSourceManifestForExecution(manifestPath string, opts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
+	return prepareSourceManifest(manifestPath, false, opts)
+}
+
 func prepareSourceManifestForPreparedInstallWithOptions(manifestPath string, opts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
 	return prepareSourceManifest(manifestPath, true, opts)
 }
@@ -81,10 +85,6 @@ func prepareSourceManifest(manifestPath string, packaging bool, buildOpts Source
 		data = updatedEncoded
 	}
 	return data, manifest, nil
-}
-
-func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest) error {
-	return ensureSourceStaticCatalog(manifestPath, manifest, sourceCatalogOptions{})
 }
 
 func ensureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest, opts sourceCatalogOptions) error {

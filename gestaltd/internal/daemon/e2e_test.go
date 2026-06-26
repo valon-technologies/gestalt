@@ -19,6 +19,12 @@ func setupAppDir(t *testing.T, baseDir string) string {
 	return setupAppDirWithVersion(t, baseDir, "0.0.1-alpha.1")
 }
 
+func localAppSourceRunCommand(artifactRel string) *providermanifestv1.SourceRun {
+	return &providermanifestv1.SourceRun{
+		Command: []string{"sh", "-c", "sh ./build.sh && ./" + artifactRel},
+	}
+}
+
 func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
 	t.Helper()
 
@@ -37,6 +43,7 @@ func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
+		Run:        localAppSourceRunCommand(artifactRel),
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}
 	writeManifestFile(t, appDir, manifest)
@@ -439,8 +446,8 @@ func TestRunLockSyncLocalProviders(t *testing.T) {
 	if err := runSync([]string{"--locked", "--config", cfgPath, "--lockfile", lockPath, "--artifacts-dir", artifactsDir}); err != nil {
 		t.Fatalf("runSync: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(artifactsDir, "providers", "example")); err != nil {
-		t.Fatalf("expected synced app artifact: %v", err)
+	if _, err := os.Stat(filepath.Join(artifactsDir, "providers", "example")); !os.IsNotExist(err) {
+		t.Fatalf("local source-run apps should not materialize provider artifacts, stat err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(artifactsDir, "indexeddb", "inmem")); err != nil {
 		t.Fatalf("expected synced indexeddb artifact: %v", err)
@@ -449,60 +456,6 @@ func TestRunLockSyncLocalProviders(t *testing.T) {
 	if err := runSync([]string{"--locked", "--check", "--config", cfgPath, "--lockfile", lockPath, "--artifacts-dir", artifactsDir}); err != nil {
 		t.Fatalf("runSync --check after sync: %v", err)
 	}
-}
-
-func TestRunSyncStaleLocalProviderRemediation(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := writeServeConfig(t, dir, 0, nil)
-	lockPath := filepath.Join(dir, "gestalt.lock.json")
-	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
-		t.Fatalf("runLock: %v", err)
-	}
-
-	staleCfgPath := writeRenamedProviderConfig(t, dir, cfgPath)
-	err := runSync([]string{"--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared")})
-	if err == nil {
-		t.Fatal("runSync --check with stale lock unexpectedly succeeded")
-	}
-	if !strings.Contains(err.Error(), "artifacts would be materialized") {
-		t.Fatalf("stale local source sync --check error = %v", err)
-	}
-
-	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
-	if err := runSync([]string{"--locked", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", staleArtifactsDir}); err != nil {
-		t.Fatalf("runSync with renamed local provider: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(staleArtifactsDir, "providers", "renamed")); err != nil {
-		t.Fatalf("renamed local provider should be prepared from source, stat err=%v", err)
-	}
-
-	err = runSync([]string{"--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared-explicit")})
-	if err == nil {
-		t.Fatal("runSync --check with stale explicit lock unexpectedly succeeded")
-	}
-	if !strings.Contains(err.Error(), "artifacts would be materialized") {
-		t.Fatalf("sync --check with stale explicit lock error = %v", err)
-	}
-}
-
-func writeRenamedProviderConfig(t *testing.T, dir, cfgPath string) string {
-	t.Helper()
-
-	staleCfgPath := filepath.Join(dir, "config-stale.yaml")
-	cfgBytes, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	staleCfg := strings.Replace(string(cfgBytes), "  example:\n    source:", "  renamed:\n    source:", 1)
-	if staleCfg == string(cfgBytes) {
-		t.Fatal("failed to create stale config")
-	}
-	if err := os.WriteFile(staleCfgPath, []byte(staleCfg), 0o644); err != nil {
-		t.Fatalf("write stale config: %v", err)
-	}
-	return staleCfgPath
 }
 
 func TestRunLockWritesOverrideLockfile(t *testing.T) {

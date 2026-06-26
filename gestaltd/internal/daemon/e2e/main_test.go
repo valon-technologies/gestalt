@@ -3,6 +3,7 @@ package e2e
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -10,8 +11,6 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 func TestE2ECLIHelp(t *testing.T) {
@@ -119,8 +118,8 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	appDir := setupAppDir(t, dir)
-	buildScriptPath := filepath.Join(appDir, "build.sh")
+	indexedDBDir := setupIndexedDBProviderDir(t, dir)
+	buildScriptPath := filepath.Join(indexedDBDir, "build.sh")
 	buildScript, err := os.ReadFile(buildScriptPath)
 	if err != nil {
 		t.Fatalf("read build script: %v", err)
@@ -128,7 +127,27 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 	if err := os.WriteFile(buildScriptPath, []byte("printf 'BUILD_STDOUT_SENTINEL\\n'\n"+string(buildScript)), 0o755); err != nil {
 		t.Fatalf("write build script: %v", err)
 	}
-	configPath := writeE2EConfig(t, dir, appDir, 18080)
+	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
+server:
+  baseUrl: %s
+  encryptionKey: test-e2e-key
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+`, e2eLoopbackBaseURL(18080), artifactsDir, indexedDBManifest, filepath.Join(dir, "gestalt.db"))
+	if err := os.WriteFile(configPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 	unrelated, err := os.Create(filepath.Join(dir, "unrelated-large.bin"))
 	if err != nil {
 		t.Fatalf("create unrelated sparse file: %v", err)
@@ -145,8 +164,8 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
 	}
-	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
-		t.Fatalf("remove prepared provider: %v", err)
+	if err := os.RemoveAll(filepath.Join(artifactsDir, "indexeddb", "sqlite")); err != nil {
+		t.Fatalf("remove prepared indexeddb provider: %v", err)
 	}
 
 	cmd := gestaltdCommand("sync", "--locked", "--verbose", "--output-format=json", "--config", configPath)
@@ -250,64 +269,6 @@ func TestE2ESyncJSONFailureLeavesStdoutEmpty(t *testing.T) {
 	}
 	if got := strings.TrimSpace(stdout.String()); got != "" {
 		t.Fatalf("failed JSON sync stdout = %q, want empty\nstderr:\n%s", got, stderr.String())
-	}
-}
-
-func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	appDir := setupAppDir(t, dir)
-	manifestPath := componentProviderManifestPath(t, appDir)
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("read source manifest: %v", err)
-	}
-	manifest.Build = &providermanifestv1.SourceBuild{
-		Command:     []string{"sh", "-c", "printf 'PREPARE_ONLY_STDOUT_SENTINEL\\n'"},
-		PrepareOnly: true,
-	}
-	manifest.Spec = &providermanifestv1.Spec{
-		Surfaces: &providermanifestv1.ProviderSurfaces{
-			REST: &providermanifestv1.RESTSurface{
-				BaseURL: "http://127.0.0.1",
-				Operations: []providermanifestv1.ProviderOperation{{
-					Name:   "ping",
-					Method: "GET",
-					Path:   "/ping",
-				}},
-			},
-		},
-	}
-	writeTestFile(t, appDir, "run.sh", []byte("#!/bin/sh\nexit 0\n"), 0o755)
-	manifest.Run = &providermanifestv1.SourceRun{Command: []string{"./run.sh"}}
-	writeManifestFile(t, appDir, manifest)
-	configPath := writeE2EConfig(t, dir, appDir, 18080)
-
-	out, err := gestaltdCommand("lock", "--config", configPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd lock: %v\n%s", err, out)
-	}
-	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
-		t.Fatalf("remove prepared provider: %v", err)
-	}
-
-	cmd := gestaltdCommand("sync", "--locked", "--output-format=json", "--config", configPath)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("gestaltd sync json: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
-	}
-	if strings.Contains(stdout.String(), "PREPARE_ONLY_STDOUT_SENTINEL") {
-		t.Fatalf("JSON stdout contained prepare-only build output:\n%s", stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "PREPARE_ONLY_STDOUT_SENTINEL") {
-		t.Fatalf("stderr missing prepare-only build output sentinel:\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
-	}
-	var doc syncOutputDocument
-	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
-		t.Fatalf("sync stdout is not JSON: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 }
 

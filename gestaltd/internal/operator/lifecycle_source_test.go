@@ -246,8 +246,8 @@ func TestLifecycleSyncLockedPreparesIndependentLocalUIsInParallel(t *testing.T) 
 			betaApp := filepath.Join(dir, "apps", "beta")
 			alphaDir := filepath.Join(dir, "ui", "alpha")
 			betaDir := filepath.Join(dir, "ui", "beta")
-			writeSourceProviderTree(t, alphaApp, "github.com/acme/apps/alpha", "1.2.3", "alpha-binary")
-			writeSourceProviderTree(t, betaApp, "github.com/acme/apps/beta", "1.2.3", "beta-binary")
+			writeLocalSourceRunProviderTree(t, alphaApp, "github.com/acme/apps/alpha", "1.2.3", "alpha-binary")
+			writeLocalSourceRunProviderTree(t, betaApp, "github.com/acme/apps/beta", "1.2.3", "beta-binary")
 			writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/alpha.started
@@ -348,8 +348,8 @@ func TestLifecycleSyncLockedParallelismOnePreparesLocalUIsSequentially(t *testin
 	betaApp := filepath.Join(dir, "apps", "beta")
 	alphaDir := filepath.Join(dir, "ui", "alpha")
 	betaDir := filepath.Join(dir, "ui", "beta")
-	writeSourceProviderTree(t, alphaApp, "github.com/acme/apps/alpha", "1.2.3", "alpha-binary")
-	writeSourceProviderTree(t, betaApp, "github.com/acme/apps/beta", "1.2.3", "beta-binary")
+	writeLocalSourceRunProviderTree(t, alphaApp, "github.com/acme/apps/alpha", "1.2.3", "alpha-binary")
+	writeLocalSourceRunProviderTree(t, betaApp, "github.com/acme/apps/beta", "1.2.3", "beta-binary")
 	writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
 set -eu
 printf 'alpha start\n' >> %s
@@ -442,7 +442,7 @@ printf '<html>beta</html>\n' > dist/index.html
 		t.Fatalf("SyncAtPathsOptions: %v", err)
 	}
 	for _, name := range []string{"alpha", "beta"} {
-		if _, err := os.Stat(filepath.Join(dir, "artifacts", "providers", name, "_owned_ui", name, "dist", "index.html")); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, "artifacts", "ui", name, "dist", "index.html")); err != nil {
 			t.Fatalf("prepared owned ui %s not found: %v", name, err)
 		}
 	}
@@ -628,7 +628,7 @@ func TestLifecycleLocalSourceLockedExecutionUsesPreparedArtifactsWithoutSourceTr
 	)
 	appDir := filepath.Join(dir, "apps", "alpha")
 	uiDir := filepath.Join(dir, "ui", "roadmap")
-	writeSourceProviderTree(t, appDir, appSource, version, "alpha-binary")
+	writeLocalSourceRunProviderTree(t, appDir, appSource, version, "alpha-binary")
 	writeSourceUITree(t, uiDir, uiSource, version)
 
 	artifactsDir := filepath.Join(dir, "artifacts")
@@ -685,16 +685,8 @@ apps:
 
 	preparedProviderDir := filepath.Join(artifactsDir, "providers", "alpha")
 	preparedProvider := filepath.Join(preparedProviderDir, "bin", "alpha")
-	if _, err := os.Stat(preparedProvider); err != nil {
-		t.Fatalf("prepared provider binary missing before source removal: %v", err)
-	}
-	preparedProviderMetadata := filepath.Join(preparedProviderDir, preparedLockMetadataFile)
-	if _, err := os.Stat(preparedProviderMetadata); err != nil {
-		t.Fatalf("prepared provider lock metadata missing before source removal: %v", err)
-	}
-	providerMetadata, err := os.ReadFile(preparedProviderMetadata)
-	if err != nil {
-		t.Fatalf("read prepared provider lock metadata before source removal: %v", err)
+	if _, err := os.Stat(preparedProvider); !os.IsNotExist(err) {
+		t.Fatalf("source-run app should not materialize prepared binary, stat err=%v", err)
 	}
 	preparedUI := filepath.Join(artifactsDir, "ui", "roadmap", "dist")
 	if _, err := os.Stat(filepath.Join(preparedUI, "index.html")); err != nil {
@@ -704,23 +696,20 @@ apps:
 	if _, err := os.Stat(preparedUIMetadata); err != nil {
 		t.Fatalf("prepared ui lock metadata missing before source removal: %v", err)
 	}
-	if err := os.RemoveAll(filepath.Join(dir, "apps")); err != nil {
-		t.Fatalf("remove app source tree: %v", err)
-	}
-	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
-		t.Fatalf("remove ui source tree: %v", err)
-	}
 
 	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, true)
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true) without local source tree: %v", err)
+		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true): %v", err)
 	}
 	app := cfg.Apps["alpha"]
 	if app == nil || app.ResolvedManifest == nil {
 		t.Fatalf("resolved app = %+v", app)
 	}
-	if got, want := filepath.ToSlash(app.Command), filepath.ToSlash(preparedProvider); got != want {
-		t.Fatalf("app command = %q, want %q", got, want)
+	if !app.DevActive {
+		t.Fatal("expected local source app to be DevActive")
+	}
+	if app.Command != "" {
+		t.Fatalf("app command = %q, want empty for source-run", app.Command)
 	}
 	ui := cfg.Providers.UI["roadmap"]
 	if ui == nil || ui.ResolvedManifest == nil {
@@ -729,41 +718,42 @@ apps:
 	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(preparedUI); got != want {
 		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
 	}
-	if err := lc.CheckSyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
-		t.Fatalf("CheckSyncAtPaths without local source tree error = %v, want stale provider artifact", err)
+
+	if err := os.RemoveAll(filepath.Join(dir, "apps")); err != nil {
+		t.Fatalf("remove app source tree: %v", err)
 	}
-	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err == nil || !strings.Contains(err.Error(), `manifest for app "alpha" not found`) {
-		t.Fatalf("SyncAtPaths without local source tree error = %v, want missing source manifest", err)
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, true); err == nil || !strings.Contains(err.Error(), `app "alpha"`) {
+		t.Fatalf("LoadForExecutionAtPath without app source tree error = %v, want missing app source", err)
+	}
+
+	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
+		t.Fatalf("remove ui source tree: %v", err)
+	}
+	writeLocalSourceRunProviderTree(t, appDir, appSource, version, "alpha-binary")
+	cfg, _, err = lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath with app source only: %v", err)
+	}
+	if ui := cfg.Providers.UI["roadmap"]; ui == nil || ui.ResolvedAssetRoot == "" {
+		t.Fatalf("ui should still resolve prepared assets without source tree: %+v", ui)
 	}
 
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("restore config after source tree removal: %v", err)
 	}
-	writeSourceProviderTree(t, appDir, appSource, version, "alpha-binary")
+	writeLocalSourceRunProviderTree(t, appDir, appSource, version, "alpha-binary")
 	writeSourceUITree(t, uiDir, uiSource, version)
-	if err := os.Remove(preparedProviderMetadata); err != nil {
-		t.Fatalf("remove prepared provider lock metadata: %v", err)
-	}
 	if err := os.Remove(preparedUIMetadata); err != nil {
 		t.Fatalf("remove prepared ui lock metadata: %v", err)
 	}
 	if err := lc.CheckSyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
-		t.Fatalf("CheckSyncAtPaths without prepared lock metadata error = %v, want stale provider artifact", err)
+		t.Fatalf("CheckSyncAtPaths without prepared ui lock metadata error = %v, want stale ui artifact", err)
 	}
 	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPaths backfilling prepared lock metadata: %v", err)
-	}
-	if _, err := os.Stat(preparedProviderMetadata); err != nil {
-		t.Fatalf("prepared provider lock metadata not backfilled: %v", err)
+		t.Fatalf("SyncAtPaths backfilling prepared ui lock metadata: %v", err)
 	}
 	if _, err := os.Stat(preparedUIMetadata); err != nil {
 		t.Fatalf("prepared ui lock metadata not backfilled: %v", err)
-	}
-	if err := os.WriteFile(preparedProvider, []byte("stale-binary"), 0o755); err != nil {
-		t.Fatalf("write stale prepared provider binary: %v", err)
-	}
-	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"app","name":"alpha"}`+"\n"), 0o644); err != nil {
-		t.Fatalf("write stale prepared provider lock metadata before sync: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(preparedUI, "index.html"), []byte("<html>stale</html>\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared ui asset: %v", err)
@@ -772,14 +762,7 @@ apps:
 		t.Fatalf("write stale prepared ui lock metadata before sync: %v", err)
 	}
 	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPaths re-materializing stale prepared lock metadata: %v", err)
-	}
-	providerData, err := os.ReadFile(preparedProvider)
-	if err != nil {
-		t.Fatalf("read re-materialized prepared provider binary: %v", err)
-	}
-	if string(providerData) != "alpha-binary" {
-		t.Fatalf("prepared provider binary after stale metadata sync = %q, want re-materialized source artifact", string(providerData))
+		t.Fatalf("SyncAtPaths re-materializing stale prepared ui lock metadata: %v", err)
 	}
 	uiData, err := os.ReadFile(filepath.Join(preparedUI, "index.html"))
 	if err != nil {
@@ -787,27 +770,6 @@ apps:
 	}
 	if string(uiData) != "<html>roadmap</html>\n" {
 		t.Fatalf("prepared ui asset after stale metadata sync = %q, want re-materialized source asset", string(uiData))
-	}
-	if err := os.RemoveAll(filepath.Join(dir, "apps")); err != nil {
-		t.Fatalf("remove app source tree after backfill: %v", err)
-	}
-	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
-		t.Fatalf("remove ui source tree after backfill: %v", err)
-	}
-	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, true); err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true) after metadata backfill: %v", err)
-	}
-
-	writeSourceProviderTree(t, appDir, appSource, version, "alpha-binary")
-	writeSourceUITree(t, uiDir, uiSource, version)
-	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"app","name":"alpha"}`+"\n"), 0o644); err != nil {
-		t.Fatalf("write stale prepared provider lock metadata: %v", err)
-	}
-	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false); err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true) with stale prepared provider metadata should re-materialize: %v", err)
-	}
-	if err := os.WriteFile(preparedProviderMetadata, providerMetadata, 0o644); err != nil {
-		t.Fatalf("restore prepared provider lock metadata: %v", err)
 	}
 	if err := os.WriteFile(preparedUIMetadata, []byte(`{"inputDigest":"stale","kind":"ui","name":"roadmap"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared ui lock metadata: %v", err)
@@ -1287,6 +1249,26 @@ func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent s
 	}
 }
 
+func writeLocalSourceRunProviderTree(t *testing.T, dir, source, version, binaryContent string) {
+	t.Helper()
+	writeSourceProviderTree(t, dir, source, version, binaryContent)
+	manifestPath := filepath.Join(dir, "manifest.yaml")
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	manifest.Run = &providermanifestv1.SourceRun{
+		Command: []string{"./provider"},
+	}
+	updated, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatFromPath(manifestPath))
+	if err != nil {
+		t.Fatalf("encode manifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, updated, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+}
+
 func writeOwnedUISourceAppTree(t *testing.T, appDir, uiDir, name, uiBuildScript string) string {
 	t.Helper()
 	writeBlockingSourceUITree(t, uiDir, "github.com/acme/ui/"+name, "1.2.3", uiBuildScript)
@@ -1321,6 +1303,9 @@ func writeOwnedUISourceAppForUI(t *testing.T, appDir, uiManifestPath, name strin
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			UI: &providermanifestv1.OwnedUI{Path: filepath.ToSlash(ownedUIPath)},
 		}),
+		Run: &providermanifestv1.SourceRun{
+			Command: []string{"./provider"},
+		},
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh", "provider"},
@@ -2065,6 +2050,11 @@ func writeExecutableSourceManifest(t *testing.T, dir, srcDirName, source, versio
 		Inputs:  []string{"build.sh", staging},
 	}
 	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: buildOutput}
+	if kind == providermanifestv1.KindApp {
+		manifest.Run = &providermanifestv1.SourceRun{
+			Command: []string{"sh", "-c", "sh ./build.sh && ./" + buildOutput},
+		}
+	}
 	manifestBytes, err := encodeSourceManifestForTest(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode source manifest: %v", err)

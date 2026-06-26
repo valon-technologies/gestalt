@@ -929,7 +929,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 			}
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
-		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindApp, providerpkg.SourceBuildOptions{})
+		execution, err := providerpkg.SourceRunCommand(entry.ResolvedManifestPath)
 		if err != nil {
 			if runtimeOwned {
 				_ = runtimeProvider.Close()
