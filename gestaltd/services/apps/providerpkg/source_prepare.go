@@ -26,9 +26,16 @@ func prepareSourceManifestForPreparedInstallWithOptions(manifestPath string, opt
 }
 
 // Local prepare may create catalog.yaml from run; packaging must regenerate it
-// from the packaged entrypoint instead.
+// from the packaged entrypoint instead. Manifest-backed apps keep checked-in
+// catalog.yaml because generateSourceStaticCatalog does not run for them.
 func explicitRunStaleCatalog(manifest *providermanifestv1.Manifest) bool {
-	return HasExplicitSourceRun(manifest)
+	if !HasExplicitSourceRun(manifest) {
+		return false
+	}
+	if manifest != nil && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
+		return false
+	}
+	return true
 }
 
 func prepareSourceManifest(manifestPath string, packaging bool, buildOpts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
