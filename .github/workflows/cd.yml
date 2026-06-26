@@ -39,7 +39,7 @@ jobs:
     with:
       ref: ${{ inputs.gestalt_ref }}
       run-race: true
-      run-coverage: true
+      run-e2e: true
 
   # Build AND publish the per-commit CI image in parallel with the validation
   # suite. This depends only on resolve-ref, so it runs alongside the Go + Helm

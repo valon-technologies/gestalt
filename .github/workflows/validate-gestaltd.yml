@@ -18,10 +18,10 @@ on:
         required: false
         default: true
         type: boolean
-      run-coverage:
-        description: Whether to run the coverage job (uploads to Codecov).
+      run-e2e:
+        description: Whether to run the daemon end-to-end suite (internal/daemon/e2e).
         required: false
-        default: true
+        default: false
         type: boolean
     outputs:
       sha:
@@ -160,7 +160,6 @@ jobs:
   test:
     name: Go Tests
     needs: resolve-ref
-    if: ${{ !inputs.run-coverage }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -187,7 +186,7 @@ jobs:
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
-      - name: Run tests
+      - name: Run tests with coverage
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         working-directory: gestaltd
         env:
@@ -197,30 +196,45 @@ jobs:
           set -euo pipefail
 
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            # PRs test only the affected packages, but compile-check everything so
+            # a package whose tests aren't in the affected set still fails the
+            # build if it stops compiling. Schedule/main runs test everything.
             packages=$("$GITHUB_WORKSPACE/.github/scripts/collect-go-test-packages.sh" "$GITHUB_WORKSPACE/gestaltd")
-            # Compile-check every package (including test files) without running
-            # any tests, so packages whose tests aren't in the affected set still
-            # fail the build if they stop compiling. `go vet ./...` type-checks
-            # and compiles all packages but, unlike `go test -run '^$' ./...`,
-            # never executes TestMain — avoiding its expensive fixture builds.
             go vet ./...
             if [[ -z "$packages" ]]; then
               echo "No Go packages affected by this pull request."
               exit 0
             fi
+            if [[ "$packages" == "./..." ]]; then
+              packages=$(go list ./...)
+            fi
           else
-            packages="./..."
+            packages=$(go list ./...)
+          fi
+
+          # The daemon e2e package runs in the dedicated e2e job, not here.
+          packages=$(echo "$packages" | grep -v '/internal/daemon/e2e$' || true)
+          if [[ -z "$packages" ]]; then
+            echo "No packages to test after excluding the e2e suite."
+            exit 0
           fi
 
           echo "$packages"
-          go test $packages
+          go test -coverprofile=coverage.out $packages
 
-  coverage:
-    name: Go Tests with Coverage
+      - name: Upload coverage
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' && hashFiles('gestaltd/coverage.out') != '' }}
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+        with:
+          files: gestaltd/coverage.out
+          fail_ci_if_error: false
+
+  e2e:
+    name: Go E2E Tests (daemon)
     needs: resolve-ref
-    if: ${{ inputs.run-coverage && needs.resolve-ref.outputs.should_validate == 'true' }}
+    if: ${{ inputs.run-e2e && needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -236,15 +250,9 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
-      - name: Run coverage
+      - name: Run e2e tests
         working-directory: gestaltd
-        run: go test -coverprofile=coverage.out ./...
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
-        with:
-          files: gestaltd/coverage.out
-          fail_ci_if_error: false
+        run: go test -timeout=15m ./internal/daemon/e2e/...
 
   race:
     name: Go Race Tests (${{ matrix.name }})
@@ -296,7 +304,7 @@ jobs:
           fi
 
           if [[ "${RACE_PACKAGES}" == "rest" ]]; then
-            packages="$(go list ./... | grep -Ev '/internal/(bootstrap|daemon|operator)$')"
+            packages="$(go list ./... | grep -Ev '/internal/(bootstrap|daemon|operator)$|/internal/daemon/e2e$')"
             go test -race "${parallel_flag[@]}" -timeout=15m ${packages}
           else
             go test -race "${parallel_flag[@]}" -timeout=15m "${RACE_PACKAGES}"
