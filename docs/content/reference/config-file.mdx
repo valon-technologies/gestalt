@@ -55,8 +55,8 @@ When multiple config files are loaded, Gestalt applies these merge rules:
 - `null` deletes an inherited key
 
 Relative file paths resolve relative to the config file that introduced them.
-That includes local `source` paths, `iconFile`, and `server.artifactsDir`. Lockfiles
-and, by default, artifact directories stay rooted at the leftmost config file.
+That includes local `source` paths, `iconFile`, and `server.artifactsDir`. The
+lockfile defaults to the current working directory (`./gestalt.lock.json`);
 `--lockfile` overrides only the lockfile path.
 
 Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; the runtime secrets manager defaults to built-in `env` when `providers.secrets` is omitted; `providers.telemetry.default` defaults to built-in `stdout`; and `providers.audit.default` defaults to built-in `inherit`. Structured secret refs are resolved during bootstrap, not during YAML parsing.
@@ -197,7 +197,7 @@ authorization:
 
 `encryptionKey` is the only required server field. It is the root deployment secret, used for encryption and derived session material.
 
-`artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/reference/configuration) for the full `lock`/`sync`/`serve` lifecycle.
+`artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; prepared artifact paths default to the current working directory unless `server.artifactsDir` is set. See [Configuration](/reference/configuration) for the full `lock`/`sync`/`serve` lifecycle.
 
 `runtime.defaultProvider` selects the runtime provider used when a app, agent provider, or workflow provider opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
 
