@@ -940,11 +940,9 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		args = execution.Args
 		workdir = execution.Workdir
 		if len(execution.Env) > 0 {
-			if env == nil {
-				env = maps.Clone(execution.Env)
-			} else {
-				maps.Copy(env, execution.Env)
-			}
+			merged := maps.Clone(execution.Env)
+			maps.Copy(merged, env)
+			env = merged
 		}
 		cleanup = execution.Cleanup
 	}

@@ -68,11 +68,9 @@ func PrepareExecution(params PrepareParams) (PreparedConfig, error) {
 		cfg.Args = execution.Args
 		cfg.Workdir = execution.Workdir
 		if len(execution.Env) > 0 {
-			if cfg.Env == nil {
-				cfg.Env = maps.Clone(execution.Env)
-			} else {
-				maps.Copy(cfg.Env, execution.Env)
-			}
+			merged := maps.Clone(execution.Env)
+			maps.Copy(merged, cfg.Env)
+			cfg.Env = merged
 		}
 		cleanup = execution.Cleanup
 	}
