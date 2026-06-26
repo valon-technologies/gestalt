@@ -86,9 +86,9 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 			return nil, fmt.Errorf("ui %q: install: %w", name, err)
 		}
 		workdir := entry.ResolvedDevWorkdir
-		if run.Workdir != "" && run.Workdir != "." {
+		if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
 			root := filepath.Dir(entry.ResolvedManifestPath)
-			workdir = filepath.Join(root, filepath.FromSlash(run.Workdir))
+			workdir = filepath.Join(root, filepath.FromSlash(w))
 		}
 		readyTimeout := defaultReadyTimeout
 		if run.ReadyTimeout > 0 {

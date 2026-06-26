@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"text/template"
 
 	"gopkg.in/yaml.v3"
@@ -133,7 +132,12 @@ func runCommand() error {
 	if err := buildGoWrapperBinary(root, binaryPath, wrapper, runtime.GOOS, runtime.GOARCH); err != nil {
 		return err
 	}
-	return syscall.Exec(binaryPath, []string{filepath.Base(binaryPath)}, os.Environ())
+	cmd := exec.Command(binaryPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Env = os.Environ()
+	return cmd.Run()
 }
 
 func readManifest(root string) (manifest, error) {
