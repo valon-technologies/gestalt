@@ -159,7 +159,7 @@ func TestValidateExplicitRunPackaging_AllowsManifestBackedRunOnlyPlugin(t *testi
 		Kind:    providermanifestv1.KindApp,
 		Source:  "github.com/test/apps/manifest-backed",
 		Version: "0.0.1-alpha.1",
-		Run: sourceRunCommand("npm", "run", "dev"),
+		Run:     sourceRunCommand("npm", "run", "dev"),
 		Spec: &providermanifestv1.Spec{
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				REST: &providermanifestv1.RESTSurface{
@@ -274,7 +274,7 @@ func TestSourceRunCommand(t *testing.T) {
 						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
 						PrepareOnly: true,
 					},
-					Run: sourceRunCommand(fakeUVPath, "run", "--frozen", "./provider.sh", "--dev"),
+					Run:  sourceRunCommand(fakeUVPath, "run", "--frozen", "./provider.sh", "--dev"),
 					Spec: &providermanifestv1.Spec{},
 				}))
 
@@ -312,7 +312,7 @@ fi
 						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
 						PrepareOnly: true,
 					},
-					Run: sourceRunCommand(fakeUVPath, "run", "--frozen", "./provider.sh"),
+					Run:  sourceRunCommand(fakeUVPath, "run", "--frozen", "./provider.sh"),
 					Spec: &providermanifestv1.Spec{},
 				}))
 
@@ -350,7 +350,7 @@ fi
 					Build: &providermanifestv1.SourceBuild{
 						Command: []string{"./fail-build.sh"},
 					},
-					Run: sourceRunCommand("./provider.sh"),
+					Run:  sourceRunCommand("./provider.sh"),
 					Spec: &providermanifestv1.Spec{},
 				}))
 
@@ -376,7 +376,7 @@ fi
 					Kind:    providermanifestv1.KindApp,
 					Source:  "github.com/test/apps/run-only",
 					Version: "0.0.1-alpha.1",
-					Run: sourceRunCommand("./provider.sh"),
+					Run:     sourceRunCommand("./provider.sh"),
 					Spec:    &providermanifestv1.Spec{},
 				}))
 
@@ -402,7 +402,7 @@ fi
 					Kind:    providermanifestv1.KindIdentity,
 					Source:  "github.com/test/providers/auth",
 					Version: "0.0.1-alpha.1",
-					Run: sourceRunCommand("./auth.sh", "--serve"),
+					Run:     sourceRunCommand("./auth.sh", "--serve"),
 					Spec:    &providermanifestv1.Spec{},
 				}))
 
@@ -525,7 +525,7 @@ fi
 		Kind:    providermanifestv1.KindApp,
 		Source:  "github.com/test/apps/run-only",
 		Version: "0.0.1-alpha.1",
-		Run: sourceRunCommand("./provider.sh"),
+		Run:     sourceRunCommand("./provider.sh"),
 		Spec:    &providermanifestv1.Spec{},
 	}))
 

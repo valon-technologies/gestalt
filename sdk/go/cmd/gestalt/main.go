@@ -1,3 +1,4 @@
+// Package main is the gestalt Go SDK command-line tool for provider build and run.
 package main
 
 import (

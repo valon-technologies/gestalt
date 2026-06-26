@@ -60,7 +60,7 @@ type staticValidationManifestYAML struct {
 	Description string                          `yaml:"description,omitempty"`
 	IconFile    string                          `yaml:"iconFile,omitempty"`
 	Build       *providermanifestv1.SourceBuild `yaml:"build,omitempty"`
-	Run         *providermanifestv1.SourceRun `yaml:"run,omitempty"`
+	Run         *providermanifestv1.SourceRun   `yaml:"run,omitempty"`
 	Artifacts   []providermanifestv1.Artifact   `yaml:"artifacts,omitempty"`
 	Entrypoint  *providermanifestv1.Entrypoint  `yaml:"entrypoint,omitempty"`
 	Spec        *providermanifestv1.Spec        `yaml:"spec,omitempty"`

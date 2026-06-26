@@ -164,7 +164,7 @@ func TestPrepareSourceManifest_RunsInstallBeforeRunCatalog(t *testing.T) {
 			Command: []string{"sh", "./install.sh"},
 			Inputs:  []string{"install.sh"},
 		},
-		Run: sourceRunCommand("sh", "./run.sh"),
+		Run:  sourceRunCommand("sh", "./run.sh"),
 		Spec: &providermanifestv1.Spec{},
 	}))
 

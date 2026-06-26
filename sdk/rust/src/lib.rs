@@ -215,8 +215,7 @@ macro_rules! export_provider {
         }
 
         pub fn main() {
-            let name = std::env::var("GESTALT_APP_NAME")
-                .unwrap_or_else(|_| "provider".to_string());
+            let name = std::env::var("GESTALT_APP_NAME").unwrap_or_else(|_| "provider".to_string());
             let result = match std::env::var("GESTALT_APP_WRITE_CATALOG") {
                 Ok(path) => __gestalt_write_catalog(&name, &path),
                 Err(_) => __gestalt_serve(&name),
@@ -236,8 +235,7 @@ macro_rules! __gestalt_kind_provider_main {
             if std::env::var("GESTALT_APP_WRITE_CATALOG").is_ok() {
                 return;
             }
-            let name = std::env::var("GESTALT_APP_NAME")
-                .unwrap_or_else(|_| "provider".to_string());
+            let name = std::env::var("GESTALT_APP_NAME").unwrap_or_else(|_| "provider".to_string());
             if let Err(error) = $serve(&name) {
                 eprintln!("error: {error}");
                 std::process::exit(1);
