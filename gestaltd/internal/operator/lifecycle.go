@@ -1022,7 +1022,7 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 			if err := bindResolvedProviderManifest(name, entry, normalized.manifestPath, manifest, configMap); err != nil {
 				return fmt.Errorf("app %q: %w", name, err)
 			}
-		case providerpkg.EffectiveSourceBuild(manifest) != nil || manifest.Entrypoint != nil:
+		default:
 			return fmt.Errorf("app %q: local-source apps must declare run", name)
 		}
 	}
@@ -4315,11 +4315,8 @@ func (l *Lifecycle) prepareSourceRunProviders(paths lifecyclePaths, cfg *config.
 		if entry == nil || !entry.DevActive {
 			continue
 		}
-		if err := providerpkg.RunSourceInstall(entry.ResolvedManifestPath, entry.ResolvedManifest, opts); err != nil {
-			return fmt.Errorf("app %q: install: %w", name, err)
-		}
-		if err := providerpkg.EnsureSourceStaticCatalog(entry.ResolvedManifestPath, entry.ResolvedManifest); err != nil {
-			return fmt.Errorf("app %q: static catalog: %w", name, err)
+		if _, _, err := providerpkg.PrepareSourceManifestForExecution(entry.ResolvedManifestPath, opts); err != nil {
+			return fmt.Errorf("app %q: prepare source: %w", name, err)
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {

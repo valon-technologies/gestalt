@@ -266,6 +266,44 @@ apps:
 	}
 }
 
+func TestLoadConfigForLifecycleLocalSourceAppWithoutPhasesErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := filepath.Join(dir, "app")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: app
+source: github.com/acme/apps/demo
+version: "1.0.0"
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`
+	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := `apiVersion: gestaltd.config/v8
+apps:
+  demo:
+    source:
+      path: ./app
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	_, err := NewLifecycle().loadConfigForLifecycle([]string{cfgPath}, false)
+	if err == nil || !strings.Contains(err.Error(), `local-source apps must declare run`) {
+		t.Fatalf("loadConfigForLifecycle error = %v, want must declare run error", err)
+	}
+}
+
 func TestConfigHasLocalProviderSourcesIgnoresDevActiveApp(t *testing.T) {
 	t.Parallel()
 
