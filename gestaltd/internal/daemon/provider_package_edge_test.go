@@ -110,12 +110,14 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 
 			configDir := t.TempDir()
 			configPath := writeManagedPluginConfigForTest(t, configDir, "roadmap", releaseServer.URL+"/provider-release.yaml", "/create-customer-roadmap-review")
+			lockfilePath := filepath.Join(configDir, operator.LockfileName)
+			artifactsDir := filepath.Join(configDir, "prepared-artifacts")
 			lc := operator.NewLifecycle().WithHTTPClient(releaseServer.Client())
-			if _, err := lc.PrepareAtPath(configPath); err != nil {
+			if _, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 				t.Fatalf("PrepareAtPath: %v", err)
 			}
 
-			loaded, _, err := lc.LoadForExecutionAtPath(configPath, true)
+			loaded, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 			if err != nil {
 				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 			}

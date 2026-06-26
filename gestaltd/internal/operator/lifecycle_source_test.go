@@ -58,6 +58,7 @@ func TestLifecycleGitSourceBuildLockSyncContract(t *testing.T) {
 	ref := strings.TrimSpace(runGitTestOutput(t, repoDir, "rev-parse", "HEAD"))
 
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
 apiVersion: gestaltd.config/v8
@@ -81,9 +82,9 @@ apps:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	entry := lock.Providers.App["alpha"]
 	if entry.SourceRef == nil {
@@ -108,8 +109,8 @@ apps:
 	if err := os.RemoveAll(filepath.Join(artifactsDir, "providers", "alpha")); err != nil {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths after removing prepared provider: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths after removing prepared provider: %v", err)
 	}
 	preparedManifest := filepath.Join(artifactsDir, "providers", "alpha", "manifest.yaml")
 	if _, err := os.Stat(preparedManifest); err != nil {
@@ -136,6 +137,7 @@ func TestLifecycleGitSourceUIBuildLockSyncContract(t *testing.T) {
 	ref := strings.TrimSpace(runGitTestOutput(t, repoDir, "rev-parse", "HEAD"))
 
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
 apiVersion: gestaltd.config/v8
@@ -160,9 +162,9 @@ server:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	entry := lock.Providers.UI["roadmap"]
 	if entry.SourceRef == nil {
@@ -175,13 +177,13 @@ server:
 	if err := os.RemoveAll(filepath.Join(artifactsDir, "ui", "roadmap")); err != nil {
 		t.Fatalf("remove prepared ui: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths after removing prepared ui: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths after removing prepared ui: %v", err)
 	}
 	if _, err := os.Stat(preparedIndex); err != nil {
 		t.Fatalf("prepared ui index not restored: %v", err)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -234,6 +236,8 @@ func TestLifecycleSyncLockedPreparesIndependentLocalUIsInParallel(t *testing.T) 
 			t.Parallel()
 
 			dir := t.TempDir()
+			lockfilePath := filepath.Join(dir, LockfileName)
+			artifactsDir := filepath.Join(dir, "artifacts")
 			syncDir := filepath.Join(dir, "sync")
 			if err := os.MkdirAll(syncDir, 0o755); err != nil {
 				t.Fatalf("mkdir sync dir: %v", err)
@@ -310,8 +314,8 @@ printf '<html>beta</html>\n' > dist/index.html
 			if err != nil {
 				t.Fatalf("read lockfile before sync: %v", err)
 			}
-			if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
-				t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+			if err := NewLifecycle().SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 2}); err != nil {
+				t.Fatalf("SyncAtPathsOptions: %v", err)
 			}
 			after, err := os.ReadFile(lockPath)
 			if err != nil {
@@ -337,6 +341,8 @@ func TestLifecycleSyncLockedParallelismOnePreparesLocalUIsSequentially(t *testin
 	}
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	logPath := filepath.Join(dir, "build.log")
 	alphaApp := filepath.Join(dir, "apps", "alpha")
 	betaApp := filepath.Join(dir, "apps", "beta")
@@ -366,8 +372,8 @@ printf 'beta end\n' >> %s
 		"alpha": filepath.Join(alphaDir, "manifest.yaml"),
 		"beta":  filepath.Join(betaDir, "manifest.yaml"),
 	})
-	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 1}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	if err := NewLifecycle().SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 1}); err != nil {
+		t.Fatalf("SyncAtPathsOptions: %v", err)
 	}
 	data, err := os.ReadFile(logPath)
 	if err != nil {
@@ -387,6 +393,8 @@ func TestLifecycleSyncLockedParallelizesAppOwnedUIs(t *testing.T) {
 	}
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	syncDir := filepath.Join(dir, "sync")
 	if err := os.MkdirAll(syncDir, 0o755); err != nil {
 		t.Fatalf("mkdir sync dir: %v", err)
@@ -430,8 +438,8 @@ printf '<html>beta</html>\n' > dist/index.html
 		"alpha": alphaManifest,
 		"beta":  betaManifest,
 	})
-	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	if err := NewLifecycle().SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 2}); err != nil {
+		t.Fatalf("SyncAtPathsOptions: %v", err)
 	}
 	for _, name := range []string{"alpha", "beta"} {
 		if _, err := os.Stat(filepath.Join(dir, "artifacts", "providers", name, "_owned_ui", name, "dist", "index.html")); err != nil {
@@ -448,6 +456,8 @@ func TestLifecycleSyncLockedParallelismOnePreparesAppOwnedUIsSequentially(t *tes
 	}
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	logPath := filepath.Join(dir, "build.log")
 	alphaManifest := writeOwnedUISourceAppTree(t, filepath.Join(dir, "apps", "alpha"), filepath.Join(dir, "ui", "alpha"), "alpha", fmt.Sprintf(`#!/bin/sh
 set -eu
@@ -468,8 +478,8 @@ printf 'beta end\n' >> %s
 		"alpha": alphaManifest,
 		"beta":  betaManifest,
 	})
-	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 1}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	if err := NewLifecycle().SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 1}); err != nil {
+		t.Fatalf("SyncAtPathsOptions: %v", err)
 	}
 	data, err := os.ReadFile(logPath)
 	if err != nil {
@@ -489,6 +499,8 @@ func TestLifecycleSyncLockedSerializesAppOwnedUIsWithSharedSource(t *testing.T) 
 	}
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	logPath := filepath.Join(dir, "build.log")
 	lockDir := filepath.Join(dir, "owned-ui.lock")
 	sharedUI := filepath.Join(dir, "ui", "shared")
@@ -512,8 +524,8 @@ printf 'end\n' >> %s
 		"alpha": alphaManifest,
 		"beta":  betaManifest,
 	})
-	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	if err := NewLifecycle().SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 2}); err != nil {
+		t.Fatalf("SyncAtPathsOptions: %v", err)
 	}
 	data, err := os.ReadFile(logPath)
 	if err != nil {
@@ -533,6 +545,8 @@ func TestLifecycleSyncLockedSerializesLocalUIsWithSharedOutput(t *testing.T) {
 	}
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	uiDir := filepath.Join(dir, "ui", "shared")
 	if err := os.MkdirAll(uiDir, 0o755); err != nil {
 		t.Fatalf("mkdir ui dir: %v", err)
@@ -562,8 +576,8 @@ printf '<html>ok</html>\n' > dist/index.html
 		"alpha": filepath.Join(uiDir, "manifest-alpha.yaml"),
 		"beta":  filepath.Join(uiDir, "manifest-beta.yaml"),
 	})
-	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	if err := NewLifecycle().SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 2}); err != nil {
+		t.Fatalf("SyncAtPathsOptions: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(uiDir, "overlap")); !os.IsNotExist(err) {
 		t.Fatalf("shared-output builds overlapped, stat overlap err=%v", err)
@@ -589,9 +603,10 @@ printf '<html>alpha</html>\n' > dist/index.html
 	configPath := writeLocalUITestConfig(t, dir, map[string]string{
 		"alpha": filepath.Join(uiDir, "manifest.yaml"),
 	})
-	err := NewLifecycle().CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2})
+	lockfilePath, artifactsDir := lockAndArtifactsForConfig(configPath)
+	err := NewLifecycle().CheckSyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 2})
 	if err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
-		t.Fatalf("CheckSyncAtPathsWithStatePathsOptions error = %v, want stale prepared artifact", err)
+		t.Fatalf("CheckSyncAtPathsOptions error = %v, want stale prepared artifact", err)
 	}
 	if _, err := os.Stat(startedPath); !os.IsNotExist(err) {
 		t.Fatalf("sync --check materialized local ui, stat started err=%v", err)
@@ -617,6 +632,7 @@ func TestLifecycleLocalSourceLockedExecutionUsesPreparedArtifactsWithoutSourceTr
 	writeSourceUITree(t, uiDir, uiSource, version)
 
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
 apiVersion: gestaltd.config/v8
@@ -640,9 +656,9 @@ apps:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	if _, ok := lock.Providers.App["alpha"]; ok {
 		t.Fatalf("local source provider lock entry should be omitted: %#v", lock.Providers)
@@ -653,9 +669,9 @@ apps:
 	if _, err := os.Stat(filepath.Join(artifactsDir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("lock should not create prepared artifact dirs for local source entries, stat err=%v", err)
 	}
-	lock, err = lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err = lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("restore canonical LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("restore canonical LockAtPaths: %v", err)
 	}
 	if _, ok := lock.Providers.App["alpha"]; ok {
 		t.Fatalf("restored local source provider lock entry should be omitted: %#v", lock.Providers)
@@ -663,8 +679,8 @@ apps:
 	if _, ok := lock.Providers.UI["roadmap"]; ok {
 		t.Fatalf("restored local source ui lock entry should be omitted: %#v", lock.Providers.UI)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 
 	preparedProviderDir := filepath.Join(artifactsDir, "providers", "alpha")
@@ -695,7 +711,7 @@ apps:
 		t.Fatalf("remove ui source tree: %v", err)
 	}
 
-	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, true, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, true)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true) without local source tree: %v", err)
 	}
@@ -713,11 +729,11 @@ apps:
 	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(preparedUI); got != want {
 		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
-		t.Fatalf("CheckSyncAtPathsWithStatePaths without local source tree error = %v, want stale provider artifact", err)
+	if err := lc.CheckSyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
+		t.Fatalf("CheckSyncAtPaths without local source tree error = %v, want stale provider artifact", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err == nil || !strings.Contains(err.Error(), `manifest for app "alpha" not found`) {
-		t.Fatalf("SyncAtPathsWithStatePaths without local source tree error = %v, want missing source manifest", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err == nil || !strings.Contains(err.Error(), `manifest for app "alpha" not found`) {
+		t.Fatalf("SyncAtPaths without local source tree error = %v, want missing source manifest", err)
 	}
 
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
@@ -731,11 +747,11 @@ apps:
 	if err := os.Remove(preparedUIMetadata); err != nil {
 		t.Fatalf("remove prepared ui lock metadata: %v", err)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
-		t.Fatalf("CheckSyncAtPathsWithStatePaths without prepared lock metadata error = %v, want stale provider artifact", err)
+	if err := lc.CheckSyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err == nil || !strings.Contains(err.Error(), "artifacts would be materialized") {
+		t.Fatalf("CheckSyncAtPaths without prepared lock metadata error = %v, want stale provider artifact", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths backfilling prepared lock metadata: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths backfilling prepared lock metadata: %v", err)
 	}
 	if _, err := os.Stat(preparedProviderMetadata); err != nil {
 		t.Fatalf("prepared provider lock metadata not backfilled: %v", err)
@@ -755,8 +771,8 @@ apps:
 	if err := os.WriteFile(preparedUIMetadata, []byte(`{"inputDigest":"stale","kind":"ui","name":"roadmap"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared ui lock metadata before sync: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths re-materializing stale prepared lock metadata: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths re-materializing stale prepared lock metadata: %v", err)
 	}
 	providerData, err := os.ReadFile(preparedProvider)
 	if err != nil {
@@ -778,7 +794,7 @@ apps:
 	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
 		t.Fatalf("remove ui source tree after backfill: %v", err)
 	}
-	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, true, true); err != nil {
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, true); err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true) after metadata backfill: %v", err)
 	}
 
@@ -787,7 +803,7 @@ apps:
 	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"app","name":"alpha"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared provider lock metadata: %v", err)
 	}
-	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err != nil {
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false); err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true) with stale prepared provider metadata should re-materialize: %v", err)
 	}
 	if err := os.WriteFile(preparedProviderMetadata, providerMetadata, 0o644); err != nil {
@@ -796,8 +812,8 @@ apps:
 	if err := os.WriteFile(preparedUIMetadata, []byte(`{"inputDigest":"stale","kind":"ui","name":"roadmap"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared ui lock metadata: %v", err)
 	}
-	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, true, true); err != nil {
-		t.Fatalf("LoadForExecutionAtPathsWithStatePaths(locked=true, noSync=true) with stale prepared ui metadata: %v", err)
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, true); err != nil {
+		t.Fatalf("LoadForExecutionAtPaths(locked=true, noSync=true) with stale prepared ui metadata: %v", err)
 	}
 }
 
@@ -806,6 +822,7 @@ func TestLockAtPathsSkipsMissingConfiguredLocalSources(t *testing.T) {
 
 	dir := t.TempDir()
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
 apiVersion: gestaltd.config/v8
@@ -828,9 +845,9 @@ apps:
 		t.Fatalf("write config: %v", err)
 	}
 
-	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	if _, ok := lock.Providers.App["missing"]; ok {
 		t.Fatalf("local source provider lock entry should be omitted: %#v", lock.Providers)
@@ -847,6 +864,8 @@ func TestLockAtPathsRejectsCommittedProviderInvokesField(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	writeLocalRelease := func(name, source, version string) string {
 		t.Helper()
 
@@ -903,9 +922,9 @@ server:
 	}
 	writeConfig("")
 
-	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	callerStatic := lock.Providers.App["caller"].ValidationManifest
 	if callerStatic == nil || callerStatic.Entrypoint != nil {
@@ -916,11 +935,11 @@ server:
     invokes:
       - app: target
         operation: missing`)
-	if _, err := NewLifecycle().LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}, StaticValidationOptions{}); err == nil || !strings.Contains(err.Error(), "field invokes not found") {
-		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths error = %v, want field invokes not found", err)
+	if _, err := NewLifecycle().LoadForStaticValidationAtPaths([]string{configPath}, lockfilePath, artifactsDir, StaticValidationOptions{}); err == nil || !strings.Contains(err.Error(), "field invokes not found") {
+		t.Fatalf("LoadForStaticValidationAtPaths error = %v, want field invokes not found", err)
 	}
-	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "field invokes not found") {
-		t.Fatalf("LockAtPathsWithStatePaths error = %v, want field invokes not found", err)
+	if _, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err == nil || !strings.Contains(err.Error(), "field invokes not found") {
+		t.Fatalf("LockAtPaths error = %v, want field invokes not found", err)
 	}
 }
 
@@ -973,22 +992,23 @@ server:
 		t.Fatalf("write config: %v", err)
 	}
 
+	lockfilePath, artifactsDir := lockAndArtifactsForConfig(configPath)
 	lc := NewLifecycle()
-	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	delete(lock.Providers.App, "target")
 	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("write stale lockfile: %v", err)
 	}
 
-	err = lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	err = lc.CheckLockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
-		t.Fatal("CheckLockAtPathsWithStatePaths unexpectedly succeeded")
+		t.Fatal("CheckLockAtPaths unexpectedly succeeded")
 	}
 	if got := err.Error(); !strings.Contains(got, "lockfile is out of date; run `gestaltd lock") || !strings.Contains(got, "missing providers.app.target") {
-		t.Fatalf("CheckLockAtPathsWithStatePaths error = %v, want lock command and missing provider drift", err)
+		t.Fatalf("CheckLockAtPaths error = %v, want lock command and missing provider drift", err)
 	}
 }
 
@@ -1045,6 +1065,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
 apiVersion: gestaltd.config/v8
@@ -1072,9 +1093,9 @@ apps:
 		t.Fatalf("write config: %v", err)
 	}
 
-	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	entry := lock.Providers.App["alpha"]
 	if entry.SourceRef == nil {
@@ -1099,8 +1120,8 @@ apps:
 		t.Fatalf("archive count = %d, want 0", got)
 	}
 	archiveBeforeCheck := archiveCount.Load()
-	if err := NewLifecycle().WithHTTPClient(srv.Client()).CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
+	if err := NewLifecycle().WithHTTPClient(srv.Client()).CheckLockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
+		t.Fatalf("CheckLockAtPaths: %v", err)
 	}
 	if got := archiveCount.Load(); got != archiveBeforeCheck {
 		t.Fatalf("archive count after check = %d, want %d", got, archiveBeforeCheck)
@@ -1160,6 +1181,7 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
@@ -1197,9 +1219,9 @@ providers:
 		t.Fatalf("write config: %v", err)
 	}
 
-	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	entry := lock.Providers.Secrets["secrets"]
 	if entry.SourceRef == nil {
@@ -1376,6 +1398,8 @@ func writeNamedBlockingSourceUIManifest(t *testing.T, dir, manifestName, source,
 
 func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]string) string {
 	t.Helper()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	var b strings.Builder
 	b.WriteString("apiVersion: gestaltd.config/v8\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
@@ -1396,7 +1420,7 @@ func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]str
 	if err := os.WriteFile(configPath, []byte(b.String()), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if _, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("write lockfile: %v", err)
 	}
 	return configPath
@@ -1404,6 +1428,8 @@ func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]str
 
 func writeOwnedUIAppTestConfig(t *testing.T, dir string, apps map[string]string) string {
 	t.Helper()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	var b strings.Builder
 	b.WriteString("apiVersion: gestaltd.config/v8\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
@@ -1425,7 +1451,7 @@ func writeOwnedUIAppTestConfig(t *testing.T, dir string, apps map[string]string)
 	if err := os.WriteFile(configPath, []byte(b.String()), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if _, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("write lockfile: %v", err)
 	}
 	return configPath
@@ -1433,6 +1459,8 @@ func writeOwnedUIAppTestConfig(t *testing.T, dir string, apps map[string]string)
 
 func writeAppBoundLocalUITestConfig(t *testing.T, dir string, apps, uiManifests map[string]string) (string, *Lockfile) {
 	t.Helper()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	var b strings.Builder
 	b.WriteString("apiVersion: gestaltd.config/v8\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
@@ -1461,7 +1489,7 @@ func writeAppBoundLocalUITestConfig(t *testing.T, dir string, apps, uiManifests 
 	if err := os.WriteFile(configPath, []byte(b.String()), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("write lockfile: %v", err)
 	}
@@ -1678,9 +1706,10 @@ server:
 		t.Fatalf("write config: %v", err)
 	}
 
-	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lockfilePath, artifactsDir := lockAndArtifactsForConfig(configPath)
+	lock, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	entry := lock.Providers.App["static-lock"]
 	if entry.ValidationManifest == nil {
@@ -1696,6 +1725,7 @@ func TestSyncAtPathsUsesLockedStaticValidationCatalogForOpenAPIProvider(t *testi
 
 	dir := t.TempDir()
 	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	packageSource := "github.com/acme/tools/static-openapi"
 	version := "1.2.3"
 	archivePath := buildExecutableArchiveDataWithSpec(t, dir, "static-openapi-src", packageSource, version, providermanifestv1.KindApp, "static-openapi", []byte("static-openapi-binary"), withNoAuthDefaultConnection(&providermanifestv1.Spec{
@@ -1739,11 +1769,11 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	if _, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
+		t.Fatalf("LockAtPaths: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 1}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{Parallelism: 1}); err != nil {
+		t.Fatalf("SyncAtPathsOptions: %v", err)
 	}
 }
 
@@ -1751,6 +1781,8 @@ func TestLockAtPathsRejectsProviderReleaseWhenStaticValidationCatalogMissing(t *
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	packageSource := "github.com/acme/tools/static-lock"
 	version := "1.2.3"
 	metadataPath := filepath.Join(dir, "provider-release.yaml")
@@ -1790,14 +1822,14 @@ server:
 		t.Fatalf("write config: %v", err)
 	}
 
-	_, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	_, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
-		t.Fatal("LockAtPathsWithStatePaths unexpectedly succeeded")
+		t.Fatal("LockAtPaths unexpectedly succeeded")
 	}
 	if got := err.Error(); !strings.Contains(got, "must include catalog metadata unless the validation manifest is MCP-only") ||
 		!strings.Contains(got, packageSource) ||
 		!strings.Contains(got, metadataPath) {
-		t.Fatalf("LockAtPathsWithStatePaths error = %v, want catalog validation failure", err)
+		t.Fatalf("LockAtPaths error = %v, want catalog validation failure", err)
 	}
 }
 
@@ -1805,6 +1837,8 @@ func TestLockAtPathsRejectsPackageLocalStaticValidationSurfaceAsSelfContained(t 
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	packageSource := "github.com/acme/tools/static-openapi"
 	version := "1.2.3"
 	metadataPath := filepath.Join(dir, "provider-release.yaml")
@@ -1847,12 +1881,12 @@ server:
 		t.Fatalf("write config: %v", err)
 	}
 
-	_, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	_, err := NewLifecycle().LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
-		t.Fatal("LockAtPathsWithStatePaths unexpectedly succeeded")
+		t.Fatal("LockAtPaths unexpectedly succeeded")
 	}
 	if !strings.Contains(err.Error(), "validation manifest must be self-contained") {
-		t.Fatalf("LockAtPathsWithStatePaths error = %v, want self-contained validation manifest error", err)
+		t.Fatalf("LockAtPaths error = %v, want self-contained validation manifest error", err)
 	}
 }
 
@@ -2381,6 +2415,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			}
 
 			artifactsDir := filepath.Join(dir, "prepared-artifacts")
+			lockfilePath := filepath.Join(dir, LockfileName)
 			configPath := filepath.Join(dir, "gestalt.yaml")
 			configLines := []string{
 				"apiVersion: " + tc.apiVersion,
@@ -2458,14 +2493,14 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			}
 
 			lc := NewLifecycle()
-			lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+			lock, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 			if err == nil {
 				if handlerErr := nextHandlerErr(); handlerErr != nil {
 					t.Fatal(handlerErr)
 				}
 			}
 			if err != nil {
-				t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+				t.Fatalf("LockAtPaths: %v", err)
 			}
 			if handlerErr := nextHandlerErr(); handlerErr != nil {
 				t.Fatal(handlerErr)
@@ -2559,13 +2594,13 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 
 			metadataBefore := metadataCount.Load()
 			currentBefore := currentArchiveCount.Load()
-			err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
+			err = lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{})
 			if tc.tamperLocalArchive {
 				if handlerErr := nextHandlerErr(); handlerErr != nil {
 					t.Fatal(handlerErr)
 				}
 				if err == nil || !strings.Contains(err.Error(), "digest mismatch") {
-					t.Fatalf("SyncAtPathsWithStatePaths error = %v, want digest mismatch", err)
+					t.Fatalf("SyncAtPaths error = %v, want digest mismatch", err)
 				}
 				return
 			}
@@ -2573,7 +2608,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				if handlerErr := nextHandlerErr(); handlerErr != nil {
 					t.Fatal(handlerErr)
 				}
-				t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+				t.Fatalf("SyncAtPaths: %v", err)
 			}
 			if handlerErr := nextHandlerErr(); handlerErr != nil {
 				t.Fatal(handlerErr)
@@ -2591,7 +2626,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			}
 			if tc.localSource && tc.remoteArchives {
 				cacheDir := filepath.Join(dir, "materialized-cache-local-metadata")
-				assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, wantCurrentSHA, &currentArchiveCount, func() error {
+				assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, lockfilePath, artifactsDir, cacheDir, wantCurrentSHA, &currentArchiveCount, func() error {
 					return os.RemoveAll(appRoot)
 				}, func() {
 					if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -2599,7 +2634,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 					}
 				})
 			}
-			cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+			cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 			if err != nil {
 				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 			}
@@ -2635,7 +2670,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 						},
 					},
 				})
-				if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), "lockfile stale") {
+				if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false); err == nil || !strings.Contains(err.Error(), "lockfile stale") {
 					t.Fatalf("LoadForExecutionAtPath after stale local metadata error = %v, want stale lockfile", err)
 				}
 			}
@@ -2751,6 +2786,7 @@ packages:
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -2777,7 +2813,7 @@ packages:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -2828,11 +2864,11 @@ packages:
 	indexBefore := indexCount.Load()
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -2854,12 +2890,12 @@ packages:
 			t.Fatal(handlerErr)
 		}
 	}
-	assertCheckSyncDoesNotPopulateMaterializedCache(t, lc, configPath, cacheDir, resetAppRoot)
-	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
-	assertRemoteMaterializedCacheRepair(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+	assertCheckSyncDoesNotPopulateMaterializedCache(t, lc, configPath, lockfilePath, artifactsDir, cacheDir, resetAppRoot)
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, lockfilePath, artifactsDir, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+	assertRemoteMaterializedCacheRepair(t, lc, configPath, lockfilePath, artifactsDir, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
 
 	archiveBeforeLoad := archiveCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -2985,6 +3021,7 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -3016,7 +3053,7 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lock, err := NewLifecycle().PrepareAtPath(configPath)
+	lock, err := NewLifecycle().PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -3131,6 +3168,7 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"  workflow:",
@@ -3150,7 +3188,7 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -3193,9 +3231,9 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
+	err = lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{})
 	if err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -3207,14 +3245,14 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
 	cacheDir := filepath.Join(dir, "materialized-cache")
-	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, lockfilePath, artifactsDir, cacheDir, archiveSHAHex, &archiveCount, func() error {
 		return os.RemoveAll(workflowRoot)
 	}, func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	})
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -3301,6 +3339,7 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"  externalCredentials:",
@@ -3321,7 +3360,7 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -3364,9 +3403,9 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
+	err = lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{})
 	if err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -3377,7 +3416,7 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -3475,6 +3514,7 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"  ui:",
@@ -3495,7 +3535,7 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -3541,9 +3581,9 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
+	err = lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{})
 	if err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -3555,14 +3595,14 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
 	cacheDir := filepath.Join(dir, "materialized-cache")
-	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, lockfilePath, artifactsDir, cacheDir, archiveSHAHex, &archiveCount, func() error {
 		return os.RemoveAll(uiRoot)
 	}, func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	})
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -3627,6 +3667,7 @@ func TestSourceAppPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		"apps:",
@@ -3645,7 +3686,7 @@ func TestSourceAppPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	_, err = lc.PrepareAtPath(configPath)
+	_, err = lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		t.Fatal("PrepareAtPath unexpectedly succeeded")
 		return
@@ -3747,6 +3788,7 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	currentMu.Unlock()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -3767,7 +3809,7 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -3801,9 +3843,9 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
+	err = lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{})
 	if err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -3814,7 +3856,7 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -3944,6 +3986,7 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	}
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -3967,7 +4010,7 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	}
 
 	lc := NewLifecycle().WithHTTPClient(client)
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -4067,6 +4110,7 @@ func TestSourceAppMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T)
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -4087,7 +4131,7 @@ func TestSourceAppMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T)
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPath(configPath); err != nil {
+	if _, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -4142,6 +4186,7 @@ func TestSourceAppMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -4162,7 +4207,7 @@ func TestSourceAppMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	_, err := lc.PrepareAtPath(configPath)
+	_, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		t.Fatal("PrepareAtPath unexpectedly succeeded")
 		return
@@ -4271,6 +4316,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -4291,7 +4337,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -4316,7 +4362,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, false, false)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -4350,9 +4396,9 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 		t.Fatalf("lock version after unlocked load = %q, want %q", got, initialVersion)
 	}
 
-	lock, err = lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	lock, err = lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths after remote metadata drift: %v", err)
+		t.Fatalf("LockAtPaths after remote metadata drift: %v", err)
 	}
 	if got := lock.Providers.App["alpha"].Version; got != updatedVersion {
 		t.Fatalf("lock version after explicit re-lock = %q, want %q", got, updatedVersion)
@@ -4475,6 +4521,7 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		"apps:",
@@ -4493,7 +4540,7 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPath(configPath); err != nil {
+	if _, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
@@ -4524,10 +4571,10 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	}
 
 	downloadsBefore := downloadCount.Load()
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -4612,6 +4659,7 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
@@ -4655,7 +4703,7 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
 	})
 	lc = lc.WithHTTPClient(srv.Client())
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -4671,7 +4719,7 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	}
 
 	metadataBefore := metadataCount.Load()
-	_, _, err = lc.LoadForExecutionAtPath(configPath, true)
+	_, _, err = lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -4685,9 +4733,9 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	}
 
 	downloadsBefore := downloadCount.Load()
-	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
+	err = lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{})
 	if err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths after cache removal: %v", err)
+		t.Fatalf("SyncAtPaths after cache removal: %v", err)
 	}
 	if got := metadataCount.Load(); got != metadataBefore {
 		t.Fatalf("metadata request count during sync = %d, want %d", got, metadataBefore)
@@ -4695,7 +4743,7 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	if got := downloadCount.Load() - downloadsBefore; got != 1 {
 		t.Fatalf("download count during sync = %d, want 1", got)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath after sync: %v", err)
 	}
@@ -4786,6 +4834,7 @@ func TestSourceAuthAppPrepareAllowsMissingEnvPlaceholderInNonStringField(t *test
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
@@ -4831,7 +4880,7 @@ func TestSourceAuthAppPrepareAllowsMissingEnvPlaceholderInNonStringField(t *test
 		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
 	})
 	lc = lc.WithHTTPClient(srv.Client())
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -4862,6 +4911,7 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 	runtimeSecretsManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/runtime-secrets", "0.1.0")
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
@@ -4898,23 +4948,23 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 			return nil
 		})
 
-	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	if _, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
+		t.Fatalf("LockAtPaths: %v", err)
 	}
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
+	if err := lc.CheckLockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
+		t.Fatalf("CheckLockAtPaths: %v", err)
 	}
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("CheckSyncAtPathsWithStatePaths: %v", err)
+	if err := lc.CheckSyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("CheckSyncAtPaths: %v", err)
 	}
 	if fullResolverCalled.Load() {
 		t.Fatal("full config secret resolver ran during lock/sync")
 	}
 
-	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil {
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false); err == nil {
 		t.Fatal("LoadForExecutionAtPath unexpectedly succeeded without runtime secret resolution")
 	}
 }
@@ -4965,6 +5015,8 @@ func TestLockRejectsLocalSourceAuthSecretsProviderBeforeFetch(t *testing.T) {
 			t.Parallel()
 
 			dir := t.TempDir()
+			lockfilePath := filepath.Join(dir, LockfileName)
+			artifactsDir := filepath.Join(dir, "artifacts")
 			bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
 			secretsYAML := make([]string, 0, len(tc.secretsYAML))
 			for _, line := range tc.secretsYAML {
@@ -5005,8 +5057,8 @@ func TestLockRejectsLocalSourceAuthSecretsProviderBeforeFetch(t *testing.T) {
 					return fmt.Errorf("source auth resolver should not run before local source secrets rejection")
 				})
 
-			if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), tc.wantError) {
-				t.Fatalf("LockAtPathsWithStatePaths error = %v, want local source secrets provider rejection", err)
+			if _, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("LockAtPaths error = %v, want local source secrets provider rejection", err)
 			}
 		})
 	}
@@ -5175,6 +5227,7 @@ packages:
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		"providerRepositories:",
@@ -5222,11 +5275,11 @@ packages:
 		}).
 		WithHTTPClient(srv.Client())
 
-	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if _, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LockAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -5247,11 +5300,11 @@ packages:
 		t.Fatalf("app archive request count = %d, want 0", got)
 	}
 
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if err := lc.CheckLockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
-		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
+		t.Fatalf("CheckLockAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -5263,11 +5316,11 @@ packages:
 	if strings.Contains(string(lockData), authToken) {
 		t.Fatal("lockfile contains resolved source auth token")
 	}
-	if _, err := lc.LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}, StaticValidationOptions{}); err != nil {
+	if _, err := lc.LoadForStaticValidationAtPaths([]string{configPath}, lockfilePath, artifactsDir, StaticValidationOptions{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
-		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LoadForStaticValidationAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -5284,11 +5337,11 @@ packages:
 	appMetadataBefore := appMetadataCount.Load()
 	secretsArchivesBefore := secretsArchiveCount.Load()
 	appArchivesBefore := appArchiveCount.Load()
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{}); err != nil {
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -5319,11 +5372,11 @@ packages:
 		WithHTTPClient(srv.Client())
 	appMetadataBeforeValidation := appMetadataCount.Load()
 	secretsArchivesBeforeValidation := secretsArchiveCount.Load()
-	if _, err := validationLC.LoadForValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	if _, err := validationLC.LoadForValidationAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
-		t.Fatalf("LoadForValidationAtPathsWithStatePaths: %v", err)
+		t.Fatalf("LoadForValidationAtPaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -5376,8 +5429,9 @@ func TestLockSourceAuthSecretRefsRequireSourceAuthResolver(t *testing.T) {
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
-	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "source auth secret resolver is required") {
-		t.Fatalf("LockAtPathsWithStatePaths error = %v, want missing source auth resolver", err)
+	lockfilePath, artifactsDir := lockAndArtifactsForConfig(configPath)
+	if _, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err == nil || !strings.Contains(err.Error(), "source auth secret resolver is required") {
+		t.Fatalf("LockAtPaths error = %v, want missing source auth resolver", err)
 	}
 }
 
@@ -5397,6 +5451,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}})
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		"providers:",
@@ -5424,7 +5479,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -5432,7 +5487,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 		t.Fatalf("lock.Providers.IndexedDB = %#v, want no local source entries", lock.Providers.IndexedDB)
 	}
 
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -5471,6 +5526,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	}})
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
@@ -5523,7 +5579,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -5543,7 +5599,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		t.Fatalf("disk lock cache entries = %#v, want no local source entries", diskLock.Providers.Cache)
 	}
 
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -5699,6 +5755,7 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			}
 
 			artifactsDir := filepath.Join(dir, "prepared-artifacts")
+			lockfilePath := filepath.Join(dir, LockfileName)
 			configLines := []string{
 				"apiVersion: " + tc.apiVersion,
 				"providers:",
@@ -5722,9 +5779,9 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			if client != nil {
 				lc = lc.WithHTTPClient(client)
 			}
-			lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+			lock, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 			if err != nil {
-				t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+				t.Fatalf("LockAtPaths: %v", err)
 			}
 
 			entry, ok := lock.Providers.Cache["session"]
@@ -5910,6 +5967,7 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
@@ -5961,7 +6019,7 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	})
 	lc = lc.WithHTTPClient(srv.Client())
 
-	lock, err := lc.PrepareAtPath(configPath)
+	lock, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -5987,9 +6045,9 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	authMetadataBefore := authMetadataCount.Load()
 	secretsDownloadsBefore := secretsDownloads.Load()
 	authDownloadsBefore := authDownloads.Load()
-	err = lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{})
+	err = lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{})
 	if err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
 	if got := secretsMetadataCount.Load(); got != secretsMetadataBefore {
 		t.Fatalf("secrets metadata requests during sync = %d, want %d", got, secretsMetadataBefore)
@@ -6003,7 +6061,7 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if got := authDownloads.Load() - authDownloadsBefore; got != 1 {
 		t.Fatalf("auth download count during sync = %d, want 1", got)
 	}
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -6120,6 +6178,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
@@ -6162,7 +6221,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
 	})
 
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -6248,6 +6307,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
 	configYAML := strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
@@ -6277,7 +6337,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	cfg, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
 	}

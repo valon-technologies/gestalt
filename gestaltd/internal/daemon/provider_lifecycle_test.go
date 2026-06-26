@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -562,7 +561,7 @@ func runGestaltdResult(args ...string) (string, error) {
 }
 
 func runGestaltdResultWithEnv(env []string, args ...string) (string, error) {
-	cmd := exec.Command(gestaltdBin, args...)
+	cmd := gestaltdCommand(args...)
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}

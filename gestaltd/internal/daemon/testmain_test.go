@@ -27,6 +27,26 @@ var (
 	externalCredentialsBin string
 )
 
+// gestaltdCommand runs the gestaltd CLI binary. When args include --config PATH,
+// the subprocess working directory is set to PATH's directory so default lockfile
+// and artifacts paths resolve like a user running gestaltd from the project root.
+func gestaltdCommand(args ...string) *exec.Cmd {
+	cmd := exec.Command(gestaltdBin, args...)
+	if workDir := gestaltdWorkDirFromArgs(args); workDir != "" {
+		cmd.Dir = workDir
+	}
+	return cmd
+}
+
+func gestaltdWorkDirFromArgs(args []string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--config" {
+			return filepath.Dir(args[i+1])
+		}
+	}
+	return ""
+}
+
 func TestMain(m *testing.M) {
 	tmpDir, err := os.MkdirTemp("", "gestaltd-e2e-*")
 	if err != nil {

@@ -53,7 +53,8 @@ type providerLocalSession struct {
 	TargetKeys        []string
 	DevUIKeys         []string
 	ConfigPaths       []string
-	State             operator.StatePaths
+	LockfilePath      string
+	ArtifactsDir      string
 	Locked            bool
 	NoSync            bool
 	PublicPort        int
@@ -95,7 +96,13 @@ func runProviderValidate(args []string) error {
 	}
 	defer func() { _ = os.RemoveAll(session.Dir) }()
 
-	result, err := validateConfigWithStatePaths(session.ConfigPaths, session.State, validateConfigOptions{Runtime: true})
+	scratchArtifactsDir, err := os.MkdirTemp("", "gestaltd-provider-validate-*")
+	if err != nil {
+		return fmt.Errorf("create validation scratch dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(scratchArtifactsDir) }()
+
+	result, err := validateConfigAtPaths(session.ConfigPaths, session.LockfilePath, scratchArtifactsDir, validateConfigOptions{Runtime: true})
 	if err != nil {
 		return err
 	}
@@ -121,7 +128,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	if session.Locked {
 		forcedDevUIKeys = session.DevUIKeys
 	}
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, session.Locked, session.NoSync, forcedDevUIKeys...)
+	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, forcedDevUIKeys...)
 	if err != nil {
 		return err
 	}
@@ -238,8 +245,8 @@ type validatedConfigResult struct {
 	Warnings []string
 }
 
-func validateConfigWithStatePaths(configFlags []string, state operator.StatePaths, opts validateConfigOptions) (*validatedConfigResult, error) {
-	paths, cfg, err := loadConfigForValidationWithStatePaths(configFlags, state, opts)
+func validateConfigAtPaths(configFlags []string, lockfilePath, artifactsDir string, opts validateConfigOptions) (*validatedConfigResult, error) {
+	paths, cfg, err := loadConfigForValidation(configFlags, lockfilePath, artifactsDir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -277,10 +284,8 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 	}()
 
 	var configPaths []string
-	state := operator.StatePaths{
-		ArtifactsDir: opts.ArtifactsDir,
-		LockfilePath: opts.LockfilePath,
-	}
+	lockfilePath := opts.LockfilePath
+	artifactsDir := opts.ArtifactsDir
 	locked := opts.Locked && opts.FleetOverlay
 	noSync := opts.NoSync && opts.FleetOverlay
 	devPort := 0
@@ -293,10 +298,8 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 			return nil, err
 		}
 		configPaths = append([]string{baseConfigPath}, opts.ConfigPaths...)
-		state = operator.StatePaths{
-			ArtifactsDir: filepath.Join(sessionDir, "artifacts"),
-			LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json"),
-		}
+		lockfilePath = filepath.Join(sessionDir, operator.LockfileName)
+		artifactsDir = filepath.Join(sessionDir, "artifacts")
 		locked = false
 		selectedPort, err := reserveLocalPort()
 		if err != nil {
@@ -345,7 +348,8 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		TargetKeys:    targetKeys,
 		DevUIKeys:     devUIKeys,
 		ConfigPaths:   configPaths,
-		State:         state,
+		LockfilePath:  lockfilePath,
+		ArtifactsDir:  artifactsDir,
 		Locked:        locked,
 		NoSync:        noSync,
 		PublicPort:    opts.Port,
@@ -690,8 +694,8 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 		args = append(args,
 			"dev_ui_keys", session.DevUIKeys,
 			"target_keys", session.TargetKeys,
-			"artifacts_dir", session.State.ArtifactsDir,
-			"lockfile", session.State.LockfilePath,
+			"artifacts_dir", session.ArtifactsDir,
+			"lockfile", session.LockfilePath,
 		)
 	}
 	if session.ManifestPath != "" {

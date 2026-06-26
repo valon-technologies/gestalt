@@ -291,7 +291,7 @@ func runProviderList(args []string) error {
 	if err != nil {
 		return err
 	}
-	lock, err := readProviderListLockfile(paths[0], *lockfilePath)
+	lock, err := readProviderListLockfile(*lockfilePath)
 	if err != nil {
 		return err
 	}
@@ -397,7 +397,7 @@ func runProviderAdd(args []string) error {
 		return err
 	}
 	if *sync {
-		if err := syncConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, false); err != nil {
+		if err := syncConfig(configPaths, *lockfilePath, "", false); err != nil {
 			return err
 		}
 	}
@@ -492,7 +492,7 @@ func runProviderUpgrade(args []string) error {
 		}
 		return nil
 	}
-	if err := lockConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, false); err != nil {
+	if err := lockConfig(configPaths, *lockfilePath, "", false); err != nil {
 		return err
 	}
 	fmt.Println("Refreshed provider lock state")

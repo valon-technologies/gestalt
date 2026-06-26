@@ -30,6 +30,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func configDirPaths(dir string) (lockfilePath, artifactsDir string) {
+	return filepath.Join(dir, LockfileName), filepath.Join(dir, "artifacts")
+}
+
+func lockAndArtifactsForConfig(configPath string) (lockfilePath, artifactsDir string) {
+	configDir := filepath.Dir(configPath)
+	return filepath.Join(configDir, LockfileName), filepath.Join(configDir, "artifacts")
+}
+
+func prepareAtPathInTest(t *testing.T, lc *Lifecycle, cfgPath string) (*Lockfile, error) {
+	t.Helper()
+	lockfilePath, artifactsDir := lockAndArtifactsForConfig(cfgPath)
+	return lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir)
+}
+
 func testDisplayName(name string) string {
 	parts := strings.Fields(strings.ReplaceAll(name, "-", " "))
 	for i, part := range parts {
@@ -504,6 +519,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	manifestPath := filepath.Join(dir, "manifest.yaml")
 	buildOutput := ".gestaltd/bin/local-provider"
 	buildScript := "mkdir -p .gestaltd/bin\nprintf 'local-provider' > " + buildOutput + "\nchmod +x " + buildOutput + "\n"
@@ -544,7 +560,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	}
 
 	lc := NewLifecycle()
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
@@ -575,6 +591,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMCPOAuthManifestPluginWithoutLockfi
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	manifestPath := filepath.Join(dir, "manifest.yaml")
 	manifest := []byte(`
 kind: app
@@ -609,7 +626,7 @@ spec:
 	}
 
 	lc := NewLifecycle()
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
@@ -715,7 +732,8 @@ spec:
 				t.Fatalf("WriteFile config: %v", err)
 			}
 
-			_, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
+			lockfilePath, artifactsDir := lockAndArtifactsForConfig(cfgPath)
+			_, _, err := NewLifecycle().LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 			if err == nil {
 				t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
 				return
@@ -748,7 +766,7 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().PrepareAtPath(cfgPath)
+	_, err := prepareAtPathInTest(t, NewLifecycle(), cfgPath)
 	if err == nil || !strings.Contains(err.Error(), `field invokes not found`) {
 		t.Fatalf("PrepareAtPath error = %v, want field invokes not found", err)
 	}
@@ -829,7 +847,7 @@ func TestPrepareAtPath_RejectsInvalidAppWorkflowCapabilitiesShape(t *testing.T) 
 				t.Fatalf("WriteFile config: %v", err)
 			}
 
-			_, err := NewLifecycle().PrepareAtPath(cfgPath)
+			_, err := prepareAtPathInTest(t, NewLifecycle(), cfgPath)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("PrepareAtPath error = %v, want substring %q", err, tc.want)
 			}
@@ -858,7 +876,7 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	if _, err := NewLifecycle().PrepareAtPath(cfgPath); err != nil {
+	if _, err := prepareAtPathInTest(t, NewLifecycle(), cfgPath); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 }
@@ -884,7 +902,7 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().PrepareAtPath(cfgPath)
+	_, err := prepareAtPathInTest(t, NewLifecycle(), cfgPath)
 	if err == nil || !strings.Contains(err.Error(), `duplicate operation "ping" across merged catalogs`) {
 		t.Fatalf("PrepareAtPath error = %v, want duplicate operation error", err)
 	}
@@ -958,7 +976,8 @@ server:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(cfgPath)
+	lockfilePath, artifactsDir := lockAndArtifactsForConfig(cfgPath)
+	lock, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -971,6 +990,7 @@ func TestLoadForExecutionAtPath_RejectsAppInvokesField(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -988,7 +1008,7 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
+	_, _, err := NewLifecycle().LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err == nil || !strings.Contains(err.Error(), `field invokes not found`) {
 		t.Fatalf("LoadForExecutionAtPath error = %v, want field invokes not found", err)
 	}
@@ -1124,6 +1144,8 @@ apps:
 			t.Parallel()
 
 			dir := t.TempDir()
+			lockfilePath := filepath.Join(dir, LockfileName)
+			artifactsDir := filepath.Join(dir, "artifacts")
 			uiDir := filepath.Join(dir, "ui")
 			if err := os.MkdirAll(uiDir, 0o755); err != nil {
 				t.Fatalf("MkdirAll ui dir: %v", err)
@@ -1222,7 +1244,7 @@ apps:
 			}
 
 			lc := NewLifecycle()
-			loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+			loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
@@ -1292,6 +1314,8 @@ func TestLoadForExecutionAtPath_AllowsLockedExplicitLocalUIWithoutPreparedUILock
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, LockfileName)
+	artifactsDir := filepath.Join(dir, "artifacts")
 	uiDir := filepath.Join(dir, "ui")
 	if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
 		t.Fatalf("MkdirAll ui dist: %v", err)
@@ -1334,7 +1358,7 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPath(cfgPath); err != nil {
+	if _, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	lockPath := filepath.Join(dir, LockfileName)
@@ -1347,7 +1371,7 @@ server:
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
-	cfgLoaded, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
+	cfgLoaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath locked: %v", err)
 	}
@@ -1413,6 +1437,7 @@ func TestLoadForExecutionAtPath_ResolvesMountedUIThemeConfig(t *testing.T) {
 			t.Parallel()
 
 			dir := t.TempDir()
+			lockfilePath, artifactsDir := configDirPaths(dir)
 			uiDir := filepath.Join(dir, "ui")
 			if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
 				t.Fatalf("MkdirAll ui dist: %v", err)
@@ -1459,7 +1484,7 @@ func TestLoadForExecutionAtPath_ResolvesMountedUIThemeConfig(t *testing.T) {
 				t.Fatalf("WriteFile config: %v", err)
 			}
 
-			loaded, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
+			loaded, _, err := NewLifecycle().LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
@@ -1499,6 +1524,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	t.Parallel()
 
 	dir := t.TempDir()
+	var lockfilePath, artifactsDir string
 	const pluginRef = "github.com/testowner/apps/roadmap"
 	const version = "0.0.1-alpha.1"
 
@@ -1618,7 +1644,8 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPath(cfgPath); err != nil {
+	lockfilePath, artifactsDir = lockAndArtifactsForConfig(cfgPath)
+	if _, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
@@ -1634,7 +1661,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	}
 
 	for _, locked := range []bool{false, true} {
-		loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, locked)
+		loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, locked, false)
 		if err != nil {
 			t.Fatalf("LoadForExecutionAtPath(locked=%t): %v", locked, err)
 		}
@@ -1670,6 +1697,7 @@ func TestLoadForExecutionAtPath_RefreshesManagedPluginWhenGenericArchiveLockIsSt
 	t.Parallel()
 
 	dir := t.TempDir()
+	var lockfilePath, artifactsDir string
 	const pluginRef = "github.com/testowner/apps/roadmap"
 	const version = "0.0.1-alpha.1"
 
@@ -1709,7 +1737,8 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPath(cfgPath); err != nil {
+	lockfilePath, artifactsDir = lockAndArtifactsForConfig(cfgPath)
+	if _, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
@@ -1736,7 +1765,7 @@ server:
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
@@ -1764,6 +1793,7 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 	t.Parallel()
 
 	dir := t.TempDir()
+	var lockfilePath, artifactsDir string
 	const pluginRef = "github.com/testowner/apps/roadmap"
 	const oldVersion = "0.0.1-alpha.1"
 	const newVersion = "0.0.2-alpha.1"
@@ -1852,7 +1882,8 @@ server:
 	writeConfig(oldVersion)
 
 	lc := NewLifecycle()
-	initialLock, err := lc.PrepareAtPath(cfgPath)
+	lockfilePath, artifactsDir = lockAndArtifactsForConfig(cfgPath)
+	initialLock, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -1879,10 +1910,10 @@ server:
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{cfgPath}, StatePaths{}, SyncOptions{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{cfgPath}, lockfilePath, artifactsDir, SyncOptions{}); err != nil {
+		t.Fatalf("SyncAtPaths: %v", err)
 	}
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, true, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
@@ -1905,6 +1936,7 @@ func TestLoadForExecutionAtPath_UsesDerivedPreparedPathsWhenLockPathsAreStale(t 
 	t.Parallel()
 
 	dir := t.TempDir()
+	var lockfilePath, artifactsDir string
 	const version = "0.0.1-alpha.1"
 	pluginManifestPath := writeLocalExecutablePlugin(t, dir, "example", "ping")
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
@@ -1942,7 +1974,8 @@ server:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.PrepareAtPath(cfgPath)
+	lockfilePath, artifactsDir = lockAndArtifactsForConfig(cfgPath)
+	lock, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir)
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
@@ -1969,7 +2002,7 @@ server:
 	}
 
 	for _, locked := range []bool{false, true} {
-		loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, locked)
+		loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, locked, false)
 		if err != nil {
 			t.Fatalf("LoadForExecutionAtPath(locked=%t): %v", locked, err)
 		}
@@ -2112,7 +2145,7 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPath(cfgPath); err == nil || !strings.Contains(err.Error(), "spec.ui.path must stay within the package") {
+	if _, err := prepareAtPathInTest(t, lc, cfgPath); err == nil || !strings.Contains(err.Error(), "spec.ui.path must stay within the package") {
 		t.Fatalf("PrepareAtPath error = %v, want substring %q", err, "spec.ui.path must stay within the package")
 	}
 }
@@ -2181,7 +2214,7 @@ func TestPrepareAtPath_RejectsPolicyBoundManagedMountedUIWithoutExplicitRouteCov
 			}
 
 			lc := NewLifecycle()
-			_, err := lc.PrepareAtPath(cfgPath)
+			_, err := prepareAtPathInTest(t, lc, cfgPath)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("PrepareAtPath error = %v, want substring %q", err, tc.want)
 			}
@@ -2228,7 +2261,7 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := lc.PrepareAtPath(cfgPath)
+	_, err := prepareAtPathInTest(t, lc, cfgPath)
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
 		return
@@ -2242,6 +2275,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	buildOutput := ".gestaltd/bin/local-auth"
 	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\nprintf 'auth-binary' > %s\nchmod +x %s\n", buildOutput, buildOutput)
@@ -2294,7 +2328,7 @@ server:
 	}
 
 	lc := NewLifecycle()
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
@@ -2389,8 +2423,9 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
+	lockfilePath, artifactsDir := lockAndArtifactsForConfig(cfgPath)
 	lc := NewLifecycle()
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
@@ -2420,6 +2455,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	writeTestFile := func(rel string, data []byte, mode os.FileMode) {
 		t.Helper()
 		path := filepath.Join(dir, rel)
@@ -2463,7 +2499,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("config.yaml", []byte(cfg), 0o644)
 
 	lc := NewLifecycle()
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
@@ -2488,6 +2524,7 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	t.Parallel()
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	writeTestFile := func(rel string, data []byte, mode os.FileMode) {
 		t.Helper()
 		path := filepath.Join(dir, rel)
@@ -2532,7 +2569,7 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	writeTestFile("config.yaml", []byte(cfg), 0o644)
 
 	lc := NewLifecycle()
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
 	}
@@ -2547,7 +2584,7 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 		}
 	}
 
-	locked, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, StatePaths{}, true, true)
+	locked, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, true, true)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true, noSync=true): %v", err)
 	}
@@ -2568,6 +2605,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalPythonSourcePlugin
 	}
 
 	dir := t.TempDir()
+	lockfilePath, artifactsDir := configDirPaths(dir)
 	python3Path, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skipf("python3 not found: %v", err)
@@ -2808,7 +2846,7 @@ print(json.dumps({
 `), 0o644)
 
 	lc := NewLifecycle()
-	loaded, _, err := lc.LoadForExecutionAtPath(filepath.Join(dir, "config.yaml"), false)
+	loaded, _, err := lc.LoadForExecutionAtPaths([]string{filepath.Join(dir, "config.yaml")}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}

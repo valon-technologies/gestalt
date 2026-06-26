@@ -20,15 +20,15 @@ func TestMaybeRunServeProviderLocalRejectsLockedWithoutConfig(t *testing.T) {
 	}
 }
 
-func TestMaybeRunServeProviderLocalRejectsStatePathsWithoutConfig(t *testing.T) {
+func TestMaybeRunServeProviderLocalRejectsLockfileAndArtifactsDirWithoutConfig(t *testing.T) {
 	t.Parallel()
 
 	_, err := maybeRunServeProviderLocal(serveProviderLocalOptions{
 		Paths:        []string{"./ui"},
 		ArtifactsDir: t.TempDir(),
 	})
-	if err == nil || !strings.Contains(err.Error(), "--artifacts-dir and --lockfile require --config") {
-		t.Fatalf("error = %v, want --artifacts-dir/--lockfile require --config", err)
+	if err == nil || !strings.Contains(err.Error(), "--lockfile and --artifacts-dir require --config") {
+		t.Fatalf("error = %v, want --lockfile and --artifacts-dir require --config", err)
 	}
 }
 

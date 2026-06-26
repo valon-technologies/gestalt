@@ -78,6 +78,7 @@ packages:
 	}))
 	defer srv.Close()
 
+	lockfilePath := filepath.Join(dir, LockfileName)
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := strings.Join([]string{
@@ -103,7 +104,7 @@ packages:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPath(configPath); err != nil {
+	if _, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
@@ -125,7 +126,7 @@ packages:
 	}
 	archiveBeforeSeed := archiveCount.Load()
 	seedCacheDir := filepath.Join(dir, "seed-cache")
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{CacheDir: seedCacheDir}); err != nil {
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{CacheDir: seedCacheDir}); err != nil {
 		t.Fatalf("seed sync: %v", err)
 	}
 	if got := archiveCount.Load(); got != archiveBeforeSeed+1 {
@@ -141,7 +142,7 @@ packages:
 	prefetchMetrics := NewSyncMetricsRecorder()
 	archiveBeforePrefetch := archiveCount.Load()
 	prefetchCacheDir := filepath.Join(dir, "prefetch-cache")
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{
 		CacheDir:      prefetchCacheDir,
 		Observability: SyncObservability{Recorder: prefetchMetrics},
 	}); err != nil {
@@ -158,7 +159,7 @@ packages:
 	remoteGetsBeforeFreshSync := remote.gets
 	archiveBeforeFreshSync := archiveCount.Load()
 	freshMetrics := NewSyncMetricsRecorder()
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{
 		CacheDir:      filepath.Join(dir, "fresh-cache"),
 		Observability: SyncObservability{Recorder: freshMetrics},
 	}); err != nil {
@@ -175,14 +176,14 @@ packages:
 	}
 }
 
-func assertCheckSyncDoesNotPopulateMaterializedCache(t *testing.T, lc *Lifecycle, configPath, cacheDir string, resetArtifacts func() error) {
+func assertCheckSyncDoesNotPopulateMaterializedCache(t *testing.T, lc *Lifecycle, configPath, lockfilePath, artifactsDir, cacheDir string, resetArtifacts func() error) {
 	t.Helper()
 
 	if err := resetArtifacts(); err != nil {
 		t.Fatalf("reset artifacts before check sync: %v", err)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{CacheDir: cacheDir}); err == nil {
-		t.Fatal("CheckSyncAtPathsWithStatePathsOptions with cache dir error = nil, want stale artifact error")
+	if err := lc.CheckSyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{CacheDir: cacheDir}); err == nil {
+		t.Fatal("CheckSyncAtPathsOptions with cache dir error = nil, want stale artifact error")
 	}
 	if _, err := os.Stat(cacheDir); !os.IsNotExist(err) {
 		t.Fatalf("cache dir after check sync stat err = %v, want not exist", err)
@@ -193,6 +194,8 @@ func assertRemoteMaterializedCacheRoundTrip(
 	t *testing.T,
 	lc *Lifecycle,
 	configPath string,
+	lockfilePath string,
+	artifactsDir string,
 	cacheDir string,
 	archiveSHAHex string,
 	archiveCount *atomic.Int64,
@@ -206,11 +209,11 @@ func assertRemoteMaterializedCacheRoundTrip(
 	}
 	archiveBeforeCacheMiss := archiveCount.Load()
 	coldMetrics := NewSyncMetricsRecorder()
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{CacheDir: cacheDir, Observability: SyncObservability{Recorder: coldMetrics}}); err != nil {
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{CacheDir: cacheDir, Observability: SyncObservability{Recorder: coldMetrics}}); err != nil {
 		if afterMiss != nil {
 			afterMiss()
 		}
-		t.Fatalf("SyncAtPathsWithStatePathsOptions cache miss: %v", err)
+		t.Fatalf("SyncAtPathsOptions cache miss: %v", err)
 	}
 	if afterMiss != nil {
 		afterMiss()
@@ -226,8 +229,8 @@ func assertRemoteMaterializedCacheRoundTrip(
 		t.Fatalf("reset artifacts before cache hit: %v", err)
 	}
 	archiveBeforeCacheHit := archiveCount.Load()
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{CacheDir: cacheDir}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions cache hit: %v", err)
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{CacheDir: cacheDir}); err != nil {
+		t.Fatalf("SyncAtPathsOptions cache hit: %v", err)
 	}
 	if got := archiveCount.Load(); got != archiveBeforeCacheHit {
 		t.Fatalf("archive request count after cache hit = %d, want %d", got, archiveBeforeCacheHit)
@@ -238,6 +241,8 @@ func assertRemoteMaterializedCacheRepair(
 	t *testing.T,
 	lc *Lifecycle,
 	configPath string,
+	lockfilePath string,
+	artifactsDir string,
 	cacheDir string,
 	archiveSHAHex string,
 	archiveCount *atomic.Int64,
@@ -256,11 +261,11 @@ func assertRemoteMaterializedCacheRepair(
 		t.Fatalf("reset artifacts before cache repair: %v", err)
 	}
 	archiveBeforeCacheRepair := archiveCount.Load()
-	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{CacheDir: cacheDir}); err != nil {
+	if err := lc.SyncAtPathsOptions([]string{configPath}, lockfilePath, artifactsDir, SyncOptions{CacheDir: cacheDir}); err != nil {
 		if afterRepair != nil {
 			afterRepair()
 		}
-		t.Fatalf("SyncAtPathsWithStatePathsOptions cache repair: %v", err)
+		t.Fatalf("SyncAtPathsOptions cache repair: %v", err)
 	}
 	if afterRepair != nil {
 		afterRepair()

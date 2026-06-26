@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -72,7 +71,7 @@ func runProviderPackageCommand(t *testing.T, pluginDir string, args ...string) s
 
 func runProviderCommandResult(pluginDir string, args ...string) ([]byte, error) {
 	cmdArgs := append([]string{"provider"}, args...)
-	cmd := exec.Command(gestaltdBin, cmdArgs...)
+	cmd := gestaltdCommand(cmdArgs...)
 	cmd.Dir = pluginDir
 	return cmd.CombinedOutput()
 }
