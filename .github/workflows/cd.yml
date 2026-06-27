@@ -1,10 +1,10 @@
 name: CD (gestaltd)
 
 # Continuous delivery for gestaltd. Re-runs the validation suite (including the
-# race matrix), builds + pushes the per-commit CI image to Artifact Registry,
-# and then builds the docs. Every CD run publishes: it is triggered by pushes to
-# main and by manual dispatch for a specific commit SHA. The hourly health check
-# runs in ci.yml instead.
+# race matrix) and builds + pushes the per-commit CI image to Artifact Registry.
+# Every CD run publishes: it is triggered by pushes to main and by manual
+# dispatch for a specific commit SHA. The hourly health check (and the docs
+# build smoke check) runs in ci.yml instead.
 
 on:
   push:
@@ -111,16 +111,3 @@ jobs:
           image-repository: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
           gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
-
-  # Docs build runs after the CI image is built and pushed, so a docs failure
-  # never blocks the image publish. It is skipped if the image build did not
-  # succeed (default needs gating).
-  docs-build:
-    name: Docs Build
-    needs: [resolve-ref, build-and-push]
-    if: ${{ needs.resolve-ref.outputs.publish == 'true' }}
-    uses: ./.github/workflows/build-docs.yml
-    with:
-      gestalt_ref: ${{ needs.resolve-ref.outputs.sha }}
-    permissions:
-      contents: read

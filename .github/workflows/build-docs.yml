@@ -1,17 +1,10 @@
 name: Build Docs
 
+# The docs build is an expensive, multi-build smoke check (it runs a full
+# Next.js production build per docs version). It is not run on pushes or pull
+# requests; instead ci.yml invokes it on its hourly schedule as a health check.
+# Use workflow_dispatch to validate docs changes on demand before the next run.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/build-docs.yml'
-      - 'docs/**'
-  pull_request:
-    paths:
-      - '.github/workflows/build-docs.yml'
-      - 'docs/**'
-
   workflow_dispatch:
   workflow_call:
     inputs:

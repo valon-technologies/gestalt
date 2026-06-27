@@ -24,6 +24,17 @@ jobs:
       run-race: ${{ github.event_name == 'schedule' }}
       run-e2e: ${{ github.event_name == 'schedule' }}
 
+  # The docs build is an expensive multi-build smoke check, so like race/e2e it
+  # runs only on the hourly schedule, not on pull requests. It is intentionally
+  # absent from cd.yml: docs are published by deploy-gestalt-docs.yml, so this
+  # is pure validation and must not gate the gestaltd image publish.
+  docs-build:
+    name: Docs Build
+    if: ${{ github.event_name == 'schedule' }}
+    uses: ./.github/workflows/build-docs.yml
+    permissions:
+      contents: read
+
   # Build-only Dockerfile/packaging validation. Depends on resolve-ref rather
   # than validate so it runs in parallel with the Go + Helm checks instead of
   # waiting for them.
