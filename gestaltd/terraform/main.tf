@@ -99,8 +99,15 @@ resource "google_artifact_registry_repository" "gestaltd_charts" {
   location      = var.region
   repository_id = var.artifact_registry_repository_id
   format        = "DOCKER"
-  description   = "OCI Helm charts for gestaltd"
+  description   = "OCI Helm charts and images for gestaltd (semver releases and per-commit builds)"
   labels        = local.labels
+
+  # Both release (semver) and per-commit (sha-<commit> / 0.0.0-g<sha>) artifacts
+  # are addressed by unique tags, so the repo is immutable: a published tag can
+  # never be reassigned to a different digest.
+  docker_config {
+    immutable_tags = true
+  }
 
   depends_on = [
     google_project_service.required,
@@ -238,6 +245,16 @@ resource "google_artifact_registry_repository_iam_member" "chart_publisher" {
   repository = google_artifact_registry_repository.gestaltd_charts.repository_id
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.chart_publisher.email}"
+}
+
+# cd.yml (on main) publishes per-commit charts and images to the charts repo via
+# the CI identity, which is the only identity trusted on refs/heads/main.
+resource "google_artifact_registry_repository_iam_member" "ci_image_chart_publisher" {
+  project    = var.project_id
+  location   = google_artifact_registry_repository.gestaltd_charts.location
+  repository = google_artifact_registry_repository.gestaltd_charts.repository_id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.ci_image_publisher.email}"
 }
 
 resource "google_artifact_registry_repository_iam_member" "chart_readers" {

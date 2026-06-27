@@ -77,10 +77,9 @@ jobs:
           gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
-  # Publish the per-commit chart (0.0.0-g<sha12>) to the immutable gestaltd-ci
-  # repo under the deploy/ path, the per-commit counterpart to
-  # release-gestaltd.yml's semver chart. Skipped if the immutable version is
-  # already published (re-runs / same-commit dispatch).
+  # Publish the per-commit chart (0.0.0-g<sha12>) to the immutable charts repo,
+  # the per-commit counterpart to release-gestaltd.yml's semver chart. Skipped if
+  # the immutable version is already published (re-runs / same-commit dispatch).
   publish-chart:
     name: Publish Helm Chart to GCP Artifact Registry
     needs: [resolve-ref, validate, build-and-push, publish-alpine-image]
@@ -106,14 +105,11 @@ jobs:
         env:
           SHA: ${{ needs.resolve-ref.outputs.sha }}
           ARTIFACT_REGISTRY_HOST: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
-          CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
+          CHART_REPOSITORY: ${{ vars.GESTALTD_CHART_REPOSITORY }}
         run: |
           sha_version="0.0.0-g${SHA:0:12}"
-          # gestaltd-ci is immutable; per-commit deployables live under deploy/ so
-          # they never collide with the static CI image at <repo>/gestaltd.
-          chart_repo="oci://${CI_IMAGE_REPOSITORY%/gestaltd}/deploy"
           echo "${{ steps.gcp-auth.outputs.access_token }}" | helm registry login "${ARTIFACT_REGISTRY_HOST}" --username oauth2accesstoken --password-stdin
-          if helm show chart "${chart_repo}/gestaltd" --version "${sha_version}" >/dev/null 2>&1; then
+          if helm show chart "${CHART_REPOSITORY}/gestaltd" --version "${sha_version}" >/dev/null 2>&1; then
             echo "Chart ${sha_version} already published; skipping."
             exit 0
           fi
@@ -121,11 +117,11 @@ jobs:
             --version "${sha_version}" \
             --app-version "${SHA}" \
             --destination /tmp/charts
-          helm push "/tmp/charts/gestaltd-${sha_version}.tgz" "${chart_repo}"
+          helm push "/tmp/charts/gestaltd-${sha_version}.tgz" "${CHART_REPOSITORY}"
 
   # Publish the per-commit alpine image (sha-<commit>-alpine) to the immutable
-  # gestaltd-ci repo under the deploy/ path, built multi-arch from the
-  # Dockerfile's `alpine` target. Skipped if the immutable tag already exists.
+  # release image repo, built multi-arch from the Dockerfile's `alpine` target.
+  # Skipped if the immutable tag already exists.
   publish-alpine-image:
     name: Publish Alpine Image to GCP Artifact Registry
     needs: [resolve-ref, validate, build-and-push]
@@ -143,13 +139,10 @@ jobs:
         id: meta
         env:
           SHA: ${{ needs.resolve-ref.outputs.sha }}
-          CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
+          IMAGE_NAME: ${{ vars.GESTALTD_RELEASE_IMAGE_REPOSITORY }}
         run: |
-          # gestaltd-ci is immutable; per-commit deployables live under deploy/ so
-          # they never collide with the static CI image at <repo>/gestaltd.
-          image="${CI_IMAGE_REPOSITORY%/gestaltd}/deploy/gestaltd-image:sha-${SHA}-alpine"
           {
-            echo "image=${image}"
+            echo "image=${IMAGE_NAME}:sha-${SHA}-alpine"
             echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } >> "$GITHUB_OUTPUT"
       - name: Authenticate to Google Cloud
