@@ -223,6 +223,18 @@ jobs:
               continue
             fi
 
+            # A published checksum with no tarball is an orphaned, inconsistent
+            # state: we cannot republish a matching tarball without overwriting the
+            # stale checksum, which objectCreator cannot do. Fail loudly rather than
+            # upload a fresh archive whose bytes disagree with the stored checksum.
+            if [[ "${has_sha}" == true ]]; then
+              echo "Orphaned ${asset}.sha256 for ${SHA}: checksum is published but the tarball is missing." >&2
+              echo "Remove the stale checksum and re-run; objectCreator cannot overwrite it in place." >&2
+              exit 1
+            fi
+
+            # has_sha is false here, so the checksum is always (re)derived from the
+            # authoritative tarball bytes below and uploaded — never left to disagree.
             if [[ "${has_tarball}" == true ]]; then
               # Checksum the published bytes, not a rebuild: gzip records an mtime,
               # so a fresh archive would not be identical to the stored one.
@@ -240,11 +252,9 @@ jobs:
               rm -f build/gestaltd
             fi
 
-            if [[ "${has_sha}" != true ]]; then
-              # Bare filename so `sha256sum -c` works after download.
-              (cd dist && shasum -a 256 "${asset}" > "${asset}.sha256")
-              gcloud storage cp "dist/${asset}.sha256" "${dest}/${asset}.sha256"
-            fi
+            # Bare filename so `sha256sum -c` works after download.
+            (cd dist && shasum -a 256 "${asset}" > "${asset}.sha256")
+            gcloud storage cp "dist/${asset}.sha256" "${dest}/${asset}.sha256"
           done
 
   # Post-validation gate for the alpine release image. By now build-alpine-image
