@@ -2007,6 +2007,42 @@ func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistr
 	return client, nil
 }
 
+const workflowProviderBuildAttempts = 6
+
+// workflowProviderBuildBackoff is the base delay between workflow provider build
+// retries (grows linearly per attempt). A var so tests can shrink it.
+var workflowProviderBuildBackoff = 5 * time.Second
+
+// buildWorkflowProviderWithRetry retries a workflow provider build whose initial
+// backend connect can transiently time out under concurrent startup load, and
+// returns the last error after exhausting attempts so a genuine failure is still
+// surfaced to bootstrap.
+func buildWorkflowProviderWithRetry(ctx context.Context, build func() (coreworkflow.Provider, error)) (coreworkflow.Provider, error) {
+	var lastErr error
+	for attempt := 1; attempt <= workflowProviderBuildAttempts; attempt++ {
+		provider, err := build()
+		if err == nil {
+			return provider, nil
+		}
+		lastErr = err
+		if attempt == workflowProviderBuildAttempts {
+			break
+		}
+		backoff := time.Duration(attempt) * workflowProviderBuildBackoff
+		slog.WarnContext(ctx, "workflow provider build failed; retrying",
+			"attempt", attempt,
+			"maxAttempts", workflowProviderBuildAttempts,
+			"backoff", backoff.String(),
+			"error", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+	return nil, lastErr
+}
+
 func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreworkflow.Provider, error) {
 	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindWorkflow, name)
 	if entry == nil {
@@ -2040,7 +2076,15 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 	if factories.Workflow == nil {
 		return nil, fmt.Errorf("workflow factory is not registered")
 	}
-	provider, err := factories.Workflow(ctx, name, node, hostServices, deps)
+	// The workflow provider connects to its backend (e.g. Temporal) during this
+	// build. Under heavy concurrent provider startup (many source-run apps) that
+	// connect can transiently exceed its deadline; retry with backoff so a slow
+	// connect does not fail bootstrap and crash-loop the daemon when it would
+	// succeed once the startup storm subsides. NewExecutable closes its process on
+	// a failed configure, so each attempt is self-contained.
+	provider, err := buildWorkflowProviderWithRetry(ctx, func() (coreworkflow.Provider, error) {
+		return factories.Workflow(ctx, name, node, hostServices, deps)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
