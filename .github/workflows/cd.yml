@@ -1,8 +1,10 @@
 name: CD (gestaltd)
 
 # Continuous delivery for gestaltd. Re-runs the validation suite (including the
-# race matrix) and builds + pushes the per-commit CI image to Artifact Registry.
-# Every CD run publishes: it is triggered by pushes to main and by manual
+# race matrix) and publishes per-commit artifacts addressed by commit SHA: the
+# CI image and alpine image to Artifact Registry, the Helm chart to the OCI chart
+# repo, and cross-compiled binaries (linux + macOS) to the public CI binary
+# bucket. Every CD run publishes: it is triggered by pushes to main and by manual
 # dispatch for a specific commit SHA. The hourly health check (and the docs
 # build smoke check) runs in ci.yml instead.
 
@@ -153,6 +155,85 @@ jobs:
             --app-version "${SHA}" \
             --destination /tmp/charts
           helm push "/tmp/charts/gestaltd-${sha_version}.tgz" "${CHART_REPOSITORY}"
+
+  # Publish per-commit gestaltd binaries (linux + macOS, amd64 + arm64) to the
+  # public CI binary bucket, addressed by commit SHA. This is the per-commit
+  # counterpart to release-gestaltd.yml's semver GitHub Release tarballs, and the
+  # only SHA-addressed artifact that ships a native macOS binary — the CI and
+  # alpine images are linux-only. Toolshed's app-packaging workflow pulls these
+  # by SHA to build provider artifacts on macOS runners without waiting for a
+  # semver release cut.
+  #
+  # Gated on validation like publish-chart: these binaries feed production app
+  # packaging, so they publish only after the tests clear. Cross-compilation is
+  # cheap, so all four targets build in one job (no per-platform runner matrix).
+  # The bucket is public-read and writable by the CI image publisher SA, so it
+  # reuses that identity. Each object is skipped if already present (re-runs /
+  # same-commit dispatch); the bucket keeps immutable, versioned history.
+  publish-binaries:
+    name: Publish gestaltd Binaries to GCS
+    needs: [resolve-ref, validate]
+    if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.resolve-ref.outputs.sha }}
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+      - name: Build, package, and upload binaries by commit SHA
+        env:
+          SHA: ${{ needs.resolve-ref.outputs.sha }}
+          VERSION: ${{ needs.resolve-ref.outputs.version }}
+          BUCKET: ${{ vars.GESTALTD_CI_BINARY_BUCKET }}
+        run: |
+          set -euo pipefail
+          : "${BUCKET:?GESTALTD_CI_BINARY_BUCKET repository variable is required}"
+
+          dest="gs://${BUCKET}/gestaltd/sha-${SHA}"
+          # goos/goarch/asset-suffix triples; suffixes match release-gestaltd.yml.
+          platforms=(
+            "darwin/arm64/macos-arm64"
+            "darwin/amd64/macos-x86_64"
+            "linux/amd64/linux-x86_64"
+            "linux/arm64/linux-arm64"
+          )
+
+          mkdir -p build dist
+          for entry in "${platforms[@]}"; do
+            IFS=/ read -r goos goarch suffix <<<"${entry}"
+            asset="gestaltd-${suffix}.tar.gz"
+
+            if gcloud storage ls "${dest}/${asset}" >/dev/null 2>&1; then
+              echo "${asset} already published for ${SHA}; skipping."
+              continue
+            fi
+
+            (
+              cd gestaltd
+              CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build \
+                -ldflags "-X main.version=${VERSION}" \
+                -o "${GITHUB_WORKSPACE}/build/gestaltd" \
+                ./cmd/gestaltd
+            )
+            tar -czf "dist/${asset}" -C build gestaltd
+            # Bare filename in the checksum file so `sha256sum -c` works after download.
+            (cd dist && shasum -a 256 "${asset}" > "${asset}.sha256")
+            gcloud storage cp "dist/${asset}" "dist/${asset}.sha256" "${dest}/"
+            rm -f build/gestaltd
+          done
 
   # Post-validation gate for the alpine release image. By now build-alpine-image
   # has already pushed the immutable sha-<commit>-alpine image, so the action's
