@@ -36,6 +36,7 @@ export type BuildArgs = {
   providerName: string;
   goos: string;
   goarch: string;
+  libc?: string;
   compileTarget?: string;
 };
 
@@ -58,6 +59,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
 const TARGET_OS_ENV = "GESTALT_TARGET_OS";
 const TARGET_ARCH_ENV = "GESTALT_TARGET_ARCH";
+const TARGET_LIBC_ENV = "GESTALT_TARGET_LIBC";
 
 /**
  * Derives build args from the source manifest + package metadata + env. Used
@@ -79,6 +81,7 @@ export function deriveBuildArgs(root: string): BuildArgs | undefined {
       providerName: providerNameFromSource(source),
       goos: targetGoos(),
       goarch: targetGoarch(),
+      libc: targetLibc(),
     };
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -109,6 +112,14 @@ function targetGoarch(): string {
     return env.trim();
   }
   return ARCH_ALIASES[process.arch] ?? process.arch;
+}
+
+// Optional libc selector for linux targets. gestaltd sets this to "musl" for the
+// shipped artifact (the deploy runtime is musl) and to the build host's libc for
+// the host-side catalog build, which must exec on the build machine. Empty/unset
+// keeps the musl default.
+function targetLibc(): string {
+  return (process.env[TARGET_LIBC_ENV] ?? "").trim();
 }
 
 /**
@@ -144,6 +155,7 @@ export function buildProviderBinary(args: BuildArgs): void {
       outputPath,
       args.goos,
       args.goarch,
+      args.libc ?? "",
       args.compileTarget,
     );
     const result = spawnSync(bunCommand.command, bunCommand.args, {
@@ -169,7 +181,8 @@ export function bunBuildCommand(
   outputPath: string,
   goos: string,
   goarch: string,
-  compileTarget = bunTarget(goos, goarch),
+  libc = "",
+  compileTarget = bunTarget(goos, goarch, libc),
 ): { command: string; args: string[] } {
   return {
     command: resolveBunExecutable(),
@@ -188,17 +201,21 @@ export function bunBuildCommand(
 /**
  * Maps a Go-style `GOOS` / `GOARCH` target into Bun's compile target format.
  */
-export function bunTarget(goos: string, goarch: string): string {
+export function bunTarget(goos: string, goarch: string, libc = "musl"): string {
   const key = `${goos}/${goarch}`;
+  // linux defaults to musl (the deploy runtime); "glibc"/"gnu" selects the
+  // glibc target so a binary built for catalog generation can exec on a glibc
+  // build host. libc is ignored for non-linux targets.
+  const gnu = libc === "glibc" || libc === "gnu";
   switch (key) {
     case "darwin/amd64":
       return "bun-darwin-x64";
     case "darwin/arm64":
       return "bun-darwin-arm64";
     case "linux/amd64":
-      return "bun-linux-x64-musl";
+      return gnu ? "bun-linux-x64" : "bun-linux-x64-musl";
     case "linux/arm64":
-      return "bun-linux-arm64-musl";
+      return gnu ? "bun-linux-arm64" : "bun-linux-arm64-musl";
     case "windows/amd64":
       return "bun-windows-x64";
     case "windows/arm64":

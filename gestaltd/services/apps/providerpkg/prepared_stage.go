@@ -69,7 +69,9 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 		return nil, err
 	}
 	targetOpts := SourceBuildOptions{GOOS: opts.GOOS, GOARCH: opts.GOARCH, Output: opts.BuildOutput}
-	hostBuiltForCatalog, err := ensureHostBuildForSourceStaticCatalog(manifestPath, manifest, SourceBuildOptions{Output: opts.BuildOutput})
+	// Build the catalog binary for the build host's libc so it can be exec'd here
+	// to generate the static catalog (a musl binary cannot run on a glibc runner).
+	hostBuiltForCatalog, err := ensureHostBuildForSourceStaticCatalog(manifestPath, manifest, SourceBuildOptions{Output: opts.BuildOutput, LibC: HostLibC()})
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +83,14 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	if err != nil {
 		return nil, err
 	}
-	if producesOutput && (!hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts)) {
+	// The catalog build is reusable as the shipped artifact only when it targets
+	// the same platform AND libc; otherwise build the target artifact (e.g. the
+	// musl artifact, after a glibc host catalog build) so it overwrites the
+	// host-libc catalog binary before staging.
+	reuseHostBuild := hostBuiltForCatalog &&
+		sourceBuildTargetsHost(targetOpts) &&
+		HostLibC() == effectiveTargetLibC(targetOpts)
+	if producesOutput && !reuseHostBuild {
 		if err := EnsureSourceBuildOutput(manifestPath, manifest, targetOpts); err != nil {
 			return nil, err
 		}
