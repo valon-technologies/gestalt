@@ -41,9 +41,8 @@ variable "gestaltd_chart_reader_service_accounts" {
     "github-deploy-stage@valon-tools-stage.iam.gserviceaccount.com",
     "terraform-dev@valon-tools-dev.iam.gserviceaccount.com",
     "terraform-stage@valon-tools-stage.iam.gserviceaccount.com",
-    # GKE node service accounts: gestaltd pods now pull the runtime image from
-    # this repo, so the nodes that run them need read access (cross-project).
     "tools-dev-nodes@valon-tools-dev.iam.gserviceaccount.com",
+    "tools-stage-nodes@valon-tools-stage.iam.gserviceaccount.com",
   ]
 }
 
