@@ -210,26 +210,41 @@ jobs:
             IFS=/ read -r goos goarch suffix <<<"${entry}"
             asset="gestaltd-${suffix}.tar.gz"
 
-            # Skip only when both the tarball and its checksum are present, so a
-            # prior run that uploaded the archive but died before the .sha256 is
-            # repaired on retry. `ls` exits non-zero if either object is missing.
-            if gcloud storage ls "${dest}/${asset}" "${dest}/${asset}.sha256" >/dev/null 2>&1; then
+            # Upload each object only when it is absent: objectCreator cannot
+            # overwrite, so re-uploading an existing object would 403. This also
+            # makes a partial prior run (tarball uploaded, checksum not) self-heal.
+            has_tarball=false
+            has_sha=false
+            gcloud storage ls "${dest}/${asset}" >/dev/null 2>&1 && has_tarball=true
+            gcloud storage ls "${dest}/${asset}.sha256" >/dev/null 2>&1 && has_sha=true
+
+            if [[ "${has_tarball}" == true && "${has_sha}" == true ]]; then
               echo "${asset} (+ checksum) already published for ${SHA}; skipping."
               continue
             fi
 
-            (
-              cd gestaltd
-              CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build \
-                -ldflags "-X main.version=${VERSION}" \
-                -o "${GITHUB_WORKSPACE}/build/gestaltd" \
-                ./cmd/gestaltd
-            )
-            tar -czf "dist/${asset}" -C build gestaltd
-            # Bare filename in the checksum file so `sha256sum -c` works after download.
-            (cd dist && shasum -a 256 "${asset}" > "${asset}.sha256")
-            gcloud storage cp "dist/${asset}" "dist/${asset}.sha256" "${dest}/"
-            rm -f build/gestaltd
+            if [[ "${has_tarball}" == true ]]; then
+              # Checksum the published bytes, not a rebuild: gzip records an mtime,
+              # so a fresh archive would not be identical to the stored one.
+              gcloud storage cp "${dest}/${asset}" "dist/${asset}"
+            else
+              (
+                cd gestaltd
+                CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build \
+                  -ldflags "-X main.version=${VERSION}" \
+                  -o "${GITHUB_WORKSPACE}/build/gestaltd" \
+                  ./cmd/gestaltd
+              )
+              tar -czf "dist/${asset}" -C build gestaltd
+              gcloud storage cp "dist/${asset}" "${dest}/${asset}"
+              rm -f build/gestaltd
+            fi
+
+            if [[ "${has_sha}" != true ]]; then
+              # Bare filename so `sha256sum -c` works after download.
+              (cd dist && shasum -a 256 "${asset}" > "${asset}.sha256")
+              gcloud storage cp "dist/${asset}.sha256" "${dest}/${asset}.sha256"
+            fi
           done
 
   # Post-validation gate for the alpine release image. By now build-alpine-image
