@@ -56,7 +56,7 @@ locals {
   chart_repository                    = "oci://${local.artifact_registry_host}/${var.project_id}/${var.artifact_registry_repository_id}"
   ci_image_repository                 = "${local.artifact_registry_host}/${var.project_id}/${google_artifact_registry_repository.gestaltd_ci_images.repository_id}/gestaltd"
   deployer_member                     = "serviceAccount:${var.deployer_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
-  chart_ref_condition                 = "(assertion.ref.startsWith(\"${var.github_ref_prefix}\") || assertion.ref == \"${var.ci_image_github_ref}\")"
+  chart_ref_condition                 = "assertion.ref.startsWith(\"${var.github_ref_prefix}\")"
   ci_image_ref_condition              = "assertion.ref == \"${var.ci_image_github_ref}\""
   workload_identity_provider          = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_github_actions.workload_identity_pool_provider_id}"
   ci_image_workload_identity_provider = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_ci_image_github_actions.workload_identity_pool_provider_id}"
@@ -179,7 +179,7 @@ resource "google_iam_workload_identity_pool_provider" "gestaltd_github_actions" 
   workload_identity_pool_id          = google_iam_workload_identity_pool.github_actions.workload_identity_pool_id
   workload_identity_pool_provider_id = var.gestaltd_github_actions_provider_id
   display_name                       = "gestaltd"
-  description                        = "OIDC provider for ${var.github_repository} gestaltd release (tags) and CD (main) chart/image publish workflows."
+  description                        = "OIDC provider for ${var.github_repository} gestaltd release workflows."
 
   attribute_mapping = {
     "google.subject"             = "assertion.sub"
