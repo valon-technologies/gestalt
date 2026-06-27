@@ -85,14 +85,38 @@ jobs:
       install-markdown: |
         - Installer: `curl -fsSL https://gestaltd.ai/install-gestaltd.sh | sh -s -- --version ${version}`
         - Homebrew: `brew upgrade valon-technologies/gestalt/gestaltd`
-        - Docker: `docker pull valontechnologies/gestaltd:${version}-alpine`
+        - Docker: `docker pull valontechnologies/gestaltd:${version}`
         - Docs: [Deployment guide](https://gestaltd.ai/deploy)
       exclude-subject-patterns: |
         ^Update gestaltd formula and chart to v
       download-artifact-pattern: 'gestaltd-*'
 
+  # Default image: the Alpine build published under the unsuffixed
+  # `:<version>` and `:latest` tags. The Helm chart's default image tag is
+  # `.Chart.AppVersion` (no suffix), and external `docker pull` / install docs
+  # reference the unsuffixed tag, so this must exist. The empty tag-suffix also
+  # makes the reusable workflow sync docs/dockerhub/gestaltd.md to Docker Hub.
+  publish-image:
+    name: Publish Docker Image
+    needs: build
+    uses: ./.github/workflows/publish-dockerhub-image.yml
+    secrets: inherit
+    with:
+      image-name: valontechnologies/gestaltd
+      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
+      dockerfile: gestaltd/Dockerfile
+      version-prefix: 'gestaltd/v'
+      short-description: Platform for self-hostable, configurable integrations and tooling
+      readme-filepath: docs/dockerhub/gestaltd.md
+      download-artifact-pattern: 'gestaltd-*'
+      platforms: 'linux/amd64,linux/arm64'
+      target: alpine-prebuilt
+
+  # `-alpine` alias of the same Alpine image, kept because valon-tools pins
+  # `image.tag=<version>-alpine`. Once that pin moves to the unsuffixed tag,
+  # this job can be removed.
   publish-image-alpine:
-    name: Publish Docker Image (Alpine)
+    name: Publish Docker Image (Alpine alias)
     needs: build
     uses: ./.github/workflows/publish-dockerhub-image.yml
     secrets: inherit

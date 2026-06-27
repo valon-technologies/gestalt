@@ -24,8 +24,10 @@
 
 | Tag | Base | Shell | Size |
 | --- | --- | --- | --- |
+| `latest`, `<version>` | Alpine 3.23 | Yes | Small |
 | `latest-alpine`, `<version>-alpine` | Alpine 3.23 | Yes | Small |
 
+The `-alpine` tags are aliases of the default tags and point at the same image.
 Tags are published for `linux/amd64` and `linux/arm64`.
 
 ## What the image includes
@@ -46,7 +48,7 @@ docker run --rm \
   -e GESTALT_ENCRYPTION_KEY="${GESTALT_ENCRYPTION_KEY}" \
   -v "$(pwd)/gestalt.yaml:/etc/gestaltd/config.yaml:ro" \
   -v gestalt-data:/data \
-  valontechnologies/gestaltd:latest-alpine
+  valontechnologies/gestaltd:latest
 ```
 
 Generate the encryption key once with `openssl rand -hex 32` and use that value for the deployment.
@@ -77,7 +79,7 @@ apps: {}
 ```yaml
 services:
   gestaltd:
-    image: valontechnologies/gestaltd:latest-alpine
+    image: valontechnologies/gestaltd:latest
     ports:
       - "8080:8080"
     volumes:
@@ -182,7 +184,7 @@ docker run --rm -it --entrypoint sh valontechnologies/gestaltd:latest-alpine
 To check startup behavior:
 
 ```sh
-docker run --rm valontechnologies/gestaltd:latest-alpine --help
+docker run --rm valontechnologies/gestaltd:latest --help
 ```
 
 ## Caveats
@@ -190,8 +192,8 @@ docker run --rm valontechnologies/gestaltd:latest-alpine --help
 - The published image defaults to unlocked startup for local usability. For
   production, bake locked state and override the command to
   `serve --locked --config ...`.
-- `docker run valontechnologies/gestaltd:latest-alpine` by itself fails because
-  the image does not auto-generate config in-container.
+- `docker run valontechnologies/gestaltd:latest` by itself fails because the
+  image does not auto-generate config in-container.
 - If you use SQLite, do not scale to multiple replicas.
 
 ## Learn more
