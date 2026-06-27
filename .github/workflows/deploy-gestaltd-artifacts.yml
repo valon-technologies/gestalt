@@ -1,4 +1,4 @@
-name: Deploy gestaltd Artifacts
+name: Terraform Apply (gestaltd)
 
 on:
   push:
