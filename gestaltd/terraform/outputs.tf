@@ -3,6 +3,7 @@ output "github_actions_variables" {
   value = {
     GESTALTD_ARTIFACT_REGISTRY_HOST            = local.artifact_registry_host
     GESTALTD_CHART_REPOSITORY                  = local.chart_repository
+    GESTALTD_CI_BINARY_BUCKET                  = google_storage_bucket.gestaltd_ci_binaries.name
     GESTALTD_CI_GCP_SERVICE_ACCOUNT            = google_service_account.ci_image_publisher.email
     GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER = local.ci_image_workload_identity_provider
     GESTALTD_CI_IMAGE_REPOSITORY               = local.ci_image_repository
@@ -34,6 +35,11 @@ output "ci_image_repository" {
 output "ci_image_publisher_service_account" {
   description = "Service account used by GitHub Actions to publish gestaltd CI images."
   value       = google_service_account.ci_image_publisher.email
+}
+
+output "ci_binary_bucket" {
+  description = "Public GCS bucket holding commit-addressed gestaltd CI binaries."
+  value       = google_storage_bucket.gestaltd_ci_binaries.name
 }
 
 output "workload_identity_provider" {

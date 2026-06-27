@@ -25,6 +25,7 @@ values into the `valon-technologies/gestalt` repository variables:
 ```text
 GESTALTD_ARTIFACT_REGISTRY_HOST
 GESTALTD_CHART_REPOSITORY
+GESTALTD_CI_BINARY_BUCKET
 GESTALTD_CI_GCP_SERVICE_ACCOUNT
 GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER
 GESTALTD_CI_IMAGE_REPOSITORY
@@ -49,9 +50,20 @@ on `main`. To backfill an older commit, run that workflow manually with
 `gestalt_ref` set to the full commit SHA. Manual backfill runs the same
 validation jobs before publishing the image.
 
-The legacy GCS CI binary bucket remains managed so Terraform does not destroy
-historical artifacts during this migration. Current workflows do not publish new
-GCS binary artifacts.
+The GCS CI binary bucket (`GESTALTD_CI_BINARY_BUCKET`) holds commit-addressed
+gestaltd binaries published by the `CD (gestaltd)` workflow. It is public-read
+and writable by the CI image publisher service account. Cross-compiled tarballs
+(linux + macOS, amd64 + arm64) land under:
+
+```text
+gs://${GESTALTD_CI_BINARY_BUCKET}/gestaltd/sha-<40-character-commit-sha>/gestaltd-<platform>.tar.gz
+```
+
+Each tarball has a companion `.tar.gz.sha256`. These are the per-commit
+counterpart to the semver GitHub Release binaries, and the only SHA-addressed
+artifact carrying a native macOS binary (the CI and alpine images are
+linux-only). Consumers fetch them over plain public HTTPS by commit SHA, with no
+authentication.
 
 `valon-tools` environments should consume the chart repository location as input
 variables instead of creating their own per-environment chart repository.
