@@ -88,7 +88,7 @@ jobs:
   # resolve-ref succeeding (not on build-image) and uses !cancelled() so a failed
   # build-image still lets this run — it just falls back to a full build + push.
   build-and-push:
-    name: Build & Publish CI Image
+    name: Publish Docker Image to GCP Artifact Registry
     needs: [resolve-ref, validate, build-image]
     if: ${{ !cancelled() && needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
