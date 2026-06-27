@@ -41,6 +41,8 @@ variable "gestaltd_chart_reader_service_accounts" {
     "github-deploy-stage@valon-tools-stage.iam.gserviceaccount.com",
     "terraform-dev@valon-tools-dev.iam.gserviceaccount.com",
     "terraform-stage@valon-tools-stage.iam.gserviceaccount.com",
+    "tools-dev-nodes@valon-tools-dev.iam.gserviceaccount.com",
+    "tools-stage-nodes@valon-tools-stage.iam.gserviceaccount.com",
   ]
 }
 
