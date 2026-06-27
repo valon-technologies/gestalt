@@ -24,19 +24,16 @@
 
 | Tag | Base | Shell | Size |
 | --- | --- | --- | --- |
-| `latest`, `<version>` | `scratch` (static) | No | Smallest |
+| `latest`, `<version>` | Alpine 3.23 | Yes | Small |
 | `latest-alpine`, `<version>-alpine` | Alpine 3.23 | Yes | Small |
 
-All tags are published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
+The `-alpine` tags are aliases of the default tags and point at the same image.
+Tags are published for `linux/amd64` and `linux/arm64`.
 
 ## What the image includes
 
-The default image is a static build: just the `gestaltd` binary and CA
-certificates on a `scratch` base. There is no shell, no package manager, and
-minimal attack surface.
-
-For debugging or app compatibility, use the `-alpine` variant. It includes
-a shell, `ca-certificates`, `libgcc`, `libstdc++`, and a writable `/data`
+The image is an Alpine build: the `gestaltd` binary on an Alpine base with a
+shell, `ca-certificates`, `libgcc`, `libstdc++`, and a writable `/data`
 directory owned by `nobody`.
 
 ## Run a simple config
@@ -178,8 +175,7 @@ horizontally scaled deployments, use Postgres or MySQL.
 
 ## Debugging
 
-The default static image does not include a shell. Use the `-alpine` variant
-for interactive debugging:
+The image includes a shell for interactive debugging:
 
 ```sh
 docker run --rm -it --entrypoint sh valontechnologies/gestaltd:latest-alpine
@@ -198,7 +194,6 @@ docker run --rm valontechnologies/gestaltd:latest --help
   `serve --locked --config ...`.
 - `docker run valontechnologies/gestaltd:latest` by itself fails because the
   image does not auto-generate config in-container.
-- The default image does not include a shell. Use `-alpine` for debugging.
 - If you use SQLite, do not scale to multiple replicas.
 
 ## Learn more

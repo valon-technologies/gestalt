@@ -203,12 +203,12 @@ latest_daemon_output="$(
     GESTALT_INSTALL_DOWNLOAD_BASE="file:///does-not-exist" \
     GESTALT_INSTALL_MAX_PAGES=2 \
     GESTALT_INSTALL_OS=linux \
-    GESTALT_INSTALL_ARCH=armv7l \
+    GESTALT_INSTALL_ARCH=aarch64 \
     sh "$daemon_installer" --dry-run --bin-dir "$tmp_dir/dry-run-bin"
 )"
 assert_contains "$latest_daemon_output" "component: gestaltd"
 assert_contains "$latest_daemon_output" "tag: gestaltd/v0.9.0-alpha.1"
-assert_contains "$latest_daemon_output" "gestaltd-linux-armv7.tar.gz"
+assert_contains "$latest_daemon_output" "gestaltd-linux-arm64.tar.gz"
 assert_contains "$latest_daemon_output" "binaries: gestaltd"
 
 dry_run_dead_base="$(
