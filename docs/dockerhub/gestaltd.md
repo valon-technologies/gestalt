@@ -24,19 +24,14 @@
 
 | Tag | Base | Shell | Size |
 | --- | --- | --- | --- |
-| `latest`, `<version>` | `scratch` (static) | No | Smallest |
 | `latest-alpine`, `<version>-alpine` | Alpine 3.23 | Yes | Small |
 
-All tags are published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
+Tags are published for `linux/amd64` and `linux/arm64`.
 
 ## What the image includes
 
-The default image is a static build: just the `gestaltd` binary and CA
-certificates on a `scratch` base. There is no shell, no package manager, and
-minimal attack surface.
-
-For debugging or app compatibility, use the `-alpine` variant. It includes
-a shell, `ca-certificates`, `libgcc`, `libstdc++`, and a writable `/data`
+The image is an Alpine build: the `gestaltd` binary on an Alpine base with a
+shell, `ca-certificates`, `libgcc`, `libstdc++`, and a writable `/data`
 directory owned by `nobody`.
 
 ## Run a simple config
@@ -51,7 +46,7 @@ docker run --rm \
   -e GESTALT_ENCRYPTION_KEY="${GESTALT_ENCRYPTION_KEY}" \
   -v "$(pwd)/gestalt.yaml:/etc/gestaltd/config.yaml:ro" \
   -v gestalt-data:/data \
-  valontechnologies/gestaltd:latest
+  valontechnologies/gestaltd:latest-alpine
 ```
 
 Generate the encryption key once with `openssl rand -hex 32` and use that value for the deployment.
@@ -82,7 +77,7 @@ apps: {}
 ```yaml
 services:
   gestaltd:
-    image: valontechnologies/gestaltd:latest
+    image: valontechnologies/gestaltd:latest-alpine
     ports:
       - "8080:8080"
     volumes:
@@ -178,8 +173,7 @@ horizontally scaled deployments, use Postgres or MySQL.
 
 ## Debugging
 
-The default static image does not include a shell. Use the `-alpine` variant
-for interactive debugging:
+The image includes a shell for interactive debugging:
 
 ```sh
 docker run --rm -it --entrypoint sh valontechnologies/gestaltd:latest-alpine
@@ -188,7 +182,7 @@ docker run --rm -it --entrypoint sh valontechnologies/gestaltd:latest-alpine
 To check startup behavior:
 
 ```sh
-docker run --rm valontechnologies/gestaltd:latest --help
+docker run --rm valontechnologies/gestaltd:latest-alpine --help
 ```
 
 ## Caveats
@@ -196,9 +190,8 @@ docker run --rm valontechnologies/gestaltd:latest --help
 - The published image defaults to unlocked startup for local usability. For
   production, bake locked state and override the command to
   `serve --locked --config ...`.
-- `docker run valontechnologies/gestaltd:latest` by itself fails because the
-  image does not auto-generate config in-container.
-- The default image does not include a shell. Use `-alpine` for debugging.
+- `docker run valontechnologies/gestaltd:latest-alpine` by itself fails because
+  the image does not auto-generate config in-container.
 - If you use SQLite, do not scale to multiple replicas.
 
 ## Learn more

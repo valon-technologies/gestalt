@@ -34,11 +34,6 @@ jobs:
             goos: linux
             goarch: arm64
             suffix: linux-arm64
-          - name: Linux-ARMv7
-            goos: linux
-            goarch: arm
-            goarm: '7'
-            suffix: linux-armv7
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -90,27 +85,11 @@ jobs:
       install-markdown: |
         - Installer: `curl -fsSL https://gestaltd.ai/install-gestaltd.sh | sh -s -- --version ${version}`
         - Homebrew: `brew upgrade valon-technologies/gestalt/gestaltd`
-        - Docker: `docker pull valontechnologies/gestaltd:${version}`
+        - Docker: `docker pull valontechnologies/gestaltd:${version}-alpine`
         - Docs: [Deployment guide](https://gestaltd.ai/deploy)
       exclude-subject-patterns: |
         ^Update gestaltd formula and chart to v
       download-artifact-pattern: 'gestaltd-*'
-
-  publish-image:
-    name: Publish Docker Image (static)
-    needs: build
-    uses: ./.github/workflows/publish-dockerhub-image.yml
-    secrets: inherit
-    with:
-      image-name: valontechnologies/gestaltd
-      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
-      dockerfile: gestaltd/Dockerfile
-      version-prefix: 'gestaltd/v'
-      short-description: Platform for self-hostable, configurable integrations and tooling
-      readme-filepath: docs/dockerhub/gestaltd.md
-      download-artifact-pattern: 'gestaltd-*'
-      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
-      target: static-prebuilt
 
   publish-image-alpine:
     name: Publish Docker Image (Alpine)
@@ -125,7 +104,7 @@ jobs:
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
       download-artifact-pattern: 'gestaltd-*'
-      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+      platforms: 'linux/amd64,linux/arm64'
       tag-suffix: '-alpine'
       target: alpine-prebuilt
 
@@ -174,7 +153,7 @@ jobs:
       - name: Parse checksums
         id: checksums
         run: |
-          for platform in macos-arm64 macos-x86_64 linux-arm64 linux-armv7 linux-x86_64; do
+          for platform in macos-arm64 macos-x86_64 linux-arm64 linux-x86_64; do
             hash=$(awk '{print $1}' "checksums/gestaltd-${platform}.tar.gz.sha256")
             echo "${platform}=${hash}" >> "$GITHUB_OUTPUT"
           done
