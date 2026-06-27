@@ -57,27 +57,10 @@ jobs:
       install-markdown: |
         - Installer: `curl -fsSL https://gestaltd.ai/install-gestalt.sh | sh -s -- --version ${version}`
         - Homebrew: `brew upgrade valon-technologies/gestalt/gestalt`
-        - Docker: `docker pull valontechnologies/gestalt:${version}`
         - Docs: [CLI guide](https://gestaltd.ai/client/cli)
       exclude-subject-patterns: |
         ^Update gestalt formula to v
       download-artifact-pattern: 'gestalt-*'
-
-  publish-image:
-    name: Publish Docker Image
-    needs: build
-    uses: ./.github/workflows/publish-dockerhub-image.yml
-    secrets: inherit
-    with:
-      image-name: valontechnologies/gestalt
-      image-url: https://hub.docker.com/r/valontechnologies/gestalt
-      dockerfile: gestalt/Dockerfile
-      version-prefix: 'gestalt/v'
-      short-description: CLI client for Gestalt authentication, integrations, workflows, and interactive agents.
-      readme-filepath: docs/dockerhub/gestalt.md
-      download-artifact-pattern: 'gestalt-linux-*'
-      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
-      target: distroless
 
   update-formula:
     name: Update Homebrew Formula

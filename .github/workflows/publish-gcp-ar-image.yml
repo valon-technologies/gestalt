@@ -1,9 +1,9 @@
 name: Publish GCP Artifact Registry Image
 
 # Builds a gestaltd release image and pushes it to Google Artifact Registry by
-# semver tag. This is the internal-deploy counterpart to publish-dockerhub-image.yml:
-# the image is addressed alongside the Helm chart in Artifact Registry and pulled
-# by valon-tools via Workload Identity rather than from public Docker Hub.
+# semver tag: the image is addressed alongside the Helm chart in Artifact Registry
+# and pulled by valon-tools via Workload Identity. gestaltd is no longer published
+# to Docker Hub.
 
 on:
   workflow_call:
