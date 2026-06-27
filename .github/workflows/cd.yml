@@ -216,8 +216,11 @@ jobs:
             IFS=/ read -r goos goarch suffix <<<"${entry}"
             asset="gestaltd-${suffix}.tar.gz"
 
-            if gcloud storage ls "${dest}/${asset}" >/dev/null 2>&1; then
-              echo "${asset} already published for ${SHA}; skipping."
+            # Skip only when both the tarball and its checksum are present, so a
+            # prior run that uploaded the archive but died before the .sha256 is
+            # repaired on retry. `ls` exits non-zero if either object is missing.
+            if gcloud storage ls "${dest}/${asset}" "${dest}/${asset}.sha256" >/dev/null 2>&1; then
+              echo "${asset} (+ checksum) already published for ${SHA}; skipping."
               continue
             fi
 

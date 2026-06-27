@@ -294,6 +294,16 @@ resource "google_storage_bucket_iam_member" "legacy_ci_binary_publisher" {
   member = "serviceAccount:${google_service_account.ci_image_publisher.email}"
 }
 
+# The CD publish-binaries job lists existing objects to skip already-published
+# commits. objectCreator alone cannot list/get, so grant the publisher explicit
+# read rather than depending on the public allUsers grant for its own idempotency
+# check (that grant could be tightened without warning).
+resource "google_storage_bucket_iam_member" "ci_binary_publisher_viewer" {
+  bucket = google_storage_bucket.gestaltd_ci_binaries.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.ci_image_publisher.email}"
+}
+
 resource "google_storage_bucket_iam_member" "legacy_ci_binary_public_readers" {
   bucket = google_storage_bucket.gestaltd_ci_binaries.name
   role   = "roles/storage.objectViewer"
