@@ -53,7 +53,7 @@ jobs:
   # It is immutable and addressed by commit SHA, so an image for a commit whose
   # tests later fail is a harmless orphan, not a promoted artifact.
   build-image:
-    name: Build CI Image
+    name: Build Toolshed Docker Image
     needs: resolve-ref
     if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
@@ -116,7 +116,7 @@ jobs:
   # runs in parallel with them. Trade-off: a failed image build no longer blocks
   # the chart, so a commit's chart can land without its companion images.
   publish-chart:
-    name: Publish Helm Chart to GCP Artifact Registry
+    name: Publish Helm Chart to GCP AR
     needs: [resolve-ref, validate]
     if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
@@ -165,7 +165,7 @@ jobs:
   # failed build-alpine-image still lets this run — it just falls back to a full
   # multi-arch build + push. Runs in parallel with build-and-push and publish-chart.
   publish-alpine-image:
-    name: Publish Alpine Image to GCP Artifact Registry
+    name: Publish Alpine Image to GCP AR
     needs: [resolve-ref, validate, build-alpine-image]
     if: ${{ !cancelled() && needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
@@ -198,7 +198,7 @@ jobs:
   # resolve-ref succeeding (not on build-image) and uses !cancelled() so a failed
   # build-image still lets this run — it just falls back to a full build + push.
   build-and-push:
-    name: Publish Docker Image to GCP Artifact Registry
+    name: Publish Toolshed Docker Image to GCP AR
     needs: [resolve-ref, validate, build-image]
     if: ${{ !cancelled() && needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
