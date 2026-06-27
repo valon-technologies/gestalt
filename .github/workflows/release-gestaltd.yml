@@ -216,16 +216,6 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           helm package gestaltd/deploy/helm/gestaltd --destination /tmp/charts
-          # Also package a chart labeled by commit SHA so valon-tools can pin a
-          # single commit for both the image and the chart. Helm requires SemVer
-          # chart versions and rewrites '+' to '_' in OCI tags, so the SHA is
-          # encoded as a prerelease identifier (0.0.0-g<sha12>) rather than build
-          # metadata. appVersion carries the full commit for traceability.
-          sha_version="0.0.0-g${GITHUB_SHA:0:12}"
-          helm package gestaltd/deploy/helm/gestaltd \
-            --version "${sha_version}" \
-            --app-version "${GITHUB_SHA}" \
-            --destination /tmp/charts
       - name: Authenticate to Google Cloud
         id: gcp-auth
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
@@ -241,8 +231,6 @@ jobs:
         run: |
           echo "${{ steps.gcp-auth.outputs.access_token }}" | helm registry login "${ARTIFACT_REGISTRY_HOST}" --username oauth2accesstoken --password-stdin
           helm push "/tmp/charts/gestaltd-${VERSION}.tgz" "${CHART_REPOSITORY}"
-          sha_version="0.0.0-g${GITHUB_SHA:0:12}"
-          helm push "/tmp/charts/gestaltd-${sha_version}.tgz" "${CHART_REPOSITORY}"
       - name: Commit and push repository updates
         run: |
           git config user.name "github-actions[bot]"
