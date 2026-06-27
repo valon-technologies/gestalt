@@ -112,25 +112,26 @@ jobs:
       platforms: 'linux/amd64,linux/arm64'
       target: alpine-prebuilt
 
-  # `-alpine` alias of the same Alpine image, kept because valon-tools pins
-  # `image.tag=<version>-alpine`. Once that pin moves to the unsuffixed tag,
-  # this job can be removed.
+  # `-alpine` tag of the same Alpine image, published to GCP Artifact Registry
+  # (not Docker Hub) alongside the Helm chart. valon-tools pins
+  # `image.tag=<version>-alpine` and pulls this image via Workload Identity, so
+  # it is not part of the public Docker Hub distribution.
   publish-image-alpine:
-    name: Publish Docker Image (Alpine alias)
+    name: Publish Docker Image (Alpine, GCP AR)
     needs: build
-    uses: ./.github/workflows/publish-dockerhub-image.yml
-    secrets: inherit
+    uses: ./.github/workflows/publish-gcp-ar-image.yml
     with:
-      image-name: valontechnologies/gestaltd
-      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
+      image-name: ${{ vars.GESTALTD_RELEASE_IMAGE_REPOSITORY }}
+      image-url: https://gestaltd.ai
+      registry-host: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
       dockerfile: gestaltd/Dockerfile
       version-prefix: 'gestaltd/v'
-      short-description: Platform for self-hostable, configurable integrations and tooling
-      readme-filepath: docs/dockerhub/gestaltd.md
       download-artifact-pattern: 'gestaltd-*'
       platforms: 'linux/amd64,linux/arm64'
       tag-suffix: '-alpine'
       target: alpine-prebuilt
+      gcp-service-account: ${{ vars.GESTALTD_GCP_SERVICE_ACCOUNT }}
+      gcp-workload-identity-provider: ${{ vars.GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
   update-formula:
     name: Update Homebrew Formula, Chart & OCI Publish
