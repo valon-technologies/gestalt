@@ -80,10 +80,15 @@ jobs:
   # Publish the per-commit chart (0.0.0-g<sha12>) to the immutable charts repo,
   # the per-commit counterpart to release-gestaltd.yml's semver chart. Skipped if
   # the immutable version is already published (re-runs / same-commit dispatch).
+  #
+  # Gated only on validation, not on the image-publish jobs: the chart packages
+  # YAML and consumes no output from build-and-push / publish-alpine-image, so it
+  # runs in parallel with them. Trade-off: a failed image build no longer blocks
+  # the chart, so a commit's chart can land without its companion images.
   publish-chart:
     name: Publish Helm Chart to GCP Artifact Registry
-    needs: [resolve-ref, validate, build-and-push, publish-alpine-image]
-    if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.build-and-push.result == 'success' && needs.publish-alpine-image.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
+    needs: [resolve-ref, validate]
+    if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -122,10 +127,14 @@ jobs:
   # Publish the per-commit alpine image (sha-<commit>-alpine) to the immutable
   # release image repo, built multi-arch from the Dockerfile's `alpine` target.
   # Skipped if the immutable tag already exists.
+  #
+  # Builds an independent image (different repo + target than build-and-push) and
+  # consumes none of its output, so it is gated only on validation and runs in
+  # parallel with build-and-push and publish-chart.
   publish-alpine-image:
     name: Publish Alpine Image to GCP Artifact Registry
-    needs: [resolve-ref, validate, build-and-push]
-    if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.build-and-push.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
+    needs: [resolve-ref, validate]
+    if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
