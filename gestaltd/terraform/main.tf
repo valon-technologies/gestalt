@@ -52,11 +52,15 @@ locals {
     var.labels,
   )
 
-  artifact_registry_host              = "${var.region}-docker.pkg.dev"
-  chart_repository                    = "oci://${local.artifact_registry_host}/${var.project_id}/${var.artifact_registry_repository_id}"
-  ci_image_repository                 = "${local.artifact_registry_host}/${var.project_id}/${google_artifact_registry_repository.gestaltd_ci_images.repository_id}/gestaltd"
-  deployer_member                     = "serviceAccount:${var.deployer_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
-  chart_ref_condition                 = "assertion.ref.startsWith(\"${var.github_ref_prefix}\")"
+  artifact_registry_host = "${var.region}-docker.pkg.dev"
+  chart_repository       = "oci://${local.artifact_registry_host}/${var.project_id}/${var.artifact_registry_repository_id}"
+  ci_image_repository    = "${local.artifact_registry_host}/${var.project_id}/${google_artifact_registry_repository.gestaltd_ci_images.repository_id}/gestaltd"
+  deployer_member        = "serviceAccount:${var.deployer_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
+  # The chart publisher identity is assumed both by release-gestaltd.yml (on
+  # gestaltd/v* tags) and by cd.yml (on main pushes). cd.yml publishes the
+  # per-commit SHA-versioned chart and alpine image to the charts repository, so
+  # the chart provider must trust main in addition to release tags.
+  chart_ref_condition                 = "(assertion.ref.startsWith(\"${var.github_ref_prefix}\") || assertion.ref == \"${var.ci_image_github_ref}\")"
   ci_image_ref_condition              = "assertion.ref == \"${var.ci_image_github_ref}\""
   workload_identity_provider          = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_github_actions.workload_identity_pool_provider_id}"
   ci_image_workload_identity_provider = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_ci_image_github_actions.workload_identity_pool_provider_id}"
@@ -179,7 +183,7 @@ resource "google_iam_workload_identity_pool_provider" "gestaltd_github_actions" 
   workload_identity_pool_id          = google_iam_workload_identity_pool.github_actions.workload_identity_pool_id
   workload_identity_pool_provider_id = var.gestaltd_github_actions_provider_id
   display_name                       = "gestaltd"
-  description                        = "OIDC provider for ${var.github_repository} gestaltd release workflows."
+  description                        = "OIDC provider for ${var.github_repository} gestaltd release (tags) and CD (main) chart/image publish workflows."
 
   attribute_mapping = {
     "google.subject"             = "assertion.sub"

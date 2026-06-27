@@ -120,6 +120,67 @@ jobs:
           echo "${{ steps.gcp-auth.outputs.access_token }}" | helm registry login "${ARTIFACT_REGISTRY_HOST}" --username oauth2accesstoken --password-stdin
           helm push "/tmp/charts/gestaltd-${sha_version}.tgz" "${CHART_REPOSITORY}"
 
+  # Publish the per-commit alpine image to the release image repository, tagged by
+  # commit SHA (sha-<commit>-alpine), so valon-tools can deploy any main commit's
+  # image alongside its SHA-versioned chart. release-gestaltd.yml publishes the
+  # same alpine image under its semver tag for formal releases; this is the
+  # per-commit counterpart. Built multi-arch from source via the Dockerfile's
+  # `alpine` target (which cross-compiles internally, so no prebuilt binaries are
+  # needed) and pushed with the chart_publisher identity, which is the writer on
+  # the charts repository. Runs only after validation passes.
+  publish-alpine-image:
+    name: Publish Alpine Image to GCP Artifact Registry
+    needs: [resolve-ref, validate]
+    if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_NAME: ${{ vars.GESTALTD_RELEASE_IMAGE_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.resolve-ref.outputs.sha }}
+      - name: Compute image metadata
+        id: meta
+        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Authenticate to Google Cloud
+        id: gcp-auth
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ vars.GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GESTALTD_GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
+          username: oauth2accesstoken
+          password: ${{ steps.gcp-auth.outputs.access_token }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - name: Build and push alpine image by commit SHA
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+        with:
+          context: .
+          file: gestaltd/Dockerfile
+          target: alpine
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.IMAGE_NAME }}:sha-${{ needs.resolve-ref.outputs.sha }}-alpine
+          build-args: |
+            GESTALT_VERSION=${{ needs.resolve-ref.outputs.version }}
+            GESTALT_REVISION=${{ needs.resolve-ref.outputs.sha }}
+            GESTALT_CREATED=${{ steps.meta.outputs.created }}
+            GESTALT_SOURCE=https://github.com/${{ github.repository }}
+            GESTALT_DOCUMENTATION=https://gestaltd.ai
+            GESTALT_URL=${{ env.IMAGE_NAME }}:sha-${{ needs.resolve-ref.outputs.sha }}-alpine
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+          sbom: true
+          provenance: mode=max
+
   # Runs only after validation passes. By now build-image has already pushed the
   # immutable sha-<commit> image, so the build action's existing-image check
   # short-circuits: it skips the build + push and just smoke-tests the published
