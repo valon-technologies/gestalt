@@ -1,10 +1,11 @@
 name: Publish GCP Artifact Registry Image
 
 # Builds a gestaltd release image and pushes it to Google Artifact Registry under
-# both a semver tag and an immutable sha-<commit> tag (plus `latest`): the image
-# is addressed alongside the Helm chart in Artifact Registry and pulled by
-# valon-tools via Workload Identity, which pins the sha-<commit> tag. gestaltd is
-# no longer published to Docker Hub.
+# its semver tag (plus `latest`): the image is addressed alongside the Helm chart
+# in Artifact Registry. Per-commit sha-<commit> images are published separately by
+# cd.yml, which owns that tag; this workflow owns only the semver and latest tags,
+# so the two never overwrite each other. gestaltd is no longer published to Docker
+# Hub.
 
 on:
   workflow_call:
@@ -122,7 +123,6 @@ jobs:
           platforms: ${{ inputs.platforms }}
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ inputs.tag-suffix }}
-            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}${{ inputs.tag-suffix }}
             ${{ env.IMAGE_NAME }}:latest${{ inputs.tag-suffix }}
           build-args: |
             GESTALT_VERSION=${{ steps.version.outputs.version }}
