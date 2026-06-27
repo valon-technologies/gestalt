@@ -77,6 +77,36 @@ jobs:
           gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
+  # Build AND publish the per-commit alpine release image (sha-<commit>-alpine)
+  # in parallel with build-image and the validation suite — the multi-arch
+  # (amd64 + arm64) build is the slowest publish step, so overlapping it with the
+  # tests rather than waiting for them is the bigger latency win. Depends only on
+  # resolve-ref. The immutable, SHA-addressed tag means an image for a commit
+  # whose tests later fail is a harmless orphan, the same trade-off build-image
+  # accepts. publish-alpine-image below then finds it present and short-circuits.
+  build-alpine-image:
+    name: Build Alpine Image
+    needs: resolve-ref
+    if: ${{ needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.resolve-ref.outputs.sha }}
+      - uses: ./.github/actions/build-gestaltd-alpine-image
+        with:
+          push: ${{ needs.resolve-ref.outputs.publish == 'true' }}
+          sha: ${{ needs.resolve-ref.outputs.sha }}
+          version: ${{ needs.resolve-ref.outputs.version }}
+          registry-host: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
+          release-image-repository: ${{ vars.GESTALTD_RELEASE_IMAGE_REPOSITORY }}
+          gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
+          gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
   # Publish the per-commit chart (0.0.0-g<sha12>) to the immutable charts repo,
   # the per-commit counterpart to release-gestaltd.yml's semver chart. Skipped if
   # the immutable version is already published (re-runs / same-commit dispatch).
@@ -124,17 +154,20 @@ jobs:
             --destination /tmp/charts
           helm push "/tmp/charts/gestaltd-${sha_version}.tgz" "${CHART_REPOSITORY}"
 
-  # Publish the per-commit alpine image (sha-<commit>-alpine) to the immutable
-  # release image repo, built multi-arch from the Dockerfile's `alpine` target.
-  # Skipped if the immutable tag already exists.
+  # Post-validation gate for the alpine release image. By now build-alpine-image
+  # has already pushed the immutable sha-<commit>-alpine image, so the action's
+  # existing-image check short-circuits — it skips the multi-arch build + push.
   #
-  # Builds an independent image (different repo + target than build-and-push) and
-  # consumes none of its output, so it is gated only on validation and runs in
-  # parallel with build-and-push and publish-chart.
+  # build-alpine-image is in `needs` only to order this after it, not to gate on
+  # its success: if its push failed, this job must still be able to build + push
+  # the image the tests have cleared. The `if` therefore gates on validate +
+  # resolve-ref succeeding (not on build-alpine-image) and uses !cancelled() so a
+  # failed build-alpine-image still lets this run — it just falls back to a full
+  # multi-arch build + push. Runs in parallel with build-and-push and publish-chart.
   publish-alpine-image:
     name: Publish Alpine Image to GCP Artifact Registry
-    needs: [resolve-ref, validate]
-    if: ${{ needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
+    needs: [resolve-ref, validate, build-alpine-image]
+    if: ${{ !cancelled() && needs.resolve-ref.result == 'success' && needs.validate.result == 'success' && needs.resolve-ref.outputs.should_validate == 'true' && needs.resolve-ref.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -144,62 +177,15 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ needs.resolve-ref.outputs.sha }}
-      - name: Compute image reference
-        id: meta
-        env:
-          SHA: ${{ needs.resolve-ref.outputs.sha }}
-          IMAGE_NAME: ${{ vars.GESTALTD_RELEASE_IMAGE_REPOSITORY }}
-        run: |
-          {
-            echo "image=${IMAGE_NAME}:sha-${SHA}-alpine"
-            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          } >> "$GITHUB_OUTPUT"
-      - name: Authenticate to Google Cloud
-        id: gcp-auth
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+      - uses: ./.github/actions/build-gestaltd-alpine-image
         with:
-          workload_identity_provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
-          token_format: access_token
-      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          registry: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
-          username: oauth2accesstoken
-          password: ${{ steps.gcp-auth.outputs.access_token }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
-      - name: Check for existing image
-        id: existing
-        env:
-          IMAGE: ${{ steps.meta.outputs.image }}
-        run: |
-          if docker buildx imagetools inspect "${IMAGE}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Image ${IMAGE} already published; skipping build."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Build and push alpine image by commit SHA
-        if: ${{ steps.existing.outputs.exists != 'true' }}
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
-        with:
-          context: .
-          file: gestaltd/Dockerfile
-          target: alpine
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.image }}
-          build-args: |
-            GESTALT_VERSION=${{ needs.resolve-ref.outputs.version }}
-            GESTALT_REVISION=${{ needs.resolve-ref.outputs.sha }}
-            GESTALT_CREATED=${{ steps.meta.outputs.created }}
-            GESTALT_SOURCE=https://github.com/${{ github.repository }}
-            GESTALT_DOCUMENTATION=https://gestaltd.ai
-            GESTALT_URL=${{ steps.meta.outputs.image }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
-          sbom: true
-          provenance: mode=max
+          push: ${{ needs.resolve-ref.outputs.publish == 'true' }}
+          sha: ${{ needs.resolve-ref.outputs.sha }}
+          version: ${{ needs.resolve-ref.outputs.version }}
+          registry-host: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
+          release-image-repository: ${{ vars.GESTALTD_RELEASE_IMAGE_REPOSITORY }}
+          gcp-service-account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
+          gcp-workload-identity-provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
   # Runs only after validation passes. By now build-image has already pushed the
   # immutable sha-<commit> image, so the build action's existing-image check

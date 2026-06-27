@@ -1,0 +1,130 @@
+name: Build gestaltd alpine release image
+description: >-
+  Build the multi-arch (linux/amd64,linux/arm64) alpine release image from the
+  Dockerfile's `alpine` target and optionally push it to Artifact Registry by
+  immutable per-commit tag (sha-<commit>-alpine) with SBOM + provenance
+  attestations. When push is true and the immutable tag already exists the build
+  is skipped, so this can run early to warm the image and again post-validation
+  as a short-circuiting fallback. Registry variables and GCP identity are passed
+  in by the caller, which must grant id-token: write when pushing.
+
+inputs:
+  push:
+    description: "'true' to push to Artifact Registry, 'false' to build only."
+    required: true
+  sha:
+    description: Full commit SHA being built.
+    required: true
+  version:
+    description: Version string stamped into the binary.
+    required: true
+  registry-host:
+    description: Artifact Registry host (required when push is true).
+    required: false
+    default: ''
+  release-image-repository:
+    description: Release image repository, e.g. <host>/<project>/gestaltd/gestaltd (required when push is true).
+    required: false
+    default: ''
+  gcp-service-account:
+    description: GCP service account for Workload Identity Federation (required when push is true).
+    required: false
+    default: ''
+  gcp-workload-identity-provider:
+    description: GCP Workload Identity provider (required when push is true).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Compute image reference
+      id: meta
+      shell: bash
+      env:
+        SHA: ${{ inputs.sha }}
+        IMAGE_NAME: ${{ inputs.release-image-repository }}
+      run: |
+        set -euo pipefail
+        {
+          echo "image=${IMAGE_NAME}:sha-${SHA}-alpine"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Validate image configuration
+      if: ${{ inputs.push == 'true' }}
+      shell: bash
+      env:
+        GESTALTD_ARTIFACT_REGISTRY_HOST: ${{ inputs.registry-host }}
+        GESTALTD_RELEASE_IMAGE_REPOSITORY: ${{ inputs.release-image-repository }}
+        GESTALTD_CI_GCP_SERVICE_ACCOUNT: ${{ inputs.gcp-service-account }}
+        GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ inputs.gcp-workload-identity-provider }}
+      run: |
+        set -euo pipefail
+        : "${GESTALTD_ARTIFACT_REGISTRY_HOST:?registry-host input is required when pushing}"
+        : "${GESTALTD_RELEASE_IMAGE_REPOSITORY:?release-image-repository input is required when pushing}"
+        : "${GESTALTD_CI_GCP_SERVICE_ACCOUNT:?gcp-service-account input is required when pushing}"
+        : "${GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER:?gcp-workload-identity-provider input is required when pushing}"
+
+    - name: Authenticate to Google Cloud
+      id: gcp-auth
+      if: ${{ inputs.push == 'true' }}
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+      with:
+        workload_identity_provider: ${{ inputs.gcp-workload-identity-provider }}
+        service_account: ${{ inputs.gcp-service-account }}
+        token_format: access_token
+
+    - name: Authenticate to Artifact Registry
+      if: ${{ inputs.push == 'true' }}
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+      with:
+        registry: ${{ inputs.registry-host }}
+        username: oauth2accesstoken
+        password: ${{ steps.gcp-auth.outputs.access_token }}
+
+    - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+
+    - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+    - name: Check for existing image
+      id: existing-image
+      if: ${{ inputs.push == 'true' }}
+      shell: bash
+      env:
+        IMAGE: ${{ steps.meta.outputs.image }}
+      run: |
+        set -euo pipefail
+        if docker buildx imagetools inspect "${IMAGE}" >/dev/null 2>&1; then
+          echo "exists=true" >> "${GITHUB_OUTPUT}"
+          echo "Image ${IMAGE} already published; skipping build."
+        else
+          echo "exists=false" >> "${GITHUB_OUTPUT}"
+        fi
+
+    # Build (and push when publishing) the multi-arch alpine image. Skipped when
+    # a publish run finds the immutable sha-<commit>-alpine tag already present
+    # (an earlier build-alpine-image pushed it); on build-only runs it validates
+    # the alpine packaging without a push (and without attestations, which
+    # require an image/oci exporter).
+    - name: Build and push alpine image by commit SHA
+      if: ${{ inputs.push != 'true' || steps.existing-image.outputs.exists != 'true' }}
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+      with:
+        context: .
+        file: gestaltd/Dockerfile
+        target: alpine
+        push: ${{ inputs.push == 'true' }}
+        platforms: linux/amd64,linux/arm64
+        tags: ${{ steps.meta.outputs.image }}
+        build-args: |
+          GESTALT_VERSION=${{ inputs.version }}
+          GESTALT_REVISION=${{ inputs.sha }}
+          GESTALT_CREATED=${{ steps.meta.outputs.created }}
+          GESTALT_SOURCE=https://github.com/${{ github.repository }}
+          GESTALT_DOCUMENTATION=https://gestaltd.ai
+          GESTALT_URL=${{ steps.meta.outputs.image }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=min
+        sbom: ${{ inputs.push == 'true' }}
+        provenance: ${{ inputs.push == 'true' && 'mode=max' || 'false' }}
