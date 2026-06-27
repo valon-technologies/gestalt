@@ -342,6 +342,34 @@ func SourceBuildTarget(opts SourceBuildOptions) (string, string) {
 	return goos, goarch
 }
 
+// HostLibC reports the C library of the current build host ("musl" or "glibc"),
+// or "" on non-linux. Bun-compiled provider binaries are dynamically linked
+// against their libc, so one built for the wrong libc cannot be exec'd (a musl
+// binary on a glibc runner fails with ENOENT for the absent /lib/ld-musl
+// loader). Packaging uses this to build the host-side catalog binary for the
+// build host while still shipping the musl artifact the deploy runtime needs.
+func HostLibC() string {
+	if runtime.GOOS != "linux" {
+		return ""
+	}
+	if matches, _ := filepath.Glob("/lib/ld-musl-*.so.1"); len(matches) > 0 {
+		return "musl"
+	}
+	return "glibc"
+}
+
+// effectiveTargetLibC is the libc a build targets: the explicit opts.LibC, else
+// the SDK default (musl for linux; none elsewhere).
+func effectiveTargetLibC(opts SourceBuildOptions) string {
+	if opts.LibC != "" {
+		return opts.LibC
+	}
+	if goos, _ := SourceBuildTarget(opts); goos == "linux" {
+		return "musl"
+	}
+	return ""
+}
+
 // EnsureSourceBuildOutput is the canonical install-then-build entry; callers
 // that need a build output should use this rather than RunSourceBuild.
 func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
