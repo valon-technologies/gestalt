@@ -157,19 +157,13 @@ jobs:
           helm push "/tmp/charts/gestaltd-${sha_version}.tgz" "${CHART_REPOSITORY}"
 
   # Publish per-commit gestaltd binaries (linux + macOS, amd64 + arm64) to the
-  # public CI binary bucket, addressed by commit SHA. This is the per-commit
-  # counterpart to release-gestaltd.yml's semver GitHub Release tarballs, and the
-  # only SHA-addressed artifact that ships a native macOS binary — the CI and
-  # alpine images are linux-only. Toolshed's app-packaging workflow pulls these
-  # by SHA to build provider artifacts on macOS runners without waiting for a
-  # semver release cut.
+  # public CI binary bucket, addressed by commit SHA — the per-commit counterpart
+  # to release-gestaltd.yml's semver release tarballs, and the only SHA-addressed
+  # artifact that ships a native macOS binary (the CI and alpine images are
+  # linux-only). Toolshed's app-packaging workflow pulls these by SHA.
   #
-  # Gated on validation like publish-chart: these binaries feed production app
-  # packaging, so they publish only after the tests clear. Cross-compilation is
-  # cheap, so all four targets build in one job (no per-platform runner matrix).
-  # The bucket is public-read and writable by the CI image publisher SA, so it
-  # reuses that identity. Each object is skipped if already present (re-runs /
-  # same-commit dispatch); the bucket keeps immutable, versioned history.
+  # Gated on validation like publish-chart, since these feed production app
+  # packaging. Reuses the CI image publisher SA, which can write the bucket.
   publish-binaries:
     name: Publish gestaltd Binaries to GCS
     needs: [resolve-ref, validate]
@@ -203,7 +197,7 @@ jobs:
           : "${BUCKET:?GESTALTD_CI_BINARY_BUCKET repository variable is required}"
 
           dest="gs://${BUCKET}/gestaltd/sha-${SHA}"
-          # goos/goarch/asset-suffix triples; suffixes match release-gestaltd.yml.
+          # goos/goarch/suffix; suffixes match release-gestaltd.yml's naming.
           platforms=(
             "darwin/arm64/macos-arm64"
             "darwin/amd64/macos-x86_64"
