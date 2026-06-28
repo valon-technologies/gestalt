@@ -1207,12 +1207,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
-	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
+	// Build workflow/agent providers before app providers: they establish their
+	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
-		if providersReady != nil {
-			<-providersReady
-		}
 		_ = closeWorkflows(extraWorkflows...)
 		_ = closeAgents(extraAgents...)
 		return nil, err
@@ -1229,6 +1227,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeAgents(extraAgents...)
 		}
 	}()
+	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
 		if err := reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err
