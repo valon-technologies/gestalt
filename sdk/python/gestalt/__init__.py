@@ -94,11 +94,8 @@ _AGENT_PROTOCOL_EXPORTS = (
     "AgentToolRef",
     "AgentStructuredOutput",
     "AgentTextOutput",
-    "AgentTurn",
     "AgentTurnDisplay",
     "AgentTurnEvent",
-    "AgentTurnOutput",
-    "AgentTurnStructuredOutput",
     "CancelAgentProviderTurnRequest",
     "CreateAgentProviderSessionRequest",
     "CreateAgentProviderTurnRequest",
@@ -117,6 +114,15 @@ _AGENT_PROTOCOL_EXPORTS = (
     "ListedAgentTool",
     "ResolveAgentProviderInteractionRequest",
     "UpdateAgentProviderSessionRequest",
+)
+
+_AGENT_CLIENT_EXPORTS = (
+    "AgentTurn",
+    "AgentTurnOutput",
+    "AgentTurnStructured",
+    "AgentTurnStructuredOutput",
+    "AgentTurnText",
+    "AgentTurnTextOutput",
 )
 
 _AGENT_HELPER_EXPORTS = (
@@ -481,6 +487,7 @@ _LAZY_EXPORTS = {
     "session_catalog": ("._app", "session_catalog"),
 }
 
+_LAZY_EXPORTS.update({name: (".agent", name) for name in _AGENT_CLIENT_EXPORTS})
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_PROTOCOL_EXPORTS})
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS})
 _LAZY_EXPORTS.update(
@@ -529,6 +536,7 @@ __all__ = [
     "decode_graphql_result",
     "ok",
     "raise_for_status",
+    *_AGENT_CLIENT_EXPORTS,
     *_AGENT_PROTOCOL_EXPORTS,
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,
