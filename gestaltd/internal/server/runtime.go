@@ -95,7 +95,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		SecureCookies:        strings.HasPrefix(cfg.Server.BaseURL, "https://"),
 		StateSecret:          crypto.DeriveKey(cfg.Server.EncryptionKey),
 		S3:                   result.S3,
-		Readiness:            runtimeReadinessStatus(result.ProvidersReady, workflowProvidersReady, result.Services),
+		Readiness:            runtimeReadinessStatus(workflowProvidersReady, result.Services),
 		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
 		PublicHostServices:   result.PublicHostServices,
 		Admin: AdminRouteConfig{
@@ -193,14 +193,8 @@ type indexedDBPinger interface {
 	Ping(context.Context) error
 }
 
-func runtimeReadinessStatus(providersReady, workflowProvidersReady <-chan struct{}, services indexedDBPinger) ReadinessChecker {
+func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services indexedDBPinger) ReadinessChecker {
 	return func() string {
-		select {
-		case <-providersReady:
-		default:
-			return "providers loading"
-		}
-
 		select {
 		case <-workflowProvidersReady:
 		default:
@@ -244,14 +238,13 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		}
 	}()
 
-	select {
-	case <-result.ProvidersReady:
-		slog.Info("all providers ready", "count", len(result.Providers.List()))
-	case failure := <-listenErr:
-		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
-	case <-ctx.Done():
-		return nil
-	}
+	go func() {
+		select {
+		case <-result.ProvidersReady:
+			slog.InfoContext(ctx, "all app providers ready", "count", len(result.Providers.List()))
+		case <-ctx.Done():
+		}
+	}()
 
 	if err := result.StartWorkflowProviders(ctx); err != nil {
 		return err
