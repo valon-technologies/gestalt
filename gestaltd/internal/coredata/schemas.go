@@ -8,6 +8,7 @@ const (
 	StoreUsers                         = "users"
 	StoreManagedSubjects               = "managed_subjects"
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
+	StoreAppSHAs                       = "app_shas"
 )
 
 var UsersSchema = idb.ObjectStoreOptions{
@@ -42,6 +43,13 @@ var ManagedSubjectsSchema = idb.ObjectStoreOptions{
 		{Name: "created_at", Type: idb.TypeTime},
 		{Name: "updated_at", Type: idb.TypeTime},
 		{Name: "deleted_at", Type: idb.TypeTime},
+	},
+}
+
+var AppSHAsSchema = idb.ObjectStoreOptions{
+	Columns: []idb.ColumnDef{
+		{Name: "app_id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "sha", Type: idb.TypeString, NotNull: true},
 	},
 }
 
