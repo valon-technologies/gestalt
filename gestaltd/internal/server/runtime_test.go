@@ -47,15 +47,9 @@ func (p fakeIndexedDBPinger) Ping(context.Context) error {
 func TestRuntimeReadinessStatusWaitsForWorkflowProviders(t *testing.T) {
 	t.Parallel()
 
-	providersReady := make(chan struct{})
 	workflowProvidersReady := make(chan struct{})
-	check := runtimeReadinessStatus(providersReady, workflowProvidersReady, fakeIndexedDBPinger{})
+	check := runtimeReadinessStatus(workflowProvidersReady, fakeIndexedDBPinger{})
 
-	if got := check(); got != "providers loading" {
-		t.Fatalf("readiness before providers = %q, want %q", got, "providers loading")
-	}
-
-	close(providersReady)
 	if got := check(); got != "workflow providers loading" {
 		t.Fatalf("readiness before workflow providers = %q, want %q", got, "workflow providers loading")
 	}
@@ -69,12 +63,9 @@ func TestRuntimeReadinessStatusWaitsForWorkflowProviders(t *testing.T) {
 func TestRuntimeReadinessStatusChecksIndexedDBAfterProviders(t *testing.T) {
 	t.Parallel()
 
-	providersReady := make(chan struct{})
-	close(providersReady)
 	workflowProvidersReady := make(chan struct{})
 	close(workflowProvidersReady)
 	check := runtimeReadinessStatus(
-		providersReady,
 		workflowProvidersReady,
 		fakeIndexedDBPinger{err: errors.New("down")},
 	)
