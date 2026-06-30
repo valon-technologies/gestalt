@@ -307,6 +307,68 @@ paths:
 	}
 }
 
+func TestProviderReleaseMetadataExposesCustomOpsAbsentFromAllowedOperations(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/custom-ops-test
+version: 1.0.0
+displayName: Custom Ops App
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    openapi:
+      connection: default
+      document: openapi.yaml
+  allowedOperations:
+    sharedRead: {}
+    getTeams: {}
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"provider": "",
+		"catalog.yaml": `name: test
+operations:
+  - id: sharedRead
+    method: GET
+  - id: customWrite
+    method: POST
+`,
+		"openapi.yaml": `openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /teams:
+    get:
+      operationId: getTeams
+      responses:
+        "200":
+          description: ok
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	cat := metadata.StaticValidation.Catalog
+	if cat == nil {
+		t.Fatalf("catalog metadata missing: %#v", metadata.StaticValidation)
+	}
+	for _, id := range []string{"customWrite", "sharedRead", "getTeams"} {
+		if _, ok := catalog.OperationByID(cat, id); !ok {
+			t.Fatalf("catalog operations = %#v, want %q", cat.Operations, id)
+		}
+	}
+}
+
 func TestProviderReleaseMetadataClassifiesHybridProviderAsExecutable(t *testing.T) {
 	t.Parallel()
 

@@ -189,7 +189,10 @@ func resolveExecutableCatalog(ctx context.Context, name string, entry *Validatio
 		return filtered, false, nil
 	}
 
-	filteredPluginCatalog, err := applyOperationExposure(pluginCatalog, operationexposure.MatchingAllowedOperations(allowed, pluginCatalog))
+	// allowedOperations gates the API surface, not the provider's own custom
+	// operations, so every plugin operation stays exposed while listed ones still
+	// carry their overrides.
+	filteredPluginCatalog, err := applyOperationExposure(pluginCatalog, exposeAllOperations(allowed, pluginCatalog))
 	if err != nil {
 		return nil, false, fmt.Errorf("plugin %q static catalog: %w", name, err)
 	}
@@ -206,7 +209,7 @@ func resolveExecutableCatalog(ctx context.Context, name string, entry *Validatio
 		if err != nil {
 			return nil, false, err
 		}
-		merged, err := mergeCatalogs(name, filteredPluginCatalog, filteredAPICatalog)
+		merged, err := mergeCatalogs(name, filteredPluginCatalog, excludeOperations(filteredAPICatalog, filteredPluginCatalog))
 		if err != nil {
 			return nil, false, err
 		}
@@ -225,11 +228,46 @@ func resolveExecutableCatalog(ctx context.Context, name string, entry *Validatio
 		return nil, false, fmt.Errorf("plugin %q API catalog: %w", name, err)
 	}
 	_, hasMCP := resolvedSurfaceURL(entry, spec, SpecSurfaceMCP)
-	merged, err := mergeCatalogs(name, filteredPluginCatalog, filteredAPICatalog)
+	merged, err := mergeCatalogs(name, filteredPluginCatalog, excludeOperations(filteredAPICatalog, filteredPluginCatalog))
 	if err != nil {
 		return nil, false, err
 	}
 	return merged, hasMCP && merged == nil, nil
+}
+
+// exposeAllOperations maps every operation in cat to its allowed_operations
+// override, if any. nil for an empty catalog avoids building an allow-none policy.
+func exposeAllOperations(allowed map[string]*OperationOverride, cat *catalog.Catalog) map[string]*OperationOverride {
+	if cat == nil || len(cat.Operations) == 0 {
+		return nil
+	}
+	exposure := make(map[string]*OperationOverride, len(cat.Operations))
+	for i := range cat.Operations {
+		exposure[cat.Operations[i].ID] = allowed[cat.Operations[i].ID]
+	}
+	return exposure
+}
+
+// excludeOperations drops operations from cat whose ID appears in other, letting
+// custom operations win over same-named API operations.
+func excludeOperations(cat, other *catalog.Catalog) *catalog.Catalog {
+	if cat == nil || other == nil || len(other.Operations) == 0 {
+		return cat
+	}
+	exclude := make(map[string]struct{}, len(other.Operations))
+	for i := range other.Operations {
+		exclude[other.Operations[i].ID] = struct{}{}
+	}
+	pruned := cat.Clone()
+	kept := make([]catalog.CatalogOperation, 0, len(pruned.Operations))
+	for i := range pruned.Operations {
+		if _, skip := exclude[pruned.Operations[i].ID]; skip {
+			continue
+		}
+		kept = append(kept, pruned.Operations[i])
+	}
+	pruned.Operations = kept
+	return pruned
 }
 
 func readStaticCatalog(name string, entry *ValidationApp, manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
