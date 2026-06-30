@@ -13,6 +13,8 @@ import (
 
 func updateAppSHAs(ctx context.Context, cfg *config.Config, db indexeddb.IndexedDB) {
 	store := db.ObjectStore(coredata.StoreAppSHAs)
+
+	live := make(map[string]struct{}, len(cfg.Apps))
 	for name, entry := range cfg.Apps {
 		if entry == nil || entry.ResolvedManifest == nil {
 			continue
@@ -26,6 +28,22 @@ func updateAppSHAs(ctx context.Context, cfg *config.Config, db indexeddb.Indexed
 			"sha":    artifact.SHA256,
 		}); err != nil {
 			slog.WarnContext(ctx, "failed to update app sha in indexeddb", "app", name, "error", err)
+			continue
+		}
+		live[name] = struct{}{}
+	}
+
+	existing, err := store.GetAllKeys(ctx, nil)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to list app shas for cleanup", "error", err)
+		return
+	}
+	for _, key := range existing {
+		if _, ok := live[key]; ok {
+			continue
+		}
+		if err := store.Delete(ctx, key); err != nil {
+			slog.WarnContext(ctx, "failed to delete stale app sha", "app", key, "error", err)
 		}
 	}
 }
