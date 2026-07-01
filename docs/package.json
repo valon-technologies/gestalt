@@ -25,14 +25,14 @@
     "next": "^16.2.6",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
-    "react": "^19.2.4",
+    "react": "^19.2.7",
     "react-dom": "^19.2.6",
     "shiki": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "25.9.1",
     "pagefind": "^1.5.2",
-    "@types/react": "^19.2.14",
+    "@types/react": "^19.2.17",
     "typescript": "6.0.3"
   }
 }
