@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -217,12 +218,32 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
 	}
-	listenErr := make(chan namedListenFailure, len(servers))
+
+	// Bind all sockets synchronously so a failed bind is caught before
+	// workflow providers and MCP setup run.
+	type boundServer struct {
+		name     string
+		server   *http.Server
+		listener net.Listener
+	}
+	bound := make([]boundServer, 0, len(servers))
 	for _, entry := range servers {
+		ln, err := net.Listen("tcp", entry.server.Addr)
+		if err != nil {
+			for _, prev := range bound {
+				_ = prev.listener.Close()
+			}
+			return fmt.Errorf("%s http server: %w", entry.name, err)
+		}
+		bound = append(bound, boundServer{name: entry.name, server: entry.server, listener: ln})
+	}
+
+	listenErr := make(chan namedListenFailure, len(bound))
+	for _, entry := range bound {
 		entry := entry
 		go func() {
-			slog.Info("gestaltd listening", "listener", entry.name, "addr", entry.server.Addr)
-			if err := entry.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Info("gestaltd listening", "listener", entry.name, "addr", entry.listener.Addr())
+			if err := entry.server.Serve(entry.listener); err != nil && err != http.ErrServerClosed {
 				listenErr <- namedListenFailure{name: entry.name, err: err}
 			}
 		}()
@@ -231,7 +252,7 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	defer func() {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), runtimeShutdownTimeout)
 		defer drainCancel()
-		for _, entry := range servers {
+		for _, entry := range bound {
 			if err := entry.server.Shutdown(drainCtx); err != nil {
 				slog.Warn("server shutdown", "listener", entry.name, "error", err)
 			}
