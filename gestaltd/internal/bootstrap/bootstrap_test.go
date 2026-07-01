@@ -5365,6 +5365,33 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	}
 }
 
+func TestBootstrapActivateAppProvidersIsIdempotentAfterAutoStart(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := result.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	})
+
+	result.ActivateAppProviders(ctx)
+	result.ActivateAppProviders(ctx)
+
+	<-result.ProvidersReady
+}
+
+func TestResultActivateAppProvidersNilReceiverIsSafe(t *testing.T) {
+	t.Parallel()
+
+	var result *bootstrap.Result
+	result.ActivateAppProviders(context.Background())
+}
+
 func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -140,6 +141,7 @@ type Server struct {
 	adminRoute             AdminRouteConfig
 	adminUI                http.Handler
 	routeProfile           RouteProfile
+	activateAppProviders   func(context.Context)
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -195,6 +197,7 @@ type Config struct {
 	RouteProfile         RouteProfile
 	MeterProvider        metric.MeterProvider
 	TracerProvider       trace.TracerProvider
+	ActivateAppProviders func(context.Context)
 }
 
 func New(cfg Config) (*Server, error) {
@@ -393,6 +396,7 @@ func New(cfg Config) (*Server, error) {
 		adminRoute:             adminRoute,
 		adminUI:                adminUI,
 		routeProfile:           cfg.RouteProfile,
+		activateAppProviders:   cfg.ActivateAppProviders,
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,

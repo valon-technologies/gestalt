@@ -99,6 +99,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Readiness:            runtimeReadinessStatus(workflowProvidersReady, result.Services),
 		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
 		PublicHostServices:   result.PublicHostServices,
+		ActivateAppProviders: result.ActivateAppProviders,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),

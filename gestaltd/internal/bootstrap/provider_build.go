@@ -259,6 +259,25 @@ func (b *preparedProviderBuilds) Start(
 	return ready, resolver, manualResolver, errResolver
 }
 
+func newProviderActivation(
+	b *preparedProviderBuilds,
+	deps Deps,
+	builder func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error),
+	onStart func(
+		ready <-chan struct{},
+		connAuth func() map[string]map[string]OAuthHandler,
+		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
+	),
+) func(context.Context) {
+	var once sync.Once
+	return func(ctx context.Context) {
+		once.Do(func() {
+			ready, connAuth, manualConnAuth, _ := b.Start(ctx, deps, builder)
+			onStart(ready, connAuth, manualConnAuth)
+		})
+	}
+}
+
 func validateProviderConnectionMode(provider string, mode core.ConnectionMode) error {
 	switch core.NormalizeConnectionMode(mode) {
 	case core.ConnectionModeNone, core.ConnectionModeSubject:
