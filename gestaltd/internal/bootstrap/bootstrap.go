@@ -261,8 +261,16 @@ type Result struct {
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
 	workflowConfigReconcileTasksStarted bool
 	auditClose                          func(context.Context) error
+	activateAppProviders                func(context.Context)
 	mu                                  sync.Mutex
 	closed                              bool
+}
+
+func (r *Result) ActivateAppProviders(ctx context.Context) {
+	if r == nil || r.activateAppProviders == nil {
+		return
+	}
+	r.activateAppProviders(ctx)
 }
 
 type workflowConfigReconcileTask struct {
@@ -1248,7 +1256,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 
 	var updateConnAuth func() map[string]map[string]OAuthHandler
 	var updateManualConnAuth func() map[string]map[string]ManualTokenExchanger
-	providersReady, updateConnAuth, updateManualConnAuth, _ = updateBuilds.Start(ctx, prepared.Deps, buildProvider)
+	activateAppProviders := newProviderActivation(updateBuilds, prepared.Deps, buildProvider, func(
+		ready <-chan struct{},
+		connAuth func() map[string]map[string]OAuthHandler,
+		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
+	) {
+		providersReady = ready
+		updateConnAuth = connAuth
+		updateManualConnAuth = manualConnAuth
+	})
+	activateAppProviders(ctx)
 
 	connAuthResolver = func() map[string]map[string]OAuthHandler {
 		b := updateConnAuth()
@@ -1336,6 +1353,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
+		activateAppProviders:         activateAppProviders,
 	}, nil
 }
 

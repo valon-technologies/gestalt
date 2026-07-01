@@ -33,6 +33,7 @@ func (s *Server) routes() {
 		s.mountManagementRootRedirect(r)
 		s.mountAdminAPIRoutes(r)
 		s.mountAdminUIRoutes(r)
+		s.mountActivateRoute(r)
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
 		s.mountMCPRoutes(r)
@@ -42,6 +43,7 @@ func (s *Server) routes() {
 		s.mountMountedUIRoutes(r)
 		s.mountAdminAPIRoutes(r)
 		s.mountAdminUIRoutes(r)
+		s.mountActivateRoute(r)
 	}
 }
 
@@ -145,6 +147,7 @@ func (s *Server) mountManagementHiddenRoutes(r chi.Router) {
 	r.Handle("/admin/api/v1/*", notFound)
 	r.Handle("/admin", notFound)
 	r.Handle("/admin/*", notFound)
+	r.Handle("/activate", notFound)
 }
 
 func (s *Server) mountMCPRoutes(r chi.Router) {
