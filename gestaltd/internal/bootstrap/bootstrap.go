@@ -1128,6 +1128,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	providers := providerBuilds.providers
 	var (
+		noopReady              <-chan struct{}
 		providersReady         <-chan struct{}
 		connAuthResolver       func() map[string]map[string]OAuthHandler
 		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
@@ -1135,6 +1136,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeProviders := true
 	defer func() {
 		if closeProviders {
+			if noopReady != nil {
+				<-noopReady
+			}
 			if providersReady != nil {
 				<-providersReady
 			}
@@ -1227,7 +1231,54 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeAgents(extraAgents...)
 		}
 	}()
-	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
+	noopBuilds, updateBuilds := providerBuilds.partition(appStartupCategory)
+
+	var noopConnAuth func() map[string]map[string]OAuthHandler
+	var noopManualConnAuth func() map[string]map[string]ManualTokenExchanger
+	noopReady, noopConnAuth, noopManualConnAuth, _ = noopBuilds.Start(ctx, prepared.Deps, buildProvider)
+	select {
+	case <-noopReady:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
+	}
+	slog.InfoContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
+
+	noopAuth := noopConnAuth()
+	noopManualAuth := noopManualConnAuth()
+
+	var updateConnAuth func() map[string]map[string]OAuthHandler
+	var updateManualConnAuth func() map[string]map[string]ManualTokenExchanger
+	providersReady, updateConnAuth, updateManualConnAuth, _ = updateBuilds.Start(ctx, prepared.Deps, buildProvider)
+
+	connAuthResolver = func() map[string]map[string]OAuthHandler {
+		b := updateConnAuth()
+		if len(b) == 0 {
+			return noopAuth
+		}
+		merged := make(map[string]map[string]OAuthHandler, len(noopAuth)+len(b))
+		for k, v := range noopAuth {
+			merged[k] = v
+		}
+		for k, v := range b {
+			merged[k] = v
+		}
+		return merged
+	}
+	manualConnAuthResolver = func() map[string]map[string]ManualTokenExchanger {
+		b := updateManualConnAuth()
+		if len(b) == 0 {
+			return noopManualAuth
+		}
+		merged := make(map[string]map[string]ManualTokenExchanger, len(noopManualAuth)+len(b))
+		for k, v := range noopManualAuth {
+			merged[k] = v
+		}
+		for k, v := range b {
+			merged[k] = v
+		}
+		return merged
+	}
+
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
 		if err := reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err

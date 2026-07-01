@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -95,7 +96,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		SecureCookies:        strings.HasPrefix(cfg.Server.BaseURL, "https://"),
 		StateSecret:          crypto.DeriveKey(cfg.Server.EncryptionKey),
 		S3:                   result.S3,
-		Readiness:            runtimeReadinessStatus(result.ProvidersReady, workflowProvidersReady, result.Services),
+		Readiness:            runtimeReadinessStatus(workflowProvidersReady, result.Services),
 		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
 		PublicHostServices:   result.PublicHostServices,
 		Admin: AdminRouteConfig{
@@ -193,14 +194,8 @@ type indexedDBPinger interface {
 	Ping(context.Context) error
 }
 
-func runtimeReadinessStatus(providersReady, workflowProvidersReady <-chan struct{}, services indexedDBPinger) ReadinessChecker {
+func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services indexedDBPinger) ReadinessChecker {
 	return func() string {
-		select {
-		case <-providersReady:
-		default:
-			return "providers loading"
-		}
-
 		select {
 		case <-workflowProvidersReady:
 		default:
@@ -223,12 +218,30 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
 	}
-	listenErr := make(chan namedListenFailure, len(servers))
+
+	type boundServer struct {
+		name     string
+		server   *http.Server
+		listener net.Listener
+	}
+	bound := make([]boundServer, 0, len(servers))
 	for _, entry := range servers {
+		ln, err := net.Listen("tcp", entry.server.Addr)
+		if err != nil {
+			for _, prev := range bound {
+				_ = prev.listener.Close()
+			}
+			return fmt.Errorf("%s http server: %w", entry.name, err)
+		}
+		bound = append(bound, boundServer{name: entry.name, server: entry.server, listener: ln})
+	}
+
+	listenErr := make(chan namedListenFailure, len(bound))
+	for _, entry := range bound {
 		entry := entry
 		go func() {
-			slog.Info("gestaltd listening", "listener", entry.name, "addr", entry.server.Addr)
-			if err := entry.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Info("gestaltd listening", "listener", entry.name, "addr", entry.listener.Addr())
+			if err := entry.server.Serve(entry.listener); err != nil && err != http.ErrServerClosed {
 				listenErr <- namedListenFailure{name: entry.name, err: err}
 			}
 		}()
@@ -237,39 +250,44 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	defer func() {
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), runtimeShutdownTimeout)
 		defer drainCancel()
-		for _, entry := range servers {
+		for _, entry := range bound {
 			if err := entry.server.Shutdown(drainCtx); err != nil {
 				slog.Warn("server shutdown", "listener", entry.name, "error", err)
 			}
 		}
 	}()
 
-	select {
-	case <-result.ProvidersReady:
-		slog.Info("all providers ready", "count", len(result.Providers.List()))
-	case failure := <-listenErr:
-		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
-	case <-ctx.Done():
-		return nil
-	}
-
-	if err := result.StartWorkflowProviders(ctx); err != nil {
-		return err
-	}
 	close(workflowProvidersReady)
-	result.StartWorkflowConfigReconciliation(ctx)
-	slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
 
-	mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
-	if err != nil {
-		return err
-	}
-	mcpSlot.Set(mcpHandler)
-	slog.Info("MCP endpoint enabled", "path", "/mcp")
+	workflowErr := make(chan error, 1)
+	go func() {
+		if err := result.StartWorkflowProviders(ctx); err != nil {
+			workflowErr <- err
+			return
+		}
+		result.StartWorkflowConfigReconciliation(ctx)
+		slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
+
+		mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
+		if err != nil {
+			workflowErr <- err
+			return
+		}
+		mcpSlot.Set(mcpHandler)
+		slog.Info("MCP endpoint enabled", "path", "/mcp")
+
+		select {
+		case <-result.ProvidersReady:
+			slog.InfoContext(ctx, "all deferred app providers ready")
+		case <-ctx.Done():
+		}
+	}()
 
 	select {
 	case failure := <-listenErr:
 		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
+	case err := <-workflowErr:
+		return err
 	case <-ctx.Done():
 		return nil
 	}

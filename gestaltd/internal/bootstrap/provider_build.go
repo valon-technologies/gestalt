@@ -92,23 +92,50 @@ func prepareProviderBuilds(
 
 	for name := range cfg.Apps {
 		intgDef := cfg.Apps[name]
-		var proxy *startupProviderProxy
+		spec, operationRouting, err := buildStartupProviderSpec(name, intgDef)
+		if err != nil {
+			slog.Warn("building startup provider proxy metadata failed", "provider", name, "error", err)
+			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef})
+			continue
+		}
+		var tracker *startupWaitTracker
 		if deps.WorkflowRuntime != nil {
-			spec, operationRouting, err := buildStartupProviderSpec(name, intgDef)
-			if err != nil {
-				slog.Warn("building startup provider proxy metadata failed", "provider", name, "error", err)
-			} else {
-				proxy = newStartupProviderProxy(spec, operationRouting, deps.WorkflowRuntime.StartupWaitTracker())
-				if err := reg.Providers.Register(name, proxy); err != nil {
-					builds.errs = append(builds.errs, fmt.Errorf("integration %q: %w", name, err))
-					slog.Warn("registering startup provider proxy failed", "provider", name, "error", err)
-					proxy = nil
-				}
-			}
+			tracker = deps.WorkflowRuntime.StartupWaitTracker()
+		}
+		proxy := newStartupProviderProxy(spec, operationRouting, tracker)
+		if err := reg.Providers.Register(name, proxy); err != nil {
+			builds.errs = append(builds.errs, fmt.Errorf("integration %q: %w", name, err))
+			slog.Warn("registering startup provider proxy failed", "provider", name, "error", err)
+			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef})
+			continue
 		}
 		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, proxy: proxy})
 	}
 	return builds, nil
+}
+
+func (b *preparedProviderBuilds) partition(categorize func(string, *config.ProviderEntry) AppStartupCategory) (noop, update *preparedProviderBuilds) {
+	prepErrs := append([]error(nil), b.errs...)
+	noop = &preparedProviderBuilds{
+		providers:      b.providers,
+		connAuth:       make(map[string]map[string]OAuthHandler),
+		manualConnAuth: make(map[string]map[string]ManualTokenExchanger),
+		errs:           prepErrs,
+	}
+	update = &preparedProviderBuilds{
+		providers:      b.providers,
+		connAuth:       make(map[string]map[string]OAuthHandler),
+		manualConnAuth: make(map[string]map[string]ManualTokenExchanger),
+		errs:           prepErrs,
+	}
+	for _, p := range b.pending {
+		if categorize(p.name, p.entry) == AppStartupUpdate {
+			update.pending = append(update.pending, p)
+		} else {
+			noop.pending = append(noop.pending, p)
+		}
+	}
+	return
 }
 
 func (b *preparedProviderBuilds) Start(
