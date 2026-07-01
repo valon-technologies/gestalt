@@ -181,6 +181,15 @@ jobs:
         with:
           go-version-file: gestaltd/go.mod
           cache-dependency-path: gestaltd/go.sum
+      - name: Cache Go build cache (cross-compiled binaries)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-gestaltd-publish-binaries-go-${{ hashFiles('gestaltd/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-gestaltd-publish-binaries-go-
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
