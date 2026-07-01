@@ -1128,6 +1128,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	providers := providerBuilds.providers
 	var (
+		noopReady              <-chan struct{}
 		providersReady         <-chan struct{}
 		connAuthResolver       func() map[string]map[string]OAuthHandler
 		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
@@ -1135,6 +1136,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeProviders := true
 	defer func() {
 		if closeProviders {
+			if noopReady != nil {
+				<-noopReady
+			}
 			if providersReady != nil {
 				<-providersReady
 			}
@@ -1230,7 +1234,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	noopBuilds, updateBuilds := providerBuilds.partition(appStartupCategory)
 
 	// NOOP apps: block until all are ready before /ready is returned.
-	noopReady, noopConnAuth, noopManualConnAuth, _ := noopBuilds.Start(ctx, prepared.Deps, buildProvider)
+	var noopConnAuth func() map[string]map[string]OAuthHandler
+	var noopManualConnAuth func() map[string]map[string]ManualTokenExchanger
+	noopReady, noopConnAuth, noopManualConnAuth, _ = noopBuilds.Start(ctx, prepared.Deps, buildProvider)
 	select {
 	case <-noopReady:
 	case <-ctx.Done():
