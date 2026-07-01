@@ -73,8 +73,22 @@ jobs:
 
       - name: Install Buf
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
-        working-directory: gestaltd
-        run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
+        run: |
+          set -euo pipefail
+          version="v1.66.1"
+          checksum="ef835cb38ed973849f68e0e6a88153cb2168507e09eecbec43a2ada2f6a698be"
+          bin_dir="$(go env GOPATH)/bin"
+          mkdir -p "${bin_dir}"
+          bin_path="${bin_dir}/buf"
+
+          curl -fsSLo "${bin_path}" \
+            "https://github.com/bufbuild/buf/releases/download/${version}/buf-Linux-x86_64"
+          actual_checksum="$(sha256sum "${bin_path}" | awk '{print $1}')"
+          if [ "${actual_checksum}" != "${checksum}" ]; then
+            echo "Checksum mismatch for buf ${version}: ${actual_checksum}" >&2
+            exit 1
+          fi
+          chmod +x "${bin_path}"
 
       - name: Check go mod tidy
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
