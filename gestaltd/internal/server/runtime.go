@@ -279,6 +279,12 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		}
 		mcpSlot.Set(mcpHandler)
 		slog.Info("MCP endpoint enabled", "path", "/mcp")
+
+		select {
+		case <-result.ProvidersReady:
+			slog.InfoContext(ctx, "all deferred app providers ready")
+		case <-ctx.Done():
+		}
 	}()
 
 	select {
