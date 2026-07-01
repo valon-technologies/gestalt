@@ -1228,6 +1228,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
+	select {
+	case <-providersReady:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
+	}
+	slog.InfoContext(ctx, "all app providers ready", "count", len(providerBuilds.providers.List()))
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
 		if err := reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err

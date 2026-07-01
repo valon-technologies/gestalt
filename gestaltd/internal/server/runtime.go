@@ -259,31 +259,33 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		}
 	}()
 
-	go func() {
-		select {
-		case <-result.ProvidersReady:
-			slog.InfoContext(ctx, "all app providers ready", "count", len(result.Providers.List()))
-		case <-ctx.Done():
-		}
-	}()
-
-	if err := result.StartWorkflowProviders(ctx); err != nil {
-		return err
-	}
+	// App providers finished during bootstrap. Open the readiness gate now and
+	// start workflow providers separately in the background.
 	close(workflowProvidersReady)
-	result.StartWorkflowConfigReconciliation(ctx)
-	slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
 
-	mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
-	if err != nil {
-		return err
-	}
-	mcpSlot.Set(mcpHandler)
-	slog.Info("MCP endpoint enabled", "path", "/mcp")
+	workflowErr := make(chan error, 1)
+	go func() {
+		if err := result.StartWorkflowProviders(ctx); err != nil {
+			workflowErr <- err
+			return
+		}
+		result.StartWorkflowConfigReconciliation(ctx)
+		slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
+
+		mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
+		if err != nil {
+			workflowErr <- err
+			return
+		}
+		mcpSlot.Set(mcpHandler)
+		slog.Info("MCP endpoint enabled", "path", "/mcp")
+	}()
 
 	select {
 	case failure := <-listenErr:
 		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
+	case err := <-workflowErr:
+		return err
 	case <-ctx.Done():
 		return nil
 	}
