@@ -312,6 +312,9 @@ def _shared_authorization_client() -> "Authorization":
         ):
             return client
         client = Authorization.connect()
+        # Process-lifetime singleton: callers must never close its channel, so a
+        # stray close()/__exit__ cannot leave the cache pointing at a dead client.
+        client._owns_channel = False
         _shared_authorization_state["target"] = target
         _shared_authorization_state["token"] = token
         _shared_authorization_state["client"] = client

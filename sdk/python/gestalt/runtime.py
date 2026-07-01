@@ -102,8 +102,26 @@ class ProviderLifecycle:
     """
 
     def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:
+        self._channel = channel
         self._stub = _runtime_pb2_grpc.ProviderLifecycleStub(channel)
         self._timeout = timeout
+        self._owns_channel = False
+
+    def close(self) -> None:
+        """Close the owned gRPC channel; a no-op for injected channels."""
+
+        if self._owns_channel:
+            self._channel.close()
+
+    def __enter__(self) -> ProviderLifecycle:
+        """Return the client for ``with`` statements."""
+
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Close the client at the end of a context manager block."""
+
+        self.close()
 
     def get_provider_identity(self) -> ProviderIdentity:
         response = _support.call_unary(

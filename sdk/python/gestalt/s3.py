@@ -258,8 +258,10 @@ class S3:
     """
 
     def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:
+        self._channel = channel
         self._stub = _s3_pb2_grpc.S3Stub(channel)
         self._timeout = timeout
+        self._owns_channel = False
 
     @classmethod
     def connect(cls, name: str | None = None, *, timeout: float | None = None) -> S3:
@@ -270,7 +272,25 @@ class S3:
         channel = host_service_channel(
             "s3", target, token=token.strip(), binding=(name or "").strip()
         )
-        return cls(channel, timeout=timeout)
+        client = cls(channel, timeout=timeout)
+        client._owns_channel = True
+        return client
+
+    def close(self) -> None:
+        """Close the owned gRPC channel; a no-op for injected channels."""
+
+        if self._owns_channel:
+            self._channel.close()
+
+    def __enter__(self) -> S3:
+        """Return the client for ``with`` statements."""
+
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Close the client at the end of a context manager block."""
+
+        self.close()
 
     @overload
     def head_object(self, request: HeadObjectRequest) -> HeadObjectResponse: ...
@@ -530,8 +550,26 @@ class S3ObjectAccess:
     """
 
     def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:
+        self._channel = channel
         self._stub = _s3_pb2_grpc.S3ObjectAccessStub(channel)
         self._timeout = timeout
+        self._owns_channel = False
+
+    def close(self) -> None:
+        """Close the owned gRPC channel; a no-op for injected channels."""
+
+        if self._owns_channel:
+            self._channel.close()
+
+    def __enter__(self) -> S3ObjectAccess:
+        """Return the client for ``with`` statements."""
+
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Close the client at the end of a context manager block."""
+
+        self.close()
 
     @overload
     def create_object_access_url(
