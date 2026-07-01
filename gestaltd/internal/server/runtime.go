@@ -219,8 +219,6 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		defer devSupervisor.Stop()
 	}
 
-	// Bind all sockets synchronously so a failed bind is caught before
-	// workflow providers and MCP setup run.
 	type boundServer struct {
 		name     string
 		server   *http.Server
@@ -259,8 +257,6 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		}
 	}()
 
-	// App providers finished during bootstrap. Open the readiness gate now and
-	// start workflow providers separately in the background.
 	close(workflowProvidersReady)
 
 	workflowErr := make(chan error, 1)

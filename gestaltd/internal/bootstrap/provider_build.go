@@ -114,21 +114,19 @@ func prepareProviderBuilds(
 	return builds, nil
 }
 
-// partition splits pending builds into two groups by startup category.
-// Both partitions share the same provider registry so proxies registered
-// during prepareProviderBuilds remain visible regardless of which partition
-// eventually resolves them.
 func (b *preparedProviderBuilds) partition(categorize func(string, *config.ProviderEntry) AppStartupCategory) (noop, update *preparedProviderBuilds) {
+	prepErrs := append([]error(nil), b.errs...)
 	noop = &preparedProviderBuilds{
 		providers:      b.providers,
 		connAuth:       make(map[string]map[string]OAuthHandler),
 		manualConnAuth: make(map[string]map[string]ManualTokenExchanger),
-		errs:           append([]error(nil), b.errs...),
+		errs:           prepErrs,
 	}
 	update = &preparedProviderBuilds{
 		providers:      b.providers,
 		connAuth:       make(map[string]map[string]OAuthHandler),
 		manualConnAuth: make(map[string]map[string]ManualTokenExchanger),
+		errs:           prepErrs,
 	}
 	for _, p := range b.pending {
 		if categorize(p.name, p.entry) == AppStartupUpdate {

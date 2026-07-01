@@ -1233,7 +1233,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 	noopBuilds, updateBuilds := providerBuilds.partition(appStartupCategory)
 
-	// NOOP apps: block until all are ready before /ready is returned.
 	var noopConnAuth func() map[string]map[string]OAuthHandler
 	var noopManualConnAuth func() map[string]map[string]ManualTokenExchanger
 	noopReady, noopConnAuth, noopManualConnAuth, _ = noopBuilds.Start(ctx, prepared.Deps, buildProvider)
@@ -1244,7 +1243,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	slog.InfoContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
 
-	// UPDATE apps: start in background and complete after /ready.
 	var updateConnAuth func() map[string]map[string]OAuthHandler
 	var updateManualConnAuth func() map[string]map[string]ManualTokenExchanger
 	providersReady, updateConnAuth, updateManualConnAuth, _ = updateBuilds.Start(ctx, prepared.Deps, buildProvider)
