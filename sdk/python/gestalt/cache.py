@@ -135,8 +135,10 @@ class Cache:
     """
 
     def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:
+        self._channel = channel
         self._stub = _cache_pb2_grpc.CacheStub(channel)
         self._timeout = timeout
+        self._owns_channel = False
 
     @classmethod
     def connect(cls, name: str | None = None, *, timeout: float | None = None) -> Cache:
@@ -147,7 +149,25 @@ class Cache:
         channel = host_service_channel(
             "cache", target, token=token.strip(), binding=(name or "").strip()
         )
-        return cls(channel, timeout=timeout)
+        client = cls(channel, timeout=timeout)
+        client._owns_channel = True
+        return client
+
+    def close(self) -> None:
+        """Close the owned gRPC channel; a no-op for injected channels."""
+
+        if self._owns_channel:
+            self._channel.close()
+
+    def __enter__(self) -> Cache:
+        """Return the client for ``with`` statements."""
+
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Close the client at the end of a context manager block."""
+
+        self.close()
 
     @overload
     def get(self, request: CacheGetRequest) -> bytes | None: ...

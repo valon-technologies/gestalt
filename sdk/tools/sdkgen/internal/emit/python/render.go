@@ -591,13 +591,17 @@ func (r *renderer) renderClient(svc *model.Service) {
 	if ctxField != nil {
 		ctxType := r.fieldType(ctxField)
 		fmt.Fprintf(&r.body, "    def __init__(self, channel: grpc.Channel, *, context: %s | None = None, timeout: float | None = None) -> None:\n", ctxType)
+		r.body.WriteString("        self._channel = channel\n")
 		fmt.Fprintf(&r.body, "        self._stub = %s.%sStub(channel)\n", r.wireGrpcModule(), wireName)
 		r.body.WriteString("        self._context = context\n")
-		r.body.WriteString("        self._timeout = timeout\n\n")
+		r.body.WriteString("        self._timeout = timeout\n")
+		r.body.WriteString("        self._owns_channel = False\n\n")
 	} else {
 		r.body.WriteString("    def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:\n")
+		r.body.WriteString("        self._channel = channel\n")
 		fmt.Fprintf(&r.body, "        self._stub = %s.%sStub(channel)\n", r.wireGrpcModule(), wireName)
-		r.body.WriteString("        self._timeout = timeout\n\n")
+		r.body.WriteString("        self._timeout = timeout\n")
+		r.body.WriteString("        self._owns_channel = False\n\n")
 	}
 
 	if svc.HostBinding != "" {
@@ -620,8 +624,24 @@ func (r *renderer) renderClient(svc *model.Service) {
 		r.body.WriteString("        channel = host_service_channel(\n")
 		fmt.Fprintf(&r.body, "            %q, target, token=token.strip(), binding=(name or \"\").strip()\n", svc.HostBinding)
 		r.body.WriteString("        )\n")
-		fmt.Fprintf(&r.body, "        return cls(%s)\n\n", forward)
+		fmt.Fprintf(&r.body, "        client = cls(%s)\n", forward)
+		r.body.WriteString("        client._owns_channel = True\n")
+		r.body.WriteString("        return client\n\n")
 	}
+
+	r.body.WriteString("    def close(self) -> None:\n")
+	r.writeDocstring("        ", "Close the owned gRPC channel; a no-op for injected channels.")
+	r.body.WriteString("\n")
+	r.body.WriteString("        if self._owns_channel:\n")
+	r.body.WriteString("            self._channel.close()\n\n")
+	fmt.Fprintf(&r.body, "    def __enter__(self) -> %s:\n", name)
+	r.writeDocstring("        ", "Return the client for ``with`` statements.")
+	r.body.WriteString("\n")
+	r.body.WriteString("        return self\n\n")
+	r.body.WriteString("    def __exit__(self, *args: object) -> None:\n")
+	r.writeDocstring("        ", "Close the client at the end of a context manager block.")
+	r.body.WriteString("\n")
+	r.body.WriteString("        self.close()\n\n")
 
 	for _, method := range svc.Methods {
 		r.renderMethod(method)

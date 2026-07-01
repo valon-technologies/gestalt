@@ -146,8 +146,26 @@ class Runtime:
     """Client for the gestalt.provider.v1.Runtime service."""
 
     def __init__(self, channel: grpc.Channel, *, timeout: float | None = None) -> None:
+        self._channel = channel
         self._stub = _runtime_provider_pb2_grpc.RuntimeStub(channel)
         self._timeout = timeout
+        self._owns_channel = False
+
+    def close(self) -> None:
+        """Close the owned gRPC channel; a no-op for injected channels."""
+
+        if self._owns_channel:
+            self._channel.close()
+
+    def __enter__(self) -> Runtime:
+        """Return the client for ``with`` statements."""
+
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Close the client at the end of a context manager block."""
+
+        self.close()
 
     def get_support(self) -> RuntimeSupport:
         response = _support.call_unary(
