@@ -22,7 +22,7 @@
     "@shikijs/langs": "^3.23.0",
     "@shikijs/themes": "^3.23.0",
     "@types/react-dom": "^19.2.3",
-    "next": "^16.2.6",
+    "next": "^16.2.9",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.4",
