@@ -5,7 +5,7 @@ import "github.com/valon-technologies/gestalt/server/internal/config"
 type AppStartupCategory int
 
 const (
-	AppStartupNOOP   AppStartupCategory = iota
+	AppStartupNOOP AppStartupCategory = iota
 	AppStartupUpdate
 )
 

@@ -1243,17 +1243,20 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	slog.InfoContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
 
+	noopAuth := noopConnAuth()
+	noopManualAuth := noopManualConnAuth()
+
 	var updateConnAuth func() map[string]map[string]OAuthHandler
 	var updateManualConnAuth func() map[string]map[string]ManualTokenExchanger
 	providersReady, updateConnAuth, updateManualConnAuth, _ = updateBuilds.Start(ctx, prepared.Deps, buildProvider)
 
 	connAuthResolver = func() map[string]map[string]OAuthHandler {
-		a, b := noopConnAuth(), updateConnAuth()
+		b := updateConnAuth()
 		if len(b) == 0 {
-			return a
+			return noopAuth
 		}
-		merged := make(map[string]map[string]OAuthHandler, len(a)+len(b))
-		for k, v := range a {
+		merged := make(map[string]map[string]OAuthHandler, len(noopAuth)+len(b))
+		for k, v := range noopAuth {
 			merged[k] = v
 		}
 		for k, v := range b {
@@ -1262,12 +1265,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return merged
 	}
 	manualConnAuthResolver = func() map[string]map[string]ManualTokenExchanger {
-		a, b := noopManualConnAuth(), updateManualConnAuth()
+		b := updateManualConnAuth()
 		if len(b) == 0 {
-			return a
+			return noopManualAuth
 		}
-		merged := make(map[string]map[string]ManualTokenExchanger, len(a)+len(b))
-		for k, v := range a {
+		merged := make(map[string]map[string]ManualTokenExchanger, len(noopManualAuth)+len(b))
+		for k, v := range noopManualAuth {
 			merged[k] = v
 		}
 		for k, v := range b {
