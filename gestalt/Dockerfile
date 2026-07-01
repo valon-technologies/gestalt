@@ -5,7 +5,7 @@ ARG GESTALT_SOURCE=https://github.com/valon-technologies/gestalt
 ARG GESTALT_DOCUMENTATION=https://gestaltd.ai
 ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestalt
 
-FROM --platform=$BUILDPLATFORM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS unpack
+FROM --platform=$BUILDPLATFORM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS unpack
 ARG TARGETARCH
 COPY dist/gestalt-linux-*.tar.gz /dist/
 RUN case "$TARGETARCH" in \
