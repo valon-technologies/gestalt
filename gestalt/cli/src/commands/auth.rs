@@ -39,6 +39,8 @@ const BROWSER_RESPONSE_PAGE: &str = r#"<!doctype html>
 </html>
 "#;
 
+const CLI_LOGIN_TOKEN_EXPIRES_IN: i64 = 30 * 24 * 3600;
+
 pub fn login(url_override: Option<&str>) -> Result<()> {
     login_with_browser_opener(url_override, |url| {
         open::that(url).map(|_| ()).map_err(Into::into)
@@ -175,18 +177,26 @@ where
     let login_result: serde_json::Value = callback_resp
         .json()
         .context("callback response missing token response")?;
-    let api_token = login_result["token"]
+    let session_token = login_result["token"]
         .as_str()
         .context("callback response missing token field")?;
-    let api_token_id = login_result["id"]
-        .as_str()
-        .context("callback response missing id field")?;
+
+    let api_client = ApiClient::new(&base_url, session_token)?;
+    let token_result = api_client
+        .create_api_token("cli-token", "", CLI_LOGIN_TOKEN_EXPIRES_IN)
+        .context("failed to mint CLI API token")?;
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
         api_url: Some(base_url),
-        api_token: api_token.to_string(),
-        api_token_id: api_token_id.to_string(),
+        api_token: token_result["token"]
+            .as_str()
+            .context("token response missing token field")?
+            .to_string(),
+        api_token_id: token_result["id"]
+            .as_str()
+            .context("token response missing id field")?
+            .to_string(),
     })?;
 
     let _ = send_browser_response(&stream, "Login successful", "You can close this tab.");

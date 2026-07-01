@@ -69,8 +69,8 @@ fn test_auth_login_stores_credentials_and_serves_browser_callback_page() {
     let credentials: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(credentials_path).unwrap()).unwrap();
     assert_eq!(credentials["api_url"], base_url);
-    assert_eq!(credentials["api_token"], "cli-secret");
-    assert_eq!(credentials["api_token_id"], "tok-123");
+    assert_eq!(credentials["api_token"], "cli-long-secret");
+    assert_eq!(credentials["api_token_id"], "tok-long");
 }
 
 #[test]

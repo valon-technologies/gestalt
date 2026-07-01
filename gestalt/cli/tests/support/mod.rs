@@ -16,7 +16,7 @@ pub(crate) use reqwest::{Method, StatusCode, header};
 pub(crate) use tempfile::TempDir;
 
 pub(crate) const TEST_TOKEN: &str = "test-token";
-const LOGIN_FLOW_REQUEST_COUNT: usize = 4;
+const LOGIN_FLOW_REQUEST_COUNT: usize = 5;
 
 macro_rules! json_mock {
     ($server:expr, $method:expr, $path:expr, $status:expr) => {
@@ -216,6 +216,14 @@ fn handle_login_request(
                 StatusCode::OK,
                 http::APPLICATION_JSON,
                 r#"{"token":"cli-secret","id":"tok-123"}"#,
+            );
+        }
+        "/api/v1/tokens" if request.method == Method::POST => {
+            write_http_response(
+                &mut stream,
+                StatusCode::CREATED,
+                http::APPLICATION_JSON,
+                r#"{"id":"tok-long","token":"cli-long-secret"}"#,
             );
         }
         _ => panic!("unexpected request: {} {}", request.method, request.target),
