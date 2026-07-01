@@ -181,14 +181,6 @@ jobs:
         with:
           go-version-file: gestaltd/go.mod
           cache-dependency-path: gestaltd/go.sum
-      # setup-go's own cache is keyed only by OS + go.sum, the same key the
-      # lint/test jobs use for a default (CGO_ENABLED=1, native-arch) build.
-      # This job cross-compiles with CGO_ENABLED=0 for four GOOS/GOARCH
-      # combinations, none of which share build cache entries with that
-      # default build, but a cache already exists under that key by the time
-      # this job runs — so this job's own compiled objects were never able to
-      # be saved back. A separate cache under a job-specific key lets its
-      # cross-compiled build cache actually persist across runs.
       - name: Cache Go build cache (cross-compiled binaries)
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
