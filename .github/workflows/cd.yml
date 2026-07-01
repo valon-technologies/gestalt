@@ -205,22 +205,24 @@ jobs:
             "linux/arm64/linux-arm64"
           )
 
-          mkdir -p build dist
-          for entry in "${platforms[@]}"; do
-            IFS=/ read -r goos goarch suffix <<<"${entry}"
-            asset="gestaltd-${suffix}.tar.gz"
+          mkdir -p build dist logs
+
+          publish_platform() {
+            local goos="$1" goarch="$2" suffix="$3"
+            local asset="gestaltd-${suffix}.tar.gz"
+            local build_dir="build/${suffix}"
 
             # Upload each object only when it is absent: objectCreator cannot
             # overwrite, so re-uploading an existing object would 403. This also
             # makes a partial prior run (tarball uploaded, checksum not) self-heal.
-            has_tarball=false
-            has_sha=false
+            local has_tarball=false
+            local has_sha=false
             gcloud storage ls "${dest}/${asset}" >/dev/null 2>&1 && has_tarball=true
             gcloud storage ls "${dest}/${asset}.sha256" >/dev/null 2>&1 && has_sha=true
 
             if [[ "${has_tarball}" == true && "${has_sha}" == true ]]; then
               echo "${asset} (+ checksum) already published for ${SHA}; skipping."
-              continue
+              return 0
             fi
 
             # A published checksum with no tarball is an orphaned, inconsistent
@@ -230,7 +232,7 @@ jobs:
             if [[ "${has_sha}" == true ]]; then
               echo "Orphaned ${asset}.sha256 for ${SHA}: checksum is published but the tarball is missing." >&2
               echo "Remove the stale checksum and re-run; objectCreator cannot overwrite it in place." >&2
-              exit 1
+              return 1
             fi
 
             # has_sha is false here, so the checksum is always (re)derived from the
@@ -240,22 +242,47 @@ jobs:
               # so a fresh archive would not be identical to the stored one.
               gcloud storage cp "${dest}/${asset}" "dist/${asset}"
             else
+              mkdir -p "${build_dir}"
               (
                 cd gestaltd
                 CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build \
                   -ldflags "-X main.version=${VERSION}" \
-                  -o "${GITHUB_WORKSPACE}/build/gestaltd" \
+                  -o "${GITHUB_WORKSPACE}/${build_dir}/gestaltd" \
                   ./cmd/gestaltd
               )
-              tar -czf "dist/${asset}" -C build gestaltd
+              tar -czf "dist/${asset}" -C "${build_dir}" gestaltd
               gcloud storage cp "dist/${asset}" "${dest}/${asset}"
-              rm -f build/gestaltd
             fi
 
             # Bare filename so `sha256sum -c` works after download.
             (cd dist && shasum -a 256 "${asset}" > "${asset}.sha256")
             gcloud storage cp "dist/${asset}.sha256" "${dest}/${asset}.sha256"
+          }
+
+          # Each platform builds to its own directory and uploads a distinct
+          # GCS object, so the four are independent and safe to run
+          # concurrently instead of one at a time. Output is captured per
+          # platform and printed after it finishes so interleaved builds
+          # don't garble the log; a failure in one platform doesn't stop the
+          # others from finishing.
+          pids=()
+          suffixes=()
+          for entry in "${platforms[@]}"; do
+            IFS=/ read -r goos goarch suffix <<<"${entry}"
+            suffixes+=("${suffix}")
+            publish_platform "${goos}" "${goarch}" "${suffix}" >"logs/${suffix}.log" 2>&1 &
+            pids+=("$!")
           done
+
+          status=0
+          for i in "${!pids[@]}"; do
+            wait "${pids[$i]}" || status=1
+            echo "::group::${suffixes[$i]}"
+            cat "logs/${suffixes[$i]}.log"
+            echo "::endgroup::"
+          done
+
+          exit "${status}"
 
   # Post-validation gate for the alpine release image. By now build-alpine-image
   # has already pushed the immutable sha-<commit>-alpine image, so the action's
