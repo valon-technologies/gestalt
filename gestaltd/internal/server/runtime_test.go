@@ -10,7 +10,9 @@ import (
 	"time"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -73,6 +75,83 @@ func TestRuntimeReadinessStatusChecksIndexedDBAfterProviders(t *testing.T) {
 	if got := check(); got != "indexeddb unavailable" {
 		t.Fatalf("readiness with indexeddb error = %q, want %q", got, "indexeddb unavailable")
 	}
+}
+
+// gatedWorkflowProvider is a coreworkflow.Provider whose Start blocks until its
+// gate is released, so a test can observe readiness while startup is in flight.
+type gatedWorkflowProvider struct {
+	coreworkflow.Provider
+	started chan struct{}
+	gate    chan struct{}
+}
+
+func (p *gatedWorkflowProvider) Start(ctx context.Context) error {
+	close(p.started)
+	select {
+	case <-p.gate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// TestServeRuntimeReadyAfterWorkflowProvidersStart proves the /ready gate stays
+// closed until StartWorkflowProviders returns — the provider's Temporal promotion
+// runs inside that call, so readiness must not flip before it completes.
+func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
+	provider := &gatedWorkflowProvider{
+		started: make(chan struct{}),
+		gate:    make(chan struct{}),
+	}
+	result := &bootstrap.Result{
+		ExtraWorkflows: []coreworkflow.Provider{provider},
+	}
+
+	workflowProvidersReady := make(chan struct{})
+	ready := runtimeReadinessStatus(workflowProvidersReady, fakeIndexedDBPinger{})
+
+	servers := []namedHTTPServer{{
+		name:   "public",
+		server: newHTTPServer("127.0.0.1:0", http.NewServeMux()),
+	}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	serveDone := make(chan struct{})
+	go func() {
+		defer close(serveDone)
+		// Invoker is nil, so newMCPHandler returns an error after the ready gate
+		// closes and serveRuntime unwinds — which is fine for this test.
+		_ = serveRuntime(ctx, &config.Config{}, bootstrap.ConnectionMaps{}, result, nil, servers, &switchableHandler{}, workflowProvidersReady, nil)
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("workflow provider Start was never invoked")
+	}
+
+	if got := ready(); got != "workflow providers loading" {
+		t.Fatalf("readiness while workflow provider starting = %q, want %q", got, "workflow providers loading")
+	}
+
+	close(provider.gate)
+
+	deadline := time.After(5 * time.Second)
+	for {
+		if ready() == "" {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("readiness never became ready after workflow providers started")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	cancel()
+	<-serveDone
 }
 
 type runtimeTestCacheServer struct {
