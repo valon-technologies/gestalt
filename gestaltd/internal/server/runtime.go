@@ -258,14 +258,14 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		}
 	}()
 
-	close(workflowProvidersReady)
-
 	workflowErr := make(chan error, 1)
 	go func() {
 		if err := result.StartWorkflowProviders(ctx); err != nil {
 			workflowErr <- err
 			return
 		}
+		close(workflowProvidersReady)
+
 		result.StartWorkflowConfigReconciliation(ctx)
 		slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
 
