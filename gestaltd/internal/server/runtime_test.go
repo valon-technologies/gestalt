@@ -77,8 +77,6 @@ func TestRuntimeReadinessStatusChecksIndexedDBAfterProviders(t *testing.T) {
 	}
 }
 
-// gatedWorkflowProvider is a coreworkflow.Provider whose Start blocks until its
-// gate is released, so a test can observe readiness while startup is in flight.
 type gatedWorkflowProvider struct {
 	coreworkflow.Provider
 	started chan struct{}
@@ -95,9 +93,6 @@ func (p *gatedWorkflowProvider) Start(ctx context.Context) error {
 	}
 }
 
-// TestServeRuntimeReadyAfterWorkflowProvidersStart proves the /ready gate stays
-// closed until StartWorkflowProviders returns — the provider's Temporal promotion
-// runs inside that call, so readiness must not flip before it completes.
 func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	t.Parallel()
 
@@ -123,8 +118,6 @@ func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	serveDone := make(chan struct{})
 	go func() {
 		defer close(serveDone)
-		// Invoker is nil, so newMCPHandler returns an error after the ready gate
-		// closes and serveRuntime unwinds — which is fine for this test.
 		_ = serveRuntime(ctx, &config.Config{}, bootstrap.ConnectionMaps{}, result, nil, servers, &switchableHandler{}, workflowProvidersReady, nil)
 	}()
 

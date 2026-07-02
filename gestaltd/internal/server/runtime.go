@@ -264,12 +264,6 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 			workflowErr <- err
 			return
 		}
-		// The workflow provider promotes this build to the deployment's current
-		// Temporal version inside the StartProvider RPC that StartWorkflowProviders
-		// drives, so a successful return means promotion is confirmed. Only now is
-		// /ready allowed to report ready — if promotion fails, the channel never
-		// closes, /ready never returns, and the Cloud Run deploy fails without
-		// shifting traffic.
 		close(workflowProvidersReady)
 
 		result.StartWorkflowConfigReconciliation(ctx)
