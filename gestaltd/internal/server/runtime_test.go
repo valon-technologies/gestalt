@@ -99,6 +99,8 @@ func (p *gatedWorkflowProvider) Start(ctx context.Context) error {
 // closed until StartWorkflowProviders returns — the provider's Temporal promotion
 // runs inside that call, so readiness must not flip before it completes.
 func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
+	t.Parallel()
+
 	provider := &gatedWorkflowProvider{
 		started: make(chan struct{}),
 		gate:    make(chan struct{}),
@@ -139,10 +141,7 @@ func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	close(provider.gate)
 
 	deadline := time.After(5 * time.Second)
-	for {
-		if ready() == "" {
-			break
-		}
+	for ready() != "" {
 		select {
 		case <-deadline:
 			t.Fatal("readiness never became ready after workflow providers started")
