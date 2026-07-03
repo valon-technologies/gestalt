@@ -3,12 +3,67 @@ package bootstrap
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
+
+func TestStartupProviderProxyLazilyActivatesOnAwait(t *testing.T) {
+	t.Parallel()
+
+	proxy := newStartupProviderProxy(appservice.StaticProviderSpec{
+		Name:           "deferred",
+		ConnectionMode: core.ConnectionModeNone,
+	}, startupOperationRouting{}, nil)
+
+	var triggers atomic.Int32
+	proxy.setActivationTrigger(func(context.Context) {
+		triggers.Add(1)
+		proxy.publish(&coretesting.StubIntegration{N: "deferred"})
+	})
+
+	provider, err := proxy.await(context.Background())
+	if err != nil {
+		t.Fatalf("await after lazy activation: %v", err)
+	}
+	if provider == nil {
+		t.Fatal("expected a resolved provider after lazy activation")
+	}
+	if got := triggers.Load(); got != 1 {
+		t.Fatalf("activation trigger fired %d times, want 1", got)
+	}
+
+	if _, err := proxy.await(context.Background()); err != nil {
+		t.Fatalf("second await: %v", err)
+	}
+	if got := triggers.Load(); got != 1 {
+		t.Fatalf("activation trigger fired %d times after resolution, want 1 (already resolved)", got)
+	}
+}
+
+func TestStartupProviderProxyDoesNotActivateWhenAlreadyResolved(t *testing.T) {
+	t.Parallel()
+
+	proxy := newStartupProviderProxy(appservice.StaticProviderSpec{
+		Name:           "eager",
+		ConnectionMode: core.ConnectionModeNone,
+	}, startupOperationRouting{}, nil)
+
+	var triggers atomic.Int32
+	proxy.setActivationTrigger(func(context.Context) { triggers.Add(1) })
+	proxy.publish(&coretesting.StubIntegration{N: "eager"})
+
+	if _, err := proxy.await(context.Background()); err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	if got := triggers.Load(); got != 0 {
+		t.Fatalf("activation trigger fired %d times for an already-resolved provider, want 0", got)
+	}
+}
 
 func TestStartupProviderProxyRejectsAppAgentCycle(t *testing.T) {
 	t.Parallel()

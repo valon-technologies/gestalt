@@ -19,6 +19,11 @@ type startupProviderProxy struct {
 	operationRouting startupOperationRouting
 	tracker          *startupWaitTracker
 	gate             startupGate[core.Provider]
+	activate         func(context.Context)
+}
+
+func (p *startupProviderProxy) setActivationTrigger(activate func(context.Context)) {
+	p.activate = activate
 }
 
 func newStartupProviderProxy(spec appservice.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
@@ -47,6 +52,9 @@ func (p *startupProviderProxy) finish(provider core.Provider, err error) {
 }
 
 func (p *startupProviderProxy) await(ctx context.Context) (core.Provider, error) {
+	if p.activate != nil && p.resolved() == nil {
+		p.activate(ctx)
+	}
 	provider, err := p.gate.await(ctx)
 	if err != nil {
 		return nil, err
