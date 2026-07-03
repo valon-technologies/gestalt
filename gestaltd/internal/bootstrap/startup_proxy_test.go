@@ -50,6 +50,31 @@ func TestStartupProviderProxyLazilyActivatesAndFailsFast(t *testing.T) {
 	}
 }
 
+func TestStartupProviderProxySurfacesActivationFailure(t *testing.T) {
+	t.Parallel()
+
+	proxy := newStartupProviderProxy(appservice.StaticProviderSpec{
+		Name:           "deferred",
+		ConnectionMode: core.ConnectionModeNone,
+	}, startupOperationRouting{}, nil)
+	proxy.setActivationTrigger(func(context.Context) {})
+
+	if _, err := proxy.await(context.Background()); !errors.Is(err, core.ErrProviderActivating) {
+		t.Fatalf("await while activating = %v, want ErrProviderActivating", err)
+	}
+
+	installErr := errors.New("boom: bad manifest")
+	proxy.fail(installErr)
+
+	_, err := proxy.await(context.Background())
+	if errors.Is(err, core.ErrProviderActivating) {
+		t.Fatalf("await after install failure still returns ErrProviderActivating: %v", err)
+	}
+	if !errors.Is(err, installErr) {
+		t.Fatalf("await after install failure = %v, want the underlying install error", err)
+	}
+}
+
 func TestStartupProviderProxyDoesNotActivateWhenAlreadyResolved(t *testing.T) {
 	t.Parallel()
 

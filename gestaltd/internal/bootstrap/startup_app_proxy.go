@@ -53,14 +53,15 @@ func (p *startupProviderProxy) finish(provider core.Provider, err error) {
 
 func (p *startupProviderProxy) await(ctx context.Context) (core.Provider, error) {
 	if p.activate != nil {
-		if provider := p.resolved(); provider != nil {
-			return provider, nil
+		if _, done, _ := p.gate.resolved(); !done {
+			p.activate(ctx)
+			if _, done, _ := p.gate.resolved(); !done {
+				return nil, fmt.Errorf("%w: %q", core.ErrProviderActivating, p.spec.Name)
+			}
 		}
-		p.activate(ctx)
-		if provider := p.resolved(); provider != nil {
-			return provider, nil
-		}
-		return nil, fmt.Errorf("%w: %q", core.ErrProviderActivating, p.spec.Name)
+		// The gate has finished (install succeeded or failed); fall through so
+		// callers get the resolved provider or the real install error, not a
+		// perpetual ErrProviderActivating.
 	}
 	provider, err := p.gate.await(ctx)
 	if err != nil {
