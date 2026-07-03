@@ -46,6 +46,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const providerInstallTimeout = 10 * time.Minute
+
 type pendingProviderBuild struct {
 	name  string
 	entry *config.ProviderEntry
@@ -175,11 +177,13 @@ func (b *preparedProviderBuilds) Start(
 	var errMu sync.Mutex
 	var wg sync.WaitGroup
 
+	installCtx, cancelInstall := context.WithTimeout(ctx, providerInstallTimeout)
+
 	for _, pending := range b.pending {
 		wg.Add(1)
 		go func(pending pendingProviderBuild) {
 			defer wg.Done()
-			buildCtx := invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, pending.name)
+			buildCtx := invocation.WithCallerProvider(installCtx, invocation.ProviderKindApp, pending.name)
 			result, err := builder(buildCtx, pending.name, pending.entry, deps)
 			if err != nil {
 				errMu.Lock()
@@ -245,6 +249,7 @@ func (b *preparedProviderBuilds) Start(
 
 	go func() {
 		wg.Wait()
+		cancelInstall()
 		close(ready)
 	}()
 
@@ -266,6 +271,7 @@ func (b *preparedProviderBuilds) Start(
 }
 
 func newProviderActivation(
+	baseCtx context.Context,
 	b *preparedProviderBuilds,
 	deps Deps,
 	builder func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error),
@@ -274,11 +280,11 @@ func newProviderActivation(
 		connAuth func() map[string]map[string]OAuthHandler,
 		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
 	),
-) func(context.Context) {
+) func() {
 	var once sync.Once
-	return func(ctx context.Context) {
+	return func() {
 		once.Do(func() {
-			ready, connAuth, manualConnAuth, _ := b.Start(ctx, deps, builder)
+			ready, connAuth, manualConnAuth, _ := b.Start(baseCtx, deps, builder)
 			onStart(ready, connAuth, manualConnAuth)
 		})
 	}

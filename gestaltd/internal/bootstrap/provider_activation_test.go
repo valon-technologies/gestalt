@@ -31,7 +31,7 @@ func TestNewProviderActivationStartsProvidersOnce(t *testing.T) {
 	}
 
 	var gotReady <-chan struct{}
-	activate := newProviderActivation(builds, Deps{}, builder, func(
+	activate := newProviderActivation(context.Background(), builds, Deps{}, builder, func(
 		ready <-chan struct{},
 		_ func() map[string]map[string]OAuthHandler,
 		_ func() map[string]map[string]ManualTokenExchanger,
@@ -41,7 +41,7 @@ func TestNewProviderActivationStartsProvidersOnce(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		activate(context.Background())
+		activate()
 		close(done)
 	}()
 	select {
@@ -62,8 +62,8 @@ func TestNewProviderActivationStartsProvidersOnce(t *testing.T) {
 		t.Fatalf("builder calls after first activation = %d, want 1", got)
 	}
 
-	activate(context.Background())
-	activate(context.Background())
+	activate()
+	activate()
 	if got := builderCalls.Load(); got != 1 {
 		t.Fatalf("builder calls after repeated activation = %d, want 1 (idempotent)", got)
 	}

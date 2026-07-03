@@ -1271,7 +1271,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	noopAuth := noopConnAuth()
 	noopManualAuth := noopManualConnAuth()
 
-	activateAppProviders := newProviderActivation(updateBuilds, prepared.Deps, buildProvider, func(
+	startDeferredProviders := newProviderActivation(ctx, updateBuilds, prepared.Deps, buildProvider, func(
 		ready <-chan struct{},
 		connAuth func() map[string]map[string]OAuthHandler,
 		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
@@ -1282,8 +1282,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			deferred.finish()
 		}()
 	})
+	activateAppProviders := func(context.Context) { startDeferredProviders() }
 	if autoActivate {
-		activateAppProviders(ctx)
+		startDeferredProviders()
 	}
 
 	connAuthResolver = func() map[string]map[string]OAuthHandler {
