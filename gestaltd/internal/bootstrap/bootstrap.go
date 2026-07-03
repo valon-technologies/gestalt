@@ -1278,10 +1278,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	) {
 		deferred.set(connAuth, manualConnAuth)
 		go func() {
-			select {
-			case <-ready:
-			case <-ctx.Done():
-			}
+			<-ready
 			deferred.finish()
 		}()
 	})
