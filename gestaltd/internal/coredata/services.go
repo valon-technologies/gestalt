@@ -29,6 +29,9 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 	if _, err := ds.CreateObjectStore(ctx, StoreManagedSubjects, ManagedSubjectsSchema); err != nil {
 		return nil, fmt.Errorf("create managed_subjects store: %w", err)
 	}
+	if _, err := ds.CreateObjectStore(ctx, StoreAppSHAs, AppSHAsSchema); err != nil {
+		return nil, fmt.Errorf("create app_shas store: %w", err)
+	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
 	return &Services{

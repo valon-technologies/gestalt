@@ -8,7 +8,15 @@ const (
 	StoreUsers                         = "users"
 	StoreManagedSubjects               = "managed_subjects"
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
+	StoreAppSHAs                       = "app_shas"
 )
+
+var AppSHAsSchema = idb.ObjectStoreOptions{
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "sha", Type: idb.TypeString, NotNull: true},
+	},
+}
 
 var UsersSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{

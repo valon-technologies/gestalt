@@ -2047,6 +2047,7 @@ type ServerConfig struct {
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
+	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
 }
 
 type ServerAgentConfig struct{}

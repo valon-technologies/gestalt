@@ -1239,7 +1239,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeAgents(extraAgents...)
 		}
 	}()
-	noopBuilds, updateBuilds := providerBuilds.partition(appStartupCategory)
+	storedSHAs := readAppSHAs(ctx, prepared.Services.DB)
+	autoActivate := resolveAutoActivate(cfg)
+	noopBuilds, updateBuilds := providerBuilds.partition(newAppStartupCategorizer(storedSHAs, autoActivate))
+	updateBuilds.onInstalled = func(name, sha string) {
+		if err := writeAppSHA(ctx, prepared.Services.DB, name, sha); err != nil {
+			slog.WarnContext(ctx, "persisting app sha failed", "provider", name, "error", err)
+		}
+	}
 
 	var noopConnAuth func() map[string]map[string]OAuthHandler
 	var noopManualConnAuth func() map[string]map[string]ManualTokenExchanger
