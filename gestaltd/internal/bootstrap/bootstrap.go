@@ -271,6 +271,15 @@ func (r *Result) ActivateAppProviders(ctx context.Context) {
 	if r == nil || r.activateAppProviders == nil {
 		return
 	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return
+	}
+	if r.deferred != nil {
+		r.deferred.markActivating()
+	}
+	r.mu.Unlock()
 	r.activateAppProviders(ctx)
 }
 
@@ -1143,7 +1152,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		connAuthResolver       func() map[string]map[string]OAuthHandler
 		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
 	)
-	deferred := &deferredProviders{}
+	deferred := newDeferredProviders()
 	closeProviders := true
 	defer func() {
 		if closeProviders {
@@ -1262,19 +1271,18 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	noopAuth := noopConnAuth()
 	noopManualAuth := noopManualConnAuth()
 
-	providersReady := make(chan struct{})
 	activateAppProviders := newProviderActivation(updateBuilds, prepared.Deps, buildProvider, func(
 		ready <-chan struct{},
 		connAuth func() map[string]map[string]OAuthHandler,
 		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
 	) {
-		deferred.set(ready, connAuth, manualConnAuth)
+		deferred.set(connAuth, manualConnAuth)
 		go func() {
 			select {
 			case <-ready:
 			case <-ctx.Done():
 			}
-			close(providersReady)
+			deferred.finish()
 		}()
 	})
 	if autoActivate {
@@ -1352,7 +1360,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		WorkflowControl:              prepared.Deps.WorkflowRuntime,
 		AgentControl:                 prepared.Deps.AgentRuntime,
 		AgentManager:                 prepared.Deps.AgentManager,
-		ProvidersReady:               providersReady,
+		ProvidersReady:               deferred.ready(),
 		ConnectionAuth:               connAuthResolver,
 		ManualConnectionAuth:         manualConnAuthResolver,
 		Invoker:                      sharedInvoker,

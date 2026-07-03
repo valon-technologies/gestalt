@@ -11,7 +11,7 @@ func TestDeferredProvidersUntriggered(t *testing.T) {
 	var nilD *deferredProviders
 	nilD.waitReady()
 
-	d := &deferredProviders{}
+	d := newDeferredProviders()
 	if got := d.connectionAuth(); got != nil {
 		t.Fatalf("connectionAuth before set = %v, want nil", got)
 	}
@@ -31,10 +31,8 @@ func TestDeferredProvidersUntriggered(t *testing.T) {
 func TestDeferredProvidersSetPopulatesAndWaits(t *testing.T) {
 	t.Parallel()
 
-	ready := make(chan struct{})
-	d := &deferredProviders{}
+	d := newDeferredProviders()
 	d.set(
-		ready,
 		func() map[string]map[string]OAuthHandler {
 			return map[string]map[string]OAuthHandler{"gh": nil}
 		},
@@ -50,17 +48,32 @@ func TestDeferredProvidersSetPopulatesAndWaits(t *testing.T) {
 		t.Fatal("manualConnectionAuth not populated after set")
 	}
 
+	assertWaitReadyBlocksUntilFinish(t, d)
+}
+
+func TestDeferredProvidersMarkActivatingWaitsUntilFinish(t *testing.T) {
+	t.Parallel()
+
+	d := newDeferredProviders()
+	d.markActivating()
+	assertWaitReadyBlocksUntilFinish(t, d)
+}
+
+func assertWaitReadyBlocksUntilFinish(t *testing.T, d *deferredProviders) {
+	t.Helper()
+
 	done := make(chan struct{})
 	go func() { d.waitReady(); close(done) }()
 	select {
 	case <-done:
-		t.Fatal("waitReady returned before its ready channel closed")
+		t.Fatal("waitReady returned before finish() while triggered")
 	case <-time.After(100 * time.Millisecond):
 	}
-	close(ready)
+
+	d.finish()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("waitReady did not return after ready closed")
+		t.Fatal("waitReady did not return after finish()")
 	}
 }

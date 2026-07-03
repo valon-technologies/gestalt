@@ -41,6 +41,34 @@ func TestBootstrapDefersActivationWhenAutoActivateDisabled(t *testing.T) {
 	}
 }
 
+func TestActivateAppProvidersAfterCloseIsNoOp(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	cfg := validConfig()
+	disabled := false
+	cfg.Server.AutoActivate = &disabled
+
+	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if err := result.Close(ctx); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		result.ActivateAppProviders(ctx)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ActivateAppProviders after Close should be a no-op, not block")
+	}
+}
+
 func TestBootstrapAutoActivateEnabledStartsWithoutActivateCall(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -5,22 +5,40 @@ import "sync"
 type deferredProviders struct {
 	mu             sync.Mutex
 	triggered      bool
-	ready          <-chan struct{}
 	connAuth       func() map[string]map[string]OAuthHandler
 	manualConnAuth func() map[string]map[string]ManualTokenExchanger
+
+	done       chan struct{}
+	finishOnce sync.Once
+}
+
+func newDeferredProviders() *deferredProviders {
+	return &deferredProviders{done: make(chan struct{})}
+}
+
+func (d *deferredProviders) ready() <-chan struct{} {
+	return d.done
+}
+
+func (d *deferredProviders) markActivating() {
+	d.mu.Lock()
+	d.triggered = true
+	d.mu.Unlock()
 }
 
 func (d *deferredProviders) set(
-	ready <-chan struct{},
 	connAuth func() map[string]map[string]OAuthHandler,
 	manualConnAuth func() map[string]map[string]ManualTokenExchanger,
 ) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	d.triggered = true
-	d.ready = ready
 	d.connAuth = connAuth
 	d.manualConnAuth = manualConnAuth
+	d.mu.Unlock()
+}
+
+func (d *deferredProviders) finish() {
+	d.finishOnce.Do(func() { close(d.done) })
 }
 
 func (d *deferredProviders) connectionAuth() map[string]map[string]OAuthHandler {
@@ -49,9 +67,8 @@ func (d *deferredProviders) waitReady() {
 	}
 	d.mu.Lock()
 	triggered := d.triggered
-	ready := d.ready
 	d.mu.Unlock()
-	if triggered && ready != nil {
-		<-ready
+	if triggered {
+		<-d.done
 	}
 }
