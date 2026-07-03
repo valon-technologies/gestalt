@@ -1342,7 +1342,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAudit = false
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
-	return &Result{
+	result := &Result{
 		Auth:                         prepared.Auth,
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
@@ -1375,7 +1375,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		auditClose:                   auditClose,
 		activateAppProviders:         activateAppProviders,
 		deferred:                     deferred,
-	}, nil
+	}
+	for _, pending := range updateBuilds.pending {
+		if pending.proxy != nil {
+			pending.proxy.setActivationTrigger(result.ActivateAppProviders)
+		}
+	}
+	return result, nil
 }
 
 type runtimeWorkerWorkflowProvider interface {

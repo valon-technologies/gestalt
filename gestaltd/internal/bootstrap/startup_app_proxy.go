@@ -19,6 +19,11 @@ type startupProviderProxy struct {
 	operationRouting startupOperationRouting
 	tracker          *startupWaitTracker
 	gate             startupGate[core.Provider]
+	activate         func(context.Context)
+}
+
+func (p *startupProviderProxy) setActivationTrigger(activate func(context.Context)) {
+	p.activate = activate
 }
 
 func newStartupProviderProxy(spec appservice.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
@@ -47,6 +52,17 @@ func (p *startupProviderProxy) finish(provider core.Provider, err error) {
 }
 
 func (p *startupProviderProxy) await(ctx context.Context) (core.Provider, error) {
+	if p.activate != nil {
+		if _, done, _ := p.gate.resolved(); !done {
+			p.activate(ctx)
+			if _, done, _ := p.gate.resolved(); !done {
+				return nil, fmt.Errorf("%w: %q", core.ErrProviderActivating, p.spec.Name)
+			}
+		}
+		// The gate has finished (install succeeded or failed); fall through so
+		// callers get the resolved provider or the real install error, not a
+		// perpetual ErrProviderActivating.
+	}
 	provider, err := p.gate.await(ctx)
 	if err != nil {
 		return nil, err
