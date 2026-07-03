@@ -59,10 +59,7 @@ type preparedProviderBuilds struct {
 	connAuth       map[string]map[string]OAuthHandler
 	manualConnAuth map[string]map[string]ManualTokenExchanger
 	errs           []error
-	// onInstalled, if set, is called with (appName, sha) after a provider
-	// finishes installing successfully. Used to persist the SHA of deferred
-	// (version-changed) providers so the next deploy sees them as unchanged.
-	onInstalled func(name, sha string)
+	onInstalled    func(name, sha string)
 }
 
 func prepareProviderBuilds(

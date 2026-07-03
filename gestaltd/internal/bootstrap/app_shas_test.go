@@ -59,6 +59,7 @@ func TestAppStartupCategorizer(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			categorize := newAppStartupCategorizer(stored, tc.autoActivate)
 			if got := categorize(tc.app, tc.entry); got != tc.want {
 				t.Fatalf("category = %d, want %d", got, tc.want)

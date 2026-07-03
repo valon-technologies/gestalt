@@ -11,10 +11,6 @@ const (
 	StoreAppSHAs                       = "app_shas"
 )
 
-// AppSHAsSchema records the artifact SHA of the last successfully installed
-// version of each app provider, keyed by app name. Bootstrap compares the
-// stored SHA against the current manifest artifact to decide whether an app is
-// unchanged (start immediately) or version-changed (defer to /activate).
 var AppSHAsSchema = idb.ObjectStoreOptions{
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
