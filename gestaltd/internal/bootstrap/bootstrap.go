@@ -262,6 +262,7 @@ type Result struct {
 	workflowConfigReconcileTasksStarted bool
 	auditClose                          func(context.Context) error
 	activateAppProviders                func(context.Context)
+	deferred                            *deferredProviders
 	mu                                  sync.Mutex
 	closed                              bool
 }
@@ -375,7 +376,9 @@ func (r *Result) Close(ctx context.Context) error {
 	if r.closed {
 		return nil
 	}
-	if r.ProvidersReady != nil {
+	if r.deferred != nil {
+		r.deferred.waitReady()
+	} else if r.ProvidersReady != nil {
 		<-r.ProvidersReady
 	}
 	var errs []error
@@ -1137,19 +1140,17 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	providers := providerBuilds.providers
 	var (
 		noopReady              <-chan struct{}
-		providersReady         <-chan struct{}
 		connAuthResolver       func() map[string]map[string]OAuthHandler
 		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
 	)
+	deferred := &deferredProviders{}
 	closeProviders := true
 	defer func() {
 		if closeProviders {
 			if noopReady != nil {
 				<-noopReady
 			}
-			if providersReady != nil {
-				<-providersReady
-			}
+			deferred.waitReady()
 			_ = CloseProviders(providers)
 		}
 	}()
@@ -1261,21 +1262,27 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	noopAuth := noopConnAuth()
 	noopManualAuth := noopManualConnAuth()
 
-	var updateConnAuth func() map[string]map[string]OAuthHandler
-	var updateManualConnAuth func() map[string]map[string]ManualTokenExchanger
+	providersReady := make(chan struct{})
 	activateAppProviders := newProviderActivation(updateBuilds, prepared.Deps, buildProvider, func(
 		ready <-chan struct{},
 		connAuth func() map[string]map[string]OAuthHandler,
 		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
 	) {
-		providersReady = ready
-		updateConnAuth = connAuth
-		updateManualConnAuth = manualConnAuth
+		deferred.set(ready, connAuth, manualConnAuth)
+		go func() {
+			select {
+			case <-ready:
+			case <-ctx.Done():
+			}
+			close(providersReady)
+		}()
 	})
-	activateAppProviders(ctx)
+	if autoActivate {
+		activateAppProviders(ctx)
+	}
 
 	connAuthResolver = func() map[string]map[string]OAuthHandler {
-		b := updateConnAuth()
+		b := deferred.connectionAuth()
 		if len(b) == 0 {
 			return noopAuth
 		}
@@ -1289,7 +1296,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return merged
 	}
 	manualConnAuthResolver = func() map[string]map[string]ManualTokenExchanger {
-		b := updateManualConnAuth()
+		b := deferred.manualConnectionAuth()
 		if len(b) == 0 {
 			return noopManualAuth
 		}
@@ -1361,6 +1368,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
 		activateAppProviders:         activateAppProviders,
+		deferred:                     deferred,
 	}, nil
 }
 
