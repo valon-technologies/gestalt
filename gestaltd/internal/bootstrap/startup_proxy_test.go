@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,7 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-func TestStartupProviderProxyLazilyActivatesOnAwait(t *testing.T) {
+func TestStartupProviderProxyLazilyActivatesAndFailsFast(t *testing.T) {
 	t.Parallel()
 
 	proxy := newStartupProviderProxy(appservice.StaticProviderSpec{
@@ -21,27 +22,31 @@ func TestStartupProviderProxyLazilyActivatesOnAwait(t *testing.T) {
 	}, startupOperationRouting{}, nil)
 
 	var triggers atomic.Int32
-	proxy.setActivationTrigger(func(context.Context) {
-		triggers.Add(1)
-		proxy.publish(&coretesting.StubIntegration{N: "deferred"})
-	})
+	// The install runs in the background; the trigger does not publish synchronously.
+	proxy.setActivationTrigger(func(context.Context) { triggers.Add(1) })
 
+	// First request triggers activation and fails fast rather than blocking.
+	_, err := proxy.await(context.Background())
+	if !errors.Is(err, core.ErrProviderActivating) {
+		t.Fatalf("await while activating = %v, want ErrProviderActivating", err)
+	}
+	if triggers.Load() == 0 {
+		t.Fatal("expected the first request to trigger activation")
+	}
+
+	// Still installing: keep failing fast.
+	if _, err := proxy.await(context.Background()); !errors.Is(err, core.ErrProviderActivating) {
+		t.Fatalf("await still activating = %v, want ErrProviderActivating", err)
+	}
+
+	// Install completes: subsequent requests resolve.
+	proxy.publish(&coretesting.StubIntegration{N: "deferred"})
 	provider, err := proxy.await(context.Background())
 	if err != nil {
-		t.Fatalf("await after lazy activation: %v", err)
+		t.Fatalf("await after install completed: %v", err)
 	}
 	if provider == nil {
-		t.Fatal("expected a resolved provider after lazy activation")
-	}
-	if got := triggers.Load(); got != 1 {
-		t.Fatalf("activation trigger fired %d times, want 1", got)
-	}
-
-	if _, err := proxy.await(context.Background()); err != nil {
-		t.Fatalf("second await: %v", err)
-	}
-	if got := triggers.Load(); got != 1 {
-		t.Fatalf("activation trigger fired %d times after resolution, want 1 (already resolved)", got)
+		t.Fatal("expected a resolved provider once activation finished")
 	}
 }
 

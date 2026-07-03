@@ -9,4 +9,5 @@ var (
 	ErrMCPOnly             = errors.New("this integration is accessible only via MCP")
 	ErrAmbiguousCredential = errors.New("ambiguous external credential")
 	ErrReconnectRequired   = errors.New("external credential reconnect required")
+	ErrProviderActivating  = errors.New("provider is still activating")
 )

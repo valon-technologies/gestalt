@@ -903,6 +903,14 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusInternalServerError, "internal error")
 	case errors.Is(err, invocation.ErrInvalidInvocation):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, core.ErrProviderActivating):
+		writeTypedError(
+			w,
+			http.StatusServiceUnavailable,
+			"provider_activating",
+			providerName,
+			fmt.Sprintf("integration %q is still activating; retry shortly", providerName),
+		)
 	case errors.Is(err, core.ErrMCPOnly):
 		writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
 	case errors.Is(err, apiexec.ErrMissingPathParam):

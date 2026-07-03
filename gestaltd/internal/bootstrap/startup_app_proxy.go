@@ -52,8 +52,15 @@ func (p *startupProviderProxy) finish(provider core.Provider, err error) {
 }
 
 func (p *startupProviderProxy) await(ctx context.Context) (core.Provider, error) {
-	if p.activate != nil && p.resolved() == nil {
+	if p.activate != nil {
+		if provider := p.resolved(); provider != nil {
+			return provider, nil
+		}
 		p.activate(ctx)
+		if provider := p.resolved(); provider != nil {
+			return provider, nil
+		}
+		return nil, fmt.Errorf("%w: %q", core.ErrProviderActivating, p.spec.Name)
 	}
 	provider, err := p.gate.await(ctx)
 	if err != nil {
