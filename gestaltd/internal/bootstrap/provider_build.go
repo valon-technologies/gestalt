@@ -50,6 +50,7 @@ type pendingProviderBuild struct {
 	name  string
 	entry *config.ProviderEntry
 	proxy *startupProviderProxy
+	sha   string
 }
 
 type preparedProviderBuilds struct {
@@ -58,6 +59,10 @@ type preparedProviderBuilds struct {
 	connAuth       map[string]map[string]OAuthHandler
 	manualConnAuth map[string]map[string]ManualTokenExchanger
 	errs           []error
+	// onInstalled, if set, is called with (appName, sha) after a provider
+	// finishes installing successfully. Used to persist the SHA of deferred
+	// (version-changed) providers so the next deploy sees them as unchanged.
+	onInstalled func(name, sha string)
 }
 
 func prepareProviderBuilds(
@@ -92,10 +97,11 @@ func prepareProviderBuilds(
 
 	for name := range cfg.Apps {
 		intgDef := cfg.Apps[name]
+		sha := currentAppSHA(intgDef)
 		spec, operationRouting, err := buildStartupProviderSpec(name, intgDef)
 		if err != nil {
 			slog.Warn("building startup provider proxy metadata failed", "provider", name, "error", err)
-			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef})
+			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, sha: sha})
 			continue
 		}
 		var tracker *startupWaitTracker
@@ -106,10 +112,10 @@ func prepareProviderBuilds(
 		if err := reg.Providers.Register(name, proxy); err != nil {
 			builds.errs = append(builds.errs, fmt.Errorf("integration %q: %w", name, err))
 			slog.Warn("registering startup provider proxy failed", "provider", name, "error", err)
-			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef})
+			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, sha: sha})
 			continue
 		}
-		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, proxy: proxy})
+		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, proxy: proxy, sha: sha})
 	}
 	return builds, nil
 }
@@ -232,6 +238,9 @@ func (b *preparedProviderBuilds) Start(
 				connMu.Lock()
 				b.manualConnAuth[pending.name] = result.ManualConnectionAuth
 				connMu.Unlock()
+			}
+			if b.onInstalled != nil && pending.sha != "" {
+				b.onInstalled(pending.name, pending.sha)
 			}
 			slog.Info("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
 		}(pending)

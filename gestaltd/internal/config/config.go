@@ -2047,6 +2047,11 @@ type ServerConfig struct {
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
+	// AutoActivate, when set, forces all app providers to start immediately at
+	// bootstrap instead of deferring version-changed ones to /activate. When
+	// unset it defaults to true if K_REVISION is absent (local dev) and false
+	// on Cloud Run, where the deploy workflow drives /activate.
+	AutoActivate *bool `yaml:"autoActivate,omitempty"`
 }
 
 type ServerAgentConfig struct{}
