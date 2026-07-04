@@ -1111,6 +1111,14 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, 
 				}
 			}
 		}
+		for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
+			entry := cfg.Apps[name]
+			if entry != nil && entry.Static != nil && entry.DevActive {
+				if err := resolveAppStaticTheme(paths, name, entry); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
 	}
 	mode := artifactModeMaterialize
 	if locked && noSync {
@@ -4306,6 +4314,36 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 		}
 		work.entry.IconFile = cmp.Or(work.entry.IconFile, work.entry.ResolvedIconFile)
 	}
+	if err := l.resolveConfiguredAppStaticBindings(paths, ordered); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *Lifecycle) resolveConfiguredAppStaticBindings(paths lifecyclePaths, work []*preparedAppWork) error {
+	for _, item := range work {
+		entry := item.entry
+		if entry == nil || entry.Static == nil {
+			continue
+		}
+		if err := resolveAppStaticTheme(paths, item.name, entry); err != nil {
+			return err
+		}
+		if entry.DevActive {
+			continue
+		}
+		if strings.TrimSpace(entry.ResolvedStaticRoot) != "" {
+			continue
+		}
+		destDir := providerDestDir(paths, item.name)
+		install, err := inspectPreparedInstall(destDir)
+		if err != nil {
+			return fmt.Errorf("read prepared manifest for provider %q: %w", item.name, err)
+		}
+		if err := bindAppStaticRoot(paths, item.name, entry, install); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -4913,6 +4951,12 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	if err := bindPreparedProviderInstall(paths, name, app, configMap, install); err != nil {
 		return err
 	}
+	if err := bindAppStaticRoot(paths, name, app, install); err != nil {
+		return err
+	}
+	if err := resolveAppStaticTheme(paths, name, app); err != nil {
+		return err
+	}
 	if lockEntryHasCompleteStaticValidation(providermanifestv1.KindApp, entry) {
 		bindLockValidationCatalog(app, entry)
 	}
@@ -5286,11 +5330,61 @@ func validateLockedInstalledManifest(kind, name, subject string, manifest *provi
 	return validateLockedArchivePolicy(subject, archivePolicyKind(kind), manifest, entry, platform, resolvedKey)
 }
 
-// resolveUIThemeConfig decodes the optional theme block of a mounted ui's
-// config and resolves its paths against the deployment config directory at
-// sync time. Unlike resolveProviderIcon, a configured-but-missing path is an
-// error: theme content is served verbatim and a typo would otherwise degrade
-// silently to the empty stylesheet.
+func bindAppStaticRoot(paths lifecyclePaths, name string, app *config.ProviderEntry, install *preparedInstall) error {
+	if app == nil || app.Static == nil {
+		return nil
+	}
+	app.ResolvedStaticRoot = ""
+	if install == nil || install.assetRootPath == "" {
+		return fmt.Errorf("app %q: static.mount configured but package has no static bundle", name)
+	}
+	indexPath := filepath.Join(install.assetRootPath, "index.html")
+	if _, err := os.Stat(indexPath); err != nil {
+		return fmt.Errorf("app %q: static bundle missing index.html at %s: %w", name, indexPath, err)
+	}
+	app.ResolvedStaticRoot = install.assetRootPath
+	return nil
+}
+
+// resolveAppStaticTheme resolves static.theme paths against the deployment config directory.
+// TODO(hughhan1): static.theme is a deployer workaround and should not be supported long-term.
+func resolveAppStaticTheme(paths lifecyclePaths, name string, entry *config.ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	entry.ResolvedThemeStylesheet = ""
+	entry.ResolvedThemeAssetsDir = ""
+	if entry.Static == nil || entry.Static.Theme == nil {
+		return nil
+	}
+	theme := entry.Static.Theme
+	if stylesheet := strings.TrimSpace(theme.Stylesheet); stylesheet != "" {
+		resolved := resolveUIThemePath(paths.configDir, stylesheet)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return fmt.Errorf("app %q static theme stylesheet not found at %s: %w", name, resolved, err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("app %q static theme stylesheet at %s is a directory", name, resolved)
+		}
+		entry.ResolvedThemeStylesheet = resolved
+	}
+	if assetsDir := strings.TrimSpace(theme.AssetsDir); assetsDir != "" {
+		resolved := resolveUIThemePath(paths.configDir, assetsDir)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return fmt.Errorf("app %q static theme assetsDir not found at %s: %w", name, resolved, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("app %q static theme assetsDir at %s is not a directory", name, resolved)
+		}
+		entry.ResolvedThemeAssetsDir = resolved
+	}
+	return nil
+}
+
+// resolveUIThemeConfig resolves ui config.theme paths against the deployment config directory.
+// TODO(hughhan1): deployment theme overrides are a deployer workaround and should not be supported long-term.
 func resolveUIThemeConfig(paths lifecyclePaths, name string, entry *config.UIEntry) error {
 	entry.ResolvedThemeStylesheet = ""
 	entry.ResolvedThemeAssetsDir = ""

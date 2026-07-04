@@ -492,6 +492,8 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
     example:
       source:
         path: ./manifest.yaml
+      static:
+        mount: /example
 ` + `server:
 ` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
@@ -521,6 +523,12 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	}
 	if !intg.DevActive {
 		t.Fatal("expected DevActive for local source-run app")
+	}
+	if intg.Static == nil || intg.Static.Mount != "/example" {
+		t.Fatalf("Static = %#v, want mount /example", intg.Static)
+	}
+	if intg.ResolvedStaticRoot != "" {
+		t.Fatalf("ResolvedStaticRoot = %q, want empty for dev-active static app", intg.ResolvedStaticRoot)
 	}
 	if intg.Command != "" {
 		t.Fatalf("Command = %q, want empty for source-run app", intg.Command)

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
@@ -66,42 +67,67 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	names := make([]string, 0, len(cfg.Providers.UI))
-	for name := range cfg.Providers.UI {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
 	var targets []Target
-	for _, name := range names {
+
+	uiNames := make([]string, 0, len(cfg.Providers.UI))
+	for name := range cfg.Providers.UI {
+		uiNames = append(uiNames, name)
+	}
+	slices.Sort(uiNames)
+	for _, name := range uiNames {
 		entry := cfg.Providers.UI[name]
 		if entry == nil || !entry.DevActive {
 			continue
 		}
-		run := providerpkg.EffectiveSourceRunCommand(entry.ResolvedManifest)
-		if run == nil {
-			return nil, fmt.Errorf("ui %q: dev-active without run manifest", name)
+		target, err := devActiveTarget(name, "ui", entry.Path, entry.ResolvedManifestPath, entry.ResolvedDevWorkdir, entry.ResolvedManifest)
+		if err != nil {
+			return nil, fmt.Errorf("ui %q: %w", name, err)
 		}
-		workdir := entry.ResolvedDevWorkdir
-		if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
-			root := filepath.Dir(entry.ResolvedManifestPath)
-			workdir = filepath.Join(root, filepath.FromSlash(w))
+		targets = append(targets, target)
+	}
+
+	appNames := make([]string, 0, len(cfg.Apps))
+	for name := range cfg.Apps {
+		appNames = append(appNames, name)
+	}
+	slices.Sort(appNames)
+	for _, name := range appNames {
+		entry := cfg.Apps[name]
+		if entry == nil || !entry.DevActive || entry.Static == nil {
+			continue
 		}
-		readyTimeout := defaultReadyTimeout
-		if run.ReadyTimeout > 0 {
-			readyTimeout = run.ReadyTimeout
+		target, err := devActiveTarget(name, "app", entry.Static.Mount, entry.ResolvedManifestPath, entry.ResolvedDevWorkdir, entry.ResolvedManifest)
+		if err != nil {
+			return nil, fmt.Errorf("app %q: %w", name, err)
 		}
-		targets = append(targets, Target{
-			Name:         name,
-			Kind:         "ui",
-			BasePath:     entry.Path,
-			Workdir:      workdir,
-			Command:      append([]string(nil), run.Command...),
-			Env:          run.Env,
-			ReadyTimeout: readyTimeout,
-		})
+		targets = append(targets, target)
 	}
 	return targets, nil
+}
+
+func devActiveTarget(name, kind, basePath, manifestPath, devWorkdir string, manifest *providermanifestv1.Manifest) (Target, error) {
+	run := providerpkg.EffectiveSourceRunCommand(manifest)
+	if run == nil {
+		return Target{}, fmt.Errorf("dev-active without run manifest")
+	}
+	workdir := devWorkdir
+	if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
+		root := filepath.Dir(manifestPath)
+		workdir = filepath.Join(root, filepath.FromSlash(w))
+	}
+	readyTimeout := defaultReadyTimeout
+	if run.ReadyTimeout > 0 {
+		readyTimeout = run.ReadyTimeout
+	}
+	return Target{
+		Name:         name,
+		Kind:         kind,
+		BasePath:     basePath,
+		Workdir:      workdir,
+		Command:      append([]string(nil), run.Command...),
+		Env:          run.Env,
+		ReadyTimeout: readyTimeout,
+	}, nil
 }
 
 func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervisor, error) {

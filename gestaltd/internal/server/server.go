@@ -60,6 +60,7 @@ type MountedUI struct {
 	ThemeStylesheet string
 	ThemeAssetsDir  string
 	IsDev           bool
+	AppLevelAuth    bool
 	builtInAdmin    bool
 }
 
@@ -263,6 +264,11 @@ func New(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
 		}
 	}
+	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlers)
+	if err != nil {
+		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)
+	}
+	mountedUIs = append(mountedUIs, appStatics...)
 	mountedUIs, err = normalizeMountedUIs(mountedUIs)
 	if err != nil {
 		return nil, err
@@ -277,7 +283,7 @@ func New(cfg Config) (*Server, error) {
 		if cfg.BuiltinAdminUI != nil {
 			adminUIOpts = *cfg.BuiltinAdminUI
 		}
-		adminUI, err = resolveConfiguredAdminUI(adminUIOpts, cfg.AdminUIProvider, cfg.ProviderUIs)
+		adminUI, err = resolveConfiguredAdminUI(adminUIOpts, cfg.AdminUIProvider, cfg.ProviderUIs, cfg.AppDefs)
 		if err != nil {
 			return nil, fmt.Errorf("resolve configured admin ui: %w", err)
 		}
