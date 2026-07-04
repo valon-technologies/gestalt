@@ -106,6 +106,8 @@ type Lifecycle struct {
 	// forcedDevUIKeys marks specific UI keys dev-active even when devServeEligible
 	// is false (serve --locked --config … --path … overlay mode).
 	forcedDevUIKeys map[string]bool
+	emittedDeprecationWarnings map[string]struct{}
+	deprecationLogger           func(string)
 }
 
 type SyncOptions struct {
@@ -389,6 +391,7 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, lockfilePa
 	if err := attachStaticValidationMetadata(lock, cfg, catalogs); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return lock, cfg, paths, nil
 }
 
@@ -430,6 +433,7 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, lockfilePath, artif
 	if err := attachStaticValidationMetadata(lock, cfg, catalogs); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return lock, cfg, paths, nil
 }
 
@@ -1144,6 +1148,7 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, 
 	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, nil, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return cfg, nil, nil
 }
 
@@ -1169,6 +1174,7 @@ func (l *Lifecycle) LoadForValidationAtPaths(configPaths []string, lockfilePath,
 	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return cfg, nil
 }
 
@@ -1228,6 +1234,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPaths(configPaths []string, lockfil
 	if err := appservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return cfg, nil
 }
 
@@ -1305,6 +1312,7 @@ func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir
 		recorder.RecordOutputStats(mode == artifactModeMaterialize, paths.artifactsDir, preparedArtifactRoots(paths, cfg))
 		recorder.Finish()
 	}
+	l.emitDeprecationWarnings(cfg)
 	return nil
 }
 
