@@ -14,30 +14,32 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
-// fingerprintSkipper is the fingerprint exclusion policy: which paths a source
-// fingerprint walk excludes. Two structural invariants apply regardless of
-// .gitignore: the declared build output (never hash the artifact about to be
-// produced) and the .git directory itself (git metadata, never a build input).
-// Everything else is decided by the enclosing repo's .gitignore rules. Explicit
-// per-input file listings are honored verbatim by the callers; shouldSkip is
-// only consulted on directory walks and on the walk root.
 type fingerprintSkipper struct {
-	matcher   gitignore.Matcher
-	repoRoot  string
-	outputAbs string
+	matcher        gitignore.Matcher
+	repoRoot       string
+	outputAbs      string
+	staticBuildAbs string
 }
 
-func newFingerprintSkipper(sourceDir, outputAbs string) (fingerprintSkipper, error) {
+func newFingerprintSkipper(sourceDir, outputAbs, staticBuildAbs string) (fingerprintSkipper, error) {
 	matcher, repoRoot, err := gitignoreMatcherForDir(sourceDir)
 	if err != nil {
 		return fingerprintSkipper{}, err
 	}
-	return fingerprintSkipper{matcher: matcher, repoRoot: repoRoot, outputAbs: outputAbs}, nil
+	return fingerprintSkipper{
+		matcher:        matcher,
+		repoRoot:       repoRoot,
+		outputAbs:      outputAbs,
+		staticBuildAbs: filepath.Clean(staticBuildAbs),
+	}, nil
 }
 
 func (s fingerprintSkipper) shouldSkip(path string, d os.DirEntry) bool {
 	cleanPath := filepath.Clean(path)
 	if s.outputAbs != "" && pathWithinRoot(s.outputAbs, cleanPath) {
+		return true
+	}
+	if s.staticBuildAbs != "" && pathWithinRoot(s.staticBuildAbs, cleanPath) {
 		return true
 	}
 	if d != nil && d.IsDir() && d.Name() == gitDirName {
@@ -50,9 +52,6 @@ func (s fingerprintSkipper) shouldSkip(path string, d os.DirEntry) bool {
 	return s.matcher.Match(components, d != nil && d.IsDir())
 }
 
-// digestCollector accumulates "relpath=sha256" lines for a source fingerprint,
-// deduplicating by path relative to sourceDir. It is the shared sink for every
-// fingerprint walk in this file.
 type digestCollector struct {
 	sourceDir string
 	digests   []string
@@ -93,10 +92,6 @@ func (c *digestCollector) joinedOver(baseDigest string) string {
 	return hex.EncodeToString(combined[:])
 }
 
-// walkDigestFiles walks root recursively, skipping paths the skipper excludes
-// and hashing every surviving file into the collector. This is the single
-// implementation of the fingerprint walk contract; both the build and install
-// paths route through it so future exclusion rules change in one place.
 func walkDigestFiles(root string, skipper fingerprintSkipper, c *digestCollector) error {
 	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -132,21 +127,21 @@ func fingerprintLocalBuildInputs(sourceDir, manifestPath string, manifest *provi
 	if outputRel, _, err := providerpkg.SourceBuildOutput(manifest); err == nil && outputRel != "" {
 		outputAbs = filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(outputRel)))
 	}
-	skipper, err := newFingerprintSkipper(sourceDir, outputAbs)
+	skipper, err := newFingerprintSkipper(sourceDir, outputAbs, providerpkg.SourceStaticBuildDir(manifestPath))
 	if err != nil {
 		return "", err
 	}
 
-	inputs := append([]string(nil), build.Inputs...)
+	var inputs []string
+	for _, command := range build.Commands {
+		inputs = append(inputs, command.Inputs...)
+	}
 	inputs = append(inputs, providerpkg.SourceInstallInputs(manifest)...)
 	if len(inputs) == 0 {
-		workdir := "."
-		if strings.TrimSpace(build.Workdir) != "" {
-			workdir = build.Workdir
-		}
-		rootAbs := filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(workdir)))
-		if err := walkDigestFiles(rootAbs, skipper, c); err != nil {
-			return "", fmt.Errorf("digest build inputs under %q: %w", workdir, err)
+		for _, rootAbs := range providerpkg.BuildWorkdirAbsPaths(sourceDir, build.Commands) {
+			if err := walkDigestFiles(rootAbs, skipper, c); err != nil {
+				return "", fmt.Errorf("digest build inputs under %q: %w", rootAbs, err)
+			}
 		}
 	} else {
 		for _, input := range inputs {
@@ -155,8 +150,6 @@ func fingerprintLocalBuildInputs(sourceDir, manifestPath string, manifest *provi
 			if err != nil {
 				return "", fmt.Errorf("stat build input %q: %w", input, err)
 			}
-			// Explicit file inputs are hashed verbatim (explicit beats ignore);
-			// only directory inputs walk through the matcher.
 			if !info.IsDir() {
 				if err := c.addFile(inputAbs); err != nil {
 					return "", fmt.Errorf("digest build input %q: %w", input, err)
@@ -172,8 +165,8 @@ func fingerprintLocalBuildInputs(sourceDir, manifestPath string, manifest *provi
 	return c.joined(), nil
 }
 
-func foldInstallInputsDigest(sourceDir, baseDigest string, installInputs []string) (string, error) {
-	skipper, err := newFingerprintSkipper(sourceDir, "")
+func foldInstallInputsDigest(sourceDir, manifestPath, baseDigest string, installInputs []string) (string, error) {
+	skipper, err := newFingerprintSkipper(sourceDir, "", providerpkg.SourceStaticBuildDir(manifestPath))
 	if err != nil {
 		return "", err
 	}

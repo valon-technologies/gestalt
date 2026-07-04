@@ -754,3 +754,109 @@ chmod +x ` + buildOutputRel + `
 		t.Fatalf("SourceManifestExecution: %v (install should run before build)", err)
 	}
 }
+
+func TestStageSourcePreparedInstallDir_StagesStaticBundle(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == windowsOS {
+		t.Skip("POSIX shell fixture")
+	}
+
+	root := t.TempDir()
+	const source = "github.com/test/apps/static-frontend"
+	buildOutputRel := sourceBuildOutputRel(t, source, runtime.GOOS)
+	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(`#!/bin/sh
+set -eu
+out="`+buildOutputRel+`"
+mkdir -p "$(dirname "$out")"
+cat > "$out" <<'SH'
+#!/bin/sh
+if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
+fi
+SH
+chmod +x "$out"
+mkdir -p "$GESTALT_BUILD_STATIC"
+printf '<html>alpha</html>\n' > "$GESTALT_BUILD_STATIC/index.html"
+`), 0o755)
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", []byte(`
+kind: app
+source: github.com/test/apps/static-frontend
+version: 0.0.1-alpha.1
+build:
+  - [sh, ./build.sh]
+run:
+  command: [sh, -c, "true"]
+spec: {}
+`))
+
+	stagingDir := filepath.Join(t.TempDir(), "prepared")
+	staged, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
+		Kind:    providermanifestv1.KindApp,
+		AppName: "alpha",
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
+	})
+	if err != nil {
+		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
+	}
+	indexPath := filepath.Join(stagingDir, "static", "index.html")
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", indexPath, err)
+	}
+	if !strings.Contains(string(data), "alpha") {
+		t.Fatalf("static index = %q", data)
+	}
+	if staged.Manifest == nil || staged.Manifest.Spec == nil || staged.Manifest.Spec.AssetRoot != "static" {
+		t.Fatalf("staged manifest spec.assetRoot = %#v, want static", staged.Manifest)
+	}
+}
+
+func TestStageSourcePreparedInstallDir_SerialBuildAbortOnFailure(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == windowsOS {
+		t.Skip("POSIX shell fixture")
+	}
+
+	root := t.TempDir()
+	logPath := filepath.Join(root, "build.log")
+	mustWriteFile(t, filepath.Join(root, "step.sh"), []byte(`#!/bin/sh
+set -eu
+step="$1"
+echo "$step" >> build.log
+if [ "$step" = "two" ] && [ "${FAIL_STEP_TWO:-}" = "1" ]; then
+  exit 1
+fi
+`), 0o755)
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", []byte(`
+kind: app
+source: github.com/test/apps/serial-build
+version: 0.0.1-alpha.1
+build:
+  - [sh, ./step.sh, one]
+  - [sh, ./step.sh, two]
+  - [sh, ./step.sh, three]
+run:
+  command: [sh, -c, "true"]
+spec: {}
+`))
+	if err := os.Setenv("FAIL_STEP_TWO", "1"); err != nil {
+		t.Fatalf("Setenv: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Unsetenv("FAIL_STEP_TWO") })
+
+	_, err := StageSourcePreparedInstallDir(manifestPath, filepath.Join(t.TempDir(), "prepared"), StageSourcePreparedInstallOptions{
+		Kind: providermanifestv1.KindApp,
+	})
+	if err == nil {
+		t.Fatal("StageSourcePreparedInstallDir: want failure on step two")
+	}
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile(build.log): %v", err)
+	}
+	got := string(logData)
+	if !strings.Contains(got, "one") || strings.Contains(got, "three") {
+		t.Fatalf("build.log = %q, want one without three after abort", got)
+	}
+}

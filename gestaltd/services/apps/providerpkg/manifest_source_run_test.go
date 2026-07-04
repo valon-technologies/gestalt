@@ -141,8 +141,8 @@ spec:
 `))
 
 	_, _, err := ReadSourceManifestFile(manifestPath)
-	if err == nil || !strings.Contains(err.Error(), "install must be a mapping") {
-		t.Fatalf("ReadSourceManifestFile error = %v, want install must be a mapping", err)
+	if err == nil || !strings.Contains(err.Error(), "install[0] must be a sequence or mapping") {
+		t.Fatalf("ReadSourceManifestFile error = %v, want install sequence rejection", err)
 	}
 }
 
@@ -170,5 +170,77 @@ func TestPrepareSourceManifest_RunsInstallBeforeRunCatalog(t *testing.T) {
 
 	if _, _, err := PrepareSourceManifest(manifestPath); err != nil {
 		t.Fatalf("PrepareSourceManifest: %v (install should run before run/catalog)", err)
+	}
+}
+
+func TestSourceManifestRoundTripsMixedPhaseLists(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	original := []byte(`
+kind: app
+source: github.com/acme/apps/mixed-phases
+version: 0.0.1-alpha.1
+install:
+  - [uv, sync]
+  - {command: [bun, install], workdir: ui, inputs: [bun.lock]}
+build:
+  - [go, build]
+  - {command: [bun, run, build], workdir: ui}
+run:
+  command: [uv, run, provider.py, --serve]
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`)
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", original)
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if len(manifest.Install.PhaseCommands()) != 2 || len(manifest.Build.PhaseCommands()) != 2 {
+		t.Fatalf("install/build phase commands = %#v / %#v", manifest.Install, manifest.Build)
+	}
+
+	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	roundTripped, err := DecodeSourceManifestFormat(encoded, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("DecodeSourceManifestFormat: %v\n%s", err, encoded)
+	}
+	if len(roundTripped.Install.PhaseCommands()) != 2 || len(roundTripped.Build.PhaseCommands()) != 2 {
+		t.Fatalf("round-tripped phases = %#v / %#v", roundTripped.Install, roundTripped.Build)
+	}
+}
+
+func TestSourceRunCommand_RejectsMultipleRunEntries(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/test/apps/multi-run
+version: 0.0.1-alpha.1
+run:
+  - [sh, -c, "true"]
+  - [sh, -c, "true"]
+spec: {}
+`))
+	_, err := SourceRunCommand(manifestPath)
+	if err == nil || !strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
+		t.Fatalf("SourceRunCommand err = %v", err)
+	}
+	if _, _, err := PrepareSourceManifest(manifestPath); err == nil || !strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
+		t.Fatalf("PrepareSourceManifest err = %v", err)
+	}
+	if _, err := StageSourcePreparedInstallDir(manifestPath, filepath.Join(t.TempDir(), "prepared"), StageSourcePreparedInstallOptions{
+		Kind: providermanifestv1.KindApp,
+	}); err == nil || !strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
+		t.Fatalf("StageSourcePreparedInstallDir err = %v", err)
 	}
 }

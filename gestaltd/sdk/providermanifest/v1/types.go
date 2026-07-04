@@ -51,12 +51,37 @@ type SourceBuild struct {
 	Command     []string `json:"command" yaml:"command"`
 	Inputs      []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	PrepareOnly bool     `json:"-" yaml:"-"`
+
+	Commands []SourcePhaseCommand `json:"-" yaml:"-"`
+	WireForm phaseWireForm        `json:"-" yaml:"-"`
 }
 
-type sourceBuildWire struct {
-	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
-	Command []string `json:"command" yaml:"command"`
-	Inputs  []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
+func (b *SourceBuild) PhaseCommands() []SourcePhaseCommand {
+	if b == nil {
+		return nil
+	}
+	if len(b.Commands) > 0 {
+		out := make([]SourcePhaseCommand, len(b.Commands))
+		copy(out, b.Commands)
+		return out
+	}
+	if len(b.Command) == 0 {
+		return nil
+	}
+	return []SourcePhaseCommand{{
+		Command: append([]string(nil), b.Command...),
+		Workdir: b.Workdir,
+		Inputs:  append([]string(nil), b.Inputs...),
+	}}
+}
+
+func (b *SourceBuild) setCommands(commands []SourcePhaseCommand, wire phaseWireForm, prepareOnly bool) {
+	b.Commands = commands
+	b.WireForm = wire
+	b.PrepareOnly = prepareOnly
+	var env map[string]string
+	var ready string
+	syncLegacyPhaseFields(&b.Command, &b.Workdir, &env, &b.Inputs, &ready, commands, wire)
 }
 
 func (b *SourceBuild) UnmarshalJSON(data []byte) error {
@@ -69,37 +94,55 @@ func (b *SourceBuild) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	if len(trimmed) > 0 && trimmed[0] == '[' {
-		var command []string
-		if err := json.Unmarshal(trimmed, &command); err != nil {
+		var nodes []json.RawMessage
+		if err := json.Unmarshal(trimmed, &nodes); err != nil {
 			return err
 		}
-		*b = SourceBuild{Command: command, PrepareOnly: true}
+		if allJSONScalars(nodes) {
+			var command []string
+			if err := json.Unmarshal(trimmed, &command); err != nil {
+				return err
+			}
+			b.setCommands([]SourcePhaseCommand{{Command: command}}, phaseWirePrepareOnlySequence, true)
+			return nil
+		}
+		commands, err := parsePhaseCommandListFromJSON(trimmed, sourceBuildWireFields, "build", false)
+		if err != nil {
+			return err
+		}
+		b.setCommands(commands, phaseWireCommandList, false)
 		return nil
 	}
-	if err := validateJSONWireObjectFields(trimmed, sourceBuildWireFields); err != nil {
+	cmd, err := parsePhaseCommandFromJSON(trimmed, sourceBuildWireFields, "build")
+	if err != nil {
 		return err
 	}
-	var raw sourceBuildWire
-	if err := decodeJSONKnownFields(trimmed, &raw); err != nil {
-		return err
-	}
-	*b = SourceBuild{
-		Workdir: raw.Workdir,
-		Command: raw.Command,
-		Inputs:  raw.Inputs,
-	}
+	b.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject, false)
 	return nil
 }
 
 func (b SourceBuild) MarshalJSON() ([]byte, error) {
-	if b.PrepareOnly {
-		return json.Marshal(b.Command)
+	commands := b.PhaseCommands()
+	if b.PrepareOnly || b.WireForm == phaseWirePrepareOnlySequence {
+		if len(commands) != 1 {
+			return nil, fmt.Errorf("prepare-only build must have exactly one command")
+		}
+		return json.Marshal(commands[0].Command)
 	}
-	return json.Marshal(sourceBuildWire{
-		Workdir: b.Workdir,
-		Command: b.Command,
-		Inputs:  b.Inputs,
-	})
+	switch b.WireForm {
+	case phaseWirePrepareOnlySequence:
+		if len(commands) != 1 {
+			return nil, fmt.Errorf("prepare-only build must have exactly one command")
+		}
+		return json.Marshal(commands[0].Command)
+	case phaseWireCommandList:
+		return marshalPhaseCommandListJSON(commands, sourceBuildWireFields)
+	default:
+		if len(commands) != 1 {
+			return marshalPhaseCommandListJSON(commands, sourceBuildWireFields)
+		}
+		return json.Marshal(sourcePhaseCommandWire(commands[0]))
+	}
 }
 
 func (b *SourceBuild) UnmarshalYAML(value *yaml.Node) error {
@@ -112,25 +155,22 @@ func (b *SourceBuild) UnmarshalYAML(value *yaml.Node) error {
 	}
 	switch value.Kind {
 	case yaml.SequenceNode:
-		var command []string
-		if err := value.Decode(&command); err != nil {
+		commands, err := parsePhaseCommandListFromYAML(value, sourceBuildWireFields, "build", true)
+		if err != nil {
 			return err
 		}
-		*b = SourceBuild{Command: command, PrepareOnly: true}
+		wire := phaseWirePrepareOnlySequence
+		if !allYAMLScalars(value) {
+			wire = phaseWireCommandList
+		}
+		b.setCommands(commands, wire, wire == phaseWirePrepareOnlySequence)
 		return nil
 	case yaml.MappingNode:
-		if err := validateYAMLWireObjectFields(value, sourceBuildWireFields, "build"); err != nil {
+		cmd, err := parsePhaseCommandFromYAML(value, sourceBuildWireFields, "build")
+		if err != nil {
 			return err
 		}
-		var raw sourceBuildWire
-		if err := decodeYAMLKnownFields(value, &raw); err != nil {
-			return err
-		}
-		*b = SourceBuild{
-			Workdir: raw.Workdir,
-			Command: raw.Command,
-			Inputs:  raw.Inputs,
-		}
+		b.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject, false)
 		return nil
 	default:
 		return fmt.Errorf("build must be a sequence or mapping")
@@ -138,14 +178,27 @@ func (b *SourceBuild) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (b SourceBuild) MarshalYAML() (any, error) {
-	if b.PrepareOnly {
-		return append([]string(nil), b.Command...), nil
+	commands := b.PhaseCommands()
+	if b.PrepareOnly || b.WireForm == phaseWirePrepareOnlySequence {
+		if len(commands) != 1 {
+			return nil, fmt.Errorf("prepare-only build must have exactly one command")
+		}
+		return append([]string(nil), commands[0].Command...), nil
 	}
-	return sourceBuildWire{
-		Workdir: b.Workdir,
-		Command: b.Command,
-		Inputs:  b.Inputs,
-	}, nil
+	switch b.WireForm {
+	case phaseWirePrepareOnlySequence:
+		if len(commands) != 1 {
+			return nil, fmt.Errorf("prepare-only build must have exactly one command")
+		}
+		return append([]string(nil), commands[0].Command...), nil
+	case phaseWireCommandList:
+		return marshalPhaseCommandListYAML(commands, sourceBuildWireFields)
+	default:
+		if len(commands) != 1 {
+			return marshalPhaseCommandListYAML(commands, sourceBuildWireFields)
+		}
+		return sourcePhaseCommandWire(commands[0]), nil
+	}
 }
 
 // SourceInstall declares a pre-build dependency-install command. It is a peer
@@ -159,13 +212,36 @@ type SourceInstall struct {
 	Workdir string            `json:"workdir,omitempty"  yaml:"workdir,omitempty"`
 	Inputs  []string          `json:"inputs,omitempty"   yaml:"inputs,omitempty"`
 	Env     map[string]string `json:"env,omitempty"      yaml:"env,omitempty"`
+
+	Commands []SourcePhaseCommand `json:"-" yaml:"-"`
+	WireForm phaseWireForm        `json:"-" yaml:"-"`
 }
 
-type sourceInstallWire struct {
-	Command []string          `json:"command"            yaml:"command"`
-	Workdir string            `json:"workdir,omitempty"  yaml:"workdir,omitempty"`
-	Inputs  []string          `json:"inputs,omitempty"   yaml:"inputs,omitempty"`
-	Env     map[string]string `json:"env,omitempty"      yaml:"env,omitempty"`
+func (i *SourceInstall) PhaseCommands() []SourcePhaseCommand {
+	if i == nil {
+		return nil
+	}
+	if len(i.Commands) > 0 {
+		out := make([]SourcePhaseCommand, len(i.Commands))
+		copy(out, i.Commands)
+		return out
+	}
+	if len(i.Command) == 0 {
+		return nil
+	}
+	return []SourcePhaseCommand{{
+		Command: append([]string(nil), i.Command...),
+		Workdir: i.Workdir,
+		Inputs:  append([]string(nil), i.Inputs...),
+		Env:     i.Env,
+	}}
+}
+
+func (i *SourceInstall) setCommands(commands []SourcePhaseCommand, wire phaseWireForm) {
+	i.Commands = commands
+	i.WireForm = wire
+	var ready string
+	syncLegacyPhaseFields(&i.Command, &i.Workdir, &i.Env, &i.Inputs, &ready, commands, wire)
 }
 
 func (i *SourceInstall) UnmarshalJSON(data []byte) error {
@@ -178,24 +254,32 @@ func (i *SourceInstall) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	if len(trimmed) > 0 && trimmed[0] == '[' {
-		return fmt.Errorf("install must be a mapping")
+		commands, err := parsePhaseCommandListFromJSON(trimmed, sourceInstallWireFields, "install", false)
+		if err != nil {
+			return err
+		}
+		i.setCommands(commands, phaseWireCommandList)
+		return nil
 	}
-	if err := validateJSONWireObjectFields(trimmed, sourceInstallWireFields); err != nil {
+	cmd, err := parsePhaseCommandFromJSON(trimmed, sourceInstallWireFields, "install")
+	if err != nil {
 		return err
 	}
-	var raw sourceInstallWire
-	if err := decodeJSONKnownFields(trimmed, &raw); err != nil {
-		return err
-	}
-	if len(raw.Command) == 0 {
-		return fmt.Errorf("install.command is required")
-	}
-	*i = SourceInstall(raw)
+	i.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
 	return nil
 }
 
 func (i SourceInstall) MarshalJSON() ([]byte, error) {
-	return json.Marshal(sourceInstallWire(i))
+	commands := i.PhaseCommands()
+	switch i.WireForm {
+	case phaseWireCommandList:
+		return marshalPhaseCommandListJSON(commands, sourceInstallWireFields)
+	default:
+		if len(commands) != 1 {
+			return marshalPhaseCommandListJSON(commands, sourceInstallWireFields)
+		}
+		return json.Marshal(sourcePhaseCommandWire(commands[0]))
+	}
 }
 
 func (i *SourceInstall) UnmarshalYAML(value *yaml.Node) error {
@@ -206,25 +290,37 @@ func (i *SourceInstall) UnmarshalYAML(value *yaml.Node) error {
 		*i = SourceInstall{}
 		return nil
 	}
-	if value.Kind != yaml.MappingNode {
-		return fmt.Errorf("install must be a mapping")
+	switch value.Kind {
+	case yaml.SequenceNode:
+		commands, err := parsePhaseCommandListFromYAML(value, sourceInstallWireFields, "install", false)
+		if err != nil {
+			return err
+		}
+		i.setCommands(commands, phaseWireCommandList)
+		return nil
+	case yaml.MappingNode:
+		cmd, err := parsePhaseCommandFromYAML(value, sourceInstallWireFields, "install")
+		if err != nil {
+			return err
+		}
+		i.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
+		return nil
+	default:
+		return fmt.Errorf("install must be a sequence or mapping")
 	}
-	if err := validateYAMLWireObjectFields(value, sourceInstallWireFields, "install"); err != nil {
-		return err
-	}
-	var raw sourceInstallWire
-	if err := decodeYAMLKnownFields(value, &raw); err != nil {
-		return err
-	}
-	if len(raw.Command) == 0 {
-		return fmt.Errorf("install.command is required")
-	}
-	*i = SourceInstall(raw)
-	return nil
 }
 
 func (i SourceInstall) MarshalYAML() (any, error) {
-	return sourceInstallWire(i), nil
+	commands := i.PhaseCommands()
+	switch i.WireForm {
+	case phaseWireCommandList:
+		return marshalPhaseCommandListYAML(commands, sourceInstallWireFields)
+	default:
+		if len(commands) != 1 {
+			return marshalPhaseCommandListYAML(commands, sourceInstallWireFields)
+		}
+		return sourcePhaseCommandWire(commands[0]), nil
+	}
 }
 
 // SourceRun declares how a local-source provider is executed from source.
@@ -236,13 +332,36 @@ type SourceRun struct {
 	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+
+	Commands []SourcePhaseCommand `json:"-" yaml:"-"`
+	WireForm phaseWireForm        `json:"-" yaml:"-"`
 }
 
-type sourceRunWire struct {
-	Command      []string          `json:"command" yaml:"command"`
-	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
-	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+func (r *SourceRun) PhaseCommands() []SourcePhaseCommand {
+	if r == nil {
+		return nil
+	}
+	if len(r.Commands) > 0 {
+		out := make([]SourcePhaseCommand, len(r.Commands))
+		copy(out, r.Commands)
+		return out
+	}
+	if len(r.Command) == 0 {
+		return nil
+	}
+	return []SourcePhaseCommand{{
+		Command:      append([]string(nil), r.Command...),
+		Workdir:      r.Workdir,
+		Env:          r.Env,
+		ReadyTimeout: r.ReadyTimeout,
+	}}
+}
+
+func (r *SourceRun) setCommands(commands []SourcePhaseCommand, wire phaseWireForm) {
+	r.Commands = commands
+	r.WireForm = wire
+	var inputs []string
+	syncLegacyPhaseFields(&r.Command, &r.Workdir, &r.Env, &inputs, &r.ReadyTimeout, commands, wire)
 }
 
 func (r *SourceRun) UnmarshalJSON(data []byte) error {
@@ -255,24 +374,32 @@ func (r *SourceRun) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	if len(trimmed) > 0 && trimmed[0] == '[' {
-		return fmt.Errorf("run must be a mapping")
+		commands, err := parsePhaseCommandListFromJSON(trimmed, sourceRunWireFields, "run", false)
+		if err != nil {
+			return err
+		}
+		r.setCommands(commands, phaseWireCommandList)
+		return nil
 	}
-	if err := validateJSONWireObjectFields(trimmed, sourceRunWireFields); err != nil {
+	cmd, err := parsePhaseCommandFromJSON(trimmed, sourceRunWireFields, "run")
+	if err != nil {
 		return err
 	}
-	var raw sourceRunWire
-	if err := decodeJSONKnownFields(trimmed, &raw); err != nil {
-		return err
-	}
-	if len(raw.Command) == 0 {
-		return fmt.Errorf("run.command is required")
-	}
-	*r = SourceRun(raw)
+	r.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
 	return nil
 }
 
 func (r SourceRun) MarshalJSON() ([]byte, error) {
-	return json.Marshal(sourceRunWire(r))
+	commands := r.PhaseCommands()
+	switch r.WireForm {
+	case phaseWireCommandList:
+		return marshalPhaseCommandListJSON(commands, sourceRunWireFields)
+	default:
+		if len(commands) != 1 {
+			return marshalPhaseCommandListJSON(commands, sourceRunWireFields)
+		}
+		return json.Marshal(sourcePhaseCommandWire(commands[0]))
+	}
 }
 
 func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
@@ -283,25 +410,37 @@ func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
 		*r = SourceRun{}
 		return nil
 	}
-	if value.Kind != yaml.MappingNode {
-		return fmt.Errorf("run must be a mapping")
+	switch value.Kind {
+	case yaml.SequenceNode:
+		commands, err := parsePhaseCommandListFromYAML(value, sourceRunWireFields, "run", false)
+		if err != nil {
+			return err
+		}
+		r.setCommands(commands, phaseWireCommandList)
+		return nil
+	case yaml.MappingNode:
+		cmd, err := parsePhaseCommandFromYAML(value, sourceRunWireFields, "run")
+		if err != nil {
+			return err
+		}
+		r.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
+		return nil
+	default:
+		return fmt.Errorf("run must be a sequence or mapping")
 	}
-	if err := validateYAMLWireObjectFields(value, sourceRunWireFields, "run"); err != nil {
-		return err
-	}
-	var raw sourceRunWire
-	if err := decodeYAMLKnownFields(value, &raw); err != nil {
-		return err
-	}
-	if len(raw.Command) == 0 {
-		return fmt.Errorf("run.command is required")
-	}
-	*r = SourceRun(raw)
-	return nil
 }
 
 func (r SourceRun) MarshalYAML() (any, error) {
-	return sourceRunWire(r), nil
+	commands := r.PhaseCommands()
+	switch r.WireForm {
+	case phaseWireCommandList:
+		return marshalPhaseCommandListYAML(commands, sourceRunWireFields)
+	default:
+		if len(commands) != 1 {
+			return marshalPhaseCommandListYAML(commands, sourceRunWireFields)
+		}
+		return sourcePhaseCommandWire(commands[0]), nil
+	}
 }
 
 // Spec is a union type validated per kind. For auth/indexeddb/secrets only

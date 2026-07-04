@@ -509,7 +509,7 @@ spec:
 `))
 			},
 			readSource: true,
-			wantError:  "run must be a mapping",
+			wantError:  "run[0] must be a sequence or mapping",
 		},
 		{
 			name: "released package rejects run metadata",

@@ -13,26 +13,25 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
+type ResolvedCommand struct {
+	Workdir      string
+	Command      []string
+	Env          map[string]string
+	Inputs       []string
+	ReadyTimeout time.Duration
+}
+
 type ResolvedSourceBuild struct {
-	Label       string
-	Workdir     string
-	Command     []string
-	Inputs      []string
+	Commands    []ResolvedCommand
 	PrepareOnly bool
 }
 
 type ResolvedSourceInstall struct {
-	Workdir string
-	Command []string
-	Inputs  []string
-	Env     map[string]string
+	Commands []ResolvedCommand
 }
 
 type ResolvedSourceRun struct {
-	Workdir      string
-	Command      []string
-	Env          map[string]string
-	ReadyTimeout time.Duration
+	Commands []ResolvedCommand
 }
 
 type SourceBuildOptions struct {
@@ -62,20 +61,48 @@ type ResolvedSourceExecution struct {
 	Intent SourceExecutionIntent
 }
 
+func resolvePhaseCommands(label string, phases []providermanifestv1.SourcePhaseCommand) ([]ResolvedCommand, error) {
+	if len(phases) == 0 {
+		return nil, nil
+	}
+	out := make([]ResolvedCommand, 0, len(phases))
+	for i, phase := range phases {
+		if len(phase.Command) == 0 {
+			return nil, fmt.Errorf("%s[%d].command is required", label, i)
+		}
+		readyTimeout, err := parseSourceRunReadyTimeout(phase.ReadyTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("%s[%d].readyTimeout: %w", label, i, err)
+		}
+		out = append(out, ResolvedCommand{
+			Workdir:      phase.Workdir,
+			Command:      append([]string(nil), phase.Command...),
+			Env:          maps.Clone(phase.Env),
+			Inputs:       append([]string(nil), phase.Inputs...),
+			ReadyTimeout: readyTimeout,
+		})
+	}
+	return out, nil
+}
+
 func EffectiveSourceRun(manifest *providermanifestv1.Manifest) *ResolvedSourceRun {
 	if manifest == nil || manifest.Run == nil {
 		return nil
 	}
-	readyTimeout, err := parseSourceRunReadyTimeout(manifest.Run.ReadyTimeout)
-	if err != nil {
-		readyTimeout = 0
+	commands, err := resolvePhaseCommands("run", manifest.Run.PhaseCommands())
+	if err != nil || len(commands) == 0 {
+		return nil
 	}
-	return &ResolvedSourceRun{
-		Workdir:      manifest.Run.Workdir,
-		Command:      append([]string(nil), manifest.Run.Command...),
-		Env:          maps.Clone(manifest.Run.Env),
-		ReadyTimeout: readyTimeout,
+	return &ResolvedSourceRun{Commands: commands}
+}
+
+func EffectiveSourceRunCommand(manifest *providermanifestv1.Manifest) *ResolvedCommand {
+	run := EffectiveSourceRun(manifest)
+	if run == nil || len(run.Commands) == 0 {
+		return nil
 	}
+	cmd := run.Commands[0]
+	return &cmd
 }
 
 func parseSourceRunReadyTimeout(raw string) (time.Duration, error) {
@@ -86,20 +113,39 @@ func parseSourceRunReadyTimeout(raw string) (time.Duration, error) {
 	return time.ParseDuration(raw)
 }
 
+func BuildWorkdirAbsPaths(sourceDir string, commands []ResolvedCommand) []string {
+	if len(commands) == 0 {
+		return []string{filepath.Clean(sourceDir)}
+	}
+	seen := map[string]struct{}{}
+	var paths []string
+	for _, command := range commands {
+		root := sourceDir
+		if w := strings.TrimSpace(command.Workdir); w != "" && w != "." {
+			root = filepath.Join(sourceDir, filepath.FromSlash(w))
+		}
+		root = filepath.Clean(root)
+		if _, ok := seen[root]; ok {
+			continue
+		}
+		seen[root] = struct{}{}
+		paths = append(paths, root)
+	}
+	return paths
+}
+
 func EffectiveSourceBuild(manifest *providermanifestv1.Manifest) *ResolvedSourceBuild {
-	if manifest == nil {
+	if manifest == nil || manifest.Build == nil {
 		return nil
 	}
-	if manifest.Build != nil {
-		return &ResolvedSourceBuild{
-			Label:       "build",
-			Workdir:     manifest.Build.Workdir,
-			Command:     append([]string(nil), manifest.Build.Command...),
-			Inputs:      append([]string(nil), manifest.Build.Inputs...),
-			PrepareOnly: manifest.Build.PrepareOnly,
-		}
+	commands, err := resolvePhaseCommands("build", manifest.Build.PhaseCommands())
+	if err != nil || len(commands) == 0 {
+		return nil
 	}
-	return nil
+	return &ResolvedSourceBuild{
+		Commands:    commands,
+		PrepareOnly: manifest.Build.PrepareOnly,
+	}
 }
 
 func SourceBuildProducesOutput(manifest *providermanifestv1.Manifest) bool {
@@ -111,24 +157,26 @@ func EffectiveSourceInstall(manifest *providermanifestv1.Manifest) *ResolvedSour
 	if manifest == nil || manifest.Install == nil {
 		return nil
 	}
-	return &ResolvedSourceInstall{
-		Workdir: manifest.Install.Workdir,
-		Command: append([]string(nil), manifest.Install.Command...),
-		Inputs:  append([]string(nil), manifest.Install.Inputs...),
-		Env:     maps.Clone(manifest.Install.Env),
+	commands, err := resolvePhaseCommands("install", manifest.Install.PhaseCommands())
+	if err != nil || len(commands) == 0 {
+		return nil
 	}
+	return &ResolvedSourceInstall{Commands: commands}
 }
 
-// RunSourceInstall execs the declared install command (no shell) from the
-// source root. Side-effect only: no entrypoint artifact is verified. A nil
-// install phase is a no-op. opts carries the target platform env that
-// sourceBuildEnv injects; install.Env is merged on top (install wins).
+// RunSourceInstall execs declared install commands serially (no shell) from the
+// source root. Side-effect only: no entrypoint artifact is verified.
 func RunSourceInstall(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	install := EffectiveSourceInstall(manifest)
 	if install == nil {
 		return nil
 	}
-	return runSourcePhase(manifestPath, "install", install.Workdir, install.Command, envMapToSlice(install.Env), opts)
+	for i, command := range install.Commands {
+		if err := runSourcePhase(manifestPath, fmt.Sprintf("install[%d]", i), command.Workdir, command.Command, envMapToSlice(command.Env), opts); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func envMapToSlice(env map[string]string) []string {
@@ -142,45 +190,56 @@ func envMapToSlice(env map[string]string) []string {
 	return out
 }
 
-// RunSourceBuild execs the declared build command (no shell) and, when the
-// build is not prepare-only, verifies the entrypoint artifact. It does NOT run
-// the install phase; callers that need install-before-build should use
-// EnsureSourceBuildOutput, which is the canonical install-then-build entry.
+// RunSourceBuild execs declared build commands serially (no shell) and verifies output.
 func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	build := EffectiveSourceBuild(manifest)
 	if build == nil {
 		return nil
 	}
-	if len(build.Command) == 0 {
-		return fmt.Errorf("%s.command is required", build.Label)
+	if len(build.Commands) == 0 {
+		return fmt.Errorf("build.command is required")
 	}
 
 	rootDir := filepath.Dir(manifestPath)
 	var outputRel, outputKind, outputPath string
+	var staticBuildEnv string
 	if !build.PrepareOnly {
 		var err error
 		outputRel, outputKind, err = SourceBuildOutput(manifest)
 		if err != nil {
 			return err
 		}
-		outputPath = filepath.Join(rootDir, filepath.FromSlash(outputRel))
-		if err := os.RemoveAll(outputPath); err != nil {
-			return fmt.Errorf("remove %s output %q: %w", build.Label, outputRel, err)
+		if outputRel != "" {
+			outputPath = filepath.Join(rootDir, filepath.FromSlash(outputRel))
+			if err := os.RemoveAll(outputPath); err != nil {
+				return fmt.Errorf("remove build output %q: %w", outputRel, err)
+			}
+		}
+		staticBuildEnv, err = prepareSourceStaticBuildDir(manifestPath)
+		if err != nil {
+			return err
 		}
 	}
 
-	if err := runSourcePhase(manifestPath, build.Label, build.Workdir, build.Command, nil, opts); err != nil {
-		return err
+	for i, command := range build.Commands {
+		label := "build"
+		if len(build.Commands) > 1 {
+			label = fmt.Sprintf("build[%d]", i)
+		}
+		envOverrides := envMapToSlice(command.Env)
+		if staticBuildEnv != "" {
+			envOverrides = append(envOverrides, envGestaltBuildStatic+"="+staticBuildEnv)
+		}
+		if err := runSourcePhase(manifestPath, label, command.Workdir, command.Command, envOverrides, opts); err != nil {
+			return err
+		}
 	}
 	if build.PrepareOnly {
 		return nil
 	}
-	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
+	return verifyAppBuildOutputs(manifestPath, manifest, outputPath, outputRel, outputKind, opts)
 }
 
-// runSourcePhase execs a declared phase command (no shell) from the source
-// root, resolving the optional relative workdir and merging phase env over the
-// target-platform env. Shared by install and build.
 func runSourcePhase(manifestPath, label, workdir string, command, envOverrides []string, opts SourceBuildOptions) error {
 	if len(command) == 0 {
 		return fmt.Errorf("%s.command is required", label)
@@ -211,8 +270,6 @@ func runSourcePhase(manifestPath, label, workdir string, command, envOverrides [
 	return nil
 }
 
-// mergePhaseEnv folds a phase's env overrides (as "KEY=VALUE" strings) over the
-// target-platform env; phase values win.
 func mergePhaseEnv(base, overrides []string) []string {
 	if len(overrides) == 0 {
 		return base
@@ -281,6 +338,9 @@ func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind 
 }
 
 func verifySourceBuildOutput(outputPath, outputRel, outputKind string, opts SourceBuildOptions) error {
+	if outputRel == "" {
+		return nil
+	}
 	info, err := os.Stat(outputPath)
 	if err != nil {
 		return fmt.Errorf("build output %q not found: %w", outputRel, err)
@@ -342,12 +402,6 @@ func SourceBuildTarget(opts SourceBuildOptions) (string, string) {
 	return goos, goarch
 }
 
-// HostLibC reports the C library of the current build host ("musl" or "glibc"),
-// or "" on non-linux. Bun-compiled provider binaries are dynamically linked
-// against their libc, so one built for the wrong libc cannot be exec'd (a musl
-// binary on a glibc runner fails with ENOENT for the absent /lib/ld-musl
-// loader). Packaging uses this to build the host-side catalog binary for the
-// build host while still shipping the musl artifact the deploy runtime needs.
 func HostLibC() string {
 	if runtime.GOOS != "linux" {
 		return ""
@@ -358,8 +412,6 @@ func HostLibC() string {
 	return "glibc"
 }
 
-// effectiveTargetLibC is the libc a build targets: the explicit opts.LibC, else
-// the SDK default (musl for linux; none elsewhere).
 func effectiveTargetLibC(opts SourceBuildOptions) string {
 	if opts.LibC != "" {
 		return opts.LibC
@@ -370,8 +422,6 @@ func effectiveTargetLibC(opts SourceBuildOptions) string {
 	return ""
 }
 
-// EnsureSourceBuildOutput is the canonical install-then-build entry; callers
-// that need a build output should use this rather than RunSourceBuild.
 func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
 	if err := RunSourceInstall(manifestPath, manifest, opts); err != nil {
 		return err
@@ -390,7 +440,7 @@ func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.M
 		return err
 	}
 	outputPath := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(outputRel))
-	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
+	return verifyAppBuildOutputs(manifestPath, manifest, outputPath, outputRel, outputKind, opts)
 }
 
 func ensurePrepareOnlyBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
@@ -406,7 +456,11 @@ func SourceBuildInputs(manifest *providermanifestv1.Manifest) []string {
 	if build == nil {
 		return nil
 	}
-	return append([]string(nil), build.Inputs...)
+	var inputs []string
+	for _, command := range build.Commands {
+		inputs = append(inputs, command.Inputs...)
+	}
+	return inputs
 }
 
 func SourceInstallInputs(manifest *providermanifestv1.Manifest) []string {
@@ -414,7 +468,11 @@ func SourceInstallInputs(manifest *providermanifestv1.Manifest) []string {
 	if install == nil {
 		return nil
 	}
-	return append([]string(nil), install.Inputs...)
+	var inputs []string
+	for _, command := range install.Commands {
+		inputs = append(inputs, command.Inputs...)
+	}
+	return inputs
 }
 
 func SourceRunCommand(manifestPath string) (SourceExecution, error) {
@@ -430,6 +488,9 @@ func SourceRunCommand(manifestPath string) (SourceExecution, error) {
 	if !HasExplicitSourceRun(manifest) {
 		return SourceExecution{}, fmt.Errorf("manifest %s: run command required", manifestPath)
 	}
+	if err := RejectMultipleSourceRuns(manifest); err != nil {
+		return SourceExecution{}, err
+	}
 	return explicitRunExecution(filepath.Dir(manifestPath), manifest).SourceExecution, nil
 }
 
@@ -444,6 +505,9 @@ func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions)
 		return SourceExecution{}, err
 	}
 	if HasExplicitSourceRun(manifest) {
+		if err := RejectMultipleSourceRuns(manifest); err != nil {
+			return SourceExecution{}, err
+		}
 		if err := RunSourceInstall(manifestPath, manifest, opts); err != nil {
 			return SourceExecution{}, err
 		}
@@ -465,6 +529,9 @@ func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions)
 func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Manifest, kind string, opts SourceBuildOptions, skipExplicitRun bool) (ResolvedSourceExecution, error) {
 	rootDir := filepath.Dir(manifestPath)
 	if !skipExplicitRun && HasExplicitSourceRun(manifest) {
+		if err := RejectMultipleSourceRuns(manifest); err != nil {
+			return ResolvedSourceExecution{}, err
+		}
 		return explicitRunExecution(rootDir, manifest), nil
 	}
 	if _, err := sourceExecutionKind(manifest, kind); err != nil {
@@ -484,23 +551,27 @@ func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Ma
 }
 
 func explicitRunExecution(rootDir string, manifest *providermanifestv1.Manifest) ResolvedSourceExecution {
-	run := EffectiveSourceRun(manifest)
+	run := EffectiveSourceRunCommand(manifest)
 	workdir := rootDir
-	if run != nil && run.Workdir != "" && run.Workdir != "." {
-		workdir = filepath.Join(rootDir, filepath.FromSlash(run.Workdir))
-	}
 	command := ""
 	var args []string
-	if run != nil && len(run.Command) > 0 {
-		command = run.Command[0]
-		args = append([]string(nil), run.Command[1:]...)
+	var env map[string]string
+	if run != nil {
+		if run.Workdir != "" && run.Workdir != "." {
+			workdir = filepath.Join(rootDir, filepath.FromSlash(run.Workdir))
+		}
+		if len(run.Command) > 0 {
+			command = run.Command[0]
+			args = append([]string(nil), run.Command[1:]...)
+		}
+		env = maps.Clone(run.Env)
 	}
 	return ResolvedSourceExecution{
 		SourceExecution: SourceExecution{
 			Command: command,
 			Args:    args,
 			Workdir: workdir,
-			Env:     maps.Clone(run.Env),
+			Env:     env,
 		},
 		Intent: SourceExecutionIntentLocalRun,
 	}
