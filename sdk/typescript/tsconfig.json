@@ -10,6 +10,7 @@
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "types": [
       "bun"
     ]
@@ -17,6 +18,7 @@
   "include": [
     "docs/entrypoints/**/*.ts",
     "src/**/*.ts",
+    "src/vite.js",
     "tests/**/*.ts",
     "src/internal/gen/**/*.ts"
   ]

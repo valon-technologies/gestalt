@@ -21,7 +21,8 @@
     "src/s3.ts",
     "src/secrets.ts",
     "src/test.ts",
-    "src/workflow.ts"
+    "src/workflow.ts",
+    "src/vite.js"
   ],
   "tsconfig": "tsconfig.json",
   "readme": "README.md",
