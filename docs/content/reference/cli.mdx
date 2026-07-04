@@ -20,8 +20,7 @@ the platform where they run.
 | Command | Purpose |
 | --- | --- |
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
-| `gestaltd serve --config PATH` | Start the server. Repeat `--config` to layer overrides. |
-| `gestaltd serve --config PATH` | Start from layered config; local UIs with a manifest `dev:` block are proxied to hot-reload dev servers. |
+| `gestaltd serve --config PATH` | Start the server. Repeat `--config` to layer overrides. Local apps with `run:` commands and `apps.<name>.static` are proxied to hot-reload dev servers. |
 | `gestaltd serve --locked --config PATH` | Start read-only from an existing lockfile and prepared artifacts. Repeat `--config` to layer overrides. |
 | `gestaltd serve --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd serve --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
@@ -43,7 +42,7 @@ the platform where they run.
 | `gestaltd provider search [QUERY]` | Search configured provider repositories. Pass `--repo NAME` to search one repository. |
 | `gestaltd provider info PACKAGE` | Show available versions and release metadata for one package. Pass `--repo NAME` to disambiguate. |
 | `gestaltd provider add PACKAGE --config PATH` | Add an indexed provider package to config and update the lockfile. Package sources are written by default. |
-| `gestaltd provider add PACKAGE --kind KIND --name NAME` | Choose the provider kind and config entry name explicitly. UI providers also require `--set path=/mount`. |
+| `gestaltd provider add PACKAGE --kind KIND --name NAME` | Choose the provider kind and config entry name explicitly. Deprecated `kind: ui` also required `--set path=/mount`. |
 | `gestaltd provider add PACKAGE --version CONSTRAINT` | Write a semver version constraint such as `^1.4.0`, `~1.4.0`, or an exact version. |
 | `gestaltd provider add PACKAGE --exact-source` | Write the resolved `provider-release.yaml` URL instead of a package source. |
 | `gestaltd provider add PACKAGE --sync` | Materialize prepared artifacts after locking. |
@@ -55,21 +54,18 @@ the platform where they run.
 | `gestaltd provider repo list` | List the default, user-level, and project provider repositories. |
 | `gestaltd provider repo update` | Fetch and cache provider repository indexes. |
 | `gestaltd provider repo remove NAME` | Remove a provider repository from the user-level store. Pass `--config PATH` to remove it from project config instead. |
-| `gestaltd serve [PATH]...` | Run one or more local source app or UI bundles. Without `--config`, serves a synthesized baseline (unlocked). |
-| `gestaltd serve [PATH]... --config PATH` | Layer local-source PATH overrides on top of the user config. Repeat `[PATH]...` and `--config` as needed. With `--locked`, the fleet loads pinned artifacts while PATH UIs that declare a manifest `dev:` block hot-reload from local trees. |
-| `gestaltd provider validate --path PATH` | Validate a local source app or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve [PATH]...`. |
+| `gestaltd serve [PATH]...` | Run one or more local source apps. Without `--config`, serves a synthesized baseline (unlocked). |
+| `gestaltd serve [PATH]... --config PATH` | Layer local-source PATH overrides on top of the user config. Repeat `[PATH]...` and `--config` as needed. With `--locked`, the fleet loads pinned artifacts while PATH apps with `run:` commands hot-reload from local trees. |
+| `gestaltd provider validate --path PATH` | Validate a local source app inside the same synthesized Gestalt config used by `gestaltd serve [PATH]...`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
-| `gestaltd provider package --version VERSION` | Build provider release archives from a source directory. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch` targets or `--platform all` for multi-platform builds. |
+| `gestaltd provider package --version VERSION` | Build provider release archives from a source directory. Executable source providers use SDK-native source packages or `build` phases and default to the host platform; declarative providers default to a generic archive. Pass `--platform ...` with `os/arch` targets or `--platform all` for multi-platform builds. |
 | `gestaltd provider package --output DIR` | Output directory for the release archives. Defaults to `dist/`. |
 | `gestaltd provider release --dist-dir DIR` | Finalize already-built release archives by validating them and writing `provider-release.yaml` into the dist directory. |
 
-For config-free local development, inferred UI mount paths use the manifest
+For config-free local development, inferred static mount paths use the manifest
 `source` slug rather than the API-safe provider key. A source ending in
-`vm-style-guide` mounts at `/vm-style-guide`, while the local integration key
-may still be `vm_style_guide`. Explicit `apps.<name>.ui.path` values take
-precedence for app-owned or sibling UI, and explicit
-`providers.ui.<name>.path` values take precedence when developing a UI bundle
-directly.
+`workspace-review` mounts at `/workspace-review` when `apps.<name>.static.mount`
+is omitted. Explicit `apps.<name>.static.mount` values take precedence.
 
 Provider package commands use the provider repository model described in
 [Provider packages](/providers#provider-packages). Mutating package commands accept one
@@ -79,7 +75,7 @@ update the lockfile by default. `provider add` and `provider remove` accept
 `--no-lock` when you need to edit config only.
 
 `gestaltd sync --locked --parallelism N` caps concurrent preparation for local
-`source.path` UI bundles. The default is up to four workers, capped by
+`source.path` app builds. The default is up to four workers, capped by
 `GOMAXPROCS`; `--parallelism 1` forces sequential preparation. Other provider
 types and `sync --locked --check` remain sequential.
 
@@ -166,37 +162,39 @@ the action is `check`, cache writes remain zero, and `output.measured` is
 | `output.files`, `output.bytes` | Aggregate prepared output measurement over known prepared artifact roots, not the entire artifacts directory. |
 | `output.roots` | All measured prepared output roots, sorted by bytes descending. |
 
-## Local UI Development
+## Local Frontend Development
 
-When a UI manifest declares a `dev:` block and your layered config points the
-UI provider at a local working tree (`source.path`), `gestaltd serve` spawns the
-declared dev command and reverse-proxies the mount path to it. Framework hot
-reload (for example Next.js Fast Refresh) works through the proxy, including
-websocket traffic.
+When an app manifest declares `run:` commands and deployment config sets
+`apps.<name>.static`, `gestaltd serve` spawns the declared commands and
+reverse-proxies the mount path to the process that binds `GESTALT_DEV_PORT`.
+Framework hot reload works through the proxy, including websocket traffic.
 
 ```yaml
-dev:
-  command: [npm, run, dev:gestalt]
+run:
+  - command: [npm, run, dev]
+    readyTimeout: 120s
 ```
 
-gestaltd injects:
+gestaltd injects (after manifest `env` entries):
 
 | Variable | Purpose |
 | --- | --- |
 | `GESTALT_DEV` | Set to `1` |
-| `GESTALT_DEV_PORT` | Port the dev server must bind on `127.0.0.1` |
-| `GESTALT_DEV_BASE_PATH` | Mount path the dev server must serve under (for example `/g-issues`) |
+| `GESTALT_DEV_PORT` | Port the frontend dev server must bind on `127.0.0.1` |
+| `GESTALT_DEV_BASE_PATH` | Mount path from `apps.<name>.static.mount` |
+| `GESTALT_PROVIDER_SOCKET` | Unix socket for the app provider when a backend `run` command is present |
 
-Map these in your framework dev script, for example
-`NEXT_BASE_PATH=$GESTALT_DEV_BASE_PATH next dev --port $GESTALT_DEV_PORT`.
+Map these in your framework dev script. See
+[Applications > Local Development](/applications#local-development) for
+Vite, Angular, webpack-dev-server, and Parcel examples.
 
-Production and `gestaltd serve --locked` ignore `dev:` and continue to serve the
-static `build` output, except for UIs passed as positional PATH arguments that declare a
-`dev:` block — those are dev-proxied even under `--locked`. Config or provider
-changes require restarting gestaltd.
+Production and `gestaltd serve --locked` serve prepared `static/` artifacts,
+except for apps passed as positional PATH arguments with active `run:` commands —
+those are dev-proxied even under `--locked`. Config or provider changes require
+restarting gestaltd.
 
-For faster iteration on local UIs while the rest of the fleet runs from pinned
-artifacts, pass PATH arguments together with `--config` and `--locked`:
+For faster iteration on a local frontend while the rest of the fleet runs from
+pinned artifacts, pass PATH arguments together with `--config` and `--locked`:
 
 ```sh
 gestaltd serve --locked \
@@ -231,7 +229,7 @@ gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve ./apps/support/manifest.yaml
-gestaltd serve --locked --config ./config.yaml ./apps/g-issues/ui
+gestaltd serve --locked --config ./config.yaml ./apps/workspace-review
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml
@@ -243,20 +241,18 @@ gestaltd provider repo add gestalt https://registry.gestaltd.ai/provider-index.y
 gestaltd provider repo update --config ./config.yaml
 gestaltd provider add github.com/valon-technologies/gestalt-providers/app/github --config ./config.yaml --name github
 gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc --config ./config.yaml --kind identity --name oidc --version '^1.4.0'
-gestaltd provider add github.com/acme/gestalt-providers/ui/console --config ./config.yaml --repo acme --kind ui --name console --set path=/console
+gestaltd provider add github.com/acme/gestalt-providers/ui/console --config ./config.yaml --repo acme --kind ui --name console --set path=/console # deprecated
 gestaltd provider list --config ./config.yaml
 gestaltd provider list --config ./config.yaml --kind app
 gestaltd provider upgrade --config ./config.yaml
 gestaltd provider upgrade github --config ./config.yaml --kind app --version '^1.5.0'
 gestaltd provider remove github --config ./config.yaml --kind app
 gestaltd provider validate --path ./apps/support
-gestaltd provider validate --path ./ui/dashboard
 gestaltd provider validate --path ./apps/support --config ./dev/support.yaml --config ./dev/local.yaml
 gestaltd serve ./apps/support
-gestaltd serve ./ui/dashboard
-gestaltd serve ./apps/support ./ui/dashboard --config ./dev/support.yaml
+gestaltd serve ./apps/support --config ./dev/support.yaml
 gestaltd serve ./apps/support --config ./dev/support.yaml --port 8080
-gestaltd serve --locked --config ./config.yaml ./apps/g-issues/ui ./apps/delta/ui
+gestaltd serve --locked --config ./config.yaml ./apps/workspace-review ./apps/delta
 gestaltd provider package --version 0.0.1-alpha.1
 gestaltd provider package --version 0.0.1-alpha.1 --platform all
 gestaltd provider package --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64

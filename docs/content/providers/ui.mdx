@@ -1,211 +1,80 @@
-import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
+import { Callout } from 'nextra/components'
 
-# UI
+# UI (Deprecated)
 
-<ActiveDevelopmentCallout verb="are">UI providers</ActiveDevelopmentCallout>
+<Callout type="warning">
+  `providers.ui`, `kind: ui`, and `spec.ui` are deprecated. New applications
+  ship frontend and backend in one `kind: app` package. Configure
+  `apps.<name>.static` in deployment config instead of mounting a separate UI
+  provider. See [Applications](/applications) for the unified model.
+</Callout>
 
-UI providers mount static asset bundles. They can be configured directly under
-`providers.ui` or attached to an executable app as a plugin-backed app. The
-built-in admin UI at `/admin` remains available even when no public UI bundles
-are configured.
+The standalone UI provider model mounted static bundles through `providers.ui`
+or `apps.<name>.ui`. Gestalt still accepts those shapes during the transitional
+period, but new work should use app-level static assets.
 
-For new custom UIs, check in the frontend source and dependency lockfile, then
-declare a top-level `build` command in the UI manifest. Gestalt uses that
-command during preparation and release packaging so the deployment serves a
-prepared static asset root instead of rebuilding at runtime.
+## What replaced it
 
-## Configuring `providers.ui`
+| Deprecated | Replacement |
+| --- | --- |
+| Sibling `ui/manifest.yaml` (`kind: ui`) | Frontend source in the same app repo; `build` writes to `GESTALT_BUILD_STATIC` |
+| `spec.ui.path` in app manifest | Optional static output from `build`; packaged as `static/` in release archives |
+| `apps.<name>.ui.path` / `ui.bundle` | `apps.<name>.static.mount` |
+| `providers.ui.<name>` | `apps.<name>.static` on the owning app |
+| `spec.routes[].allowedRoles` | App-level authorization via `authorization.models.<m>.resourceTypes.<app>.defaultRole` and relationships |
+| UI manifest `dev:` block | App manifest `run:` commands with `readyTimeout` for local dev proxy |
 
-Mount a local UI bundle directly:
+## Before and after
 
-```yaml
-providers:
-  ui:
-    roadmap:
-      source: ./customer-roadmap-review/ui/manifest.yaml
-      path: /create-customer-roadmap-review
-      authorizationPolicy: roadmap_review
-```
-
-Bind a named UI bundle to a plugin-backed app:
-
-```yaml
-providers:
-  ui:
-    roadmap:
-      source: ./customer-roadmap-review/ui/manifest.yaml
-
-apps:
-  roadmap_review:
-    source: ./customer-roadmap-review/plugin/manifest.yaml
-    ui:
-      bundle: roadmap
-      path: /create-customer-roadmap-review
-    authorizationPolicy: roadmap_review
-```
-
-Or let the app manifest own the UI bundle and keep only the deployment mount
-in config:
+**Before (deprecated):**
 
 ```yaml
 apps:
   roadmap_review:
-    source: ./customer-roadmap-review/plugin/manifest.yaml
+    source: ./roadmap-review/app/manifest.yaml
     ui:
-      path: /create-customer-roadmap-review
+      path: /roadmap
     authorizationPolicy: roadmap_review
 ```
 
-With an app manifest like:
+```yaml
+kind: app
+spec:
+  ui:
+    path: ../ui/manifest.yaml
+```
+
+**After (unified):**
+
+```yaml
+apps:
+  roadmap_review:
+    source: ./roadmap-review/manifest.yaml
+    static:
+      mount: /roadmap
+    authorizationPolicy: roadmap_review
+```
 
 ```yaml
 kind: app
 source: github.com/acme/apps/roadmap-review
 version: 1.0.0
-spec:
-  auth:
-    type: none
-  ui:
-    path: ../ui/manifest.yaml
-```
-
-For every config field, see
-[Config File](/reference/config-file#providersui).
-
-## Route Authorization
-
-When a mounted UI has an `authorizationPolicy`, Gestalt authenticates the
-caller, resolves their role under that policy, and checks the UI manifest's
-`spec.routes[].allowedRoles` before serving the matching route or its static
-assets.
-
-Plugin-backed mounted UIs inherit the owning plugin's dynamic grants when that
-plugin declares `authorizationPolicy`. They also inherit the plugin's route-auth
-provider when the app declares `auth.provider`. Direct `providers.ui` bundles
-and the built-in admin UI use the server-wide auth configuration.
-
-## The Admin UI
-
-The built-in admin UI is served at `/admin` by default. It includes operator
-views such as the Prometheus metrics dashboard and the app authorization
-workspace at `/admin/?tab=members`.
-
-Use `server.admin.authorizationPolicy` to protect `/admin`, or `server.admin.ui`
-to pin `/admin` to a named UI bundle that ships `admin/index.html`. See
-[Config File](/reference/config-file#server) for those settings.
-
-## Building your own UI bundle
-
-For source-authored UI bundles, keep generated output out of source control:
-
-```text
-ui/
-  manifest.yaml
-  package.json
-  package-lock.json
-  src/
-    app.tsx
-```
-
-### Manifest
-
-A UI manifest declares `kind: ui`. Source manifests must use top-level `build`
-with an `output` directory. `spec.routes` is optional unless a
-deployment binds the UI to an `authorizationPolicy`.
-
-```yaml
-kind: ui
-source: github.com/acme/apps/roadmap-ui
-version: 0.0.1
-displayName: Roadmap Review UI
-description: Static UI for roadmap review.
+install:
+  - [npm, ci]
 build:
-  command:
-    - npm
-    - run
-    - build
-  inputs:
-    - package.json
-    - package-lock.json
-    - src
+  - [npm, run, build]
+run:
+  - command: [npm, run, dev]
+    readyTimeout: 120s
 spec:
-  assetRoot: dist
-  routes:
-    - path: /
-      allowedRoles: [viewer, admin]
-    - path: /admin/*
-      allowedRoles: [admin]
+  connections:
+    default:
+      auth:
+        type: none
 ```
-
-`build.command` is an argv array. `spec.assetRoot` is manifest-relative and
-points at the generated static files, commonly `out`, `dist`, or `build`.
-Frameworks that require a server at runtime are not compatible with UI bundles
-because Gestalt serves static assets only.
-
-For the full UI manifest schema, see
-[App Manifests](/reference/app-manifests#ui-metadata). For source UI
-build and release behavior, see
-[Source UI builds](/providers#source-ui-builds) and
-[Releasing provider packages](/providers#releasing-provider-packages).
-
-## Local development
-
-For local iteration with framework hot reload, add a `dev:` block next to
-`build:` in the UI manifest. When your deployment config points `source.path`
-at the working tree, `gestaltd serve` (unlocked) spawns the dev command and
-reverse-proxies the configured mount path to it. Production and
-`gestaltd serve --locked` ignore `dev:` and serve the static `build` artifact.
-
-```yaml
-kind: ui
-build:
-  command: [npm, run, build]
-  inputs: [package.json, src]
-dev:
-  command: [npm, run, dev:gestalt]
-spec:
-  assetRoot: out
-  routes:
-    - path: /
-      allowedRoles: [viewer, editor, admin]
-```
-
-gestaltd sets these environment variables for the dev command:
-
-| Variable | Value |
-| --- | --- |
-| `GESTALT_DEV` | `1` |
-| `GESTALT_DEV_PORT` | Ephemeral localhost port |
-| `GESTALT_DEV_BASE_PATH` | The configured mount path (for example `/roadmap`) |
-
-The dev script must listen on `127.0.0.1:$GESTALT_DEV_PORT` and serve the app
-and its HMR websocket under `$GESTALT_DEV_BASE_PATH`. Example `package.json`
-script for Next.js:
-
-```json
-{
-  "scripts": {
-    "dev:gestalt": "NEXT_BASE_PATH=$GESTALT_DEV_BASE_PATH next dev --port $GESTALT_DEV_PORT"
-  }
-}
-```
-
-Point a local config overlay at your working tree:
-
-```yaml
-providers:
-  ui:
-    roadmap:
-      source:
-        path: ../customer-roadmap-review/ui
-```
-
-Then run layered serve as usual. Git-snapshot UIs in the base config stay
-static; only local-source UIs with `dev:` activate the proxy.
 
 ## What to read next
 
-- [Applications](/applications): recommended app plus sibling UI layout
-- [Config File](/reference/config-file#providersui): exact `providers.ui` fields
-- [App Manifests](/reference/app-manifests#ui-metadata): UI manifest schema
-- [Authorization configuration](/reference/config-file#authorization): route and role semantics
+- [Applications](/applications): unified app layout, static mounts, and local dev
+- [Config File](/reference/config-file#appsnamestatic): `apps.<name>.static` fields
+- [App Manifests](/reference/app-manifests#command-phases): `install`, `build`, and `run` phases

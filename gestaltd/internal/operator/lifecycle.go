@@ -959,6 +959,7 @@ func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, allowMissingEnv
 			return nil, err
 		}
 	}
+	l.emitDeprecationWarnings(cfg)
 	return cfg, nil
 }
 

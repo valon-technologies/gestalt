@@ -193,6 +193,48 @@ You declare static metadata, connections, and passthrough surfaces in a manifest
 
 See [Provider Manifests](/reference/app-manifests) for the full field reference.
 
+### Command phases
+
+Source manifests declare serial `install`, `build`, and `run` phases. Each
+phase accepts an argv list, an object with `command`, or a list of steps:
+
+```yaml
+install:
+  - [npm, ci]
+build:
+  - command: [npm, run, build]
+    inputs:
+      - package.json
+      - package-lock.json
+      - src
+run:
+  - command: [npm, run, dev]
+    readyTimeout: 120s
+  - command: [npm, run, dev:provider]
+```
+
+See [App Manifests > Command Phases](/reference/app-manifests#command-phases).
+
+## Static Assets
+
+Unified apps may ship a browser frontend from the same package. During `build`,
+Gestalt sets `GESTALT_BUILD_STATIC` to an absolute path under
+`.gestalt/build-static/`. Your build script must write `index.html` there.
+Gestalt stages the directory into `static/` in prepared and release archives.
+
+Configure the public mount in deployment config:
+
+```yaml
+apps:
+  support:
+    source: ./support/manifest.yaml
+    static:
+      mount: /support
+```
+
+See [Applications](/applications#building-the-frontend) for Vite, webpack, and
+authorization guidance.
+
 ### Creating a project
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
@@ -1044,7 +1086,7 @@ A Slack app could use this to check which Slack workspace the caller is connecte
 ### Testing locally
 
 Use `gestaltd provider validate` and `gestaltd serve [PATH]...` when iterating on
-source apps.
+source apps with optional `apps.<name>.static` mounts.
 
 Validate the app in isolation:
 
@@ -1052,22 +1094,15 @@ Validate the app in isolation:
 gestaltd provider validate --path ./slack
 ```
 
-Run the app locally with browser-facing UI available:
+Run the app locally with the frontend dev proxy when the manifest declares
+`run:` commands:
 
 ```sh
 gestaltd serve ./slack
 ```
 
-Validate or serve the UI bundle directly when you are working on the frontend
-itself:
-
-```sh
-gestaltd provider validate --path ./ui
-gestaltd serve ./ui
-```
-
-When the app needs supporting providers, extra plugins, or explicit mounted
-UIs, layer real config overlays on top of the synthesized baseline:
+When the app needs supporting providers, extra plugins, or explicit static
+mounts, layer real config overlays on top of the synthesized baseline:
 
 ```sh
 gestaltd provider validate --path ./slack --config ./dev/support.yaml
@@ -1078,9 +1113,8 @@ Repeated `--config` flags merge left-to-right, and `null` deletes inherited
 entries. That makes it possible to boot some supporting providers while
 suppressing others for a local session.
 
-When your config already points at local provider source paths, use config-based
-serve with a manifest `dev:` block on the UI to get hot reload through the
-gestaltd reverse proxy:
+When your config points at local app source paths and the manifest declares
+`run:` commands, gestaltd proxies the frontend that binds `GESTALT_DEV_PORT`:
 
 ```sh
 gestaltd serve \
@@ -1088,8 +1122,9 @@ gestaltd serve \
   --config ./dev/slack-local.yaml
 ```
 
-See [UI > Local development](/providers/ui#local-development) for the
-`GESTALT_DEV_*` contract.
+See [Applications > Local Development](/applications#local-development) and
+[CLI > Local Frontend Development](/reference/cli#local-frontend-development)
+for the `GESTALT_DEV_*` contract.
 
 Once the local server is running, invoke an operation:
 
