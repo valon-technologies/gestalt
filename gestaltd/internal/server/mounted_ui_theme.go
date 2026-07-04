@@ -18,11 +18,8 @@ const (
 	mountedUIThemeAssetsPrefix   = "/theme/"
 )
 
-// mountedUIThemeHandler intercepts the deployment theme endpoints ahead of
-// the static handler, so its SPA fallback can never answer /theme.css with
-// index.html as text/html. An unconfigured mount serves an empty stylesheet
-// (200, text/css) instead of falling through; /theme/* falls through unless
-// an assets directory is configured.
+// mountedUIThemeHandler intercepts deployment theme endpoints before the static handler.
+// TODO(hughhan1): theme.css and /theme/* are deployer workarounds and should not be supported long-term.
 func mountedUIThemeHandlerFullPath(mounted MountedUI, next http.Handler) http.Handler {
 	stylesheetPath, assetsPrefix := mountedUIThemePaths(mounted.Path)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

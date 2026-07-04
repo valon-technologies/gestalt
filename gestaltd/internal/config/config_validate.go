@@ -51,6 +51,9 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeMountedUIPaths(cfg, appOwnedUIBindings); err != nil {
 		return err
 	}
+	if err := normalizeAppStaticMounts(cfg); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -869,6 +872,9 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	}
 	if entry.UI != "" && entry.MountPath == "" {
 		return fmt.Errorf("config validation: apps.%s.ui.bundle requires apps.%s.ui.path", name, name)
+	}
+	if entry.Static != nil && (strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) != "") {
+		return fmt.Errorf("config validation: apps.%s cannot set both static and ui", name)
 	}
 	if err := validateProviderEntrySource("app", name, entry); err != nil {
 		return err
@@ -2380,6 +2386,28 @@ func normalizeMountedUIPath(path string) (string, error) {
 	return path, nil
 }
 
+func normalizeAppStaticMounts(cfg *Config) error {
+	if cfg == nil || len(cfg.Apps) == 0 {
+		return nil
+	}
+	for name, entry := range cfg.Apps {
+		if entry == nil || entry.Static == nil {
+			continue
+		}
+		mount := strings.TrimSpace(entry.Static.Mount)
+		if mount == "" {
+			entry.Static.Mount = "/" + name
+			continue
+		}
+		normalized, err := normalizeMountedUIPath(mount)
+		if err != nil {
+			return fmt.Errorf("config validation: apps.%s.static.mount: %w", name, err)
+		}
+		entry.Static.Mount = normalized
+	}
+	return nil
+}
+
 func validateMountedUICollisions(cfg *Config, appOwnedUIBindings map[string]struct{}) error {
 	reserved := []string{
 		"/api",
@@ -2424,6 +2452,16 @@ func validateMountedUICollisions(cfg *Config, appOwnedUIBindings map[string]stru
 		subjects = append(subjects, mountedPathSubject{
 			label: "apps." + name + ".ui.path",
 			path:  entry.MountPath,
+		})
+	}
+	for _, name := range appNames {
+		entry := cfg.Apps[name]
+		if entry == nil || entry.Static == nil || strings.TrimSpace(entry.Static.Mount) == "" {
+			continue
+		}
+		subjects = append(subjects, mountedPathSubject{
+			label: "apps." + name + ".static.mount",
+			path:  entry.Static.Mount,
 		})
 	}
 	for i, subject := range subjects {

@@ -2237,10 +2237,10 @@ func TestMountedUIThemeRoutes(t *testing.T) {
 			"portal": {
 				Path: "/portal",
 				ProviderEntry: config.ProviderEntry{
-					ResolvedAssetRoot: uiDir,
+					ResolvedAssetRoot:       uiDir,
+					ResolvedThemeStylesheet: filepath.Join(themeDir, "tenant.css"),
+					ResolvedThemeAssetsDir:  filepath.Join(themeDir, "assets"),
 				},
-				ResolvedThemeStylesheet: filepath.Join(themeDir, "tenant.css"),
-				ResolvedThemeAssetsDir:  filepath.Join(themeDir, "assets"),
 			},
 		}
 	})
@@ -2872,6 +2872,184 @@ func TestBuiltInAdminRoute_ProviderBackedAdminUIAutoDiscoversRootUI(t *testing.T
 	}
 	if !strings.Contains(string(assetBody), "background:#123456") {
 		t.Fatalf("provider-backed admin asset body = %q, want provider stylesheet", assetBody)
+	}
+}
+
+func TestMountedAppStaticServing(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>alpha-shell</body></html>")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"alpha": {
+				Static:             &config.AppStaticConfig{Mount: "/alpha"},
+				ResolvedStaticRoot: rootDir,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/alpha/deep/route")
+	if err != nil {
+		t.Fatalf("GET deep route: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), `<base href="/alpha/">`) {
+		t.Fatalf("body = %q, want SPA fallback with base tag", body)
+	}
+}
+
+func TestMountedAppStaticAuthorizationRelationshipAllow(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>secret-alpha-bundle</body></html>")
+
+	svc := testutil.NewStubServices(t)
+	user := seedUserRecord(t, svc, "alpha-user", "alpha-user@example.test", time.Now())
+	authz := &serverTestAuthorizationProvider{
+		resourceTypes: []*proto.AuthorizationModelResourceType{{Name: "alpha"}},
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(principal.UserSubjectID(user.ID), "viewer", "alpha", "alpha"),
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "alpha-user@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"alpha": {
+				Static:             &config.AppStaticConfig{Mount: "/alpha"},
+				ResolvedStaticRoot: rootDir,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/alpha/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET authorized: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "secret-alpha-bundle") {
+		t.Fatalf("body = %q, want bundle bytes", body)
+	}
+}
+
+func TestMountedAppStaticAuthorizationDenyWithoutAccess(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>secret-beta-bundle</body></html>")
+
+	svc := testutil.NewStubServices(t)
+	seedUserRecord(t, svc, "beta-user", "beta-user@example.test", time.Now())
+	authz := &serverTestAuthorizationProvider{
+		resourceTypes: []*proto.AuthorizationModelResourceType{{Name: "beta"}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "beta-user@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"beta": {
+				Static:             &config.AppStaticConfig{Mount: "/beta"},
+				ResolvedStaticRoot: rootDir,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/beta/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET denied: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+	if strings.Contains(string(body), "secret-beta-bundle") {
+		t.Fatalf("403 body leaked bundle bytes: %q", body)
+	}
+}
+
+func TestBuiltInAdminRoute_AppStaticAutoDiscoversRootBundle(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>root-alpha-shell</html>")
+	writeTestAdminShell(t, rootDir, "app-static-admin-shell")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"alpha": {
+				Static:             &config.AppStaticConfig{Mount: "/"},
+				ResolvedStaticRoot: rootDir,
+			},
+		}
+		cfg.BuiltinAdminUI = &server.BuiltinAdminUIOptions{
+			BrandHref: "/",
+			LoginBase: "https://login.example.test/start",
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	adminResp, err := http.Get(ts.URL + "/admin/")
+	if err != nil {
+		t.Fatalf("GET app-backed admin ui: %v", err)
+	}
+	adminBody, err := io.ReadAll(adminResp.Body)
+	_ = adminResp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll admin ui: %v", err)
+	}
+	if adminResp.StatusCode != http.StatusOK {
+		t.Fatalf("admin ui status = %d, want 200", adminResp.StatusCode)
+	}
+	if !strings.Contains(string(adminBody), "app-static-admin-shell") {
+		t.Fatalf("admin ui body = %q, want app static admin shell", adminBody)
 	}
 }
 

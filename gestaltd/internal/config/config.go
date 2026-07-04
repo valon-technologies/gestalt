@@ -539,7 +539,20 @@ type ProviderEntry struct {
 	ConnectionParams   map[string]ConnectionParamDef         `yaml:"-"`
 	Discovery          *providermanifestv1.ProviderDiscovery `yaml:"-"`
 	ResolvedAssetRoot  string                                `yaml:"-"`
-	MCPToolPrefix      string                                `yaml:"-"`
+	Static             *AppStaticConfig                      `yaml:"static,omitempty"`
+	ResolvedStaticRoot string                                `yaml:"-"`
+	// Runtime-resolved theme paths (populated during sync from static.theme or
+	// ui config.theme, not from YAML).
+	ResolvedThemeStylesheet string `yaml:"-"`
+	ResolvedThemeAssetsDir  string `yaml:"-"`
+	MCPToolPrefix           string `yaml:"-"`
+}
+
+// AppStaticConfig configures a packaged app's static bundle mount.
+// TODO(hughhan1): static.theme is a deployer workaround and should not be supported long-term.
+type AppStaticConfig struct {
+	Mount string         `yaml:"mount,omitempty"`
+	Theme *UIThemeConfig `yaml:"theme,omitempty"`
 }
 
 type providerEntryFields ProviderEntry
@@ -1187,17 +1200,10 @@ type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
 	OwnerApp      string `yaml:"-"`
-
-	// Runtime-resolved theme paths (populated during sync from the entry's
-	// config.theme block, not from YAML).
-	ResolvedThemeStylesheet string `yaml:"-"`
-	ResolvedThemeAssetsDir  string `yaml:"-"`
 }
 
 // UIThemeConfig is the typed `theme` block of a ui mount's provider config.
-// It points at a deployment-supplied stylesheet served at <mount>/theme.css
-// and an optional asset directory served under <mount>/theme/. Paths are
-// relative to the deployment config file.
+// TODO(hughhan1): deployment theme overrides are a deployer workaround and should not be supported long-term.
 type UIThemeConfig struct {
 	Stylesheet string `yaml:"stylesheet,omitempty"`
 	AssetsDir  string `yaml:"assetsDir,omitempty"`

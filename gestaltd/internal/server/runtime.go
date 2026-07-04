@@ -55,6 +55,14 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 			break
 		}
 	}
+	if publicBrandHref != "/" {
+		for _, entry := range cfg.Apps {
+			if entry != nil && entry.Static != nil && strings.TrimSpace(entry.Static.Mount) == "/" {
+				publicBrandHref = "/"
+				break
+			}
+		}
+	}
 
 	managementAddr := cfg.Server.ManagementAddr()
 	mcpSlot := &switchableHandler{}

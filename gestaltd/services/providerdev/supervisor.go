@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
@@ -66,42 +67,80 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	names := make([]string, 0, len(cfg.Providers.UI))
-	for name := range cfg.Providers.UI {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
 	var targets []Target
-	for _, name := range names {
+	seenNames := map[string]string{}
+
+	uiNames := make([]string, 0, len(cfg.Providers.UI))
+	for name := range cfg.Providers.UI {
+		uiNames = append(uiNames, name)
+	}
+	slices.Sort(uiNames)
+	for _, name := range uiNames {
 		entry := cfg.Providers.UI[name]
 		if entry == nil || !entry.DevActive {
 			continue
 		}
-		run := providerpkg.EffectiveSourceRunCommand(entry.ResolvedManifest)
-		if run == nil {
-			return nil, fmt.Errorf("ui %q: dev-active without run manifest", name)
+		if prev, ok := seenNames[name]; ok {
+			return nil, fmt.Errorf("dev target %q: dev-active providers.ui and apps cannot share the same name (already registered as %s)", name, prev)
 		}
-		workdir := entry.ResolvedDevWorkdir
-		if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
-			root := filepath.Dir(entry.ResolvedManifestPath)
-			workdir = filepath.Join(root, filepath.FromSlash(w))
+		seenNames[name] = "ui"
+		target, err := devActiveTarget(name, "ui", entry.Path, entry.ResolvedManifestPath, entry.ResolvedDevWorkdir, entry.ResolvedManifest)
+		if err != nil {
+			return nil, fmt.Errorf("ui %q: %w", name, err)
 		}
-		readyTimeout := defaultReadyTimeout
-		if run.ReadyTimeout > 0 {
-			readyTimeout = run.ReadyTimeout
+		targets = append(targets, target)
+	}
+
+	appNames := make([]string, 0, len(cfg.Apps))
+	for name := range cfg.Apps {
+		appNames = append(appNames, name)
+	}
+	slices.Sort(appNames)
+	for _, name := range appNames {
+		entry := cfg.Apps[name]
+		if entry == nil || !entry.DevActive || entry.Static == nil {
+			continue
 		}
-		targets = append(targets, Target{
-			Name:         name,
-			Kind:         "ui",
-			BasePath:     entry.Path,
-			Workdir:      workdir,
-			Command:      append([]string(nil), run.Command...),
-			Env:          run.Env,
-			ReadyTimeout: readyTimeout,
-		})
+		if prev, ok := seenNames[name]; ok {
+			return nil, fmt.Errorf("dev target %q: dev-active providers.ui and apps cannot share the same name (already registered as %s)", name, prev)
+		}
+		seenNames[name] = "app"
+		target, err := devActiveTarget(name, "app", entry.Static.Mount, entry.ResolvedManifestPath, entry.ResolvedDevWorkdir, entry.ResolvedManifest)
+		if err != nil {
+			return nil, fmt.Errorf("app %q: %w", name, err)
+		}
+		targets = append(targets, target)
 	}
 	return targets, nil
+}
+
+func (t Target) procKey() string {
+	return t.Kind + ":" + t.Name
+}
+
+func devActiveTarget(name, kind, basePath, manifestPath, devWorkdir string, manifest *providermanifestv1.Manifest) (Target, error) {
+	run := providerpkg.EffectiveSourceRunCommand(manifest)
+	if run == nil {
+		return Target{}, fmt.Errorf("dev-active without run manifest")
+	}
+	workdir := devWorkdir
+	if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
+		root := filepath.Dir(manifestPath)
+		workdir = filepath.Join(root, filepath.FromSlash(w))
+	}
+	readyTimeout := defaultReadyTimeout
+	if run.ReadyTimeout > 0 {
+		readyTimeout = run.ReadyTimeout
+	}
+	return Target{
+		Name:         name,
+		Kind:         kind,
+		BasePath:     basePath,
+		Workdir:      workdir,
+		Command:      append([]string(nil), run.Command...),
+		Env:          run.Env,
+		ReadyTimeout: readyTimeout,
+	}, nil
 }
 
 func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervisor, error) {
@@ -125,7 +164,12 @@ func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervi
 			return nil, fmt.Errorf("dev target %q: command is required", target.Name)
 		}
 		proc := &managedProc{target: target}
-		s.procs[target.Name] = proc
+		key := target.procKey()
+		if _, exists := s.procs[key]; exists {
+			cancel()
+			return nil, fmt.Errorf("dev target %q (%s) already started", target.Name, target.Kind)
+		}
+		s.procs[key] = proc
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
@@ -137,8 +181,8 @@ func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervi
 
 func (s *Supervisor) Handlers() map[string]http.Handler {
 	handlers := make(map[string]http.Handler, len(s.procs))
-	for name, proc := range s.procs {
-		handlers[name] = proc.handler()
+	for _, proc := range s.procs {
+		handlers[proc.target.Name] = proc.handler()
 	}
 	return handlers
 }

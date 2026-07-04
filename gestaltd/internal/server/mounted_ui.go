@@ -191,18 +191,18 @@ func resolveBuiltinAdminUI(opts BuiltinAdminUIOptions) (http.Handler, error) {
 	return handler, nil
 }
 
-func resolveConfiguredAdminUI(opts BuiltinAdminUIOptions, providerName string, entries map[string]*config.UIEntry) (http.Handler, error) {
-	entry, resolvedName, err := selectAdminUIProviderEntry(strings.TrimSpace(providerName), entries)
+func resolveConfiguredAdminUI(opts BuiltinAdminUIOptions, providerName string, uiEntries map[string]*config.UIEntry, appEntries map[string]*config.ProviderEntry) (http.Handler, error) {
+	assetRoot, resolvedName, sourceKind, err := selectAdminShellSource(strings.TrimSpace(providerName), uiEntries, appEntries)
 	if err != nil {
 		return nil, err
 	}
-	if entry == nil {
+	if assetRoot == "" {
 		return nil, nil
 	}
 
-	adminDir := filepath.Join(entry.ResolvedAssetRoot, "admin")
+	adminDir := filepath.Join(assetRoot, "admin")
 	if _, err := os.Stat(filepath.Join(adminDir, "index.html")); err != nil {
-		return nil, fmt.Errorf("ui.%s admin assets not found at %s: %w", resolvedName, adminDir, err)
+		return nil, fmt.Errorf("%s admin assets not found at %s: %w", sourceKind, adminDir, err)
 	}
 
 	handler, err := adminui.DirHandler(adminDir, adminui.Options{
@@ -210,44 +210,83 @@ func resolveConfiguredAdminUI(opts BuiltinAdminUIOptions, providerName string, e
 		LoginBase: opts.LoginBase,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ui.%s admin assets: %w", resolvedName, err)
+		return nil, fmt.Errorf("%s admin assets: %w", sourceKind, err)
 	}
+	_ = resolvedName
 	return handler, nil
 }
 
-func selectAdminUIProviderEntry(providerName string, entries map[string]*config.UIEntry) (*config.UIEntry, string, error) {
-	if len(entries) == 0 {
-		if providerName != "" {
-			return nil, "", fmt.Errorf("server.admin.ui %q not found", providerName)
-		}
-		return nil, "", nil
-	}
-
+func selectAdminShellSource(providerName string, uiEntries map[string]*config.UIEntry, appEntries map[string]*config.ProviderEntry) (assetRoot, resolvedName, sourceKind string, err error) {
 	if providerName != "" {
-		entry := entries[providerName]
-		if entry == nil {
-			return nil, "", fmt.Errorf("server.admin.ui %q not found", providerName)
+		if entry := uiEntries[providerName]; entry != nil {
+			if strings.TrimSpace(entry.ResolvedAssetRoot) == "" {
+				return "", "", "", fmt.Errorf("server.admin.ui %q asset root not resolved", providerName)
+			}
+			return entry.ResolvedAssetRoot, providerName, "ui." + providerName, nil
 		}
-		return entry, providerName, nil
+		if entry := appEntries[providerName]; entry != nil && entry.Static != nil {
+			if strings.TrimSpace(entry.ResolvedStaticRoot) == "" {
+				return "", "", "", fmt.Errorf("server.admin.ui %q static asset root not resolved", providerName)
+			}
+			return entry.ResolvedStaticRoot, providerName, "app." + providerName, nil
+		}
+		return "", "", "", fmt.Errorf("server.admin.ui %q not found", providerName)
 	}
 
+	if entry, name := selectRootMountedUIAdminShell(uiEntries); entry != nil {
+		return entry.ResolvedAssetRoot, name, "ui." + name, nil
+	}
+	if root, name := selectRootMountedAppStaticAdminShell(appEntries); root != "" {
+		return root, name, "app." + name, nil
+	}
+	return "", "", "", nil
+}
+
+func selectRootMountedUIAdminShell(entries map[string]*config.UIEntry) (*config.UIEntry, string) {
 	names := make([]string, 0, len(entries))
 	for name := range entries {
 		names = append(names, name)
 	}
 	slices.Sort(names)
-
 	for _, name := range names {
 		entry := entries[name]
 		if entry == nil || strings.TrimSpace(entry.Path) != "/" {
 			continue
 		}
 		if uiEntryHasAdminShell(entry) {
-			return entry, name, nil
+			return entry, name
 		}
 	}
+	return nil, ""
+}
 
-	return nil, "", nil
+func selectRootMountedAppStaticAdminShell(entries map[string]*config.ProviderEntry) (string, string) {
+	names := make([]string, 0, len(entries))
+	for name, entry := range entries {
+		if entry == nil || entry.Static == nil {
+			continue
+		}
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		entry := entries[name]
+		if strings.TrimSpace(entry.Static.Mount) != "/" {
+			continue
+		}
+		if appStaticHasAdminShell(entry) {
+			return entry.ResolvedStaticRoot, name
+		}
+	}
+	return "", ""
+}
+
+func appStaticHasAdminShell(entry *config.ProviderEntry) bool {
+	if entry == nil || strings.TrimSpace(entry.ResolvedStaticRoot) == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(entry.ResolvedStaticRoot, "admin", "index.html"))
+	return err == nil && !info.IsDir()
 }
 
 func uiEntryHasAdminShell(entry *config.UIEntry) bool {
@@ -265,6 +304,9 @@ func normalizeMountedUIs(mounted []MountedUI) ([]MountedUI, error) {
 
 	normalized := append([]MountedUI(nil), mounted...)
 	for i := range normalized {
+		if normalized[i].AppLevelAuth {
+			continue
+		}
 		routes, err := normalizeMountedUIRoutes(normalized[i].Routes)
 		if err != nil {
 			name := normalized[i].Name
@@ -328,6 +370,9 @@ func normalizeMountedUIRoutes(routes []MountedUIRoute) ([]MountedUIRoute, error)
 }
 
 func validatePolicyBoundMountedUIRoutes(mounted MountedUI) error {
+	if mounted.AppLevelAuth {
+		return nil
+	}
 	if !mountedUIRequiresAuthorization(mounted) {
 		return nil
 	}
@@ -361,10 +406,6 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 		h := mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 		return withDevContentSecurityPolicy(h)
 	}
-	// The theme interceptor wraps the static handler under StripPrefix (it
-	// matches mount-relative paths) and runs inside protectedUIHandler:
-	// policy-bound mounts keep their auth semantics for /theme.css and
-	// /theme/* exactly like any other mount path.
 	inner = mountedUIThemeHandler(mounted, inner)
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
@@ -438,6 +479,26 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 
+	if mounted.AppLevelAuth {
+		access, allowed, err := s.authorizeMountedAppAccess(r.Context(), p, mounted)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to authorize app access")
+			return nil, false
+		}
+		if !allowed {
+			writeError(w, http.StatusForbidden, "app access denied")
+			return nil, false
+		}
+		ctx := r.Context()
+		if p != nil {
+			ctx = principal.WithPrincipal(ctx, p)
+		}
+		if access.Policy != "" || access.Role != "" {
+			ctx = invocation.WithAccessContext(ctx, access)
+		}
+		return ctx, true
+	}
+
 	route, matched := mounted.routeForRequestPath(r.URL.Path)
 	access, allowed, err := s.authorizeMountedUIRoute(r.Context(), p, mounted, route, matched)
 	if err != nil {
@@ -469,30 +530,64 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 	if s.authorization == nil {
 		return invocation.AccessContext{}, false, nil
 	}
-	resourceName := mountedUIAuthorizationResourceName(mounted)
-	if resourceName == "" {
+	resourceName, subjectID, ok := mountedUIAuthorizationSubject(p, mounted)
+	if !ok {
 		return invocation.AccessContext{}, false, nil
 	}
-	subjectID := principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))
-	if strings.TrimSpace(subjectID) == "" {
-		return invocation.AccessContext{}, false, nil
-	}
+	return s.authorizeMountedResourceRoles(ctx, resourceName, subjectID, route.AllowedRoles)
+}
 
+func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Principal, mounted MountedUI) (invocation.AccessContext, bool, error) {
+	if !mountedUIRequiresAuthorization(mounted) {
+		return invocation.AccessContext{}, true, nil
+	}
+	if s.authorization == nil {
+		if s.noAuth {
+			return invocation.AccessContext{}, true, nil
+		}
+		return invocation.AccessContext{}, false, nil
+	}
+	resourceName, subjectID, ok := mountedUIAuthorizationSubject(p, mounted)
+	if !ok {
+		return invocation.AccessContext{}, false, nil
+	}
+	return s.authorizeMountedResourceRoles(ctx, resourceName, subjectID, nil)
+}
+
+func mountedUIAuthorizationSubject(p *principal.Principal, mounted MountedUI) (resourceName, subjectID string, ok bool) {
+	resourceName = mountedUIAuthorizationResourceName(mounted)
+	if resourceName == "" {
+		return "", "", false
+	}
+	subjectID = principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))
+	if strings.TrimSpace(subjectID) == "" {
+		return "", "", false
+	}
+	return resourceName, subjectID, true
+}
+
+func (s *Server) authorizeMountedResourceRoles(ctx context.Context, resourceName, subjectID string, allowedRoles []string) (invocation.AccessContext, bool, error) {
 	roles, err := s.mountedUIAuthorizationRoles(ctx, subjectID, resourceName)
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
-	for _, allowedRole := range route.AllowedRoles {
-		if _, ok := roles[strings.TrimSpace(allowedRole)]; ok {
-			return invocation.AccessContext{Policy: resourceName, Role: strings.TrimSpace(allowedRole)}, true, nil
+	if len(allowedRoles) == 0 {
+		for role := range roles {
+			return invocation.AccessContext{Policy: resourceName, Role: strings.TrimSpace(role)}, true, nil
+		}
+	} else {
+		for _, allowedRole := range allowedRoles {
+			allowedRole = strings.TrimSpace(allowedRole)
+			if _, ok := roles[allowedRole]; ok {
+				return invocation.AccessContext{Policy: resourceName, Role: allowedRole}, true, nil
+			}
 		}
 	}
-
 	defaultRole, err := s.mountedUIResourceDefaultRole(ctx, resourceName)
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
-	if defaultRole != "" && mountedUIRoleAllowed(defaultRole, route.AllowedRoles) {
+	if defaultRole != "" && (len(allowedRoles) == 0 || mountedUIRoleAllowed(defaultRole, allowedRoles)) {
 		return invocation.AccessContext{Policy: resourceName, Role: defaultRole}, true, nil
 	}
 	return invocation.AccessContext{}, false, nil
@@ -506,6 +601,9 @@ func mountedUIAuthorizationResourceName(mounted MountedUI) string {
 }
 
 func mountedUIRequiresAuthorization(mounted MountedUI) bool {
+	if mounted.AppLevelAuth {
+		return true
+	}
 	if strings.TrimSpace(mounted.AuthorizationPolicy) != "" {
 		return true
 	}
