@@ -105,9 +105,9 @@ type Lifecycle struct {
 	devServeEligible bool
 	// forcedDevUIKeys marks specific UI keys dev-active even when devServeEligible
 	// is false (serve --locked --config … --path … overlay mode).
-	forcedDevUIKeys map[string]bool
+	forcedDevUIKeys            map[string]bool
 	emittedDeprecationWarnings map[string]struct{}
-	deprecationLogger           func(string)
+	deprecationLogger          func(string)
 }
 
 type SyncOptions struct {
