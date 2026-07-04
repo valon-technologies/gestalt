@@ -1234,6 +1234,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPaths(configPaths []string, lockfil
 	if err := appservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return cfg, nil
 }
 
