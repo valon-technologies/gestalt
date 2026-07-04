@@ -189,7 +189,9 @@ func (b *preparedProviderBuilds) Start(
 			if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
 				if pending.proxy != nil {
 					pending.proxy.fail(err)
+					b.providers.Remove(pending.name)
 				}
+				slog.Info("frontend-only dev app; no backend provider registered", "provider", pending.name)
 				return
 			}
 			if err != nil {
