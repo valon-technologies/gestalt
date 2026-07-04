@@ -231,6 +231,13 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if err := validateOwnedUI(spec.UI, sourceMode); err != nil {
 			return err
 		}
+		if !sourceMode && spec != nil && spec.AssetRoot != "" {
+			if err := validateRelativePackagePath(spec.AssetRoot, "spec.assetRoot"); err != nil {
+				return err
+			}
+		} else if sourceMode && spec != nil && spec.AssetRoot != "" {
+			return fmt.Errorf("spec.assetRoot is only allowed in prepared app manifests")
+		}
 		if spec != nil && spec.IsDeclarative() {
 			if err := validateDeclarativeProvider(spec); err != nil {
 				return err
@@ -241,6 +248,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			if err := validateEntrypoint(kind, manifest.Entrypoint, artifactPaths, sourceMode); err != nil {
 				return err
 			}
+		case spec != nil && spec.AssetRoot != "" && !sourceMode:
 		case manifest.Build != nil && !manifest.Build.PrepareOnly && !sourceMode:
 			return fmt.Errorf("entrypoint is required when build is set")
 		case manifest.IsDeclarativeOnlyProvider():
@@ -456,32 +464,44 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	if build == nil {
 		return nil
 	}
-	if build.PrepareOnly && build.Workdir != "" {
-		return fmt.Errorf("build.workdir is only supported with object-form build metadata")
-	}
-	if build.PrepareOnly && len(build.Inputs) > 0 {
-		return fmt.Errorf("build.inputs is only supported with object-form build metadata")
-	}
-	if build.Workdir != "" {
-		if err := validateRelativeSourcePath(build.Workdir, "build.workdir"); err != nil {
-			return err
-		}
-	}
-	if len(build.Command) == 0 {
+	commands := build.PhaseCommands()
+	if len(commands) == 0 {
 		return fmt.Errorf("build.command is required")
 	}
-	for i, arg := range build.Command {
-		if strings.TrimSpace(arg) == "" {
-			return fmt.Errorf("build.command[%d] is required", i)
+	if build.PrepareOnly {
+		if build.Workdir != "" {
+			return fmt.Errorf("build.workdir is only supported with object-form build metadata")
+		}
+		if len(build.Inputs) > 0 {
+			return fmt.Errorf("build.inputs is only supported with object-form build metadata")
 		}
 	}
-	for i, input := range build.Inputs {
-		label := fmt.Sprintf("build.inputs[%d]", i)
-		if strings.ContainsAny(input, "*?[") {
-			return fmt.Errorf("%s does not support glob syntax", label)
+	for i, command := range commands {
+		label := "build"
+		if len(commands) > 1 {
+			label = fmt.Sprintf("build[%d]", i)
 		}
-		if err := validateRelativeSourcePath(input, label); err != nil {
-			return err
+		if command.Workdir != "" {
+			if err := validateRelativeSourcePath(command.Workdir, label+".workdir"); err != nil {
+				return err
+			}
+		}
+		if len(command.Command) == 0 {
+			return fmt.Errorf("%s.command is required", label)
+		}
+		for j, arg := range command.Command {
+			if strings.TrimSpace(arg) == "" {
+				return fmt.Errorf("%s.command[%d] is required", label, j)
+			}
+		}
+		for j, input := range command.Inputs {
+			inputLabel := fmt.Sprintf("%s.inputs[%d]", label, j)
+			if strings.ContainsAny(input, "*?[") {
+				return fmt.Errorf("%s does not support glob syntax", inputLabel)
+			}
+			if err := validateRelativeSourcePath(input, inputLabel); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -491,26 +511,36 @@ func validateSourceInstall(install *providermanifestv1.SourceInstall) error {
 	if install == nil {
 		return nil
 	}
-	if install.Workdir != "" {
-		if err := validateRelativeSourcePath(install.Workdir, "install.workdir"); err != nil {
-			return err
-		}
-	}
-	if len(install.Command) == 0 {
+	commands := install.PhaseCommands()
+	if len(commands) == 0 {
 		return fmt.Errorf("install.command is required")
 	}
-	for i, arg := range install.Command {
-		if strings.TrimSpace(arg) == "" {
-			return fmt.Errorf("install.command[%d] is required", i)
+	for i, command := range commands {
+		label := "install"
+		if len(commands) > 1 {
+			label = fmt.Sprintf("install[%d]", i)
 		}
-	}
-	for i, input := range install.Inputs {
-		label := fmt.Sprintf("install.inputs[%d]", i)
-		if strings.ContainsAny(input, "*?[") {
-			return fmt.Errorf("%s does not support glob syntax", label)
+		if command.Workdir != "" {
+			if err := validateRelativeSourcePath(command.Workdir, label+".workdir"); err != nil {
+				return err
+			}
 		}
-		if err := validateRelativeSourcePath(input, label); err != nil {
-			return err
+		if len(command.Command) == 0 {
+			return fmt.Errorf("%s.command is required", label)
+		}
+		for j, arg := range command.Command {
+			if strings.TrimSpace(arg) == "" {
+				return fmt.Errorf("%s.command[%d] is required", label, j)
+			}
+		}
+		for j, input := range command.Inputs {
+			inputLabel := fmt.Sprintf("%s.inputs[%d]", label, j)
+			if strings.ContainsAny(input, "*?[") {
+				return fmt.Errorf("%s does not support glob syntax", inputLabel)
+			}
+			if err := validateRelativeSourcePath(input, inputLabel); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -520,22 +550,32 @@ func validateSourceRun(run *providermanifestv1.SourceRun) error {
 	if run == nil {
 		return nil
 	}
-	if run.Workdir != "" {
-		if err := validateRelativeSourcePath(run.Workdir, "run.workdir"); err != nil {
-			return err
-		}
-	}
-	if len(run.Command) == 0 {
+	commands := run.PhaseCommands()
+	if len(commands) == 0 {
 		return fmt.Errorf("run.command is required")
 	}
-	for i, arg := range run.Command {
-		if strings.TrimSpace(arg) == "" {
-			return fmt.Errorf("run.command[%d] is required", i)
+	for i, command := range commands {
+		label := "run"
+		if len(commands) > 1 {
+			label = fmt.Sprintf("run[%d]", i)
 		}
-	}
-	if strings.TrimSpace(run.ReadyTimeout) != "" {
-		if _, err := time.ParseDuration(strings.TrimSpace(run.ReadyTimeout)); err != nil {
-			return fmt.Errorf("run.readyTimeout: %w", err)
+		if command.Workdir != "" {
+			if err := validateRelativeSourcePath(command.Workdir, label+".workdir"); err != nil {
+				return err
+			}
+		}
+		if len(command.Command) == 0 {
+			return fmt.Errorf("%s.command is required", label)
+		}
+		for j, arg := range command.Command {
+			if strings.TrimSpace(arg) == "" {
+				return fmt.Errorf("%s.command[%d] is required", label, j)
+			}
+		}
+		if strings.TrimSpace(command.ReadyTimeout) != "" {
+			if _, err := time.ParseDuration(strings.TrimSpace(command.ReadyTimeout)); err != nil {
+				return fmt.Errorf("%s.readyTimeout: %w", label, err)
+			}
 		}
 	}
 	return nil

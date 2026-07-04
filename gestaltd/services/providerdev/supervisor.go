@@ -78,7 +78,7 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 		if entry == nil || !entry.DevActive {
 			continue
 		}
-		run := providerpkg.EffectiveSourceRun(entry.ResolvedManifest)
+		run := providerpkg.EffectiveSourceRunCommand(entry.ResolvedManifest)
 		if run == nil {
 			return nil, fmt.Errorf("ui %q: dev-active without run manifest", name)
 		}

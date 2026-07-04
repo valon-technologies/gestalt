@@ -53,6 +53,9 @@ func prepareSourceManifest(manifestPath string, packaging bool, buildOpts Source
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := RejectMultipleSourceRuns(manifest); err != nil {
+		return nil, nil, err
+	}
 	format := ManifestFormatFromPath(manifestPath)
 	originalManifest, err := DecodeSourceManifestFormat(data, format)
 	if err != nil {
@@ -126,6 +129,11 @@ func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *provide
 	resolved, err := resolveSourceExecution(manifestPath, manifest, providermanifestv1.KindApp, SourceBuildOptions{}, opts.SkipExplicitRun)
 	if err != nil {
 		return fmt.Errorf("prepare source provider for static catalog: %w", err)
+	}
+	if opts.SkipExplicitRun && resolved.Intent == SourceExecutionIntentPackagedEntrypoint {
+		if _, err := os.Stat(resolved.Command); err != nil && os.IsNotExist(err) && HasExplicitSourceRun(manifest) {
+			resolved = explicitRunExecution(rootDir, manifest)
+		}
 	}
 	execution := resolved.SourceExecution
 	if execution.Cleanup != nil {

@@ -60,6 +60,9 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 	}
+	if err := RejectMultipleSourceRuns(manifest); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(opts.Kind) == "" {
 		if _, err := ManifestKind(manifest); err != nil {
 			return nil, err
@@ -211,6 +214,9 @@ func stagePreparedInstallDir(manifestPath, stagingDir string, srcManifest *provi
 	if err := copyPreparedInstallSupportFiles(stagedManifest, sourceDir, stagingDir, includeArtifacts); err != nil {
 		return nil, err
 	}
+	if err := stagePreparedStaticBundle(manifestPath, stagingDir, stagedManifest); err != nil {
+		return nil, err
+	}
 
 	stagedManifestPath := filepath.Join(stagingDir, manifestFile)
 	if err := writePreparedManifestFile(stagedManifestPath, manifestFormat, stagedManifest); err != nil {
@@ -316,14 +322,25 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 		if err != nil {
 			return nil, err
 		}
-		stagedRel := PackageExecutablePath(configuredName, goos)
-		digest, err := FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(sourceRel)))
-		if err != nil {
-			return nil, fmt.Errorf("hash artifact %s: %w", sourceRel, err)
+		execPath := filepath.Join(sourceDir, filepath.FromSlash(sourceRel))
+		staticOK := false
+		if manifestPath, err := FindManifestFile(sourceDir); err == nil {
+			if ok, err := sourceStaticQualifies(SourceStaticBuildDir(manifestPath)); err == nil {
+				staticOK = ok
+			}
 		}
-		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: stagedRel}
-		manifest.Artifacts = []providermanifestv1.Artifact{
-			{OS: goos, Arch: goarch, Path: stagedRel, SHA256: digest},
+		if _, err := os.Stat(execPath); err == nil {
+			stagedRel := PackageExecutablePath(configuredName, goos)
+			digest, err := FileSHA256(execPath)
+			if err != nil {
+				return nil, fmt.Errorf("hash artifact %s: %w", sourceRel, err)
+			}
+			manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: stagedRel}
+			manifest.Artifacts = []providermanifestv1.Artifact{
+				{OS: goos, Arch: goarch, Path: stagedRel, SHA256: digest},
+			}
+		} else if !staticOK {
+			return nil, fmt.Errorf("hash artifact %s: %w", sourceRel, err)
 		}
 	}
 

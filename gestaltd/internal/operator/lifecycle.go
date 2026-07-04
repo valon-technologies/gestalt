@@ -999,6 +999,9 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 		case hasRun && manifest.Spec != nil && manifest.Spec.IsManifestBacked():
 			return fmt.Errorf("app %q: local-source apps cannot combine run: with a declarative surface", name)
 		case hasRun:
+			if err := providerpkg.RejectMultipleSourceRuns(manifest); err != nil {
+				return fmt.Errorf("app %q: %w", name, err)
+			}
 			configMap, err := config.NodeToMap(entry.Config)
 			if err != nil {
 				return fmt.Errorf("app %q: decode config: %w", name, err)
@@ -1007,7 +1010,7 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 				return fmt.Errorf("app %q: %w", name, err)
 			}
 			workdir := normalized.sourceDir
-			if run := providerpkg.EffectiveSourceRun(manifest); run != nil {
+			if run := providerpkg.EffectiveSourceRunCommand(manifest); run != nil {
 				if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
 					workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(w))
 				}
@@ -1064,6 +1067,9 @@ func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
 			}
 			continue
 		}
+		if err := providerpkg.RejectMultipleSourceRuns(manifest); err != nil {
+			return fmt.Errorf("ui %q: %w", name, err)
+		}
 		configMap, err := config.NodeToMap(entry.Config)
 		if err != nil {
 			return fmt.Errorf("ui %q: decode config: %w", name, err)
@@ -1072,8 +1078,10 @@ func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
 			return fmt.Errorf("ui %q: %w", name, err)
 		}
 		workdir := normalized.sourceDir
-		if w := strings.TrimSpace(manifest.Run.Workdir); w != "" && w != "." {
-			workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(w))
+		if run := providerpkg.EffectiveSourceRunCommand(manifest); run != nil {
+			if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
+				workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(w))
+			}
 		}
 		entry.DevActive = true
 		entry.ResolvedDevWorkdir = workdir
@@ -2738,7 +2746,7 @@ func fingerprintLocalSourceDigest(sourcePath string) (string, error) {
 	if len(installInputs) == 0 {
 		return digest, nil
 	}
-	return foldInstallInputsDigest(normalized.sourceDir, digest, installInputs)
+	return foldInstallInputsDigest(normalized.sourceDir, normalized.manifestPath, digest, installInputs)
 }
 
 func fingerprintLocalReleaseMetadataDigest(sourcePath string) (string, error) {
@@ -3592,15 +3600,11 @@ func sourceBuildPathDomains(sourceDir string, manifest *providermanifestv1.Manif
 	if build == nil {
 		return nil, nil
 	}
-	workdir := sourceDir
-	if build.Workdir != "" && build.Workdir != "." {
-		workdir = filepath.Join(sourceDir, filepath.FromSlash(build.Workdir))
-	}
+	domains := providerpkg.BuildWorkdirAbsPaths(sourceDir, build.Commands)
 	outputRel, _, err := providerpkg.SourceBuildOutput(manifest)
 	if err != nil {
 		return nil, err
 	}
-	domains := []string{workdir}
 	if outputRel != "" {
 		domains = append(domains, filepath.Join(sourceDir, filepath.FromSlash(outputRel)))
 	}
