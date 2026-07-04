@@ -103,7 +103,7 @@ func parseAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func mountedUIsFromEntries(entries map[string]*config.UIEntry, devHandlers map[string]http.Handler) ([]MountedUI, error) {
+func mountedUIsFromEntries(entries map[string]*config.UIEntry, devHandlerResolver func(string) http.Handler) ([]MountedUI, error) {
 	names := make([]string, 0, len(entries))
 	for name := range entries {
 		names = append(names, name)
@@ -120,10 +120,7 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry, devHandlers map[s
 		routes := mountedUIRoutesFromEntry(entry)
 
 		if entry.DevActive {
-			handler := devHandlers[name]
-			if handler == nil {
-				return nil, fmt.Errorf("ui %q is dev-active but no dev handler was started", name)
-			}
+			handler := lazyDevHandler(devHandlerResolver, name)
 			mounted = append(mounted, MountedUI{
 				Name:                name,
 				Path:                entry.Path,

@@ -494,6 +494,38 @@ func SourceRunCommand(manifestPath string) (SourceExecution, error) {
 	return explicitRunExecution(filepath.Dir(manifestPath), manifest).SourceExecution, nil
 }
 
+// SourceRunCommands returns every explicit run entry for dev-mode supervision.
+func SourceRunCommands(manifestPath string) ([]ResolvedCommand, error) {
+	absoluteManifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve manifest path: %w", err)
+	}
+	manifestPath = absoluteManifestPath
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	if !HasExplicitSourceRun(manifest) {
+		return nil, fmt.Errorf("manifest %s: run command required", manifestPath)
+	}
+	commands, err := resolvePhaseCommands("run", manifest.Run.PhaseCommands())
+	if err != nil {
+		return nil, err
+	}
+	if len(commands) == 0 {
+		return nil, fmt.Errorf("manifest %s: run command required", manifestPath)
+	}
+	rootDir := filepath.Dir(manifestPath)
+	for i := range commands {
+		if commands[i].Workdir != "" && commands[i].Workdir != "." {
+			commands[i].Workdir = filepath.Join(rootDir, filepath.FromSlash(commands[i].Workdir))
+		} else {
+			commands[i].Workdir = rootDir
+		}
+	}
+	return commands, nil
+}
+
 func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions) (SourceExecution, error) {
 	absoluteManifestPath, err := filepath.Abs(manifestPath)
 	if err != nil {

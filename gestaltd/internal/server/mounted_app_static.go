@@ -13,7 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/ui"
 )
 
-func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHandlers map[string]http.Handler) ([]MountedUI, error) {
+func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHandlerResolver func(string) http.Handler) ([]MountedUI, error) {
 	names := make([]string, 0, len(apps))
 	for name, entry := range apps {
 		if entry == nil || entry.Static == nil {
@@ -33,10 +33,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 		mountedName := "app:" + name
 
 		if entry.DevActive {
-			handler := devHandlers[name]
-			if handler == nil {
-				return nil, fmt.Errorf("app %q is dev-active but no dev handler was started", name)
-			}
+			handler := lazyDevHandler(devHandlerResolver, name)
 			mounted = append(mounted, MountedUI{
 				Name:                mountedName,
 				Path:                mount,

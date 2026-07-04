@@ -2,6 +2,7 @@ package providerdev_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,7 +16,9 @@ import (
 	"testing"
 	"time"
 
+	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 func TestSupervisorProxiesHTTP(t *testing.T) {
@@ -143,6 +146,114 @@ func TestSupervisorStopTerminatesChild(t *testing.T) {
 	waitUntilProcessDead(t, pid)
 }
 
+func TestSupervisorAppRunClassification(t *testing.T) {
+	t.Parallel()
+	workdir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	telemetry := telemetrynoop.New()
+	prepared, err := runtimehost.PrepareExternalProviderSockets(runtimehost.ProcessConfig{
+		ProviderName: "combo",
+		Telemetry:    telemetry,
+	})
+	if err != nil {
+		t.Fatalf("PrepareExternalProviderSockets: %v", err)
+	}
+	t.Cleanup(prepared.Cleanup)
+
+	sup, err := providerdev.Start(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(sup.Stop)
+
+	handle, err := sup.StartApp(ctx, providerdev.AppTarget{
+		Name:       "combo",
+		BasePath:   "/combo",
+		SocketPath: prepared.PluginSocket,
+		BaseEnv:    prepared.Env,
+		Commands: []providerdev.AppCommand{
+			{Workdir: workdir, Command: []string{buildTestdataBinary(t, "fakebackend")}, ReadyTimeout: 15 * time.Second},
+			{Workdir: workdir, Command: []string{buildFakeDevServer(t)}, ReadyTimeout: 15 * time.Second},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartApp: %v", err)
+	}
+
+	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer dialCancel()
+	conn, err := runtimehost.DialExternalProviderSocket(dialCtx, handle.SocketPath(), runtimehost.ProcessConfig{
+		ProviderName: "combo",
+		Telemetry:    telemetry,
+	})
+	if err != nil {
+		t.Fatalf("DialExternalProviderSocket: %v", err)
+	}
+	_ = conn.Close()
+
+	handler := handle.FrontendHandler()
+	waitForHandlerStatus(t, handler, "/combo/", http.StatusOK)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/combo/", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "dev-ok" {
+		t.Fatalf("proxy status/body = %d/%q, want 200/dev-ok", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSupervisorFrontendOnlyAppClassification(t *testing.T) {
+	t.Parallel()
+	workdir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	telemetry := telemetrynoop.New()
+	prepared, err := runtimehost.PrepareExternalProviderSockets(runtimehost.ProcessConfig{
+		ProviderName: "frontend-only",
+		Telemetry:    telemetry,
+	})
+	if err != nil {
+		t.Fatalf("PrepareExternalProviderSockets: %v", err)
+	}
+	t.Cleanup(prepared.Cleanup)
+
+	sup, err := providerdev.Start(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(sup.Stop)
+
+	handle, err := sup.StartApp(ctx, providerdev.AppTarget{
+		Name:       "frontend-only",
+		BasePath:   "/solo",
+		SocketPath: prepared.PluginSocket,
+		BaseEnv:    prepared.Env,
+		Commands: []providerdev.AppCommand{{
+			Workdir:      workdir,
+			Command:      []string{buildFakeDevServer(t)},
+			ReadyTimeout: 10 * time.Second,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartApp: %v", err)
+	}
+
+	dialCtx, dialCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer dialCancel()
+	_, dialErr := runtimehost.DialExternalProviderSocket(dialCtx, handle.SocketPath(), runtimehost.ProcessConfig{
+		ProviderName: "frontend-only",
+		Telemetry:    telemetry,
+	})
+	if !errors.Is(dialErr, runtimehost.ErrProviderSocketNotServed) {
+		t.Fatalf("dial error = %v, want ErrProviderSocketNotServed", dialErr)
+	}
+	if !errors.Is(providerdev.ClassifyFrontendOnlyDevApp(ctx, dialErr, handle), providerdev.ErrFrontendOnlyDevApp) {
+		t.Fatalf("expected frontend-only classification")
+	}
+	waitForHandlerStatus(t, handle.FrontendHandler(), "/solo/", http.StatusOK)
+}
+
 func buildFakeDevServer(t *testing.T) string {
 	t.Helper()
 	srcDir := filepath.Join(moduleRoot(t), "services", "providerdev", "testdata", "fakedevserver")
@@ -152,6 +263,19 @@ func buildFakeDevServer(t *testing.T) string {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("build fake dev server: %v\n%s", err, out)
+	}
+	return bin
+}
+
+func buildTestdataBinary(t *testing.T, name string) string {
+	t.Helper()
+	srcDir := filepath.Join(moduleRoot(t), "services", "providerdev", "testdata", name)
+	bin := filepath.Join(t.TempDir(), name)
+	cmd := exec.Command("go", "build", "-o", bin, ".")
+	cmd.Dir = srcDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build %s: %v\n%s", name, err, out)
 	}
 	return bin
 }

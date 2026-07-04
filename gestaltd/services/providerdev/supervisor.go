@@ -48,6 +48,8 @@ type Supervisor struct {
 	cancel context.CancelFunc
 	logger *slog.Logger
 	procs  map[string]*managedProc
+	appsMu sync.RWMutex
+	apps   map[string]*appManaged
 	wg     sync.WaitGroup
 }
 
@@ -67,9 +69,14 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	var targets []Target
-	seenNames := map[string]string{}
+	devActiveApps := make(map[string]struct{})
+	for name, entry := range cfg.Apps {
+		if entry != nil && entry.DevActive {
+			devActiveApps[name] = struct{}{}
+		}
+	}
 
+	var targets []Target
 	uiNames := make([]string, 0, len(cfg.Providers.UI))
 	for name := range cfg.Providers.UI {
 		uiNames = append(uiNames, name)
@@ -80,34 +87,12 @@ func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
 		if entry == nil || !entry.DevActive {
 			continue
 		}
-		if prev, ok := seenNames[name]; ok {
-			return nil, fmt.Errorf("dev target %q: dev-active providers.ui and apps cannot share the same name (already registered as %s)", name, prev)
+		if _, ok := devActiveApps[name]; ok {
+			return nil, fmt.Errorf("dev target %q: dev-active providers.ui and apps cannot share the same name", name)
 		}
-		seenNames[name] = "ui"
 		target, err := devActiveTarget(name, "ui", entry.Path, entry.ResolvedManifestPath, entry.ResolvedDevWorkdir, entry.ResolvedManifest)
 		if err != nil {
 			return nil, fmt.Errorf("ui %q: %w", name, err)
-		}
-		targets = append(targets, target)
-	}
-
-	appNames := make([]string, 0, len(cfg.Apps))
-	for name := range cfg.Apps {
-		appNames = append(appNames, name)
-	}
-	slices.Sort(appNames)
-	for _, name := range appNames {
-		entry := cfg.Apps[name]
-		if entry == nil || !entry.DevActive || entry.Static == nil {
-			continue
-		}
-		if prev, ok := seenNames[name]; ok {
-			return nil, fmt.Errorf("dev target %q: dev-active providers.ui and apps cannot share the same name (already registered as %s)", name, prev)
-		}
-		seenNames[name] = "app"
-		target, err := devActiveTarget(name, "app", entry.Static.Mount, entry.ResolvedManifestPath, entry.ResolvedDevWorkdir, entry.ResolvedManifest)
-		if err != nil {
-			return nil, fmt.Errorf("app %q: %w", name, err)
 		}
 		targets = append(targets, target)
 	}
@@ -144,9 +129,6 @@ func devActiveTarget(name, kind, basePath, manifestPath, devWorkdir string, mani
 }
 
 func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervisor, error) {
-	if len(targets) == 0 {
-		return &Supervisor{procs: map[string]*managedProc{}}, nil
-	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -156,6 +138,10 @@ func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervi
 		cancel: cancel,
 		logger: logger,
 		procs:  make(map[string]*managedProc, len(targets)),
+		apps:   make(map[string]*appManaged),
+	}
+	if len(targets) == 0 {
+		return s, nil
 	}
 	for _, target := range targets {
 		target := target
@@ -180,11 +166,41 @@ func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervi
 }
 
 func (s *Supervisor) Handlers() map[string]http.Handler {
-	handlers := make(map[string]http.Handler, len(s.procs))
+	handlers := make(map[string]http.Handler, len(s.procs)+len(s.apps))
 	for _, proc := range s.procs {
 		handlers[proc.target.Name] = proc.handler()
 	}
+	s.appsMu.RLock()
+	for name, app := range s.apps {
+		handlers[name] = app.frontendHandler()
+	}
+	s.appsMu.RUnlock()
 	return handlers
+}
+
+func (s *Supervisor) DevHandler(name string) http.Handler {
+	if s == nil {
+		return nil
+	}
+	s.appsMu.RLock()
+	app, ok := s.apps[name]
+	s.appsMu.RUnlock()
+	if ok {
+		return app.frontendHandler()
+	}
+	if proc := s.procByName(name); proc != nil {
+		return proc.handler()
+	}
+	return nil
+}
+
+func (s *Supervisor) procByName(name string) *managedProc {
+	for _, proc := range s.procs {
+		if proc.target.Name == name {
+			return proc
+		}
+	}
+	return nil
 }
 
 func (s *Supervisor) Stop() {
@@ -194,6 +210,19 @@ func (s *Supervisor) Stop() {
 	s.cancel()
 	for _, proc := range s.procs {
 		proc.stop()
+	}
+	s.appsMu.Lock()
+	apps := make([]*appManaged, 0, len(s.apps))
+	for _, app := range s.apps {
+		apps = append(apps, app)
+	}
+	s.apps = make(map[string]*appManaged)
+	s.appsMu.Unlock()
+	for _, app := range apps {
+		if app.cancel != nil {
+			app.cancel()
+		}
+		app.stop()
 	}
 	s.wg.Wait()
 }

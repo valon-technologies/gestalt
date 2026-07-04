@@ -18,6 +18,7 @@ import (
 	telemetryotlp "github.com/valon-technologies/gestalt/server/services/observability/drivers/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/services/observability/drivers/stdout"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	secretsenv "github.com/valon-technologies/gestalt/server/services/secrets/drivers/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/services/secrets/drivers/file"
@@ -47,8 +48,18 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 
 	factories := buildFactories()
 
+	devSupervisor, err := startDevSupervisor(ctx, cfg)
+	if err != nil {
+		stop()
+		return nil, fmt.Errorf("start dev supervisor: %w", err)
+	}
+	factories.DevSupervisor = devSupervisor
+
 	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 	if err != nil {
+		if devSupervisor != nil {
+			devSupervisor.Stop()
+		}
 		stop()
 		return nil, fmt.Errorf("bootstrap: %v", err)
 	}
@@ -161,6 +172,24 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 	return factories
+}
+
+func startDevSupervisor(ctx context.Context, cfg *config.Config) (*providerdev.Supervisor, error) {
+	uiTargets, err := providerdev.TargetsFromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	hasDevApp := false
+	for _, entry := range cfg.Apps {
+		if entry != nil && entry.DevActive {
+			hasDevApp = true
+			break
+		}
+	}
+	if len(uiTargets) == 0 && !hasDevApp {
+		return nil, nil
+	}
+	return providerdev.Start(ctx, slog.Default(), uiTargets)
 }
 
 const gracefulShutdownTimeout = 15 * time.Second
