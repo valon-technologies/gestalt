@@ -235,15 +235,15 @@ spec: {}
 	if err == nil || !strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
 		t.Fatalf("SourceRunCommand err = %v", err)
 	}
-	if _, _, err := PrepareSourceManifest(manifestPath); err == nil || !strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
-		t.Fatalf("PrepareSourceManifest err = %v", err)
+	if _, _, err := PrepareSourceManifest(manifestPath); err != nil && strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
+		t.Fatalf("PrepareSourceManifest err = %v, want manifest prepare to allow multiple runs", err)
 	}
 	if _, _, err := PrepareSourceManifestForExecution(manifestPath, SourceBuildOptions{}); err != nil && strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
 		t.Fatalf("PrepareSourceManifestForExecution err = %v, want execution prepare to allow multiple runs", err)
 	}
 	if _, err := StageSourcePreparedInstallDir(manifestPath, filepath.Join(t.TempDir(), "prepared"), StageSourcePreparedInstallOptions{
 		Kind: providermanifestv1.KindApp,
-	}); err == nil || !strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
-		t.Fatalf("StageSourcePreparedInstallDir err = %v", err)
+	}); err != nil && strings.Contains(err.Error(), errMultipleRunCommandsRequireDevMode) {
+		t.Fatalf("StageSourcePreparedInstallDir err = %v, want packaging to allow multiple runs", err)
 	}
 }

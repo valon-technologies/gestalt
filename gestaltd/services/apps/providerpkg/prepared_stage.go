@@ -60,9 +60,6 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 	}
-	if err := RejectMultipleSourceRuns(manifest); err != nil {
-		return nil, err
-	}
 	if strings.TrimSpace(opts.Kind) == "" {
 		if _, err := ManifestKind(manifest); err != nil {
 			return nil, err
