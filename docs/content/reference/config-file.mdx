@@ -1,4 +1,4 @@
-import { Tabs } from 'nextra/components'
+import { Tabs, Callout } from 'nextra/components'
 
 # Config File
 
@@ -36,7 +36,7 @@ providers:
   s3: {}
   secrets: {}
   telemetry: {}
-  ui: {}
+  ui: {} # deprecated; use apps.<name>.static
   workflow: {}
 workflows:
   definitions: {}
@@ -205,9 +205,13 @@ authorization:
 
 `admin.authorizationPolicy` names the policy used to protect the built-in `/admin` route. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
-`admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
+`admin.ui` optionally pins `/admin` to one named deprecated UI bundle. The
+selected bundle must ship `admin/index.html` inside its prepared asset root.
+When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the
+root `apps.<name>.static` mount when that bundle contains `admin/index.html`,
+then falls back to the built-in admin shell.
 
-`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and optional per-resource `defaultRole` values. `authorization.relationships` defines static relationship tuples against those resource types.
+`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and optional per-resource `defaultRole` values. For apps with `apps.<name>.static`, `defaultRole` on the app resource type controls the role used when serving mounted static assets. `authorization.relationships` defines static relationship tuples against those resource types.
 
 ```yaml
 authorization:
@@ -288,7 +292,7 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `runtime.relayBaseUrl` | `server.baseUrl` | Absolute HTTP(S) URL that hosted runtimes use for Gestalt host-service relay and egress proxy callbacks. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
-| `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
+| `admin.ui` | | **Deprecated.** Optional named UI bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root `apps.<name>.static` mount before using the built-in fallback. |
 | `authorization.models` | | Static authorization model fragments keyed by model name. Each fragment defines `resourceTypes`, relation `subjectTypes` or `allowedTargets`, and actions. |
 | `authorization.relationships` | | Static relationship tuples with `subject`, `relation`, and `resource` fields. |
 | `authorization.resourceTypes.<type>.dynamic.allowAdditionalRelationships` | `false` | Allows later dynamic source state to add relationship tuples for a static resource type. Dynamic override/removal of static relationships is not supported. |
@@ -1170,9 +1174,8 @@ apps:
     description: Public GitHub operations
     iconFile: ./icons/github.svg
     authorizationPolicy: support_staff
-    ui:
-      path: /github
-      bundle: github_console
+    static:
+      mount: /github
     source:
       package: github.com/valon-technologies/gestalt-providers/app/github
       version: 0.0.1-alpha.1
@@ -1204,11 +1207,12 @@ apps:
 | `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the app. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
-| `authorizationPolicy` | Optional named policy used by host-side operation filtering and execution checks for this app. |
-| `ui` | Optional app-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the app manifest's owned `spec.ui`. |
+| `authorizationPolicy` | Optional named policy used by host-side operation filtering and execution checks for this app. Also gates `apps.<name>.static` mounts when set. |
+| `static` | Optional static frontend mount. See [`apps.<name>.static`](#appsnamestatic). |
+| `ui` | **Deprecated.** Optional app-backed mounted UI binding. Use `static` instead. |
 | `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
-| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.identity`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{app}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.identity`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{app}/{operation}`) and on `apps.<name>.static` mounts, including browser-login flows whose `next` path resolves into that app's mount. The built-in admin UI/admin API and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the app manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
 | `http` | Optional hosted HTTP binding overrides merged over the app manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, or target operation. |
@@ -1219,6 +1223,33 @@ apps:
 | `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 | `indexeddb` | Optional app IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the app's IndexedDB SDK calls; when omitted, the app inherits the selected/default host IndexedDB. `indexeddb.db` overrides the app-visible database name and defaults to the app key. Supported providers derive app scoping from that `db` name using provider-native namespace config; Gestalt does not rewrite object-store names at the SDK transport layer. `indexeddb.objectStores` optionally allowlists the logical object stores the app may use. Apps then call `new IndexedDB()` (or the equivalent SDK helper) through the unified host-service socket; they do not choose arbitrary schemas or DSNs at runtime. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable app through the unified host-service SDK transport. SDK clients select the configured binding by name. |
+
+### `apps.<name>.static`
+
+Mount prepared static assets from a unified `kind: app` package at a public URL
+prefix. Gestalt reads assets from the packaged `static/` directory (or from a
+local dev proxy when `run:` commands are active).
+
+```yaml
+apps:
+  workspace_review:
+    source: ./workspace-review/manifest.yaml
+    authorizationPolicy: workspace_review
+    static:
+      mount: /workspace-review
+      theme:
+        stylesheet: ./themes/workspace.css
+        assetsDir: ./themes/workspace-assets
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `static.mount` | `/{app name}` | Public URL prefix for the app frontend. Must not conflict with reserved paths or another mount. Only one app may use `/`. |
+| `static.theme.stylesheet` | | Optional path to a CSS file served at `{mount}/theme.css` relative to the config directory. |
+| `static.theme.assetsDir` | | Optional directory served under `{mount}/theme/`. |
+
+When `static` is set, the prepared app archive must include a `static/`
+directory with `index.html`. Omit `static` for API-only apps.
 
 ### `apps.*.source`
 
@@ -1306,11 +1337,10 @@ apps:
 ```
 
 This field changes runtime authentication for app HTTP operation routes and
-app-backed mounted UIs. Browser login uses the app's route-auth provider
-when its `next` path resolves into that app's mounted UI. Standalone
-`providers.ui` bundles, the built-in admin UI/admin API, integration OAuth
-helper routes, and `/mcp` still use the server-wide auth provider in this
-phase.
+`apps.<name>.static` mounts. Browser login uses the app's route-auth provider
+when its `next` path resolves into that app's mounted frontend. The built-in
+admin UI/admin API, integration OAuth helper routes, and `/mcp` still use the
+server-wide auth provider in this phase.
 
 Do not put release-download credentials in `apps.<name>.auth`. That field
 selects route authentication for the mounted app. Use `source.auth` for
@@ -1370,7 +1400,7 @@ spec:
 | --- | --- |
 | `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
-| `auth` | Optional app route auth reference. Use `auth.provider` to reference either `server` or a named `providers.identity` entry. Gestalt enforces this on app HTTP operation routes and on app-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional app route auth reference. Use `auth.provider` to reference either `server` or a named `providers.identity` entry. Gestalt enforces this on app HTTP operation routes and `apps.<name>.static` mounts. The built-in admin UI/admin API and `/mcp` still use the server-wide auth provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -1684,6 +1714,12 @@ host-specific OS wrappers alone.
 
 ## `providers.ui`
 
+<Callout type="warning">
+  `providers.ui` is deprecated. Configure `apps.<name>.static` on unified
+  `kind: app` packages instead. See [UI (Deprecated)](/providers/ui) and
+  [Applications](/applications).
+</Callout>
+
 ```yaml
 providers:
   ui:
@@ -1740,9 +1776,22 @@ metadata URL, `source.url`, or `source.githubRelease`.
 `providers.ui.<name>.config` is only allowed when
 `providers.ui.<name>.source` is set.
 
-Each `apps.<name>` entry may set `ui.path` to publish a app-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle. When `ui.bundle` is omitted, the app manifest must declare `spec.ui`. A given UI may be bound by at most one app entry. `ui.path` must use the same path rules as a directly mounted UI.
+Each `apps.<name>` entry may set `static.mount` to publish a app-backed
+frontend. When `static` is set, the prepared package must include a `static/`
+directory with `index.html`. `static.mount` defaults to `/{app name}` when
+omitted and must follow the same path rules as legacy UI mounts.
 
-When `server.admin.ui` is set, it must reference an existing `providers.ui.<name>` entry. Runtime startup then requires that entry's prepared asset root to include `admin/index.html`.
+Each `apps.<name>` entry may set `ui.path` (**deprecated**) to publish a
+app-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle.
+When `ui.bundle` is omitted, the app manifest must declare `spec.ui`. A given
+UI may be bound by at most one app entry. `ui.path` must use the same path
+rules as a directly mounted UI.
+
+When `server.admin.ui` is set, it must reference an existing `providers.ui.<name>`
+entry (**deprecated**). Runtime startup then requires that entry's prepared asset
+root to include `admin/index.html`. When unset, Gestalt auto-discovers
+`admin/index.html` from the root `apps.<name>.static` mount before falling back
+to the built-in admin shell.
 
 Each name in `apps.<name>.s3` must reference an existing enabled
 `providers.s3.<name>` entry.

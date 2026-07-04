@@ -12,9 +12,9 @@ import ActiveDevelopmentCallout from '../components/ActiveDevelopmentCallout'
 </Callout>
 
 Gestalt can be used to build applications. At a minimum, an application is a
-single [app](/providers/apps), or optionally a composition of
-[apps](/providers/apps) and [UIs](/providers/ui), using existing
-primitives for [identity](/providers/identity),
+single [app](/providers/apps) package that may include both executable backend
+code and a browser frontend, using existing primitives for
+[identity](/providers/identity),
 [authorization configuration](/reference/config-file#authorization),
 [IndexedDB](/providers/indexeddb)/[Cache](/providers/cache)/[S3](/providers/s3),
 [workflows](/providers/workflow), and [agents](/providers/agent).
@@ -23,26 +23,25 @@ primitives for [identity](/providers/identity),
 
 This example application, `workspace_review`, stores review items in IndexedDB,
 writes generated reports to S3, runs a nightly cron through the workflow
-provider, and serves a lightweight browser UI at `/workspace-review`.
+provider, and serves a browser UI at `/workspace-review` from the same app
+package.
 
-Use a `app/` plus sibling `ui/` layout:
+Use a single app repository — no sibling `ui/manifest.yaml`:
 
 ```text
 workspace-review/
-  app/
-    manifest.yaml
-    package.json
-    provider.ts
-  ui/
-    manifest.yaml
-    package.json
-    package-lock.json
-    src/
-      app.tsx
+  manifest.yaml
+  package.json
+  package-lock.json
+  provider.ts
+  src/
+    app.tsx
+    api.ts
 ```
 
-The app manifest owns the operations and points at the sibling UI bundle.
-For the full manifest schema, see [Provider Manifests](/reference/app-manifests).
+The app manifest owns operations, build phases, and optional local `run`
+commands. For the full manifest schema, see
+[Provider Manifests](/reference/app-manifests).
 
 ```yaml
 kind: app
@@ -50,6 +49,19 @@ source: github.com/acme/apps/workspace-review
 version: 0.1.0
 displayName: Workspace Review
 description: Review workspace changes and publish nightly summaries.
+install:
+  - [npm, ci]
+build:
+  - command: [npm, run, build]
+    inputs:
+      - package.json
+      - package-lock.json
+      - src
+      - provider.ts
+run:
+  - command: [npm, run, dev]
+    readyTimeout: 120s
+  - command: [npm, run, dev:provider]
 spec:
   mcp: true
   connections:
@@ -57,52 +69,44 @@ spec:
       mode: none
       auth:
         type: none
-  ui:
-    path: ../ui/manifest.yaml
 ```
 
-The UI bundle should be authored from source. Check in the UI source and
-dependency lockfile, declare a `build` command and `output` directory, and leave
-the generated `out/` or `dist/` directory out of source control. Gestalt builds
-the static assets during preparation and serves the prepared output at runtime.
-Route rules are required when the mounted app binds an `authorizationPolicy`.
-For UI package details, see [Providers > UI](/providers/ui).
+Check in frontend source and dependency lockfiles. Declare `install`, `build`,
+and `run` command lists in the manifest. The `build` phase writes static assets
+to `GESTALT_BUILD_STATIC` (see [Building the Frontend](#building-the-frontend));
+Gestalt copies that output into the packaged `static/` directory. Engineers
+never name `static/` in source — it exists only in prepared and release
+archives.
 
 <Callout type="info">
-  Source-built UI packages are the recommended shape for new applications, but
-  the workflow is still alpha. Current manifests need explicit build commands,
-  output paths, and build tools in the preparation environment; improving those
-  ergonomics is on the radar.
+  Unified app packages are the recommended shape for new applications. List-form
+  `install`, `build`, and `run` phases are still evolving; explicit commands and
+  build-tool availability in the preparation environment are required today.
 </Callout>
 
-```yaml
-kind: ui
-source: github.com/acme/ui/workspace-review
-version: 0.1.0
-displayName: Workspace Review UI
-description: Browser UI for workspace review.
-build:
-  command:
-    - npm
-    - run
-    - build
-  inputs:
-    - package.json
-    - package-lock.json
-    - src
-spec:
-  assetRoot: out
-  routes:
-    - path: /
-      allowedRoles: [viewer, admin]
-    - path: /admin/*
-      allowedRoles: [admin]
+A prepared release archive layout looks like:
+
+```text
+manifest.yaml
+artifacts/
+  workspace-review-linux-amd64
+static/
+  index.html
+  assets/
+    app-*.js
+    app-*.css
+entrypoint:
+  artifactPath: artifacts/workspace-review-linux-amd64
 ```
+
+For static mount and authorization configuration, see
+[Serving and Mounts](#serving-and-mounts) and
+[Authorization](#authorization).
 
 ## Host Services
 
 The deployment config wires the application into host services. Platform
-identity protects the mounted UI and HTTP operation routes, the
+identity protects the mounted frontend and HTTP operation routes, the
 authorization policy controls who may use the application, and the provider
 bindings expose only the host services the app is allowed to use.
 
@@ -176,12 +180,12 @@ providers:
 
 apps:
   workspace_review:
-    source: ./workspace-review/app/manifest.yaml
+    source: ./workspace-review/manifest.yaml
     auth:
       provider: server
     authorizationPolicy: workspace_review
-    ui:
-      path: /workspace-review
+    static:
+      mount: /workspace-review
     indexeddb:
       provider: main
       db: workspace_review
@@ -820,6 +824,143 @@ the same SDK client; they return the raw result, and the SDK's
 `decodeGraphQLResult` helpers apply the same envelope decoding plus GraphQL
 `errors` handling.
 
+## Building the Frontend
+
+Frontend assets live in the same app repo as the provider. Gestalt does not
+serve TypeScript or JSX source at runtime — only the prepared `static/` bundle.
+
+### Relative asset references
+
+Use relative URLs in HTML, CSS, and JS (`./assets/app.js`, not `/assets/app.js`).
+Gestalt injects a `<base href="/{mount}/">` tag when serving mounted apps so
+relative references resolve under the mount path. Client routers should derive
+their base from `document.baseURI` rather than hard-coding `/`.
+
+During `build`, Gestalt sets `GESTALT_BUILD_STATIC` to an absolute path under
+`.gestalt/build-static/` in the manifest directory. Your build script must write
+`index.html` and assets there. Gestalt verifies `index.html` exists after the
+build phase and stages the directory into `static/` in release archives.
+
+### Vite
+
+Use the Gestalt Vite plugin for base-path and dev-server defaults:
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import gestalt from "@valon-technologies/gestalt/vite";
+
+export default defineConfig({
+  plugins: [react(), gestalt()],
+  build: {
+    outDir: process.env.GESTALT_BUILD_STATIC,
+    emptyOutDir: true,
+  },
+});
+```
+
+`gestalt()` sets `base` to a relative path and configures the dev server for
+`GESTALT_DEV_*` when gestaltd proxies local `run` commands.
+
+Manual equivalent when not using the plugin:
+
+```ts
+export default defineConfig({
+  base: "./",
+  server: {
+    host: "127.0.0.1",
+    port: Number(process.env.GESTALT_DEV_PORT),
+    strictPort: true,
+  },
+  build: {
+    outDir: process.env.GESTALT_BUILD_STATIC,
+    emptyOutDir: true,
+  },
+});
+```
+
+### webpack
+
+Set `output.publicPath` to `""` (empty string) so chunk URLs stay relative.
+
+### Unsupported frameworks
+
+<Callout type="warning">
+  Frameworks that emit absolute asset URLs only — including default Next.js and
+  Astro production builds — are not compatible with Gestalt static mounts. Use a
+  static-export mode with relative URLs, or a bundler that supports relative
+  `publicPath` / `base`.
+</Callout>
+
+## Serving and Mounts
+
+Deployment config mounts prepared static assets with `apps.<name>.static`:
+
+```yaml
+apps:
+  workspace_review:
+    source: ./workspace-review/manifest.yaml
+    static:
+      mount: /workspace-review
+```
+
+| Field | Description |
+| --- | --- |
+| `static.mount` | Public URL prefix. Defaults to `/{app name}` when omitted. |
+| `static.theme` | Optional deployer workaround: paths to a theme stylesheet and assets directory injected before the static handler. |
+
+Only one app may mount at `/`. That root mount may supply `admin/index.html` for
+the built-in `/admin` shell when `server.admin.ui` is unset.
+
+Gestalt serves static files from the prepared `static/` directory, applies SPA
+fallback (unknown paths under the mount return `index.html`), and injects
+`<base href>` into HTML responses when the document does not already define one.
+Theme endpoints (`/theme.css`, `/theme/*`) are handled before the static file
+handler when `static.theme` is configured.
+
+## Authorization
+
+Mounted app static assets use a single app-level authorization check — there are
+no per-route role allowlists in the unified model.
+
+When `apps.<name>.authorizationPolicy` is set (or the app name is used as the
+resource type), Gestalt authenticates the caller **before serving bytes** from
+the mount. Unauthorized requests receive a login redirect or `403` without
+leaking asset contents.
+
+Grant access with static relationships and optional default roles:
+
+```yaml
+authorization:
+  models:
+    default:
+      resourceTypes:
+        workspace_review:
+          defaultRole: viewer
+          relations:
+            viewer:
+              subjectTypes: [subject]
+            admin:
+              subjectTypes: [subject]
+  relationships:
+    - subject:
+        type: subject
+        id: user:alice
+      relation: viewer
+      resource:
+        type: workspace_review
+        id: workspace_review
+```
+
+`authorization.models.<model>.resourceTypes.<app>.defaultRole` names the role
+assigned when the subject has a relationship to the app resource but no more
+specific relation matches. Operation-level role allowlists in
+`apps.<name>.allowedOperations` still apply to API calls; they do not create
+separate static route policies.
+
+Local development uses the same gate: `gestaltd serve` proxies `run` commands
+only after the app passes the configured authorization policy.
+
 ## Lightweight Frontend
 
 The frontend can stay small because Gestalt already handles sessions, route
@@ -841,10 +982,11 @@ export async function saveItem(item) {
 }
 ```
 
-Use [Providers > UI](/providers/ui) for UI bundle configuration and route
-authorization rules. Source-built UI packages are the recommended shape for
-new applications; generated static output is prepared by Gestalt and should not
-normally be checked in.
+Use [Serving and Mounts](#serving-and-mounts) and
+[Authorization](#authorization) for mount and access configuration. Check
+frontend source and lockfiles into the app repo; Gestalt prepares static output
+during lock, sync, and package — do not commit `.gestalt/build-static/` or
+packaged `static/` trees.
 
 ## Configuring Webhooks
 
@@ -888,19 +1030,71 @@ spec:
         required: true
         content:
           application/json: {}
-  ui:
-    path: ../ui/manifest.yaml
 ```
 
 ## Local Development
 
-Run the app locally from the app directory with the supporting provider
+Run the unified app locally from the app directory with supporting provider
 bindings in a development config file:
 
 ```sh
-gestaltd provider validate --path ./workspace-review/app --config ./dev.yaml
-gestaltd serve ./workspace-review/app --config ./dev.yaml
+gestaltd provider validate --path ./workspace-review --config ./dev.yaml
+gestaltd serve ./workspace-review --config ./dev.yaml
 ```
 
-For local UI detection, config overlays, and remote attach workflows, see
-[App > Testing locally](/providers/apps#testing-locally).
+When the app manifest declares `run:` commands and config sets
+`apps.<name>.static.mount`, gestaltd classifies the app for local development:
+
+1. **Full-stack dev** — a `run` command opens the provider socket on
+   `GESTALT_PROVIDER_SOCKET` and (optionally) another `run` command binds a
+   frontend dev server to `GESTALT_DEV_PORT`.
+2. **Frontend-only dev** — only the frontend binds `GESTALT_DEV_PORT`; gestaltd
+   serves API routes from pinned artifacts or skips backend registration after a
+   short readiness grace period.
+
+gestaltd appends these environment variables to each `run` command (manifest
+`env` entries are applied first):
+
+| Variable | Purpose |
+| --- | --- |
+| `GESTALT_DEV` | `1` while gestaltd manages the dev process |
+| `GESTALT_DEV_PORT` | Ephemeral `127.0.0.1` port the frontend dev server must bind |
+| `GESTALT_DEV_BASE_PATH` | Mount path from `apps.<name>.static.mount` |
+| `GESTALT_PROVIDER_SOCKET` | Unix socket for the app provider (full-stack apps only) |
+
+The dev supervisor probes frontend readiness on `GESTALT_DEV_PORT`, restarts
+crashed commands with exponential backoff, and allows one dev binder per app
+name.
+
+### Package script recipe
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "dev:provider": "tsx ./provider.ts",
+    "build": "vite build"
+  }
+}
+```
+
+```yaml
+run:
+  - command: [npm, run, dev]
+    readyTimeout: 120s
+  - command: [npm, run, dev:provider]
+```
+
+Map framework dev servers to the Gestalt contract:
+
+| Tool | Port | Base path |
+| --- | --- | --- |
+| Vite (`gestalt()` plugin) | `process.env.GESTALT_DEV_PORT` | handled by plugin |
+| Vite (manual) | `--port $GESTALT_DEV_PORT --host 127.0.0.1` | `base: './'` in config |
+| Angular (`ng serve`) | `--port $GESTALT_DEV_PORT --host 127.0.0.1` | `--serve-path $GESTALT_DEV_BASE_PATH` |
+| webpack-dev-server | `port: Number(process.env.GESTALT_DEV_PORT)` | `devMiddleware.publicPath: process.env.GESTALT_DEV_BASE_PATH + '/'` |
+| Parcel | `--port $GESTALT_DEV_PORT --host 127.0.0.1` | `--public-url $GESTALT_DEV_BASE_PATH/` |
+
+For layered config, remote attach, and PATH overrides, see
+[App > Testing locally](/providers/apps#testing-locally) and
+[CLI > Local Frontend Development](/reference/cli#local-frontend-development).

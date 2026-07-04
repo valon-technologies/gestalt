@@ -1,4 +1,4 @@
-import { Tabs } from "nextra/components";
+import { Tabs, Callout } from "nextra/components";
 
 # Provider Manifests
 
@@ -43,8 +43,9 @@ These fields appear at the top level of every manifest regardless of kind.
 | `iconFile`    | string     | no       | Relative path to an SVG icon bundled with the package.                                                                                                                                               |
 | `artifacts`   | Artifact[] | no       | Prepared or released executable artifacts keyed by platform. Source manifests must omit this field.                                                        |
 | `entrypoint`  | Entrypoint | no       | Executable entrypoint metadata for the provider.                                                                                                                                                     |
-| `build`       | SourceBuild | no       | Source-only command that prepares the declared runtime output. Prepared and released manifests strip this field.                                                                                     |
-| `run`         | string[] | no       | Source-only command argv for local source execution. Prepared and released manifests strip this field.                                                                                              |
+| `build`       | SourceBuild | no       | Source-only build phase(s). Prepared and released manifests strip this field.                                                                                     |
+| `install`     | SourceInstall | no     | Source-only install phase(s) run before `build`. Prepared and released manifests strip this field.                                                                 |
+| `run`         | string[] / SourceRun | no | Source-only run phase(s) for local dev and provider startup. Prepared and released manifests strip this field.                              |
 | `spec`        | object     | no       | Kind-specific configuration block.                                                                                                                                                                   |
 
 ## Entrypoint
@@ -63,10 +64,10 @@ entrypoint:
 ```
 
 For executable source manifests, `entrypoint.artifactPath` is the packaged
-executable path. When object-form `build.command` is present, Gestalt runs it
-before release packaging and requires the command to produce that file. If a
-source manifest also declares `run`, local source execution uses `run` instead
-of `entrypoint`.
+executable path. When object-form or list-form `build` is present, Gestalt runs
+it before release packaging and requires the command to produce that file and/or
+static assets under `GESTALT_BUILD_STATIC`. If a source manifest also declares
+`run`, local source execution uses `run` instead of `entrypoint`.
 
 ```yaml
 kind: indexeddb
@@ -118,9 +119,15 @@ The `spec` block for a `kind: app` manifest describes an app. It supports declar
 | `connections` | map[string]ConnectionDef | Canonical upstream auth and connection definitions. Put upstream OAuth/manual/bearer auth here, typically under `connections.default`. |
 | `defaultConnection` | string | Name of the connection to use when none is specified. |
 | `requires` | string[] | Provider source identifiers that this provider depends on. Gestalt ensures the listed providers are available before starting this provider. |
-| `ui` | OwnedUIRef | Optional owned UI reference for apps that publish a mounted UI. |
+| `ui` | OwnedUIRef | **Deprecated.** Optional owned UI reference. Use unified `build` static output instead. |
 
 ### Owned UI
+
+<Callout type="warning">
+  `spec.ui` is deprecated. Ship frontend assets from the same `kind: app`
+  package using `build` commands that write to `GESTALT_BUILD_STATIC`. See
+  [Applications](/applications#application-shape).
+</Callout>
 
 Apps that back mounted apps may declare their UI artifact in the app manifest. Deployment config still chooses whether to mount the app, which public path to use, and which authorization policy to bind. The manifest only says which UI bundle belongs to the app.
 
@@ -213,7 +220,14 @@ REST-visible MCP tools are listed as `transport: mcp-passthrough` operations.
 
 ### Authentication Types
 
-`spec.auth.provider` selects a route-auth provider for app HTTP routes. Gestalt currently enforces it on `/api/v1/apps/{name}/operations`, `/api/v1/{integration}/{operation}`, and app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mounted UI. Standalone `providers.ui` bundles, the built-in admin UI/admin API, integration OAuth helper routes, and `/mcp` still use the server-wide auth provider. Upstream auth still lives on `spec.connections.<name>.auth`, and the `auth.type` field on a connection accepts these values:
+`spec.auth.provider` selects a route-auth provider for app HTTP routes. Gestalt
+currently enforces it on `/api/v1/apps/{name}/operations`,
+`/api/v1/{integration}/{operation}`, and `apps.<name>.static` mounts,
+including browser-login flows whose `next` path resolves into that app's mount.
+The built-in admin UI/admin API, integration OAuth helper routes, and `/mcp`
+still use the server-wide auth provider. Upstream auth still lives on
+`spec.connections.<name>.auth`, and the `auth.type` field on a connection
+accepts these values:
 
 | Type        | Purpose                                                                                                                                                            |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -532,7 +546,72 @@ artifacts:
     path: artifacts/linux/amd64/provider
 ```
 
+## Command Phases
+
+Source app manifests may declare three serial phases: `install`, `build`, and
+`run`. Each phase accepts:
+
+- **Argv list** — a YAML sequence of strings, for example `[npm, ci]`
+- **Object** — `{ command: [...], workdir, env, inputs, readyTimeout }`
+- **Command list** — a sequence of argv lists and/or objects executed in order
+
+```yaml
+install:
+  - [npm, ci]
+build:
+  - command: [npm, run, build]
+    inputs:
+      - package.json
+      - package-lock.json
+      - src
+run:
+  - command: [npm, run, dev]
+    readyTimeout: 120s
+  - command: [npm, run, dev:provider]
+```
+
+`install` runs before `build` during lock, sync, package, and local preparation.
+`build` may produce an executable at `entrypoint.artifactPath` and/or static
+files in the directory named by `GESTALT_BUILD_STATIC`. `run` is source-only;
+gestaltd uses it for local provider startup and dev-server proxying. Multiple
+`run` commands require dev-mode support.
+
+Legacy object-form `build.command` and single `run` argv arrays remain valid.
+
+| Phase field | Type | Purpose |
+| --- | --- | --- |
+| `command` | string[] | **Required** argv for this step. |
+| `workdir` | string | Manifest-relative working directory. Defaults to the manifest directory. |
+| `env` | map[string]string | Extra environment variables for this step. |
+| `inputs` | string[] | Manifest-relative paths fingerprinting local source builds. No globs. |
+| `readyTimeout` | string | (`run` only) How long gestaltd waits for a dev server to bind `GESTALT_DEV_PORT`. |
+
+### Static Assets
+
+When a `build` step writes `index.html` into `GESTALT_BUILD_STATIC`, Gestalt
+stages that directory as `static/` in prepared and release archives and records
+the packaged static root on the manifest. Engineers author builds to
+`GESTALT_BUILD_STATIC`; they do not commit a `static/` directory in source.
+
+```yaml
+build:
+  - command: [npm, run, build]
+```
+
+```text
+# after package
+static/
+  index.html
+  assets/
+```
+
 ## UI Metadata
+
+<Callout type="warning">
+  `kind: ui` manifests and this section are deprecated. Unified `kind: app`
+  packages embed static assets via [Command Phases](#command-phases) and
+  [Static Assets](#static-assets).
+</Callout>
 
 The `spec` block for a `kind: ui` manifest describes a static UI package.
 Source UI manifests must declare top-level `build.command` and `spec.assetRoot`.
@@ -886,6 +965,11 @@ Source UI build steps must be declared with top-level `build`. Gestalt runs
 that command before source-manifest preparation during lock, sync, dev, and
 release packaging. This lets UI packages generate static bundles without
 checking built artifacts into source control.
+
+<Callout type="warning">
+  The following `kind: ui` example is deprecated. Use unified `kind: app`
+  [Command Phases](#command-phases) instead.
+</Callout>
 
 ```yaml
 kind: ui

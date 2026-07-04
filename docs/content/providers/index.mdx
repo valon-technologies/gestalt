@@ -2,7 +2,7 @@
 asIndexPage: true
 ---
 
-import { Cards, Tabs } from 'nextra/components'
+import { Cards, Tabs, Callout } from 'nextra/components'
 import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 # Providers
@@ -33,7 +33,7 @@ examples, and custom provider contract for that kind:
   <Cards.Card title="Runtime" href="/providers/runtime" />
   <Cards.Card title="S3" href="/providers/s3" />
   <Cards.Card title="Secret" href="/providers/secrets" />
-  <Cards.Card title="UI" href="/providers/ui" />
+  <Cards.Card title="UI (Deprecated)" href="/providers/ui" />
   <Cards.Card title="Workflow" href="/providers/workflow" />
 </Cards>
 
@@ -89,10 +89,10 @@ providers:
 
 Local sources point at a provider manifest near the config, such as
 `./apps/my-plugin/manifest.yaml`. Use them for development and testing before
-packaging. Executable source manifests can declare `run` for local source
-execution and `build.command` plus `entrypoint.artifactPath` for compiled
-release artifacts. UI source manifests declare `build.command` and
-`spec.assetRoot`.
+packaging. Executable source manifests declare `install`, `build`, and `run`
+command lists. The `build` phase may write a provider executable and/or static
+assets to `GESTALT_BUILD_STATIC`; Gestalt packages the latter as `static/` in
+release archives.
 
 ```yaml
 apps:
@@ -101,11 +101,11 @@ apps:
 ```
 
 ```yaml
-providers:
-  ui:
-    dashboard:
-      source: ./gestalt-ui/manifest.yaml
-      path: /dashboard
+apps:
+  dashboard:
+    source: ./apps/dashboard/manifest.yaml
+    static:
+      mount: /dashboard
 ```
 
 ### Exact sources
@@ -434,6 +434,12 @@ hosted/spec-loaded surfaces may omit `build`, `run`, and `entrypoint`.
 
 #### Source UI builds
 
+<Callout type="warning">
+  `kind: ui` source builds are deprecated. New apps use `kind: app` manifests
+  with list-form `build` commands that write static assets to
+  `GESTALT_BUILD_STATIC`. See [Applications](/applications#building-the-frontend).
+</Callout>
+
 Source UI manifests must define top-level `build.command` and `spec.assetRoot`.
 Gestalt runs the command before source-manifest preparation, which lets UI
 packages generate static assets without checking built files into source
@@ -488,6 +494,11 @@ artifacts:
 ```
 
 #### UI bundle manifest
+
+<Callout type="warning">
+  Released `kind: ui` packages are deprecated. New releases ship static assets
+  inside `kind: app` archives under `static/`.
+</Callout>
 
 UI packages use the same manifest system:
 
