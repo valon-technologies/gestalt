@@ -72,7 +72,74 @@ server:
 	)
 }
 
-func TestLoadConfigForLifecycleSurfacesKindUIManifestDeprecationWarning(t *testing.T) {
+func TestLoadForExecutionAtPathsSurfacesManifestDeprecationWarnings(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	uiDir := filepath.Join(dir, "ui", "legacy")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: ui
+source: github.com/acme/apps/legacy-ui
+version: "1.0.0"
+run:
+  command: [sh, -c, echo]
+build:
+  command: [sh, ./build.sh]
+  inputs: [build.sh]
+spec:
+  assetRoot: dist
+  routes:
+    - path: /
+      allowedRoles: [viewer]
+`
+	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>legacy</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile build.sh: %v", err)
+	}
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := `apiVersion: gestaltd.config/v8
+` + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + `  ui:
+    legacy:
+      source:
+        path: ui/legacy/manifest.yaml
+      path: /legacy
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: ` + filepath.ToSlash(artifactsDir) + `
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	if _, err := lc.LockAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
+		t.Fatalf("LockAtPaths: %v", err)
+	}
+
+	var warnings []string
+	lc = NewLifecycle().WithDeprecationLogger(func(msg string) { warnings = append(warnings, msg) })
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false); err != nil {
+		t.Fatalf("LoadForExecutionAtPaths: %v", err)
+	}
+	assertDeprecationWarnings(t, warnings,
+		`providers.ui.legacy is deprecated; migrate to apps.legacy.static`,
+		`kind: ui manifest "legacy" is deprecated; migrate to apps.legacy.static`,
+	)
+}
+
+func TestLoadForExecutionAtPathsSurfacesKindUIManifestDeprecationWarning(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -98,22 +165,25 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v8
-providers:
-  ui:
+	cfgYAML := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
     legacy:
       path: /legacy
       source:
         path: ./ui
+server:
+` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
+	artifactsDir := filepath.Join(dir, "artifacts")
+	lockfilePath := filepath.Join(dir, LockfileName)
+
 	var warnings []string
 	lc := NewLifecycle().WithDevServeEligible(true).WithDeprecationLogger(func(msg string) { warnings = append(warnings, msg) })
-	if _, err := lc.loadConfigForLifecycle([]string{cfgPath}, false); err != nil {
-		t.Fatalf("loadConfigForLifecycle: %v", err)
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false); err != nil {
+		t.Fatalf("LoadForExecutionAtPaths: %v", err)
 	}
 	assertDeprecationWarnings(t, warnings,
 		`providers.ui.legacy is deprecated; migrate to apps.legacy.static`,
@@ -121,7 +191,7 @@ providers:
 	)
 }
 
-func TestLoadConfigForLifecycleSurfacesSpecUIDeprecationWarning(t *testing.T) {
+func TestLoadForExecutionAtPathsSurfacesSpecUIDeprecationWarning(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -142,22 +212,31 @@ func TestLoadConfigForLifecycleSurfacesSpecUIDeprecationWarning(t *testing.T) {
 	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "build.sh"), []byte("#!/bin/sh\nmkdir -p bin\ntouch bin/owned\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile build.sh: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: owned\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgYAML := `apiVersion: gestaltd.config/v8
-apps:
+	cfgYAML := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
   owned:
     source:
       path: ./manifest.yaml
+server:
+` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
+	lockfilePath, artifactsDir := configDirPaths(dir)
+
 	var warnings []string
 	lc := NewLifecycle().WithDeprecationLogger(func(msg string) { warnings = append(warnings, msg) })
-	if _, err := lc.loadConfigForLifecycle([]string{cfgPath}, true); err != nil {
-		t.Fatalf("loadConfigForLifecycle: %v", err)
+	if _, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false); err != nil {
+		t.Fatalf("LoadForExecutionAtPaths: %v", err)
 	}
 	assertDeprecationWarnings(t, warnings,
 		`apps.owned manifest spec.ui is deprecated; migrate to apps.owned.static`,

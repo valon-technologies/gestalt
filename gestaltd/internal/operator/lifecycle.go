@@ -959,7 +959,6 @@ func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, allowMissingEnv
 			return nil, err
 		}
 	}
-	l.emitDeprecationWarnings(cfg)
 	return cfg, nil
 }
 
@@ -1149,6 +1148,7 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, 
 	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, nil, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return cfg, nil, nil
 }
 
@@ -1174,6 +1174,7 @@ func (l *Lifecycle) LoadForValidationAtPaths(configPaths []string, lockfilePath,
 	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
+	l.emitDeprecationWarnings(cfg)
 	return cfg, nil
 }
 
