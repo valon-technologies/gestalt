@@ -10,8 +10,11 @@ const root = join(import.meta.dir, "..");
 test("typedoc entryPoints mirror package.json exports", () => {
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const typedoc = JSON.parse(readFileSync(join(root, "typedoc.json"), "utf8"));
-  const exportTargets = Object.values(pkg.exports as Record<string, string>)
-    .map((target) => target.replace(/^\.\//, ""))
+  const exportTargets = Object.values(pkg.exports as Record<string, string | { default: string }>)
+    .map((target) => {
+      const path = typeof target === "string" ? target : target.default;
+      return path.replace(/^\.\//, "");
+    })
     .sort();
   const entryPoints = [...(typedoc.entryPoints as string[])].sort();
   expect(entryPoints).toEqual(exportTargets);
