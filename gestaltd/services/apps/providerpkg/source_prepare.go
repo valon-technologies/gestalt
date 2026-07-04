@@ -18,15 +18,15 @@ type sourceCatalogOptions struct {
 }
 
 func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
-	return prepareSourceManifest(manifestPath, false, SourceBuildOptions{})
+	return prepareSourceManifest(manifestPath, false, SourceBuildOptions{}, false)
 }
 
 func PrepareSourceManifestForExecution(manifestPath string, opts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
-	return prepareSourceManifest(manifestPath, false, opts)
+	return prepareSourceManifest(manifestPath, false, opts, true)
 }
 
 func prepareSourceManifestForPreparedInstallWithOptions(manifestPath string, opts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
-	return prepareSourceManifest(manifestPath, true, opts)
+	return prepareSourceManifest(manifestPath, true, opts, false)
 }
 
 // Local prepare may create catalog.yaml from run; packaging must regenerate it
@@ -42,7 +42,7 @@ func explicitRunStaleCatalog(manifest *providermanifestv1.Manifest) bool {
 	return true
 }
 
-func prepareSourceManifest(manifestPath string, packaging bool, buildOpts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
+func prepareSourceManifest(manifestPath string, packaging bool, buildOpts SourceBuildOptions, allowMultipleRuns bool) ([]byte, *providermanifestv1.Manifest, error) {
 	absoluteManifestPath, err := filepath.Abs(manifestPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve manifest path: %w", err)
@@ -53,8 +53,10 @@ func prepareSourceManifest(manifestPath string, packaging bool, buildOpts Source
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := RejectMultipleSourceRuns(manifest); err != nil {
-		return nil, nil, err
+	if !allowMultipleRuns {
+		if err := RejectMultipleSourceRuns(manifest); err != nil {
+			return nil, nil, err
+		}
 	}
 	format := ManifestFormatFromPath(manifestPath)
 	originalManifest, err := DecodeSourceManifestFormat(data, format)
@@ -126,9 +128,15 @@ func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *provide
 	if manifest != nil && manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
 		return nil
 	}
-	resolved, err := resolveSourceExecution(manifestPath, manifest, providermanifestv1.KindApp, SourceBuildOptions{}, opts.SkipExplicitRun)
-	if err != nil {
-		return fmt.Errorf("prepare source provider for static catalog: %w", err)
+	var resolved ResolvedSourceExecution
+	if HasMultipleSourceRuns(manifest) {
+		resolved = explicitRunExecution(rootDir, manifest)
+	} else {
+		var err error
+		resolved, err = resolveSourceExecution(manifestPath, manifest, providermanifestv1.KindApp, SourceBuildOptions{}, opts.SkipExplicitRun)
+		if err != nil {
+			return fmt.Errorf("prepare source provider for static catalog: %w", err)
+		}
 	}
 	if opts.SkipExplicitRun && resolved.Intent == SourceExecutionIntentPackagedEntrypoint {
 		if _, err := os.Stat(resolved.Command); err != nil && os.IsNotExist(err) && HasExplicitSourceRun(manifest) {

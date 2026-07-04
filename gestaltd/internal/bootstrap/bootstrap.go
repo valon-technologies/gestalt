@@ -33,6 +33,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -182,6 +183,7 @@ type Deps struct {
 	Telemetry             core.TelemetryProvider
 	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
+	DevSupervisor         *providerdev.Supervisor
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -218,6 +220,7 @@ type FactoryRegistry struct {
 	Telemetry           map[string]TelemetryFactory
 	Audit               AuditFactory
 	Builtins            []core.Provider
+	DevSupervisor       *providerdev.Supervisor
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
@@ -256,6 +259,7 @@ type Result struct {
 	Runtimes             RuntimeInspector
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 	CallerTokenIssuer    *providergateway.CallerTokenIssuer
+	DevSupervisor        *providerdev.Supervisor
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -389,6 +393,10 @@ func (r *Result) Close(ctx context.Context) error {
 		r.deferred.waitReady()
 	} else if r.ProvidersReady != nil {
 		<-r.ProvidersReady
+	}
+	if r.DevSupervisor != nil {
+		r.DevSupervisor.Stop()
+		r.DevSupervisor = nil
 	}
 	var errs []error
 	authCloseErr := closeAuth(r.Auth)
@@ -877,6 +885,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.WorkflowManager = workflowManager
 	deps.AgentManager = agentManager
 	deps.PublicHostServices = publicHostServices
+	if factories != nil {
+		deps.DevSupervisor = factories.DevSupervisor
+	}
 
 	workflowRuntime, err := newWorkflowRuntime(cfg)
 	if err != nil {
@@ -1370,6 +1381,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Runtimes:                     prepared.runtimeRegistry,
 		PublicHostServices:           publicHostServices,
 		CallerTokenIssuer:            prepared.CallerTokenIssuer,
+		DevSupervisor:                prepared.Deps.DevSupervisor,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,

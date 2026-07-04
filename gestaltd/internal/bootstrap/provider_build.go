@@ -39,6 +39,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
@@ -185,6 +186,12 @@ func (b *preparedProviderBuilds) Start(
 			defer wg.Done()
 			buildCtx := invocation.WithCallerProvider(installCtx, invocation.ProviderKindApp, pending.name)
 			result, err := builder(buildCtx, pending.name, pending.entry, deps)
+			if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
+				if pending.proxy != nil {
+					pending.proxy.fail(err)
+				}
+				return
+			}
 			if err != nil {
 				errMu.Lock()
 				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
@@ -952,6 +959,9 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 }
 
 func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec appservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
+	if entry != nil && entry.DevActive && deps.DevSupervisor != nil {
+		return buildDevSupervisedAppProvider(ctx, name, entry, pluginConfig, spec, deps)
+	}
 	command := entry.Command
 	args := entry.Args
 	workdir := ""
@@ -1116,6 +1126,91 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	cleanup = nil
 	return prov, nil
 }
+
+func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec appservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
+	if deps.DevSupervisor == nil {
+		return nil, fmt.Errorf("dev app %q: dev supervisor is not configured", name)
+	}
+	target, err := providerdev.AppTargetForEntry(name, entry)
+	if err != nil {
+		return nil, err
+	}
+	hostServices, err := buildProviderHostServices(name, appProviderHostServiceDeps(entry, deps))
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := runtimehost.PrepareExternalProviderSockets(runtimehost.ProcessConfig{
+		ProviderName: name,
+		HostServices: hostServices,
+		Telemetry:    deps.Telemetry,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dev app %q: prepare provider sockets: %w", name, err)
+	}
+	target.SocketPath = prepared.PluginSocket
+	if target.BaseEnv == nil {
+		target.BaseEnv = map[string]string{}
+	}
+	maps.Copy(target.BaseEnv, prepared.Env)
+	handle, err := deps.DevSupervisor.StartApp(ctx, target)
+	if err != nil {
+		prepared.Cleanup()
+		return nil, fmt.Errorf("dev app %q: %w", name, err)
+	}
+	stopDevApp := func() {
+		deps.DevSupervisor.StopApp(name)
+		prepared.Cleanup()
+	}
+	timeout := 90 * time.Second
+	if commands, err := providerpkg.SourceRunCommands(entry.ResolvedManifestPath); err == nil {
+		for _, command := range commands {
+			if command.ReadyTimeout > timeout {
+				timeout = command.ReadyTimeout
+			}
+		}
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	conn, err := runtimehost.DialExternalProviderSocket(dialCtx, handle.SocketPath(), runtimehost.ProcessConfig{
+		ProviderName: name,
+		Telemetry:    deps.Telemetry,
+	})
+	if classifyErr := providerdev.ClassifyFrontendOnlyDevApp(ctx, err, handle); classifyErr != nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		if !errors.Is(classifyErr, providerdev.ErrFrontendOnlyDevApp) {
+			stopDevApp()
+		}
+		return nil, classifyErr
+	}
+	closer := closerFunc(func() error {
+		var closeErr error
+		if conn != nil {
+			closeErr = conn.Close()
+		}
+		prepared.Cleanup()
+		return closeErr
+	})
+	opts := []appservice.RemoteProviderOption{
+		appservice.WithCloser(closer),
+		appservice.WithHostContext(deps.BaseURL),
+		appservice.WithCallerProvider(invocation.ProviderKindApp, name),
+	}
+	prov, err := appservice.NewRemote(ctx, proto.NewAppProviderClient(conn), spec, pluginConfig, opts...)
+	if err != nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		stopDevApp()
+		return nil, err
+	}
+	return prov, nil
+}
+
+type closerFunc func() error
+
+func (f closerFunc) Close() error { return f() }
 
 func buildHostedAgentProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error) {
 	launch, err := prepareHostedAgentProviderLaunch(ctx, name, entry, node, deps)

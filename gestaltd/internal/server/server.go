@@ -190,7 +190,7 @@ type Config struct {
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 	S3                   map[string]s3sdk.S3
 	MountedUIs           []MountedUI
-	DevHandlers          map[string]http.Handler
+	DevHandlerResolver   func(name string) http.Handler
 	Admin                AdminRouteConfig
 	AdminUIProvider      string
 	AdminUI              http.Handler
@@ -259,12 +259,12 @@ func New(cfg Config) (*Server, error) {
 	}
 	mountedUIs := cfg.MountedUIs
 	if len(mountedUIs) == 0 && len(cfg.ProviderUIs) != 0 {
-		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs, cfg.DevHandlers)
+		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs, cfg.DevHandlerResolver)
 		if err != nil {
 			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
 		}
 	}
-	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlers)
+	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlerResolver)
 	if err != nil {
 		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)
 	}

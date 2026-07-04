@@ -999,9 +999,6 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 		case hasRun && manifest.Spec != nil && manifest.Spec.IsManifestBacked():
 			return fmt.Errorf("app %q: local-source apps cannot combine run: with a declarative surface", name)
 		case hasRun:
-			if err := providerpkg.RejectMultipleSourceRuns(manifest); err != nil {
-				return fmt.Errorf("app %q: %w", name, err)
-			}
 			configMap, err := config.NodeToMap(entry.Config)
 			if err != nil {
 				return fmt.Errorf("app %q: decode config: %w", name, err)
@@ -1113,7 +1110,7 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, 
 		}
 		for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 			entry := cfg.Apps[name]
-			if entry != nil && entry.Static != nil && entry.DevActive {
+			if entry != nil && entry.Static != nil {
 				if err := resolveAppStaticTheme(paths, name, entry); err != nil {
 					return nil, nil, err
 				}
@@ -4329,22 +4326,26 @@ func (l *Lifecycle) resolveConfiguredAppStaticBindings(paths lifecyclePaths, wor
 		if err := resolveAppStaticTheme(paths, item.name, entry); err != nil {
 			return err
 		}
-		if entry.DevActive {
-			continue
-		}
-		if strings.TrimSpace(entry.ResolvedStaticRoot) != "" {
-			continue
-		}
-		destDir := providerDestDir(paths, item.name)
-		install, err := inspectPreparedInstall(destDir)
-		if err != nil {
-			return fmt.Errorf("read prepared manifest for provider %q: %w", item.name, err)
-		}
-		if err := bindAppStaticRoot(paths, item.name, entry, install); err != nil {
+		if err := materializeAppStaticRoot(paths, item.name, entry); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func materializeAppStaticRoot(paths lifecyclePaths, name string, entry *config.ProviderEntry) error {
+	if entry == nil || entry.Static == nil || entry.DevActive {
+		return nil
+	}
+	if strings.TrimSpace(entry.ResolvedStaticRoot) != "" {
+		return nil
+	}
+	destDir := providerDestDir(paths, name)
+	install, err := inspectPreparedInstall(destDir)
+	if err != nil {
+		return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
+	}
+	return bindAppStaticRoot(paths, name, entry, install)
 }
 
 func (l *Lifecycle) prepareSourceRunProviders(paths lifecyclePaths, cfg *config.Config, mode artifactMode) error {
@@ -5331,7 +5332,7 @@ func validateLockedInstalledManifest(kind, name, subject string, manifest *provi
 }
 
 func bindAppStaticRoot(paths lifecyclePaths, name string, app *config.ProviderEntry, install *preparedInstall) error {
-	if app == nil || app.Static == nil {
+	if app == nil || app.Static == nil || app.DevActive {
 		return nil
 	}
 	app.ResolvedStaticRoot = ""

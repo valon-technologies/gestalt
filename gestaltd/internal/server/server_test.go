@@ -2878,34 +2878,75 @@ func TestBuiltInAdminRoute_ProviderBackedAdminUIAutoDiscoversRootUI(t *testing.T
 func TestMountedAppStaticServing(t *testing.T) {
 	t.Parallel()
 
-	rootDir := t.TempDir()
-	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>alpha-shell</body></html>")
+	t.Run("base href injection", func(t *testing.T) {
+		t.Parallel()
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"alpha": {
-				Static:             &config.AppStaticConfig{Mount: "/alpha"},
-				ResolvedStaticRoot: rootDir,
-			},
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head><title>alpha</title></head><body>alpha-shell</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"alpha": {
+					Static:             &config.AppStaticConfig{Mount: "/alpha"},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/alpha/")
+		if err != nil {
+			t.Fatalf("GET /alpha/: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		text := string(body)
+		if !strings.Contains(text, `<base href="/alpha/">`) {
+			t.Fatalf("body = %q, want injected base href", text)
+		}
+		if !strings.Contains(text, "alpha-shell") {
+			t.Fatalf("body = %q, want alpha shell", text)
 		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/alpha/deep/route")
-	if err != nil {
-		t.Fatalf("GET deep route: %v", err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	if !strings.Contains(string(body), `<base href="/alpha/">`) {
-		t.Fatalf("body = %q, want SPA fallback with base tag", body)
-	}
+	t.Run("SPA fallback", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>alpha-shell</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"alpha": {
+					Static:             &config.AppStaticConfig{Mount: "/alpha"},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/alpha/deep/route")
+		if err != nil {
+			t.Fatalf("GET deep route: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		if !strings.Contains(string(body), `<base href="/alpha/">`) {
+			t.Fatalf("body = %q, want SPA fallback with base tag", body)
+		}
+	})
 }
 
 func TestMountedAppStaticAuthorizationRelationshipAllow(t *testing.T) {

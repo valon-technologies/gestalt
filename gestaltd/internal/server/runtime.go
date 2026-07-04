@@ -128,15 +128,9 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	publicConfig.MCPHandler = mcpSlot
 	publicConfig.ProviderUIs = cfg.Providers.UI
 
-	var devSupervisor *providerdev.Supervisor
-	if targets, err := providerdev.TargetsFromConfig(cfg); err != nil {
-		return err
-	} else if len(targets) > 0 {
-		devSupervisor, err = providerdev.Start(ctx, slog.Default(), targets)
-		if err != nil {
-			return fmt.Errorf("start dev servers: %w", err)
-		}
-		publicConfig.DevHandlers = devSupervisor.Handlers()
+	devSupervisor := result.DevSupervisor
+	if devSupervisor != nil {
+		publicConfig.DevHandlerResolver = devSupervisor.DevHandler
 	}
 
 	publicConfig.BuiltinAdminUI = &BuiltinAdminUIOptions{
@@ -173,7 +167,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		managementConfig := baseConfig
 		managementConfig.RouteProfile = RouteProfileManagement
 		managementConfig.ProviderUIs = cfg.Providers.UI
-		managementConfig.DevHandlers = publicConfig.DevHandlers
+		managementConfig.DevHandlerResolver = publicConfig.DevHandlerResolver
 		managementLoginBase := browserLoginPath
 		if baseURL := strings.TrimRight(cfg.Server.BaseURL, "/"); baseURL != "" {
 			managementLoginBase = baseURL + browserLoginPath
