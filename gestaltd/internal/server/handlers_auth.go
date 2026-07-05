@@ -126,17 +126,21 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	nextPath, err := resolveLoginRedirectPath(req.Next, s.allowedLoginRedirectBaseURLs())
-	if err != nil {
-		auditErr = err
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	auth, err = s.loginAuthRuntimeForNextPath(nextPath)
-	if err != nil {
-		auditErr = err
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	nextPath := ""
+	if strings.TrimSpace(req.Next) != "" {
+		var err error
+		nextPath, err = resolveLoginRedirectPath(req.Next, s.allowedLoginRedirectBaseURLs())
+		if err != nil {
+			auditErr = err
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		auth, err = s.loginAuthRuntimeForNextPath(nextPath)
+		if err != nil {
+			auditErr = err
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	state := req.State
 	if req.CallbackPort > 0 && req.CallbackPort <= maxPort {

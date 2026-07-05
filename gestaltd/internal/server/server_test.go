@@ -8378,87 +8378,137 @@ func TestStartBrowserLogin_MissingPluginRouteAuthProviderAuditsAttemptedProvider
 func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
-	svc := testutil.NewStubServices(t)
-	existing := seedUserRecord(t, svc, "user-existing", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
-	var auditBuf bytes.Buffer
-	auditSink := invocation.NewSlogAuditSink(&auditBuf)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
-				if code == "good-code" {
-					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
-				}
-				return nil, fmt.Errorf("bad code")
+	t.Run("issues session cookie on success", func(t *testing.T) {
+		t.Parallel()
+
+		svc := testutil.NewStubServices(t)
+		existing := seedUserRecord(t, svc, "user-existing", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+		var auditBuf bytes.Buffer
+		auditSink := invocation.NewSlogAuditSink(&auditBuf)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
+					if code == "good-code" {
+						return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+					}
+					return nil, fmt.Errorf("bad code")
+				},
+			}
+			cfg.Services = svc
+			cfg.AuditSink = auditSink
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar}
+
+		body := bytes.NewBufferString(`{"state":"test-state"}`)
+		loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+		if err != nil {
+			t.Fatalf("start login: %v", err)
+		}
+		_ = loginResp.Body.Close()
+
+		resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["status"] != "ok" {
+			t.Fatalf("unexpected status: %v", result["status"])
+		}
+		var sessionCookie *http.Cookie
+		for _, cookie := range resp.Cookies() {
+			if cookie.Name == "session_token" && cookie.Value != "" {
+				sessionCookie = cookie
+				break
+			}
+		}
+		if sessionCookie == nil {
+			t.Fatal("expected session_token cookie after login")
+		}
+		stored, err := svc.Users.GetUser(context.Background(), existing.ID)
+		if err != nil {
+			t.Fatalf("get user: %v", err)
+		}
+		if stored.Email != "user@example.com" {
+			t.Fatalf("expected user email %q, got %q", "user@example.com", stored.Email)
+		}
+
+		lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+		if len(lines) == 0 {
+			t.Fatal("expected login audit record")
+		}
+		var auditRecord map[string]any
+		if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["operation"] != "auth.login.complete" {
+			t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
+		}
+		if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
+			t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
+		}
+		if _, ok := auditRecord["user_id"]; ok {
+			t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
+		}
+	})
+
+	t.Run("redirects to next path when POST included next", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
+					if code == "good-code" {
+						return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+					}
+					return nil, fmt.Errorf("bad code")
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar}
+
+		body := bytes.NewBufferString(`{"state":"test-state","next":"/apps"}`)
+		loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+		if err != nil {
+			t.Fatalf("start login: %v", err)
+		}
+		_ = loginResp.Body.Close()
+
+		noRedirect := &http.Client{
+			Jar: jar,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
 			},
 		}
-		cfg.Services = svc
-		cfg.AuditSink = auditSink
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-
-	body := bytes.NewBufferString(`{"state":"test-state"}`)
-	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("start login: %v", err)
-	}
-	_ = loginResp.Body.Close()
-
-	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["status"] != "ok" {
-		t.Fatalf("unexpected status: %v", result["status"])
-	}
-	var sessionCookie *http.Cookie
-	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "session_token" && cookie.Value != "" {
-			sessionCookie = cookie
-			break
+		resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
 		}
-	}
-	if sessionCookie == nil {
-		t.Fatal("expected session_token cookie after login")
-	}
-	stored, err := svc.Users.GetUser(context.Background(), existing.ID)
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-	if stored.Email != "user@example.com" {
-		t.Fatalf("expected user email %q, got %q", "user@example.com", stored.Email)
-	}
+		defer func() { _ = resp.Body.Close() }()
 
-	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
-	if len(lines) == 0 {
-		t.Fatal("expected login audit record")
-	}
-	var auditRecord map[string]any
-	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
-		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
-	}
-	if auditRecord["operation"] != "auth.login.complete" {
-		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
-	}
-	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
-		t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
-	}
-	if _, ok := auditRecord["user_id"]; ok {
-		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
-	}
+		if resp.StatusCode != http.StatusFound {
+			t.Fatalf("expected 302, got %d", resp.StatusCode)
+		}
+		if got := resp.Header.Get("Location"); got != "/apps" {
+			t.Fatalf("Location = %q, want /apps", got)
+		}
+	})
 }
 
 func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *testing.T) {
@@ -8632,145 +8682,103 @@ func TestLoginCallbackForCLI(t *testing.T) {
 func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 	t.Parallel()
 
-	svc := testutil.NewStubServices(t)
-	_ = seedUser(t, svc, "host@example.com")
-	auth := newHostIssuedSessionAuthStub([]byte("host-issued-secret"), hostIssuedSessionAuthOpts{})
-	baseTokenFn := auth.TokenFn
-	var gotAuthorizationCodeState string
-	auth.TokenFn = func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
-		if req != nil && req.GrantType == core.GrantTypeAuthorizationCode {
-			gotAuthorizationCodeState = req.State
-			if req.State != "cli:54305:test-state" {
-				return nil, fmt.Errorf("authorization code state = %q, want prefixed CLI state", req.State)
-			}
-		}
-		return baseTokenFn(ctx, req)
-	}
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = auth
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
+	t.Run("completes with cli=1", func(t *testing.T) {
+		t.Parallel()
 
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-
-	body := bytes.NewBufferString(`{"state":"test-state","callbackPort":54305}`)
-	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("start login: %v", err)
-	}
-	_ = loginResp.Body.Close()
-
-	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state&cli=1")
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["id"] == "" {
-		t.Fatal("expected id in CLI login response")
-	}
-	if result["token"] == "" {
-		t.Fatal("expected token in CLI login response")
-	}
-	if gotAuthorizationCodeState != "cli:54305:test-state" {
-		t.Fatalf("authorization code state = %q, want prefixed CLI state", gotAuthorizationCodeState)
-	}
-}
-
-func TestStartLoginWithNextPath(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
-				if code == "good-code" {
-					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+		svc := testutil.NewStubServices(t)
+		_ = seedUser(t, svc, "host@example.com")
+		auth := newHostIssuedSessionAuthStub([]byte("host-issued-secret"), hostIssuedSessionAuthOpts{})
+		baseTokenFn := auth.TokenFn
+		var gotAuthorizationCodeState string
+		auth.TokenFn = func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+			if req != nil && req.GrantType == core.GrantTypeAuthorizationCode {
+				gotAuthorizationCodeState = req.State
+				if req.State != "cli:54305:test-state" {
+					return nil, fmt.Errorf("authorization code state = %q, want prefixed CLI state", req.State)
 				}
-				return nil, fmt.Errorf("bad code")
+			}
+			return baseTokenFn(ctx, req)
+		}
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = auth
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar}
+
+		body := bytes.NewBufferString(`{"state":"test-state","callbackPort":54305}`)
+		loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+		if err != nil {
+			t.Fatalf("start login: %v", err)
+		}
+		_ = loginResp.Body.Close()
+
+		resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state&cli=1")
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["id"] == "" {
+			t.Fatal("expected id in CLI login response")
+		}
+		if result["token"] == "" {
+			t.Fatal("expected token in CLI login response")
+		}
+		if gotAuthorizationCodeState != "cli:54305:test-state" {
+			t.Fatalf("authorization code state = %q, want prefixed CLI state", gotAuthorizationCodeState)
+		}
+	})
+
+	t.Run("redirects to localhost without cli=1", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar}
+
+		body := bytes.NewBufferString(`{"state":"raw-cli-state","callbackPort":54305}`)
+		loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+		if err != nil {
+			t.Fatalf("start login: %v", err)
+		}
+		_ = loginResp.Body.Close()
+
+		noRedirect := &http.Client{
+			Jar: jar,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
 			},
 		}
+		resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=raw-cli-state")
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusFound {
+			t.Fatalf("expected 302, got %d", resp.StatusCode)
+		}
+		got := resp.Header.Get("Location")
+		want := "http://127.0.0.1:54305/?code=good-code&state=raw-cli-state"
+		if got != want {
+			t.Fatalf("Location = %q, want %q", got, want)
+		}
 	})
-	testutil.CloseOnCleanup(t, ts)
-
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-
-	body := bytes.NewBufferString(`{"state":"test-state","next":"/apps"}`)
-	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("start login: %v", err)
-	}
-	_ = loginResp.Body.Close()
-
-	noRedirect := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
-	if err != nil {
-		t.Fatalf("callback request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected 302, got %d", resp.StatusCode)
-	}
-	if got := resp.Header.Get("Location"); got != "/apps" {
-		t.Fatalf("Location = %q, want /apps", got)
-	}
-}
-
-func TestLoginCallbackCLILocalhostBounce(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-
-	body := bytes.NewBufferString(`{"state":"raw-cli-state","callbackPort":54305}`)
-	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("start login: %v", err)
-	}
-	_ = loginResp.Body.Close()
-
-	noRedirect := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=raw-cli-state")
-	if err != nil {
-		t.Fatalf("callback request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected 302, got %d", resp.StatusCode)
-	}
-	got := resp.Header.Get("Location")
-	want := "http://127.0.0.1:54305/?code=good-code&state=raw-cli-state"
-	if got != want {
-		t.Fatalf("Location = %q, want %q", got, want)
-	}
 }
 
 func TestLoginCallbackStateMismatch(t *testing.T) {
