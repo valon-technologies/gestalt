@@ -457,8 +457,6 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	originalState := r.URL.Query().Get("state")
 	if r.URL.Query().Get("cli") != "1" {
 		if port, rawState, ok := extractCLIState(originalState); ok {
-			auditAllowed = true
-			auditErr = nil
 			redirectCLIAuthorization(w, r, port, code, rawState)
 			return
 		}
