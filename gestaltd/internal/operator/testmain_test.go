@@ -178,6 +178,9 @@ func writeDefaultProvidersDir(baseDir, binaryPath string) (string, error) {
 	if err := writeProviderReleaseMetadata(dir, manifest); err != nil {
 		return "", err
 	}
+	if err := testutil.WriteDefaultRootAppFixture(providersDir); err != nil {
+		return "", err
+	}
 	return providersDir, nil
 }
 

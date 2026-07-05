@@ -1453,7 +1453,7 @@ providers:
 		}
 	})
 
-	t.Run("admin ui without static is rejected", func(t *testing.T) {
+	t.Run("admin ui field is rejected", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1478,7 +1478,7 @@ apps:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), "server.admin.ui references app \"dashboard\" without apps.dashboard.static configured") {
+		if !strings.Contains(err.Error(), "field ui not found in type config.AdminConfig") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

@@ -140,7 +140,7 @@ apps:
 `, encryptionKey,
 		config.DefaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion),
 		"sqlite://"+dbPath,
-		config.DefaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion),
+		config.DefaultProviderMetadataURL(config.DefaultRootAppProvider, config.DefaultRootAppVersion),
 		config.DefaultProviderMetadataURL(defaultHTTPBinProvider, defaultHTTPBinVersion))
 }
 
@@ -177,5 +177,5 @@ apps:
 		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultExternalCredentialsProvider),
 		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultIndexedDBProvider),
 		"sqlite://"+dbPath,
-		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultUIProvider))
+		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultRootAppProvider))
 }

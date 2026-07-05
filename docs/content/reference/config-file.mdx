@@ -275,7 +275,7 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `public.port` | `8080` | Port for the public listener. |
 | `management.host` | | Bind address for the management listener. |
 | `management.port` | | Port for the management listener. Required when `management.host` is set. |
-| `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in `/admin` on split public/management deployments. |
+| `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in admin on split public/management deployments. |
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
@@ -970,7 +970,7 @@ providers:
         serviceName: gestaltd
 ```
 
-Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI at `/admin` reads that same scrape surface. This is the default when `providers.telemetry` is omitted.
+Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI reads that same scrape surface. This is the default when `providers.telemetry` is omitted.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -1006,7 +1006,7 @@ providers:
           level: info
 ```
 
-Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent) while still keeping local `/metrics` available by default. The built-in admin UI at `/admin` reads that same local scrape surface.
+Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent) while still keeping local `/metrics` available by default. The built-in admin UI reads that same local scrape surface.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -1735,7 +1735,7 @@ omitted and must follow mount path rules.
 Each name in `apps.<name>.s3` must reference an existing enabled
 `providers.s3.<name>` entry.
 
-App static mounts are served on the public listener only. The built-in admin UI remains at `/admin`.
+App static mounts are served on the public listener only.
 
 `server.egress.defaultAction` must be `allow` or `deny`.
 

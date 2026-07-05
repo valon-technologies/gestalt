@@ -265,6 +265,10 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		return "", err
 	}
 
+	if err := testutil.WriteDefaultRootAppFixture(providersDir); err != nil {
+		return "", err
+	}
+
 	return providersDir, nil
 }
 

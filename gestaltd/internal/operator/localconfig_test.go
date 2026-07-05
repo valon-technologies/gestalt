@@ -29,7 +29,7 @@ func TestDefaultManagedConfigIncludesRootStaticApp(t *testing.T) {
 		t.Fatal(`Apps["root"] = nil`)
 		return
 	}
-	wantURL := config.DefaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion)
+	wantURL := config.DefaultProviderMetadataURL(config.DefaultRootAppProvider, config.DefaultRootAppVersion)
 	if got := rootApp.SourceMetadataURL(); got != wantURL {
 		t.Fatalf(`Apps["root"].SourceMetadataURL() = %q, want %q`, got, wantURL)
 	}
@@ -74,7 +74,7 @@ func TestDefaultLocalSourceConfigIncludesRootStaticApp(t *testing.T) {
 		t.Fatal(`Apps["root"] = nil`)
 		return
 	}
-	wantPath := filepath.Join(providersDir, "ui", "default", "manifest.yaml")
+	wantPath := filepath.Join(providersDir, "app", "default", "manifest.yaml")
 	if got := rootApp.SourcePath(); got != wantPath {
 		t.Fatalf(`Apps["root"].Source.Path = %q, want %q`, got, wantPath)
 	}
@@ -141,9 +141,9 @@ func TestResolveStartConfigPathsGeneratesDefaultLocalSourceConfig(t *testing.T) 
 		t.Fatal(`Apps["root"] = nil`)
 		return
 	}
-	wantUIPath := config.DefaultLocalProviderManifestPath(providersDir, config.DefaultUIProvider)
-	if got := rootApp.SourcePath(); got != wantUIPath {
-		t.Fatalf(`Apps["root"].Source.Path = %q, want %q`, got, wantUIPath)
+	wantRootAppPath := config.DefaultLocalProviderManifestPath(providersDir, config.DefaultRootAppProvider)
+	if got := rootApp.SourcePath(); got != wantRootAppPath {
+		t.Fatalf(`Apps["root"].Source.Path = %q, want %q`, got, wantRootAppPath)
 	}
 	if rootApp.Static == nil {
 		t.Fatal(`Apps["root"].Static = nil`)
