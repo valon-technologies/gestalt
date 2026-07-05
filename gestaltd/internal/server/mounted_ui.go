@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	stdpath "path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -186,112 +185,6 @@ func resolveBuiltinAdminUI(opts BuiltinAdminUIOptions) (http.Handler, error) {
 		return nil, fmt.Errorf("embedded admin ui assets not found")
 	}
 	return handler, nil
-}
-
-func resolveConfiguredAdminUI(opts BuiltinAdminUIOptions, providerName string, uiEntries map[string]*config.UIEntry, appEntries map[string]*config.ProviderEntry) (http.Handler, error) {
-	assetRoot, resolvedName, sourceKind, err := selectAdminShellSource(strings.TrimSpace(providerName), uiEntries, appEntries)
-	if err != nil {
-		return nil, err
-	}
-	if assetRoot == "" {
-		return nil, nil
-	}
-
-	adminDir := filepath.Join(assetRoot, "admin")
-	if _, err := os.Stat(filepath.Join(adminDir, "index.html")); err != nil {
-		return nil, fmt.Errorf("%s admin assets not found at %s: %w", sourceKind, adminDir, err)
-	}
-
-	handler, err := adminui.DirHandler(adminDir, adminui.Options{
-		BrandHref: opts.BrandHref,
-		LoginBase: opts.LoginBase,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%s admin assets: %w", sourceKind, err)
-	}
-	_ = resolvedName
-	return handler, nil
-}
-
-func selectAdminShellSource(providerName string, uiEntries map[string]*config.UIEntry, appEntries map[string]*config.ProviderEntry) (assetRoot, resolvedName, sourceKind string, err error) {
-	if providerName != "" {
-		if entry := uiEntries[providerName]; entry != nil {
-			if strings.TrimSpace(entry.ResolvedAssetRoot) == "" {
-				return "", "", "", fmt.Errorf("server.admin.ui %q asset root not resolved", providerName)
-			}
-			return entry.ResolvedAssetRoot, providerName, "ui." + providerName, nil
-		}
-		if entry := appEntries[providerName]; entry != nil && entry.Static != nil {
-			if strings.TrimSpace(entry.ResolvedStaticRoot) == "" {
-				return "", "", "", fmt.Errorf("server.admin.ui %q static asset root not resolved", providerName)
-			}
-			return entry.ResolvedStaticRoot, providerName, "app." + providerName, nil
-		}
-		return "", "", "", fmt.Errorf("server.admin.ui %q not found", providerName)
-	}
-
-	if entry, name := selectRootMountedUIAdminShell(uiEntries); entry != nil {
-		return entry.ResolvedAssetRoot, name, "ui." + name, nil
-	}
-	if root, name := selectRootMountedAppStaticAdminShell(appEntries); root != "" {
-		return root, name, "app." + name, nil
-	}
-	return "", "", "", nil
-}
-
-func selectRootMountedUIAdminShell(entries map[string]*config.UIEntry) (*config.UIEntry, string) {
-	names := make([]string, 0, len(entries))
-	for name := range entries {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		entry := entries[name]
-		if entry == nil || strings.TrimSpace(entry.Path) != "/" {
-			continue
-		}
-		if uiEntryHasAdminShell(entry) {
-			return entry, name
-		}
-	}
-	return nil, ""
-}
-
-func selectRootMountedAppStaticAdminShell(entries map[string]*config.ProviderEntry) (string, string) {
-	names := make([]string, 0, len(entries))
-	for name, entry := range entries {
-		if entry == nil || entry.Static == nil {
-			continue
-		}
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		entry := entries[name]
-		if strings.TrimSpace(entry.Static.Mount) != "/" {
-			continue
-		}
-		if appStaticHasAdminShell(entry) {
-			return entry.ResolvedStaticRoot, name
-		}
-	}
-	return "", ""
-}
-
-func appStaticHasAdminShell(entry *config.ProviderEntry) bool {
-	if entry == nil || strings.TrimSpace(entry.ResolvedStaticRoot) == "" {
-		return false
-	}
-	info, err := os.Stat(filepath.Join(entry.ResolvedStaticRoot, "admin", "index.html"))
-	return err == nil && !info.IsDir()
-}
-
-func uiEntryHasAdminShell(entry *config.UIEntry) bool {
-	if entry == nil || strings.TrimSpace(entry.ResolvedAssetRoot) == "" {
-		return false
-	}
-	info, err := os.Stat(filepath.Join(entry.ResolvedAssetRoot, "admin", "index.html"))
-	return err == nil && !info.IsDir()
 }
 
 func normalizeMountedUIs(mounted []MountedUI) ([]MountedUI, error) {

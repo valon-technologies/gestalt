@@ -205,12 +205,6 @@ authorization:
 
 `admin.authorizationPolicy` names the policy used to protect the built-in `/admin` route. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
-`admin.ui` optionally pins `/admin` to one named deprecated UI bundle. The
-selected bundle must ship `admin/index.html` inside its prepared asset root.
-When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the
-root `apps.<name>.static` mount when that bundle contains `admin/index.html`,
-then falls back to the built-in admin shell.
-
 `authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and optional per-resource `defaultRole` values. For apps with `apps.<name>.static`, `defaultRole` on the app resource type controls the role used when serving mounted static assets. `authorization.relationships` defines static relationship tuples against those resource types.
 
 ```yaml
@@ -292,7 +286,6 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `runtime.relayBaseUrl` | `server.baseUrl` | Absolute HTTP(S) URL that hosted runtimes use for Gestalt host-service relay and egress proxy callbacks. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
-| `admin.ui` | | **Deprecated.** Optional named UI bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root `apps.<name>.static` mount before using the built-in fallback. |
 | `authorization.models` | | Static authorization model fragments keyed by model name. Each fragment defines `resourceTypes`, relation `subjectTypes` or `allowedTargets`, and actions. |
 | `authorization.relationships` | | Static relationship tuples with `subject`, `relation`, and `resource` fields. |
 | `authorization.resourceTypes.<type>.dynamic.allowAdditionalRelationships` | `false` | Allows later dynamic source state to add relationship tuples for a static resource type. Dynamic override/removal of static relationships is not supported. |
@@ -1732,7 +1725,7 @@ providers:
         brandName: Acme
 ```
 
-`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `apps.<name>.ui.bundle` binds to `apps.<name>.ui.path`. When a app manifest declares `spec.ui`, `apps.<name>.ui.bundle` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the app-owned reference. `/admin` remains available regardless. A selected `server.admin.ui` bundle, or the root-mounted UI bundle when it contains `admin/index.html`, may also supply the static admin shell while Gestalt keeps the existing `/admin` auth and API semantics. Omit `providers.ui` entirely to run headless with no public UI bundles.
+`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `apps.<name>.ui.bundle` binds to `apps.<name>.ui.path`. When a app manifest declares `spec.ui`, `apps.<name>.ui.bundle` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the app-owned reference. `/admin` remains available regardless and always uses the built-in admin shell. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
 App-backed mounted UIs inherit the owning app's dynamic authorization grants when that app sets `authorizationPolicy`. Direct `providers.ui.<name>.authorizationPolicy` bindings remain static-only.
 
@@ -1786,12 +1779,6 @@ app-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle.
 When `ui.bundle` is omitted, the app manifest must declare `spec.ui`. A given
 UI may be bound by at most one app entry. `ui.path` must use the same path
 rules as a directly mounted UI.
-
-When `server.admin.ui` is set, it must reference an existing `providers.ui.<name>`
-entry (**deprecated**). Runtime startup then requires that entry's prepared asset
-root to include `admin/index.html`. When unset, Gestalt auto-discovers
-`admin/index.html` from the root `apps.<name>.static` mount before falling back
-to the built-in admin shell.
 
 Each name in `apps.<name>.s3` must reference an existing enabled
 `providers.s3.<name>` entry.
