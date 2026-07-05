@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
@@ -35,7 +33,6 @@ const (
 
 type Target struct {
 	Name         string
-	Kind         string
 	BasePath     string
 	Workdir      string
 	Command      []string
@@ -65,45 +62,11 @@ type managedProc struct {
 	waitErr   error
 }
 
-func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
-	if cfg == nil {
-		return nil, nil
-	}
-	devActiveApps := make(map[string]struct{})
-	for name, entry := range cfg.Apps {
-		if entry != nil && entry.DevActive {
-			devActiveApps[name] = struct{}{}
-		}
-	}
-
-	var targets []Target
-	uiNames := make([]string, 0, len(cfg.Providers.UI))
-	for name := range cfg.Providers.UI {
-		uiNames = append(uiNames, name)
-	}
-	slices.Sort(uiNames)
-	for _, name := range uiNames {
-		entry := cfg.Providers.UI[name]
-		if entry == nil || !entry.DevActive {
-			continue
-		}
-		if _, ok := devActiveApps[name]; ok {
-			return nil, fmt.Errorf("dev target %q: dev-active providers.ui and apps cannot share the same name", name)
-		}
-		target, err := devActiveTarget(name, "ui", entry.Path, entry.ResolvedManifestPath, entry.ResolvedDevWorkdir, entry.ResolvedManifest)
-		if err != nil {
-			return nil, fmt.Errorf("ui %q: %w", name, err)
-		}
-		targets = append(targets, target)
-	}
-	return targets, nil
-}
-
 func (t Target) procKey() string {
-	return t.Kind + ":" + t.Name
+	return t.Name
 }
 
-func devActiveTarget(name, kind, basePath, manifestPath, devWorkdir string, manifest *providermanifestv1.Manifest) (Target, error) {
+func devActiveTarget(name, basePath, manifestPath, devWorkdir string, manifest *providermanifestv1.Manifest) (Target, error) {
 	run := providerpkg.EffectiveSourceRunCommand(manifest)
 	if run == nil {
 		return Target{}, fmt.Errorf("dev-active without run manifest")
@@ -119,7 +82,6 @@ func devActiveTarget(name, kind, basePath, manifestPath, devWorkdir string, mani
 	}
 	return Target{
 		Name:         name,
-		Kind:         kind,
 		BasePath:     basePath,
 		Workdir:      workdir,
 		Command:      append([]string(nil), run.Command...),
@@ -153,7 +115,7 @@ func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervi
 		key := target.procKey()
 		if _, exists := s.procs[key]; exists {
 			cancel()
-			return nil, fmt.Errorf("dev target %q (%s) already started", target.Name, target.Kind)
+			return nil, fmt.Errorf("dev target %q already started", target.Name)
 		}
 		s.procs[key] = proc
 		s.wg.Add(1)

@@ -32,45 +32,26 @@ func TestMaybeRunServeProviderLocalRejectsLockfileAndArtifactsDirWithoutConfig(t
 	}
 }
 
-func TestPrepareProviderLocalOverlaySessionCollectsDevUIKeys(t *testing.T) {
+func TestPrepareProviderLocalOverlaySessionCollectsDevAppKeys(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	uiDir := filepath.Join(dir, "ui", "demo")
-	if err := os.MkdirAll(uiDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	manifest := `kind: ui
-source: github.com/acme/apps/demo-ui
-version: "1.0.0"
-run:
-  command: [sh, -c, echo]
-build:
-  command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
-spec:
-  assetRoot: out
-  routes:
-    - path: /
-      allowedRoles: [viewer]
-`
-	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
+	appDir := setupAppDir(t, dir)
+	setAppManifestSource(t, appDir, "github.com/acme/apps/demo")
 
 	baseCfg := filepath.Join(dir, "base.yaml")
 	baseYAML := `apiVersion: gestaltd.config/v8
-providers:
-  ui:
-    demo:
-      path: /demo
-      source: https://example.invalid/ui/demo
+apps:
+  demo:
+    source: https://example.invalid/apps/demo
 `
 	if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
 		t.Fatalf("WriteFile base config: %v", err)
 	}
 
+	appManifest := componentProviderManifestPath(t, appDir)
 	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
-		Paths:        []string{uiDir, uiDir},
+		Paths:        []string{appManifest, appManifest},
 		ConfigPaths:  []string{baseCfg},
 		Locked:       true,
 		FleetOverlay: true,
@@ -80,11 +61,11 @@ providers:
 	}
 	defer func() { _ = os.RemoveAll(session.Dir) }()
 
-	if len(session.DevUIKeys) != 2 {
-		t.Fatalf("DevUIKeys = %#v, want two entries", session.DevUIKeys)
+	if len(session.DevAppKeys) != 2 {
+		t.Fatalf("DevAppKeys = %#v, want two entries", session.DevAppKeys)
 	}
-	if session.DevUIKeys[0] != "demo_ui" || session.DevUIKeys[1] != "demo_ui" {
-		t.Fatalf("DevUIKeys = %#v, want demo_ui twice", session.DevUIKeys)
+	if session.DevAppKeys[0] != "demo" || session.DevAppKeys[1] != "demo" {
+		t.Fatalf("DevAppKeys = %#v, want demo twice", session.DevAppKeys)
 	}
 	if len(session.ConfigPaths) != 3 {
 		t.Fatalf("ConfigPaths len = %d, want base + 2 overlays", len(session.ConfigPaths))
@@ -95,41 +76,22 @@ func TestPrepareProviderLocalOverlaySessionForwardsNoSync(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	uiDir := filepath.Join(dir, "ui", "demo")
-	if err := os.MkdirAll(uiDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	manifest := `kind: ui
-source: github.com/acme/apps/demo-ui
-version: "1.0.0"
-run:
-  command: [sh, -c, echo]
-build:
-  command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
-spec:
-  assetRoot: out
-  routes:
-    - path: /
-      allowedRoles: [viewer]
-`
-	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
+	appDir := setupAppDir(t, dir)
+	setAppManifestSource(t, appDir, "github.com/acme/apps/demo")
 
 	baseCfg := filepath.Join(dir, "base.yaml")
 	baseYAML := `apiVersion: gestaltd.config/v8
-providers:
-  ui:
-    demo:
-      path: /demo
-      source: https://example.invalid/ui/demo
+apps:
+  demo:
+    source: https://example.invalid/apps/demo
 `
 	if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
 		t.Fatalf("WriteFile base config: %v", err)
 	}
 
+	appManifest := componentProviderManifestPath(t, appDir)
 	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
-		Paths:        []string{uiDir},
+		Paths:        []string{appManifest},
 		ConfigPaths:  []string{baseCfg},
 		Locked:       true,
 		NoSync:       true,
@@ -145,5 +107,35 @@ providers:
 	}
 	if !session.NoSync {
 		t.Fatalf("session.NoSync = false, want true so --locked --no-sync binds pinned artifacts as-is")
+	}
+}
+
+func TestPrepareProviderLocalOverlaySessionRejectsUIKind(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	uiDir := filepath.Join(dir, "ui", "demo")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: ui
+source: github.com/acme/apps/demo-ui
+version: "1.0.0"
+run:
+  command: [sh, -c, echo]
+build:
+  command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
+spec:
+  assetRoot: out
+`
+	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	_, err := prepareProviderLocalSession(providerLocalCommandOptions{
+		Paths: []string{uiDir},
+	})
+	if err == nil || (!strings.Contains(err.Error(), "apps.demo_ui.static") && !strings.Contains(err.Error(), `manifest kind "ui" is not valid`)) {
+		t.Fatalf("error = %v, want ui kind rejection", err)
 	}
 }

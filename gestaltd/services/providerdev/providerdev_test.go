@@ -29,7 +29,6 @@ func TestSupervisorProxiesHTTP(t *testing.T) {
 
 	sup, err := providerdev.Start(ctx, nil, []providerdev.Target{{
 		Name:         "demo",
-		Kind:         "ui",
 		BasePath:     "/demo",
 		Workdir:      t.TempDir(),
 		Command:      []string{fakeServerBin},
@@ -61,7 +60,6 @@ func TestSupervisorNotReadyReturns503(t *testing.T) {
 
 	sup, err := providerdev.Start(ctx, nil, []providerdev.Target{{
 		Name:         "slow",
-		Kind:         "ui",
 		BasePath:     "/slow",
 		Workdir:      t.TempDir(),
 		Command:      []string{runtime.GOOS + "_never_exists_binary"},
@@ -92,7 +90,6 @@ func TestSupervisorProbeStopsOnRestart(t *testing.T) {
 
 	sup, err := providerdev.Start(ctx, nil, []providerdev.Target{{
 		Name:     "flaky",
-		Kind:     "ui",
 		BasePath: "/flaky",
 		Workdir:  workdir,
 		Command:  []string{fakeServerBin},
@@ -130,7 +127,6 @@ func TestSupervisorStopTerminatesChild(t *testing.T) {
 
 	sup, err := providerdev.Start(ctx, nil, []providerdev.Target{{
 		Name:         "demo",
-		Kind:         "ui",
 		BasePath:     "/demo",
 		Workdir:      t.TempDir(),
 		Command:      []string{fakeServerBin},

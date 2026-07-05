@@ -265,41 +265,6 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		return "", err
 	}
 
-	uiDir := filepath.Join(providersDir, "ui", "default")
-	distDir := filepath.Join(uiDir, "dist")
-	if err := os.MkdirAll(distDir, 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(distDir, "index.html"), []byte(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Default Gestalt UI</title>
-  </head>
-  <body>
-    <div id="app">Default Gestalt UI</div>
-  </body>
-</html>
-`), 0o644); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>Default Gestalt UI</html>\\n' > dist/index.html\n"), 0o755); err != nil {
-		return "", err
-	}
-	if err := writeManifest(filepath.Join(uiDir, "manifest.yaml"), &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/test/ui/default",
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Default Gestalt UI",
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
-		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
-	}); err != nil {
-		return "", err
-	}
-
 	return providersDir, nil
 }
 

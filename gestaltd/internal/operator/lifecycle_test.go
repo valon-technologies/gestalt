@@ -3,7 +3,6 @@ package operator
 import (
 	"archive/tar"
 	"bytes"
-	"cmp"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -337,51 +336,6 @@ func newManagedMetadataServer(t *testing.T, releases []managedMetadataRelease) *
 	}))
 }
 
-func writeLocalUIManifest(t *testing.T, dir, name, source, version string, spec *providermanifestv1.Spec, files map[string]string) string {
-	t.Helper()
-
-	root := filepath.Join(dir, name)
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", root, err)
-	}
-	for rel, contents := range files {
-		fullPath := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-			t.Fatalf("MkdirAll(%s): %v", filepath.Dir(fullPath), err)
-		}
-		if err := os.WriteFile(fullPath, []byte(contents), 0o644); err != nil {
-			t.Fatalf("WriteFile(%s): %v", fullPath, err)
-		}
-	}
-	manifestPath := filepath.Join(root, "manifest.yaml")
-	if spec == nil {
-		spec = &providermanifestv1.Spec{}
-	}
-	if spec.AssetRoot == "" {
-		spec.AssetRoot = "dist"
-	}
-	buildScript := fmt.Sprintf("mkdir -p %s\nprintf '<html>%s</html>\\n' > %s/index.html\n", spec.AssetRoot, name, spec.AssetRoot)
-	if err := os.WriteFile(filepath.Join(root, "build.sh"), []byte(buildScript), 0o755); err != nil {
-		t.Fatalf("WriteFile build.sh: %v", err)
-	}
-	build := &providermanifestv1.SourceBuild{Command: []string{"sh", "./build.sh"}, Inputs: []string{"build.sh"}}
-	manifest, err := encodeSourceManifestForTest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      source,
-		Version:     version,
-		DisplayName: testDisplayName(name),
-		Build:       build,
-		Spec:        spec,
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", manifestPath, err)
-	}
-	return manifestPath
-}
-
 func localAppSourceRunCommand(buildOutput string) *providermanifestv1.SourceRun {
 	return &providermanifestv1.SourceRun{
 		Command: []string{"sh", "-c", "sh ./build.sh && ./" + buildOutput},
@@ -501,7 +455,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	lc := NewLifecycle()
+	lc := NewLifecycle().WithDevServeEligible(true)
 	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
@@ -938,686 +892,6 @@ server:
 	}
 }
 
-func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		uiConfigYAML string
-		extraYAML    string
-		uiKey        string
-		wantPath     string
-		wantPolicy   string
-		ownedUIPath  string
-		uiManifest   string
-		sourceBuild  bool
-		createApp    bool
-		wantErr      string
-	}{
-		{
-			name: "direct mounted ui",
-			uiConfigYAML: `  ui:
-    roadmap:
-      source:
-        path: ./ui/manifest.yaml
-      path: /create-customer-roadmap-review
-`,
-			uiKey:    "roadmap",
-			wantPath: "/create-customer-roadmap-review",
-		},
-		{
-			name: "direct mounted source-built ui",
-			uiConfigYAML: `  ui:
-    roadmap:
-      source:
-        path: ./ui/manifest.yaml
-      path: /create-customer-roadmap-review
-`,
-			uiKey:       "roadmap",
-			wantPath:    "/create-customer-roadmap-review",
-			sourceBuild: true,
-		},
-		{
-			name: "plugin ui object binds explicit ui",
-			uiConfigYAML: "  ui:\n" +
-				"    roadmap:\n" +
-				"      source:\n" +
-				"        path: ./ui/manifest.yaml\n" +
-				"apps:\n" +
-				"    roadmap:\n" +
-				"      source:\n" +
-				"        path: ./app/manifest.yaml\n" +
-				"      ui:\n" +
-				"        bundle: roadmap\n" +
-				"        path: /create-customer-roadmap-review\n" +
-				"      authorizationPolicy: roadmap_policy\n",
-			uiKey:      "roadmap",
-			wantPath:   "/create-customer-roadmap-review",
-			wantPolicy: "roadmap_policy",
-			createApp:  true,
-		},
-		{
-			name: "plugin owned ui via app ui path",
-			uiConfigYAML: `apps:
-    roadmap:
-      source:
-        path: ./app/manifest.yaml
-      ui:
-        path: /create-customer-roadmap-review
-      authorizationPolicy: roadmap_policy
-`,
-			uiKey:       "roadmap",
-			wantPath:    "/create-customer-roadmap-review",
-			wantPolicy:  "roadmap_policy",
-			ownedUIPath: "../ui/manifest.yaml",
-		},
-		{
-			name: "plugin owned source-built ui via app ui path",
-			uiConfigYAML: `apps:
-    roadmap:
-      source:
-        path: ./app/manifest.yaml
-      ui:
-        path: /create-customer-roadmap-review
-`,
-			uiKey:       "roadmap",
-			wantPath:    "/create-customer-roadmap-review",
-			ownedUIPath: "../ui/manifest.yaml",
-			sourceBuild: true,
-		},
-		{
-			name: "plugin owned ui via app ui path with noncanonical manifest filename",
-			uiConfigYAML: `apps:
-    roadmap:
-      source:
-        path: ./app/manifest.yaml
-      ui:
-        path: /create-customer-roadmap-review
-      authorizationPolicy: roadmap_policy
-`,
-			uiKey:       "roadmap",
-			wantPath:    "/create-customer-roadmap-review",
-			wantPolicy:  "roadmap_policy",
-			ownedUIPath: "../ui/ui-manifest.yaml",
-			uiManifest:  "ui-manifest.yaml",
-		},
-		{
-			name: "plugin owned ui with same-name ui overlay",
-			uiConfigYAML: `  ui:
-    roadmap:
-      source:
-        path: ./ui/manifest.yaml
-apps:
-    roadmap:
-      source:
-        path: ./app/manifest.yaml
-      ui:
-        path: /create-customer-roadmap-review
-      authorizationPolicy: roadmap_policy
-`,
-			uiKey:       "roadmap",
-			wantPath:    "/create-customer-roadmap-review",
-			wantPolicy:  "roadmap_policy",
-			ownedUIPath: "../ui/manifest.yaml",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dir := t.TempDir()
-			lockfilePath := filepath.Join(dir, LockfileName)
-			artifactsDir := filepath.Join(dir, "artifacts")
-			uiDir := filepath.Join(dir, "ui")
-			if err := os.MkdirAll(uiDir, 0o755); err != nil {
-				t.Fatalf("MkdirAll ui dir: %v", err)
-			}
-			manifestName := cmp.Or(tc.uiManifest, "manifest.yaml")
-			manifestPath := filepath.Join(uiDir, manifestName)
-			var spec *providermanifestv1.Spec
-			var build *providermanifestv1.SourceBuild
-			if tc.sourceBuild {
-				build = &providermanifestv1.SourceBuild{
-					Command: []string{"sh", "./build.sh"},
-					Inputs:  []string{"build.sh"},
-				}
-				if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
-					t.Fatalf("WriteFile build.sh: %v", err)
-				}
-			} else {
-				if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
-					t.Fatalf("MkdirAll ui dist: %v", err)
-				}
-				if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
-					t.Fatalf("WriteFile index.html: %v", err)
-				}
-				build = &providermanifestv1.SourceBuild{
-					Command: []string{"sh", "./build.sh"},
-				}
-				if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
-					t.Fatalf("WriteFile build.sh: %v", err)
-				}
-			}
-			if spec == nil {
-				spec = &providermanifestv1.Spec{}
-			}
-			spec.AssetRoot = "dist"
-			if tc.wantPolicy != "" {
-				spec.Routes = []providermanifestv1.UIRoute{
-					{Path: "/", AllowedRoles: []string{"viewer"}},
-				}
-			}
-			manifest, err := encodeSourceManifestForTest(&providermanifestv1.Manifest{
-				Kind:        providermanifestv1.KindUI,
-				Source:      "github.com/testowner/web/roadmap",
-				Version:     "0.0.1-alpha.1",
-				DisplayName: "Roadmap UI",
-				Build:       build,
-				Spec:        spec,
-			}, providerpkg.ManifestFormatYAML)
-			if err != nil {
-				t.Fatalf("EncodeManifest: %v", err)
-			}
-			if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-				t.Fatalf("WriteFile manifest: %v", err)
-			}
-			if tc.createApp || tc.extraYAML != "" || tc.ownedUIPath != "" {
-				pluginManifestPath := filepath.Join(dir, "app", "manifest.yaml")
-				if err := os.MkdirAll(filepath.Dir(pluginManifestPath), 0o755); err != nil {
-					t.Fatalf("MkdirAll app dir: %v", err)
-				}
-				pluginBuildOutput := ".gestaltd/bin/roadmap"
-				if err := os.WriteFile(filepath.Join(dir, "app", "build.sh"), []byte(fmt.Sprintf("mkdir -p .gestaltd/bin\nprintf 'roadmap-plugin' > %s\nchmod +x %s\n", pluginBuildOutput, pluginBuildOutput)), 0o755); err != nil {
-					t.Fatalf("WriteFile build.sh: %v", err)
-				}
-				pluginSpec := withNoAuthDefaultConnection(&providermanifestv1.Spec{})
-				if tc.ownedUIPath != "" {
-					pluginSpec.UI = &providermanifestv1.OwnedUI{Path: tc.ownedUIPath}
-				}
-				pluginManifest, err := encodeSourceManifestForTest(&providermanifestv1.Manifest{
-					Source:      "github.com/testowner/apps/roadmap",
-					Version:     "0.0.1-alpha.1",
-					DisplayName: "Roadmap Plugin",
-					Kind:        providermanifestv1.KindApp,
-					Spec:        pluginSpec,
-					Build: &providermanifestv1.SourceBuild{
-						Command: []string{"sh", "./build.sh"},
-						Inputs:  []string{"build.sh"},
-					},
-					Run:        localAppSourceRunCommand(pluginBuildOutput),
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: pluginBuildOutput},
-				}, providerpkg.ManifestFormatYAML)
-				if err != nil {
-					t.Fatalf("EncodePluginManifest: %v", err)
-				}
-				if err := os.WriteFile(pluginManifestPath, pluginManifest, 0o644); err != nil {
-					t.Fatalf("WriteFile app manifest: %v", err)
-				}
-				if err := os.WriteFile(filepath.Join(dir, "app", "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
-					t.Fatalf("WriteFile app catalog: %v", err)
-				}
-			}
-
-			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + tc.uiConfigYAML + tc.extraYAML + `server:
-` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
-
-			lc := NewLifecycle()
-			loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
-			if tc.wantErr != "" {
-				if err == nil {
-					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
-					return
-				}
-				if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("LoadForExecutionAtPath error = %q, want substring %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("LoadForExecutionAtPath: %v", err)
-			}
-
-			entry := loaded.Providers.UI[tc.uiKey]
-			if entry == nil {
-				t.Fatalf(`Providers.UI[%q] = nil`, tc.uiKey)
-				return
-			}
-			if entry.ResolvedManifest == nil {
-				t.Fatal("ResolvedManifest = nil")
-				return
-			}
-			gotManifestPath := filepath.ToSlash(entry.ResolvedManifestPath)
-			wantUIManifest := filepath.ToSlash(filepath.Join("ui", tc.uiKey, "manifest.yaml"))
-			wantSourceUIManifest := filepath.ToSlash(filepath.Join("ui", "manifest.yaml"))
-			wantOwnedManifest := filepath.ToSlash(filepath.Join("providers", "roadmap", "_owned_ui", "ui", "manifest.yaml"))
-			if !strings.HasSuffix(gotManifestPath, wantUIManifest) && !strings.HasSuffix(gotManifestPath, wantSourceUIManifest) && !strings.HasSuffix(gotManifestPath, wantOwnedManifest) {
-				t.Fatalf("ResolvedManifestPath = %q", gotManifestPath)
-			}
-			gotAssetRoot := filepath.ToSlash(entry.ResolvedAssetRoot)
-			wantUIAssetRoot := filepath.ToSlash(filepath.Join("ui", tc.uiKey, "dist"))
-			wantSourceUIAssetRoot := filepath.ToSlash(filepath.Join("ui", "dist"))
-			wantOwnedAssetRoot := filepath.ToSlash(filepath.Join("providers", "roadmap", "_owned_ui", "ui", "dist"))
-			if !strings.HasSuffix(gotAssetRoot, wantUIAssetRoot) && !strings.HasSuffix(gotAssetRoot, wantSourceUIAssetRoot) && !strings.HasSuffix(gotAssetRoot, wantOwnedAssetRoot) {
-				t.Fatalf("ResolvedAssetRoot = %q", gotAssetRoot)
-			}
-			if got := entry.Path; got != tc.wantPath {
-				t.Fatalf("Path = %q, want %q", got, tc.wantPath)
-			}
-			if got := entry.AuthorizationPolicy; got != tc.wantPolicy {
-				t.Fatalf("AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
-			}
-			if tc.wantPolicy != "" {
-				if got := entry.OwnerApp; got != "roadmap" {
-					t.Fatalf("OwnerApp = %q, want %q", got, "roadmap")
-				}
-			}
-			if tc.wantPolicy != "" {
-				app := loaded.Apps["roadmap"]
-				if app == nil {
-					t.Fatal(`Apps["roadmap"] = nil`)
-					return
-				}
-				if got := app.AuthorizationPolicy; got != tc.wantPolicy {
-					t.Fatalf("App AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
-				}
-			}
-			if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
-				t.Fatalf("expected lockfile to be created: %v", err)
-			}
-		})
-	}
-}
-
-func TestLoadForExecutionAtPath_AllowsLockedExplicitLocalUIWithoutPreparedUILockEntry(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	lockfilePath := filepath.Join(dir, LockfileName)
-	artifactsDir := filepath.Join(dir, "artifacts")
-	uiDir := filepath.Join(dir, "ui")
-	if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
-		t.Fatalf("MkdirAll ui dist: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
-		t.Fatalf("WriteFile index.html: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
-		t.Fatalf("WriteFile build.sh: %v", err)
-	}
-	manifest, err := encodeSourceManifestForTest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/testowner/web/roadmap",
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Roadmap UI",
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
-		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
-    roadmap:
-      source:
-        path: ./ui/manifest.yaml
-      path: /create-customer-roadmap-review
-server:
-` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	lc := NewLifecycle()
-	if _, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir); err != nil {
-		t.Fatalf("PrepareAtPath: %v", err)
-	}
-	lockPath := filepath.Join(dir, LockfileName)
-	lock, err := ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	delete(lock.Providers.UI, "roadmap")
-	if err := WriteLockfile(lockPath, lock); err != nil {
-		t.Fatalf("WriteLockfile: %v", err)
-	}
-
-	cfgLoaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, true, false)
-	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath locked: %v", err)
-	}
-	if cfgLoaded.Providers.UI["roadmap"].ResolvedManifest == nil {
-		t.Fatal(`Providers.UI["roadmap"].ResolvedManifest = nil`)
-	}
-}
-
-func TestLoadForExecutionAtPath_ResolvesMountedUIThemeConfig(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		themeYAML      string
-		wantStylesheet string
-		wantAssetsDir  string
-		wantErr        string
-	}{
-		{
-			name: "stylesheet and assetsDir resolved against the config dir",
-			themeYAML: `      config:
-        theme:
-          stylesheet: ./theme/tenant.css
-          assetsDir: ./theme/assets
-`,
-			wantStylesheet: filepath.Join("theme", "tenant.css"),
-			wantAssetsDir:  filepath.Join("theme", "assets"),
-		},
-		{
-			name: "no theme block leaves theme paths empty",
-		},
-		{
-			name: "missing stylesheet fails sync",
-			themeYAML: `      config:
-        theme:
-          stylesheet: ./theme/missing.css
-`,
-			wantErr: "theme stylesheet not found",
-		},
-		{
-			name: "assetsDir pointing at a file fails sync",
-			themeYAML: `      config:
-        theme:
-          stylesheet: ./theme/tenant.css
-          assetsDir: ./theme/tenant.css
-`,
-			wantErr: "is not a directory",
-		},
-		{
-			name: "unknown theme key fails decode",
-			themeYAML: `      config:
-        theme:
-          stylesheet: ./theme/tenant.css
-          asetsDir: ./theme/assets
-`,
-			wantErr: "theme config",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dir := t.TempDir()
-			lockfilePath, artifactsDir := configDirPaths(dir)
-			uiDir := filepath.Join(dir, "ui")
-			if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
-				t.Fatalf("MkdirAll ui dist: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
-				t.Fatalf("WriteFile index.html: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
-				t.Fatalf("WriteFile build.sh: %v", err)
-			}
-			manifest, err := encodeSourceManifestForTest(&providermanifestv1.Manifest{
-				Kind:        providermanifestv1.KindUI,
-				Source:      "github.com/testowner/web/roadmap",
-				Version:     "0.0.1-alpha.1",
-				DisplayName: "Roadmap UI",
-				Build: &providermanifestv1.SourceBuild{
-					Command: []string{"sh", "./build.sh"},
-				},
-				Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
-			}, providerpkg.ManifestFormatYAML)
-			if err != nil {
-				t.Fatalf("EncodeManifest: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), manifest, 0o644); err != nil {
-				t.Fatalf("WriteFile manifest: %v", err)
-			}
-			if err := os.MkdirAll(filepath.Join(dir, "theme", "assets"), 0o755); err != nil {
-				t.Fatalf("MkdirAll theme assets: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "theme", "tenant.css"), []byte(":root{--brand:#123456;}"), 0o644); err != nil {
-				t.Fatalf("WriteFile tenant.css: %v", err)
-			}
-
-			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
-    roadmap:
-      source:
-        path: ./ui/manifest.yaml
-      path: /roadmap
-` + tc.themeYAML + `server:
-` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
-
-			loaded, _, err := NewLifecycle().LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
-			if tc.wantErr != "" {
-				if err == nil {
-					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
-				}
-				if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("LoadForExecutionAtPath error = %q, want substring %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("LoadForExecutionAtPath: %v", err)
-			}
-
-			entry := loaded.Providers.UI["roadmap"]
-			if entry == nil {
-				t.Fatal(`Providers.UI["roadmap"] = nil`)
-			}
-			wantStylesheet := ""
-			if tc.wantStylesheet != "" {
-				wantStylesheet = filepath.Join(dir, tc.wantStylesheet)
-			}
-			if got := entry.ResolvedThemeStylesheet; got != wantStylesheet {
-				t.Fatalf("ResolvedThemeStylesheet = %q, want %q", got, wantStylesheet)
-			}
-			wantAssetsDir := ""
-			if tc.wantAssetsDir != "" {
-				wantAssetsDir = filepath.Join(dir, tc.wantAssetsDir)
-			}
-			if got := entry.ResolvedThemeAssetsDir; got != wantAssetsDir {
-				t.Fatalf("ResolvedThemeAssetsDir = %q, want %q", got, wantAssetsDir)
-			}
-		})
-	}
-}
-
-func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	var lockfilePath, artifactsDir string
-	const pluginRef = "github.com/testowner/apps/roadmap"
-	const version = "0.0.1-alpha.1"
-
-	pkgDir := filepath.Join(dir, "roadmap-plugin-pkg")
-	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll package dir: %v", err)
-	}
-
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app"))
-	artifactContent := []byte("plugin-binary")
-	artifactFullPath := filepath.Join(pkgDir, filepath.FromSlash(artifactPath))
-	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll artifact dir: %v", err)
-	}
-	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
-		t.Fatalf("WriteFile artifact: %v", err)
-	}
-
-	ownedUIManifestPath := filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile))
-	ownedUIManifestBytes, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/testowner/web/roadmap-review",
-		Version:     version,
-		DisplayName: "Roadmap Review UI",
-		Spec: &providermanifestv1.Spec{
-			AssetRoot: "dist",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Encode owned UI manifest: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(pkgDir, "_owned_ui", "roadmap-ui", "dist"), 0o755); err != nil {
-		t.Fatalf("MkdirAll owned UI dist: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, filepath.FromSlash(ownedUIManifestPath)), ownedUIManifestBytes, 0o644); err != nil {
-		t.Fatalf("WriteFile owned UI manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "_owned_ui", "roadmap-ui", "dist", "index.html"), []byte("<html>roadmap review</html>"), 0o644); err != nil {
-		t.Fatalf("WriteFile owned UI index: %v", err)
-	}
-
-	sum := sha256.Sum256(artifactContent)
-	pluginManifestBytes, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindApp,
-		Source:      pluginRef,
-		Version:     version,
-		DisplayName: "Roadmap Review",
-		Entrypoint: &providermanifestv1.Entrypoint{
-			ArtifactPath: artifactPath,
-		},
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:     runtime.GOOS,
-			Arch:   runtime.GOARCH,
-			Path:   artifactPath,
-			SHA256: hex.EncodeToString(sum[:]),
-		}},
-		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
-			UI: &providermanifestv1.OwnedUI{
-				Path: ownedUIManifestPath,
-			},
-		}),
-	})
-	if err != nil {
-		t.Fatalf("Encode app manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, providerpkg.ManifestFile), pluginManifestBytes, 0o644); err != nil {
-		t.Fatalf("WriteFile app manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile catalog: %v", err)
-	}
-	outsideOwnedUIPath := filepath.Join(dir, "owned-ui", "manifest.json")
-	if err := os.MkdirAll(filepath.Dir(outsideOwnedUIPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll owned ui dir: %v", err)
-	}
-	outsideOwnedUIManifest, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/testowner/web/outside-roadmap",
-		Version:     version,
-		DisplayName: "Outside Roadmap UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
-	})
-	if err != nil {
-		t.Fatalf("Encode outside owned UI manifest: %v", err)
-	}
-	if err := os.WriteFile(outsideOwnedUIPath, outsideOwnedUIManifest, 0o644); err != nil {
-		t.Fatalf("WriteFile outside owned UI manifest: %v", err)
-	}
-
-	pkgPath := filepath.Join(dir, "roadmap-plugin-pkg.tar.gz")
-	if err := providerpkg.CreatePackageFromDir(pkgDir, pkgPath); err != nil {
-		t.Fatalf("CreatePackageFromDir: %v", err)
-	}
-
-	srv := newManagedMetadataServer(t, []managedMetadataRelease{{
-		metadataPath:    "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
-		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-app.tar.gz",
-		archiveFilePath: pkgPath,
-		packageSource:   pluginRef,
-		version:         version,
-		kind:            providermanifestv1.KindApp,
-		allowInvalid:    true,
-	}})
-	defer srv.Close()
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
-  roadmap:
-    source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
-    ui:
-      path: /create-customer-roadmap-review
-` + `server:
-` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	lc := NewLifecycle()
-	lockfilePath, artifactsDir = lockAndArtifactsForConfig(cfgPath)
-	if _, err := lc.PrepareAtPaths([]string{cfgPath}, lockfilePath, artifactsDir); err != nil {
-		t.Fatalf("PrepareAtPath: %v", err)
-	}
-
-	lock, err := ReadLockfile(filepath.Join(dir, LockfileName))
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	pluginLock := lock.Providers.App["roadmap"]
-	pluginLock.ArtifactManifest = ""
-	lock.Providers.App["roadmap"] = pluginLock
-	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
-		t.Fatalf("WriteLockfile: %v", err)
-	}
-
-	for _, locked := range []bool{false, true} {
-		loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, locked, false)
-		if err != nil {
-			t.Fatalf("LoadForExecutionAtPath(locked=%t): %v", locked, err)
-		}
-		entry := loaded.Providers.UI["roadmap"]
-		if entry == nil || entry.ResolvedManifest == nil {
-			t.Fatalf("Resolved plugin-owned UI = %+v", entry)
-			return
-		}
-		if entry.Path != "/create-customer-roadmap-review" {
-			t.Fatalf("entry.Path = %q, want %q", entry.Path, "/create-customer-roadmap-review")
-		}
-		if got, want := filepath.ToSlash(entry.ResolvedManifestPath), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile)); !strings.HasSuffix(got, want) {
-			t.Fatalf("ResolvedManifestPath = %q, want suffix %q", got, want)
-		}
-		if got, want := filepath.ToSlash(entry.ResolvedAssetRoot), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", "dist")); !strings.HasSuffix(got, want) {
-			t.Fatalf("ResolvedAssetRoot = %q, want suffix %q", got, want)
-		}
-	}
-
-	rewrittenLock, err := ReadLockfile(filepath.Join(dir, LockfileName))
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	if got := rewrittenLock.Providers.App["roadmap"].ArtifactManifest; got != "" {
-		t.Fatalf("lock.Providers.App[roadmap].ArtifactManifest = %q, want stale value preserved", got)
-	}
-	if len(rewrittenLock.Providers.UI) != 0 {
-		t.Fatalf("lock.Providers.UI = %#v, want no separate UI entries for in-package owned UI", rewrittenLock.Providers.UI)
-	}
-}
-
 func TestLoadForExecutionAtPath_RefreshesManagedPluginWhenGenericArchiveLockIsStale(t *testing.T) {
 	t.Parallel()
 
@@ -1862,14 +1136,8 @@ func TestLoadForExecutionAtPath_UsesDerivedPreparedPathsWhenLockPathsAreStale(t 
 
 	dir := t.TempDir()
 	var lockfilePath, artifactsDir string
-	const version = "0.0.1-alpha.1"
 	pluginManifestPath := writeLocalExecutablePlugin(t, dir, "example", "ping")
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
-	uiManifestPath := writeLocalUIManifest(t, dir, "roadmap-ui", "github.com/testowner/web/roadmap", version, &providermanifestv1.Spec{
-		AssetRoot: "dist",
-	}, map[string]string{
-		"dist/index.html": "<html>roadmap</html>",
-	})
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: %s
@@ -1880,11 +1148,6 @@ providers:
         path: %q
       config:
         path: %q
-  ui:
-    roadmap:
-      source:
-        path: %q
-      path: /roadmap
 apps:
   example:
     source:
@@ -1893,7 +1156,7 @@ server:
   providers:
     indexeddb: main
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, config.ConfigAPIVersion, indexedDBManifestPath, filepath.Join(dir, "gestalt.db"), uiManifestPath, pluginManifestPath)
+`, config.ConfigAPIVersion, indexedDBManifestPath, filepath.Join(dir, "gestalt.db"), pluginManifestPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -1917,10 +1180,6 @@ server:
 	indexedDBEntry.ArtifactManifest = "stale/indexeddb/manifest.json"
 	indexedDBEntry.Executable = "stale/indexeddb/executable"
 	lock.Providers.IndexedDB["main"] = indexedDBEntry
-	uiEntry := lock.Providers.UI["roadmap"]
-	uiEntry.ArtifactManifest = "stale/ui/manifest.json"
-	uiEntry.AssetRoot = "stale/ui/assets"
-	lock.Providers.UI["roadmap"] = uiEntry
 	lockPath := filepath.Join(dir, LockfileName)
 	if err := WriteLockfile(lockPath, lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
@@ -1949,201 +1208,14 @@ server:
 		if got := indexedDB.Command; strings.Contains(got, "stale/indexeddb/executable") {
 			t.Fatalf("idb.Command = %q, want derived prepared path", got)
 		}
-
-		ui := loaded.Providers.UI["roadmap"]
-		if ui == nil || ui.ResolvedManifest == nil {
-			t.Fatalf("Providers.UI[roadmap] = %+v", ui)
-			return
-		}
-		if got := ui.ResolvedAssetRoot; strings.Contains(got, "stale/ui/assets") {
-			t.Fatalf("ResolvedAssetRoot = %q, want derived prepared path", got)
-		}
 	}
 
 	rewrittenData, err := os.ReadFile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	if strings.Contains(string(rewrittenData), "stale/provider/manifest.json") || strings.Contains(string(rewrittenData), "stale/ui/assets") {
+	if strings.Contains(string(rewrittenData), "stale/provider/manifest.json") || strings.Contains(string(rewrittenData), "stale/indexeddb/executable") {
 		t.Fatalf("portable lockfile should not persist stale prepared paths: %s", rewrittenData)
-	}
-}
-
-func TestPrepareAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	const pluginRef = "github.com/testowner/apps/roadmap"
-	const version = "0.0.1-alpha.1"
-
-	pkgDir := filepath.Join(dir, "roadmap-managed-pkg")
-	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll package dir: %v", err)
-	}
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app"))
-	artifactContent := []byte("plugin-binary")
-	artifactFullPath := filepath.Join(pkgDir, filepath.FromSlash(artifactPath))
-	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll artifact dir: %v", err)
-	}
-	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
-		t.Fatalf("WriteFile artifact: %v", err)
-	}
-	sum := sha256.Sum256(artifactContent)
-	manifestBytes, err := json.Marshal(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindApp,
-		Source:      pluginRef,
-		Version:     version,
-		DisplayName: "Roadmap Review",
-		Entrypoint: &providermanifestv1.Entrypoint{
-			ArtifactPath: artifactPath,
-		},
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:     runtime.GOOS,
-			Arch:   runtime.GOARCH,
-			Path:   artifactPath,
-			SHA256: hex.EncodeToString(sum[:]),
-		}},
-		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
-			UI: &providermanifestv1.OwnedUI{
-				Path: "../owned-ui/manifest.json",
-			},
-		}),
-	})
-	if err != nil {
-		t.Fatalf("Marshal manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, providerpkg.ManifestFile), manifestBytes, 0o644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile catalog: %v", err)
-	}
-	outsideOwnedUIRoot := filepath.Join(dir, "owned-ui")
-	if err := os.MkdirAll(filepath.Join(outsideOwnedUIRoot, "dist"), 0o755); err != nil {
-		t.Fatalf("MkdirAll outside owned UI dist: %v", err)
-	}
-	outsideOwnedUIManifest, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/testowner/web/outside-roadmap",
-		Version:     version,
-		DisplayName: "Outside Roadmap UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
-	})
-	if err != nil {
-		t.Fatalf("Encode outside owned UI manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(outsideOwnedUIRoot, providerpkg.ManifestFile), outsideOwnedUIManifest, 0o644); err != nil {
-		t.Fatalf("WriteFile outside owned UI manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(outsideOwnedUIRoot, "dist", "index.html"), []byte("<html>outside roadmap</html>"), 0o644); err != nil {
-		t.Fatalf("WriteFile outside owned UI index: %v", err)
-	}
-	pkgPath := filepath.Join(dir, "roadmap-managed-pkg.tar.gz")
-	mustCreateLifecycleArchive(t, pkgPath,
-		lifecycleArchiveFile{name: providerpkg.ManifestFile, data: manifestBytes, mode: 0o644},
-		lifecycleArchiveFile{name: "catalog.yaml", data: []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), mode: 0o644},
-		lifecycleArchiveFile{name: artifactPath, data: artifactContent, mode: 0o755},
-	)
-	srv := newManagedMetadataServer(t, []managedMetadataRelease{{
-		metadataPath:    "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
-		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-app.tar.gz",
-		archiveFilePath: pkgPath,
-		packageSource:   pluginRef,
-		version:         version,
-		kind:            providermanifestv1.KindApp,
-		allowInvalid:    true,
-	}})
-	defer srv.Close()
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
-  roadmap:
-    source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
-    ui:
-      path: /create-customer-roadmap-review
-server:
-` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	lc := NewLifecycle()
-	if _, err := prepareAtPathInTest(t, lc, cfgPath); err == nil || !strings.Contains(err.Error(), "spec.ui.path must stay within the package") {
-		t.Fatalf("PrepareAtPath error = %v, want substring %q", err, "spec.ui.path must stay within the package")
-	}
-}
-
-func TestPrepareAtPath_RejectsPolicyBoundManagedMountedUIWithoutExplicitRouteCoverage(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		spec *providermanifestv1.Spec
-		want string
-	}{
-		{
-			name: "missing routes",
-			spec: &providermanifestv1.Spec{AssetRoot: "dist"},
-			want: "must declare at least one route",
-		},
-		{
-			name: "missing root coverage",
-			spec: &providermanifestv1.Spec{
-				AssetRoot: "dist",
-				Routes: []providermanifestv1.UIRoute{
-					{Path: "/reports", AllowedRoles: []string{"admin"}},
-				},
-			},
-			want: "must declare a route covering /",
-		},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dir := t.TempDir()
-			pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-				Kind:        providermanifestv1.KindUI,
-				Source:      "github.com/testowner/web/sample-portal",
-				Version:     "0.0.1-alpha.1",
-				DisplayName: "Sample Portal",
-				Spec:        tc.spec,
-			}, map[string]string{
-				"dist/index.html": "<html>sample portal</html>",
-			}, false)
-			srv := newManagedMetadataServer(t, []managedMetadataRelease{{
-				metadataPath:    "/providers/sample-portal/v0.0.1-alpha.1/provider-release.yaml",
-				archiveURLPath:  "/providers/sample-portal/v0.0.1-alpha.1/sample-portal.tar.gz",
-				archiveFilePath: pkgPath,
-				packageSource:   "github.com/testowner/web/sample-portal",
-				version:         "0.0.1-alpha.1",
-				kind:            providermanifestv1.KindUI,
-				allowInvalid:    true,
-			}})
-			defer srv.Close()
-
-			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
-    sample_portal:
-      source: ` + srv.URL + `/providers/sample-portal/v0.0.1-alpha.1/provider-release.yaml
-      path: /sample-portal
-      authorizationPolicy: sample_policy
-` + `server:
-` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
-
-			lc := NewLifecycle()
-			_, err := prepareAtPathInTest(t, lc, cfgPath)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("PrepareAtPath error = %v, want substring %q", err, tc.want)
-			}
-		})
 	}
 }
 
@@ -2426,7 +1498,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 `
 	writeTestFile("config.yaml", []byte(cfg), 0o644)
 
-	lc := NewLifecycle()
+	lc := NewLifecycle().WithDevServeEligible(true)
 	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
@@ -2505,7 +1577,7 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 `
 	writeTestFile("config.yaml", []byte(cfg), 0o644)
 
-	lc := NewLifecycle()
+	lc := NewLifecycle().WithDevServeEligible(true)
 	loaded, _, err := lc.LoadForExecutionAtPaths([]string{cfgPath}, lockfilePath, artifactsDir, false, false)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
@@ -3509,25 +2581,14 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 			t.Fatalf("MkdirAll(%q): %v", filepath.Dir(manifestPath), err)
 		}
 		manifest := fmt.Sprintf("source: github.com/test-org/fingerprint-test/component\nversion: 0.0.1\nkind: %s\n", kind)
-		if kind == providermanifestv1.KindUI {
-			assetRoot := filepath.Join(filepath.Dir(manifestPath), "assets")
-			if err := os.MkdirAll(assetRoot, 0o755); err != nil {
-				t.Fatalf("MkdirAll(%q): %v", assetRoot, err)
-			}
-			if err := os.WriteFile(filepath.Join(assetRoot, "index.html"), []byte("<html></html>"), 0o644); err != nil {
-				t.Fatalf("WriteFile(asset): %v", err)
-			}
-			manifest += "build:\n  command: [go, version]\nspec:\n  assetRoot: assets\n"
-		} else {
-			buildScript := filepath.Join(filepath.Dir(manifestPath), "build.sh")
-			buildOutput := ".gestaltd/bin/fingerprint-provider"
-			if err := os.WriteFile(buildScript, []byte("#!/bin/sh\nmkdir -p .gestaltd/bin\nprintf 'fingerprint-provider' > "+buildOutput+"\nchmod +x "+buildOutput+"\n"), 0o755); err != nil {
-				t.Fatalf("WriteFile(build.sh): %v", err)
-			}
-			manifest += "build:\n  command: [sh, ./build.sh]\n  inputs: [build.sh]\n"
-			if kind == providermanifestv1.KindApp {
-				manifest += "spec: {}\n"
-			}
+		buildScript := filepath.Join(filepath.Dir(manifestPath), "build.sh")
+		buildOutput := ".gestaltd/bin/fingerprint-provider"
+		if err := os.WriteFile(buildScript, []byte("#!/bin/sh\nmkdir -p .gestaltd/bin\nprintf 'fingerprint-provider' > "+buildOutput+"\nchmod +x "+buildOutput+"\n"), 0o755); err != nil {
+			t.Fatalf("WriteFile(build.sh): %v", err)
+		}
+		manifest += "build:\n  command: [sh, ./build.sh]\n  inputs: [build.sh]\n"
+		if kind == providermanifestv1.KindApp {
+			manifest += "spec: {}\n"
 		}
 		if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", manifestPath, err)
@@ -3580,35 +2641,6 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		}
 		if first != second {
 			t.Fatalf("local source fingerprint drifted across copied config trees: %q != %q", first, second)
-		}
-	})
-
-	t.Run("named ui local source path is stable across copied config trees", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		firstConfigDir := filepath.Join(root, "one", "deploy")
-		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "web/dashboard/manifest.yaml", providermanifestv1.KindUI)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "web/dashboard/manifest.yaml", providermanifestv1.KindUI)
-
-		firstProvider := &config.ProviderEntry{
-			Source: config.ProviderSource{Path: firstManifestPath},
-		}
-		secondProvider := &config.ProviderEntry{
-			Source: config.ProviderSource{Path: secondManifestPath},
-		}
-
-		first, err := NamedUIProviderFingerprint("dashboard", firstProvider, firstConfigDir)
-		if err != nil {
-			t.Fatalf("NamedUIProviderFingerprint(first): %v", err)
-		}
-		second, err := NamedUIProviderFingerprint("dashboard", secondProvider, secondConfigDir)
-		if err != nil {
-			t.Fatalf("NamedUIProviderFingerprint(second): %v", err)
-		}
-		if first != second {
-			t.Fatalf("named ui fingerprint drifted across copied config trees: %q != %q", first, second)
 		}
 	})
 
@@ -3888,18 +2920,6 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 					},
 				},
 			},
-			UI: map[string]LockEntry{
-				"roadmap": {
-					InputDigest: "ui-fp",
-					Source:      "github.com/test-org/test-repo/test-ui",
-					Version:     "2.0.0",
-					Archives: map[string]LockArchive{
-						"generic": {URL: "https://example.com/ui.tar.gz", SHA256: "def456"},
-					},
-					ArtifactManifest: "ui/roadmap/manifest.json",
-					AssetRoot:        "ui/roadmap/assets",
-				},
-			},
 		},
 	}
 	if err := WriteLockfile(lockPath, want); err != nil {
@@ -3987,22 +3007,6 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if auditEntry.Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("audit runtime = %q, want %q", auditEntry.Runtime, providerLockRuntimeExecutable)
 	}
-	uiEntry, ok := diskLock.Providers.UI["roadmap"]
-	if !ok {
-		t.Fatal(`disk lock providers.ui["roadmap"] not found`)
-	}
-	if uiEntry.InputDigest != want.Providers.UI["roadmap"].InputDigest {
-		t.Fatalf("ui inputDigest = %q, want %q", uiEntry.InputDigest, want.Providers.UI["roadmap"].InputDigest)
-	}
-	if uiEntry.Source != "" {
-		t.Fatalf("ui source = %q, want omitted portable source", uiEntry.Source)
-	}
-	if uiEntry.Kind != providermanifestv1.KindUI {
-		t.Fatalf("ui kind = %q, want %q", uiEntry.Kind, providermanifestv1.KindUI)
-	}
-	if uiEntry.Runtime != providerLockRuntimeAssets {
-		t.Fatalf("ui runtime = %q, want %q", uiEntry.Runtime, providerLockRuntimeAssets)
-	}
 
 	got, err := ReadLockfile(lockPath)
 	if err != nil {
@@ -4035,10 +3039,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if got.Providers.Audit["default"].Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("audit runtime = %q, want %q", got.Providers.Audit["default"].Runtime, providerLockRuntimeExecutable)
 	}
-	if got.Providers.UI["roadmap"].Source != want.Providers.UI["roadmap"].Source || got.Providers.UI["roadmap"].Version != want.Providers.UI["roadmap"].Version {
-		t.Fatal("ui lock entry mismatch")
-	}
-	if got.Providers.App["example"].ArtifactManifest != "" || got.Providers.UI["roadmap"].AssetRoot != "" {
+	if got.Providers.App["example"].ArtifactManifest != "" {
 		t.Fatal("portable lock schema should not populate local path fields on read")
 	}
 }

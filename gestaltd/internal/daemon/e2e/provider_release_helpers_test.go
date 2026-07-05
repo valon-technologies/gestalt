@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -270,8 +271,8 @@ providers:
 apps:
   %s:
     source: %q
-    ui:
-      path: %q
+    static:
+      mount: %q
 server:
   providers:
     externalCredentials: default
@@ -530,11 +531,47 @@ func newPrebuiltProviderReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
-func newUIReleaseFixture(t *testing.T, dir string) string {
-	return newUIReleaseFixtureWithAssetRoot(t, dir, uiTestAssetRoot)
+func newStaticAppReleaseFixture(t *testing.T, dir string) string {
+	return newDeclarativeStaticAppReleaseFixture(t, dir)
 }
 
-func newBuiltUIReleaseFixture(t *testing.T, dir string) string {
+func newDeclarativeStaticAppReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, uiTestAppName)
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      uiTestSource,
+		Version:     "0.0.1",
+		DisplayName: "Static App Test",
+		IconFile:    releaseTestIconPath,
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://api.example.test",
+					Operations: []providermanifestv1.ProviderOperation{{
+						Name:   "health",
+						Method: "GET",
+						Path:   "/health",
+					}},
+				},
+			},
+		},
+	})
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0o644)
+	writeDeclarativeStaticCatalog(t, pluginDir)
+	return pluginDir
+}
+
+func writeDeclarativeStaticCatalog(t *testing.T, pluginDir string) {
+	t.Helper()
+	writeTestFile(t, pluginDir, providerpkg.StaticCatalogFile, []byte("name: ui-test\noperations:\n  - id: health\n    method: GET\n"), 0o644)
+}
+
+func newBuiltStaticAppReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
 	pluginDir := filepath.Join(dir, uiTestAppName)
@@ -542,21 +579,48 @@ func newBuiltUIReleaseFixture(t *testing.T, dir string) string {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeTestFile(t, pluginDir, providerpkg.ManifestFile, []byte(fmt.Sprintf(`{
-  "kind": "ui",
+  "kind": "app",
   "source": %q,
   "version": "0.0.1",
-  "displayName": "UI Test",
+  "displayName": "Static App Test",
   "iconFile": %q,
   "release": {"build": {"workdir": "ui", "command": ["sh", "./build.sh"]}},
-  "spec": {"assetRoot": "ui/out"}
+  "spec": {"assetRoot": "static"}
 }
 `, uiTestSource, releaseTestIconPath)), 0o644)
-	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
-	writeReleaseBuildScript(t, pluginDir, filepath.Join("ui", "build.sh"), "mkdir -p out/static\nprintf '<html></html>\\n' > out/index.html\nprintf 'console.log(\"ok\")\\n' > out/static/app.js\n")
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0o644)
+	writeReleaseBuildScript(t, pluginDir, filepath.Join("ui", "build.sh"), "mkdir -p ../static/assets\nprintf '<html></html>\\n' > ../static/index.html\nprintf 'console.log(\"ok\")\\n' > ../static/assets/app.js\n")
 	return pluginDir
 }
 
-func newSourceBuiltUIReleaseFixture(t *testing.T, dir string) string {
+func staticBuildArchiveName(version string) string {
+	return platformArchiveNameForTest(uiTestAppName, version, runtime.GOOS, runtime.GOARCH)
+}
+
+func declarativeRESTSpec() *providermanifestv1.Spec {
+	return &providermanifestv1.Spec{
+		Surfaces: &providermanifestv1.ProviderSurfaces{
+			REST: &providermanifestv1.RESTSurface{
+				BaseURL: "https://api.example.test",
+				Operations: []providermanifestv1.ProviderOperation{{
+					Name:   "health",
+					Method: "GET",
+					Path:   "/health",
+				}},
+			},
+		},
+	}
+}
+
+func writeStaticBuildScript(t *testing.T, pluginDir string) {
+	t.Helper()
+	writeReleaseBuildScript(t, pluginDir, "build.sh", `mkdir -p "$GESTALT_BUILD_STATIC/assets"
+printf '<html></html>\n' > "$GESTALT_BUILD_STATIC/index.html"
+printf 'console.log("ok")\n' > "$GESTALT_BUILD_STATIC/assets/app.js"
+`)
+}
+
+func newSourceBuiltStaticAppReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
 	pluginDir := filepath.Join(dir, uiTestAppName)
@@ -564,118 +628,59 @@ func newSourceBuiltUIReleaseFixture(t *testing.T, dir string) string {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
+		Kind:        providermanifestv1.KindApp,
 		Source:      uiTestSource,
 		Version:     "0.0.1",
-		DisplayName: "UI Test",
+		DisplayName: "Static App Test",
 		IconFile:    releaseTestIconPath,
+		Spec:        declarativeRESTSpec(),
 		Build: &providermanifestv1.SourceBuild{
-			Workdir: "ui",
 			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"ui/build.sh"},
+			Inputs:  []string{"build.sh"},
 		},
-		Spec: &providermanifestv1.Spec{AssetRoot: "ui/out"},
 	})
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0o644)
-	writeReleaseBuildScript(t, pluginDir, filepath.Join("ui", "build.sh"), "mkdir -p out/static\nprintf '<html></html>\\n' > out/index.html\nprintf 'console.log(\"ok\")\\n' > out/static/app.js\n")
+	writeStaticBuildScript(t, pluginDir)
+	writeDeclarativeStaticCatalog(t, pluginDir)
 	return pluginDir
+}
+
+func newSourceProviderReleaseFixtureWithStaticBundle(t *testing.T, dir string) string {
+	t.Helper()
+	return newSourceBuiltStaticAppReleaseFixture(t, dir)
+}
+
+func newStaticAppReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
+	t.Helper()
+
+	pluginDir := newDeclarativeStaticAppReleaseFixture(t, dir)
+	writeTestFile(t, pluginDir, filepath.Join(assetRoot, "index.html"), []byte("<html></html>\n"), 0o644)
+	writeTestFile(t, pluginDir, filepath.Join(assetRoot, "static", "app.js"), []byte("console.log('ok')\n"), 0o644)
+	return pluginDir
+}
+
+func newUIReleaseFixture(t *testing.T, dir string) string {
+	return newStaticAppReleaseFixture(t, dir)
+}
+
+func newBuiltUIReleaseFixture(t *testing.T, dir string) string {
+	return newBuiltStaticAppReleaseFixture(t, dir)
+}
+
+func newSourceBuiltUIReleaseFixture(t *testing.T, dir string) string {
+	return newSourceBuiltStaticAppReleaseFixture(t, dir)
 }
 
 func newSourceProviderReleaseFixtureWithOwnedUI(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := newSourceProviderReleaseFixture(t, dir)
-	uiDir := filepath.Join(dir, "roadmap-ui")
-	if err := os.MkdirAll(uiDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(uiDir): %v", err)
-	}
-	writeReleaseTestManifest(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/testowner/web/roadmap-ui",
-		Version:     "0.0.1",
-		DisplayName: "Roadmap UI",
-		IconFile:    releaseTestIconPath,
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
-		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
-	})
-	writeTestFile(t, uiDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0o644)
-	writeTestFile(t, uiDir, "dist/index.html", []byte("<html>roadmap</html>\n"), 0o644)
-	writeTestFile(t, uiDir, "dist/static/app.js", []byte("console.log('roadmap')\n"), 0o644)
-	writeReleaseBuildScript(t, uiDir, "build.sh", "mkdir -p dist/static\nprintf '<html>roadmap</html>\\n' > dist/index.html\nprintf 'console.log(\"roadmap\")\\n' > dist/static/app.js\n")
-
-	manifestPath := filepath.Join(pluginDir, providerpkg.ManifestFile)
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile(%s): %v", providerpkg.ManifestFile, err)
-	}
-	manifest.Spec.UI = &providermanifestv1.OwnedUI{Path: "../roadmap-ui/" + providerpkg.ManifestFile}
-	writeReleaseTestManifest(t, pluginDir, manifest)
-
-	return pluginDir
+	return newSourceProviderReleaseFixtureWithStaticBundle(t, dir)
 }
 
 func newSourceProviderReleaseFixtureWithSourceBuiltOwnedUI(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := newSourceProviderReleaseFixture(t, dir)
-	uiDir := filepath.Join(dir, "roadmap-ui")
-	if err := os.MkdirAll(uiDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(uiDir): %v", err)
-	}
-	writeReleaseTestManifest(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/testowner/web/roadmap-ui",
-		Version:     "0.0.1",
-		DisplayName: "Roadmap UI",
-		IconFile:    releaseTestIconPath,
-		Build: &providermanifestv1.SourceBuild{
-			Workdir: "ui",
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"ui/build.sh"},
-		},
-		Spec: &providermanifestv1.Spec{AssetRoot: "ui/dist"},
-	})
-	writeTestFile(t, uiDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0o644)
-	writeReleaseBuildScript(t, uiDir, filepath.Join("ui", "build.sh"), "mkdir -p dist/static\nprintf '<html>roadmap</html>\\n' > dist/index.html\nprintf 'console.log(\"roadmap\")\\n' > dist/static/app.js\n")
-
-	manifestPath := filepath.Join(pluginDir, providerpkg.ManifestFile)
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile(%s): %v", providerpkg.ManifestFile, err)
-	}
-	manifest.Spec.UI = &providermanifestv1.OwnedUI{Path: "../roadmap-ui/" + providerpkg.ManifestFile}
-	writeReleaseTestManifest(t, pluginDir, manifest)
-
-	return pluginDir
+	return newSourceProviderReleaseFixtureWithStaticBundle(t, dir)
 }
 
 func newUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(dir, uiTestAppName)
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      uiTestSource,
-		Version:     "0.0.1",
-		DisplayName: "UI Test",
-		IconFile:    releaseTestIconPath,
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
-		Spec: &providermanifestv1.Spec{AssetRoot: assetRoot},
-	})
-	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
-	writeTestFile(t, pluginDir, assetRoot+"/index.html", []byte("<html></html>\n"), 0644)
-	writeTestFile(t, pluginDir, assetRoot+"/static/app.js", []byte("console.log('ok')\n"), 0644)
-	writeReleaseBuildScript(t, pluginDir, "build.sh", "mkdir -p "+assetRoot+"/static\nprintf '<html></html>\\n' > "+assetRoot+"/index.html\nprintf 'console.log(\"ok\")\\n' > "+assetRoot+"/static/app.js\n")
-	return pluginDir
+	return newStaticAppReleaseFixtureWithAssetRoot(t, dir, assetRoot)
 }
 
 func writeReleaseBuildScript(t *testing.T, dir, rel, body string) {

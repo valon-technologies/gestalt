@@ -8,6 +8,5 @@ export default {
   runtime: "Runtime",
   s3: "S3",
   secrets: "Secret",
-  ui: "UI (Deprecated)",
   workflow: "Workflow",
 };

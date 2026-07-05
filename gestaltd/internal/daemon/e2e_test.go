@@ -309,13 +309,13 @@ func setupMountedUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
 	return setupMountedUIDirWithRoutes(t, baseDir, nil)
 }
 
-func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
+func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, _ any) *mountedUITestConfig {
 	t.Helper()
 
-	return setupMountedUIDirAt(t, filepath.Join(baseDir, "mounted-ui"), routes)
+	return setupMountedUIDirAt(t, filepath.Join(baseDir, "mounted-ui"))
 }
 
-func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
+func setupMountedUIDirAt(t *testing.T, uiDir string) *mountedUITestConfig {
 	t.Helper()
 
 	distDir := filepath.Join(uiDir, "dist")
@@ -340,7 +340,7 @@ func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1
 `), 0o644)
 	writeTestFile(t, uiDir, "build.sh", []byte("mkdir -p dist/assets\nprintf '<html>Roadmap Review UI</html>\\n' > dist/index.html\nprintf 'window.__ROADMAP_REVIEW_UI__ = \"ready\";\\n' > dist/assets/app.js\n"), 0o755)
 	writeManifestFile(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
+		Kind:        providermanifestv1.KindApp,
 		Source:      "github.com/test/ui/roadmap-review",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap Review UI",
@@ -350,7 +350,6 @@ func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1
 		},
 		Spec: &providermanifestv1.Spec{
 			AssetRoot: "dist",
-			Routes:    routes,
 		},
 	})
 

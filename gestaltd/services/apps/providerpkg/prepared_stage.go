@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	releaseOwnedUIRoot      = "_owned_ui"
 	windowsOS               = "windows"
 	windowsExecutableSuffix = ".exe"
 )
@@ -245,9 +244,6 @@ func validatePreparedInstallDeclaredBuild(root string, manifest *providermanifes
 			return err
 		}
 	}
-	if kind == providermanifestv1.KindUI {
-		return nil
-	}
 	resolved, err := ResolveSourceReleaseBuild(root, manifest)
 	if err != nil {
 		return err
@@ -293,28 +289,20 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	if err != nil {
 		return nil, fmt.Errorf("clone manifest: %w", err)
 	}
-	uiAssetRoot := SourceUIBuildOutput(manifest)
 	manifest.Version = version
 
-	kind, err := ManifestKind(manifest)
-	if err != nil {
+	if _, err := ManifestKind(manifest); err != nil {
 		return nil, err
 	}
 	manifest.Install = nil
 	manifest.Build = nil
 	manifest.Run = nil
 	manifest.Artifacts = nil
-	if kind == providermanifestv1.KindUI && uiAssetRoot != "" {
-		if manifest.Spec == nil {
-			manifest.Spec = &providermanifestv1.Spec{}
-		}
-		manifest.Spec.AssetRoot = uiAssetRoot
-	}
 	producesOutput, err := SourceReleaseBuildProducesOutput(sourceDir, srcManifest)
 	if err != nil {
 		return nil, err
 	}
-	if kind != providermanifestv1.KindUI && producesOutput {
+	if producesOutput {
 		sourceRel, err := SourceBuildOutputPath(srcManifest, goos)
 		if err != nil {
 			return nil, err
@@ -398,9 +386,6 @@ func copyPreparedInstallSupportFiles(manifest *providermanifestv1.Manifest, sour
 	if manifest == nil {
 		return nil
 	}
-	if err := stagePreparedOwnedUI(manifest, sourceDir, stagingDir); err != nil {
-		return err
-	}
 
 	copied := make(map[string]struct{})
 	copyPath := func(rel string, optional bool) error {
@@ -470,47 +455,6 @@ func copyPreparedInstallSupportFiles(manifest *providermanifestv1.Manifest, sour
 		}
 	}
 	return nil
-}
-
-func stagePreparedOwnedUI(manifest *providermanifestv1.Manifest, sourceDir, stagingDir string) error {
-	if manifest == nil || manifest.Kind != providermanifestv1.KindApp || manifest.Spec == nil || manifest.Spec.UI == nil {
-		return nil
-	}
-	ownedUI := manifest.Spec.UI
-	if strings.TrimSpace(ownedUI.Path) == "" {
-		return nil
-	}
-
-	uiManifestPath := filepath.Join(sourceDir, filepath.FromSlash(ownedUI.Path))
-	_, _, err := ReadSourceManifestFile(uiManifestPath)
-	if err != nil {
-		return fmt.Errorf("read owned ui manifest %s: %w", ownedUI.Path, err)
-	}
-	packagedDir := filepath.Join(stagingDir, filepath.FromSlash(packagedOwnedUIDir(ownedUI.Path)))
-	staged, err := StageSourcePreparedInstallDir(uiManifestPath, packagedDir, StageSourcePreparedInstallOptions{})
-	if err != nil {
-		return fmt.Errorf("stage owned ui package %s: %w", ownedUI.Path, err)
-	}
-	packagedRelPath, err := filepath.Rel(stagingDir, staged.ManifestPath)
-	if err != nil {
-		return fmt.Errorf("resolve staged owned ui manifest %s: %w", ownedUI.Path, err)
-	}
-	packagedRelPath, err = normalizePreparedInstallPath(filepath.ToSlash(packagedRelPath))
-	if err != nil {
-		return fmt.Errorf("normalize staged owned ui manifest %s: %w", ownedUI.Path, err)
-	}
-
-	ownedUI.Path = packagedRelPath
-	return nil
-}
-
-func packagedOwnedUIDir(rel string) string {
-	cleanRel := path.Clean(strings.ReplaceAll(rel, "\\", "/"))
-	parent := path.Base(path.Dir(cleanRel))
-	if parent == "." || parent == "/" || parent == "" {
-		return releaseOwnedUIRoot
-	}
-	return path.Join(releaseOwnedUIRoot, parent)
 }
 
 func normalizePreparedInstallPath(rel string) (string, error) {

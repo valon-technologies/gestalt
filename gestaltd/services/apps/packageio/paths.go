@@ -55,12 +55,9 @@ func executableRelPath(base, goos string) string {
 	return base
 }
 
-func validateSourceEntrypointDecl(manifest *providermanifestv1.Manifest, kind string, sourceMode bool) error {
+func validateSourceEntrypointDecl(manifest *providermanifestv1.Manifest, _ string, sourceMode bool) error {
 	if !sourceMode || manifest == nil || manifest.Entrypoint == nil {
 		return nil
-	}
-	if kind == providermanifestv1.KindUI {
-		return fmt.Errorf("ui manifests may not define entrypoints")
 	}
 	return fmt.Errorf("%s", sourceEntrypointReject)
 }

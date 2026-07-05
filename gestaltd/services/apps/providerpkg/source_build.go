@@ -318,16 +318,8 @@ func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind 
 	if build := EffectiveSourceBuild(manifest); build != nil && build.PrepareOnly {
 		return "", "", nil
 	}
-	manifestKind, err := ManifestKind(manifest)
-	if err != nil {
+	if _, err := ManifestKind(manifest); err != nil {
 		return "", "", err
-	}
-	if manifestKind == providermanifestv1.KindUI {
-		output := SourceUIBuildOutput(manifest)
-		if strings.TrimSpace(output) == "" {
-			return "", "", fmt.Errorf("spec.assetRoot is required when build is set")
-		}
-		return output, providermanifestv1.KindUI, nil
 	}
 	goos, _ := SourceBuildTarget(SourceBuildOptions{})
 	outputRel, err := SourceBuildOutputPath(manifest, goos)
@@ -346,10 +338,6 @@ func verifySourceBuildOutput(outputPath, outputRel, outputKind string, opts Sour
 		return fmt.Errorf("build output %q not found: %w", outputRel, err)
 	}
 	switch outputKind {
-	case providermanifestv1.KindUI:
-		if !info.IsDir() {
-			return fmt.Errorf("build output %q must be a directory", outputRel)
-		}
 	case "executable":
 		if info.IsDir() {
 			return fmt.Errorf("build output %q must be an executable file", outputRel)

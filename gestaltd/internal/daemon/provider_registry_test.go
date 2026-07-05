@@ -22,19 +22,17 @@ providers:
       source:
         package: github.com/acme/providers/authn
         version: "1.0.0"
-  ui:
-    dashboard:
-      path: /dashboard
-      source:
-        package: github.com/acme/providers/dashboard
-        version: "1.0.0"
 apps:
+  dashboard:
+    source:
+      package: github.com/acme/providers/dashboard
+      version: "1.0.0"
 `), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
 	if err := updateProviderVersionConstraint(path, "", "dashboard", ">= 2.0.0"); err != nil {
-		t.Fatalf("update ui version: %v", err)
+		t.Fatalf("update app version: %v", err)
 	}
 	if err := updateProviderVersionConstraint(path, providermanifestv1.KindIdentity, "authn", "~1.4.0"); err != nil {
 		t.Fatalf("update authentication version: %v", err)
@@ -44,8 +42,8 @@ apps:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Providers.UI["dashboard"].Source.PackageVersionConstraint(); got != ">= 2.0.0" {
-		t.Fatalf("ui version = %q, want >= 2.0.0", got)
+	if got := cfg.Apps["dashboard"].Source.PackageVersionConstraint(); got != ">= 2.0.0" {
+		t.Fatalf("app version = %q, want >= 2.0.0", got)
 	}
 	if got := cfg.Providers.Identity["authn"].Source.PackageVersionConstraint(); got != "~1.4.0" {
 		t.Fatalf("authentication version = %q, want ~1.4.0", got)
@@ -59,11 +57,10 @@ func TestUpdateProviderVersionConstraintRequiresKindForAmbiguousName(t *testing.
 	if err := os.WriteFile(path, []byte(`
 apiVersion: gestaltd.config/v8
 providers:
-  ui:
+  workflow:
     shared:
-      path: /shared
       source:
-        package: github.com/acme/providers/shared-ui
+        package: github.com/acme/providers/shared-workflow
         version: "1.0.0"
 apps:
   shared:
@@ -82,15 +79,15 @@ apps:
 		t.Fatalf("update version error = %v, want --kind ambiguity", err)
 	}
 
-	if err := updateProviderVersionConstraint(path, providermanifestv1.KindUI, "shared", "2.0.0"); err != nil {
-		t.Fatalf("update ui version: %v", err)
+	if err := updateProviderVersionConstraint(path, providermanifestv1.KindWorkflow, "shared", "2.0.0"); err != nil {
+		t.Fatalf("update workflow version: %v", err)
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Providers.UI["shared"].Source.PackageVersionConstraint(); got != "2.0.0" {
-		t.Fatalf("ui version = %q, want 2.0.0", got)
+	if got := cfg.Providers.Workflow["shared"].Source.PackageVersionConstraint(); got != "2.0.0" {
+		t.Fatalf("workflow version = %q, want 2.0.0", got)
 	}
 	if got := cfg.Apps["shared"].Source.PackageVersionConstraint(); got != "1.0.0" {
 		t.Fatalf("plugin version = %q, want 1.0.0", got)

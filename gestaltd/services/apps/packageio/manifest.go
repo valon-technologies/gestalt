@@ -100,7 +100,6 @@ var validManifestKinds = map[string]bool{
 	providermanifestv1.KindWorkflow:            true,
 	providermanifestv1.KindAgent:               true,
 	providermanifestv1.KindSecrets:             true,
-	providermanifestv1.KindUI:                  true,
 	providermanifestv1.KindRuntime:             true,
 }
 
@@ -113,7 +112,7 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 	}
 	kind := providermanifestv1.NormalizeKind(manifest.Kind)
 	if !validManifestKinds[manifest.Kind] && !validManifestKinds[kind] {
-		return "", fmt.Errorf("manifest kind %q is not valid; expected one of app, identity, authentication, authorization, externalcredentials, indexeddb, cache, s3, workflow, agent, secrets, runtime, or ui", manifest.Kind)
+		return "", fmt.Errorf("manifest kind %q is not valid; expected one of app, identity, authentication, authorization, externalcredentials, indexeddb, cache, s3, workflow, agent, secrets, or runtime", manifest.Kind)
 	}
 	return kind, nil
 }
@@ -228,9 +227,6 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if err := validateExecutableProviderMetadata(spec); err != nil {
 			return err
 		}
-		if err := validateOwnedUI(spec.UI, sourceMode); err != nil {
-			return err
-		}
 		if !sourceMode && spec != nil && spec.AssetRoot != "" {
 			if err := validateRelativePackagePath(spec.AssetRoot, "spec.assetRoot"); err != nil {
 				return err
@@ -266,108 +262,10 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 				return err
 			}
 		}
-	case providermanifestv1.KindUI:
-		if manifest.Entrypoint != nil {
-			return fmt.Errorf("ui manifests may not define entrypoints")
-		}
-		assetRoot := ""
-		if spec != nil {
-			assetRoot = spec.AssetRoot
-		}
-		if sourceMode {
-			if manifest.Build == nil {
-				return fmt.Errorf("build is required for source ui manifests")
-			}
-			if manifest.Build.PrepareOnly {
-				return fmt.Errorf("source ui manifests require object-form build metadata")
-			}
-			if assetRoot == "" {
-				return fmt.Errorf("spec.assetRoot is required for source ui manifests")
-			}
-		} else if assetRoot == "" {
-			return fmt.Errorf("spec.assetRoot is required for ui manifests")
-		}
-		if assetRoot != "" {
-			if err := validateRelativePackagePath(assetRoot, "spec.assetRoot"); err != nil {
-				return err
-			}
-		}
-		if spec != nil {
-			if err := validateUIRoutes(spec.Routes); err != nil {
-				return err
-			}
-		}
 	default:
 		return fmt.Errorf("unsupported manifest kind %q", kind)
 	}
 
-	return nil
-}
-
-func validateOwnedUI(ownedUI *providermanifestv1.OwnedUI, sourceMode bool) error {
-	if ownedUI == nil {
-		return nil
-	}
-	pathValue := strings.TrimSpace(ownedUI.Path)
-	if pathValue != "" {
-		if !sourceMode {
-			if err := validateRelativePackagePath(pathValue, "spec.ui.path"); err != nil {
-				return err
-			}
-			ownedUI.Path = pathValue
-		} else {
-			if filepath.IsAbs(pathValue) {
-				return fmt.Errorf("spec.ui.path must be relative")
-			}
-			cleaned := path.Clean(filepath.ToSlash(pathValue))
-			if cleaned == "." || cleaned == "" {
-				return fmt.Errorf("spec.ui.path must not be empty")
-			}
-			ownedUI.Path = cleaned
-		}
-		return nil
-	}
-	return fmt.Errorf("spec.ui.path is required when spec.ui is set")
-}
-
-func validateUIRoutes(routes []providermanifestv1.UIRoute) error {
-	seenPaths := make(map[string]struct{}, len(routes))
-	for i := range routes {
-		normalized, err := NormalizeUIRoutePath(fmt.Sprintf("spec.routes[%d].path", i), routes[i].Path)
-		if err != nil {
-			return err
-		}
-		routes[i].Path = normalized
-		if _, exists := seenPaths[normalized]; exists {
-			return fmt.Errorf("spec.routes[%d].path %q duplicates another route", i, normalized)
-		}
-		seenPaths[normalized] = struct{}{}
-
-		roles, err := NormalizeUIAllowedRoles(fmt.Sprintf("spec.routes[%d].allowedRoles", i), routes[i].AllowedRoles)
-		if err != nil {
-			return err
-		}
-		routes[i].AllowedRoles = roles
-	}
-	return nil
-}
-
-func ValidatePolicyBoundUIRoutes(routes []providermanifestv1.UIRoute) error {
-	if len(routes) == 0 {
-		return fmt.Errorf("policy-bound UIs must declare at least one route")
-	}
-	coversRoot := false
-	for i := range routes {
-		if len(routes[i].AllowedRoles) == 0 {
-			return fmt.Errorf("spec.routes[%d].allowedRoles must not be empty", i)
-		}
-		if UIRouteMatches(routes[i].Path, "/") {
-			coversRoot = true
-		}
-	}
-	if !coversRoot {
-		return fmt.Errorf("policy-bound UIs must declare a route covering /")
-	}
 	return nil
 }
 

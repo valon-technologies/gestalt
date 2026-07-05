@@ -141,7 +141,7 @@ func (s *Supervisor) StartApp(ctx context.Context, target AppTarget) (*AppHandle
 		}
 	}
 	if s.procByName(target.Name) != nil {
-		return nil, fmt.Errorf("dev app %q conflicts with dev-active providers.ui of the same name", target.Name)
+		return nil, fmt.Errorf("dev app %q is already running", target.Name)
 	}
 	port, err := reserveLocalPort()
 	if err != nil {

@@ -429,8 +429,6 @@ func lockEntryRuntime(entry LockEntry, fallbackKind string) string {
 		return value
 	}
 	switch lockEntryKind(entry, fallbackKind) {
-	case providermanifestv1.KindUI:
-		return providerLockRuntimeUI
 	default:
 		return providerLockRuntimeExecutable
 	}

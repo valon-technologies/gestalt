@@ -195,7 +195,7 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	appManifest := componentProviderManifestPath(t, setupAppDir(t, filepath.Join(dir, "app")))
-	ui := setupMountedUIDir(t, dir)
+	ui := setupStaticAppDir(t, dir)
 	workflowManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindWorkflow, "workflow-indexeddb"))
 	agentManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindAgent, "agent-simple"))
 
@@ -211,10 +211,6 @@ server:
 providers:
   indexeddb:
     inmem:
-      source:
-        path: %s
-  ui:
-    roadmap:
       source:
         path: %s
   workflow:
@@ -251,9 +247,9 @@ apps:
   roadmap:
     source:
       path: %s
-    ui:
-      path: /roadmap
-      bundle: roadmap
+  %s:
+    source:
+      path: %s
 workflows:
   definitions:
     nightly_sync:
@@ -309,7 +305,7 @@ workflows:
           event:
             type: roadmap.item.updated
             source: roadmap
-`, e2eLoopbackBaseURL(8080), indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, appManifest)
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, workflowManifest, agentManifest, appManifest, ui.Name, ui.ManifestPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -361,16 +357,16 @@ server:
 			wantError: "bogus",
 		},
 		{
-			name: "ui object requires path",
+			name: "unknown app field is rejected",
 			cfg: `apiVersion: gestaltd.config/v8
 apps:
   roadmap:
     source:
       path: ./app/manifest.yaml
     ui:
-      bundle: roadmap
+      path: /roadmap
 `,
-			wantError: "ui.path is required when ui is an object",
+			wantError: "field ui not found",
 		},
 	}
 
@@ -419,15 +415,15 @@ func TestE2EProviderValidateIsolatedSourceApp(t *testing.T) {
 	}
 }
 
-func TestE2EProviderValidateSourceUI(t *testing.T) {
+func TestE2EProviderValidateStaticApp(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	mountedUI := setupMountedUIDir(t, dir)
-	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
+	staticApp := setupStaticAppDir(t, dir)
+	setAppManifestSource(t, staticApp.AppDir, "github.com/test/ui/roadmap.review")
 
-	cmd := gestaltdCommand("provider", "validate", "--path", mountedUI.ManifestPath)
+	cmd := gestaltdCommand("provider", "validate", "--path", staticApp.ManifestPath)
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -439,11 +435,8 @@ func TestE2EProviderValidateSourceUI(t *testing.T) {
 	if !strings.Contains(string(out), "config ok") {
 		t.Fatalf("expected validate success, got: %s", out)
 	}
-	if !strings.Contains(string(out), "ui=roadmap_review") {
-		t.Fatalf("expected ui validation summary, got: %s", out)
-	}
-	if !strings.Contains(string(out), "mounted_ui_paths=[/roadmap.review]") {
-		t.Fatalf("expected source-slug ui mount path in output, got: %s", out)
+	if !strings.Contains(string(out), "app=roadmap_review") {
+		t.Fatalf("expected app validation summary, got: %s", out)
 	}
 }
 
@@ -489,7 +482,7 @@ func TestE2EProviderValidateRejectsNonAppManifest(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected gestaltd provider validate to fail for non-app manifest\n%s", out)
 	}
-	if !strings.Contains(string(out), "only support kind: app or ui in v1") {
+	if !strings.Contains(string(out), "only support kind: app in v1") {
 		t.Fatalf("expected app-only error, got: %s", out)
 	}
 }
@@ -499,54 +492,48 @@ func TestE2EProviderValidateLayeredConfigSupportsNullDeletion(t *testing.T) {
 
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	targetDir := setupAppDir(t, filepath.Join(dir, "target"))
+	targetDir := setupStaticAppDir(t, filepath.Join(dir, "target"))
 	supportDir := setupAppDir(t, filepath.Join(dir, "support"))
-	mountedUI := setupMountedUIDir(t, dir)
-	attachOwnedUIToAppSource(t, targetDir, mountedUI.ManifestPath)
 
 	supportManifest := componentProviderManifestPath(t, supportDir)
 	supportRel, err := filepath.Rel(dir, supportManifest)
 	if err != nil {
 		t.Fatalf("filepath.Rel(support): %v", err)
 	}
-	uiRel, err := filepath.Rel(dir, mountedUI.ManifestPath)
+	staticRel, err := filepath.Rel(dir, targetDir.ManifestPath)
 	if err != nil {
-		t.Fatalf("filepath.Rel(ui): %v", err)
+		t.Fatalf("filepath.Rel(static): %v", err)
 	}
 
 	baseCfgPath := filepath.Join(dir, "support.yaml")
 	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
-providers:
-  ui:
-    roadmap:
-      source:
-        path: %s
-      path: /provider
 apps:
+  %s:
+    source:
+      path: %s
+    static:
+      mount: /provider
   support:
     source:
       path: %s
-    ui:
-      bundle: roadmap
-      path: /provider
-`, filepath.ToSlash(uiRel), filepath.ToSlash(supportRel))
+    static:
+      mount: /provider
+`, targetDir.Name, filepath.ToSlash(staticRel), filepath.ToSlash(supportRel))
 	if err := os.WriteFile(baseCfgPath, []byte(baseCfg), 0o644); err != nil {
 		t.Fatalf("write support config: %v", err)
 	}
 
 	overrideCfgPath := filepath.Join(dir, "support-override.yaml")
-	overrideCfg := `apiVersion: gestaltd.config/v8
-providers:
-  ui:
-    roadmap: null
+	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
 apps:
+  %s: null
   support: null
-`
+`, targetDir.Name)
 	if err := os.WriteFile(overrideCfgPath, []byte(overrideCfg), 0o644); err != nil {
 		t.Fatalf("write support override: %v", err)
 	}
 
-	failingCmd := gestaltdCommand("provider", "validate", "--path", targetDir, "--config", baseCfgPath)
+	failingCmd := gestaltdCommand("provider", "validate", "--path", targetDir.AppDir, "--config", baseCfgPath)
 	failingCmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -555,11 +542,11 @@ apps:
 	if err == nil {
 		t.Fatalf("expected provider validate without null deletion to fail\n%s", failingOut)
 	}
-	if !strings.Contains(string(failingOut), `collides with providers.ui.roadmap`) {
+	if !strings.Contains(string(failingOut), "apps.support.static.mount") || !strings.Contains(string(failingOut), "/provider") {
 		t.Fatalf("expected mount collision error, got: %s", failingOut)
 	}
 
-	successCmd := gestaltdCommand("provider", "validate", "--path", targetDir, "--config", baseCfgPath, "--config", overrideCfgPath)
+	successCmd := gestaltdCommand("provider", "validate", "--path", targetDir.AppDir, "--config", baseCfgPath, "--config", overrideCfgPath)
 	successCmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -1108,13 +1095,7 @@ func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
 
 func setUIManifestSource(t *testing.T, manifestPath, source string) {
 	t.Helper()
-
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
-	}
-	manifest.Source = source
-	writeManifestFile(t, filepath.Dir(manifestPath), manifest)
+	setAppManifestSource(t, filepath.Dir(manifestPath), source)
 }
 
 func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
@@ -1464,52 +1445,28 @@ func setupExternalCredentialsProviderDir(t *testing.T, baseDir string) string {
 	return providerDir
 }
 
-type mountedUITestConfig struct {
+type staticAppTestConfig struct {
 	Name         string
-	Path         string
+	MountPath    string
 	ManifestPath string
+	AppDir       string
 }
 
-func setupMountedUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
+func setupStaticAppDir(t *testing.T, baseDir string) *staticAppTestConfig {
 	t.Helper()
-	return setupMountedUIDirWithRoutes(t, baseDir, nil)
+	return setupStaticAppDirAt(t, filepath.Join(baseDir, "static-app"), "/create-customer-roadmap-review")
 }
 
-func attachOwnedUIToAppSource(t *testing.T, appDir, uiManifestPath string) {
+func setupStaticAppDirAt(t *testing.T, appDir, mountPath string) *staticAppTestConfig {
 	t.Helper()
 
-	manifestPath := componentProviderManifestPath(t, appDir)
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
-	}
-	if manifest.Spec == nil {
-		manifest.Spec = &providermanifestv1.Spec{}
-	}
-	relativeUIPath, err := filepath.Rel(appDir, uiManifestPath)
-	if err != nil {
-		t.Fatalf("filepath.Rel(%s, %s): %v", appDir, uiManifestPath, err)
-	}
-	manifest.Spec.UI = &providermanifestv1.OwnedUI{Path: filepath.ToSlash(relativeUIPath)}
-	writeManifestFile(t, appDir, manifest)
-}
-
-func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
-	t.Helper()
-
-	return setupMountedUIDirAt(t, filepath.Join(baseDir, "mounted-ui"), routes)
-}
-
-func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
-	t.Helper()
-
-	distDir := filepath.Join(uiDir, "dist")
-	assetsDir := filepath.Join(distDir, "assets")
+	staticBuildDir := filepath.Join(appDir, ".gestalt", "build-static")
+	assetsDir := filepath.Join(staticBuildDir, "assets")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", assetsDir, err)
 	}
 
-	writeTestFile(t, uiDir, filepath.Join("dist", "index.html"), []byte(`<!doctype html>
+	writeTestFile(t, appDir, filepath.Join(".gestalt", "build-static", "index.html"), []byte(`<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -1521,29 +1478,43 @@ func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1
   </body>
 </html>
 `), 0o644)
-	writeTestFile(t, uiDir, filepath.Join("dist", "assets", "app.js"), []byte(`window.__ROADMAP_REVIEW_UI__ = "ready";
-`), 0o644)
-	writeTestFile(t, uiDir, "build.sh", []byte("mkdir -p dist/assets\nprintf '<html>Roadmap Review UI</html>\\n' > dist/index.html\nprintf 'window.__ROADMAP_REVIEW_UI__ = \"ready\";\\n' > dist/assets/app.js\n"), 0o755)
-	writeManifestFile(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
+	writeTestFile(t, appDir, "catalog.yaml", []byte("name: roadmap_review\noperations:\n  - id: sync\n    method: POST\n"), 0o644)
+	writeManifestFile(t, appDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
 		Source:      "github.com/test/ui/roadmap-review",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap Review UI",
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
 		Spec: &providermanifestv1.Spec{
-			AssetRoot: "dist",
-			Routes:    routes,
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://api.example.test",
+					Operations: []providermanifestv1.ProviderOperation{{
+						Name:   "health",
+						Method: "GET",
+						Path:   "/health",
+					}},
+				},
+			},
 		},
 	})
 
-	return &mountedUITestConfig{
+	return &staticAppTestConfig{
 		Name:         "roadmap_review",
-		Path:         "/create-customer-roadmap-review",
-		ManifestPath: filepath.Join(uiDir, "manifest.yaml"),
+		MountPath:    mountPath,
+		ManifestPath: filepath.Join(appDir, "manifest.yaml"),
+		AppDir:       appDir,
 	}
+}
+
+func setAppManifestSource(t *testing.T, appDir, source string) {
+	t.Helper()
+
+	_, manifest, err := providerpkg.ReadSourceManifestFile(componentProviderManifestPath(t, appDir))
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", appDir, err)
+	}
+	manifest.Source = source
+	writeManifestFile(t, appDir, manifest)
 }
 
 func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
@@ -1604,39 +1575,10 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: externalCredentialsBuildOutput},
 	})
 
-	rootUIDir := filepath.Join(providersDir, "ui", "default")
-	rootDistDir := filepath.Join(rootUIDir, "dist")
-	if err := os.MkdirAll(rootDistDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", rootDistDir, err)
-	}
-	writeTestFile(t, rootUIDir, filepath.Join("dist", "index.html"), []byte(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Default Gestalt UI</title>
-  </head>
-  <body>
-    <div id="app">Default Gestalt UI</div>
-  </body>
-</html>
-`), 0o644)
-	writeTestFile(t, rootUIDir, "build.sh", []byte("mkdir -p dist\nprintf '<html>Default Gestalt UI</html>\\n' > dist/index.html\n"), 0o755)
-	writeManifestFile(t, rootUIDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/test/ui/default",
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Default Gestalt UI",
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
-		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
-	})
-
 	return providersDir
 }
 
-func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITestConfig) string {
+func writeServeConfig(t *testing.T, dir string, port int, staticApp *staticAppTestConfig) string {
 	t.Helper()
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
@@ -1646,14 +1588,14 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
 	}
-	uiBlock := ""
-	if mountedUI != nil {
-		uiBlock = fmt.Sprintf(`  ui:
-    %s:
-      source:
-        path: %q
-      path: %s
-`, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
+	staticBlock := ""
+	if staticApp != nil {
+		staticBlock = fmt.Sprintf(`  %s:
+    source:
+      path: %q
+    static:
+      mount: %s
+`, staticApp.Name, staticApp.ManifestPath, staticApp.MountPath)
 	}
 
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
@@ -1669,11 +1611,11 @@ providers:
     inmem:
       source:
         path: %s
-%sapps:
-  example:
+apps:
+%s  example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(port), port, indexedDBManifest, uiBlock, appManifest)
+`, e2eLoopbackBaseURL(port), port, indexedDBManifest, staticBlock, appManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1682,7 +1624,7 @@ providers:
 	return cfgPath
 }
 
-func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, managementPort int, mountedUI *mountedUITestConfig) string {
+func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, managementPort int, staticApp *staticAppTestConfig) string {
 	t.Helper()
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
@@ -1692,14 +1634,14 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
 	}
-	uiBlock := ""
-	if mountedUI != nil {
-		uiBlock = fmt.Sprintf(`  ui:
-    %s:
-      source:
-        path: %q
-      path: %s
-`, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
+	staticBlock := ""
+	if staticApp != nil {
+		staticBlock = fmt.Sprintf(`  %s:
+    source:
+      path: %q
+    static:
+      mount: %s
+`, staticApp.Name, staticApp.ManifestPath, staticApp.MountPath)
 	}
 
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
@@ -1718,11 +1660,11 @@ providers:
     inmem:
       source:
         path: %s
-%sapps:
-  example:
+apps:
+%s  example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(publicPort), publicPort, managementPort, indexedDBManifest, uiBlock, appManifest)
+`, e2eLoopbackBaseURL(publicPort), publicPort, managementPort, indexedDBManifest, staticBlock, appManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1818,12 +1760,11 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	mountedUI := setupMountedUIDir(t, dir)
 	publicPort, publicHolder := reservePort(t)
 	managementPort, managementHolder := reservePort(t)
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", publicPort)
 	managementURL := fmt.Sprintf("http://127.0.0.1:%d", managementPort)
-	cfgPath := writeServeConfigWithManagement(t, dir, publicPort, managementPort, mountedUI)
+	cfgPath := writeServeConfigWithManagement(t, dir, publicPort, managementPort, nil)
 
 	cmd := gestaltdCommand("serve", "--config", cfgPath)
 	releasePortHoldersAndStart(t, []net.Listener{publicHolder, managementHolder}, func() {
@@ -1853,12 +1794,6 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 			wantStatus: http.StatusNotFound,
 		},
 		{
-			name:         "public serves mounted ui",
-			url:          publicURL + mountedUI.Path + "/sync",
-			wantStatus:   http.StatusOK,
-			wantContains: "Roadmap Review UI",
-		},
-		{
 			name:       "management becomes ready",
 			url:        managementURL + "/ready",
 			wantStatus: http.StatusOK,
@@ -1879,11 +1814,6 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 			url:          managementURL + "/admin/",
 			wantStatus:   http.StatusOK,
 			wantContains: "Prometheus telemetry",
-		},
-		{
-			name:       "management hides mounted ui",
-			url:        managementURL + mountedUI.Path + "/sync",
-			wantStatus: http.StatusNotFound,
 		},
 	} {
 		tc := tc

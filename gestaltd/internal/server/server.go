@@ -45,14 +45,12 @@ const (
 	RouteProfileManagement
 )
 
-type MountedUIRoute = providermanifestv1.UIRoute
-
 type MountedUI struct {
 	Name                string
 	Path                string
 	AppName             string
 	AuthorizationPolicy string
-	Routes              []MountedUIRoute
+	AllowedRoles        []string
 	Handler             http.Handler
 	// ThemeStylesheet and ThemeAssetsDir are resolved absolute paths to a
 	// deployment-configured theme, served at <mount>/theme.css and under
@@ -176,7 +174,6 @@ type Config struct {
 	ManualConnectionAuth func() map[string]map[string]bootstrap.ManualTokenExchanger
 	AppDefs              map[string]*config.ProviderEntry
 	AgentDefs            map[string]*config.ProviderEntry
-	ProviderUIs          map[string]*config.UIEntry
 	PublicBaseURL        string
 	ManagementBaseURL    string
 	SecureCookies        bool
@@ -256,13 +253,7 @@ func New(cfg Config) (*Server, error) {
 	if err := validateAdminRouteRuntime(adminRoute, noAuth, cfg.PublicBaseURL, cfg.ManagementBaseURL, cfg.RouteProfile); err != nil {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
-	mountedUIs := cfg.MountedUIs
-	if len(mountedUIs) == 0 && len(cfg.ProviderUIs) != 0 {
-		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs, cfg.DevHandlerResolver)
-		if err != nil {
-			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
-		}
-	}
+	mountedUIs := append([]MountedUI(nil), cfg.MountedUIs...)
 	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlerResolver)
 	if err != nil {
 		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)

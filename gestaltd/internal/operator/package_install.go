@@ -19,9 +19,15 @@ type installedPackage struct {
 	Manifest       *providermanifestv1.Manifest
 }
 
-func isUIOnly(manifest *providermanifestv1.Manifest) bool {
+func isAssetOnly(manifest *providermanifestv1.Manifest) bool {
+	if manifest == nil || manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {
+		return false
+	}
 	kind, err := packageio.ManifestKind(manifest)
-	return err == nil && kind == providermanifestv1.KindUI
+	if err != nil {
+		return false
+	}
+	return packageio.EntrypointForKind(manifest, kind) == nil
 }
 
 func manifestNeedsExecutableArtifact(manifest *providermanifestv1.Manifest) bool {
@@ -42,7 +48,7 @@ func installPackageAs(packagePath, destDir, configuredName string) (*installedPa
 		return nil, err
 	}
 
-	if isUIOnly(manifest) {
+	if isAssetOnly(manifest) {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			return nil, fmt.Errorf("create app directory: %w", err)
 		}
@@ -118,7 +124,7 @@ func executablePathForManifest(root string, manifest *providermanifestv1.Manifes
 	if manifest == nil {
 		return "", fmt.Errorf("manifest is required")
 	}
-	if isUIOnly(manifest) {
+	if isAssetOnly(manifest) {
 		return "", nil
 	}
 	kind, err := packageio.ManifestKind(manifest)
@@ -139,7 +145,7 @@ func executablePathForManifest(root string, manifest *providermanifestv1.Manifes
 }
 
 func normalizeInstalledExecutable(root string, manifest *providermanifestv1.Manifest, configuredName string) error {
-	if manifest == nil || isUIOnly(manifest) {
+	if manifest == nil || isAssetOnly(manifest) {
 		return nil
 	}
 	kind, err := packageio.ManifestKind(manifest)

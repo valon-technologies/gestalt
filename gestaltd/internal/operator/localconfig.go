@@ -123,14 +123,14 @@ providers:
       source: %s
       config:
         dsn: %q
-  ui:
-    root:
-      source: %s
-      path: /
   secrets:
     env:
       source: env
 apps:
+  root:
+    source: %s
+    static:
+      mount: /
   httpbin:
     displayName: HTTPBin
     source: %s
@@ -164,14 +164,15 @@ providers:
         path: %q
       config:
         dsn: %q
-  ui:
-    root:
-      source:
-        path: %q
-      path: /
   secrets:
     env:
       source: env
+apps:
+  root:
+    source:
+      path: %q
+    static:
+      mount: /
 `, encryptionKey,
 		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultExternalCredentialsProvider),
 		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultIndexedDBProvider),

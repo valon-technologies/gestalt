@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
-func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
+func TestDefaultManagedConfigIncludesRootStaticApp(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -24,17 +24,21 @@ func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	rootUI := cfg.Providers.UI["root"]
-	if rootUI == nil {
-		t.Fatal(`Providers.UI["root"] = nil`)
+	rootApp := cfg.Apps["root"]
+	if rootApp == nil {
+		t.Fatal(`Apps["root"] = nil`)
 		return
 	}
 	wantURL := config.DefaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion)
-	if got := rootUI.SourceMetadataURL(); got != wantURL {
-		t.Fatalf(`Providers.UI["root"].SourceMetadataURL() = %q, want %q`, got, wantURL)
+	if got := rootApp.SourceMetadataURL(); got != wantURL {
+		t.Fatalf(`Apps["root"].SourceMetadataURL() = %q, want %q`, got, wantURL)
 	}
-	if got := rootUI.Path; got != "/" {
-		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")
+	if rootApp.Static == nil {
+		t.Fatal(`Apps["root"].Static = nil`)
+		return
+	}
+	if got := rootApp.Static.Mount; got != "/" {
+		t.Fatalf(`Apps["root"].Static.Mount = %q, want %q`, got, "/")
 	}
 
 	indexedDB := cfg.Providers.IndexedDB["main"]
@@ -48,7 +52,7 @@ func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
 	}
 }
 
-func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
+func TestDefaultLocalSourceConfigIncludesRootStaticApp(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -65,17 +69,21 @@ func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	rootUI := cfg.Providers.UI["root"]
-	if rootUI == nil {
-		t.Fatal(`Providers.UI["root"] = nil`)
+	rootApp := cfg.Apps["root"]
+	if rootApp == nil {
+		t.Fatal(`Apps["root"] = nil`)
 		return
 	}
 	wantPath := filepath.Join(providersDir, "ui", "default", "manifest.yaml")
-	if got := rootUI.SourcePath(); got != wantPath {
-		t.Fatalf(`Providers.UI["root"].Source.Path = %q, want %q`, got, wantPath)
+	if got := rootApp.SourcePath(); got != wantPath {
+		t.Fatalf(`Apps["root"].Source.Path = %q, want %q`, got, wantPath)
 	}
-	if got := rootUI.Path; got != "/" {
-		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")
+	if rootApp.Static == nil {
+		t.Fatal(`Apps["root"].Static = nil`)
+		return
+	}
+	if got := rootApp.Static.Mount; got != "/" {
+		t.Fatalf(`Apps["root"].Static.Mount = %q, want %q`, got, "/")
 	}
 
 	externalCredentials := cfg.Providers.ExternalCredentials[config.DefaultProviderInstance]
@@ -128,19 +136,23 @@ func TestResolveStartConfigPathsGeneratesDefaultLocalSourceConfig(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Load(%s): %v", wantConfigPath, err)
 	}
-	rootUI := cfg.Providers.UI["root"]
-	if rootUI == nil {
-		t.Fatal(`Providers.UI["root"] = nil`)
+	rootApp := cfg.Apps["root"]
+	if rootApp == nil {
+		t.Fatal(`Apps["root"] = nil`)
 		return
 	}
 	wantUIPath := config.DefaultLocalProviderManifestPath(providersDir, config.DefaultUIProvider)
-	if got := rootUI.SourcePath(); got != wantUIPath {
-		t.Fatalf(`Providers.UI["root"].Source.Path = %q, want %q`, got, wantUIPath)
+	if got := rootApp.SourcePath(); got != wantUIPath {
+		t.Fatalf(`Apps["root"].Source.Path = %q, want %q`, got, wantUIPath)
 	}
-	if got := rootUI.Path; got != "/" {
-		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")
+	if rootApp.Static == nil {
+		t.Fatal(`Apps["root"].Static = nil`)
+		return
 	}
-	if len(cfg.Apps) != 0 {
-		t.Fatalf("Apps = %#v, want empty", cfg.Apps)
+	if got := rootApp.Static.Mount; got != "/" {
+		t.Fatalf(`Apps["root"].Static.Mount = %q, want %q`, got, "/")
+	}
+	if len(cfg.Apps) != 1 {
+		t.Fatalf("Apps = %#v, want only root static app", cfg.Apps)
 	}
 }

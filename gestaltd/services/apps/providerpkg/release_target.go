@@ -16,9 +16,6 @@ func ReleaseRequiresBuild(manifest *providermanifestv1.Manifest) bool {
 }
 
 func releaseRequiresBuildForKind(manifest *providermanifestv1.Manifest, kind string) bool {
-	if kind == providermanifestv1.KindUI {
-		return false
-	}
 	if manifest == nil {
 		return false
 	}
@@ -46,7 +43,7 @@ func ValidateExplicitRunPackaging(root string, manifest *providermanifestv1.Mani
 	if err != nil {
 		return err
 	}
-	if kind == providermanifestv1.KindUI || !releaseRequiresBuildForKind(manifest, kind) {
+	if !releaseRequiresBuildForKind(manifest, kind) {
 		return nil
 	}
 	resolved, err := ResolveSourceReleaseBuild(root, manifest)
