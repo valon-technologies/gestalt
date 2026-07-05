@@ -21,6 +21,7 @@ import (
 type loginRequest struct {
 	State        string `json:"state"`
 	CallbackPort int    `json:"callbackPort,omitempty"`
+	Next         string `json:"next,omitempty"`
 }
 
 type authInfoResponse struct {
@@ -125,6 +126,18 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	nextPath, err := resolveLoginRedirectPath(req.Next, s.allowedLoginRedirectBaseURLs())
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	auth, err = s.loginAuthRuntimeForNextPath(nextPath)
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	state := req.State
 	if req.CallbackPort > 0 && req.CallbackPort <= maxPort {
 		state = fmt.Sprintf("%s%d:%s", cliStatePrefix, req.CallbackPort, req.State)
@@ -134,7 +147,7 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
-	loginURL, err := s.beginLogin(w, r, auth, state, "")
+	loginURL, err := s.beginLogin(w, r, auth, state, nextPath)
 	if err != nil {
 		auditErr = err
 		status := http.StatusInternalServerError
@@ -442,6 +455,13 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Query().Get("cli") != "1" {
+		if port, rawState, ok := extractCLIState(loginState.State); ok {
+			redirectCLIAuthorization(w, r, port, code, rawState)
+			return
+		}
+	}
+
 	auth, err = s.authRuntimeForProvider(loginState.Provider)
 	if err != nil {
 		auditErr = err
@@ -567,6 +587,32 @@ func stripCLIStatePrefix(state string) (string, bool) {
 		return "", false
 	}
 	return rawState, true
+}
+
+func extractCLIState(state string) (port int, rawState string, ok bool) {
+	if !strings.HasPrefix(state, cliStatePrefix) {
+		return 0, "", false
+	}
+	rest := strings.TrimPrefix(state, cliStatePrefix)
+	portText, raw, found := strings.Cut(rest, ":")
+	if !found || portText == "" || raw == "" {
+		return 0, "", false
+	}
+	p, err := strconv.Atoi(portText)
+	if err != nil || p < 1 || p > maxPort {
+		return 0, "", false
+	}
+	return p, raw, true
+}
+
+func redirectCLIAuthorization(w http.ResponseWriter, r *http.Request, port int, code, rawState string) {
+	target := fmt.Sprintf(
+		"http://127.0.0.1:%d/?code=%s&state=%s",
+		port,
+		url.QueryEscape(code),
+		url.QueryEscape(rawState),
+	)
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {

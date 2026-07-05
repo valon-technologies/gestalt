@@ -52,6 +52,7 @@ type MountedUI struct {
 	Path                string
 	AppName             string
 	AuthorizationPolicy string
+	PublicPaths         []string
 	Routes              []MountedUIRoute
 	Handler             http.Handler
 	// ThemeStylesheet and ThemeAssetsDir are resolved absolute paths to a

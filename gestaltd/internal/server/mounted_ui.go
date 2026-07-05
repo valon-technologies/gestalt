@@ -22,7 +22,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
 )
 
-const browserLoginPath = "/api/v1/auth/login"
+const browserLoginPath = "/login"
 const adminUIDirEnv = "GESTALTD_ADMIN_UI_DIR"
 const defaultAdminAuthorizationResource = "gestaltAdmin"
 
@@ -439,12 +439,66 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if mountedUIPathIsPublic(mounted, r.URL.Path) {
+			inner.ServeHTTP(w, r)
+			return
+		}
 		ctx, ok := s.authorizeProtectedUIRequest(w, r, mounted, redirectLogin)
 		if !ok {
 			return
 		}
 		inner.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func mountedUIPathIsPublic(mounted MountedUI, requestPath string) bool {
+	if len(mounted.PublicPaths) == 0 {
+		return false
+	}
+	relativePath := requestPath
+	if mounted.Path != "/" {
+		relativePath = strings.TrimPrefix(requestPath, mounted.Path)
+	}
+	if relativePath == "" {
+		relativePath = "/"
+	}
+	if !strings.HasPrefix(relativePath, "/") {
+		relativePath = "/" + relativePath
+	}
+	for _, pattern := range mounted.PublicPaths {
+		if PublicPathMatches(pattern, relativePath) {
+			return true
+		}
+	}
+	return false
+}
+
+func PublicPathMatches(pattern, path string) bool {
+	pattern = strings.TrimSpace(pattern)
+	path = strings.TrimSpace(path)
+	if pattern == "" {
+		return false
+	}
+	if strings.HasSuffix(pattern, "/**") {
+		base := strings.TrimSuffix(pattern, "/**")
+		if base == "" {
+			return true
+		}
+		return path == base || strings.HasPrefix(path, base+"/")
+	}
+	if strings.HasSuffix(pattern, "/*") {
+		base := strings.TrimSuffix(pattern, "/*")
+		if base == "" {
+			trimmed := strings.TrimPrefix(path, "/")
+			return trimmed == "" || !strings.Contains(trimmed, "/")
+		}
+		if path == base {
+			return true
+		}
+		rest := strings.TrimPrefix(path, base+"/")
+		return strings.HasPrefix(path, base+"/") && rest != "" && !strings.Contains(rest, "/")
+	}
+	return path == pattern
 }
 
 func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handler {
