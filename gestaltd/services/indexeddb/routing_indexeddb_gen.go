@@ -153,3 +153,19 @@ func (s *routingIndexedDBServer) IndexDelete(ctx context.Context, req *proto.Ind
 	return server.IndexDelete(ctx, req)
 }
 
+func (s *routingIndexedDBServer) AcquireLock(ctx context.Context, req *proto.AcquireLockRequest) (*proto.AcquireLockResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.AcquireLock(ctx, req)
+}
+
+func (s *routingIndexedDBServer) ReleaseLock(ctx context.Context, req *proto.ReleaseLockRequest) (*emptypb.Empty, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.ReleaseLock(ctx, req)
+}
+

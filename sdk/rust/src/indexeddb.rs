@@ -4,13 +4,14 @@
 
 use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::codec::indexeddb::{
-    from_wire_count_response, from_wire_cursor_response, from_wire_delete_response,
-    from_wire_key_response, from_wire_keys_response, from_wire_record_response,
-    from_wire_records_response, from_wire_transaction_server_message,
-    to_wire_create_object_store_request, to_wire_cursor_client_message,
-    to_wire_delete_object_store_request, to_wire_index_query_request,
-    to_wire_object_store_name_request, to_wire_object_store_range_request,
-    to_wire_object_store_request, to_wire_record_request, to_wire_transaction_client_message,
+    from_wire_acquire_lock_response, from_wire_count_response, from_wire_cursor_response,
+    from_wire_delete_response, from_wire_key_response, from_wire_keys_response,
+    from_wire_record_response, from_wire_records_response, from_wire_transaction_server_message,
+    to_wire_acquire_lock_request, to_wire_create_object_store_request,
+    to_wire_cursor_client_message, to_wire_delete_object_store_request,
+    to_wire_index_query_request, to_wire_object_store_name_request,
+    to_wire_object_store_range_request, to_wire_object_store_request, to_wire_record_request,
+    to_wire_release_lock_request, to_wire_transaction_client_message,
 };
 use crate::generated::v1;
 use crate::rpc_support::{GestaltError, RpcStatus};
@@ -60,6 +61,34 @@ pub mod transaction_mode {
     pub const TRANSACTION_READONLY: i32 = 0;
     /// TRANSACTION_READWRITE.
     pub const TRANSACTION_READWRITE: i32 = 1;
+}
+
+/// AcquireLockRequest requests a keyed, TTL'd advisory lease.
+///
+/// Native message type for `gestalt.provider.v1.AcquireLockRequest`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AcquireLockRequest {
+    /// The `key` field.
+    pub key: String,
+    /// The `holder` field.
+    pub holder: String,
+    /// The `ttl_ms` field.
+    pub ttl_ms: i64,
+}
+
+/// AcquireLockResponse reports whether the lease was acquired and its current owner.
+///
+/// Native message type for `gestalt.provider.v1.AcquireLockResponse`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AcquireLockResponse {
+    /// The `acquired` field.
+    pub acquired: bool,
+    /// The `holder` field.
+    pub holder: String,
+    /// The `expires_at` field; None when unset.
+    pub expires_at: Option<std::time::SystemTime>,
+    /// The `fencing_token` field.
+    pub fencing_token: i64,
 }
 
 /// BeginTransactionRequest starts an IndexedDB transaction stream.
@@ -433,6 +462,17 @@ pub struct RecordResponse {
 pub struct RecordsResponse {
     /// The `records` field.
     pub records: Vec<Record>,
+}
+
+/// ReleaseLockRequest releases a lease previously acquired by holder.
+///
+/// Native message type for `gestalt.provider.v1.ReleaseLockRequest`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ReleaseLockRequest {
+    /// The `key` field.
+    pub key: String,
+    /// The `holder` field.
+    pub holder: String,
 }
 
 /// Native message type for `gestalt.provider.v1.TransactionAbortRequest`.
@@ -1209,6 +1249,67 @@ impl IndexedDB {
         }
         let response = self.inner.index_delete(tonic_request).await?;
         Ok(from_wire_delete_response(response.into_inner()))
+    }
+
+    /// Advisory locks
+    ///
+    /// Calls `gestalt.provider.v1.IndexedDB.AcquireLock`.
+    pub async fn acquire_lock(
+        &mut self,
+        key: String,
+        holder: String,
+        ttl_ms: i64,
+    ) -> Result<AcquireLockResponse, GestaltError> {
+        let request = AcquireLockRequest {
+            key,
+            holder,
+            ttl_ms,
+        };
+        let mut tonic_request = tonic::Request::new(to_wire_acquire_lock_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.acquire_lock(tonic_request).await?;
+        Ok(from_wire_acquire_lock_response(response.into_inner()))
+    }
+
+    /// Advisory locks
+    ///
+    /// Calls `gestalt.provider.v1.IndexedDB.AcquireLock` with the full request and response messages.
+    pub async fn acquire_lock_raw(
+        &mut self,
+        request: AcquireLockRequest,
+    ) -> Result<AcquireLockResponse, GestaltError> {
+        let mut tonic_request = tonic::Request::new(to_wire_acquire_lock_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.acquire_lock(tonic_request).await?;
+        Ok(from_wire_acquire_lock_response(response.into_inner()))
+    }
+
+    /// Calls `gestalt.provider.v1.IndexedDB.ReleaseLock`.
+    pub async fn release_lock(&mut self, key: String, holder: String) -> Result<(), GestaltError> {
+        let request = ReleaseLockRequest { key, holder };
+        let mut tonic_request = tonic::Request::new(to_wire_release_lock_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        self.inner.release_lock(tonic_request).await?;
+        Ok(())
+    }
+
+    /// Calls `gestalt.provider.v1.IndexedDB.ReleaseLock` with the full request and response messages.
+    pub async fn release_lock_raw(
+        &mut self,
+        request: ReleaseLockRequest,
+    ) -> Result<(), GestaltError> {
+        let mut tonic_request = tonic::Request::new(to_wire_release_lock_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        self.inner.release_lock(tonic_request).await?;
+        Ok(())
     }
 
     /// Cursor iteration (bidirectional stream)

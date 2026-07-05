@@ -25,6 +25,44 @@ _empty: Any = _empty_pb2
 _struct: Any = _struct_pb2
 
 
+def to_wire_acquire_lock_request(value: native.AcquireLockRequest) -> Any:
+    return _indexeddb_pb2.AcquireLockRequest(
+        key=value.key,
+        holder=value.holder,
+        ttl_ms=value.ttl_ms,
+    )
+
+
+def from_wire_acquire_lock_request(value: Any) -> native.AcquireLockRequest:
+    return native.AcquireLockRequest(
+        key=value.key,
+        holder=value.holder,
+        ttl_ms=value.ttl_ms,
+    )
+
+
+def to_wire_acquire_lock_response(value: native.AcquireLockResponse) -> Any:
+    return _indexeddb_pb2.AcquireLockResponse(
+        acquired=value.acquired,
+        holder=value.holder,
+        expires_at=None
+        if value.expires_at is None
+        else to_wire_timestamp(value.expires_at),
+        fencing_token=value.fencing_token,
+    )
+
+
+def from_wire_acquire_lock_response(value: Any) -> native.AcquireLockResponse:
+    return native.AcquireLockResponse(
+        acquired=value.acquired,
+        holder=value.holder,
+        expires_at=from_wire_timestamp(value.expires_at)
+        if value.HasField("expires_at")
+        else None,
+        fencing_token=value.fencing_token,
+    )
+
+
 def to_wire_begin_transaction_request(value: native.BeginTransactionRequest) -> Any:
     return _indexeddb_pb2.BeginTransactionRequest(
         stores=value.stores,
@@ -537,6 +575,20 @@ def to_wire_records_response(value: native.RecordsResponse) -> Any:
 def from_wire_records_response(value: Any) -> native.RecordsResponse:
     return native.RecordsResponse(
         records=[from_wire_record(item) for item in value.records],
+    )
+
+
+def to_wire_release_lock_request(value: native.ReleaseLockRequest) -> Any:
+    return _indexeddb_pb2.ReleaseLockRequest(
+        key=value.key,
+        holder=value.holder,
+    )
+
+
+def from_wire_release_lock_request(value: Any) -> native.ReleaseLockRequest:
+    return native.ReleaseLockRequest(
+        key=value.key,
+        holder=value.holder,
     )
 
 

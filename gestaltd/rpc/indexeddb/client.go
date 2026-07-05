@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -21,6 +22,33 @@ type clientDB struct {
 
 // Close is a no-op because this client uses shared transport.
 func (db *clientDB) Close() error { return nil }
+
+// AcquireLock acquires a keyed advisory lease via the IndexedDB service.
+func (db *clientDB) AcquireLock(ctx context.Context, key, holder string, ttl time.Duration) (idb.LockLease, error) {
+	ctx, cancel := db.callCtx(ctx)
+	defer cancel()
+	resp, err := db.client.AcquireLock(ctx, &proto.AcquireLockRequest{Key: key, Holder: holder, TtlMs: ttl.Milliseconds()})
+	if err != nil {
+		return idb.LockLease{}, grpcErr(err)
+	}
+	lease := idb.LockLease{Acquired: resp.GetAcquired(), Holder: resp.GetHolder(), FencingToken: resp.GetFencingToken()}
+	if ts := resp.GetExpiresAt(); ts != nil {
+		lease.ExpiresAt = ts.AsTime()
+	}
+	return lease, nil
+}
+
+// ReleaseLock releases a keyed advisory lease held by holder.
+func (db *clientDB) ReleaseLock(ctx context.Context, key, holder string) error {
+	ctx, cancel := db.callCtx(ctx)
+	defer cancel()
+	if _, err := db.client.ReleaseLock(ctx, &proto.ReleaseLockRequest{Key: key, Holder: holder}); err != nil {
+		return grpcErr(err)
+	}
+	return nil
+}
+
+var _ idb.Locker = (*clientDB)(nil)
 
 var (
 	_ idb.Database    = (*clientDB)(nil)

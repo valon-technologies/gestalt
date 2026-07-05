@@ -84,7 +84,7 @@ func assertStreamContextSurvivesUnaryTimeout(t *testing.T, streamCtx context.Con
 
 	time.Sleep(15 * time.Millisecond)
 	if err := streamCtx.Err(); err != nil {
-		t.Fatalf("stream context cancelled after return: %v", err)
+		t.Fatalf("stream context canceled after return: %v", err)
 	}
 }
 
@@ -92,6 +92,8 @@ func TestBidiStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
 	t.Parallel()
 
 	t.Run("transaction", func(t *testing.T) {
+		t.Parallel()
+
 		stub := &txnStreamClient{}
 		db := NewClient(stub, Options{UnaryTimeout: 5 * time.Millisecond})
 
@@ -108,6 +110,8 @@ func TestBidiStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
 	})
 
 	t.Run("cursor", func(t *testing.T) {
+		t.Parallel()
+
 		stub := &cursorStreamClient{}
 		db := NewClient(stub, Options{UnaryTimeout: 5 * time.Millisecond})
 

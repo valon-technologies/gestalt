@@ -3,6 +3,7 @@ package indexeddb
 import (
 	"context"
 	"io"
+	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -10,6 +11,8 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -76,4 +79,20 @@ func (r *remoteIndexedDB) Close() error {
 		return nil
 	}
 	return r.closer.Close()
+}
+
+func (r *remoteIndexedDB) AcquireLock(ctx context.Context, key, holder string, ttl time.Duration) (idb.LockLease, error) {
+	locker, ok := r.Database.(idb.Locker)
+	if !ok {
+		return idb.LockLease{}, status.Error(codes.Unimplemented, "indexeddb: advisory locks not supported")
+	}
+	return locker.AcquireLock(ctx, key, holder, ttl)
+}
+
+func (r *remoteIndexedDB) ReleaseLock(ctx context.Context, key, holder string) error {
+	locker, ok := r.Database.(idb.Locker)
+	if !ok {
+		return status.Error(codes.Unimplemented, "indexeddb: advisory locks not supported")
+	}
+	return locker.ReleaseLock(ctx, key, holder)
 }

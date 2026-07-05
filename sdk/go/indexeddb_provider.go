@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"time"
 
 	"github.com/valon-technologies/gestalt/sdk/go/client"
 )
@@ -35,6 +36,35 @@ type IndexedDBProvider interface {
 
 	OpenCursor(ctx context.Context, req IndexedDBOpenCursorRequest) (IndexedDBCursor, error)
 	BeginTransaction(ctx context.Context, req IndexedDBBeginTransactionRequest) (IndexedDBTransaction, error)
+}
+
+// IndexedDBLockProvider is an optional capability implemented by providers that
+// support keyed advisory leases, in addition to [IndexedDBProvider]. The SDK
+// returns Unimplemented for providers that do not implement it.
+type IndexedDBLockProvider interface {
+	AcquireLock(ctx context.Context, req IndexedDBAcquireLockRequest) (IndexedDBLockLease, error)
+	ReleaseLock(ctx context.Context, req IndexedDBReleaseLockRequest) error
+}
+
+// IndexedDBAcquireLockRequest requests a keyed advisory lease held for TTL.
+type IndexedDBAcquireLockRequest struct {
+	Key    string
+	Holder string
+	TTL    time.Duration
+}
+
+// IndexedDBReleaseLockRequest releases a lease held by Holder.
+type IndexedDBReleaseLockRequest struct {
+	Key    string
+	Holder string
+}
+
+// IndexedDBLockLease is the outcome of an AcquireLock call.
+type IndexedDBLockLease struct {
+	Acquired     bool
+	Holder       string
+	ExpiresAt    time.Time
+	FencingToken int64
 }
 
 // IndexedDBObjectStoreRequest names a store within a database.

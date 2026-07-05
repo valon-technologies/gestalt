@@ -9,6 +9,56 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func ToWireAcquireLockRequest(value *AcquireLockRequest) *proto.AcquireLockRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.AcquireLockRequest{
+		Key:    value.Key,
+		Holder: value.Holder,
+		TtlMs:  value.TtlMs,
+	}
+	return out
+}
+
+func FromWireAcquireLockRequest(value *proto.AcquireLockRequest) *AcquireLockRequest {
+	if value == nil {
+		return nil
+	}
+	out := &AcquireLockRequest{
+		Key:    value.Key,
+		Holder: value.Holder,
+		TtlMs:  value.TtlMs,
+	}
+	return out
+}
+
+func ToWireAcquireLockResponse(value *AcquireLockResponse) *proto.AcquireLockResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.AcquireLockResponse{
+		Acquired:     value.Acquired,
+		Holder:       value.Holder,
+		ExpiresAt:    toWireTimestamp(value.ExpiresAt),
+		FencingToken: value.FencingToken,
+	}
+	return out
+}
+
+func FromWireAcquireLockResponse(value *proto.AcquireLockResponse) *AcquireLockResponse {
+	if value == nil {
+		return nil
+	}
+	out := &AcquireLockResponse{
+		Acquired:     value.Acquired,
+		Holder:       value.Holder,
+		ExpiresAt:    fromWireTimestamp(value.ExpiresAt),
+		FencingToken: value.FencingToken,
+	}
+	return out
+}
+
 func ToWireBeginTransactionRequest(value *BeginTransactionRequest) *proto.BeginTransactionRequest {
 	if value == nil {
 		return nil
@@ -691,6 +741,28 @@ func FromWireRecordsResponse(value *proto.RecordsResponse) *RecordsResponse {
 	out := &RecordsResponse{}
 	for _, item := range value.Records {
 		out.Records = append(out.Records, FromWireRecord(item))
+	}
+	return out
+}
+
+func ToWireReleaseLockRequest(value *ReleaseLockRequest) *proto.ReleaseLockRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ReleaseLockRequest{
+		Key:    value.Key,
+		Holder: value.Holder,
+	}
+	return out
+}
+
+func FromWireReleaseLockRequest(value *proto.ReleaseLockRequest) *ReleaseLockRequest {
+	if value == nil {
+		return nil
+	}
+	out := &ReleaseLockRequest{
+		Key:    value.Key,
+		Holder: value.Holder,
 	}
 	return out
 }

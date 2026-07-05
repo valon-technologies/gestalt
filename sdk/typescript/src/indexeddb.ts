@@ -19,6 +19,7 @@ import {
 
 import * as wire from "./internal/gen/v1/indexeddb_pb.ts";
 import {
+  fromWireAcquireLockResponse,
   fromWireCountResponse,
   fromWireCursorResponse,
   fromWireDeleteResponse,
@@ -27,6 +28,7 @@ import {
   fromWireRecordResponse,
   fromWireRecordsResponse,
   fromWireTransactionServerMessage,
+  toWireAcquireLockRequest,
   toWireCreateObjectStoreRequest,
   toWireCursorClientMessage,
   toWireDeleteObjectStoreRequest,
@@ -35,6 +37,7 @@ import {
   toWireObjectStoreRangeRequest,
   toWireObjectStoreRequest,
   toWireRecordRequest,
+  toWireReleaseLockRequest,
   toWireTransactionClientMessage,
 } from "./internal/codec/indexeddb.ts";
 import {
@@ -78,6 +81,25 @@ export const TransactionMode = {
 } as const;
 
 export type TransactionMode = number;
+
+/**
+ * AcquireLockRequest requests a keyed, TTL'd advisory lease.
+ */
+export interface AcquireLockRequest {
+  key: string;
+  holder: string;
+  ttlMs: bigint;
+}
+
+/**
+ * AcquireLockResponse reports whether the lease was acquired and its current owner.
+ */
+export interface AcquireLockResponse {
+  acquired: boolean;
+  holder: string;
+  expiresAt?: Date;
+  fencingToken: bigint;
+}
 
 /**
  * BeginTransactionRequest starts an IndexedDB transaction stream.
@@ -412,6 +434,14 @@ export interface RecordResponse {
  */
 export interface RecordsResponse {
   records: Record[];
+}
+
+/**
+ * ReleaseLockRequest releases a lease previously acquired by holder.
+ */
+export interface ReleaseLockRequest {
+  key: string;
+  holder: string;
 }
 
 export interface TransactionAbortRequest {
@@ -1262,6 +1292,55 @@ export class IndexedDB {
       ),
     );
     return fromWireDeleteResponse(response);
+  }
+
+  async acquireLock(
+    key: string,
+    holder: string,
+    ttlMs: bigint,
+  ): Promise<AcquireLockResponse> {
+    const request = { key, holder, ttlMs } satisfies Init<AcquireLockRequest>;
+    const response = await callUnary(() =>
+      this.client.acquireLock(
+        toWireAcquireLockRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireAcquireLockResponse(response);
+  }
+
+  /**
+   * Advisory locks
+   */
+  async acquireLockRaw(
+    request: Init<AcquireLockRequest>,
+  ): Promise<AcquireLockResponse> {
+    const response = await callUnary(() =>
+      this.client.acquireLock(
+        toWireAcquireLockRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireAcquireLockResponse(response);
+  }
+
+  async releaseLock(key: string, holder: string): Promise<void> {
+    const request = { key, holder } satisfies Init<ReleaseLockRequest>;
+    await callUnary(() =>
+      this.client.releaseLock(
+        toWireReleaseLockRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+  }
+
+  async releaseLockRaw(request: Init<ReleaseLockRequest>): Promise<void> {
+    await callUnary(() =>
+      this.client.releaseLock(
+        toWireReleaseLockRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
   }
 
   /**
