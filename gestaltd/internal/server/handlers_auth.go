@@ -455,6 +455,13 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	originalState := r.URL.Query().Get("state")
+	if r.URL.Query().Get("cli") != "1" {
+		if port, rawState, ok := extractCLIState(originalState); ok {
+			redirectCLIAuthorization(w, r, port, code, rawState)
+			return
+		}
+	}
+
 	loginState, err := s.loginStateForCallback(r)
 	if err != nil {
 		auditErr = errors.New("login state validation failed")
@@ -471,8 +478,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mode, cliPort, cliRawState := resolveLoginCallbackMode(r, loginState.State)
-	switch mode {
-	case loginCallbackBounce:
+	if mode == loginCallbackBounce {
 		redirectCLIAuthorization(w, r, cliPort, code, cliRawState)
 		return
 	}
