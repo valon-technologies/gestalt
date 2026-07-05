@@ -455,10 +455,6 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	originalState := r.URL.Query().Get("state")
-
-	// Browser OAuth callbacks for CLI login do not carry the login_state
-	// cookie stored on the CLI HTTP client from POST /auth/login. Extract
-	// the provider-returned cli:port:state before loginStateForCallback.
 	if r.URL.Query().Get("cli") != "1" {
 		if port, rawState, ok := extractCLIState(originalState); ok {
 			auditAllowed = true

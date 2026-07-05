@@ -8753,7 +8753,6 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 				return http.ErrUseLastResponse
 			},
 		}
-		// No cookie jar — simulates browser after Google OAuth redirect.
 		resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=cli:54305:raw-cli-state")
 		if err != nil {
 			t.Fatalf("callback request: %v", err)
