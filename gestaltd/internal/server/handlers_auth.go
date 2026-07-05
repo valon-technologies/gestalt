@@ -471,8 +471,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mode, cliPort, cliRawState := resolveLoginCallbackMode(r, loginState.State)
-	switch mode {
-	case loginCallbackBounce:
+	if mode == loginCallbackBounce {
 		redirectCLIAuthorization(w, r, cliPort, code, cliRawState)
 		return
 	}
