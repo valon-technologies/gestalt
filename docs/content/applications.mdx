@@ -909,8 +909,7 @@ apps:
 | `static.mount` | Public URL prefix. Defaults to `/{app name}` when omitted. |
 | `static.theme` | Optional deployer workaround: paths to a theme stylesheet and assets directory injected before the static handler. |
 
-Only one app may mount at `/`. That root mount may supply `admin/index.html` for
-the built-in `/admin` shell when `server.admin.ui` is unset.
+Only one app may mount at `/`.
 
 Gestalt serves static files from the prepared `static/` directory, applies SPA
 fallback (unknown paths under the mount return `index.html`), and injects
