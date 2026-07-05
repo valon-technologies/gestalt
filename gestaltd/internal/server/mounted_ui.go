@@ -466,14 +466,14 @@ func mountedUIPathIsPublic(mounted MountedUI, requestPath string) bool {
 		relativePath = "/" + relativePath
 	}
 	for _, pattern := range mounted.PublicPaths {
-		if PublicPathMatches(pattern, relativePath) {
+		if publicPathMatches(pattern, relativePath) {
 			return true
 		}
 	}
 	return false
 }
 
-func PublicPathMatches(pattern, path string) bool {
+func publicPathMatches(pattern, path string) bool {
 	pattern = strings.TrimSpace(pattern)
 	path = strings.TrimSpace(path)
 	if pattern == "" {

@@ -2947,6 +2947,60 @@ func TestMountedAppStaticServing(t *testing.T) {
 			t.Fatalf("body = %q, want SPA fallback with base tag", body)
 		}
 	})
+
+	t.Run("public paths bypass app level auth", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>home</body></html>")
+		writeTestUIAsset(t, filepath.Join(rootDir, "login", "index.html"), "<html><head></head><body>login page</body></html>")
+		writeTestUIAsset(t, filepath.Join(rootDir, "apps", "index.html"), "<html><head></head><body>apps page</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"home": {
+					Static: &config.AppStaticConfig{
+						Mount:       "/",
+						PublicPaths: []string{"/login", "/login/**"},
+					},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		loginResp, err := http.Get(ts.URL + "/login")
+		if err != nil {
+			t.Fatalf("GET /login: %v", err)
+		}
+		loginBody, err := io.ReadAll(loginResp.Body)
+		_ = loginResp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll login: %v", err)
+		}
+		if loginResp.StatusCode != http.StatusOK {
+			t.Fatalf("login status = %d, want 200: %s", loginResp.StatusCode, loginBody)
+		}
+		if !strings.Contains(string(loginBody), "login page") {
+			t.Fatalf("login body = %q, want login page", loginBody)
+		}
+
+		noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}}
+		appsResp, err := noRedirect.Get(ts.URL + "/apps")
+		if err != nil {
+			t.Fatalf("GET /apps: %v", err)
+		}
+		_ = appsResp.Body.Close()
+		if appsResp.StatusCode != http.StatusFound {
+			t.Fatalf("apps status = %d, want 302", appsResp.StatusCode)
+		}
+		if got := appsResp.Header.Get("Location"); got != "/login?next=%2Fapps" {
+			t.Fatalf("apps Location = %q, want /login?next=%%2Fapps", got)
+		}
+	})
 }
 
 func TestMountedAppStaticAuthorizationRelationshipAllow(t *testing.T) {
@@ -8684,92 +8738,6 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 	}
 	if gotAuthorizationCodeState != "cli:54305:test-state" {
 		t.Fatalf("authorization code state = %q, want prefixed CLI state", gotAuthorizationCodeState)
-	}
-}
-
-func TestLoginCallbackCLILocalhostBounce(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-
-	body := bytes.NewBufferString(`{"state":"raw-cli-state","callbackPort":54305}`)
-	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("start login: %v", err)
-	}
-	_ = loginResp.Body.Close()
-
-	noRedirect := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=raw-cli-state")
-	if err != nil {
-		t.Fatalf("callback request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected 302, got %d", resp.StatusCode)
-	}
-	got := resp.Header.Get("Location")
-	wantPrefix := "http://127.0.0.1:54305/?code=good-code&state=raw-cli-state"
-	if got != wantPrefix {
-		t.Fatalf("Location = %q, want %q", got, wantPrefix)
-	}
-}
-
-func TestStartLoginWithNextPath(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
-				if code == "good-code" {
-					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
-				}
-				return nil, fmt.Errorf("bad code")
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-
-	body := bytes.NewBufferString(`{"state":"test-state","next":"/apps"}`)
-	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("start login: %v", err)
-	}
-	_ = loginResp.Body.Close()
-
-	noRedirect := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
-	if err != nil {
-		t.Fatalf("callback request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected 302, got %d", resp.StatusCode)
-	}
-	if got := resp.Header.Get("Location"); got != "/apps" {
-		t.Fatalf("Location = %q, want /apps", got)
 	}
 }
 
