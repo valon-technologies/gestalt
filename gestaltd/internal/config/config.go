@@ -2785,6 +2785,9 @@ func loadValidatedConfigRoot(path string, lookup func(string) (string, bool), mo
 	if err := validateConfigRootAPIVersion(root); err != nil {
 		return yaml.Node{}, err
 	}
+	if err := rejectLegacyProvidersUIKey(&root); err != nil {
+		return yaml.Node{}, err
+	}
 
 	validationRoot, err := cloneConfigRoot(root)
 	if err != nil {
