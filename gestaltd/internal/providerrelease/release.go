@@ -282,8 +282,7 @@ func ArtifactsByTarget(artifacts Artifacts) (map[string]Artifact, error) {
 }
 
 func RuntimeForManifest(kind string, manifest *providermanifestv1.Manifest) string {
-	switch providermanifestv1.NormalizeKind(kind) {
-	case providermanifestv1.KindApp:
+	if providermanifestv1.NormalizeKind(kind) == providermanifestv1.KindApp {
 		if manifest != nil && manifest.Spec != nil && manifest.Spec.AssetRoot != "" && manifest.Entrypoint == nil && !manifest.IsDeclarativeOnlyProvider() {
 			return RuntimeUI
 		}

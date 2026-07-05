@@ -15,7 +15,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -249,80 +248,6 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	if _, ok := binding.RequestBody.Content["application/x-www-form-urlencoded"]; !ok {
 		t.Fatalf("binding.RequestBody.Content = %#v, want form content type", binding.RequestBody.Content)
 	}
-}
-
-func writeManagedPluginConfigForTest(t *testing.T, dir, pluginKey, metadataURL, mountPath string) string {
-	t.Helper()
-
-	indexedDBManifest := writeStubIndexedDBManifestForTest(t, dir)
-	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	configData := fmt.Sprintf(`apiVersion: %s
-providers:
-  externalCredentials:
-    default:
-      source:
-        path: %q
-  indexeddb:
-    sqlite:
-      source:
-        path: %q
-      config:
-        path: %q
-apps:
-  %s:
-    source: %q
-    static:
-      mount: %q
-server:
-  providers:
-    externalCredentials: default
-    indexeddb: sqlite
-  artifactsDir: %q
-  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, config.ConfigAPIVersion, externalCredentialsManifest, indexedDBManifest, filepath.Join(dir, "gestalt.db"), pluginKey, metadataURL, mountPath, filepath.Join(dir, "prepared-artifacts"))
-	configPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte(configData), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	return configPath
-}
-
-func writeStubIndexedDBManifestForTest(t *testing.T, dir string) string {
-	t.Helper()
-
-	providerDir := filepath.Join(dir, "indexeddb-stub-src")
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("mkdir indexeddb stub dir: %v", err)
-	}
-	stagingBinary := filepath.Join(providerDir, "indexeddb-stub-binary")
-	artifactContent := []byte("indexeddb-stub-binary")
-	if err := os.WriteFile(stagingBinary, artifactContent, 0o755); err != nil {
-		t.Fatalf("write indexeddb staging binary: %v", err)
-	}
-	buildOutput := ".gestaltd/bin/indexeddb-stub"
-	buildScript := fmt.Sprintf("mkdir -p .gestaltd/bin\ncp indexeddb-stub-binary %s\nchmod +x %s\n", buildOutput, buildOutput)
-	if err := os.WriteFile(filepath.Join(providerDir, "build.sh"), []byte(buildScript), 0o755); err != nil {
-		t.Fatalf("write indexeddb build script: %v", err)
-	}
-	manifestPath := filepath.Join(providerDir, "manifest.yaml")
-	data, err := encodeTestManifestFormat(&providermanifestv1.Manifest{
-		Source:      "github.com/test/providers/indexeddb-stub",
-		Version:     "0.0.1-alpha.1",
-		Kind:        providermanifestv1.KindIndexedDB,
-		DisplayName: "IndexedDB Stub",
-		Spec:        &providermanifestv1.Spec{},
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh", "indexeddb-stub-binary"},
-		},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("encode indexeddb manifest: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
-		t.Fatalf("write indexeddb manifest: %v", err)
-	}
-	return manifestPath
 }
 
 type sourceComponentReleaseFixtureParams struct {
@@ -650,15 +575,6 @@ func newSourceProviderReleaseFixtureWithStaticBundle(t *testing.T, dir string) s
 	return newSourceBuiltStaticAppReleaseFixture(t, dir)
 }
 
-func newStaticAppReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
-	t.Helper()
-
-	pluginDir := newDeclarativeStaticAppReleaseFixture(t, dir)
-	writeTestFile(t, pluginDir, filepath.Join(assetRoot, "index.html"), []byte("<html></html>\n"), 0o644)
-	writeTestFile(t, pluginDir, filepath.Join(assetRoot, "static", "app.js"), []byte("console.log('ok')\n"), 0o644)
-	return pluginDir
-}
-
 func newUIReleaseFixture(t *testing.T, dir string) string {
 	return newStaticAppReleaseFixture(t, dir)
 }
@@ -669,18 +585,6 @@ func newBuiltUIReleaseFixture(t *testing.T, dir string) string {
 
 func newSourceBuiltUIReleaseFixture(t *testing.T, dir string) string {
 	return newSourceBuiltStaticAppReleaseFixture(t, dir)
-}
-
-func newSourceProviderReleaseFixtureWithOwnedUI(t *testing.T, dir string) string {
-	return newSourceProviderReleaseFixtureWithStaticBundle(t, dir)
-}
-
-func newSourceProviderReleaseFixtureWithSourceBuiltOwnedUI(t *testing.T, dir string) string {
-	return newSourceProviderReleaseFixtureWithStaticBundle(t, dir)
-}
-
-func newUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
-	return newStaticAppReleaseFixtureWithAssetRoot(t, dir, assetRoot)
 }
 
 func writeReleaseBuildScript(t *testing.T, dir, rel, body string) {

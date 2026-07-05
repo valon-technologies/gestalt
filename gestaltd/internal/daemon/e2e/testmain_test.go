@@ -296,14 +296,6 @@ func writeComponentProviderDir(dir, binaryPath string, manifest *providermanifes
 	return os.WriteFile(filepath.Join(dir, "manifest.yaml"), manifestData, 0o644)
 }
 
-func writeManifest(path string, manifest *providermanifestv1.Manifest) error {
-	data, err := encodeTestManifestFormat(manifest, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
-}
-
 func writeLocalProviderReleaseMetadata(dir string) error {
 	manifestPath := filepath.Join(dir, "manifest.yaml")
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)

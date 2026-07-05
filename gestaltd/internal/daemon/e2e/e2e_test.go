@@ -1093,11 +1093,6 @@ func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
 	return appDir
 }
 
-func setUIManifestSource(t *testing.T, manifestPath, source string) {
-	t.Helper()
-	setAppManifestSource(t, filepath.Dir(manifestPath), source)
-}
-
 func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	t.Helper()
 

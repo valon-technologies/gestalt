@@ -3204,22 +3204,6 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 	return nil
 }
 
-func sourceBuildPathDomains(sourceDir string, manifest *providermanifestv1.Manifest) ([]string, error) {
-	build := providerpkg.EffectiveSourceBuild(manifest)
-	if build == nil {
-		return nil, nil
-	}
-	domains := providerpkg.BuildWorkdirAbsPaths(sourceDir, build.Commands)
-	outputRel, _, err := providerpkg.SourceBuildOutput(manifest)
-	if err != nil {
-		return nil, err
-	}
-	if outputRel != "" {
-		domains = append(domains, filepath.Join(sourceDir, filepath.FromSlash(outputRel)))
-	}
-	return domains, nil
-}
-
 func (l *Lifecycle) applyLockedProviders(configPaths []string, lockfilePath, artifactsDir string, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) error {
 	if !configHasProviderLoading(cfg) {
 		return nil

@@ -428,10 +428,8 @@ func lockEntryRuntime(entry LockEntry, fallbackKind string) string {
 	if value := strings.TrimSpace(entry.Runtime); value != "" {
 		return value
 	}
-	switch lockEntryKind(entry, fallbackKind) {
-	default:
-		return providerLockRuntimeExecutable
-	}
+	_ = fallbackKind
+	return providerLockRuntimeExecutable
 }
 
 func downloadArchiveForSource(ctx context.Context, client *http.Client, token, archiveURL string) (*providerpkg.DownloadResult, error) {

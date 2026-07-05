@@ -1,9 +1,7 @@
 package operator
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -2789,50 +2787,6 @@ func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *provide
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
 	return pkgPath
-}
-
-type lifecycleArchiveFile struct {
-	name string
-	data []byte
-	mode int64
-}
-
-func mustCreateLifecycleArchive(t *testing.T, archivePath string, files ...lifecycleArchiveFile) {
-	t.Helper()
-
-	out, err := os.Create(archivePath)
-	if err != nil {
-		t.Fatalf("Create(%q): %v", archivePath, err)
-	}
-	defer func() {
-		if err := out.Close(); err != nil {
-			t.Fatalf("close archive: %v", err)
-		}
-	}()
-
-	gzw := gzip.NewWriter(out)
-	defer func() {
-		if err := gzw.Close(); err != nil {
-			t.Fatalf("close gzip: %v", err)
-		}
-	}()
-
-	tw := tar.NewWriter(gzw)
-	defer func() {
-		if err := tw.Close(); err != nil {
-			t.Fatalf("close tar: %v", err)
-		}
-	}()
-
-	for _, file := range files {
-		hdr := &tar.Header{Name: file.name, Mode: file.mode, Size: int64(len(file.data))}
-		if err := tw.WriteHeader(hdr); err != nil {
-			t.Fatalf("WriteHeader(%q): %v", file.name, err)
-		}
-		if _, err := tw.Write(file.data); err != nil {
-			t.Fatalf("Write(%q): %v", file.name, err)
-		}
-	}
 }
 
 func TestReadWriteLockfile_RoundTrip(t *testing.T) {

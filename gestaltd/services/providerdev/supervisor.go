@@ -11,16 +11,12 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 const (
@@ -64,30 +60,6 @@ type managedProc struct {
 
 func (t Target) procKey() string {
 	return t.Name
-}
-
-func devActiveTarget(name, basePath, manifestPath, devWorkdir string, manifest *providermanifestv1.Manifest) (Target, error) {
-	run := providerpkg.EffectiveSourceRunCommand(manifest)
-	if run == nil {
-		return Target{}, fmt.Errorf("dev-active without run manifest")
-	}
-	workdir := devWorkdir
-	if w := strings.TrimSpace(run.Workdir); w != "" && w != "." {
-		root := filepath.Dir(manifestPath)
-		workdir = filepath.Join(root, filepath.FromSlash(w))
-	}
-	readyTimeout := defaultReadyTimeout
-	if run.ReadyTimeout > 0 {
-		readyTimeout = run.ReadyTimeout
-	}
-	return Target{
-		Name:         name,
-		BasePath:     basePath,
-		Workdir:      workdir,
-		Command:      append([]string(nil), run.Command...),
-		Env:          run.Env,
-		ReadyTimeout: readyTimeout,
-	}, nil
 }
 
 func Start(ctx context.Context, logger *slog.Logger, targets []Target) (*Supervisor, error) {
