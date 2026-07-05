@@ -491,6 +491,9 @@ func mountedUIAuthorizationResourceName(mounted MountedUI) string {
 }
 
 func mountedUIRequiresAuthorization(mounted MountedUI) bool {
+	if mounted.PublicStatic {
+		return false
+	}
 	if mounted.AppLevelAuth {
 		return true
 	}

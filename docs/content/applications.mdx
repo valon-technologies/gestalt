@@ -907,6 +907,7 @@ apps:
 | Field | Description |
 | --- | --- |
 | `static.mount` | Public URL prefix. Defaults to `/{app name}` when omitted. |
+| `static.public` | When `true`, serve the static bundle without login. Defaults to `false`. |
 | `static.theme` | Optional deployer workaround: paths to a theme stylesheet and assets directory injected before the static handler. |
 
 Only one app may mount at `/`.
@@ -919,15 +920,27 @@ handler when `static.theme` is configured.
 
 ## Authorization
 
-Mounted app static assets use a single app-level authorization check — there are
-no per-route role allowlists in the unified model.
+Mounted app static assets support three access tiers:
 
-When `apps.<name>.authorizationPolicy` is set (or the app name is used as the
-resource type), Gestalt authenticates the caller **before serving bytes** from
-the mount. Unauthorized requests receive a login redirect or `403` without
-leaking asset contents.
+| Tier | Configuration | Behavior |
+| --- | --- | --- |
+| Public | `static.public: true` | No login required to load HTML, CSS, JS, or theme assets. API calls still require a session. |
+| Authenticated | Default (`static.public` omitted or `false`) | Browser login required before any bytes are served from the mount. |
+| Authorized | `authorizationPolicy` set (or app name as resource type) | After login, Gestalt checks relationships before serving bytes. Unauthorized requests receive a login redirect or `403` without leaking asset contents. |
 
-Grant access with static relationships and optional default roles:
+When `static.public: true`, authorization policy and relationships do not gate static serving. They still apply to `/api/v1/{app}/{operation}` routes.
+
+Example public docs mount:
+
+```yaml
+apps:
+  docs:
+    static:
+      mount: /docs
+      public: true
+```
+
+Grant access for authenticated and authorized tiers with static relationships and optional default roles:
 
 ```yaml
 authorization:

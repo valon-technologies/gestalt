@@ -21,6 +21,7 @@ period, but new work should use app-level static assets.
 | `spec.ui.path` in app manifest | Optional static output from `build`; packaged as `static/` in release archives |
 | `apps.<name>.ui.path` / `ui.bundle` | `apps.<name>.static.mount` |
 | `providers.ui.<name>` | `apps.<name>.static` on the owning app |
+| Anonymous legacy `providers.ui` (no `authorizationPolicy`, no `spec.routes`) | `apps.<name>.static` with `public: true` |
 | `spec.routes[].allowedRoles` | App-level authorization via `authorization.models.<m>.resourceTypes.<app>.defaultRole` and relationships |
 | UI manifest `dev:` block | App manifest `run:` commands with `readyTimeout` for local dev proxy |
 

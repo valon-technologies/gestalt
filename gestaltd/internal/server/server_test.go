@@ -2863,61 +2863,289 @@ func TestMountedAppStaticServing(t *testing.T) {
 			t.Fatalf("body = %q, want SPA fallback with base tag", body)
 		}
 	})
+
+	t.Run("default requires login when auth enabled", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>gamma-shell</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, core.ErrNotFound
+					}
+					return &core.UserIdentity{Email: "gamma-user@example.test"}, nil
+				},
+			}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"gamma": {
+					Static:             &config.AppStaticConfig{Mount: "/gamma"},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}}
+		resp, err := noRedirect.Get(ts.URL + "/gamma/")
+		if err != nil {
+			t.Fatalf("GET /gamma/: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusFound {
+			t.Fatalf("status = %d, want 302", resp.StatusCode)
+		}
+		if got := resp.Header.Get("Location"); !strings.HasPrefix(got, "/api/v1/auth/login") {
+			t.Fatalf("Location = %q, want login redirect", got)
+		}
+	})
+
+	t.Run("public serves without session when auth enabled", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>public-docs-shell</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"docs": {
+					Static: &config.AppStaticConfig{
+						Mount:  "/docs",
+						Public: true,
+					},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/docs/")
+		if err != nil {
+			t.Fatalf("GET /docs/: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "public-docs-shell") {
+			t.Fatalf("body = %q, want public docs shell", body)
+		}
+	})
+
+	t.Run("public SPA fallback without session", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>public-docs-shell</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"docs": {
+					Static: &config.AppStaticConfig{
+						Mount:  "/docs",
+						Public: true,
+					},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/docs/guide/intro")
+		if err != nil {
+			t.Fatalf("GET deep route: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		if !strings.Contains(string(body), "public-docs-shell") {
+			t.Fatalf("body = %q, want SPA fallback", body)
+		}
+	})
+
+	t.Run("public theme without session", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		themeDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>public-docs-shell</body></html>")
+		stylesheetBody := "body { color: public; }"
+		writeTestUIAsset(t, filepath.Join(themeDir, "docs.css"), stylesheetBody)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"docs": {
+					Static: &config.AppStaticConfig{
+						Mount:  "/docs",
+						Public: true,
+					},
+					ResolvedStaticRoot:      rootDir,
+					ResolvedThemeStylesheet: filepath.Join(themeDir, "docs.css"),
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/docs/theme.css")
+		if err != nil {
+			t.Fatalf("GET theme.css: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if got := string(body); got != stylesheetBody {
+			t.Fatalf("theme.css body = %q, want %q", got, stylesheetBody)
+		}
+	})
+
+	t.Run("public static API still requires auth", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>public-docs-shell</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"docs": {
+					Static: &config.AppStaticConfig{
+						Mount:  "/docs",
+						Public: true,
+					},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/api/v1/apps")
+		if err != nil {
+			t.Fatalf("GET /api/v1/apps: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", resp.StatusCode)
+		}
+	})
 }
 
 func TestMountedAppStaticAuthorizationRelationshipAllow(t *testing.T) {
 	t.Parallel()
 
-	rootDir := t.TempDir()
-	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>secret-alpha-bundle</body></html>")
+	t.Run("authorized user with relationship", func(t *testing.T) {
+		t.Parallel()
 
-	svc := testutil.NewStubServices(t)
-	user := seedUserRecord(t, svc, "alpha-user", "alpha-user@example.test", time.Now())
-	authz := &serverTestAuthorizationProvider{
-		resourceTypes: []*proto.AuthorizationModelResourceType{{Name: "alpha"}},
-		relationships: []*proto.Relationship{
-			testAuthorizationRelationship(principal.UserSubjectID(user.ID), "viewer", "alpha", "alpha"),
-		},
-	}
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>secret-alpha-bundle</body></html>")
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "alpha-user@example.test"}, nil
+		svc := testutil.NewStubServices(t)
+		user := seedUserRecord(t, svc, "alpha-user", "alpha-user@example.test", time.Now())
+		authz := &serverTestAuthorizationProvider{
+			resourceTypes: []*proto.AuthorizationModelResourceType{{Name: "alpha"}},
+			relationships: []*proto.Relationship{
+				testAuthorizationRelationship(principal.UserSubjectID(user.ID), "viewer", "alpha", "alpha"),
 			},
 		}
-		cfg.Services = svc
-		cfg.Authorization = authz
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"alpha": {
-				Static:             &config.AppStaticConfig{Mount: "/alpha"},
-				ResolvedStaticRoot: rootDir,
-			},
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, core.ErrNotFound
+					}
+					return &core.UserIdentity{Email: "alpha-user@example.test"}, nil
+				},
+			}
+			cfg.Services = svc
+			cfg.Authorization = authz
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"alpha": {
+					Static:             &config.AppStaticConfig{Mount: "/alpha"},
+					ResolvedStaticRoot: rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/alpha/", nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET authorized: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "secret-alpha-bundle") {
+			t.Fatalf("body = %q, want bundle bytes", body)
 		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/alpha/", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET authorized: %v", err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	if !strings.Contains(string(body), "secret-alpha-bundle") {
-		t.Fatalf("body = %q, want bundle bytes", body)
-	}
+	t.Run("public with authorization policy", func(t *testing.T) {
+		t.Parallel()
+
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head></head><body>public-alpha-bundle</body></html>")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"alpha": {
+					Static: &config.AppStaticConfig{
+						Mount:  "/alpha",
+						Public: true,
+					},
+					AuthorizationPolicy: "alpha",
+					ResolvedStaticRoot:  rootDir,
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/alpha/")
+		if err != nil {
+			t.Fatalf("GET /alpha/: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if !strings.Contains(string(body), "public-alpha-bundle") {
+			t.Fatalf("body = %q, want bundle bytes", body)
+		}
+	})
 }
 
 func TestMountedAppStaticAuthorizationDenyWithoutAccess(t *testing.T) {

@@ -662,15 +662,25 @@ func providerLocalBaseURL(port int) string {
 }
 
 func mountedPublicUIPaths(cfg *config.Config) []string {
-	if cfg == nil || len(cfg.Providers.UI) == 0 {
+	if cfg == nil {
 		return nil
 	}
-	paths := make([]string, 0, len(cfg.Providers.UI))
+	paths := make([]string, 0, len(cfg.Providers.UI)+len(cfg.Apps))
 	for _, entry := range cfg.Providers.UI {
 		if entry == nil || strings.TrimSpace(entry.Path) == "" {
 			continue
 		}
 		paths = append(paths, strings.TrimSpace(entry.Path))
+	}
+	for name, entry := range cfg.Apps {
+		if entry == nil || entry.Static == nil || !entry.Static.Public {
+			continue
+		}
+		mount := strings.TrimSpace(entry.Static.Mount)
+		if mount == "" {
+			mount = "/" + name
+		}
+		paths = append(paths, mount)
 	}
 	slices.Sort(paths)
 	return slices.Compact(paths)
