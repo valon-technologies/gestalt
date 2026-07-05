@@ -26,6 +26,12 @@ import {
 } from "../http-subject.ts";
 import { operationResult } from "../app-decode.ts";
 import {
+  type MigrationSet,
+  normalizeMigrations,
+  type Revision,
+  runMigrationsForBinding,
+} from "../migrate.ts";
+import {
   isProviderBase,
   ProviderBase,
   type ProviderBaseOptions,
@@ -101,6 +107,12 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
   iconSvg?: string;
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
+  /**
+   * Migration revisions run to head during `configure`, before the author's own
+   * configure hook. Accepts a plain {@link Revision} array or a
+   * {@link MigrationSet}.
+   */
+  migrations?: MigrationSet | Revision[];
 }
 
 function normalizeResponseHeaders(
@@ -171,6 +183,7 @@ export class AppProvider extends ProviderBase {
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
   private readonly httpSubjectResolver: HTTPSubjectResolver | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
+  private readonly migrationSet: MigrationSet | undefined;
 
   constructor(options: AppDefinitionOptions) {
     super(options);
@@ -180,6 +193,7 @@ export class AppProvider extends ProviderBase {
     this.connectionParams = normalizeConnectionParams(options.connectionParams);
     this.httpSubjectResolver = options.resolveHTTPSubject;
     this.sessionCatalogHandler = options.sessionCatalog;
+    this.migrationSet = normalizeMigrations(options.migrations);
 
     for (const rawEntry of options.operations) {
       const entry = operation(rawEntry);
@@ -191,6 +205,19 @@ export class AppProvider extends ProviderBase {
       }
       this.operations.set(entry.id, entry);
     }
+  }
+
+  /**
+   * Runs declared migrations to head, then invokes the author's configure hook.
+   */
+  override async configureProvider(
+    name: string,
+    config: Record<string, unknown>,
+  ): Promise<void> {
+    if (this.migrationSet) {
+      await runMigrationsForBinding(this.migrationSet);
+    }
+    await super.configureProvider(name, config);
   }
 
   /**

@@ -317,6 +317,17 @@ export {
 } from "./providers/indexeddb.ts";
 export type { IndexedDBQuery as WireIndexedDBQuery, KeyValue } from "./indexeddb.ts";
 export {
+  DEFAULT_LEDGER_STORE,
+  runMigrations,
+  type MigrationHandle,
+  type MigrationResult,
+  type MigrationSet,
+  type MigrationStore,
+  type Revision,
+  type SchemaSpec,
+  type StoreSchema,
+} from "./migrate.ts";
+export {
   PresignMethod,
   S3,
   S3ObjectAccess,
