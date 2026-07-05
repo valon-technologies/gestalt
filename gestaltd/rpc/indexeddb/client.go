@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"

@@ -1453,6 +1453,36 @@ providers:
 		}
 	})
 
+	t.Run("admin ui without static is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  providers:
+    indexeddb: sqlite
+  admin:
+    ui: dashboard
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  dashboard:
+    source:
+      path: ./app/manifest.yaml
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.admin.ui references app \"dashboard\" without apps.dashboard.static configured") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
@@ -1585,7 +1615,7 @@ apps:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), "field ui not found in type config.ProvidersConfig") {
+		if !strings.Contains(err.Error(), "providers.ui is no longer supported") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
