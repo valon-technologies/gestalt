@@ -8740,7 +8740,7 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 		}
 	})
 
-	t.Run("redirects to localhost without cli=1", func(t *testing.T) {
+	t.Run("redirects browser OAuth callback to localhost", func(t *testing.T) {
 		t.Parallel()
 
 		ts := newTestServer(t, func(cfg *server.Config) {
@@ -8748,23 +8748,13 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		jar, _ := cookiejar.New(nil)
-		client := &http.Client{Jar: jar}
-
-		body := bytes.NewBufferString(`{"state":"raw-cli-state","callbackPort":54305}`)
-		loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-		if err != nil {
-			t.Fatalf("start login: %v", err)
-		}
-		_ = loginResp.Body.Close()
-
 		noRedirect := &http.Client{
-			Jar: jar,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
 		}
-		resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=raw-cli-state")
+		// No cookie jar — simulates browser after Google OAuth redirect.
+		resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=cli:54305:raw-cli-state")
 		if err != nil {
 			t.Fatalf("callback request: %v", err)
 		}
