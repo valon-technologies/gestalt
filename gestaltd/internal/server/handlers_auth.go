@@ -126,21 +126,15 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	nextPath := ""
-	if strings.TrimSpace(req.Next) != "" {
-		var err error
-		nextPath, err = resolveLoginRedirectPath(req.Next, s.allowedLoginRedirectBaseURLs())
-		if err != nil {
-			auditErr = err
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+	auth, nextPath, err := s.resolveLoginStartAuth(req.Next, false)
+	if err != nil {
+		auditErr = err
+		status := http.StatusBadRequest
+		if !errors.Is(err, errBadLoginRedirectPath) {
+			status = http.StatusInternalServerError
 		}
-		auth, err = s.loginAuthRuntimeForNextPath(nextPath)
-		if err != nil {
-			auditErr = err
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
+		writeError(w, status, err.Error())
+		return
 	}
 	state := req.State
 	if req.CallbackPort > 0 && req.CallbackPort <= maxPort {
@@ -178,16 +172,14 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.start", auditAllowed, auditErr)
 	}()
 
-	nextPath, err := resolveLoginRedirectPath(r.URL.Query().Get("next"), s.allowedLoginRedirectBaseURLs())
+	auth, nextPath, err := s.resolveLoginStartAuth(r.URL.Query().Get("next"), true)
 	if err != nil {
 		auditErr = err
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	auth, err = s.loginAuthRuntimeForNextPath(nextPath)
-	if err != nil {
-		auditErr = err
-		writeError(w, http.StatusInternalServerError, err.Error())
+		status := http.StatusBadRequest
+		if !errors.Is(err, errBadLoginRedirectPath) {
+			status = http.StatusInternalServerError
+		}
+		writeError(w, status, err.Error())
 		return
 	}
 	if auth.noAuth || auth.provider == nil {
@@ -256,10 +248,29 @@ func (s *Server) allowedLoginRedirectBaseURLs() []string {
 	return []string{strings.TrimRight(s.managementBaseURL, "/") + "/admin"}
 }
 
+func (s *Server) resolveLoginStartAuth(nextRaw string, defaultRoot bool) (authRuntime, string, error) {
+	nextPath, err := resolveLoginRedirectPath(nextRaw, s.allowedLoginRedirectBaseURLs())
+	if err != nil {
+		return authRuntime{}, "", err
+	}
+	if nextPath == "" && defaultRoot {
+		nextPath = "/"
+	}
+	auth := s.serverAuthRuntime()
+	if nextPath != "" {
+		var authErr error
+		auth, authErr = s.loginAuthRuntimeForNextPath(nextPath)
+		if authErr != nil {
+			return auth, nextPath, authErr
+		}
+	}
+	return auth, nextPath, nil
+}
+
 func resolveLoginRedirectPath(raw string, allowedBaseURLs []string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "/", nil
+		return "", nil
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
@@ -459,11 +470,11 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.URL.Query().Get("cli") != "1" {
-		if port, rawState, ok := extractCLIState(loginState.State); ok {
-			redirectCLIAuthorization(w, r, port, code, rawState)
-			return
-		}
+	mode, cliPort, cliRawState := resolveLoginCallbackMode(r, loginState.State)
+	switch mode {
+	case loginCallbackBounce:
+		redirectCLIAuthorization(w, r, cliPort, code, cliRawState)
+		return
 	}
 
 	auth, err = s.authRuntimeForProvider(loginState.Provider)
@@ -511,7 +522,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if r.URL.Query().Get("cli") == "1" {
+	if mode == loginCallbackCLIGrant {
 		apiGrant, exchangeErr := auth.provider.Token(r.Context(), &core.TokenRequest{
 			GrantType:        core.GrantTypeTokenExchange,
 			SubjectToken:     tokenResp.AccessToken,
@@ -577,20 +588,22 @@ func loginStatesMatch(expectedState, originalState string) bool {
 	return false
 }
 
-func stripCLIStatePrefix(state string) (string, bool) {
-	if !strings.HasPrefix(state, cliStatePrefix) {
-		return "", false
+type loginCallbackMode int
+
+const (
+	loginCallbackBrowser loginCallbackMode = iota
+	loginCallbackBounce
+	loginCallbackCLIGrant
+)
+
+func resolveLoginCallbackMode(r *http.Request, cookieState string) (loginCallbackMode, int, string) {
+	if r.URL.Query().Get("cli") == "1" {
+		return loginCallbackCLIGrant, 0, ""
 	}
-	rest := strings.TrimPrefix(state, cliStatePrefix)
-	portText, rawState, ok := strings.Cut(rest, ":")
-	if !ok || portText == "" || rawState == "" {
-		return "", false
+	if port, rawState, ok := extractCLIState(cookieState); ok {
+		return loginCallbackBounce, port, rawState
 	}
-	port, err := strconv.Atoi(portText)
-	if err != nil || port < 1 || port > maxPort {
-		return "", false
-	}
-	return rawState, true
+	return loginCallbackBrowser, 0, ""
 }
 
 func extractCLIState(state string) (port int, rawState string, ok bool) {
@@ -607,6 +620,11 @@ func extractCLIState(state string) (port int, rawState string, ok bool) {
 		return 0, "", false
 	}
 	return p, raw, true
+}
+
+func stripCLIStatePrefix(state string) (string, bool) {
+	_, rawState, ok := extractCLIState(state)
+	return rawState, ok
 }
 
 func redirectCLIAuthorization(w http.ResponseWriter, r *http.Request, port int, code, rawState string) {
