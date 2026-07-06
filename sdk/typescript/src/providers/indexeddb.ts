@@ -140,6 +140,8 @@ export interface IndexedDB {
     schema?: ObjectStoreSchema,
   ): Promise<ObjectStore>;
   deleteObjectStore(name: string): Promise<void>;
+  createIndex(store: string, index: IndexSchema): Promise<void>;
+  deleteIndex(store: string, name: string): Promise<void>;
   objectStore(name: string): ObjectStore;
   transaction(
     stores: string[],
@@ -1142,6 +1144,27 @@ class IndexedDBImpl implements IndexedDB {
    */
   async deleteObjectStore(name: string): Promise<void> {
     await rpc(() => this.client.deleteObjectStore({ name }));
+  }
+
+  /**
+   * Adds a secondary index to an existing object store.
+   */
+  async createIndex(store: string, index: IndexSchema): Promise<void> {
+    await rpc(() =>
+      this.client.createIndex({
+        store,
+        name: index.name,
+        keyPath: index.keyPath,
+        unique: index.unique ?? false,
+      }),
+    );
+  }
+
+  /**
+   * Removes a secondary index from an existing object store.
+   */
+  async deleteIndex(store: string, name: string): Promise<void> {
+    await rpc(() => this.client.deleteIndex({ store, name }));
   }
 
   /**

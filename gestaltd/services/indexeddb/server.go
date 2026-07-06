@@ -145,6 +145,35 @@ func (s *indexedDBServer) DeleteObjectStore(ctx context.Context, req *proto.Dele
 	return &emptypb.Empty{}, nil
 }
 
+func (s *indexedDBServer) CreateIndex(ctx context.Context, req *proto.CreateIndexRequest) (*emptypb.Empty, error) {
+	if err := s.ensureAllowedStore(req.GetStore()); err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	manager, ok := metricutil.UnwrapIndexedDB(s.ds).(idb.IndexManager)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: index management not supported")
+	}
+	index := idb.IndexDefinition{Name: req.GetName(), KeyPath: req.GetKeyPath(), Unique: req.GetUnique()}
+	if err := manager.CreateIndex(ctx, s.storeName(req.GetStore()), index); err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *indexedDBServer) DeleteIndex(ctx context.Context, req *proto.DeleteIndexRequest) (*emptypb.Empty, error) {
+	if err := s.ensureAllowedStore(req.GetStore()); err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	manager, ok := metricutil.UnwrapIndexedDB(s.ds).(idb.IndexManager)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: index management not supported")
+	}
+	if err := manager.DeleteIndex(ctx, s.storeName(req.GetStore()), req.GetName()); err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {

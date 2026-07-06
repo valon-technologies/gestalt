@@ -109,3 +109,17 @@ type LockLease struct {
 	ExpiresAt    time.Time
 	FencingToken int64
 }
+
+// IndexManager is an optional capability implemented by backends that support
+// adding or removing secondary indexes on an existing object store.
+type IndexManager interface {
+	CreateIndex(ctx context.Context, store string, index IndexDefinition) error
+	DeleteIndex(ctx context.Context, store, name string) error
+}
+
+// IndexDefinition describes a secondary index to create on an object store.
+type IndexDefinition struct {
+	Name    string
+	KeyPath []string
+	Unique  bool
+}
