@@ -4,7 +4,8 @@ import { base } from "../src/mount.ts";
 
 type BaseElement = {
   tagName: string;
-  getAttribute(name: string): string | null;
+  href: string;
+  getAttribute?: (name: string) => string | null;
 };
 
 function installDocument(baseEl: BaseElement | null): void {
@@ -35,19 +36,26 @@ describe("base", () => {
   test("returns the mount prefix without a trailing slash", () => {
     installDocument({
       tagName: "BASE",
+      href: "http://example.com/example-app/",
+    });
+    expect(base()).toBe("/example-app");
+  });
+
+  test("resolves a relative base href from HTMLBaseElement.href", () => {
+    installDocument({
+      tagName: "BASE",
+      href: "http://example.com/mounted-app/",
       getAttribute(name: string) {
-        return name === "href" ? "/vm-style-guide/" : null;
+        return name === "href" ? "./" : null;
       },
     });
-    expect(base()).toBe("/vm-style-guide");
+    expect(base()).toBe("/mounted-app");
   });
 
   test("returns empty string for a root mount", () => {
     installDocument({
       tagName: "BASE",
-      getAttribute(name: string) {
-        return name === "href" ? "/" : null;
-      },
+      href: "http://example.com/",
     });
     expect(base()).toBe("");
   });

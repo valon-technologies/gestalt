@@ -18,10 +18,10 @@ export function base(): string {
   if (!baseEl || baseEl.tagName !== "BASE") {
     throw new Error("base() requires <base href> to be present in the document");
   }
-  const href = baseEl.getAttribute("href")?.trim();
+  const href = (baseEl as HTMLBaseElement).href.trim();
   if (!href) {
     throw new Error("base() requires <base href> to be present in the document");
   }
-  const pathname = new URL(href, "http://localhost").pathname.replace(/\/+$/, "");
+  const pathname = new URL(href).pathname.replace(/\/+$/, "");
   return pathname;
 }
