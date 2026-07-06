@@ -130,10 +130,6 @@ export function gestalt(options = {}) {
           return html;
         }
         const devBase = normalizeBasePath(env.GESTALT_DEV_BASE_PATH);
-        // Root mount: relative refs resolve without <base>; gestaltd skips it in prod too.
-        if (devBase === "/") {
-          return html;
-        }
         if (/<base\b/i.test(html)) {
           return html;
         }

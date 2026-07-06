@@ -2760,37 +2760,67 @@ func TestMountedAppStaticServing(t *testing.T) {
 	t.Run("base href injection", func(t *testing.T) {
 		t.Parallel()
 
-		rootDir := t.TempDir()
-		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head><title>alpha</title></head><body>alpha-shell</body></html>")
+		cases := []struct {
+			name     string
+			mount    string
+			request  string
+			wantBase string
+			shell    string
+		}{
+			{
+				name:     "subpath mount",
+				mount:    "/alpha",
+				request:  "/alpha/",
+				wantBase: `<base href="/alpha/">`,
+				shell:    "alpha-shell",
+			},
+			{
+				name:     "root mount",
+				mount:    "/",
+				request:  "/",
+				wantBase: `<base href="/">`,
+				shell:    "root-shell",
+			},
+		}
 
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.AppDefs = map[string]*config.ProviderEntry{
-				"alpha": {
-					Static:             &config.AppStaticConfig{Mount: "/alpha"},
-					ResolvedStaticRoot: rootDir,
-				},
-			}
-		})
-		testutil.CloseOnCleanup(t, ts)
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 
-		resp, err := http.Get(ts.URL + "/alpha/")
-		if err != nil {
-			t.Fatalf("GET /alpha/: %v", err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			t.Fatalf("ReadAll: %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want 200", resp.StatusCode)
-		}
-		text := string(body)
-		if !strings.Contains(text, `<base href="/alpha/">`) {
-			t.Fatalf("body = %q, want injected base href", text)
-		}
-		if !strings.Contains(text, "alpha-shell") {
-			t.Fatalf("body = %q, want alpha shell", text)
+				rootDir := t.TempDir()
+				writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html><head><title>"+tc.name+"</title></head><body>"+tc.shell+"</body></html>")
+
+				ts := newTestServer(t, func(cfg *server.Config) {
+					cfg.AppDefs = map[string]*config.ProviderEntry{
+						tc.name: {
+							Static:             &config.AppStaticConfig{Mount: tc.mount},
+							ResolvedStaticRoot: rootDir,
+						},
+					}
+				})
+				testutil.CloseOnCleanup(t, ts)
+
+				resp, err := http.Get(ts.URL + tc.request)
+				if err != nil {
+					t.Fatalf("GET %s: %v", tc.request, err)
+				}
+				body, err := io.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+				if err != nil {
+					t.Fatalf("ReadAll: %v", err)
+				}
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("status = %d, want 200", resp.StatusCode)
+				}
+				text := string(body)
+				if !strings.Contains(text, tc.wantBase) {
+					t.Fatalf("body = %q, want injected base href %q", text, tc.wantBase)
+				}
+				if !strings.Contains(text, tc.shell) {
+					t.Fatalf("body = %q, want %q shell", text, tc.shell)
+				}
+			})
 		}
 	})
 

@@ -3,6 +3,7 @@
   "entryPoints": [
     "src/index.ts",
     "src/build.ts",
+    "src/mount.ts",
     "src/providers/runtime-public.ts",
     "src/schema.ts",
     "src/telemetry.ts",
