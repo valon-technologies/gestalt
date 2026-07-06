@@ -5,6 +5,7 @@ import { base } from "../src/mount.ts";
 type BaseElement = {
   tagName: string;
   href: string;
+  getAttribute?: (name: string) => string | null;
 };
 
 function installDocument(baseEl: BaseElement | null): void {
@@ -38,10 +39,15 @@ describe("base", () => {
       href: "http://example.com/example-app/",
     });
     expect(base()).toBe("/example-app");
+  });
 
+  test("resolves a relative base href from HTMLBaseElement.href", () => {
     installDocument({
       tagName: "BASE",
       href: "http://example.com/mounted-app/",
+      getAttribute(name: string) {
+        return name === "href" ? "./" : null;
+      },
     });
     expect(base()).toBe("/mounted-app");
   });
