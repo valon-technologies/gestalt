@@ -536,9 +536,6 @@ func providerLocalSourceOverride(manifestPath string) map[string]any {
 		"url":           nil,
 		"githubRelease": nil,
 		"git":           nil,
-		"package":       nil,
-		"repo":          nil,
-		"version":       nil,
 		"auth":          nil,
 	}
 }

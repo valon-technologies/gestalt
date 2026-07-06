@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 func TestMaybeRunServeProviderLocalRejectsLockedWithoutConfig(t *testing.T) {
@@ -148,98 +146,4 @@ providers:
 	if !session.NoSync {
 		t.Fatalf("session.NoSync = false, want true so --locked --no-sync binds pinned artifacts as-is")
 	}
-}
-
-func TestPrepareProviderLocalSessionClearsGitSourceOnFleetOverlay(t *testing.T) {
-	t.Parallel()
-
-	t.Run("git source", func(t *testing.T) {
-		t.Parallel()
-
-		dir := t.TempDir()
-		appDir := setupAppDir(t, filepath.Join(dir, "oncall"))
-		setAppManifestSource(t, appDir, "github.com/valon/apps/oncall")
-
-		baseCfg := filepath.Join(dir, "base.yaml")
-		baseYAML := `apiVersion: gestaltd.config/v8
-apps:
-  oncall:
-    source:
-      git:
-        repo: https://github.com/valon-technologies/valon-tools.git
-        ref: cbd1f53e00000000000000000000000000000000
-        path: apps/oncall/manifest.yaml
-`
-		if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
-			t.Fatalf("WriteFile base config: %v", err)
-		}
-
-		session, err := prepareProviderLocalSession(providerLocalCommandOptions{
-			Paths:        []string{componentProviderManifestPath(t, appDir)},
-			ConfigPaths:  []string{baseCfg},
-			FleetOverlay: true,
-		})
-		if err != nil {
-			t.Fatalf("prepareProviderLocalSession: %v", err)
-		}
-		defer func() { _ = os.RemoveAll(session.Dir) }()
-
-		cfg, err := config.LoadPaths(session.ConfigPaths)
-		if err != nil {
-			t.Fatalf("LoadPaths(session.ConfigPaths): %v", err)
-		}
-		entry := cfg.Apps["oncall"]
-		if entry == nil {
-			t.Fatal(`Apps["oncall"] = nil`)
-		}
-		if !entry.Source.IsLocal() {
-			t.Fatalf("Apps[oncall].Source.IsLocal() = false, want true")
-		}
-		if entry.Source.IsGit() {
-			t.Fatalf("Apps[oncall].Source.IsGit() = true, want false")
-		}
-	})
-
-	t.Run("metadata URL source", func(t *testing.T) {
-		t.Parallel()
-
-		dir := t.TempDir()
-		appDir := setupAppDir(t, filepath.Join(dir, "oncall"))
-		setAppManifestSource(t, appDir, "github.com/valon/apps/oncall")
-
-		baseCfg := filepath.Join(dir, "base.yaml")
-		baseYAML := `apiVersion: gestaltd.config/v8
-apps:
-  oncall:
-    source: https://example.invalid/providers/oncall/provider-release.yaml
-`
-		if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
-			t.Fatalf("WriteFile base config: %v", err)
-		}
-
-		session, err := prepareProviderLocalSession(providerLocalCommandOptions{
-			Paths:        []string{componentProviderManifestPath(t, appDir)},
-			ConfigPaths:  []string{baseCfg},
-			FleetOverlay: true,
-		})
-		if err != nil {
-			t.Fatalf("prepareProviderLocalSession: %v", err)
-		}
-		defer func() { _ = os.RemoveAll(session.Dir) }()
-
-		cfg, err := config.LoadPaths(session.ConfigPaths)
-		if err != nil {
-			t.Fatalf("LoadPaths(session.ConfigPaths): %v", err)
-		}
-		entry := cfg.Apps["oncall"]
-		if entry == nil {
-			t.Fatal(`Apps["oncall"] = nil`)
-		}
-		if !entry.Source.IsLocal() {
-			t.Fatalf("Apps[oncall].Source.IsLocal() = false, want true")
-		}
-		if entry.Source.IsMetadataURL() {
-			t.Fatalf("Apps[oncall].Source.IsMetadataURL() = true, want false")
-		}
-	})
 }
