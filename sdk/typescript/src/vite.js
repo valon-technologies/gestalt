@@ -43,6 +43,30 @@ function devBinding(port) {
   };
 }
 
+const DEFAULT_DEV_API_PROXY_TARGET = "http://127.0.0.1:8080";
+
+/**
+ * @param {string | undefined | null} value
+ * @returns {string}
+ */
+function normalizeApiProxyTarget(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return DEFAULT_DEV_API_PROXY_TARGET;
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
+/**
+ * @param {Record<string, string | undefined>} env
+ * @returns {string}
+ */
+function resolveGestaltDevApiProxyTarget(env) {
+  return normalizeApiProxyTarget(
+    env.GESTALT_API_PROXY_TARGET?.trim() || env.GESTALT_BASE_URL?.trim(),
+  );
+}
+
 /**
  * @param {Record<string, string | undefined>} env
  * @param {string} command
@@ -71,10 +95,17 @@ function gestaltConfig(env, command) {
   const port = parseDevPort(devPort);
   const base = normalizeBasePath(env.GESTALT_DEV_BASE_PATH);
   const binding = devBinding(port);
+  const apiTarget = resolveGestaltDevApiProxyTarget(env);
+  const proxy = { target: apiTarget, changeOrigin: true };
 
   return {
     base,
-    server: binding,
+    server: {
+      ...binding,
+      proxy: {
+        "/api/v1": proxy,
+      },
+    },
     preview: binding,
   };
 }

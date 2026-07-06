@@ -182,6 +182,7 @@ gestaltd injects (after manifest `env` entries):
 | `GESTALT_DEV` | Set to `1` |
 | `GESTALT_DEV_PORT` | Port the frontend dev server must bind on `127.0.0.1` |
 | `GESTALT_DEV_BASE_PATH` | Mount path from `apps.<name>.static.mount` |
+| `GESTALT_BASE_URL` | Public gestaltd origin for two-origin Vite `/api/v1` proxying |
 | `GESTALT_PROVIDER_SOCKET` | Unix socket for the app provider when a backend `run` command is present |
 
 Map these in your framework dev script. See

@@ -1154,6 +1154,9 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 		target.BaseEnv = map[string]string{}
 	}
 	maps.Copy(target.BaseEnv, prepared.Env)
+	if baseURL := strings.TrimSpace(deps.BaseURL); baseURL != "" {
+		target.BaseEnv["GESTALT_BASE_URL"] = strings.TrimRight(baseURL, "/")
+	}
 	handle, err := deps.DevSupervisor.StartApp(ctx, target)
 	if err != nil {
 		prepared.Cleanup()

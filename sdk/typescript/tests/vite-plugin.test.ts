@@ -85,12 +85,20 @@ describe("gestalt vite plugin", () => {
     expect(config.build.outDir).toBe("dist");
   });
 
-  test("dev env resolves base, port, strictPort, and allowedHosts", async () => {
+  test("dev env applies gestaltd dev contract and /api/v1 proxy", async () => {
     const config = await resolveConfig(
       {
         configFile: false,
         root: fixtureRoot,
-        plugins: [gestalt({ env: { GESTALT_DEV_PORT: "5173", GESTALT_DEV_BASE_PATH: "/example" } })],
+        plugins: [
+          gestalt({
+            env: {
+              GESTALT_DEV_PORT: "5173",
+              GESTALT_DEV_BASE_PATH: "/example",
+              GESTALT_BASE_URL: "http://127.0.0.1:65003",
+            },
+          }),
+        ],
       },
       "serve",
     );
@@ -103,6 +111,35 @@ describe("gestalt vite plugin", () => {
     expect(config.preview.port).toBe(5173);
     expect(config.preview.strictPort).toBe(true);
     expect(config.preview.allowedHosts).toBe(true);
+    expect(config.server.proxy?.["/api/v1"]).toEqual({
+      target: "http://127.0.0.1:65003",
+      changeOrigin: true,
+    });
+
+    const overridden = await resolveConfig(
+      {
+        configFile: false,
+        root: fixtureRoot,
+        server: {
+          proxy: {
+            "/api/v1": { target: "http://127.0.0.1:8080", changeOrigin: true },
+          },
+        },
+        plugins: [
+          gestalt({
+            env: {
+              GESTALT_DEV_PORT: "5173",
+              GESTALT_API_PROXY_TARGET: "http://127.0.0.1:9000",
+            },
+          }),
+        ],
+      },
+      "serve",
+    );
+    expect(overridden.server.proxy?.["/api/v1"]).toEqual({
+      target: "http://127.0.0.1:9000",
+      changeOrigin: true,
+    });
   });
 
   test("live dev server serves mount with foreign Host and injected base tag", async () => {
