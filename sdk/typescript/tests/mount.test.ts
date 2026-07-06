@@ -35,15 +35,15 @@ describe("base", () => {
   test("returns the mount prefix without a trailing slash", () => {
     installDocument({
       tagName: "BASE",
-      href: "http://example.com/vm-style-guide/",
+      href: "http://example.com/example-app/",
     });
-    expect(base()).toBe("/vm-style-guide");
+    expect(base()).toBe("/example-app");
 
     installDocument({
       tagName: "BASE",
-      href: "http://example.com/create-customer-roadmap-review/",
+      href: "http://example.com/mounted-app/",
     });
-    expect(base()).toBe("/create-customer-roadmap-review");
+    expect(base()).toBe("/mounted-app");
   });
 
   test("returns empty string for a root mount", () => {
