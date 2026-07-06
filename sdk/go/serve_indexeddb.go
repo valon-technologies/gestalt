@@ -67,6 +67,27 @@ func (s indexedDBProviderServer) ReleaseLock(ctx context.Context, req *proto.Rel
 	return &emptypb.Empty{}, providerRPCError("indexeddb release lock", locker.ReleaseLock(ctx, IndexedDBReleaseLockRequest{Key: req.GetKey(), Holder: req.GetHolder()}))
 }
 
+func (s indexedDBProviderServer) CreateIndex(ctx context.Context, req *proto.CreateIndexRequest) (*emptypb.Empty, error) {
+	manager, ok := s.provider.(IndexedDBIndexProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: index management not supported")
+	}
+	return &emptypb.Empty{}, providerRPCError("indexeddb create index", manager.CreateIndex(ctx, IndexedDBCreateIndexRequest{
+		Store:   req.GetStore(),
+		Name:    req.GetName(),
+		KeyPath: req.GetKeyPath(),
+		Unique:  req.GetUnique(),
+	}))
+}
+
+func (s indexedDBProviderServer) DeleteIndex(ctx context.Context, req *proto.DeleteIndexRequest) (*emptypb.Empty, error) {
+	manager, ok := s.provider.(IndexedDBIndexProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: index management not supported")
+	}
+	return &emptypb.Empty{}, providerRPCError("indexeddb delete index", manager.DeleteIndex(ctx, IndexedDBDeleteIndexRequest{Store: req.GetStore(), Name: req.GetName()}))
+}
+
 func (s indexedDBProviderServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
 	record, err := s.provider.Get(ctx, objectStoreRequestFromProto(req))
 	return recordResponseToProto("indexeddb get", record, err)

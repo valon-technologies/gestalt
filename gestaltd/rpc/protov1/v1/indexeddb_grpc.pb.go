@@ -22,6 +22,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	IndexedDB_CreateObjectStore_FullMethodName = "/gestalt.provider.v1.IndexedDB/CreateObjectStore"
 	IndexedDB_DeleteObjectStore_FullMethodName = "/gestalt.provider.v1.IndexedDB/DeleteObjectStore"
+	IndexedDB_CreateIndex_FullMethodName       = "/gestalt.provider.v1.IndexedDB/CreateIndex"
+	IndexedDB_DeleteIndex_FullMethodName       = "/gestalt.provider.v1.IndexedDB/DeleteIndex"
 	IndexedDB_Get_FullMethodName               = "/gestalt.provider.v1.IndexedDB/Get"
 	IndexedDB_GetKey_FullMethodName            = "/gestalt.provider.v1.IndexedDB/GetKey"
 	IndexedDB_Add_FullMethodName               = "/gestalt.provider.v1.IndexedDB/Add"
@@ -53,6 +55,8 @@ type IndexedDBClient interface {
 	// Lifecycle
 	CreateObjectStore(ctx context.Context, in *CreateObjectStoreRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteObjectStore(ctx context.Context, in *DeleteObjectStoreRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteIndex(ctx context.Context, in *DeleteIndexRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Primary key CRUD
 	Get(ctx context.Context, in *ObjectStoreRequest, opts ...grpc.CallOption) (*RecordResponse, error)
 	GetKey(ctx context.Context, in *ObjectStoreRequest, opts ...grpc.CallOption) (*KeyResponse, error)
@@ -104,6 +108,26 @@ func (c *indexedDBClient) DeleteObjectStore(ctx context.Context, in *DeleteObjec
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, IndexedDB_DeleteObjectStore_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indexedDBClient) CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, IndexedDB_CreateIndex_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indexedDBClient) DeleteIndex(ctx context.Context, in *DeleteIndexRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, IndexedDB_DeleteIndex_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -325,6 +349,8 @@ type IndexedDBServer interface {
 	// Lifecycle
 	CreateObjectStore(context.Context, *CreateObjectStoreRequest) (*emptypb.Empty, error)
 	DeleteObjectStore(context.Context, *DeleteObjectStoreRequest) (*emptypb.Empty, error)
+	CreateIndex(context.Context, *CreateIndexRequest) (*emptypb.Empty, error)
+	DeleteIndex(context.Context, *DeleteIndexRequest) (*emptypb.Empty, error)
 	// Primary key CRUD
 	Get(context.Context, *ObjectStoreRequest) (*RecordResponse, error)
 	GetKey(context.Context, *ObjectStoreRequest) (*KeyResponse, error)
@@ -367,6 +393,12 @@ func (UnimplementedIndexedDBServer) CreateObjectStore(context.Context, *CreateOb
 }
 func (UnimplementedIndexedDBServer) DeleteObjectStore(context.Context, *DeleteObjectStoreRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteObjectStore not implemented")
+}
+func (UnimplementedIndexedDBServer) CreateIndex(context.Context, *CreateIndexRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateIndex not implemented")
+}
+func (UnimplementedIndexedDBServer) DeleteIndex(context.Context, *DeleteIndexRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteIndex not implemented")
 }
 func (UnimplementedIndexedDBServer) Get(context.Context, *ObjectStoreRequest) (*RecordResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Get not implemented")
@@ -481,6 +513,42 @@ func _IndexedDB_DeleteObjectStore_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(IndexedDBServer).DeleteObjectStore(ctx, req.(*DeleteObjectStoreRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndexedDB_CreateIndex_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateIndexRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndexedDBServer).CreateIndex(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndexedDB_CreateIndex_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndexedDBServer).CreateIndex(ctx, req.(*CreateIndexRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndexedDB_DeleteIndex_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteIndexRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndexedDBServer).DeleteIndex(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndexedDB_DeleteIndex_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndexedDBServer).DeleteIndex(ctx, req.(*DeleteIndexRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -837,6 +905,14 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteObjectStore",
 			Handler:    _IndexedDB_DeleteObjectStore_Handler,
+		},
+		{
+			MethodName: "CreateIndex",
+			Handler:    _IndexedDB_CreateIndex_Handler,
+		},
+		{
+			MethodName: "DeleteIndex",
+			Handler:    _IndexedDB_DeleteIndex_Handler,
 		},
 		{
 			MethodName: "Get",

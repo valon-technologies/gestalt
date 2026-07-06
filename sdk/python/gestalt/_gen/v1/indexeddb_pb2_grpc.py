@@ -46,6 +46,16 @@ class IndexedDBStub(object):
                 request_serializer=v1_dot_indexeddb__pb2.DeleteObjectStoreRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
+        self.CreateIndex = channel.unary_unary(
+                '/gestalt.provider.v1.IndexedDB/CreateIndex',
+                request_serializer=v1_dot_indexeddb__pb2.CreateIndexRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
+        self.DeleteIndex = channel.unary_unary(
+                '/gestalt.provider.v1.IndexedDB/DeleteIndex',
+                request_serializer=v1_dot_indexeddb__pb2.DeleteIndexRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
         self.Get = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Get',
                 request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRequest.SerializeToString,
@@ -160,6 +170,18 @@ class IndexedDBServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def DeleteObjectStore(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateIndex(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteIndex(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -303,6 +325,16 @@ def add_IndexedDBServicer_to_server(servicer, server):
             'DeleteObjectStore': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteObjectStore,
                     request_deserializer=v1_dot_indexeddb__pb2.DeleteObjectStoreRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'CreateIndex': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateIndex,
+                    request_deserializer=v1_dot_indexeddb__pb2.CreateIndexRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'DeleteIndex': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteIndex,
+                    request_deserializer=v1_dot_indexeddb__pb2.DeleteIndexRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Get': grpc.unary_unary_rpc_method_handler(
@@ -460,6 +492,60 @@ class IndexedDB(object):
             target,
             '/gestalt.provider.v1.IndexedDB/DeleteObjectStore',
             v1_dot_indexeddb__pb2.DeleteObjectStoreRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateIndex(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.IndexedDB/CreateIndex',
+            v1_dot_indexeddb__pb2.CreateIndexRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteIndex(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.IndexedDB/DeleteIndex',
+            v1_dot_indexeddb__pb2.DeleteIndexRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,

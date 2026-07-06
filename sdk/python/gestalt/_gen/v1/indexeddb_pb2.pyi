@@ -204,6 +204,26 @@ class DeleteObjectStoreRequest(_message.Message):
     name: str
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
+class CreateIndexRequest(_message.Message):
+    __slots__ = ()
+    STORE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    KEY_PATH_FIELD_NUMBER: _ClassVar[int]
+    UNIQUE_FIELD_NUMBER: _ClassVar[int]
+    store: str
+    name: str
+    key_path: _containers.RepeatedScalarFieldContainer[str]
+    unique: bool
+    def __init__(self, store: _Optional[str] = ..., name: _Optional[str] = ..., key_path: _Optional[_Iterable[str]] = ..., unique: _Optional[bool] = ...) -> None: ...
+
+class DeleteIndexRequest(_message.Message):
+    __slots__ = ()
+    STORE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    store: str
+    name: str
+    def __init__(self, store: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
 class IndexQueryRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
