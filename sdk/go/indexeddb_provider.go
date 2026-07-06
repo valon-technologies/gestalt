@@ -67,29 +67,6 @@ type IndexedDBLockLease struct {
 	FencingToken int64
 }
 
-// IndexedDBIndexProvider is an optional capability implemented by providers that
-// support adding or removing secondary indexes on an existing object store, in
-// addition to [IndexedDBProvider]. The SDK returns Unimplemented for providers
-// that do not implement it.
-type IndexedDBIndexProvider interface {
-	CreateIndex(ctx context.Context, req IndexedDBCreateIndexRequest) error
-	DeleteIndex(ctx context.Context, req IndexedDBDeleteIndexRequest) error
-}
-
-// IndexedDBCreateIndexRequest adds a secondary index to an existing store.
-type IndexedDBCreateIndexRequest struct {
-	Store   string
-	Name    string
-	KeyPath []string
-	Unique  bool
-}
-
-// IndexedDBDeleteIndexRequest removes a secondary index from an existing store.
-type IndexedDBDeleteIndexRequest struct {
-	Store string
-	Name  string
-}
-
 // IndexedDBObjectStoreRequest names a store within a database.
 type IndexedDBObjectStoreRequest struct {
 	Store string

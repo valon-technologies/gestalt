@@ -96,19 +96,3 @@ func (r *remoteIndexedDB) ReleaseLock(ctx context.Context, key, holder string) e
 	}
 	return locker.ReleaseLock(ctx, key, holder)
 }
-
-func (r *remoteIndexedDB) CreateIndex(ctx context.Context, store string, index idb.IndexDefinition) error {
-	manager, ok := r.Database.(idb.IndexManager)
-	if !ok {
-		return status.Error(codes.Unimplemented, "indexeddb: index management not supported")
-	}
-	return manager.CreateIndex(ctx, store, index)
-}
-
-func (r *remoteIndexedDB) DeleteIndex(ctx context.Context, store, name string) error {
-	manager, ok := r.Database.(idb.IndexManager)
-	if !ok {
-		return status.Error(codes.Unimplemented, "indexeddb: index management not supported")
-	}
-	return manager.DeleteIndex(ctx, store, name)
-}

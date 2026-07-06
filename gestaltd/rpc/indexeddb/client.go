@@ -50,29 +50,6 @@ func (db *clientDB) ReleaseLock(ctx context.Context, key, holder string) error {
 
 var _ idb.Locker = (*clientDB)(nil)
 
-// CreateIndex adds a secondary index to an existing store via the IndexedDB service.
-func (db *clientDB) CreateIndex(ctx context.Context, store string, index idb.IndexDefinition) error {
-	ctx, cancel := db.callCtx(ctx)
-	defer cancel()
-	req := &proto.CreateIndexRequest{Store: store, Name: index.Name, KeyPath: index.KeyPath, Unique: index.Unique}
-	if _, err := db.client.CreateIndex(ctx, req); err != nil {
-		return grpcErr(err)
-	}
-	return nil
-}
-
-// DeleteIndex removes a secondary index from an existing store via the IndexedDB service.
-func (db *clientDB) DeleteIndex(ctx context.Context, store, name string) error {
-	ctx, cancel := db.callCtx(ctx)
-	defer cancel()
-	if _, err := db.client.DeleteIndex(ctx, &proto.DeleteIndexRequest{Store: store, Name: name}); err != nil {
-		return grpcErr(err)
-	}
-	return nil
-}
-
-var _ idb.IndexManager = (*clientDB)(nil)
-
 var (
 	_ idb.Database    = (*clientDB)(nil)
 	_ idb.ObjectStore = (*objectStore)(nil)
