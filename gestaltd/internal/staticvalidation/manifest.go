@@ -23,11 +23,6 @@ func ProjectManifest(manifest *providermanifestv1.Manifest, manifestPath string,
 		if cloned.Spec != nil {
 			spec := *cloned.Spec
 			spec.ConfigSchemaPath = ""
-			if spec.UI != nil {
-				ui := *spec.UI
-				ui.Path = ""
-				spec.UI = &ui
-			}
 			if spec.Surfaces != nil {
 				surfaces := *spec.Surfaces
 				if surfaces.OpenAPI != nil && packageio.IsLocalPackageReference(surfaces.OpenAPI.Document) {

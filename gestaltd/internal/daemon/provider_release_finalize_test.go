@@ -546,7 +546,7 @@ func providerReleaseManifestForTest(version, displayName, goos, goarch string) *
 
 func uiReleaseManifestForTest(version string) *providermanifestv1.Manifest {
 	return &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
+		Kind:        providermanifestv1.KindApp,
 		Source:      uiTestSource,
 		Version:     version,
 		DisplayName: "UI Test",

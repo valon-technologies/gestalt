@@ -1,42 +1,33 @@
 package e2e
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
-func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
+func TestRun_ProviderPackageAndReleaseStagesAppStaticBundle(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		fixture       func(*testing.T, string) string
-		wantFiles     []string
-		wantAssetRoot string
-		skipOnWin     bool
+		name      string
+		fixture   func(*testing.T, string) string
+		skipOnWin bool
 	}{
 		{
-			name:          "checked-in owned ui assets with build command",
-			fixture:       newSourceProviderReleaseFixtureWithOwnedUI,
-			wantFiles:     []string{"_owned_ui/roadmap-ui/branding/icon.svg", "_owned_ui/roadmap-ui/dist/index.html", "_owned_ui/roadmap-ui/dist/static/app.js"},
-			wantAssetRoot: filepath.Join("_owned_ui", "roadmap-ui", "dist"),
+			name:    "checked-in static bundle with build command",
+			fixture: newSourceProviderReleaseFixtureWithStaticBundle,
 		},
 		{
-			name:          "source-built owned ui assets",
-			fixture:       newSourceProviderReleaseFixtureWithSourceBuiltOwnedUI,
-			wantFiles:     []string{"_owned_ui/roadmap-ui/branding/icon.svg", "_owned_ui/roadmap-ui/ui/dist/index.html", "_owned_ui/roadmap-ui/ui/dist/static/app.js"},
-			wantAssetRoot: filepath.Join("_owned_ui", "roadmap-ui", "ui", "dist"),
-			skipOnWin:     true,
+			name:      "source-built static bundle",
+			fixture:   newSourceBuiltStaticAppReleaseFixture,
+			skipOnWin: true,
 		},
 	}
 
@@ -45,12 +36,12 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if tc.skipOnWin && runtime.GOOS == "windows" {
-				t.Skip("owned ui release-build fixture uses POSIX shell")
+				t.Skip("static bundle release-build fixture uses POSIX shell")
 			}
 
 			pluginDir := tc.fixture(t, t.TempDir())
 			outputDir := t.TempDir()
-			testVersion := "0.0.3-owned-ui"
+			testVersion := "0.0.3-static-bundle"
 
 			runProviderPackageAndReleaseCommand(t, pluginDir,
 				"--version", testVersion,
@@ -58,31 +49,20 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 				"--output", outputDir,
 			)
 
-			archiveName := "gestalt-app-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+			archiveName := staticBuildArchiveName(testVersion)
 			extractDir := extractReleasedArchive(t, outputDir, archiveName)
 			manifest := readReleasedManifest(t, outputDir, archiveName)
-			if manifest.Spec == nil || manifest.Spec.UI == nil {
-				t.Fatalf("released manifest spec.ui = %+v", manifest.Spec)
+			if manifest.Spec == nil || manifest.Spec.AssetRoot != "static" {
+				t.Fatalf("released manifest spec.assetRoot = %+v, want %q", manifest.Spec, "static")
 			}
-			const wantOwnedUIPath = "_owned_ui/roadmap-ui/manifest.json"
-			if got := manifest.Spec.UI.Path; got != wantOwnedUIPath {
-				t.Fatalf("spec.ui.path = %q, want %q", got, wantOwnedUIPath)
-			}
-			for _, rel := range append([]string{wantOwnedUIPath}, tc.wantFiles...) {
+			for _, rel := range []string{"branding/icon.svg", "static/index.html", "static/assets/app.js"} {
 				if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
 					t.Fatalf("expected %s in archive: %v", rel, err)
 				}
 			}
-			_, ownedUIManifest, err := providerpkg.ReadManifestFile(filepath.Join(extractDir, filepath.FromSlash(wantOwnedUIPath)))
-			if err != nil {
-				t.Fatalf("read owned ui manifest: %v", err)
-			}
-			if ownedUIManifest.Build != nil {
-				t.Fatalf("owned ui manifest unexpectedly retained build metadata: %+v", ownedUIManifest.Build)
-			}
 			metadata := readProviderReleaseMetadata(t, outputDir)
-			if metadata.Package != releaseTestSource {
-				t.Fatalf("release metadata package = %q, want %q", metadata.Package, releaseTestSource)
+			if metadata.Package != uiTestSource {
+				t.Fatalf("release metadata package = %q, want %q", metadata.Package, uiTestSource)
 			}
 			if metadata.Kind != providermanifestv1.KindApp {
 				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindApp)
@@ -93,7 +73,7 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 			if len(metadata.Artifacts) != 1 {
 				t.Fatalf("release metadata artifacts = %+v, want 1 entry", metadata.Artifacts)
 			}
-			artifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.CurrentPlatformString())
+			artifact := providerReleaseArtifactForTarget(t, metadata, providerrelease.GenericTarget)
 			if got := artifact.Path; got != archiveName {
 				t.Fatalf("release metadata artifact path = %q, want %q", got, archiveName)
 			}
@@ -103,55 +83,6 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 			}
 			if got := artifact.SHA256; got != digest {
 				t.Fatalf("release metadata artifact sha256 = %q, want %q", got, digest)
-			}
-
-			releaseServer := httptest.NewServer(http.FileServer(http.Dir(outputDir)))
-			defer releaseServer.Close()
-
-			configDir := t.TempDir()
-			configPath := writeManagedPluginConfigForTest(t, configDir, "roadmap", releaseServer.URL+"/provider-release.yaml", "/create-customer-roadmap-review")
-			lockfilePath := filepath.Join(configDir, operator.LockfileName)
-			artifactsDir := filepath.Join(configDir, "prepared-artifacts")
-			lc := operator.NewLifecycle().WithHTTPClient(releaseServer.Client())
-			if _, err := lc.PrepareAtPaths([]string{configPath}, lockfilePath, artifactsDir); err != nil {
-				t.Fatalf("PrepareAtPath: %v", err)
-			}
-
-			loaded, _, err := lc.LoadForExecutionAtPaths([]string{configPath}, lockfilePath, artifactsDir, true, false)
-			if err != nil {
-				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
-			}
-			app := loaded.Apps["roadmap"]
-			if app == nil || app.ResolvedManifest == nil {
-				t.Fatalf("ResolvedManifest = %+v", app)
-			}
-			if app.Command == "" {
-				t.Fatalf("app.Command = %q, want packaged executable path", app.Command)
-			}
-			if got := app.ResolvedManifest.Version; got != testVersion {
-				t.Fatalf("ResolvedManifest.Version = %q, want %q", got, testVersion)
-			}
-
-			uiEntry := loaded.Providers.UI["roadmap"]
-			if uiEntry == nil || uiEntry.ResolvedManifest == nil {
-				t.Fatalf("Resolved app-owned UI = %+v", uiEntry)
-			}
-			if uiEntry.Path != "/create-customer-roadmap-review" {
-				t.Fatalf("uiEntry.Path = %q, want %q", uiEntry.Path, "/create-customer-roadmap-review")
-			}
-			if got := filepath.ToSlash(uiEntry.ResolvedManifestPath); !strings.HasSuffix(got, filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile))) {
-				t.Fatalf("ResolvedManifestPath = %q, want owned-ui manifest suffix", got)
-			}
-			if got := filepath.ToSlash(uiEntry.ResolvedAssetRoot); !strings.HasSuffix(got, filepath.ToSlash(tc.wantAssetRoot)) {
-				t.Fatalf("ResolvedAssetRoot = %q, want owned-ui asset root suffix %q", got, tc.wantAssetRoot)
-			}
-
-			lock, err := operator.ReadLockfile(filepath.Join(configDir, operator.LockfileName))
-			if err != nil {
-				t.Fatalf("ReadLockfile: %v", err)
-			}
-			if len(lock.Providers.UI) != 0 {
-				t.Fatalf("lock.Providers.UI = %#v, want no separate UI entries for packaged owned UI", lock.Providers.UI)
 			}
 		})
 	}
@@ -202,7 +133,7 @@ func TestRun_ProviderPackageRejectsDeletedBuild(t *testing.T) {
 	}
 }
 
-func TestRun_ProviderPackageAndReleaseBuildsSourceUIAssetsBeforePackaging(t *testing.T) {
+func TestRun_ProviderPackageAndReleaseBuildsSourceStaticAssetsBeforePackaging(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
@@ -211,26 +142,27 @@ func TestRun_ProviderPackageAndReleaseBuildsSourceUIAssetsBeforePackaging(t *tes
 
 	pluginDir := newSourceBuiltUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
-	const testVersion = "0.0.3-source-build-ui"
+	const testVersion = "0.0.3-source-build-static"
 
 	runProviderPackageAndReleaseCommand(t, pluginDir,
 		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-app-ui-test_v" + testVersion + ".tar.gz"
+	archiveName := staticBuildArchiveName(testVersion)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	if manifest.Build != nil {
 		t.Fatalf("released manifest unexpectedly retained build metadata: %+v", manifest.Build)
 	}
-	if manifest.Spec == nil || manifest.Spec.AssetRoot != "ui/out" {
-		t.Fatalf("released manifest spec.assetRoot = %+v, want ui/out", manifest.Spec)
+	if manifest.Spec == nil || manifest.Spec.AssetRoot != "static" {
+		t.Fatalf("released manifest spec.assetRoot = %+v, want static", manifest.Spec)
 	}
 	for _, rel := range []string{
 		"branding/icon.svg",
-		"ui/out/index.html",
-		"ui/out/static/app.js",
+		"static/index.html",
+		"static/assets/app.js",
 	} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("expected %s in archive: %v", rel, err)
@@ -246,32 +178,33 @@ func TestRun_ProviderPackageAndReleaseAllowsOverlappingSupportPaths(t *testing.T
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
+		Kind:        providermanifestv1.KindApp,
 		Source:      "github.com/testowner/apps/ui-overlap",
 		Version:     "0.0.1",
-		DisplayName: "UI Overlap",
+		DisplayName: "Static Overlap",
 		IconFile:    "out/icon.svg",
+		Spec:        declarativeRESTSpec(),
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
-		Spec: &providermanifestv1.Spec{AssetRoot: "out"},
 	})
 	writeTestFile(t, pluginDir, "out/icon.svg", []byte("<svg></svg>\n"), 0o644)
-	writeTestFile(t, pluginDir, "out/index.html", []byte("<html></html>\n"), 0o644)
-	writeTestFile(t, pluginDir, "build.sh", []byte("mkdir -p out\nprintf '<svg></svg>\\n' > out/icon.svg\nprintf '<html></html>\\n' > out/index.html\n"), 0o755)
+	writeDeclarativeStaticCatalog(t, pluginDir)
+	writeTestFile(t, pluginDir, "build.sh", []byte("mkdir -p \"$GESTALT_BUILD_STATIC\"\nprintf '<svg></svg>\\n' > out/icon.svg\nprintf '<html></html>\\n' > \"$GESTALT_BUILD_STATIC/index.html\"\n"), 0o755)
 
 	outputDir := t.TempDir()
 	const testVersion = "0.0.3-overlap.1"
 
 	runProviderPackageAndReleaseCommand(t, pluginDir,
 		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-app-ui-overlap_v" + testVersion + ".tar.gz"
+	archiveName := platformArchiveNameForTest("ui-overlap", testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	for _, rel := range []string{"out/icon.svg", "out/index.html"} {
+	for _, rel := range []string{"out/icon.svg", "static/index.html"} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("expected %s in archive: %v", rel, err)
 		}
@@ -476,21 +409,6 @@ func TestRun_ProviderPackageDoesNotWriteReleaseFinalizationFiles(t *testing.T) {
 		t.Fatalf("provider package unexpectedly wrote %s", providerrelease.MetadataFile)
 	} else if !os.IsNotExist(err) {
 		t.Fatalf("stat %s: %v", providerrelease.MetadataFile, err)
-	}
-}
-
-func TestRun_ProviderPackageRejectsOutputInsideUIAssetRoot(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newUIReleaseFixtureWithAssetRoot(t, t.TempDir(), "release-output")
-	outputDir := filepath.Join(pluginDir, "release-output", "nested")
-
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir, "--version", "1.0.0", "--output", outputDir)
-	if err == nil {
-		t.Fatalf("expected provider release to fail, got output: %s", out)
-	}
-	if !strings.Contains(string(out), "must not be inside ui asset root") {
-		t.Fatalf("expected overlap error, got: %s", out)
 	}
 }
 

@@ -78,14 +78,6 @@ func (s *Server) mountedUIRootAccessibleContext(ctx context.Context, p *principa
 		return false
 	}
 
-	route, matched := mounted.routeForRequestPath(mountedUIRootRequestPath(mounted))
-	_, allowed, err := s.authorizeMountedUIRoute(ctx, p, mounted, route, matched)
+	_, allowed, err := s.authorizeMountedAppAccess(ctx, p, mounted)
 	return err == nil && allowed
-}
-
-func mountedUIRootRequestPath(mounted MountedUI) string {
-	if mounted.Path == "/" {
-		return "/"
-	}
-	return mounted.Path + "/"
 }

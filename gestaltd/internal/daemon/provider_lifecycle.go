@@ -94,31 +94,6 @@ var providerLifecycleKinds = []providerLifecycleKind{
 			return lock.Providers.Runtime
 		},
 	},
-	{
-		kind:         providermanifestv1.KindUI,
-		manifestKind: providermanifestv1.KindUI,
-		collection: func(doc *yaml.Node) *yaml.Node {
-			return mappingValueNodeLocal(mappingValueNodeLocal(doc, "providers"), "ui")
-		},
-		entryMap: func(cfg *config.Config) map[string]*config.ProviderEntry {
-			if cfg == nil || cfg.Providers.UI == nil {
-				return nil
-			}
-			entries := make(map[string]*config.ProviderEntry, len(cfg.Providers.UI))
-			for name, entry := range cfg.Providers.UI {
-				if entry != nil {
-					entries[name] = &entry.ProviderEntry
-				}
-			}
-			return entries
-		},
-		lockEntries: func(lock *operator.Lockfile) map[string]operator.LockEntry {
-			if lock == nil {
-				return nil
-			}
-			return lock.Providers.UI
-		},
-	},
 }
 
 func lifecycleHostProviderKind(kind, manifestKind string) providerLifecycleKind {
@@ -294,7 +269,7 @@ func providerLifecycleRowFor(kind providerLifecycleKind, name string, entry *con
 	if !providerSourceBacked(entry) {
 		return row
 	}
-	if operator.LockEntryMetadataMatchesProvider(configPath, kind.kind, name, entry, lockEntry, lockFound, kind.kind == providermanifestv1.KindUI) {
+	if operator.LockEntryMetadataMatchesProvider(configPath, kind.kind, name, entry, lockEntry, lockFound) {
 		if entry.Source.IsPackage() && entry.Source.ResolvedPackageMetadataURL() == "" {
 			row.Status = "unverified"
 			return row
@@ -595,9 +570,6 @@ func applyProviderEntry(doc *yaml.Node, apiVersion, kind, name string, resolved 
 		entry["source"] = source
 	} else {
 		entry["source"] = resolved.MetadataURL
-	}
-	if kind == providermanifestv1.KindUI {
-		entry["path"] = setValues["path"]
 	}
 	target := providerEntryCollection(doc, kind)
 	setNode(target, name, yamlMapping(entry))

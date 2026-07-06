@@ -42,10 +42,6 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 	return packageio.ManifestKind(manifest)
 }
 
-func ValidatePolicyBoundUIRoutes(routes []providermanifestv1.UIRoute) error {
-	return packageio.ValidatePolicyBoundUIRoutes(routes)
-}
-
 func CurrentPlatformArtifact(manifest *providermanifestv1.Manifest) (*providermanifestv1.Artifact, error) {
 	return packageio.CurrentPlatformArtifact(manifest)
 }

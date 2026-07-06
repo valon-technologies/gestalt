@@ -1453,6 +1453,36 @@ providers:
 		}
 	})
 
+	t.Run("admin ui field is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  providers:
+    indexeddb: sqlite
+  admin:
+    ui: dashboard
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  dashboard:
+    source:
+      path: ./app/manifest.yaml
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "field ui not found in type config.AdminConfig") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 }
 
 func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
@@ -1568,7 +1598,7 @@ apps:
 		}
 	})
 
-	t.Run("apiVersion classifies scalar ui sources", func(t *testing.T) {
+	t.Run("apiVersion rejects providers.ui", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1581,12 +1611,12 @@ providers:
 apps:
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		if got := cfg.Providers.UI["dashboard"].SourcePath(); got != filepath.Join(filepath.Dir(path), "providers/ui/dashboard/manifest.yaml") {
-			t.Fatalf("unexpected ui source path: %q", got)
+		if !strings.Contains(err.Error(), "providers.ui is no longer supported") {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -2032,10 +2062,10 @@ apps:
 	})
 }
 
-func TestLoadConfigUIEntries(t *testing.T) {
+func TestLoadConfigStaticMounts(t *testing.T) {
 	t.Parallel()
 
-	t.Run("omitted ui leaves mounted ui map empty", func(t *testing.T) {
+	t.Run("static mount defaults to app name", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2044,6 +2074,11 @@ providers:
     sqlite:
       source:
         path: ./providers/indexeddb/sqlite
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+    static: {}
 server:
   providers:
     indexeddb: sqlite
@@ -2054,25 +2089,26 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if len(cfg.Providers.UI) != 0 {
-			t.Fatalf("Providers.UI = %#v, want empty", cfg.Providers.UI)
+		if got := cfg.Apps["roadmap"].Static.Mount; got != "/roadmap" {
+			t.Fatalf(`Apps["roadmap"].Static.Mount = %q, want %q`, got, "/roadmap")
 		}
 	})
 
-	t.Run("relative ui provider path resolves from config directory", func(t *testing.T) {
+	t.Run("static mount path normalizes trailing slash", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 providers:
-  ui:
-    roadmap:
-      source:
-        path: ./ui/default/provider.yaml
-      path: /create-customer-roadmap-review
   indexeddb:
     sqlite:
       source:
         path: ./providers/indexeddb/sqlite
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+    static:
+      mount: /create-customer-roadmap-review/
 server:
   providers:
     indexeddb: sqlite
@@ -2083,16 +2119,179 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		entry := cfg.Providers.UI["roadmap"]
-		if entry == nil {
-			t.Fatal(`Providers.UI["roadmap"] = nil`)
-			return
-		}
-		wantPath := filepath.Join(filepath.Dir(path), "ui", "default", "provider.yaml")
-		if got := entry.Source.Path; got != wantPath {
-			t.Fatalf(`Providers.UI["roadmap"].Source.Path = %q, want %q`, got, wantPath)
+		if got := cfg.Apps["roadmap"].Static.Mount; got != "/create-customer-roadmap-review" {
+			t.Fatalf(`Apps["roadmap"].Static.Mount = %q, want %q`, got, "/create-customer-roadmap-review")
 		}
 	})
+
+	t.Run("static theme config is preserved", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+    static:
+      mount: /roadmap
+      theme:
+        stylesheet: ./theme.css
+        assetsDir: ./theme-assets
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		theme := cfg.Apps["roadmap"].Static.Theme
+		if theme == nil {
+			t.Fatal(`Apps["roadmap"].Static.Theme = nil`)
+		}
+		if got := theme.Stylesheet; got != "./theme.css" {
+			t.Fatalf(`theme.stylesheet = %q, want %q`, got, "./theme.css")
+		}
+		if got := theme.AssetsDir; got != "./theme-assets" {
+			t.Fatalf(`theme.assetsDir = %q, want %q`, got, "./theme-assets")
+		}
+	})
+
+	t.Run("reserved static mount path is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  api:
+    source:
+      path: ./app/manifest.yaml
+    static:
+      mount: /api
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `apps.api.static.mount "/api" conflicts with reserved path "/api"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("metrics namespace is rejected for static mounts", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  metrics:
+    source:
+      path: ./app/manifest.yaml
+    static:
+      mount: /metrics/dashboard
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `apps.metrics.static.mount "/metrics/dashboard" conflicts with reserved path "/metrics"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("static mount path prefix collision is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  docs:
+    source:
+      path: ./app/docs/manifest.yaml
+    static:
+      mount: /tools
+  admin:
+    source:
+      path: ./app/admin/manifest.yaml
+    static:
+      mount: /tools/admin
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `apps.admin.static.mount "/tools/admin" conflicts with apps.docs.static.mount "/tools"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("root static mount path is accepted", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  root:
+    source:
+      path: ./app/manifest.yaml
+    static:
+      mount: /
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Apps["root"].Static.Mount; got != "/" {
+			t.Fatalf(`Apps["root"].Static.Mount = %q, want %q`, got, "/")
+		}
+	})
+}
+
+func TestLoadConfigS3ProviderPaths(t *testing.T) {
+	t.Parallel()
 
 	t.Run("relative s3 provider path resolves from config directory", func(t *testing.T) {
 		t.Parallel()
@@ -2129,348 +2328,8 @@ server:
 	})
 }
 
-func TestLoadConfigMountedUIs(t *testing.T) {
+func TestLoadConfigExternalCredentialsScalarSource(t *testing.T) {
 	t.Parallel()
-
-	t.Run("relative ui provider path resolves and mount path normalizes", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    roadmap:
-      source:
-        path: ./web/roadmap/manifest.yaml
-      path: /create-customer-roadmap-review/
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		entry := cfg.Providers.UI["roadmap"]
-		if entry == nil {
-			t.Fatal(`Providers.UI["roadmap"] = nil`)
-			return
-		}
-		wantSourcePath := filepath.Join(filepath.Dir(path), "web", "roadmap", "manifest.yaml")
-		if got := entry.Source.Path; got != wantSourcePath {
-			t.Fatalf(`Providers.UI["roadmap"].Source.Path = %q, want %q`, got, wantSourcePath)
-		}
-		if got := entry.Path; got != "/create-customer-roadmap-review" {
-			t.Fatalf(`Providers.UI["roadmap"].Path = %q, want %q`, got, "/create-customer-roadmap-review")
-		}
-	})
-
-	t.Run("app ui object binds an explicit ui entry", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    roadmap:
-      source:
-        path: ./web/roadmap/manifest.yaml
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-apps:
-  roadmap:
-    source:
-      path: ./app/manifest.yaml
-    ui:
-      bundle: roadmap
-      path: /create-customer-roadmap-review/
-    authorizationPolicy: roadmap_policy
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		entry := cfg.Providers.UI["roadmap"]
-		if entry == nil {
-			t.Fatal(`Providers.UI["roadmap"] = nil`)
-			return
-		}
-		if got := entry.Path; got != "/create-customer-roadmap-review" {
-			t.Fatalf(`Providers.UI["roadmap"].Path = %q, want %q`, got, "/create-customer-roadmap-review")
-		}
-		if got := entry.AuthorizationPolicy; got != "roadmap_policy" {
-			t.Fatalf(`Providers.UI["roadmap"].AuthorizationPolicy = %q, want %q`, got, "roadmap_policy")
-		}
-		if got := entry.OwnerApp; got != "roadmap" {
-			t.Fatalf(`Providers.UI["roadmap"].OwnerApp = %q, want %q`, got, "roadmap")
-		}
-	})
-
-	t.Run("nested mounted ui provider paths are allowed", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    docs:
-      source:
-        path: ./web/docs/manifest.yaml
-      path: /docs
-    admin:
-      source:
-        path: ./web/docs-admin/manifest.yaml
-      path: /docs/admin
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if got := cfg.Providers.UI["docs"].Path; got != "/docs" {
-			t.Fatalf(`Providers.UI["docs"].Path = %q, want %q`, got, "/docs")
-		}
-		if got := cfg.Providers.UI["admin"].Path; got != "/docs/admin" {
-			t.Fatalf(`Providers.UI["admin"].Path = %q, want %q`, got, "/docs/admin")
-		}
-	})
-
-	t.Run("reserved path is rejected", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    api:
-      source:
-        path: ./web/api/manifest.yaml
-      path: /api
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `ui.api.path "/api" conflicts with reserved path "/api"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("metrics namespace is rejected", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    metrics:
-      source:
-        path: ./web/metrics/manifest.yaml
-      path: /metrics/dashboard
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `ui.metrics.path "/metrics/dashboard" conflicts with reserved path "/metrics"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("app-owned ui overlay still validates reserved paths", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-apps:
-  roadmap:
-    source:
-      path: ./app/manifest.yaml
-    ui:
-      path: /api
-providers:
-  ui:
-    roadmap:
-      source:
-        path: ./web/roadmap/manifest.yaml
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `apps.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("same-name app-owned ui overlay only suppresses duplicate path checks", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-apps:
-  roadmap:
-    source:
-      path: ./app/manifest.yaml
-    ui:
-      path: /api
-providers:
-  ui:
-    roadmap:
-      source:
-        path: ./web/roadmap/manifest.yaml
-      path: /roadmap
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `apps.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("app ui path prefix collision with mounted ui is rejected", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    docs:
-      source:
-        path: ./web/docs/manifest.yaml
-      path: /tools
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-apps:
-  admin:
-    source:
-      path: ./app/manifest.yaml
-    ui:
-      path: /tools/admin
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `ui.docs.path "/tools" conflicts with apps.admin.ui.path "/tools/admin"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("root path is accepted", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    root:
-      source:
-        path: ./web/root/manifest.yaml
-      path: /
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if got := cfg.Providers.UI["root"].Path; got != "/" {
-			t.Fatalf("Providers.UI[root].Path = %q, want %q", got, "/")
-		}
-	})
-
-	t.Run("ui scalar source is treated as local path", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    roadmap:
-      source: stdout
-      path: /create-customer-roadmap-review
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if got := cfg.Providers.UI["roadmap"].SourcePath(); got != filepath.Join(filepath.Dir(path), "stdout") {
-			t.Fatalf("ui source path = %q, want local path", got)
-		}
-	})
 
 	t.Run("external credentials scalar local source is a path", func(t *testing.T) {
 		t.Parallel()
@@ -2586,17 +2445,12 @@ server:
 
 		path := mustWriteConfigFile(t, `
 providers:
-  ui:
-    root:
-      source:
-        path: ./web/root/manifest.yaml
-      path: /app
-      indexeddb:
-        provider: sqlite
   indexeddb:
     sqlite:
       source:
         path: ./providers/indexeddb/sqlite
+      indexeddb:
+        provider: sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2607,7 +2461,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.indexeddb is only supported on apps.*`) {
+		if !strings.Contains(err.Error(), `providers.indexeddb.sqlite.indexeddb is only supported on apps.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2682,11 +2536,9 @@ server:
 
 		path := mustWriteConfigFile(t, `
 providers:
-  ui:
-    root:
-      source:
-        path: ./web/root/manifest.yaml
-      path: /app
+  cache:
+    shared:
+      source: https://example.com/providers/cache/shared/provider-release.yaml
       surfaces:
         mcp:
           url: https://mcp.example.test
@@ -2704,7 +2556,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on apps.*`) {
+		if !strings.Contains(err.Error(), `providers.cache.shared.surfaces is only supported on apps.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2713,13 +2565,13 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    root:
-      source:
-        path: ./web/root/manifest.yaml
-      path: /app
+apps:
+  root:
+    source:
+      path: ./web/root/manifest.yaml
+    static:
       mountPath: /also-app
+providers:
   indexeddb:
     sqlite:
       source:
@@ -3676,11 +3528,10 @@ server:
 
 		path := mustWriteConfigFile(t, `
 providers:
-  ui:
-    root:
+  indexeddb:
+    sqlite:
       source:
-        path: ./web/root/manifest.yaml
-      path: /app
+        path: ./providers/indexeddb/sqlite
       workflow:
         provider: temporal
         operations:
@@ -3689,10 +3540,6 @@ providers:
     temporal:
       source:
         path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite

@@ -38,8 +38,8 @@ const (
 	DefaultIndexedDBVersion            = "0.0.1-alpha.3"
 	DefaultExternalCredentialsProvider = DefaultProviderRepo + "/externalcredentials/default"
 	DefaultExternalCredentialsVersion  = "0.0.1-alpha.2"
-	DefaultUIProvider                  = DefaultProviderRepo + "/ui/default"
-	DefaultUIVersion                   = "0.0.2-alpha.1"
+	DefaultRootAppProvider             = DefaultProviderRepo + "/app/default"
+	DefaultRootAppVersion              = "0.0.1-alpha.1"
 	DefaultProviderInstance            = "default"
 )
 
@@ -88,7 +88,6 @@ type ProvidersConfig struct {
 	Secrets             map[string]*ProviderEntry `yaml:"secrets,omitempty"`
 	Telemetry           map[string]*ProviderEntry `yaml:"telemetry,omitempty"`
 	Audit               map[string]*ProviderEntry `yaml:"audit,omitempty"`
-	UI                  map[string]*UIEntry       `yaml:"ui,omitempty"`
 	IndexedDB           map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
 	Cache               map[string]*ProviderEntry `yaml:"cache,omitempty"`
 	S3                  map[string]*ProviderEntry `yaml:"s3,omitempty"`
@@ -505,9 +504,6 @@ type ProviderEntry struct {
 	// AuthorizationPolicy binds this provider to a shared subject access policy.
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
-	// App-specific runtime fields populated from the canonical ui object.
-	MountPath         string                        `yaml:"-"`
-	UI                string                        `yaml:"-"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	Capabilities      *AppCapabilitiesConfig        `yaml:"capabilities,omitempty"`
@@ -607,30 +603,10 @@ type providerEntryYAML struct {
 	Auth                *RouteAuthDef `yaml:"auth,omitempty"`
 }
 
-type providerEntryMarshalYAML struct {
-	providerEntryFields `yaml:",inline"`
-	Auth                *RouteAuthDef       `yaml:"auth,omitempty"`
-	UI                  *appUIBindingConfig `yaml:"ui,omitempty"`
-}
-
-type uiEntryYAML struct {
-	providerEntryYAML `yaml:",inline"`
-	Path              string `yaml:"path,omitempty"`
-}
-
-type uiEntryMarshalYAML struct {
-	providerEntryMarshalYAML `yaml:",inline"`
-	Path                     string `yaml:"path,omitempty"`
-}
-
 func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 	normalized := cloneYAMLNode(value)
 	if mappingValueNode(normalized, "execution") != nil {
 		return fmt.Errorf("config validation: provider execution has been removed; use runtime instead")
-	}
-	uiBinding, err := normalizeProviderEntryUINode(normalized)
-	if err != nil {
-		return err
 	}
 	var raw providerEntryYAML
 	if err := decodeYAMLNodeKnownFields(normalized, &raw); err != nil {
@@ -640,32 +616,15 @@ func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	if uiBinding != nil {
-		uiBinding.Path = strings.TrimSpace(uiBinding.Path)
-		uiBinding.Bundle = strings.TrimSpace(uiBinding.Bundle)
-		if uiBinding.Bundle != "" {
-			decoded.UI = uiBinding.Bundle
-		}
-		if uiBinding.Path != "" {
-			decoded.MountPath = uiBinding.Path
-		}
-	}
 	*e = decoded
 	return nil
 }
 
 func (e ProviderEntry) MarshalYAML() (any, error) {
-	raw := providerEntryMarshalYAML{
+	return providerEntryYAML{
 		providerEntryFields: providerEntryFieldsFromEntry(e),
 		Auth:                cloneRouteAuthDef(e.RouteAuth),
-	}
-	if strings.TrimSpace(e.MountPath) != "" {
-		raw.UI = &appUIBindingConfig{
-			Bundle: strings.TrimSpace(e.UI),
-			Path:   strings.TrimSpace(e.MountPath),
-		}
-	}
-	return raw, nil
+	}, nil
 }
 
 type ProviderSurfaceOverrides struct {
@@ -682,11 +641,6 @@ type IndexedDBBindingConfig struct {
 	Provider     string   `yaml:"provider,omitempty"`
 	DB           string   `yaml:"db,omitempty"`
 	ObjectStores []string `yaml:"objectStores,omitempty"`
-}
-
-type appUIBindingConfig struct {
-	Path   string `yaml:"path,omitempty"`
-	Bundle string `yaml:"bundle,omitempty"`
 }
 
 type ProviderEgressConfig struct {
@@ -1195,13 +1149,6 @@ type ProviderMCPSurfaceOverride struct {
 	URL string `yaml:"url,omitempty"`
 }
 
-// UIEntry configures a mounted web UI bundle served under a fixed path prefix.
-type UIEntry struct {
-	ProviderEntry `yaml:",inline"`
-	Path          string `yaml:"path,omitempty"`
-	OwnerApp      string `yaml:"-"`
-}
-
 // UIThemeConfig is the typed `theme` block of a ui mount's provider config.
 // TODO(hughhan1): deployment theme overrides are a deployer workaround and should not be supported long-term.
 type UIThemeConfig struct {
@@ -1230,37 +1177,6 @@ func UIThemeConfigFromProviderConfig(node yaml.Node) (*UIThemeConfig, error) {
 		return nil, fmt.Errorf("theme: %w", err)
 	}
 	return theme, nil
-}
-
-func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {
-	var raw uiEntryYAML
-	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
-		return err
-	}
-	decoded, err := raw.decode()
-	if err != nil {
-		return err
-	}
-	*e = UIEntry{
-		ProviderEntry: decoded,
-		Path:          raw.Path,
-	}
-	return nil
-}
-
-func (e UIEntry) MarshalYAML() (any, error) {
-	raw, err := e.ProviderEntry.MarshalYAML()
-	if err != nil {
-		return nil, err
-	}
-	entry, ok := raw.(providerEntryMarshalYAML)
-	if !ok {
-		return nil, fmt.Errorf("marshal ui entry: unexpected provider entry shape %T", raw)
-	}
-	return uiEntryMarshalYAML{
-		providerEntryMarshalYAML: entry,
-		Path:                     e.Path,
-	}, nil
 }
 
 func (raw providerEntryYAML) decode() (ProviderEntry, error) {
@@ -1295,41 +1211,6 @@ func cloneYAMLNode(node *yaml.Node) *yaml.Node {
 		}
 	}
 	return &cloned
-}
-
-func normalizeProviderEntryUINode(node *yaml.Node) (*appUIBindingConfig, error) {
-	raw := documentValueNode(node)
-	if raw == nil || raw.Kind != yaml.MappingNode {
-		return nil, nil
-	}
-	for i := 0; i+1 < len(raw.Content); i += 2 {
-		key := raw.Content[i]
-		value := raw.Content[i+1]
-		if key == nil || strings.TrimSpace(key.Value) != "ui" {
-			continue
-		}
-		if value == nil || value.Kind != yaml.MappingNode {
-			return nil, fmt.Errorf("ui must be an object with path")
-		}
-		var binding appUIBindingConfig
-		if err := decodeYAMLNodeKnownFields(value, &binding); err != nil {
-			return nil, err
-		}
-		binding.Path = strings.TrimSpace(binding.Path)
-		binding.Bundle = strings.TrimSpace(binding.Bundle)
-		if binding.Path == "" {
-			return nil, fmt.Errorf("ui.path is required when ui is an object")
-		}
-		if mappingValueNode(raw, "mountPath") != nil {
-			return nil, fmt.Errorf("mountPath is no longer supported; use ui.path")
-		}
-		raw.Content = append(raw.Content[:i], raw.Content[i+2:]...)
-		return &binding, nil
-	}
-	if mappingValueNode(raw, "mountPath") != nil {
-		return nil, fmt.Errorf("mountPath is no longer supported; use ui.path")
-	}
-	return nil, nil
 }
 
 func cloneRouteAuthDef(src *RouteAuthDef) *RouteAuthDef {
@@ -2492,10 +2373,7 @@ func selectedAgentHarnessNode(entry *yaml.Node, harnessName string) *yaml.Node {
 }
 
 func normalizeConfigShape(cfg *Config) error {
-	if err := normalizeConfigShapeForPartialLoad(cfg); err != nil {
-		return err
-	}
-	return applyAppMountBindings(cfg)
+	return normalizeConfigShapeForPartialLoad(cfg)
 }
 
 func normalizeConfigShapeForPartialLoad(cfg *Config) error {
@@ -2557,11 +2435,6 @@ func normalizeProviderEntries(cfg *Config) {
 	}
 	for _, entry := range cfg.Providers.Agent {
 		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil {
-			normalizeProviderEntryAliases(&entry.ProviderEntry)
-		}
 	}
 	for _, entry := range cfg.Runtime.Providers {
 		if entry != nil {
@@ -2626,15 +2499,6 @@ func OverlayRemoteAppConfigPaths(paths []string, cfg *Config) error {
 			continue
 		}
 		if err := overlayRemoteEntryConfigNode(mappingValueNode(s3Node, name), entry, "s3 "+strconv.Quote(name)); err != nil {
-			return err
-		}
-	}
-	uiNode := mappingValueNode(providersNode, "ui")
-	for name, entry := range cfg.Providers.UI {
-		if entry == nil || !entry.HasRemoteSource() {
-			continue
-		}
-		if err := overlayRemoteEntryConfigNode(mappingValueNode(uiNode, name), &entry.ProviderEntry, "ui "+strconv.Quote(name)); err != nil {
 			return err
 		}
 	}
@@ -2749,6 +2613,9 @@ func loadWithLookupPathsMode(paths []string, lookup func(string) (string, bool),
 }
 
 func loadConfigFromRoot(paths []string, root yaml.Node, canonicalize bool, validate bool) (*Config, error) {
+	if err := rejectLegacyProvidersUIKey(&root); err != nil {
+		return nil, err
+	}
 	normalized, err := yaml.Marshal(documentValueNode(&root))
 	if err != nil {
 		return nil, fmt.Errorf("marshaling normalized config YAML: %w", err)
@@ -2782,6 +2649,21 @@ func loadConfigFromRoot(paths []string, root yaml.Node, canonicalize bool, valid
 	}
 
 	return &cfg, nil
+}
+
+func rejectLegacyProvidersUIKey(root *yaml.Node) error {
+	doc := documentValueNode(root)
+	if doc == nil {
+		return nil
+	}
+	providers := mappingValueNode(doc, "providers")
+	if providers == nil {
+		return nil
+	}
+	if mappingValueNode(providers, "ui") != nil {
+		return fmt.Errorf("parsing config YAML: providers.ui is no longer supported; migrate each entry to apps.<name>.static")
+	}
+	return nil
 }
 
 func primaryConfigPath(paths []string) string {
@@ -2901,6 +2783,9 @@ func loadValidatedConfigRoot(path string, lookup func(string) (string, bool), mo
 		return yaml.Node{}, err
 	}
 	if err := validateConfigRootAPIVersion(root); err != nil {
+		return yaml.Node{}, err
+	}
+	if err := rejectLegacyProvidersUIKey(&root); err != nil {
 		return yaml.Node{}, err
 	}
 
@@ -3360,7 +3245,6 @@ func applyDefaults(cfg *Config) {
 	}
 	cfg.Apps = nonNilProviderEntryMap(cfg.Apps)
 	cfg.Workflows.Definitions = nonNilWorkflowDefinitionMap(cfg.Workflows.Definitions)
-	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
 	cfg.Providers.Identity = nonNilProviderEntryMap(cfg.Providers.Identity)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
 	cfg.Providers.ExternalCredentials = applyDefaultSourceProviderEntries(cfg.Providers.ExternalCredentials, DefaultProviderInstance, DefaultProviderSource(DefaultExternalCredentialsProvider, DefaultExternalCredentialsVersion))
@@ -3420,11 +3304,6 @@ func normalizeProviderSourceShapes(cfg *Config) {
 	for _, entry := range cfg.Runtime.Providers {
 		if entry != nil {
 			normalizeEntry(providermanifestv1.KindRuntime, &entry.ProviderEntry)
-		}
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil {
-			normalizeEntry(providermanifestv1.KindUI, &entry.ProviderEntry)
 		}
 	}
 }
@@ -3540,13 +3419,6 @@ func looksLikeUnsupportedScalarSource(value string) bool {
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {
 	if entries == nil {
 		return make(map[string]*ProviderEntry)
-	}
-	return entries
-}
-
-func nonNilUIEntryMap(entries map[string]*UIEntry) map[string]*UIEntry {
-	if entries == nil {
-		return make(map[string]*UIEntry)
 	}
 	return entries
 }
@@ -3786,61 +3658,6 @@ func normalizeAdminConfig(cfg *Config) error {
 	return nil
 }
 
-func applyAppMountBindings(cfg *Config) error {
-	if cfg == nil || len(cfg.Apps) == 0 {
-		return nil
-	}
-
-	appNames := slices.Sorted(maps.Keys(cfg.Apps))
-	seenUIs := make(map[string]string, len(appNames))
-	for _, appName := range appNames {
-		app := cfg.Apps[appName]
-		if app == nil {
-			return fmt.Errorf("config validation: apps.%s is required", appName)
-		}
-		app.UI = strings.TrimSpace(app.UI)
-		app.MountPath = strings.TrimSpace(app.MountPath)
-		app.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
-
-		if app.MountPath == "" {
-			if app.UI != "" {
-				return fmt.Errorf("config validation: apps.%s.ui.bundle requires apps.%s.ui.path", appName, appName)
-			}
-			continue
-		}
-		normalizedPath, err := normalizeMountedUIPath(app.MountPath)
-		if err != nil {
-			return fmt.Errorf("config validation: apps.%s.ui.path: %w", appName, err)
-		}
-		app.MountPath = normalizedPath
-		if app.UI == "" {
-			continue
-		}
-		if prev, exists := seenUIs[app.UI]; exists && prev != appName {
-			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", appName, app.UI, prev)
-		}
-		ui := cfg.Providers.UI[app.UI]
-		if ui == nil {
-			return fmt.Errorf("config validation: apps.%s.ui references unknown ui %q", appName, app.UI)
-		}
-		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", appName, app.UI, app.UI)
-		}
-		if current := strings.TrimSpace(ui.Path); current != "" && current != app.MountPath {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.path", appName, app.UI, app.UI)
-		}
-		if current := strings.TrimSpace(ui.OwnerApp); current != "" && current != appName {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s owner", appName, app.UI, app.UI)
-		}
-		ui.AuthorizationPolicy = app.AuthorizationPolicy
-		ui.Path = app.MountPath
-		ui.OwnerApp = appName
-		seenUIs[app.UI] = appName
-	}
-
-	return nil
-}
-
 func resolveBaseURL(cfg *Config) {
 	cfg.Server.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.BaseURL), "/")
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
@@ -3868,7 +3685,6 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 			{key: "secrets", kind: providermanifestv1.KindSecrets},
 			{key: "telemetry", kind: string(HostProviderKindTelemetry)},
 			{key: "audit", kind: string(HostProviderKindAudit)},
-			{key: "ui", kind: providermanifestv1.KindUI},
 			{key: "indexeddb", kind: providermanifestv1.KindIndexedDB},
 			{key: "cache", kind: providermanifestv1.KindCache},
 			{key: "s3", kind: providermanifestv1.KindS3},
@@ -4001,11 +3817,6 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	}
 	for _, entry := range cfg.Providers.Audit {
 		resolveEntry(entry)
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil {
-			resolveEntry(&entry.ProviderEntry)
-		}
 	}
 	for _, entry := range cfg.Providers.IndexedDB {
 		resolveEntry(entry)

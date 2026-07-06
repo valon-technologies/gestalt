@@ -33,7 +33,6 @@ examples, and custom provider contract for that kind:
   <Cards.Card title="Runtime" href="/providers/runtime" />
   <Cards.Card title="S3" href="/providers/s3" />
   <Cards.Card title="Secret" href="/providers/secrets" />
-  <Cards.Card title="UI (Deprecated)" href="/providers/ui" />
   <Cards.Card title="Workflow" href="/providers/workflow" />
 </Cards>
 
@@ -122,13 +121,11 @@ apps:
 ```
 
 ```yaml
-providers:
-  ui:
-    dashboard:
-      source: https://github.com/valon-technologies/gestalt-providers/releases/download/ui/default/v1.2.0/provider-release.yaml
-      path: /dashboard
-      config:
-        brand_name: Acme
+apps:
+  default:
+    source: https://github.com/valon-technologies/gestalt-providers/releases/download/app/default/v1.2.0/provider-release.yaml
+    static:
+      mount: /
 ```
 
 ```yaml
@@ -393,7 +390,8 @@ are building, then use the release guidance below when the package is ready.
 ### Releasing provider packages
 
 Gestalt uses the same release system for executable provider packages,
-identity and datastore component packages, and packaged UI bundles. Every
+identity and datastore component packages, and unified app packages with static
+frontends. Every
 package is described by a provider manifest file: `manifest.yaml`,
 `manifest.yml`, or `manifest.json`.
 
@@ -432,47 +430,6 @@ environment: Go, Cargo, npm, Python, or an internal wrapper script all use the
 same manifest shape. Declarative app manifests that only describe
 hosted/spec-loaded surfaces may omit `build`, `run`, and `entrypoint`.
 
-#### Source UI builds
-
-<Callout type="warning">
-  `kind: ui` source builds are deprecated. New apps use `kind: app` manifests
-  with list-form `build` commands that write static assets to
-  `GESTALT_BUILD_STATIC`. See [Applications](/applications#building-the-frontend).
-</Callout>
-
-Source UI manifests must define top-level `build.command` and `spec.assetRoot`.
-Gestalt runs the command before source-manifest preparation, which lets UI
-packages generate static assets without checking built files into source
-control. The environment running
-`gestaltd lock`, `gestaltd sync --locked`, `gestaltd serve [PATH]...`, or
-`gestaltd provider package` must have the command's build tools available.
-`gestaltd serve --locked` only serves prepared static assets.
-
-```yaml
-kind: ui
-source: github.com/acme/apps/gestalt-ui
-version: 1.2.0
-build:
-  workdir: ui
-  command:
-    - npm
-    - run
-    - build
-  inputs:
-    - ui/package.json
-    - ui/package-lock.json
-    - ui/src
-spec:
-  assetRoot: ui/out
-  routes:
-    - path: /
-      allowedRoles: [viewer, admin]
-```
-
-Released UI packages still contain `spec.assetRoot`; Gestalt verifies that
-`build.command` produced that directory and strips build metadata. There is no
-`release.build` field and no separate `build.output` field.
-
 #### Release manifest for an executable provider
 
 Released executable app providers add concrete `entrypoint` and
@@ -492,26 +449,6 @@ artifacts:
     path: artifacts/linux/amd64/provider
     sha256: "..."
 ```
-
-#### UI bundle manifest
-
-<Callout type="warning">
-  Released `kind: ui` packages are deprecated. New releases ship static assets
-  inside `kind: app` archives under `static/`.
-</Callout>
-
-UI packages use the same manifest system:
-
-```yaml
-kind: ui
-source: github.com/acme/apps/ui/default
-version: 1.2.0
-spec:
-  assetRoot: ui/out
-  configSchemaPath: schemas/ui-config.schema.json
-```
-
-`gestaltd lock` records the released UI in `gestalt.lock.json`, and `gestaltd sync --locked` prepares its assets. `gestaltd serve --locked` then serves the prepared asset root at whatever public path the deployment config binds for that UI bundle. Omit `providers.ui` to run headless with no public UI bundles. The built-in admin UI remains available at `/admin` regardless.
 
 ### Build a release
 

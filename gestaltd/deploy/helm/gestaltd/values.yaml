@@ -77,7 +77,7 @@ config:
   server:
     public:
       port: 8080
-    # Configure a separate internal-only management listener for /admin and
+    # Configure a separate internal-only management listener for the admin UI and
     # /metrics. Keep the management service disabled unless you also expose a
     # matching internal Kubernetes Service below.
     # management:
@@ -100,7 +100,7 @@ config:
         source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml
         config:
           dsn: "sqlite:///data/gestalt.db"
-    # Add providers.ui.<name> entries when you want to mount public static UI bundles.
+    # Add apps.<name>.static mounts when you want to serve public static bundles.
 
 # Extra environment variables for the container. These are only required
 # when your config uses ${VAR} placeholders for auth, baseUrl, or

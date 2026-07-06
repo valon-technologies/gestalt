@@ -255,8 +255,8 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
-		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
-			info.MountedPath = strings.TrimSpace(entry.MountPath)
+		if entry, ok := s.pluginDefs[name]; ok && entry != nil && entry.Static != nil {
+			info.MountedPath = strings.TrimSpace(entry.Static.Mount)
 		}
 		instances := connected[name]
 		authTypes := s.populateIntegrationSettings(&info, instances, p)

@@ -375,8 +375,8 @@ func runProviderAdd(args []string) error {
 		return fmt.Errorf("--name is required")
 	}
 	setValues := parseSetFlags(setFlags)
-	if entryKind == providermanifestv1.KindUI && strings.TrimSpace(setValues["path"]) == "" {
-		return fmt.Errorf("provider add for kind ui requires --set path=/mount")
+	if entryKind == "ui" {
+		return fmt.Errorf("provider add for kind ui is no longer supported; configure apps.<name>.static instead")
 	}
 	if providerEntryExists(cfg, entryKind, entryName) {
 		return fmt.Errorf("provider %q of kind %q already exists", entryName, entryKind)
@@ -693,7 +693,6 @@ func providerEntryCollectionsForVersionUpdate(doc *yaml.Node, kind string) []pro
 		{kind: providermanifestv1.KindS3, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindS3))},
 		{kind: providermanifestv1.KindWorkflow, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindWorkflow))},
 		{kind: providermanifestv1.KindAgent, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindAgent))},
-		{kind: providermanifestv1.KindUI, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindUI))},
 		{kind: providermanifestv1.KindRuntime, node: runtimeProviders},
 	}
 }
@@ -728,8 +727,6 @@ func providerEntryCollection(doc *yaml.Node, kind string) *yaml.Node {
 	switch kind {
 	case "", providermanifestv1.KindApp:
 		return ensureMapping(doc, "apps")
-	case providermanifestv1.KindUI:
-		return ensureMapping(ensureMapping(doc, "providers"), "ui")
 	case providermanifestv1.KindRuntime:
 		return ensureMapping(ensureMapping(doc, "runtime"), "providers")
 	default:
