@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -265,7 +266,7 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		return "", err
 	}
 
-	if err := testutil.WriteDefaultRootAppFixture(providersDir); err != nil {
+	if err := operator.WriteDefaultRootAppFixture(providersDir); err != nil {
 		return "", err
 	}
 
