@@ -31,6 +31,12 @@ import {
   type ProviderBaseOptions,
 } from "../provider.ts";
 import type { Schema } from "../schema.ts";
+import { IndexedDB } from "./indexeddb.ts";
+import {
+  type MigrationRunOptions,
+  type Revision,
+  runMigrations,
+} from "./migrations.ts";
 
 const JSON_CONTENT_TYPE = "application/json";
 
@@ -91,6 +97,12 @@ export type SessionCatalogHandler = (
 ) => MaybePromise<SessionCatalog | null | undefined>;
 
 /**
+ * Migrations declared on an app: either a bare ordered list of revisions, or a
+ * list plus binding/ledger overrides.
+ */
+export type MigrationsOption = Revision[] | MigrationRunOptions;
+
+/**
  * Runtime hooks required to implement an app provider.
  */
 export interface AppDefinitionOptions extends ProviderBaseOptions {
@@ -101,6 +113,11 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
   iconSvg?: string;
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
+  /**
+   * Revisions the SDK discovers and runs during provider startup, before the
+   * author's own configure handler. The author never calls a runner.
+   */
+  migrations?: MigrationsOption;
 }
 
 function normalizeResponseHeaders(
@@ -171,6 +188,7 @@ export class AppProvider extends ProviderBase {
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
   private readonly httpSubjectResolver: HTTPSubjectResolver | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
+  private readonly migrations: MigrationRunOptions | undefined;
 
   constructor(options: AppDefinitionOptions) {
     super(options);
@@ -180,6 +198,7 @@ export class AppProvider extends ProviderBase {
     this.connectionParams = normalizeConnectionParams(options.connectionParams);
     this.httpSubjectResolver = options.resolveHTTPSubject;
     this.sessionCatalogHandler = options.sessionCatalog;
+    this.migrations = normalizeMigrations(options.migrations);
 
     for (const rawEntry of options.operations) {
       const entry = operation(rawEntry);
@@ -191,6 +210,27 @@ export class AppProvider extends ProviderBase {
       }
       this.operations.set(entry.id, entry);
     }
+  }
+
+  /**
+   * Runs declared migrations before delegating to the author's configure
+   * handler. Migrations are app-scoped and need a DB binding, so this override
+   * lives on {@link AppProvider} rather than the generic provider base. The
+   * connection is opened and released even on error.
+   */
+  override async configureProvider(
+    name: string,
+    config: Record<string, unknown>,
+  ): Promise<void> {
+    if (this.migrations) {
+      const db = new IndexedDB(this.migrations.dbBinding);
+      try {
+        await runMigrations(db, this.migrations);
+      } finally {
+        db.close();
+      }
+    }
+    await super.configureProvider(name, config);
   }
 
   /**
@@ -405,6 +445,18 @@ function normalizeConnectionParams(
     output[key] = entry;
   }
   return output;
+}
+
+function normalizeMigrations(
+  input: MigrationsOption | undefined,
+): MigrationRunOptions | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  if (Array.isArray(input)) {
+    return input.length > 0 ? { revisions: input } : undefined;
+  }
+  return input.revisions.length > 0 ? input : undefined;
 }
 
 function isResponse(value: unknown): value is Response<unknown> {
