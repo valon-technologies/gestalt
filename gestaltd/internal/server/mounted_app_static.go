@@ -32,7 +32,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 		}
 		mountedName := "app:" + name
 
-		public := entry.Static != nil && entry.Static.Public
+		public := entry.Static.Public
 
 		if entry.DevActive {
 			handler := lazyDevHandler(devHandlerResolver, name)

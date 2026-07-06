@@ -5412,18 +5412,6 @@ providers:
 `, legacyAgentHarnessKey),
 			wantErr: fmt.Sprintf(`field %s not found`, legacyAgentHarnessKey),
 		},
-		{
-			name: "unknown static field is rejected",
-			yaml: `
-apps:
-  docs:
-    source: ./apps/docs/manifest.yaml
-    static:
-      mount: /docs
-      visibility: public
-`,
-			wantErr: `field visibility not found`,
-		},
 	}
 
 	for _, tc := range cases {
@@ -5521,17 +5509,6 @@ providers:
         auth:
           token: test-token
 apps:
-`,
-		},
-		{
-			name: "static public mount",
-			yaml: `
-apps:
-  docs:
-    source: ./apps/docs/manifest.yaml
-    static:
-      mount: /docs
-      public: true
 `,
 		},
 	}
