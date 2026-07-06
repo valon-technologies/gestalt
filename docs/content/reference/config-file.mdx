@@ -1236,6 +1236,7 @@ apps:
 | Field | Default | Description |
 | --- | --- | --- |
 | `static.mount` | `/{app name}` | Public URL prefix for the app frontend. Must not conflict with reserved paths or another mount. Only one app may use `/`. |
+| `static.public` | `false` | When `true`, serve static assets and theme endpoints without platform authentication or static-mount authorization. API routes for the app still require a session. |
 | `static.theme.stylesheet` | | Optional path to a CSS file served at `{mount}/theme.css` relative to the config directory. |
 | `static.theme.assetsDir` | | Optional directory served under `{mount}/theme/`. |
 
