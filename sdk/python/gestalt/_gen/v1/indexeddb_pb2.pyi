@@ -222,6 +222,36 @@ class CountResponse(_message.Message):
     count: int
     def __init__(self, count: _Optional[int] = ...) -> None: ...
 
+class AcquireLockRequest(_message.Message):
+    __slots__ = ()
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    HOLDER_FIELD_NUMBER: _ClassVar[int]
+    TTL_MS_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    holder: str
+    ttl_ms: int
+    def __init__(self, key: _Optional[str] = ..., holder: _Optional[str] = ..., ttl_ms: _Optional[int] = ...) -> None: ...
+
+class AcquireLockResponse(_message.Message):
+    __slots__ = ()
+    ACQUIRED_FIELD_NUMBER: _ClassVar[int]
+    HOLDER_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    FENCING_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    acquired: bool
+    holder: str
+    expires_at: _timestamp_pb2.Timestamp
+    fencing_token: int
+    def __init__(self, acquired: _Optional[bool] = ..., holder: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., fencing_token: _Optional[int] = ...) -> None: ...
+
+class ReleaseLockRequest(_message.Message):
+    __slots__ = ()
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    HOLDER_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    holder: str
+    def __init__(self, key: _Optional[str] = ..., holder: _Optional[str] = ...) -> None: ...
+
 class OpenCursorRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]

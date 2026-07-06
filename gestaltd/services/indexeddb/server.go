@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
@@ -20,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type indexedDBServer struct {
@@ -153,6 +155,33 @@ func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return recordResponseFromRecord(rec)
+}
+
+func (s *indexedDBServer) AcquireLock(ctx context.Context, req *proto.AcquireLockRequest) (*proto.AcquireLockResponse, error) {
+	locker, ok := metricutil.UnwrapIndexedDB(s.ds).(idb.Locker)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: advisory locks not supported")
+	}
+	lease, err := locker.AcquireLock(ctx, req.GetKey(), req.GetHolder(), time.Duration(req.GetTtlMs())*time.Millisecond)
+	if err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	resp := &proto.AcquireLockResponse{Acquired: lease.Acquired, Holder: lease.Holder, FencingToken: lease.FencingToken}
+	if !lease.ExpiresAt.IsZero() {
+		resp.ExpiresAt = timestamppb.New(lease.ExpiresAt)
+	}
+	return resp, nil
+}
+
+func (s *indexedDBServer) ReleaseLock(ctx context.Context, req *proto.ReleaseLockRequest) (*emptypb.Empty, error) {
+	locker, ok := metricutil.UnwrapIndexedDB(s.ds).(idb.Locker)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: advisory locks not supported")
+	}
+	if err := locker.ReleaseLock(ctx, req.GetKey(), req.GetHolder()); err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.KeyResponse, error) {

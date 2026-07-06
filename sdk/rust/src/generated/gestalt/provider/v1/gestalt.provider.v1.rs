@@ -2354,6 +2354,36 @@ pub struct CountResponse {
     #[prost(int64, tag = "1")]
     pub count: i64,
 }
+/// AcquireLockRequest requests a keyed, TTL'd advisory lease.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AcquireLockRequest {
+    #[prost(string, tag = "1")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub holder: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub ttl_ms: i64,
+}
+/// AcquireLockResponse reports whether the lease was acquired and its current owner.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AcquireLockResponse {
+    #[prost(bool, tag = "1")]
+    pub acquired: bool,
+    #[prost(string, tag = "2")]
+    pub holder: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(int64, tag = "4")]
+    pub fencing_token: i64,
+}
+/// ReleaseLockRequest releases a lease previously acquired by holder.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ReleaseLockRequest {
+    #[prost(string, tag = "1")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub holder: ::prost::alloc::string::String,
+}
 /// OpenCursorRequest starts a streaming cursor over an object store or index.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OpenCursorRequest {

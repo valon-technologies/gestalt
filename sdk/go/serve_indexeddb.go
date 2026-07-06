@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/client"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ServeIndexedDBProvider starts a gRPC server for an [IndexedDBProvider].
@@ -35,6 +37,34 @@ func (s indexedDBProviderServer) CreateObjectStore(ctx context.Context, req *pro
 
 func (s indexedDBProviderServer) DeleteObjectStore(ctx context.Context, req *proto.DeleteObjectStoreRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, providerRPCError("indexeddb delete object store", s.provider.DeleteObjectStore(ctx, req.GetName()))
+}
+
+func (s indexedDBProviderServer) AcquireLock(ctx context.Context, req *proto.AcquireLockRequest) (*proto.AcquireLockResponse, error) {
+	locker, ok := s.provider.(IndexedDBLockProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: advisory locks not supported")
+	}
+	lease, err := locker.AcquireLock(ctx, IndexedDBAcquireLockRequest{
+		Key:    req.GetKey(),
+		Holder: req.GetHolder(),
+		TTL:    time.Duration(req.GetTtlMs()) * time.Millisecond,
+	})
+	if err != nil {
+		return nil, providerRPCError("indexeddb acquire lock", err)
+	}
+	resp := &proto.AcquireLockResponse{Acquired: lease.Acquired, Holder: lease.Holder, FencingToken: lease.FencingToken}
+	if !lease.ExpiresAt.IsZero() {
+		resp.ExpiresAt = timestamppb.New(lease.ExpiresAt)
+	}
+	return resp, nil
+}
+
+func (s indexedDBProviderServer) ReleaseLock(ctx context.Context, req *proto.ReleaseLockRequest) (*emptypb.Empty, error) {
+	locker, ok := s.provider.(IndexedDBLockProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "indexeddb: advisory locks not supported")
+	}
+	return &emptypb.Empty{}, providerRPCError("indexeddb release lock", locker.ReleaseLock(ctx, IndexedDBReleaseLockRequest{Key: req.GetKey(), Holder: req.GetHolder()}))
 }
 
 func (s indexedDBProviderServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {

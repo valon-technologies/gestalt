@@ -11,6 +11,8 @@ import (
 )
 
 func TestCursor_ContinueToKeyRejectsNilKey(t *testing.T) {
+	t.Parallel()
+
 	cursor := &rpcCursor{}
 
 	if cursor.ContinueToKey(nil) {
@@ -25,6 +27,8 @@ func TestCursor_ContinueToKeyRejectsNilKey(t *testing.T) {
 }
 
 func TestCursor_ContinueToKeyRejectsInvalidKey(t *testing.T) {
+	t.Parallel()
+
 	cursor := &rpcCursor{}
 
 	if cursor.ContinueToKey(make(chan int)) {
@@ -39,6 +43,8 @@ func TestCursor_ContinueToKeyRejectsInvalidKey(t *testing.T) {
 }
 
 func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
+	t.Parallel()
+
 	kv, err := idb.AnyToKeyValue("active")
 	if err != nil {
 		t.Fatalf("AnyToKeyValue: %v", err)
@@ -66,6 +72,8 @@ func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
 }
 
 func TestCursor_ValueRejectsNilRecord(t *testing.T) {
+	t.Parallel()
+
 	cursor := &rpcCursor{
 		entry: &proto.CursorEntry{
 			PrimaryKey: "a",

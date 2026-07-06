@@ -5,6 +5,8 @@ import { EmptySchema, NullValue } from "@bufbuild/protobuf/wkt";
 
 import * as wire from "../gen/v1/indexeddb_pb.ts";
 import type {
+  AcquireLockRequest,
+  AcquireLockResponse,
   BeginTransactionRequest,
   ColumnDef,
   CountResponse,
@@ -38,6 +40,7 @@ import type {
   RecordRequest,
   RecordResponse,
   RecordsResponse,
+  ReleaseLockRequest,
   TransactionAbortRequest,
   TransactionAbortResponse,
   TransactionBeginResponse,
@@ -63,6 +66,52 @@ import {
   toWireValue,
 } from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
+
+export function toWireAcquireLockRequest(
+  value: Init<AcquireLockRequest>,
+): wire.AcquireLockRequest {
+  return create(wire.AcquireLockRequestSchema, {
+    key: value.key ?? "",
+    holder: value.holder ?? "",
+    ttlMs: value.ttlMs ?? 0n,
+  });
+}
+
+export function fromWireAcquireLockRequest(
+  value: wire.AcquireLockRequest,
+): AcquireLockRequest {
+  return {
+    key: value.key,
+    holder: value.holder,
+    ttlMs: value.ttlMs,
+  };
+}
+
+export function toWireAcquireLockResponse(
+  value: Init<AcquireLockResponse>,
+): wire.AcquireLockResponse {
+  return create(wire.AcquireLockResponseSchema, {
+    acquired: value.acquired ?? false,
+    holder: value.holder ?? "",
+    ...(value.expiresAt !== undefined
+      ? { expiresAt: toWireTimestamp(value.expiresAt) }
+      : {}),
+    fencingToken: value.fencingToken ?? 0n,
+  });
+}
+
+export function fromWireAcquireLockResponse(
+  value: wire.AcquireLockResponse,
+): AcquireLockResponse {
+  return {
+    acquired: value.acquired,
+    holder: value.holder,
+    ...(value.expiresAt !== undefined
+      ? { expiresAt: fromWireTimestamp(value.expiresAt) }
+      : {}),
+    fencingToken: value.fencingToken,
+  };
+}
 
 export function toWireBeginTransactionRequest(
   value: Init<BeginTransactionRequest>,
@@ -730,6 +779,24 @@ export function fromWireRecordsResponse(
 ): RecordsResponse {
   return {
     records: value.records.map(fromWireRecord),
+  };
+}
+
+export function toWireReleaseLockRequest(
+  value: Init<ReleaseLockRequest>,
+): wire.ReleaseLockRequest {
+  return create(wire.ReleaseLockRequestSchema, {
+    key: value.key ?? "",
+    holder: value.holder ?? "",
+  });
+}
+
+export function fromWireReleaseLockRequest(
+  value: wire.ReleaseLockRequest,
+): ReleaseLockRequest {
+  return {
+    key: value.key,
+    holder: value.holder,
   };
 }
 

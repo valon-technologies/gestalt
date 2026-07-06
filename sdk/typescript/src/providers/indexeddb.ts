@@ -120,6 +120,17 @@ export type GetAllOptions = {
 };
 
 /**
+ * Result of an {@link IndexedDB.acquireLock} call: whether the caller now holds
+ * the lease, its current holder and expiry, and a monotonic fencing token.
+ */
+export interface AcquireLockResult {
+  acquired: boolean;
+  holder: string;
+  expiresAt?: Date;
+  fencingToken: bigint;
+}
+
+/**
  * Fakeable client contract for IndexedDB-compatible storage.
  */
 export interface IndexedDB {
@@ -135,6 +146,12 @@ export interface IndexedDB {
     mode?: TransactionMode,
     options?: TransactionOptions,
   ): Promise<Transaction>;
+  acquireLock(
+    key: string,
+    holder: string,
+    ttlMs: number,
+  ): Promise<AcquireLockResult>;
+  releaseLock(key: string, holder: string): Promise<void>;
 }
 
 /**
@@ -1143,6 +1160,35 @@ class IndexedDBImpl implements IndexedDB {
     options?: TransactionOptions,
   ): Promise<Transaction> {
     return TransactionImpl.open(this.client, stores, mode, options);
+  }
+
+  /**
+   * Acquires a keyed advisory lease for `ttlMs`, reclaiming it atomically if the
+   * current lease has expired. Returns whether it was acquired plus the current
+   * holder, expiry, and fencing token.
+   */
+  async acquireLock(
+    key: string,
+    holder: string,
+    ttlMs: number,
+  ): Promise<AcquireLockResult> {
+    const resp = await rpc(() =>
+      this.client.acquireLock({ key, holder, ttlMs: BigInt(Math.trunc(ttlMs)) }),
+    );
+    return {
+      acquired: resp.acquired,
+      holder: resp.holder,
+      ...(resp.expiresAt ? { expiresAt: dateFromTimestamp(resp.expiresAt) } : {}),
+      fencingToken: resp.fencingToken,
+    };
+  }
+
+  /**
+   * Releases a lease previously acquired by `holder`. A no-op if the lease is no
+   * longer held by this holder.
+   */
+  async releaseLock(key: string, holder: string): Promise<void> {
+    await rpc(() => this.client.releaseLock({ key, holder }));
   }
 }
 

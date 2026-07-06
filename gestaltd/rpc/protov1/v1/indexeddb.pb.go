@@ -1437,6 +1437,189 @@ func (x *CountResponse) GetCount() int64 {
 	return 0
 }
 
+// AcquireLockRequest requests a keyed, TTL'd advisory lease.
+type AcquireLockRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Holder        string                 `protobuf:"bytes,2,opt,name=holder,proto3" json:"holder,omitempty"`
+	TtlMs         int64                  `protobuf:"varint,3,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcquireLockRequest) Reset() {
+	*x = AcquireLockRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcquireLockRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcquireLockRequest) ProtoMessage() {}
+
+func (x *AcquireLockRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcquireLockRequest.ProtoReflect.Descriptor instead.
+func (*AcquireLockRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *AcquireLockRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *AcquireLockRequest) GetHolder() string {
+	if x != nil {
+		return x.Holder
+	}
+	return ""
+}
+
+func (x *AcquireLockRequest) GetTtlMs() int64 {
+	if x != nil {
+		return x.TtlMs
+	}
+	return 0
+}
+
+// AcquireLockResponse reports whether the lease was acquired and its current owner.
+type AcquireLockResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Acquired      bool                   `protobuf:"varint,1,opt,name=acquired,proto3" json:"acquired,omitempty"`
+	Holder        string                 `protobuf:"bytes,2,opt,name=holder,proto3" json:"holder,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	FencingToken  int64                  `protobuf:"varint,4,opt,name=fencing_token,json=fencingToken,proto3" json:"fencing_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcquireLockResponse) Reset() {
+	*x = AcquireLockResponse{}
+	mi := &file_v1_indexeddb_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcquireLockResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcquireLockResponse) ProtoMessage() {}
+
+func (x *AcquireLockResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcquireLockResponse.ProtoReflect.Descriptor instead.
+func (*AcquireLockResponse) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AcquireLockResponse) GetAcquired() bool {
+	if x != nil {
+		return x.Acquired
+	}
+	return false
+}
+
+func (x *AcquireLockResponse) GetHolder() string {
+	if x != nil {
+		return x.Holder
+	}
+	return ""
+}
+
+func (x *AcquireLockResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *AcquireLockResponse) GetFencingToken() int64 {
+	if x != nil {
+		return x.FencingToken
+	}
+	return 0
+}
+
+// ReleaseLockRequest releases a lease previously acquired by holder.
+type ReleaseLockRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Holder        string                 `protobuf:"bytes,2,opt,name=holder,proto3" json:"holder,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseLockRequest) Reset() {
+	*x = ReleaseLockRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseLockRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseLockRequest) ProtoMessage() {}
+
+func (x *ReleaseLockRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseLockRequest.ProtoReflect.Descriptor instead.
+func (*ReleaseLockRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ReleaseLockRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *ReleaseLockRequest) GetHolder() string {
+	if x != nil {
+		return x.Holder
+	}
+	return ""
+}
+
 // OpenCursorRequest starts a streaming cursor over an object store or index.
 type OpenCursorRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
@@ -1452,7 +1635,7 @@ type OpenCursorRequest struct {
 
 func (x *OpenCursorRequest) Reset() {
 	*x = OpenCursorRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	mi := &file_v1_indexeddb_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1464,7 +1647,7 @@ func (x *OpenCursorRequest) String() string {
 func (*OpenCursorRequest) ProtoMessage() {}
 
 func (x *OpenCursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	mi := &file_v1_indexeddb_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1477,7 +1660,7 @@ func (x *OpenCursorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenCursorRequest.ProtoReflect.Descriptor instead.
 func (*OpenCursorRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{20}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *OpenCursorRequest) GetStore() string {
@@ -1525,7 +1708,7 @@ type CursorKeyTarget struct {
 
 func (x *CursorKeyTarget) Reset() {
 	*x = CursorKeyTarget{}
-	mi := &file_v1_indexeddb_proto_msgTypes[21]
+	mi := &file_v1_indexeddb_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1537,7 +1720,7 @@ func (x *CursorKeyTarget) String() string {
 func (*CursorKeyTarget) ProtoMessage() {}
 
 func (x *CursorKeyTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[21]
+	mi := &file_v1_indexeddb_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1550,7 +1733,7 @@ func (x *CursorKeyTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorKeyTarget.ProtoReflect.Descriptor instead.
 func (*CursorKeyTarget) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{21}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CursorKeyTarget) GetKey() *KeyValue {
@@ -1578,7 +1761,7 @@ type CursorCommand struct {
 
 func (x *CursorCommand) Reset() {
 	*x = CursorCommand{}
-	mi := &file_v1_indexeddb_proto_msgTypes[22]
+	mi := &file_v1_indexeddb_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1590,7 +1773,7 @@ func (x *CursorCommand) String() string {
 func (*CursorCommand) ProtoMessage() {}
 
 func (x *CursorCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[22]
+	mi := &file_v1_indexeddb_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1603,7 +1786,7 @@ func (x *CursorCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorCommand.ProtoReflect.Descriptor instead.
 func (*CursorCommand) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{22}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CursorCommand) GetCommand() isCursorCommand_Command {
@@ -1721,7 +1904,7 @@ type CursorClientMessage struct {
 
 func (x *CursorClientMessage) Reset() {
 	*x = CursorClientMessage{}
-	mi := &file_v1_indexeddb_proto_msgTypes[23]
+	mi := &file_v1_indexeddb_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1733,7 +1916,7 @@ func (x *CursorClientMessage) String() string {
 func (*CursorClientMessage) ProtoMessage() {}
 
 func (x *CursorClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[23]
+	mi := &file_v1_indexeddb_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1746,7 +1929,7 @@ func (x *CursorClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorClientMessage.ProtoReflect.Descriptor instead.
 func (*CursorClientMessage) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{23}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CursorClientMessage) GetMsg() isCursorClientMessage_Msg {
@@ -1804,7 +1987,7 @@ type CursorEntry struct {
 
 func (x *CursorEntry) Reset() {
 	*x = CursorEntry{}
-	mi := &file_v1_indexeddb_proto_msgTypes[24]
+	mi := &file_v1_indexeddb_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1816,7 +1999,7 @@ func (x *CursorEntry) String() string {
 func (*CursorEntry) ProtoMessage() {}
 
 func (x *CursorEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[24]
+	mi := &file_v1_indexeddb_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1829,7 +2012,7 @@ func (x *CursorEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorEntry.ProtoReflect.Descriptor instead.
 func (*CursorEntry) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{24}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CursorEntry) GetKey() *KeyValue {
@@ -1867,7 +2050,7 @@ type CursorResponse struct {
 
 func (x *CursorResponse) Reset() {
 	*x = CursorResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[25]
+	mi := &file_v1_indexeddb_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1879,7 +2062,7 @@ func (x *CursorResponse) String() string {
 func (*CursorResponse) ProtoMessage() {}
 
 func (x *CursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[25]
+	mi := &file_v1_indexeddb_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1892,7 +2075,7 @@ func (x *CursorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorResponse.ProtoReflect.Descriptor instead.
 func (*CursorResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{25}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CursorResponse) GetResult() isCursorResponse_Result {
@@ -1946,7 +2129,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[26]
+	mi := &file_v1_indexeddb_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1958,7 +2141,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[26]
+	mi := &file_v1_indexeddb_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1971,7 +2154,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{26}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteResponse) GetDeleted() int64 {
@@ -1991,7 +2174,7 @@ type KeyResponse struct {
 
 func (x *KeyResponse) Reset() {
 	*x = KeyResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[27]
+	mi := &file_v1_indexeddb_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2003,7 +2186,7 @@ func (x *KeyResponse) String() string {
 func (*KeyResponse) ProtoMessage() {}
 
 func (x *KeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[27]
+	mi := &file_v1_indexeddb_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2016,7 +2199,7 @@ func (x *KeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyResponse.ProtoReflect.Descriptor instead.
 func (*KeyResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{27}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *KeyResponse) GetKey() string {
@@ -2038,7 +2221,7 @@ type BeginTransactionRequest struct {
 
 func (x *BeginTransactionRequest) Reset() {
 	*x = BeginTransactionRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[28]
+	mi := &file_v1_indexeddb_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2050,7 +2233,7 @@ func (x *BeginTransactionRequest) String() string {
 func (*BeginTransactionRequest) ProtoMessage() {}
 
 func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[28]
+	mi := &file_v1_indexeddb_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2063,7 +2246,7 @@ func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginTransactionRequest.ProtoReflect.Descriptor instead.
 func (*BeginTransactionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{28}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *BeginTransactionRequest) GetStores() []string {
@@ -2095,7 +2278,7 @@ type TransactionBeginResponse struct {
 
 func (x *TransactionBeginResponse) Reset() {
 	*x = TransactionBeginResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[29]
+	mi := &file_v1_indexeddb_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2107,7 +2290,7 @@ func (x *TransactionBeginResponse) String() string {
 func (*TransactionBeginResponse) ProtoMessage() {}
 
 func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[29]
+	mi := &file_v1_indexeddb_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2120,7 +2303,7 @@ func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionBeginResponse.ProtoReflect.Descriptor instead.
 func (*TransactionBeginResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{29}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{32}
 }
 
 type TransactionCommitRequest struct {
@@ -2131,7 +2314,7 @@ type TransactionCommitRequest struct {
 
 func (x *TransactionCommitRequest) Reset() {
 	*x = TransactionCommitRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[30]
+	mi := &file_v1_indexeddb_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2143,7 +2326,7 @@ func (x *TransactionCommitRequest) String() string {
 func (*TransactionCommitRequest) ProtoMessage() {}
 
 func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[30]
+	mi := &file_v1_indexeddb_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2156,7 +2339,7 @@ func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitRequest.ProtoReflect.Descriptor instead.
 func (*TransactionCommitRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{30}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{33}
 }
 
 // TransactionCommitResponse carries a non-OK status when commit failed after
@@ -2170,7 +2353,7 @@ type TransactionCommitResponse struct {
 
 func (x *TransactionCommitResponse) Reset() {
 	*x = TransactionCommitResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[31]
+	mi := &file_v1_indexeddb_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2182,7 +2365,7 @@ func (x *TransactionCommitResponse) String() string {
 func (*TransactionCommitResponse) ProtoMessage() {}
 
 func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[31]
+	mi := &file_v1_indexeddb_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2195,7 +2378,7 @@ func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitResponse.ProtoReflect.Descriptor instead.
 func (*TransactionCommitResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{31}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *TransactionCommitResponse) GetError() *status.Status {
@@ -2214,7 +2397,7 @@ type TransactionAbortRequest struct {
 
 func (x *TransactionAbortRequest) Reset() {
 	*x = TransactionAbortRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[32]
+	mi := &file_v1_indexeddb_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2226,7 +2409,7 @@ func (x *TransactionAbortRequest) String() string {
 func (*TransactionAbortRequest) ProtoMessage() {}
 
 func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[32]
+	mi := &file_v1_indexeddb_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2239,7 +2422,7 @@ func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortRequest.ProtoReflect.Descriptor instead.
 func (*TransactionAbortRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{32}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *TransactionAbortRequest) GetReason() string {
@@ -2259,7 +2442,7 @@ type TransactionAbortResponse struct {
 
 func (x *TransactionAbortResponse) Reset() {
 	*x = TransactionAbortResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[33]
+	mi := &file_v1_indexeddb_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2271,7 +2454,7 @@ func (x *TransactionAbortResponse) String() string {
 func (*TransactionAbortResponse) ProtoMessage() {}
 
 func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[33]
+	mi := &file_v1_indexeddb_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2284,7 +2467,7 @@ func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortResponse.ProtoReflect.Descriptor instead.
 func (*TransactionAbortResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{33}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *TransactionAbortResponse) GetError() *status.Status {
@@ -2325,7 +2508,7 @@ type TransactionOperation struct {
 
 func (x *TransactionOperation) Reset() {
 	*x = TransactionOperation{}
-	mi := &file_v1_indexeddb_proto_msgTypes[34]
+	mi := &file_v1_indexeddb_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2337,7 +2520,7 @@ func (x *TransactionOperation) String() string {
 func (*TransactionOperation) ProtoMessage() {}
 
 func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[34]
+	mi := &file_v1_indexeddb_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2350,7 +2533,7 @@ func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperation.ProtoReflect.Descriptor instead.
 func (*TransactionOperation) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{34}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *TransactionOperation) GetRequestId() uint64 {
@@ -2633,7 +2816,7 @@ type TransactionOperationResponse struct {
 
 func (x *TransactionOperationResponse) Reset() {
 	*x = TransactionOperationResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[35]
+	mi := &file_v1_indexeddb_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2645,7 +2828,7 @@ func (x *TransactionOperationResponse) String() string {
 func (*TransactionOperationResponse) ProtoMessage() {}
 
 func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[35]
+	mi := &file_v1_indexeddb_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2658,7 +2841,7 @@ func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperationResponse.ProtoReflect.Descriptor instead.
 func (*TransactionOperationResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{35}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *TransactionOperationResponse) GetRequestId() uint64 {
@@ -2808,7 +2991,7 @@ type TransactionClientMessage struct {
 
 func (x *TransactionClientMessage) Reset() {
 	*x = TransactionClientMessage{}
-	mi := &file_v1_indexeddb_proto_msgTypes[36]
+	mi := &file_v1_indexeddb_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2820,7 +3003,7 @@ func (x *TransactionClientMessage) String() string {
 func (*TransactionClientMessage) ProtoMessage() {}
 
 func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[36]
+	mi := &file_v1_indexeddb_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2833,7 +3016,7 @@ func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionClientMessage.ProtoReflect.Descriptor instead.
 func (*TransactionClientMessage) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{36}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *TransactionClientMessage) GetMsg() isTransactionClientMessage_Msg {
@@ -2922,7 +3105,7 @@ type TransactionServerMessage struct {
 
 func (x *TransactionServerMessage) Reset() {
 	*x = TransactionServerMessage{}
-	mi := &file_v1_indexeddb_proto_msgTypes[37]
+	mi := &file_v1_indexeddb_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2934,7 +3117,7 @@ func (x *TransactionServerMessage) String() string {
 func (*TransactionServerMessage) ProtoMessage() {}
 
 func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[37]
+	mi := &file_v1_indexeddb_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2947,7 +3130,7 @@ func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionServerMessage.ProtoReflect.Descriptor instead.
 func (*TransactionServerMessage) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{37}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TransactionServerMessage) GetMsg() isTransactionServerMessage_Msg {
@@ -3110,7 +3293,20 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x05count\x18\x04 \x01(\rH\x00R\x05count\x88\x01\x01B\b\n" +
 	"\x06_count\"0\n" +
 	"\rCountResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count:\t\x9a\xb5\x18\x05count\"\xdb\x01\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count:\t\x9a\xb5\x18\x05count\"U\n" +
+	"\x12AcquireLockRequest\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
+	"\x06holder\x18\x02 \x01(\tR\x06holder\x12\x15\n" +
+	"\x06ttl_ms\x18\x03 \x01(\x03R\x05ttlMs\"\xa9\x01\n" +
+	"\x13AcquireLockResponse\x12\x1a\n" +
+	"\bacquired\x18\x01 \x01(\bR\bacquired\x12\x16\n" +
+	"\x06holder\x18\x02 \x01(\tR\x06holder\x129\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12#\n" +
+	"\rfencing_token\x18\x04 \x01(\x03R\ffencingToken\">\n" +
+	"\x12ReleaseLockRequest\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
+	"\x06holder\x18\x02 \x01(\tR\x06holder\"\xdb\x01\n" +
 	"\x11OpenCursorRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\tR\x05index\x129\n" +
@@ -3215,7 +3411,7 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x19TransactionDurabilityHint\x12\"\n" +
 	"\x1eTRANSACTION_DURABILITY_DEFAULT\x10\x00\x12!\n" +
 	"\x1dTRANSACTION_DURABILITY_STRICT\x10\x01\x12\"\n" +
-	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\xb4\x11\n" +
+	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\x96\x13\n" +
 	"\tIndexedDB\x12n\n" +
 	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\x12\x8a\xb5\x18\x04name\x8a\xb5\x18\x06schema\x12d\n" +
 	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\b\x8a\xb5\x18\x04name\x12d\n" +
@@ -3236,7 +3432,9 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\"$\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\xa2\xb5\x18\x05count\x12u\n" +
 	"\n" +
 	"IndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\x12w\n" +
-	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\x12_\n" +
+	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\x12}\n" +
+	"\vAcquireLock\x12'.gestalt.provider.v1.AcquireLockRequest\x1a(.gestalt.provider.v1.AcquireLockResponse\"\x1b\x8a\xb5\x18\x03key\x8a\xb5\x18\x06holder\x8a\xb5\x18\x06ttl_ms\x12a\n" +
+	"\vReleaseLock\x12'.gestalt.provider.v1.ReleaseLockRequest\x1a\x16.google.protobuf.Empty\"\x11\x8a\xb5\x18\x03key\x8a\xb5\x18\x06holder\x12_\n" +
 	"\n" +
 	"OpenCursor\x12(.gestalt.provider.v1.CursorClientMessage\x1a#.gestalt.provider.v1.CursorResponse(\x010\x01\x12o\n" +
 	"\vTransaction\x12-.gestalt.provider.v1.TransactionClientMessage\x1a-.gestalt.provider.v1.TransactionServerMessage(\x010\x01\x1a\r\x8a\xb5\x18\tindexeddbB\xda\x01\n" +
@@ -3255,7 +3453,7 @@ func file_v1_indexeddb_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_indexeddb_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_v1_indexeddb_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_v1_indexeddb_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_v1_indexeddb_proto_goTypes = []any{
 	(CursorDirection)(0),                 // 0: gestalt.provider.v1.CursorDirection
 	(TransactionMode)(0),                 // 1: gestalt.provider.v1.TransactionMode
@@ -3280,36 +3478,39 @@ var file_v1_indexeddb_proto_goTypes = []any{
 	(*DeleteObjectStoreRequest)(nil),     // 20: gestalt.provider.v1.DeleteObjectStoreRequest
 	(*IndexQueryRequest)(nil),            // 21: gestalt.provider.v1.IndexQueryRequest
 	(*CountResponse)(nil),                // 22: gestalt.provider.v1.CountResponse
-	(*OpenCursorRequest)(nil),            // 23: gestalt.provider.v1.OpenCursorRequest
-	(*CursorKeyTarget)(nil),              // 24: gestalt.provider.v1.CursorKeyTarget
-	(*CursorCommand)(nil),                // 25: gestalt.provider.v1.CursorCommand
-	(*CursorClientMessage)(nil),          // 26: gestalt.provider.v1.CursorClientMessage
-	(*CursorEntry)(nil),                  // 27: gestalt.provider.v1.CursorEntry
-	(*CursorResponse)(nil),               // 28: gestalt.provider.v1.CursorResponse
-	(*DeleteResponse)(nil),               // 29: gestalt.provider.v1.DeleteResponse
-	(*KeyResponse)(nil),                  // 30: gestalt.provider.v1.KeyResponse
-	(*BeginTransactionRequest)(nil),      // 31: gestalt.provider.v1.BeginTransactionRequest
-	(*TransactionBeginResponse)(nil),     // 32: gestalt.provider.v1.TransactionBeginResponse
-	(*TransactionCommitRequest)(nil),     // 33: gestalt.provider.v1.TransactionCommitRequest
-	(*TransactionCommitResponse)(nil),    // 34: gestalt.provider.v1.TransactionCommitResponse
-	(*TransactionAbortRequest)(nil),      // 35: gestalt.provider.v1.TransactionAbortRequest
-	(*TransactionAbortResponse)(nil),     // 36: gestalt.provider.v1.TransactionAbortResponse
-	(*TransactionOperation)(nil),         // 37: gestalt.provider.v1.TransactionOperation
-	(*TransactionOperationResponse)(nil), // 38: gestalt.provider.v1.TransactionOperationResponse
-	(*TransactionClientMessage)(nil),     // 39: gestalt.provider.v1.TransactionClientMessage
-	(*TransactionServerMessage)(nil),     // 40: gestalt.provider.v1.TransactionServerMessage
-	nil,                                  // 41: gestalt.provider.v1.Record.FieldsEntry
-	(structpb.NullValue)(0),              // 42: google.protobuf.NullValue
-	(*timestamppb.Timestamp)(nil),        // 43: google.protobuf.Timestamp
-	(*structpb.Value)(nil),               // 44: google.protobuf.Value
-	(*status.Status)(nil),                // 45: google.rpc.Status
-	(*emptypb.Empty)(nil),                // 46: google.protobuf.Empty
+	(*AcquireLockRequest)(nil),           // 23: gestalt.provider.v1.AcquireLockRequest
+	(*AcquireLockResponse)(nil),          // 24: gestalt.provider.v1.AcquireLockResponse
+	(*ReleaseLockRequest)(nil),           // 25: gestalt.provider.v1.ReleaseLockRequest
+	(*OpenCursorRequest)(nil),            // 26: gestalt.provider.v1.OpenCursorRequest
+	(*CursorKeyTarget)(nil),              // 27: gestalt.provider.v1.CursorKeyTarget
+	(*CursorCommand)(nil),                // 28: gestalt.provider.v1.CursorCommand
+	(*CursorClientMessage)(nil),          // 29: gestalt.provider.v1.CursorClientMessage
+	(*CursorEntry)(nil),                  // 30: gestalt.provider.v1.CursorEntry
+	(*CursorResponse)(nil),               // 31: gestalt.provider.v1.CursorResponse
+	(*DeleteResponse)(nil),               // 32: gestalt.provider.v1.DeleteResponse
+	(*KeyResponse)(nil),                  // 33: gestalt.provider.v1.KeyResponse
+	(*BeginTransactionRequest)(nil),      // 34: gestalt.provider.v1.BeginTransactionRequest
+	(*TransactionBeginResponse)(nil),     // 35: gestalt.provider.v1.TransactionBeginResponse
+	(*TransactionCommitRequest)(nil),     // 36: gestalt.provider.v1.TransactionCommitRequest
+	(*TransactionCommitResponse)(nil),    // 37: gestalt.provider.v1.TransactionCommitResponse
+	(*TransactionAbortRequest)(nil),      // 38: gestalt.provider.v1.TransactionAbortRequest
+	(*TransactionAbortResponse)(nil),     // 39: gestalt.provider.v1.TransactionAbortResponse
+	(*TransactionOperation)(nil),         // 40: gestalt.provider.v1.TransactionOperation
+	(*TransactionOperationResponse)(nil), // 41: gestalt.provider.v1.TransactionOperationResponse
+	(*TransactionClientMessage)(nil),     // 42: gestalt.provider.v1.TransactionClientMessage
+	(*TransactionServerMessage)(nil),     // 43: gestalt.provider.v1.TransactionServerMessage
+	nil,                                  // 44: gestalt.provider.v1.Record.FieldsEntry
+	(structpb.NullValue)(0),              // 45: google.protobuf.NullValue
+	(*timestamppb.Timestamp)(nil),        // 46: google.protobuf.Timestamp
+	(*structpb.Value)(nil),               // 47: google.protobuf.Value
+	(*status.Status)(nil),                // 48: google.rpc.Status
+	(*emptypb.Empty)(nil),                // 49: google.protobuf.Empty
 }
 var file_v1_indexeddb_proto_depIdxs = []int32{
-	42, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
-	43, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
-	44, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
-	41, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
+	45, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
+	46, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
+	47, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
+	44, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
 	6,  // 4: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
 	7,  // 5: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
 	3,  // 6: gestalt.provider.v1.KeyValue.scalar:type_name -> gestalt.provider.v1.TypedValue
@@ -3325,98 +3526,103 @@ var file_v1_indexeddb_proto_depIdxs = []int32{
 	11, // 16: gestalt.provider.v1.ObjectStoreRangeRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
 	5,  // 17: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
 	11, // 18: gestalt.provider.v1.IndexQueryRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
-	11, // 19: gestalt.provider.v1.OpenCursorRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
-	0,  // 20: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
-	8,  // 21: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
-	24, // 22: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
-	4,  // 23: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
-	23, // 24: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
-	25, // 25: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
-	8,  // 26: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
-	4,  // 27: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
-	27, // 28: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
-	1,  // 29: gestalt.provider.v1.BeginTransactionRequest.mode:type_name -> gestalt.provider.v1.TransactionMode
-	2,  // 30: gestalt.provider.v1.BeginTransactionRequest.durability_hint:type_name -> gestalt.provider.v1.TransactionDurabilityHint
-	45, // 31: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
-	45, // 32: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
-	16, // 33: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	16, // 34: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	12, // 35: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
-	12, // 36: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
-	16, // 37: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	17, // 38: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
-	18, // 39: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 40: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 41: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 42: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	21, // 43: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
-	21, // 44: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
-	21, // 45: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
-	21, // 46: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
-	21, // 47: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
-	21, // 48: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
-	45, // 49: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
-	46, // 50: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
-	13, // 51: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
-	14, // 52: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
-	30, // 53: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
-	15, // 54: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
-	22, // 55: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
-	29, // 56: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
-	31, // 57: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
-	37, // 58: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
-	33, // 59: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
-	35, // 60: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
-	32, // 61: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
-	38, // 62: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
-	34, // 63: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
-	36, // 64: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
-	3,  // 65: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
-	19, // 66: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
-	20, // 67: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
-	16, // 68: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	16, // 69: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	12, // 70: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
-	12, // 71: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
-	16, // 72: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	17, // 73: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
-	18, // 74: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 75: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 76: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 77: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	21, // 78: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
-	21, // 79: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
-	21, // 80: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
-	21, // 81: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
-	21, // 82: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
-	21, // 83: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
-	26, // 84: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
-	39, // 85: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
-	46, // 86: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
-	46, // 87: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
-	13, // 88: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
-	30, // 89: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
-	46, // 90: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
-	46, // 91: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
-	46, // 92: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
-	46, // 93: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
-	14, // 94: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	15, // 95: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	22, // 96: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
-	29, // 97: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
-	13, // 98: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
-	30, // 99: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
-	14, // 100: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	15, // 101: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	22, // 102: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
-	29, // 103: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
-	28, // 104: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
-	40, // 105: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
-	86, // [86:106] is the sub-list for method output_type
-	66, // [66:86] is the sub-list for method input_type
-	66, // [66:66] is the sub-list for extension type_name
-	66, // [66:66] is the sub-list for extension extendee
-	0,  // [0:66] is the sub-list for field type_name
+	46, // 19: gestalt.provider.v1.AcquireLockResponse.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 20: gestalt.provider.v1.OpenCursorRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
+	0,  // 21: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
+	8,  // 22: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
+	27, // 23: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
+	4,  // 24: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
+	26, // 25: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
+	28, // 26: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
+	8,  // 27: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
+	4,  // 28: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
+	30, // 29: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
+	1,  // 30: gestalt.provider.v1.BeginTransactionRequest.mode:type_name -> gestalt.provider.v1.TransactionMode
+	2,  // 31: gestalt.provider.v1.BeginTransactionRequest.durability_hint:type_name -> gestalt.provider.v1.TransactionDurabilityHint
+	48, // 32: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
+	48, // 33: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
+	16, // 34: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	16, // 35: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	12, // 36: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
+	12, // 37: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
+	16, // 38: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	17, // 39: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
+	18, // 40: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 41: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 42: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 43: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	21, // 44: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 45: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 46: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 47: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 48: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 49: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
+	48, // 50: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
+	49, // 51: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
+	13, // 52: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
+	14, // 53: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
+	33, // 54: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
+	15, // 55: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
+	22, // 56: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
+	32, // 57: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
+	34, // 58: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
+	40, // 59: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
+	36, // 60: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
+	38, // 61: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
+	35, // 62: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
+	41, // 63: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
+	37, // 64: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
+	39, // 65: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
+	3,  // 66: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
+	19, // 67: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
+	20, // 68: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
+	16, // 69: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	16, // 70: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	12, // 71: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
+	12, // 72: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
+	16, // 73: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	17, // 74: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
+	18, // 75: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 76: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 77: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 78: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	21, // 79: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 80: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 81: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 82: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 83: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 84: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 85: gestalt.provider.v1.IndexedDB.AcquireLock:input_type -> gestalt.provider.v1.AcquireLockRequest
+	25, // 86: gestalt.provider.v1.IndexedDB.ReleaseLock:input_type -> gestalt.provider.v1.ReleaseLockRequest
+	29, // 87: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
+	42, // 88: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
+	49, // 89: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
+	49, // 90: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
+	13, // 91: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
+	33, // 92: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
+	49, // 93: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
+	49, // 94: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
+	49, // 95: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
+	49, // 96: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
+	14, // 97: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	15, // 98: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	22, // 99: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
+	32, // 100: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
+	13, // 101: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
+	33, // 102: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
+	14, // 103: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	15, // 104: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	22, // 105: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
+	32, // 106: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
+	24, // 107: gestalt.provider.v1.IndexedDB.AcquireLock:output_type -> gestalt.provider.v1.AcquireLockResponse
+	49, // 108: gestalt.provider.v1.IndexedDB.ReleaseLock:output_type -> google.protobuf.Empty
+	31, // 109: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
+	43, // 110: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
+	89, // [89:111] is the sub-list for method output_type
+	67, // [67:89] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_v1_indexeddb_proto_init() }
@@ -3445,7 +3651,7 @@ func file_v1_indexeddb_proto_init() {
 	}
 	file_v1_indexeddb_proto_msgTypes[15].OneofWrappers = []any{}
 	file_v1_indexeddb_proto_msgTypes[18].OneofWrappers = []any{}
-	file_v1_indexeddb_proto_msgTypes[22].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[25].OneofWrappers = []any{
 		(*CursorCommand_Next)(nil),
 		(*CursorCommand_ContinueToKey)(nil),
 		(*CursorCommand_Advance)(nil),
@@ -3453,15 +3659,15 @@ func file_v1_indexeddb_proto_init() {
 		(*CursorCommand_Delete)(nil),
 		(*CursorCommand_Close)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[23].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[26].OneofWrappers = []any{
 		(*CursorClientMessage_Open)(nil),
 		(*CursorClientMessage_Command)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[25].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[28].OneofWrappers = []any{
 		(*CursorResponse_Entry)(nil),
 		(*CursorResponse_Done)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[34].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[37].OneofWrappers = []any{
 		(*TransactionOperation_Get)(nil),
 		(*TransactionOperation_GetKey)(nil),
 		(*TransactionOperation_Add)(nil),
@@ -3479,7 +3685,7 @@ func file_v1_indexeddb_proto_init() {
 		(*TransactionOperation_IndexCount)(nil),
 		(*TransactionOperation_IndexDelete)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[35].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[38].OneofWrappers = []any{
 		(*TransactionOperationResponse_Empty)(nil),
 		(*TransactionOperationResponse_Record)(nil),
 		(*TransactionOperationResponse_Records)(nil),
@@ -3488,13 +3694,13 @@ func file_v1_indexeddb_proto_init() {
 		(*TransactionOperationResponse_Count)(nil),
 		(*TransactionOperationResponse_Delete)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[36].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[39].OneofWrappers = []any{
 		(*TransactionClientMessage_Begin)(nil),
 		(*TransactionClientMessage_Operation)(nil),
 		(*TransactionClientMessage_Commit)(nil),
 		(*TransactionClientMessage_Abort)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[37].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[40].OneofWrappers = []any{
 		(*TransactionServerMessage_Begin)(nil),
 		(*TransactionServerMessage_Operation)(nil),
 		(*TransactionServerMessage_Commit)(nil),
@@ -3506,7 +3712,7 @@ func file_v1_indexeddb_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_indexeddb_proto_rawDesc), len(file_v1_indexeddb_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   39,
+			NumMessages:   42,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
