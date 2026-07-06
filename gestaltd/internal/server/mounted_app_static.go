@@ -66,7 +66,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 			Path:                mount,
 			AppName:             name,
 			AuthorizationPolicy: entry.AuthorizationPolicy,
-			AppLevelAuth:        !public,
+			AppLevelAuth:        !entry.Static.Public,
 			Handler:             handler,
 			ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 			ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
