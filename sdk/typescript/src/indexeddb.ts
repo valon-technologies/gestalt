@@ -29,8 +29,10 @@ import {
   fromWireRecordsResponse,
   fromWireTransactionServerMessage,
   toWireAcquireLockRequest,
+  toWireCreateIndexRequest,
   toWireCreateObjectStoreRequest,
   toWireCursorClientMessage,
+  toWireDeleteIndexRequest,
   toWireDeleteObjectStoreRequest,
   toWireIndexQueryRequest,
   toWireObjectStoreNameRequest,
@@ -126,6 +128,16 @@ export interface ColumnDef {
  */
 export interface CountResponse {
   count: bigint;
+}
+
+/**
+ * CreateIndexRequest adds a secondary index to an existing object store.
+ */
+export interface CreateIndexRequest {
+  store: string;
+  name: string;
+  keyPath: string[];
+  unique: boolean;
 }
 
 /**
@@ -250,6 +262,14 @@ export function cursorResponseResultDone(value: boolean): CursorResponseResult {
  */
 export interface CursorResponse {
   result: CursorResponseResult;
+}
+
+/**
+ * DeleteIndexRequest removes a secondary index from an existing object store.
+ */
+export interface DeleteIndexRequest {
+  store: string;
+  name: string;
 }
 
 /**
@@ -849,6 +869,54 @@ export class IndexedDB {
     await callUnary(() =>
       this.client.deleteObjectStore(
         toWireDeleteObjectStoreRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+  }
+
+  async createIndex(
+    store: string,
+    name: string,
+    keyPath: string[],
+    unique: boolean,
+  ): Promise<void> {
+    const request = {
+      store,
+      name,
+      keyPath,
+      unique,
+    } satisfies Init<CreateIndexRequest>;
+    await callUnary(() =>
+      this.client.createIndex(
+        toWireCreateIndexRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+  }
+
+  async createIndexRaw(request: Init<CreateIndexRequest>): Promise<void> {
+    await callUnary(() =>
+      this.client.createIndex(
+        toWireCreateIndexRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+  }
+
+  async deleteIndex(store: string, name: string): Promise<void> {
+    const request = { store, name } satisfies Init<DeleteIndexRequest>;
+    await callUnary(() =>
+      this.client.deleteIndex(
+        toWireDeleteIndexRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+  }
+
+  async deleteIndexRaw(request: Init<DeleteIndexRequest>): Promise<void> {
+    await callUnary(() =>
+      this.client.deleteIndex(
+        toWireDeleteIndexRequest(request),
         callOptions(this.timeoutMs),
       ),
     );

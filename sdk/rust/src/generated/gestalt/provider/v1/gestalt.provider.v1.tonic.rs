@@ -4859,6 +4859,8 @@ pub mod indexed_db_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        /** Lifecycle
+        */
         pub async fn create_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectStoreRequest>,
@@ -4877,6 +4879,7 @@ pub mod indexed_db_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        ///
         pub async fn delete_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::DeleteObjectStoreRequest>,
@@ -4892,6 +4895,42 @@ pub mod indexed_db_client {
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.IndexedDB",
                 "DeleteObjectStore",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn create_index(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CreateIndexRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/CreateIndex");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "CreateIndex",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn delete_index(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DeleteIndexRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/DeleteIndex");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "DeleteIndex",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -5262,13 +5301,26 @@ pub mod indexed_db_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
+        /** Lifecycle
+        */
         async fn create_object_store(
             &self,
             request: tonic::Request<super::CreateObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
+        ///
         async fn delete_object_store(
             &self,
             request: tonic::Request<super::DeleteObjectStoreRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
+        ///
+        async fn create_index(
+            &self,
+            request: tonic::Request<super::CreateIndexRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
+        ///
+        async fn delete_index(
+            &self,
+            request: tonic::Request<super::DeleteIndexRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
         /** Primary key CRUD
         */
@@ -5530,6 +5582,84 @@ pub mod indexed_db_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = DeleteObjectStoreSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.IndexedDB/CreateIndex" => {
+                    #[allow(non_camel_case_types)]
+                    struct CreateIndexSvc<T: IndexedDb>(pub Arc<T>);
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::CreateIndexRequest> for CreateIndexSvc<T> {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CreateIndexRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as IndexedDb>::create_index(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CreateIndexSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.IndexedDB/DeleteIndex" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteIndexSvc<T: IndexedDb>(pub Arc<T>);
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::DeleteIndexRequest> for DeleteIndexSvc<T> {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DeleteIndexRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as IndexedDb>::delete_index(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DeleteIndexSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

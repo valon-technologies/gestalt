@@ -111,6 +111,24 @@ def from_wire_count_response(value: Any) -> native.CountResponse:
     )
 
 
+def to_wire_create_index_request(value: native.CreateIndexRequest) -> Any:
+    return _indexeddb_pb2.CreateIndexRequest(
+        store=value.store,
+        name=value.name,
+        key_path=value.key_path,
+        unique=value.unique,
+    )
+
+
+def from_wire_create_index_request(value: Any) -> native.CreateIndexRequest:
+    return native.CreateIndexRequest(
+        store=value.store,
+        name=value.name,
+        key_path=list(value.key_path),
+        unique=value.unique,
+    )
+
+
 def to_wire_create_object_store_request(value: native.CreateObjectStoreRequest) -> Any:
     return _indexeddb_pb2.CreateObjectStoreRequest(
         name=value.name,
@@ -272,6 +290,20 @@ def from_wire_cursor_response_result(value: Any) -> native.CursorResponseResult:
     if case == "done":
         return native.CursorResponseDone(value=value.done)
     return None
+
+
+def to_wire_delete_index_request(value: native.DeleteIndexRequest) -> Any:
+    return _indexeddb_pb2.DeleteIndexRequest(
+        store=value.store,
+        name=value.name,
+    )
+
+
+def from_wire_delete_index_request(value: Any) -> native.DeleteIndexRequest:
+    return native.DeleteIndexRequest(
+        store=value.store,
+        name=value.name,
+    )
 
 
 def to_wire_delete_object_store_request(value: native.DeleteObjectStoreRequest) -> Any:

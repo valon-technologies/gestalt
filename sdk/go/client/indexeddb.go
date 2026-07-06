@@ -103,6 +103,16 @@ type CountResponse struct {
 	Count int64
 }
 
+// CreateIndexRequest is the native message type for gestalt.provider.v1.CreateIndexRequest.
+//
+// CreateIndexRequest adds a secondary index to an existing object store.
+type CreateIndexRequest struct {
+	Store   string
+	Name    string
+	KeyPath []string
+	Unique  bool
+}
+
 // CreateObjectStoreRequest is the native message type for gestalt.provider.v1.CreateObjectStoreRequest.
 //
 // CreateObjectStoreRequest creates a new object store.
@@ -236,6 +246,14 @@ func (*CursorResponseResultDone) isCursorResponseResult() {}
 // CursorResponse is one streamed cursor frame.
 type CursorResponse struct {
 	Result CursorResponseResult
+}
+
+// DeleteIndexRequest is the native message type for gestalt.provider.v1.DeleteIndexRequest.
+//
+// DeleteIndexRequest removes a secondary index from an existing object store.
+type DeleteIndexRequest struct {
+	Store string
+	Name  string
 }
 
 // DeleteObjectStoreRequest is the native message type for gestalt.provider.v1.DeleteObjectStoreRequest.
@@ -874,6 +892,40 @@ func (c *IndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
 // DeleteObjectStoreRaw is the faithful form of [IndexedDB.DeleteObjectStore].
 func (c *IndexedDB) DeleteObjectStoreRaw(ctx context.Context, request *DeleteObjectStoreRequest) error {
 	if _, err := c.client.DeleteObjectStore(ctx, ToWireDeleteObjectStoreRequest(request)); err != nil {
+		return toGestaltError(err)
+	}
+	return nil
+}
+
+// CreateIndex is the ergonomic form of [IndexedDB.CreateIndexRaw].
+func (c *IndexedDB) CreateIndex(ctx context.Context, store string, name string, keyPath []string, unique bool) error {
+	request := &CreateIndexRequest{Store: store, Name: name, KeyPath: keyPath, Unique: unique}
+	if _, err := c.client.CreateIndex(ctx, ToWireCreateIndexRequest(request)); err != nil {
+		return toGestaltError(err)
+	}
+	return nil
+}
+
+// CreateIndexRaw is the faithful form of [IndexedDB.CreateIndex].
+func (c *IndexedDB) CreateIndexRaw(ctx context.Context, request *CreateIndexRequest) error {
+	if _, err := c.client.CreateIndex(ctx, ToWireCreateIndexRequest(request)); err != nil {
+		return toGestaltError(err)
+	}
+	return nil
+}
+
+// DeleteIndex is the ergonomic form of [IndexedDB.DeleteIndexRaw].
+func (c *IndexedDB) DeleteIndex(ctx context.Context, store string, name string) error {
+	request := &DeleteIndexRequest{Store: store, Name: name}
+	if _, err := c.client.DeleteIndex(ctx, ToWireDeleteIndexRequest(request)); err != nil {
+		return toGestaltError(err)
+	}
+	return nil
+}
+
+// DeleteIndexRaw is the faithful form of [IndexedDB.DeleteIndex].
+func (c *IndexedDB) DeleteIndexRaw(ctx context.Context, request *DeleteIndexRequest) error {
+	if _, err := c.client.DeleteIndex(ctx, ToWireDeleteIndexRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil

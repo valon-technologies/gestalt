@@ -2336,6 +2336,26 @@ pub struct DeleteObjectStoreRequest {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
 }
+/// CreateIndexRequest adds a secondary index to an existing object store.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CreateIndexRequest {
+    #[prost(string, tag = "1")]
+    pub store: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "3")]
+    pub key_path: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, tag = "4")]
+    pub unique: bool,
+}
+/// DeleteIndexRequest removes a secondary index from an existing object store.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeleteIndexRequest {
+    #[prost(string, tag = "1")]
+    pub store: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
 /// IndexQueryRequest addresses a secondary index plus an optional query.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IndexQueryRequest {
