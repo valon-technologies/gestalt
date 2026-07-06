@@ -859,8 +859,9 @@ export default defineConfig({
 });
 ```
 
-`gestalt()` sets `base` to a relative path and configures the dev server for
-`GESTALT_DEV_*` when gestaltd proxies local `run` commands.
+`gestalt()` sets `base` to a relative path, configures the dev server for
+`GESTALT_DEV_*` when gestaltd proxies local `run` commands, and proxies `/api/v1`
+to `GESTALT_BASE_URL` for two-origin local dev.
 
 Manual equivalent when not using the plugin:
 
@@ -1072,6 +1073,7 @@ gestaltd appends these environment variables to each `run` command (manifest
 | `GESTALT_DEV` | `1` while gestaltd manages the dev process |
 | `GESTALT_DEV_PORT` | Ephemeral `127.0.0.1` port the frontend dev server must bind |
 | `GESTALT_DEV_BASE_PATH` | Mount path from `apps.<name>.static.mount` |
+| `GESTALT_BASE_URL` | Public gestaltd origin; consumed by `gestalt()` for `/api/v1` proxying |
 | `GESTALT_PROVIDER_SOCKET` | Unix socket for the app provider (full-stack apps only) |
 
 The dev supervisor probes frontend readiness on `GESTALT_DEV_PORT`, restarts
