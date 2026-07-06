@@ -450,32 +450,75 @@ func TestE2EProviderValidateSourceUI(t *testing.T) {
 func TestE2EProviderValidateReusesConfiguredAppKey(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	appDir := setupAppDir(t, dir)
-	manifestPath := componentProviderManifestPath(t, appDir)
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
+	cases := []struct {
+		name       string
+		appKey     string
+		setupApp   func(t *testing.T, dir string) string
+		configYAML func(manifestPath string) string
+	}{
+		{
+			name:   "local path in config",
+			appKey: "provider_go",
+			setupApp: func(t *testing.T, dir string) string {
+				return setupAppDir(t, dir)
+			},
+			configYAML: func(manifestPath string) string {
+				return fmt.Sprintf(`apiVersion: gestaltd.config/v8
 apps:
   provider_go:
     source:
       path: %s
 `, manifestPath)
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
+			},
+		},
+		{
+			name:   "git source fleet config",
+			appKey: "oncall",
+			setupApp: func(t *testing.T, dir string) string {
+				appDir := setupAppDir(t, filepath.Join(dir, "oncall"))
+				setUIManifestSource(t, componentProviderManifestPath(t, appDir), "github.com/valon/apps/oncall")
+				return appDir
+			},
+			configYAML: func(manifestPath string) string {
+				return `apiVersion: gestaltd.config/v8
+apps:
+  oncall:
+    source:
+      git:
+        repo: https://github.com/valon-technologies/valon-tools.git
+        ref: cbd1f53e00000000000000000000000000000000
+        path: apps/oncall/manifest.yaml
+`
+			},
+		},
 	}
 
-	cmd := gestaltdCommand("provider", "validate", "--path", appDir, "--config", cfgPath)
-	cmd.Env = append(os.Environ(),
-		"GESTALT_PROVIDERS_DIR="+providersDir,
-		"GOTELEMETRY=off",
-	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd provider validate failed: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(string(out), "app=provider_go") {
-		t.Fatalf("expected configured app key in output, got: %s", out)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			providersDir := setupDefaultLocalProvidersDir(t, dir)
+			appDir := tc.setupApp(t, dir)
+			cfgPath := filepath.Join(dir, "config.yaml")
+			if err := os.WriteFile(cfgPath, []byte(tc.configYAML(componentProviderManifestPath(t, appDir))), 0o644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			cmd := gestaltdCommand("provider", "validate", "--path", appDir, "--config", cfgPath)
+			cmd.Env = append(os.Environ(),
+				"GESTALT_PROVIDERS_DIR="+providersDir,
+				"GOTELEMETRY=off",
+			)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("gestaltd provider validate failed: %v\noutput: %s", err, out)
+			}
+			if !strings.Contains(string(out), "app="+tc.appKey) {
+				t.Fatalf("expected configured app key %q in output, got: %s", tc.appKey, out)
+			}
+		})
 	}
 }
 
