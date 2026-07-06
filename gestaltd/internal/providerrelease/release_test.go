@@ -95,6 +95,33 @@ func TestValidateMetadataAllowsExecutableForHybridProjection(t *testing.T) {
 	}
 }
 
+func TestValidateMetadataAllowsExecutableForStaticBundleProjection(t *testing.T) {
+	t.Parallel()
+
+	// A hybrid app provider that also carries a static bundle projects to a validation manifest
+	// with spec.assetRoot set and no entrypoint, so RuntimeForManifest on the projection returns
+	// ui exactly as it would for a frontend-only app. The release metadata runtime is executable
+	// (the binary exists), and ValidateMetadata must accept this because the projection cannot
+	// prove the binary's absence.
+	metadata := validReleaseMetadataForTest()
+	metadata.Runtime = RuntimeExecutable
+	metadata.StaticValidation.Manifest = &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  metadata.Package,
+		Version: metadata.Version,
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "static",
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {Auth: &providermanifestv1.ProviderAuth{Type: "none"}},
+			},
+		},
+	}
+
+	if err := ValidateMetadata(metadata); err != nil {
+		t.Fatalf("ValidateMetadata error = %v, want nil for executable release with static bundle projection", err)
+	}
+}
+
 func TestValidateMetadataRejectsRuntimeMismatch(t *testing.T) {
 	t.Parallel()
 

@@ -181,19 +181,17 @@ func ValidateMetadata(metadata *Metadata) error {
 	// The validation manifest is a platform-neutral projection of the packaged
 	// manifest: it intentionally strips Entrypoint and Artifacts (see staticvalidation.ProjectManifest).
 	// Because the entrypoint signal is gone, RuntimeForManifest on the projection cannot distinguish a
-	// hybrid app provider (manifest-backed spec surface plus a hosted binary) from a declarative-only
-	// app provider (manifest-backed spec surface, no binary) - both project to RuntimeDeclarative. The
-	// real classification lives in metadata.Runtime, which is derived from the full packaged manifest.
-	// Validate against the projection accordingly: a declarative release must project to declarative,
-	// and an executable release must project to declarative or executable (never UI).
+	// hybrid app provider from one with no binary: a hybrid with a manifest-backed spec surface
+	// projects to RuntimeDeclarative, and a hybrid carrying a static bundle (spec.assetRoot) projects
+	// to RuntimeUI, exactly like a frontend-only app. The real classification lives in
+	// metadata.Runtime, which is derived from the full packaged manifest. Validate against the
+	// projection accordingly: a declarative release must project to declarative, a ui release must
+	// project to ui, and an executable release accepts any projection because the projection cannot
+	// prove the binary's absence.
 	validationRuntime := RuntimeForManifest(metadataKind, manifest)
 	switch metadata.Runtime {
 	case RuntimeDeclarative:
 		if validationRuntime != RuntimeDeclarative {
-			return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, validationRuntime)
-		}
-	case RuntimeExecutable:
-		if validationRuntime == RuntimeUI {
 			return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, validationRuntime)
 		}
 	case RuntimeUI:
