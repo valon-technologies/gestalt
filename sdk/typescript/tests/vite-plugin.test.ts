@@ -143,25 +143,34 @@ describe("gestalt vite plugin", () => {
   });
 
   test("live dev server serves mount with foreign Host and injected base tag", async () => {
-    const port = await freePort();
-    const env = {
-      GESTALT_DEV_PORT: String(port),
-      GESTALT_DEV_BASE_PATH: "/example",
-    };
-    const server = await createViteServer({
-      configFile: false,
-      root: fixtureRoot,
-      plugins: [gestalt({ env })],
-    });
-    viteServers.push(server);
-    await server.listen();
+    const cases = [
+      { basePath: "/example", requestPath: "/example/", wantBase: '<base href="/example/">' },
+      { basePath: "/", requestPath: "/", wantBase: '<base href="/">' },
+    ] as const;
 
-    const response = await fetch(`http://127.0.0.1:${port}/example/`, {
-      headers: { Host: "foreign.example.test" },
-    });
-    expect(response.status).toBe(200);
-    const html = await response.text();
-    expect(html).toContain('<base href="/example/">');
+    for (const { basePath, requestPath, wantBase } of cases) {
+      const port = await freePort();
+      const env = {
+        GESTALT_DEV_PORT: String(port),
+        GESTALT_DEV_BASE_PATH: basePath,
+      };
+      const server = await createViteServer({
+        configFile: false,
+        root: fixtureRoot,
+        plugins: [gestalt({ env })],
+      });
+      viteServers.push(server);
+      await server.listen();
+
+      const response = await fetch(`http://127.0.0.1:${port}${requestPath}`, {
+        headers: { Host: "foreign.example.test" },
+      });
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain(wantBase);
+      await server.close();
+      viteServers.pop();
+    }
   });
 
   test("build emits relative asset references into GESTALT_BUILD_STATIC", async () => {

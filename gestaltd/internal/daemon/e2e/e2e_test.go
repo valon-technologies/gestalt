@@ -469,7 +469,7 @@ apps:
 			appKey: "oncall",
 			setupApp: func(t *testing.T, dir string) string {
 				appDir := setupAppDir(t, filepath.Join(dir, "oncall"))
-				setUIManifestSource(t, componentProviderManifestPath(t, appDir), "github.com/valon/apps/oncall")
+				setAppManifestSource(t, appDir, "github.com/valon/apps/oncall")
 				return appDir
 			},
 			configYAML: func(manifestPath string) string {
