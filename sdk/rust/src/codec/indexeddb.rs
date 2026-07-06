@@ -8,16 +8,16 @@ use crate::codec::support::{
 use crate::generated::v1;
 use crate::indexeddb::{
     AcquireLockRequest, AcquireLockResponse, BeginTransactionRequest, ColumnDef, CountResponse,
-    CreateObjectStoreRequest, CursorClientMessage, CursorClientMessageMsg, CursorCommand,
-    CursorCommandCommand, CursorEntry, CursorKeyTarget, CursorResponse, CursorResponseResult,
-    DeleteObjectStoreRequest, DeleteResponse, IndexQueryRequest, IndexSchema, IndexedDBQuery,
-    IndexedDBQueryQuery, KeyRange, KeyResponse, KeyValue, KeyValueArray, KeyValueKind,
-    KeysResponse, ObjectStoreNameRequest, ObjectStoreRangeRequest, ObjectStoreRequest,
-    ObjectStoreSchema, OpenCursorRequest, Record, RecordRequest, RecordResponse, RecordsResponse,
-    ReleaseLockRequest, TransactionAbortRequest, TransactionAbortResponse,
-    TransactionBeginResponse, TransactionClientMessage, TransactionClientMessageMsg,
-    TransactionCommitRequest, TransactionCommitResponse, TransactionOperation,
-    TransactionOperationOperation, TransactionOperationResponse,
+    CreateIndexRequest, CreateObjectStoreRequest, CursorClientMessage, CursorClientMessageMsg,
+    CursorCommand, CursorCommandCommand, CursorEntry, CursorKeyTarget, CursorResponse,
+    CursorResponseResult, DeleteIndexRequest, DeleteObjectStoreRequest, DeleteResponse,
+    IndexQueryRequest, IndexSchema, IndexedDBQuery, IndexedDBQueryQuery, KeyRange, KeyResponse,
+    KeyValue, KeyValueArray, KeyValueKind, KeysResponse, ObjectStoreNameRequest,
+    ObjectStoreRangeRequest, ObjectStoreRequest, ObjectStoreSchema, OpenCursorRequest, Record,
+    RecordRequest, RecordResponse, RecordsResponse, ReleaseLockRequest, TransactionAbortRequest,
+    TransactionAbortResponse, TransactionBeginResponse, TransactionClientMessage,
+    TransactionClientMessageMsg, TransactionCommitRequest, TransactionCommitResponse,
+    TransactionOperation, TransactionOperationOperation, TransactionOperationResponse,
     TransactionOperationResponseResult, TransactionServerMessage, TransactionServerMessageMsg,
     TypedValue, TypedValueKind,
 };
@@ -68,6 +68,16 @@ pub(crate) fn to_wire_column_def(value: ColumnDef) -> v1::ColumnDef {
 /// Converts a wire `CountResponse` to its native message.
 pub(crate) fn from_wire_count_response(value: v1::CountResponse) -> CountResponse {
     CountResponse { count: value.count }
+}
+
+/// Converts a native `CreateIndexRequest` to its wire message.
+pub(crate) fn to_wire_create_index_request(value: CreateIndexRequest) -> v1::CreateIndexRequest {
+    v1::CreateIndexRequest {
+        store: value.store,
+        name: value.name,
+        key_path: value.key_path,
+        unique: value.unique,
+    }
 }
 
 /// Converts a native `CreateObjectStoreRequest` to its wire message.
@@ -155,6 +165,14 @@ pub(crate) fn from_wire_cursor_response_result(
             CursorResponseResult::Entry(from_wire_cursor_entry(value))
         }
         v1::cursor_response::Result::Done(value) => CursorResponseResult::Done(value),
+    }
+}
+
+/// Converts a native `DeleteIndexRequest` to its wire message.
+pub(crate) fn to_wire_delete_index_request(value: DeleteIndexRequest) -> v1::DeleteIndexRequest {
+    v1::DeleteIndexRequest {
+        store: value.store,
+        name: value.name,
     }
 }
 
