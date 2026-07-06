@@ -7,12 +7,11 @@ use crate::codec::indexeddb::{
     from_wire_acquire_lock_response, from_wire_count_response, from_wire_cursor_response,
     from_wire_delete_response, from_wire_key_response, from_wire_keys_response,
     from_wire_record_response, from_wire_records_response, from_wire_transaction_server_message,
-    to_wire_acquire_lock_request, to_wire_create_index_request,
-    to_wire_create_object_store_request, to_wire_cursor_client_message,
-    to_wire_delete_index_request, to_wire_delete_object_store_request, to_wire_index_query_request,
-    to_wire_object_store_name_request, to_wire_object_store_range_request,
-    to_wire_object_store_request, to_wire_record_request, to_wire_release_lock_request,
-    to_wire_transaction_client_message,
+    to_wire_acquire_lock_request, to_wire_create_object_store_request,
+    to_wire_cursor_client_message, to_wire_delete_object_store_request,
+    to_wire_index_query_request, to_wire_object_store_name_request,
+    to_wire_object_store_range_request, to_wire_object_store_request, to_wire_record_request,
+    to_wire_release_lock_request, to_wire_transaction_client_message,
 };
 use crate::generated::v1;
 use crate::rpc_support::{GestaltError, RpcStatus};
@@ -131,21 +130,6 @@ pub struct CountResponse {
     pub count: i64,
 }
 
-/// CreateIndexRequest adds a secondary index to an existing object store.
-///
-/// Native message type for `gestalt.provider.v1.CreateIndexRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct CreateIndexRequest {
-    /// The `store` field.
-    pub store: String,
-    /// The `name` field.
-    pub name: String,
-    /// The `key_path` field.
-    pub key_path: Vec<String>,
-    /// The `unique` field.
-    pub unique: bool,
-}
-
 /// CreateObjectStoreRequest creates a new object store.
 ///
 /// Native message type for `gestalt.provider.v1.CreateObjectStoreRequest`.
@@ -245,17 +229,6 @@ pub enum CursorResponseResult {
 pub struct CursorResponse {
     /// The `result` oneof; None when unset.
     pub result: Option<CursorResponseResult>,
-}
-
-/// DeleteIndexRequest removes a secondary index from an existing object store.
-///
-/// Native message type for `gestalt.provider.v1.DeleteIndexRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct DeleteIndexRequest {
-    /// The `store` field.
-    pub store: String,
-    /// The `name` field.
-    pub name: String,
 }
 
 /// DeleteObjectStoreRequest removes an object store.
@@ -789,65 +762,6 @@ impl IndexedDB {
             tonic_request.set_timeout(timeout);
         }
         self.inner.delete_object_store(tonic_request).await?;
-        Ok(())
-    }
-
-    /// Calls `gestalt.provider.v1.IndexedDB.CreateIndex`.
-    pub async fn create_index(
-        &mut self,
-        store: String,
-        name: String,
-        key_path: Vec<String>,
-        unique: bool,
-    ) -> Result<(), GestaltError> {
-        let request = CreateIndexRequest {
-            store,
-            name,
-            key_path,
-            unique,
-        };
-        let mut tonic_request = tonic::Request::new(to_wire_create_index_request(request));
-        if let Some(timeout) = self.timeout {
-            tonic_request.set_timeout(timeout);
-        }
-        self.inner.create_index(tonic_request).await?;
-        Ok(())
-    }
-
-    /// Calls `gestalt.provider.v1.IndexedDB.CreateIndex` with the full request and response messages.
-    pub async fn create_index_raw(
-        &mut self,
-        request: CreateIndexRequest,
-    ) -> Result<(), GestaltError> {
-        let mut tonic_request = tonic::Request::new(to_wire_create_index_request(request));
-        if let Some(timeout) = self.timeout {
-            tonic_request.set_timeout(timeout);
-        }
-        self.inner.create_index(tonic_request).await?;
-        Ok(())
-    }
-
-    /// Calls `gestalt.provider.v1.IndexedDB.DeleteIndex`.
-    pub async fn delete_index(&mut self, store: String, name: String) -> Result<(), GestaltError> {
-        let request = DeleteIndexRequest { store, name };
-        let mut tonic_request = tonic::Request::new(to_wire_delete_index_request(request));
-        if let Some(timeout) = self.timeout {
-            tonic_request.set_timeout(timeout);
-        }
-        self.inner.delete_index(tonic_request).await?;
-        Ok(())
-    }
-
-    /// Calls `gestalt.provider.v1.IndexedDB.DeleteIndex` with the full request and response messages.
-    pub async fn delete_index_raw(
-        &mut self,
-        request: DeleteIndexRequest,
-    ) -> Result<(), GestaltError> {
-        let mut tonic_request = tonic::Request::new(to_wire_delete_index_request(request));
-        if let Some(timeout) = self.timeout {
-            tonic_request.set_timeout(timeout);
-        }
-        self.inner.delete_index(tonic_request).await?;
         Ok(())
     }
 

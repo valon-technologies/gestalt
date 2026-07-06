@@ -168,47 +168,6 @@ describe("IndexedDB transport", () => {
     }
   });
 
-  test("createIndex and deleteIndex forward the request", async () => {
-    const envName = ENV_HOST_SERVICE_SOCKET;
-    const previousTarget = process.env[envName];
-    process.env[envName] = "/tmp/fake-indexeddb.sock";
-    try {
-      const local = new IndexedDB("schema");
-      const createCalls: any[] = [];
-      const deleteCalls: any[] = [];
-      (local as any).client = {
-        createIndex: async (request: any) => {
-          createCalls.push(request);
-          return {};
-        },
-        deleteIndex: async (request: any) => {
-          deleteCalls.push(request);
-          return {};
-        },
-      };
-
-      await local.createIndex("issues", {
-        name: "by_status",
-        keyPath: ["status"],
-        unique: true,
-      });
-      await local.createIndex("issues", { name: "by_owner", keyPath: ["owner"] });
-      await local.deleteIndex("issues", "by_status");
-
-      expect(createCalls).toEqual([
-        { store: "issues", name: "by_status", keyPath: ["status"], unique: true },
-        { store: "issues", name: "by_owner", keyPath: ["owner"], unique: false },
-      ]);
-      expect(deleteCalls).toEqual([{ store: "issues", name: "by_status" }]);
-    } finally {
-      if (previousTarget === undefined) {
-        delete process.env[envName];
-      } else {
-        process.env[envName] = previousTarget;
-      }
-    }
-  });
-
   test("nested JSON round-trip", async () => {
     const store = "nested_json_roundtrip";
     await db.createObjectStore(store);
