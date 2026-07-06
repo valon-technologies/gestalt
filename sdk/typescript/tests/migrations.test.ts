@@ -307,6 +307,32 @@ describe("runMigrations", () => {
     expect(fake.stores.has("x")).toBe(false);
   });
 
+  test("a mutating op inside up() throws once the lease is lost mid-revision", async () => {
+    const { db, fake } = fakeDb();
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const seed: Revision = {
+      id: "0001_seed",
+      schema: { stores: [{ name: "issues", columns: [{ name: "id", primaryKey: true }] }] },
+    };
+    const backfill: Revision = {
+      id: "0002_backfill",
+      up: async (m) => {
+        // Another instance reclaims the lease while up() is running.
+        fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
+        await sleep(1_400);
+        // The guarded handle must refuse further writes once the lease is lost.
+        await m.store("issues").put({ id: "x" });
+      },
+    };
+
+    await runMigrations(db, { revisions: [seed] });
+    await expect(
+      runMigrations(db, { revisions: [seed, backfill], lockTtlMs: 2_000 }),
+    ).rejects.toThrow(/lost the migration lease/);
+    expect(await ledgerIds(fake)).toEqual(["0001_seed"]);
+    expect(fake.stores.get("issues")?.rows.has("x")).toBe(false);
+  });
+
   test("fails closed when the ledger is ahead of the code", async () => {
     const { db, fake } = fakeDb();
     await runMigrations(db, { revisions: [issuesRevision] });
