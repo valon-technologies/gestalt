@@ -32,8 +32,6 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 		}
 		mountedName := "app:" + name
 
-		public := entry.Static.Public
-
 		if entry.DevActive {
 			handler := lazyDevHandler(devHandlerResolver, name)
 			mounted = append(mounted, MountedUI{
@@ -41,7 +39,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 				Path:                mount,
 				AppName:             name,
 				AuthorizationPolicy: entry.AuthorizationPolicy,
-				AppLevelAuth:        !public,
+				AppLevelAuth:        !entry.Static.Public,
 				Handler:             handler,
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
