@@ -61,7 +61,6 @@ type MountedUI struct {
 	ThemeAssetsDir  string
 	IsDev           bool
 	AppLevelAuth    bool
-	PublicStatic    bool
 	builtInAdmin    bool
 }
 
