@@ -63,7 +63,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider validate",
 			args:      []string{"provider", "validate", "--help"},
-			wantParts: []string{"gestaltd provider validate", "v1 supports kind: app and kind: ui manifests", "--config PATH"},
+			wantParts: []string{"gestaltd provider validate", "v1 supports kind: app manifests", "--config PATH"},
 		},
 	}
 

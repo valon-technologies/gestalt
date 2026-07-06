@@ -110,24 +110,19 @@ func TestManifestKindDoesNotMutateCallerManifest(t *testing.T) {
 	}
 }
 
-func TestManifestWorkflow_RoundTripsUIPackage(t *testing.T) {
+func TestManifestWorkflow_RoundTripsAppStaticPackage(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	sourceDir := filepath.Join(root, "ui")
+	sourceDir := filepath.Join(root, "static-app")
 	mustWriteManifestData(t, sourceDir, "manifest.yml", []byte(`
-kind: ui
-source: github.com/acme/apps/ui
+kind: app
+source: github.com/acme/apps/static
 version: 1.0.0
 spec:
   assetRoot: ui/dist
-  routes:
-    - path: /admin/*
-      allowedRoles: [admin]
-    - path: /*
-      allowedRoles: [viewer, admin]
 `))
-	mustWriteFile(t, filepath.Join(sourceDir, "ui", "dist", "index.html"), []byte("<!doctype html><title>ui</title>"), 0o644)
+	mustWriteFile(t, filepath.Join(sourceDir, "ui", "dist", "index.html"), []byte("<!doctype html><title>static</title>"), 0o644)
 
 	_, manifest, gotPath, err := LoadManifestFromPath(sourceDir)
 	if err != nil {
@@ -137,13 +132,10 @@ spec:
 		t.Fatalf("manifest path = %q, want manifest.yml", gotPath)
 	}
 	if manifest.Spec == nil || manifest.Spec.AssetRoot != "ui/dist" {
-		t.Fatalf("unexpected ui manifest: %#v", manifest.Spec)
-	}
-	if len(manifest.Spec.Routes) != 2 || manifest.Spec.Routes[0].Path != "/admin/*" || manifest.Spec.Routes[1].Path != "/*" {
-		t.Fatalf("unexpected ui routes: %#v", manifest.Spec.Routes)
+		t.Fatalf("unexpected app static manifest: %#v", manifest.Spec)
 	}
 
-	archivePath := filepath.Join(root, "ui.tar.gz")
+	archivePath := filepath.Join(root, "static-app.tar.gz")
 	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
@@ -153,7 +145,7 @@ spec:
 		t.Fatalf("ExtractPackage: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, "ui", "dist", "index.html")); err != nil {
-		t.Fatalf("expected extracted UI asset: %v", err)
+		t.Fatalf("expected extracted static asset: %v", err)
 	}
 }
 
@@ -237,9 +229,9 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 				case "manifest.yaml":
 					source = "github.com/acme/apps/yaml-first"
 				}
-				data := []byte(fmt.Sprintf("kind: ui\nsource: %s\nversion: 1.0.0\nspec:\n  assetRoot: ui\n", source))
+				data := []byte(fmt.Sprintf("kind: app\nsource: %s\nversion: 1.0.0\nspec:\n  assetRoot: ui\n", source))
 				if filepath.Ext(name) == ".json" {
-					data = []byte(fmt.Sprintf(`{"kind":"ui","source":%q,"version":"1.0.0","spec":{"assetRoot":"ui"}}`, source))
+					data = []byte(fmt.Sprintf(`{"kind":"app","source":%q,"version":"1.0.0","spec":{"assetRoot":"ui"}}`, source))
 				}
 				mustWriteManifestData(t, dir, name, data)
 			}
@@ -277,39 +269,6 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 				}))
 			},
 			wantError: "manifest kind is required",
-		},
-		{
-			name: "rejects ui route without allowed roles",
-			buildData: func(t *testing.T, dir string) string {
-				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
-				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
-kind: ui
-source: github.com/acme/apps/ui-routes
-version: 1.0.0
-spec:
-  assetRoot: ui/dist
-  routes:
-    - path: /admin
-`))
-			},
-			wantError: "allowedRoles must not be empty",
-		},
-		{
-			name: "rejects non-terminal wildcard ui route",
-			buildData: func(t *testing.T, dir string) string {
-				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
-				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
-kind: ui
-source: github.com/acme/apps/ui-routes
-version: 1.0.0
-spec:
-  assetRoot: ui/dist
-  routes:
-    - path: /admin/*/settings
-      allowedRoles: [admin]
-`))
-			},
-			wantError: "wildcards are only supported as a terminal /*",
 		},
 		{
 			name: "entrypoint references unknown artifact",
@@ -576,7 +535,7 @@ spec:
 	}
 }
 
-func TestManifestWorkflow_SourceUIBuildValidation(t *testing.T) {
+func TestManifestWorkflow_AppStaticAssetRootValidation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -586,22 +545,10 @@ func TestManifestWorkflow_SourceUIBuildValidation(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name: "source ui requires asset root",
+			name: "source app rejects asset root",
 			manifest: `
-kind: ui
-source: github.com/acme/apps/source-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-`,
-			readSource: true,
-			wantErr:    "spec.assetRoot is required for source ui manifests",
-		},
-		{
-			name: "source ui uses asset root",
-			manifest: `
-kind: ui
-source: github.com/acme/apps/source-ui
+kind: app
+source: github.com/acme/apps/source-static
 version: 1.0.0
 build:
   command: [npm, run, build]
@@ -609,108 +556,32 @@ spec:
   assetRoot: dist
 `,
 			readSource: true,
+			wantErr:    "spec.assetRoot is only allowed in prepared app manifests",
 		},
 		{
-			name: "source ui rejects build output field",
+			name: "prepared app uses asset root",
 			manifest: `
-kind: ui
-source: github.com/acme/apps/source-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-  output: dist
-spec:
-  routes:
-    - path: /*
-      allowedRoles: [viewer]
-`,
-			readSource: true,
-			wantErr:    "build.output is not supported",
-		},
-		{
-			name: "source ui rejects prepare-only build",
-			manifest: `
-kind: ui
-source: github.com/acme/apps/source-ui
-version: 1.0.0
-build: [npm, install]
-spec:
-  assetRoot: dist
-`,
-			readSource: true,
-			wantErr:    "source ui manifests require object-form build metadata",
-		},
-		{
-			name: "released ui uses asset root",
-			manifest: `
-kind: ui
-source: github.com/acme/apps/released-ui
+kind: app
+source: github.com/acme/apps/prepared-static
 version: 1.0.0
 spec:
   assetRoot: dist
 `,
 		},
 		{
-			name: "released ui rejects build metadata",
+			name: "source app rejects entrypoint with static build",
 			manifest: `
-kind: ui
-source: github.com/acme/apps/released-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-spec:
-  assetRoot: dist
-`,
-			wantErr: "build metadata is only allowed in source manifests",
-		},
-		{
-			name: "source ui rejects deleted release metadata",
-			manifest: `
-kind: ui
-source: github.com/acme/apps/source-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-spec:
-  assetRoot: dist
-release:
-  build:
-    command: [npm, run, build]
-`,
-			readSource: true,
-			wantErr:    "field release not found",
-		},
-		{
-			name: "source ui rejects input globs",
-			manifest: `
-kind: ui
-source: github.com/acme/apps/source-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-  inputs:
-    - src/**
-spec:
-  assetRoot: dist
-`,
-			readSource: true,
-			wantErr:    "build.inputs[0] does not support glob syntax",
-		},
-		{
-			name: "source ui rejects entrypoint",
-			manifest: `
-kind: ui
-source: github.com/test/ui/example
+kind: app
+source: github.com/test/apps/static-example
 version: 0.0.1-alpha.1
 entrypoint:
   artifactPath: dist/index.html
 build:
   command: [npm, run, build]
-spec:
-  assetRoot: dist
+spec: {}
 `,
 			readSource: true,
-			wantErr:    "ui manifests may not define entrypoints",
+			wantErr:    "entrypoint.artifactPath",
 		},
 	}
 

@@ -232,7 +232,7 @@ func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *conf
 		if err != nil {
 			return LockEntry{}, err
 		}
-		return finalizeGitSnapshotLockEntry(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), app, entry, installed, configMap, false)
+		return finalizeGitSnapshotLockEntry(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), app, entry, installed, configMap)
 	}
 
 	install, err := l.prepareGitSourceInstall(ctx, paths, providermanifestv1.KindApp, name, destDir, app)
@@ -242,7 +242,7 @@ func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *conf
 	if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindApp, configMap); err != nil {
 		return LockEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
 	}
-	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindApp, name, app, install, false)
+	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindApp, name, app, install)
 }
 
 func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any, mode artifactMode) (LockEntry, error) {
@@ -252,7 +252,7 @@ func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *con
 		if err != nil {
 			return LockEntry{}, err
 		}
-		return finalizeGitSnapshotLockEntry(paths, kind, name, subject, app, entry, installed, configMap, false)
+		return finalizeGitSnapshotLockEntry(paths, kind, name, subject, app, entry, installed, configMap)
 	}
 
 	install, err := l.prepareGitSourceInstall(ctx, paths, kind, name, destDir, app)
@@ -262,26 +262,7 @@ func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *con
 	if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, kind, configMap); err != nil {
 		return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
 	}
-	return gitLocalLockEntryFromPreparedInstall(paths, kind, name, app, install, false)
-}
-
-func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir, subject string, configMap map[string]any, mode artifactMode) (LockEntry, error) {
-	if gitSourceMaterialization(gitSourceDef(app)) == gitMaterializationSnapshot {
-		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindUI, name, subject, destDir, app, mode)
-		if err != nil {
-			return LockEntry{}, err
-		}
-		return finalizeGitSnapshotLockEntry(paths, providermanifestv1.KindUI, "ui:"+name, subject, app, entry, installed, configMap, true)
-	}
-
-	install, err := l.prepareGitSourceInstall(ctx, paths, providermanifestv1.KindUI, name, destDir, app)
-	if err != nil {
-		return LockEntry{}, err
-	}
-	if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindUI, configMap); err != nil {
-		return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
-	}
-	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindUI, "ui:"+name, app, install, true)
+	return gitLocalLockEntryFromPreparedInstall(paths, kind, name, app, install)
 }
 
 func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, expectedKind, name, subject, destDir string, app *config.ProviderEntry, mode artifactMode) (LockEntry, *installedPackage, error) {
@@ -327,16 +308,17 @@ func (l *Lifecycle) stageGitSourceInstall(ctx context.Context, paths lifecyclePa
 	return stageLocalSourceInstall(kind, name, manifestPath, destDir, opts)
 }
 
-func gitLocalLockEntryFromPreparedInstall(paths lifecyclePaths, kind, fingerprintName string, app *config.ProviderEntry, install *preparedInstall, ui bool) (LockEntry, error) {
-	var entry LockEntry
-	var err error
-	if ui {
-		entry, err = localUILockEntryFromPreparedInstall(paths, strings.TrimPrefix(fingerprintName, "ui:"), app, install)
-	} else {
-		entry, err = localLockEntryFromPreparedInstall(paths, kind, fingerprintName, app, install)
-	}
+func gitLocalLockEntryFromPreparedInstall(paths lifecyclePaths, kind, fingerprintName string, app *config.ProviderEntry, install *preparedInstall) (LockEntry, error) {
+	entry, err := localLockEntryFromPreparedInstall(paths, kind, fingerprintName, app, install)
 	if err != nil {
 		return LockEntry{}, err
+	}
+	if install.assetRootPath != "" {
+		assetRoot, err := relativePreparedPath(paths.artifactsDir, install.assetRootPath)
+		if err != nil {
+			return LockEntry{}, fmt.Errorf("compute asset root path for %s %q: %w", kind, fingerprintName, err)
+		}
+		entry.AssetRoot = assetRoot
 	}
 	entry.Source = canonicalGitSourceLocation(app)
 	entry.SourceRef = gitSourceLockRef(app, "")
@@ -347,12 +329,12 @@ func gitLocalLockEntryFromPreparedInstall(paths lifecyclePaths, kind, fingerprin
 	return entry, nil
 }
 
-func finalizeGitSnapshotLockEntry(paths lifecyclePaths, kind, fingerprintName, subject string, app *config.ProviderEntry, entry LockEntry, installed *installedPackage, configMap map[string]any, ui bool) (LockEntry, error) {
+func finalizeGitSnapshotLockEntry(paths lifecyclePaths, kind, fingerprintName, subject string, app *config.ProviderEntry, entry LockEntry, installed *installedPackage, configMap map[string]any) (LockEntry, error) {
 	manifestPath, manifest := gitSnapshotLockManifest(entry, installed)
 	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, kind, configMap); err != nil {
 		return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
 	}
-	return finalizeGitLockEntry(paths, fingerprintName, app, entry, installed, kind, ui)
+	return finalizeGitLockEntry(paths, fingerprintName, app, entry, installed, kind)
 }
 
 func gitSnapshotLockManifest(entry LockEntry, installed *installedPackage) (string, *providermanifestv1.Manifest) {
@@ -362,14 +344,8 @@ func gitSnapshotLockManifest(entry LockEntry, installed *installedPackage) (stri
 	return "", entry.ValidationManifest
 }
 
-func finalizeGitLockEntry(paths lifecyclePaths, fingerprintName string, app *config.ProviderEntry, entry LockEntry, installed *installedPackage, kind string, ui bool) (LockEntry, error) {
-	var fingerprint string
-	var err error
-	if ui {
-		fingerprint, err = NamedUIProviderFingerprint(strings.TrimPrefix(fingerprintName, "ui:"), app, paths.configDir)
-	} else {
-		fingerprint, err = ProviderFingerprint(fingerprintName, app, paths.configDir)
-	}
+func finalizeGitLockEntry(paths lifecyclePaths, fingerprintName string, app *config.ProviderEntry, entry LockEntry, installed *installedPackage, kind string) (LockEntry, error) {
+	fingerprint, err := ProviderFingerprint(fingerprintName, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting %s provider: %w", kind, err)
 	}
@@ -384,22 +360,20 @@ func finalizeGitLockEntry(paths lifecyclePaths, fingerprintName string, app *con
 		return LockEntry{}, fmt.Errorf("compute manifest path for %s provider: %w", kind, err)
 	}
 	entry.ArtifactManifest = filepath.ToSlash(manifestRel)
-	if ui {
+	if installed.AssetRoot != "" {
 		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
 		if err != nil {
-			return LockEntry{}, fmt.Errorf("compute asset root path for ui provider: %w", err)
+			return LockEntry{}, fmt.Errorf("compute asset root path for %s provider: %w", kind, err)
 		}
 		entry.AssetRoot = filepath.ToSlash(assetRoot)
-		return entry, nil
 	}
-	executableRel := ""
 	if installed.ExecutablePath != "" {
-		executableRel, err = filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
+		executableRel, err := filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
 		if err != nil {
 			return LockEntry{}, fmt.Errorf("compute executable path for %s provider: %w", kind, err)
 		}
+		entry.Executable = filepath.ToSlash(executableRel)
 	}
-	entry.Executable = filepath.ToSlash(executableRel)
 	return entry, nil
 }
 

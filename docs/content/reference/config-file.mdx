@@ -9,10 +9,10 @@ them left-to-right before validation and bootstrap. The top-level keys are
 `server` (listener, encryption, egress, and host-provider selection),
 `authorization` (static authorization model and relationships), `connections` (reusable
 upstream credential definitions), `providers` (named
-identity, secrets, telemetry, audit, UI, indexeddb, authorization,
+identity, secrets, telemetry, audit, indexeddb, authorization,
 workflow, cache, s3, and agent entries), `providerRepositories` (package index
 URLs), `runtime` (hosted execution backends), `workflows` (config-managed
-definitions), and `apps` (executable integrations and optional app-backed UI
+definitions), and `apps` (executable integrations and optional static frontend
 mounts):
 
 ```yaml
@@ -36,7 +36,6 @@ providers:
   s3: {}
   secrets: {}
   telemetry: {}
-  ui: {} # deprecated; use apps.<name>.static
   workflow: {}
 workflows:
   definitions: {}
@@ -276,7 +275,7 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `public.port` | `8080` | Port for the public listener. |
 | `management.host` | | Bind address for the management listener. |
 | `management.port` | | Port for the management listener. Required when `management.host` is set. |
-| `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in `/admin` on split public/management deployments. |
+| `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in admin on split public/management deployments. |
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
@@ -971,7 +970,7 @@ providers:
         serviceName: gestaltd
 ```
 
-Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI at `/admin` reads that same scrape surface. This is the default when `providers.telemetry` is omitted.
+Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI reads that same scrape surface. This is the default when `providers.telemetry` is omitted.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -1007,7 +1006,7 @@ providers:
           level: info
 ```
 
-Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent) while still keeping local `/metrics` available by default. The built-in admin UI at `/admin` reads that same local scrape surface.
+Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent) while still keeping local `/metrics` available by default. The built-in admin UI reads that same local scrape surface.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -1202,7 +1201,6 @@ apps:
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `authorizationPolicy` | Optional named policy used by host-side operation filtering and execution checks for this app. Also gates `apps.<name>.static` mounts when set. |
 | `static` | Optional static frontend mount. See [`apps.<name>.static`](#appsnamestatic). |
-| `ui` | **Deprecated.** Optional app-backed mounted UI binding. Use `static` instead. |
 | `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.identity`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{app}/{operation}`) and on `apps.<name>.static` mounts, including browser-login flows whose `next` path resolves into that app's mount. The built-in admin UI/admin API and `/mcp` still use the server-wide auth provider in this phase. |
@@ -1706,40 +1704,6 @@ are only a complete security boundary when the app is
 running inside a supported sandboxed runtime rather than relying on
 host-specific OS wrappers alone.
 
-## `providers.ui`
-
-<Callout type="warning">
-  `providers.ui` is deprecated. Configure `apps.<name>.static` on unified
-  `kind: app` packages instead. See [UI (Deprecated)](/providers/ui) and
-  [Applications](/applications).
-</Callout>
-
-```yaml
-providers:
-  ui:
-    console:
-      source:
-        package: github.com/valon-technologies/gestalt-providers/ui/default
-        version: 0.0.1
-      path: /console
-      config:
-        brandName: Acme
-```
-
-`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `apps.<name>.ui.bundle` binds to `apps.<name>.ui.path`. When a app manifest declares `spec.ui`, `apps.<name>.ui.bundle` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the app-owned reference. `/admin` remains available regardless and always uses the built-in admin shell. Omit `providers.ui` entirely to run headless with no public UI bundles.
-
-App-backed mounted UIs inherit the owning app's dynamic authorization grants when that app sets `authorizationPolicy`. Direct `providers.ui.<name>.authorizationPolicy` bindings remain static-only.
-
-When `authorizationPolicy` is set on a mounted UI, the referenced UI manifest must declare `spec.routes` with non-empty `allowedRoles`, and at least one route must cover `/`.
-
-| Field | Description |
-| --- | --- |
-| `path` | Direct mount prefix for this UI when not bound through `apps.<name>.ui.path`. |
-| `authorizationPolicy` | Direct policy binding for this UI when not bound through `apps.<name>.ui.path`. |
-| `source` | Package source, local UI manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
-| `config` | Optional UI-provider config validated against the bundle schema when present. |
-
 ## Validation rules
 
 Structural validation runs at config load time (`lock`, `sync`, `validate`, `serve`). Runtime validation runs only at `serve` time.
@@ -1764,27 +1728,15 @@ connections that collect or exchange credentials are not supported; declare a
 top-level connection and reference it with `ref`. All connections in a app
 must share the same mode.
 
-Each `providers.ui.<name>` entry must set `source` to exactly one loading mode:
-package source, local UI manifest path, published `provider-release.yaml`
-metadata URL, `source.url`, or `source.githubRelease`.
-`providers.ui.<name>.config` is only allowed when
-`providers.ui.<name>.source` is set.
-
 Each `apps.<name>` entry may set `static.mount` to publish a app-backed
 frontend. When `static` is set, the prepared package must include a `static/`
 directory with `index.html`. `static.mount` defaults to `/{app name}` when
-omitted and must follow the same path rules as legacy UI mounts.
-
-Each `apps.<name>` entry may set `ui.path` (**deprecated**) to publish a
-app-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle.
-When `ui.bundle` is omitted, the app manifest must declare `spec.ui`. A given
-UI may be bound by at most one app entry. `ui.path` must use the same path
-rules as a directly mounted UI.
+omitted and must follow mount path rules.
 
 Each name in `apps.<name>.s3` must reference an existing enabled
 `providers.s3.<name>` entry.
 
-Mounted UI bundles are served on the public listener only. The built-in admin UI remains at `/admin`.
+App static mounts are served on the public listener only.
 
 `server.egress.defaultAction` must be `allow` or `deny`.
 

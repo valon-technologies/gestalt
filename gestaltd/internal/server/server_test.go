@@ -2084,10 +2084,6 @@ func TestMountedUIRoutes(t *testing.T) {
 		cfg.MountedUIs = []server.MountedUI{{
 			Path:    "/sample-portal",
 			Handler: handler,
-			Routes: []server.MountedUIRoute{{
-				Path:         "/*",
-				AllowedRoles: []string{"viewer"},
-			}},
 		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -2232,17 +2228,19 @@ func TestMountedUIThemeRoutes(t *testing.T) {
 	writeTestUIAsset(t, filepath.Join(themeDir, "secret.css"), "outside-theme-assets")
 	writeTestUIAsset(t, filepath.Join(themeDir, "assets", "fonts", "brand.woff2"), "woff2-bytes")
 
+	handler, err := testutilUIHandler(uiDir)
+	if err != nil {
+		t.Fatalf("ui handler: %v", err)
+	}
+
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.ProviderUIs = map[string]*config.UIEntry{
-			"portal": {
-				Path: "/portal",
-				ProviderEntry: config.ProviderEntry{
-					ResolvedAssetRoot:       uiDir,
-					ResolvedThemeStylesheet: filepath.Join(themeDir, "tenant.css"),
-					ResolvedThemeAssetsDir:  filepath.Join(themeDir, "assets"),
-				},
-			},
-		}
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:            "portal",
+			Path:            "/portal",
+			Handler:         handler,
+			ThemeStylesheet: filepath.Join(themeDir, "tenant.css"),
+			ThemeAssetsDir:  filepath.Join(themeDir, "assets"),
+		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -2347,16 +2345,17 @@ func TestMountedUIThemeStylesheetUnconfigured(t *testing.T) {
 
 	rootDir := t.TempDir()
 	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>root-shell</html>")
+	handler, err := testutilUIHandler(rootDir)
+	if err != nil {
+		t.Fatalf("ui handler: %v", err)
+	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.ProviderUIs = map[string]*config.UIEntry{
-			"root": {
-				Path: "/",
-				ProviderEntry: config.ProviderEntry{
-					ResolvedAssetRoot: rootDir,
-				},
-			},
-		}
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:    "root",
+			Path:    "/",
+			Handler: handler,
+		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -2461,13 +2460,10 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 			Name:                "brand-ui",
 			Path:                "/brand",
 			AppName:             "brand",
+			AppLevelAuth:        true,
 			AuthorizationPolicy: "brandPolicy",
-			Routes: []server.MountedUIRoute{{
-				Path:         "/*",
-				AllowedRoles: []string{"viewer"},
-			}},
-			Handler:         handler,
-			ThemeStylesheet: filepath.Join(themeDir, "tenant.css"),
+			Handler:             handler,
+			ThemeStylesheet:     filepath.Join(themeDir, "tenant.css"),
 		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -2509,7 +2505,7 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 	}
 }
 
-func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
+func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -2561,13 +2557,10 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 		cfg.Authorization = authz
 		cfg.MountedUIs = []server.MountedUI{
 			{
-				Name:    "deal-hub-ui",
-				Path:    "/deal-hub",
-				AppName: "dealHub",
-				Routes: []server.MountedUIRoute{{
-					Path:         "/*",
-					AllowedRoles: []string{"admin"},
-				}},
+				Name:         "deal-hub-ui",
+				Path:         "/deal-hub",
+				AppName:      "dealHub",
+				AppLevelAuth: true,
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					_, _ = w.Write([]byte("deal-hub-shell"))
 				}),
@@ -2576,11 +2569,8 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 				Name:                "brain-ui",
 				Path:                "/brain",
 				AppName:             "brain",
+				AppLevelAuth:        true,
 				AuthorizationPolicy: "brainPolicy",
-				Routes: []server.MountedUIRoute{
-					{Path: "/admin/*", AllowedRoles: []string{"admin"}},
-					{Path: "/*", AllowedRoles: []string{"viewer"}},
-				},
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					_, _ = w.Write([]byte("brain-shell"))
 				}),
@@ -2589,11 +2579,8 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 				Name:                "reader-ui",
 				Path:                "/reader",
 				AppName:             "reader",
+				AppLevelAuth:        true,
 				AuthorizationPolicy: "readerPolicy",
-				Routes: []server.MountedUIRoute{
-					{Path: "/admin/*", AllowedRoles: []string{"admin"}},
-					{Path: "/*", AllowedRoles: []string{"reader"}},
-				},
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					_, _ = w.Write([]byte("reader-shell"))
 				}),
@@ -2657,30 +2644,6 @@ func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 	}
 	if !bytes.Contains(body, []byte("reader-shell")) {
 		t.Fatalf("default-role mounted UI body = %q, want shell", body)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/reader/admin/settings", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET default-role admin mounted UI: %v", err)
-	}
-	body, _ = io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("default-role admin mounted UI status = %d, want 403: %s", resp.StatusCode, body)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/admin/settings", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin mounted UI: %v", err)
-	}
-	body, _ = io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("admin mounted UI status = %d, want 403: %s", resp.StatusCode, body)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
@@ -4059,23 +4022,18 @@ func TestListIntegrations(t *testing.T) {
 func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	t.Parallel()
 
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>github</html>")
+
 	stub := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
-	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"github": {
-				MountPath: "/github",
+				Static:             &config.AppStaticConfig{Mount: "/github"},
+				ResolvedStaticRoot: rootDir,
 			},
 		}
-		cfg.MountedUIs = []server.MountedUI{{
-			Name:    "github",
-			AppName: "github",
-			Path:    "/github",
-			Handler: handler,
-		}}
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -4986,10 +4944,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	t.Run("manifest-backed MCP passthrough without declared auth exposes no synthetic connection", func(t *testing.T) {
 		t.Parallel()
 
+		rootDir := t.TempDir()
+		writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>clickhouse</html>")
+
 		stub := &stubNonOAuthProvider{name: "clickhouse"}
 		plugin := &config.ProviderEntry{
-			Source:    config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-clickhouse/v1.0.0/provider-release.yaml"),
-			MountPath: "/clickhouse",
+			Source:             config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-clickhouse/v1.0.0/provider-release.yaml"),
+			Static:             &config.AppStaticConfig{Mount: "/clickhouse"},
+			ResolvedStaticRoot: rootDir,
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -5007,14 +4969,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				"clickhouse": plugin,
 			}
 			cfg.Services = testutil.NewStubServices(t)
-			cfg.MountedUIs = []server.MountedUI{{
-				Name:    "clickhouse",
-				AppName: "clickhouse",
-				Path:    "/clickhouse",
-				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					w.WriteHeader(http.StatusOK)
-				}),
-			}}
 		})
 		testutil.CloseOnCleanup(t, ts)
 

@@ -34,13 +34,13 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithConfigPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
+func setupBootstrapWithConfigPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevUIKeys...)
+	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevAppKeys...)
 }
 
-func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
-	cfg, err := loadConfigForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevUIKeys...)
+func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
+	cfg, err := loadConfigForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevAppKeys...)
 	if err != nil {
 		stop()
 		return nil, err
@@ -175,21 +175,12 @@ func buildFactories() *bootstrap.FactoryRegistry {
 }
 
 func startDevSupervisor(ctx context.Context, cfg *config.Config) (*providerdev.Supervisor, error) {
-	uiTargets, err := providerdev.TargetsFromConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	hasDevApp := false
 	for _, entry := range cfg.Apps {
 		if entry != nil && entry.DevActive {
-			hasDevApp = true
-			break
+			return providerdev.Start(ctx, slog.Default(), nil)
 		}
 	}
-	if len(uiTargets) == 0 && !hasDevApp {
-		return nil, nil
-	}
-	return providerdev.Start(ctx, slog.Default(), uiTargets)
+	return nil, nil
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

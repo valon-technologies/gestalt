@@ -23,7 +23,6 @@ const (
 	KindWorkflow            = "workflow"
 	KindAgent               = "agent"
 	KindSecrets             = "secrets"
-	KindUI                  = "ui"
 	KindRuntime             = "runtime"
 )
 
@@ -324,9 +323,8 @@ func (i SourceInstall) MarshalYAML() (any, error) {
 }
 
 // SourceRun declares how a local-source provider is executed from source.
-// For backend kinds gestaltd execs Command directly (no shell) with the
-// GESTALT_PROVIDER_SOCKET contract env vars set. For ui kind the command is a
-// long-lived HTTP dev server that gestaltd reverse-proxies.
+// gestaltd execs Command directly (no shell) with the GESTALT_PROVIDER_SOCKET
+// contract env vars set.
 type SourceRun struct {
 	Command      []string          `json:"command" yaml:"command"`
 	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
@@ -463,11 +461,7 @@ type Spec struct {
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
-	UI                *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
-
-	// UI-specific fields
-	AssetRoot string    `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	Routes    []UIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
+	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
 }
 
 type RouteAuthRef struct {
@@ -531,10 +525,6 @@ type HTTPSecurityScheme struct {
 type HTTPSecretRef struct {
 	Env    string `json:"env,omitempty" yaml:"env,omitempty"`
 	Secret string `json:"secret,omitempty" yaml:"secret,omitempty"`
-}
-
-type OwnedUI struct {
-	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
 func (s *Spec) IsDeclarative() bool {
@@ -738,11 +728,6 @@ type CredentialRefreshConfig struct {
 	RefreshBeforeExpiry string `json:"refreshBeforeExpiry,omitempty" yaml:"refreshBeforeExpiry,omitempty"`
 }
 
-type UIRoute struct {
-	Path         string   `json:"path" yaml:"path"`
-	AllowedRoles []string `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
-}
-
 type ProviderOperation struct {
 	Name               string                       `json:"name" yaml:"name"`
 	Description        string                       `json:"description,omitempty" yaml:"description,omitempty"`
@@ -915,9 +900,7 @@ type specJSONWire struct {
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty"`
 	Requires          []string                              `json:"requires,omitempty"`
-	UI                *OwnedUI                              `json:"ui,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty"`
-	Routes            []UIRoute                             `json:"routes,omitempty"`
 }
 
 type specYAMLWire struct {
@@ -935,9 +918,7 @@ type specYAMLWire struct {
 	ResponseMapping   *ManifestResponseMapping              `yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `yaml:"pagination,omitempty"`
 	Requires          []string                              `yaml:"requires,omitempty"`
-	UI                *OwnedUI                              `yaml:"ui,omitempty"`
 	AssetRoot         string                                `yaml:"assetRoot,omitempty"`
-	Routes            []UIRoute                             `yaml:"routes,omitempty"`
 }
 
 type specWire struct {
@@ -955,9 +936,7 @@ type specWire struct {
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
-	UI                *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	Routes            []UIRoute                             `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 func (s *Spec) UnmarshalJSON(data []byte) error {
@@ -985,9 +964,7 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 		ResponseMapping:   raw.ResponseMapping,
 		Pagination:        raw.Pagination,
 		Requires:          raw.Requires,
-		UI:                raw.UI,
 		AssetRoot:         raw.AssetRoot,
-		Routes:            raw.Routes,
 	}
 
 	*s = spec
@@ -1034,9 +1011,7 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 		ResponseMapping:   raw.ResponseMapping,
 		Pagination:        raw.Pagination,
 		Requires:          raw.Requires,
-		UI:                raw.UI,
 		AssetRoot:         raw.AssetRoot,
-		Routes:            raw.Routes,
 	}
 
 	*s = spec
@@ -1066,9 +1041,7 @@ func (s Spec) canonicalWire() (specWire, error) {
 		ResponseMapping:   s.ResponseMapping,
 		Pagination:        s.Pagination,
 		Requires:          s.Requires,
-		UI:                s.UI,
 		AssetRoot:         s.AssetRoot,
-		Routes:            s.Routes,
 	}, nil
 }
 
@@ -1258,9 +1231,7 @@ var specWireFields = map[string]struct{}{
 	"responseMapping":   {},
 	"pagination":        {},
 	"requires":          {},
-	"ui":                {},
 	"assetRoot":         {},
-	"routes":            {},
 }
 
 //go:embed manifest.jsonschema.json

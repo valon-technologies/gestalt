@@ -369,12 +369,8 @@ apps:
   alpha:
     source: env
 providers:
-  ui:
-    alpha:
-      source: ./ui-manifest.yaml
-      path: /
   secrets:
-    secretstore:
+    alpha:
       source: env
 `)
 	out, err := runGestaltdResult("provider", "remove", "alpha", "--config", cfgPath, "--no-lock")
@@ -383,14 +379,17 @@ providers:
 	}
 	assertContains(t, out, "ambiguous")
 
-	out = runGestaltd(t, "provider", "remove", "secretstore", "--config", cfgPath, "--no-lock")
-	assertContains(t, out, "Removed secrets secretstore")
+	out = runGestaltd(t, "provider", "remove", "alpha", "--kind", "secrets", "--config", cfgPath, "--no-lock")
+	assertContains(t, out, "Removed secrets alpha")
 	cfg, err := config.LoadPartialAllowMissingEnvPaths([]string{cfgPath})
 	if err != nil {
 		t.Fatalf("LoadPartialAllowMissingEnvPaths: %v", err)
 	}
-	if _, ok := cfg.Providers.Secrets["secretstore"]; ok {
-		t.Fatal("secretstore still present after remove")
+	if _, ok := cfg.Providers.Secrets["alpha"]; ok {
+		t.Fatal("secrets alpha still present after remove")
+	}
+	if _, ok := cfg.Apps["alpha"]; !ok {
+		t.Fatal("apps alpha was removed unexpectedly")
 	}
 }
 
@@ -406,11 +405,10 @@ apps:
     source:
       package: github.com/acme/providers/alpha
 providers:
-  ui:
+  secrets:
     alpha:
       source:
-        package: github.com/acme/providers/alpha-ui
-      path: /
+        package: github.com/acme/providers/alpha-secrets
 `)
 	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v8\n")
 

@@ -62,17 +62,6 @@ func setAppManifestSource(t *testing.T, appDir, source string) {
 	writeManifestFile(t, appDir, manifest)
 }
 
-func setUIManifestSource(t *testing.T, manifestPath, source string) {
-	t.Helper()
-
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
-	}
-	manifest.Source = source
-	writeManifestFile(t, filepath.Dir(manifestPath), manifest)
-}
-
 func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	t.Helper()
 
@@ -298,70 +287,7 @@ func setupExternalCredentialsProviderDir(t *testing.T, baseDir string) string {
 	return providerDir
 }
 
-type mountedUITestConfig struct {
-	Name         string
-	Path         string
-	ManifestPath string
-}
-
-func setupMountedUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
-	t.Helper()
-	return setupMountedUIDirWithRoutes(t, baseDir, nil)
-}
-
-func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
-	t.Helper()
-
-	return setupMountedUIDirAt(t, filepath.Join(baseDir, "mounted-ui"), routes)
-}
-
-func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
-	t.Helper()
-
-	distDir := filepath.Join(uiDir, "dist")
-	assetsDir := filepath.Join(distDir, "assets")
-	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", assetsDir, err)
-	}
-
-	writeTestFile(t, uiDir, filepath.Join("dist", "index.html"), []byte(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Roadmap Review UI</title>
-  </head>
-  <body>
-    <div id="app">Roadmap Review UI</div>
-    <script type="module" src="assets/app.js"></script>
-  </body>
-</html>
-`), 0o644)
-	writeTestFile(t, uiDir, filepath.Join("dist", "assets", "app.js"), []byte(`window.__ROADMAP_REVIEW_UI__ = "ready";
-`), 0o644)
-	writeTestFile(t, uiDir, "build.sh", []byte("mkdir -p dist/assets\nprintf '<html>Roadmap Review UI</html>\\n' > dist/index.html\nprintf 'window.__ROADMAP_REVIEW_UI__ = \"ready\";\\n' > dist/assets/app.js\n"), 0o755)
-	writeManifestFile(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/test/ui/roadmap-review",
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Roadmap Review UI",
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"build.sh"},
-		},
-		Spec: &providermanifestv1.Spec{
-			AssetRoot: "dist",
-			Routes:    routes,
-		},
-	})
-
-	return &mountedUITestConfig{
-		Name:         "roadmap_review",
-		Path:         "/create-customer-roadmap-review",
-		ManifestPath: filepath.Join(uiDir, "manifest.yaml"),
-	}
-}
-
-func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITestConfig) string {
+func writeServeConfig(t *testing.T, dir string, port int) string {
 	t.Helper()
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
@@ -370,15 +296,6 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 	appManifest, err := providerpkg.FindManifestFile(appDir)
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
-	}
-	uiBlock := ""
-	if mountedUI != nil {
-		uiBlock = fmt.Sprintf(`  ui:
-    %s:
-      source:
-        path: %q
-      path: %s
-`, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
@@ -394,11 +311,11 @@ providers:
     inmem:
       source:
         path: %s
-%sapps:
+apps:
   example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(port), port, indexedDBManifest, uiBlock, appManifest)
+`, e2eLoopbackBaseURL(port), port, indexedDBManifest, appManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -420,7 +337,7 @@ func TestRunLockSyncLocalProviders(t *testing.T) {
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
 	artifactsDir := filepath.Join(dir, "artifacts")
-	cfgPath := writeServeConfig(t, dir, 0, nil)
+	cfgPath := writeServeConfig(t, dir, 0)
 
 	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock: %v", err)
@@ -462,7 +379,7 @@ func TestRunLockWritesOverrideLockfile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := writeServeConfig(t, dir, 0, nil)
+	cfgPath := writeServeConfig(t, dir, 0)
 	lockPath := filepath.Join(dir, "state", "local", "gestalt.lock.json")
 
 	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
@@ -509,7 +426,7 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := writeServeConfig(t, dir, 0, nil)
+	cfgPath := writeServeConfig(t, dir, 0)
 	lockPath := filepath.Join(dir, "state", "locked-serve", "gestalt.lock.json")
 	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock with --lockfile: %v", err)

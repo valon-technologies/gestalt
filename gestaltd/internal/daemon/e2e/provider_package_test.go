@@ -576,22 +576,27 @@ func TestRun_ProviderPackageAndReleaseCopiesCompiledSupportFiles(t *testing.T) {
 func TestRun_ProviderPackageAndReleaseCopiesUISupportFiles(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newUIReleaseFixture(t, t.TempDir())
+	if runtime.GOOS == "windows" {
+		t.Skip("static bundle release-build fixture uses POSIX shell")
+	}
+
+	pluginDir := newSourceBuiltStaticAppReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	testVersion := "0.0.3-test"
 
 	runProviderPackageAndReleaseCommand(t, pluginDir,
 		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-app-ui-test_v" + testVersion + ".tar.gz"
+	archiveName := staticBuildArchiveName(testVersion)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 
 	for _, rel := range []string{
 		"branding/icon.svg",
-		"out/index.html",
-		"out/static/app.js",
+		"static/index.html",
+		"static/assets/app.js",
 	} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("expected %s in archive: %v", rel, err)
@@ -602,8 +607,8 @@ func TestRun_ProviderPackageAndReleaseCopiesUISupportFiles(t *testing.T) {
 	if metadata.Package != uiTestSource {
 		t.Fatalf("release metadata package = %q, want %q", metadata.Package, uiTestSource)
 	}
-	if metadata.Kind != providermanifestv1.KindUI {
-		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindUI)
+	if metadata.Kind != providermanifestv1.KindApp {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindApp)
 	}
 	uiArtifact := providerReleaseArtifactForTarget(t, metadata, providerrelease.GenericTarget)
 	uiDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))

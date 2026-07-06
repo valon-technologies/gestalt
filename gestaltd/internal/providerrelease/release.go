@@ -141,7 +141,7 @@ func ValidateMetadata(metadata *Metadata) error {
 		return fmt.Errorf("provider release version: %w", err)
 	}
 	switch metadata.Kind {
-	case providermanifestv1.KindApp, providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime, providermanifestv1.KindUI:
+	case providermanifestv1.KindApp, providermanifestv1.KindIdentity, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 	default:
 		return fmt.Errorf("provider release kind %q is not supported", metadata.Kind)
 	}
@@ -150,16 +150,13 @@ func ValidateMetadata(metadata *Metadata) error {
 	}
 	switch metadata.Runtime {
 	case RuntimeExecutable:
-		if metadata.Kind == providermanifestv1.KindUI {
-			return fmt.Errorf("provider release runtime %q is invalid for kind %q", metadata.Runtime, metadata.Kind)
-		}
 	case RuntimeDeclarative:
 		if metadata.Kind != providermanifestv1.KindApp {
 			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindApp)
 		}
 	case RuntimeUI:
-		if metadata.Kind != providermanifestv1.KindUI {
-			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindUI)
+		if metadata.Kind != providermanifestv1.KindApp {
+			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindApp)
 		}
 	default:
 		return fmt.Errorf("provider release runtime %q is not supported", metadata.Runtime)
@@ -285,10 +282,10 @@ func ArtifactsByTarget(artifacts Artifacts) (map[string]Artifact, error) {
 }
 
 func RuntimeForManifest(kind string, manifest *providermanifestv1.Manifest) string {
-	switch providermanifestv1.NormalizeKind(kind) {
-	case providermanifestv1.KindUI:
-		return RuntimeUI
-	case providermanifestv1.KindApp:
+	if providermanifestv1.NormalizeKind(kind) == providermanifestv1.KindApp {
+		if manifest != nil && manifest.Spec != nil && manifest.Spec.AssetRoot != "" && manifest.Entrypoint == nil && !manifest.IsDeclarativeOnlyProvider() {
+			return RuntimeUI
+		}
 		if manifest != nil && manifest.IsDeclarativeOnlyProvider() {
 			return RuntimeDeclarative
 		}
@@ -325,9 +322,6 @@ func ManifestReferencesPackageFiles(manifest *providermanifestv1.Manifest) bool 
 		return false
 	}
 	if packageio.IsLocalPackageReference(spec.ConfigSchemaPath) {
-		return true
-	}
-	if spec.UI != nil && packageio.IsLocalPackageReference(spec.UI.Path) {
 		return true
 	}
 	if spec.Surfaces == nil {

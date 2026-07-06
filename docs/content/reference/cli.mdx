@@ -42,7 +42,7 @@ the platform where they run.
 | `gestaltd provider search [QUERY]` | Search configured provider repositories. Pass `--repo NAME` to search one repository. |
 | `gestaltd provider info PACKAGE` | Show available versions and release metadata for one package. Pass `--repo NAME` to disambiguate. |
 | `gestaltd provider add PACKAGE --config PATH` | Add an indexed provider package to config and update the lockfile. Package sources are written by default. |
-| `gestaltd provider add PACKAGE --kind KIND --name NAME` | Choose the provider kind and config entry name explicitly. Deprecated `kind: ui` also required `--set path=/mount`. |
+| `gestaltd provider add PACKAGE --kind KIND --name NAME` | Choose the provider kind and config entry name explicitly. |
 | `gestaltd provider add PACKAGE --version CONSTRAINT` | Write a semver version constraint such as `^1.4.0`, `~1.4.0`, or an exact version. |
 | `gestaltd provider add PACKAGE --exact-source` | Write the resolved `provider-release.yaml` URL instead of a package source. |
 | `gestaltd provider add PACKAGE --sync` | Materialize prepared artifacts after locking. |
@@ -241,7 +241,6 @@ gestaltd provider repo add gestalt https://registry.gestaltd.ai/provider-index.y
 gestaltd provider repo update --config ./config.yaml
 gestaltd provider add github.com/valon-technologies/gestalt-providers/app/github --config ./config.yaml --name github
 gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc --config ./config.yaml --kind identity --name oidc --version '^1.4.0'
-gestaltd provider add github.com/acme/gestalt-providers/ui/console --config ./config.yaml --repo acme --kind ui --name console --set path=/console # deprecated
 gestaltd provider list --config ./config.yaml
 gestaltd provider list --config ./config.yaml --kind app
 gestaltd provider upgrade --config ./config.yaml

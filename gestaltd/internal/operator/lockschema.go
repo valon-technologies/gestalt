@@ -10,7 +10,7 @@ import (
 
 const (
 	providerLockSchemaName         = "gestaltd-provider-lock"
-	providerLockSchemaVersion      = 11
+	providerLockSchemaVersion      = 12
 	providerLockRevision           = 0
 	providerLockKindWorkflow       = "workflow"
 	providerLockKindTelemetry      = "telemetry"
@@ -58,7 +58,6 @@ var providerLockBucketSpecs = []providerLockBucketSpec{
 	newProviderLockBucket(providermanifestv1.KindSecrets, "secrets", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.Secrets }),
 	newProviderLockBucket(providerLockKindTelemetry, "telemetry", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.Telemetry }),
 	newProviderLockBucket(providerLockKindAudit, "audit", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.Audit }),
-	newProviderLockBucket(providermanifestv1.KindUI, "ui", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers.UI }),
 }
 
 func newProviderLockBucket(kind, name string, entries func(*Lockfile) *map[string]LockEntry) providerLockBucketSpec {
@@ -132,12 +131,17 @@ func canonicalLockfile(lock *Lockfile) *Lockfile {
 	return canonical
 }
 
+const legacyProviderUILockMigrationError = "lockfile contains legacy providers.ui entries; migrate to apps.<name>.static and run gestaltd lock"
+
 func validateProviderLockfile(lock *Lockfile) error {
 	if lock == nil {
 		return fmt.Errorf("unsupported lockfile schema; run `gestaltd lock` to upgrade")
 	}
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd lock` to upgrade", lock.Schema)
+	}
+	if len(lock.Providers.UI) > 0 || lock.SchemaVersion < providerLockSchemaVersion {
+		return fmt.Errorf("%s", legacyProviderUILockMigrationError)
 	}
 	if lock.SchemaVersion != providerLockSchemaVersion {
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd lock` to upgrade", lock.SchemaVersion)

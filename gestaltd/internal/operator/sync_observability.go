@@ -64,11 +64,6 @@ func (l *Lifecycle) prefetchComponentMaterializedCache(paths lifecyclePaths, loc
 		}, func(name string) string {
 			return name
 		})...)
-		requests = append(requests, l.materializedCacheRequestsForProviders(paths, lockEntriesForProviderKind(lock, providermanifestv1.KindUI), providermanifestv1.KindUI, uiProviderEntries(cfg), func(name string) string {
-			return uiDestDir(paths, name)
-		}, func(name string) string {
-			return "ui:" + name
-		})...)
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		kind := providerManifestKind(collection.kind)
@@ -92,11 +87,6 @@ func (l *Lifecycle) prefetchComponentMaterializedCache(paths lifecyclePaths, loc
 		return s3DestDir(paths, name)
 	}, func(name string) string {
 		return fmt.Sprintf("%s %q", providermanifestv1.KindS3, name)
-	}, mode)...)
-	requests = append(requests, materializedCacheRequestsForLocalSourceProviders(paths, providermanifestv1.KindUI, uiProviderEntries(cfg), func(name string) string {
-		return uiDestDir(paths, name)
-	}, func(name string) string {
-		return "ui " + strconv.Quote(name)
 	}, mode)...)
 	paths.prefetchMaterializedCache(context.Background(), requests, parallelism)
 }
@@ -212,8 +202,6 @@ func needsLockedMaterializedCachePrefetch(paths lifecyclePaths, kind, name, fing
 	switch kind {
 	case providermanifestv1.KindApp:
 		return install.executablePath != "" && missingPathForPrefetch(install.executablePath)
-	case providermanifestv1.KindUI:
-		return install.assetRootPath == "" || missingPathForPrefetch(install.assetRootPath)
 	default:
 		return install.executablePath == "" || missingPathForPrefetch(install.executablePath)
 	}
@@ -227,16 +215,6 @@ func missingPathForPrefetch(path string) bool {
 func runtimeProviderEntries(cfg *config.Config) map[string]*config.ProviderEntry {
 	entries := make(map[string]*config.ProviderEntry, len(cfg.Runtime.Providers))
 	for name, entry := range cfg.Runtime.Providers {
-		if entry != nil {
-			entries[name] = &entry.ProviderEntry
-		}
-	}
-	return entries
-}
-
-func uiProviderEntries(cfg *config.Config) map[string]*config.ProviderEntry {
-	entries := make(map[string]*config.ProviderEntry, len(cfg.Providers.UI))
-	for name, entry := range cfg.Providers.UI {
 		if entry != nil {
 			entries[name] = &entry.ProviderEntry
 		}
@@ -306,16 +284,6 @@ func preparedArtifactRoots(paths lifecyclePaths, cfg *config.Config) []PreparedA
 				Kind:    providermanifestv1.KindS3,
 				Name:    name,
 				DestDir: s3DestDir(paths, name),
-			})
-		}
-	}
-	for name, entry := range cfg.Providers.UI {
-		if entry != nil {
-			roots = append(roots, PreparedArtifactRoot{
-				Subject: "ui " + strconv.Quote(name),
-				Kind:    providermanifestv1.KindUI,
-				Name:    name,
-				DestDir: uiDestDir(paths, name),
 			})
 		}
 	}

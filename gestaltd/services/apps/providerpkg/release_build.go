@@ -30,9 +30,6 @@ func ResolveSourceReleaseBuild(root string, manifest *providermanifestv1.Manifes
 	if err != nil {
 		return ResolvedSourceReleaseBuild{}, err
 	}
-	if kind == providermanifestv1.KindUI {
-		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildNone}, nil
-	}
 	if HasExplicitSourceRun(manifest) && (manifest.Build == nil || manifest.Build.PrepareOnly) {
 		return ResolvedSourceReleaseBuild{Kind: kind, Mode: SourceReleaseBuildNone}, nil
 	}

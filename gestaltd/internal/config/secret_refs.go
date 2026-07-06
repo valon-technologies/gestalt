@@ -278,14 +278,6 @@ func TransformSourceAuthTokens(cfg *Config, transform ConfigStringTransformer) e
 			}
 		}
 	}
-	for _, entry := range cfg.Providers.UI {
-		if entry == nil {
-			continue
-		}
-		if err := transformEntry(&entry.ProviderEntry); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -328,14 +320,6 @@ func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer)
 		}
 	}
 	for _, entry := range cfg.Runtime.Providers {
-		if entry == nil {
-			continue
-		}
-		if err := transformConfigStringFieldsInStruct(entry, transform); err != nil {
-			return err
-		}
-	}
-	for _, entry := range cfg.Providers.UI {
 		if entry == nil {
 			continue
 		}

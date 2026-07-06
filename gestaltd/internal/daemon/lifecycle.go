@@ -2,20 +2,14 @@ package daemon
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
-func surfaceDeprecationWarning(msg string) {
-	slog.Warn(msg)
-}
-
 func operatorLifecycle() *operator.Lifecycle {
 	return operator.NewLifecycle().
-		WithDeprecationLogger(surfaceDeprecationWarning).
 		WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 			return bootstrap.ResolveConfigSecrets(ctx, cfg, buildFactories())
 		}).WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
@@ -44,10 +38,10 @@ func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, 
 	return operatorLifecycle().SyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 }
 
-func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevUIKeys ...string) (*config.Config, error) {
+func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*config.Config, error) {
 	lc := operatorLifecycle().WithDevServeEligible(!locked)
-	if len(forcedDevUIKeys) > 0 {
-		lc = lc.WithForcedDevUIKeys(forcedDevUIKeys)
+	if len(forcedDevAppKeys) > 0 {
+		lc = lc.WithForcedDevAppKeys(forcedDevAppKeys)
 	}
 	cfg, _, err := lc.LoadForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync)
 	if err != nil {

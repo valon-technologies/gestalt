@@ -260,7 +260,7 @@ func writeMaterializedCacheUISource(t *testing.T, dir, name string) string {
 	if err := os.MkdirAll(filepath.Join(source, "assets"), 0o755); err != nil {
 		t.Fatalf("create UI source assets: %v", err)
 	}
-	manifest := []byte("kind: ui\nsource: github.com/acme/pkg/ui\nversion: 0.0.1\ndisplayName: Test UI\ndescription: Test UI\nspec:\n  assetRoot: assets\n  routes:\n    - path: /\n      allowedRoles: [viewer]\n")
+	manifest := []byte("kind: app\nsource: github.com/acme/pkg/static\nversion: 0.0.1\ndisplayName: Test Static\ndescription: Test Static\nspec:\n  assetRoot: assets\n")
 	if err := os.WriteFile(filepath.Join(source, "manifest.yaml"), manifest, 0o644); err != nil {
 		t.Fatalf("write UI manifest: %v", err)
 	}
@@ -269,8 +269,8 @@ func writeMaterializedCacheUISource(t *testing.T, dir, name string) string {
 
 func materializedCacheUIRequest(dir, name, destName string) materializedCacheRequest {
 	return materializedCacheRequest{
-		Subject:        `ui provider "` + name + `"`,
-		Kind:           "ui",
+		Subject:        `static app "` + name + `"`,
+		Kind:           "",
 		Name:           name,
 		SourceKind:     syncArtifactSourceRemoteArchive,
 		ArchiveSHA256:  materializedCacheTestSHA256Hex([]byte("archive")),

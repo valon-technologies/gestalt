@@ -49,18 +49,10 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	}
 
 	publicBrandHref := "/admin/"
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil && entry.Path == "/" {
+	for _, entry := range cfg.Apps {
+		if entry != nil && entry.Static != nil && strings.TrimSpace(entry.Static.Mount) == "/" {
 			publicBrandHref = "/"
 			break
-		}
-	}
-	if publicBrandHref != "/" {
-		for _, entry := range cfg.Apps {
-			if entry != nil && entry.Static != nil && strings.TrimSpace(entry.Static.Mount) == "/" {
-				publicBrandHref = "/"
-				break
-			}
 		}
 	}
 
@@ -125,7 +117,6 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		publicConfig.RouteProfile = RouteProfilePublic
 	}
 	publicConfig.MCPHandler = mcpSlot
-	publicConfig.ProviderUIs = cfg.Providers.UI
 
 	devSupervisor := result.DevSupervisor
 	if devSupervisor != nil {
@@ -165,7 +156,6 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 
 		managementConfig := baseConfig
 		managementConfig.RouteProfile = RouteProfileManagement
-		managementConfig.ProviderUIs = cfg.Providers.UI
 		managementConfig.DevHandlerResolver = publicConfig.DevHandlerResolver
 		managementLoginBase := browserLoginPath
 		if baseURL := strings.TrimRight(cfg.Server.BaseURL, "/"); baseURL != "" {

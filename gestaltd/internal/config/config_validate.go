@@ -20,7 +20,6 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 )
 
@@ -47,10 +46,6 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeConnectionBindings(cfg); err != nil {
 		return err
 	}
-	appOwnedUIBindings := appOwnedUIBindings(cfg)
-	if err := normalizeMountedUIPaths(cfg, appOwnedUIBindings); err != nil {
-		return err
-	}
 	if err := normalizeAppStaticMounts(cfg); err != nil {
 		return err
 	}
@@ -60,7 +55,6 @@ func CanonicalizeStructure(cfg *Config) error {
 // ValidateCanonicalStructure checks config shape assuming canonicalization has
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
-	appOwnedUIBindings := appOwnedUIBindings(cfg)
 	if err := validateAuthorizationModelConfig(cfg); err != nil {
 		return err
 	}
@@ -104,27 +98,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 			return err
 		}
 	}
-	for name, entry := range cfg.Providers.UI {
-		if entry == nil {
-			return fmt.Errorf("config validation: ui.%s is required", name)
-		}
-		if err := validateAppOnlyProviderFields("ui."+name, &entry.ProviderEntry); err != nil {
-			return err
-		}
-		if entry.Source.IsBuiltin() {
-			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
-		}
-		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
-			return err
-		}
-		if entry.Path == "" {
-			if _, ok := appOwnedUIBindings[name]; ok {
-				continue
-			}
-			return fmt.Errorf("config validation: ui.%s.path is required", name)
-		}
-	}
-	if err := validateMountedUICollisions(cfg, appOwnedUIBindings); err != nil {
+	if err := validateStaticMountCollisions(cfg); err != nil {
 		return err
 	}
 
@@ -731,29 +705,6 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if err := validateAppIntegrationConnections(name, entry); err != nil {
 			return err
 		}
-		if strings.TrimSpace(entry.MountPath) == "" || strings.TrimSpace(entry.UI) != "" {
-			continue
-		}
-		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil || entry.ManifestSpec().UI == nil {
-			return fmt.Errorf("config validation: apps.%s.ui.path requires apps.%s.ui.bundle or app spec.ui", name, name)
-		}
-	}
-	for name, entry := range cfg.Providers.UI {
-		if entry == nil {
-			return fmt.Errorf("config validation: ui %q requires a source", name)
-		}
-		if entry.AuthorizationPolicy == "" {
-			continue
-		}
-		if entry.StaticManifestUnavailable {
-			continue
-		}
-		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil {
-			return fmt.Errorf("config validation: ui %q authorizationPolicy requires a resolved ui manifest", name)
-		}
-		if err := packageio.ValidatePolicyBoundUIRoutes(entry.ManifestSpec().Routes); err != nil {
-			return fmt.Errorf("config validation: ui %q authorizationPolicy: %w", name, err)
-		}
 	}
 	return nil
 }
@@ -855,8 +806,6 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: apps.%s.lifecycle is only supported on providers.agent.*", name)
 	}
-	entry.MountPath = strings.TrimSpace(entry.MountPath)
-	entry.UI = strings.TrimSpace(entry.UI)
 	if entry.IndexedDB != nil {
 		entry.IndexedDB.Provider = strings.TrimSpace(entry.IndexedDB.Provider)
 		entry.IndexedDB.DB = strings.TrimSpace(entry.IndexedDB.DB)
@@ -869,12 +818,6 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	}
 	if err := validateAppCapabilities("apps."+name+".capabilities", entry.Capabilities); err != nil {
 		return err
-	}
-	if entry.UI != "" && entry.MountPath == "" {
-		return fmt.Errorf("config validation: apps.%s.ui.bundle requires apps.%s.ui.path", name, name)
-	}
-	if entry.Static != nil && (strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) != "") {
-		return fmt.Errorf("config validation: apps.%s cannot set both static and ui", name)
 	}
 	if err := validateProviderEntrySource("app", name, entry); err != nil {
 		return err
@@ -1072,12 +1015,6 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	if entry.RouteAuth != nil {
 		return fmt.Errorf("config validation: %s.auth is only supported on apps.*; use %s.source.auth for source auth", subject, subject)
 	}
-	if strings.TrimSpace(entry.MountPath) != "" {
-		return fmt.Errorf("config validation: %s.mountPath is only supported on apps.*", subject)
-	}
-	if strings.TrimSpace(entry.UI) != "" {
-		return fmt.Errorf("config validation: %s.ui is only supported on apps.*", subject)
-	}
 	if len(entry.Cache) > 0 {
 		return fmt.Errorf("config validation: %s.cache is only supported on apps.*", subject)
 	}
@@ -1091,7 +1028,7 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 		return fmt.Errorf("config validation: %s.surfaces is only supported on apps.*", subject)
 	}
 	if entry.AuthorizationPolicy != "" {
-		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.* and ui.*", subject)
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.*", subject)
 	}
 	if _, err := cfg.EffectiveRuntimePlacement(subject, entry); err != nil {
 		return err
@@ -1301,12 +1238,6 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if entry.RouteAuth != nil {
 		return fmt.Errorf("config validation: %s.auth is only supported on apps.*; use %s.source.auth for source auth", subject, subject)
 	}
-	if strings.TrimSpace(entry.MountPath) != "" {
-		return fmt.Errorf("config validation: %s.mountPath is only supported on apps.*", subject)
-	}
-	if strings.TrimSpace(entry.UI) != "" {
-		return fmt.Errorf("config validation: %s.ui is only supported on apps.*", subject)
-	}
 	if len(entry.Cache) > 0 {
 		return fmt.Errorf("config validation: %s.cache is only supported on apps.*", subject)
 	}
@@ -1334,7 +1265,7 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 		return fmt.Errorf("config validation: %s.surfaces is only supported on apps.*", subject)
 	}
 	if entry.AuthorizationPolicy != "" {
-		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.* and ui.*", subject)
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.*", subject)
 	}
 	if entry.IndexedDB == nil {
 		return nil
@@ -1363,12 +1294,6 @@ func validateAppOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry.RouteAuth != nil {
 		return fmt.Errorf("config validation: %s.auth is only supported on apps.*; use %s.source.auth for source auth", subject, subject)
 	}
-	if strings.TrimSpace(entry.MountPath) != "" {
-		return fmt.Errorf("config validation: %s.mountPath is only supported on apps.*", subject)
-	}
-	if strings.TrimSpace(entry.UI) != "" {
-		return fmt.Errorf("config validation: %s.ui is only supported on apps.*", subject)
-	}
 	if entry.IndexedDB != nil {
 		return fmt.Errorf("config validation: %s.indexeddb is only supported on apps.*", subject)
 	}
@@ -1390,8 +1315,8 @@ func validateAppOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on apps.*", subject)
 	}
-	if entry.AuthorizationPolicy != "" && !strings.HasPrefix(subject, "ui.") {
-		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.* and ui.*", subject)
+	if entry.AuthorizationPolicy != "" {
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.*", subject)
 	}
 	return nil
 }
@@ -2343,26 +2268,6 @@ func validateAppCacheBindings(cfg *Config, name string, entry *ProviderEntry) er
 	}
 	return nil
 }
-func normalizeMountedUIPaths(cfg *Config, appOwnedUIBindings map[string]struct{}) error {
-	for name, entry := range cfg.Providers.UI {
-		if entry == nil {
-			continue
-		}
-		if strings.TrimSpace(entry.Path) == "" {
-			if _, ok := appOwnedUIBindings[name]; ok {
-				continue
-			}
-			return fmt.Errorf("config validation: ui.%s.path: path is required", name)
-		}
-		normalized, err := normalizeMountedUIPath(entry.Path)
-		if err != nil {
-			return fmt.Errorf("config validation: ui.%s.path: %w", name, err)
-		}
-		entry.Path = normalized
-	}
-	return nil
-}
-
 func normalizeMountedUIPath(path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -2403,7 +2308,7 @@ func normalizeAppStaticMounts(cfg *Config) error {
 	return nil
 }
 
-func validateMountedUICollisions(cfg *Config, appOwnedUIBindings map[string]struct{}) error {
+func validateStaticMountCollisions(cfg *Config) error {
 	reserved := []string{
 		"/api",
 		"/api/v1",
@@ -2416,40 +2321,11 @@ func validateMountedUICollisions(cfg *Config, appOwnedUIBindings map[string]stru
 		"/ready",
 	}
 	type mountedPathSubject struct {
-		label           string
-		path            string
-		allowNestedPath bool
+		label string
+		path  string
 	}
-	subjects := make([]mountedPathSubject, 0, len(cfg.Providers.UI)+len(cfg.Apps))
-	names := slices.Sorted(maps.Keys(cfg.Providers.UI))
-	for _, name := range names {
-		entry := cfg.Providers.UI[name]
-		if entry == nil || strings.TrimSpace(entry.Path) == "" {
-			continue
-		}
-		subjects = append(subjects, mountedPathSubject{
-			label:           "ui." + name + ".path",
-			path:            entry.Path,
-			allowNestedPath: true,
-		})
-	}
-	appNames := slices.Sorted(maps.Keys(cfg.Apps))
-	for _, name := range appNames {
-		entry := cfg.Apps[name]
-		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
-			continue
-		}
-		if _, ok := appOwnedUIBindings[name]; ok {
-			if ui := cfg.Providers.UI[name]; ui != nil && mountedUIPathsMatch(ui.Path, entry.MountPath) {
-				continue
-			}
-		}
-		subjects = append(subjects, mountedPathSubject{
-			label: "apps." + name + ".ui.path",
-			path:  entry.MountPath,
-		})
-	}
-	for _, name := range appNames {
+	var subjects []mountedPathSubject
+	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
 		if entry == nil || entry.Static == nil || strings.TrimSpace(entry.Static.Mount) == "" {
 			continue
@@ -2477,10 +2353,8 @@ func validateMountedUICollisions(cfg *Config, appOwnedUIBindings map[string]stru
 			if subject.path == other.path {
 				return fmt.Errorf("config validation: %s %q conflicts with %s %q", subject.label, subject.path, other.label, other.path)
 			}
-			if !subject.allowNestedPath || !other.allowNestedPath {
-				if mountedUIPathsConflict(subject.path, other.path) {
-					return fmt.Errorf("config validation: %s %q conflicts with %s %q", subject.label, subject.path, other.label, other.path)
-				}
+			if mountedUIPathsConflict(subject.path, other.path) {
+				return fmt.Errorf("config validation: %s %q conflicts with %s %q", subject.label, subject.path, other.label, other.path)
 			}
 		}
 	}
@@ -2492,28 +2366,6 @@ func mountedUIPathsConflict(a, b string) bool {
 		return true
 	}
 	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
-}
-
-func mountedUIPathsMatch(uiPath, mountPath string) bool {
-	if strings.TrimSpace(uiPath) == "" {
-		return false
-	}
-	normalizedMountPath, err := normalizeMountedUIPath(mountPath)
-	if err != nil {
-		return false
-	}
-	return uiPath == normalizedMountPath
-}
-
-func appOwnedUIBindings(cfg *Config) map[string]struct{} {
-	refs := make(map[string]struct{}, len(cfg.Apps))
-	for name, entry := range cfg.Apps {
-		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
-			continue
-		}
-		refs[name] = struct{}{}
-	}
-	return refs
 }
 
 func validateExecutableConnectionAuthSupport(name string, plan StaticConnectionPlan) error {

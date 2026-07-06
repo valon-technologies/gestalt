@@ -4,75 +4,71 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-func TestPrepareProviderLocalSessionSupportsDirectUITarget(t *testing.T) {
+func TestPrepareProviderLocalSessionRejectsDirectUITarget(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	mountedUI := setupMountedUIDir(t, dir)
-	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
-
-	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Paths: []string{mountedUI.ManifestPath}})
-	if err != nil {
-		t.Fatalf("prepareProviderLocalSession: %v", err)
+	uiDir := filepath.Join(dir, "ui")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(session.Dir) })
-
-	if got, want := session.Kind, "ui"; got != want {
-		t.Fatalf("session.Kind = %q, want %q", got, want)
-	}
-	if got, want := session.TargetKey, "roadmap_review"; got != want {
-		t.Fatalf("session.TargetKey = %q, want %q", got, want)
-	}
-	if got, want := session.AutoMountedUIPath, "/roadmap.review"; got != want {
-		t.Fatalf("session.AutoMountedUIPath = %q, want %q", got, want)
-	}
-	if !slices.Contains(session.PublicUIPaths, session.AutoMountedUIPath) {
-		t.Fatalf("session.PublicUIPaths = %v, want %q", session.PublicUIPaths, session.AutoMountedUIPath)
+	manifest := `kind: ui
+source: github.com/test/ui/roadmap.review
+version: "0.0.1-alpha.1"
+build:
+  command: [sh, -c, "mkdir -p dist && echo ok > dist/index.html"]
+spec:
+  assetRoot: dist
+`
+	manifestPath := filepath.Join(uiDir, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
 	}
 
-	cfg, err := config.LoadPaths(session.ConfigPaths)
-	if err != nil {
-		t.Fatalf("LoadPaths(session.ConfigPaths): %v", err)
-	}
-	ui := cfg.Providers.UI[session.TargetKey]
-	if ui == nil {
-		t.Fatalf("Providers.UI[%q] = nil", session.TargetKey)
-		return
-	}
-	wantManifestPath, err := canonicalPath(mountedUI.ManifestPath)
-	if err != nil {
-		t.Fatalf("canonicalPath(%s): %v", mountedUI.ManifestPath, err)
-	}
-	if got := ui.SourcePath(); got != wantManifestPath {
-		t.Fatalf("UI source path = %q, want %q", got, wantManifestPath)
-	}
-	if got := ui.Path; got != session.AutoMountedUIPath {
-		t.Fatalf("UI path = %q, want %q", got, session.AutoMountedUIPath)
+	_, err := prepareProviderLocalSession(providerLocalCommandOptions{Paths: []string{manifestPath}})
+	if err == nil || (!strings.Contains(err.Error(), "apps.roadmap_review.static") && !strings.Contains(err.Error(), `manifest kind "ui" is not valid`)) {
+		t.Fatalf("error = %v, want ui kind rejection", err)
 	}
 }
 
-func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
+func TestPrepareProviderLocalSessionAutoMountsAppStatic(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	rootDir := filepath.Join(dir, "package")
-	appDir := setupAppDir(t, filepath.Join(rootDir, "app"))
+	appDir := setupAppDir(t, dir)
 	setAppManifestSource(t, appDir, "github.com/test/apps/vm-style-guide")
-	siblingUI := setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
 	appManifest := componentProviderManifestPath(t, appDir)
 
-	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Paths: []string{appManifest}})
+	baseCfg := filepath.Join(dir, "base.yaml")
+	baseYAML := `apiVersion: gestaltd.config/v8
+apps:
+  vm_style_guide:
+    static:
+      mount: /vm-style-guide
+    source: https://example.invalid/apps/vm-style-guide
+`
+	if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile base config: %v", err)
+	}
+
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
+		Paths:        []string{appManifest},
+		ConfigPaths:  []string{baseCfg},
+		FleetOverlay: true,
+	})
 	if err != nil {
 		t.Fatalf("prepareProviderLocalSession: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(session.Dir) })
 
-	if got, want := session.Kind, "app"; got != want {
+	if got, want := session.Kind, providermanifestv1.KindApp; got != want {
 		t.Fatalf("session.Kind = %q, want %q", got, want)
 	}
 	if got, want := session.TargetKey, "vm_style_guide"; got != want {
@@ -92,25 +88,19 @@ func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
 	app := cfg.Apps[session.TargetKey]
 	if app == nil {
 		t.Fatalf("Apps[%q] = nil", session.TargetKey)
-		return
 	}
-	if got := app.UI; got != session.TargetKey {
-		t.Fatalf("App UI = %q, want %q", got, session.TargetKey)
+	if app.Static == nil {
+		t.Fatalf("Apps[%q].Static = nil, want static mount overlay", session.TargetKey)
 	}
-	if got := app.MountPath; got != session.AutoMountedUIPath {
-		t.Fatalf("App mount path = %q, want %q", got, session.AutoMountedUIPath)
+	if got := app.Static.Mount; got != session.AutoMountedUIPath {
+		t.Fatalf("App static mount = %q, want %q", got, session.AutoMountedUIPath)
 	}
-	ui := cfg.Providers.UI[session.TargetKey]
-	if ui == nil {
-		t.Fatalf("Providers.UI[%q] = nil", session.TargetKey)
-		return
-	}
-	wantManifestPath, err := canonicalPath(siblingUI.ManifestPath)
+	wantManifestPath, err := canonicalPath(appManifest)
 	if err != nil {
-		t.Fatalf("canonicalPath(%s): %v", siblingUI.ManifestPath, err)
+		t.Fatalf("canonicalPath(%s): %v", appManifest, err)
 	}
-	if got := ui.SourcePath(); got != wantManifestPath {
-		t.Fatalf("sibling UI source path = %q, want %q", got, wantManifestPath)
+	if got := app.SourcePath(); got != wantManifestPath {
+		t.Fatalf("App source path = %q, want %q", got, wantManifestPath)
 	}
 }
 
@@ -142,15 +132,8 @@ func TestPrepareProviderLocalSessionLeavesAppWithoutUIUnmounted(t *testing.T) {
 	app := cfg.Apps[session.TargetKey]
 	if app == nil {
 		t.Fatalf("Apps[%q] = nil", session.TargetKey)
-		return
 	}
-	if got := app.UI; got != "" {
-		t.Fatalf("App UI = %q, want empty", got)
-	}
-	if got := app.MountPath; got != "" {
-		t.Fatalf("App mount path = %q, want empty", got)
-	}
-	if ui := cfg.Providers.UI[session.TargetKey]; ui != nil {
-		t.Fatalf("Providers.UI[%q] = %#v, want nil", session.TargetKey, ui)
+	if app.Static != nil {
+		t.Fatalf("Apps[%q].Static = %#v, want nil", session.TargetKey, app.Static)
 	}
 }
