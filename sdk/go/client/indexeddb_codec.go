@@ -131,32 +131,6 @@ func FromWireCountResponse(value *proto.CountResponse) *CountResponse {
 	return out
 }
 
-func ToWireCreateIndexRequest(value *CreateIndexRequest) *proto.CreateIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateIndexRequest{
-		Store:   value.Store,
-		Name:    value.Name,
-		KeyPath: value.KeyPath,
-		Unique:  value.Unique,
-	}
-	return out
-}
-
-func FromWireCreateIndexRequest(value *proto.CreateIndexRequest) *CreateIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateIndexRequest{
-		Store:   value.Store,
-		Name:    value.Name,
-		KeyPath: value.KeyPath,
-		Unique:  value.Unique,
-	}
-	return out
-}
-
 func ToWireCreateObjectStoreRequest(value *CreateObjectStoreRequest) *proto.CreateObjectStoreRequest {
 	if value == nil {
 		return nil
@@ -319,28 +293,6 @@ func FromWireCursorResponse(value *proto.CursorResponse) *CursorResponse {
 		out.Result = &CursorResponseResultEntry{Value: FromWireCursorEntry(variant.Entry)}
 	case *proto.CursorResponse_Done:
 		out.Result = &CursorResponseResultDone{Value: variant.Done}
-	}
-	return out
-}
-
-func ToWireDeleteIndexRequest(value *DeleteIndexRequest) *proto.DeleteIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteIndexRequest{
-		Store: value.Store,
-		Name:  value.Name,
-	}
-	return out
-}
-
-func FromWireDeleteIndexRequest(value *proto.DeleteIndexRequest) *DeleteIndexRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteIndexRequest{
-		Store: value.Store,
-		Name:  value.Name,
 	}
 	return out
 }

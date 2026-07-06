@@ -25,22 +25,6 @@ func (s *routingIndexedDBServer) DeleteObjectStore(ctx context.Context, req *pro
 	return server.DeleteObjectStore(ctx, req)
 }
 
-func (s *routingIndexedDBServer) CreateIndex(ctx context.Context, req *proto.CreateIndexRequest) (*emptypb.Empty, error) {
-	server, err := s.server(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return server.CreateIndex(ctx, req)
-}
-
-func (s *routingIndexedDBServer) DeleteIndex(ctx context.Context, req *proto.DeleteIndexRequest) (*emptypb.Empty, error) {
-	server, err := s.server(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return server.DeleteIndex(ctx, req)
-}
-
 func (s *routingIndexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
 	server, err := s.server(ctx)
 	if err != nil {

@@ -135,20 +135,6 @@ message DeleteObjectStoreRequest {
   string name = 1;
 }
 
-// CreateIndexRequest adds a secondary index to an existing object store.
-message CreateIndexRequest {
-  string store = 1;
-  string name = 2;
-  repeated string key_path = 3;
-  bool unique = 4;
-}
-
-// DeleteIndexRequest removes a secondary index from an existing object store.
-message DeleteIndexRequest {
-  string store = 1;
-  string name = 2;
-}
-
 // IndexQueryRequest addresses a secondary index plus an optional query.
 message IndexQueryRequest {
   string store = 1;
@@ -365,16 +351,6 @@ service IndexedDB {
     option (signature) = "schema";
   }
   rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty) {
-    option (signature) = "name";
-  }
-  rpc CreateIndex(CreateIndexRequest) returns (google.protobuf.Empty) {
-    option (signature) = "store";
-    option (signature) = "name";
-    option (signature) = "key_path";
-    option (signature) = "unique";
-  }
-  rpc DeleteIndex(DeleteIndexRequest) returns (google.protobuf.Empty) {
-    option (signature) = "store";
     option (signature) = "name";
   }
 

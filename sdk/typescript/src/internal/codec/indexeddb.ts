@@ -10,7 +10,6 @@ import type {
   BeginTransactionRequest,
   ColumnDef,
   CountResponse,
-  CreateIndexRequest,
   CreateObjectStoreRequest,
   CursorClientMessage,
   CursorClientMessageMsg,
@@ -20,7 +19,6 @@ import type {
   CursorKeyTarget,
   CursorResponse,
   CursorResponseResult,
-  DeleteIndexRequest,
   DeleteObjectStoreRequest,
   DeleteResponse,
   IndexQueryRequest,
@@ -169,28 +167,6 @@ export function fromWireCountResponse(
 ): CountResponse {
   return {
     count: value.count,
-  };
-}
-
-export function toWireCreateIndexRequest(
-  value: Init<CreateIndexRequest>,
-): wire.CreateIndexRequest {
-  return create(wire.CreateIndexRequestSchema, {
-    store: value.store ?? "",
-    name: value.name ?? "",
-    keyPath: value.keyPath ?? [],
-    unique: value.unique ?? false,
-  });
-}
-
-export function fromWireCreateIndexRequest(
-  value: wire.CreateIndexRequest,
-): CreateIndexRequest {
-  return {
-    store: value.store,
-    name: value.name,
-    keyPath: value.keyPath,
-    unique: value.unique,
   };
 }
 
@@ -398,24 +374,6 @@ export function fromWireCursorResponseResult(
     default:
       return { case: undefined };
   }
-}
-
-export function toWireDeleteIndexRequest(
-  value: Init<DeleteIndexRequest>,
-): wire.DeleteIndexRequest {
-  return create(wire.DeleteIndexRequestSchema, {
-    store: value.store ?? "",
-    name: value.name ?? "",
-  });
-}
-
-export function fromWireDeleteIndexRequest(
-  value: wire.DeleteIndexRequest,
-): DeleteIndexRequest {
-  return {
-    store: value.store,
-    name: value.name,
-  };
 }
 
 export function toWireDeleteObjectStoreRequest(

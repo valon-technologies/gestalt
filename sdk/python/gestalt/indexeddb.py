@@ -114,16 +114,6 @@ class CountResponse:
 
 
 @dataclass(frozen=True, slots=True)
-class CreateIndexRequest:
-    """CreateIndexRequest adds a secondary index to an existing object store."""
-
-    store: str = ""
-    name: str = ""
-    key_path: list[str] = field(default_factory=list)
-    unique: bool = False
-
-
-@dataclass(frozen=True, slots=True)
 class CreateObjectStoreRequest:
     """CreateObjectStoreRequest creates a new object store."""
 
@@ -235,14 +225,6 @@ class CursorResponse:
     """CursorResponse is one streamed cursor frame."""
 
     result: CursorResponseResult = None
-
-
-@dataclass(frozen=True, slots=True)
-class DeleteIndexRequest:
-    """DeleteIndexRequest removes a secondary index from an existing object store."""
-
-    store: str = ""
-    name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -863,71 +845,6 @@ class IndexedDB:
             lambda: self._stub.DeleteObjectStore(
                 _codec.to_wire_delete_object_store_request(request),
                 timeout=self._timeout,
-            )
-        )
-
-    @overload
-    def create_index(self, request: CreateIndexRequest) -> None: ...
-
-    @overload
-    def create_index(
-        self,
-        *,
-        store: str = ...,
-        name: str = ...,
-        key_path: list[str] = ...,
-        unique: bool = ...,
-    ) -> None: ...
-
-    def create_index(
-        self,
-        request: CreateIndexRequest | None = None,
-        *,
-        store: str | None = None,
-        name: str | None = None,
-        key_path: list[str] | None = None,
-        unique: bool | None = None,
-    ) -> None:
-        if request is None:
-            request = CreateIndexRequest(
-                store=store or "",
-                name=name or "",
-                key_path=key_path if key_path is not None else [],
-                unique=unique or False,
-            )
-        elif (
-            store is not None
-            or name is not None
-            or key_path is not None
-            or unique is not None
-        ):
-            raise ValueError("pass either request or keyword arguments, not both")
-        _support.call_unary(
-            lambda: self._stub.CreateIndex(
-                _codec.to_wire_create_index_request(request), timeout=self._timeout
-            )
-        )
-
-    @overload
-    def delete_index(self, request: DeleteIndexRequest) -> None: ...
-
-    @overload
-    def delete_index(self, *, store: str = ..., name: str = ...) -> None: ...
-
-    def delete_index(
-        self,
-        request: DeleteIndexRequest | None = None,
-        *,
-        store: str | None = None,
-        name: str | None = None,
-    ) -> None:
-        if request is None:
-            request = DeleteIndexRequest(store=store or "", name=name or "")
-        elif store is not None or name is not None:
-            raise ValueError("pass either request or keyword arguments, not both")
-        _support.call_unary(
-            lambda: self._stub.DeleteIndex(
-                _codec.to_wire_delete_index_request(request), timeout=self._timeout
             )
         )
 
