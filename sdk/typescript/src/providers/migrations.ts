@@ -1,19 +1,12 @@
 import {
   AlreadyExistsError,
   type ColumnSchema,
-  type Cursor,
-  type GetAllOptions,
   type IndexedDB,
   type IndexSchema,
-  type Index as StoreIndex,
   type Key,
   type KeyRange,
   NotFoundError,
-  type ObjectStore,
-  type OpenCursorOptions,
   type Record as DBRecord,
-  type Transaction,
-  type TransactionObjectStore,
 } from "./indexeddb.ts";
 
 const DEFAULT_LEDGER_STORE = "_gestalt_migrations";
@@ -66,81 +59,29 @@ export interface SchemaDeclaration {
 }
 
 /**
- * The restricted handle passed to an imperative revision's `up`/`down`. It is
- * data-only over stores that already exist: every operation on it is idempotent
- * by construction, and it exposes no schema DDL and no `add` (fail-on-exists).
- */
-export interface MigrationHandle {
-  store(name: string): MigrationStore;
-  /** Optional atomic all-or-nothing backfill over a fixed store scope. */
-  transaction(stores: string[]): Promise<MigrationTransaction>;
-}
-
-/** Data-only, idempotent view of an object store for imperative revisions. */
-export interface MigrationStore {
-  get(id: string): Promise<DBRecord>;
-  getAll(query?: Query, options?: GetAllOptions): Promise<DBRecord[]>;
-  getAllKeys(query?: Query, options?: GetAllOptions): Promise<string[]>;
-  count(query?: Query): Promise<number>;
-  openCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
-  index(name: string): MigrationIndex;
-  put(record: DBRecord): Promise<void>;
-  delete(id: string): Promise<void>;
-  deleteRange(query: Query): Promise<number>;
-  clear(): Promise<void>;
-}
-
-/** Read-only view of a secondary index for imperative revisions. */
-export interface MigrationIndex {
-  get(query?: Query): Promise<DBRecord>;
-  getKey(query?: Query): Promise<string>;
-  getAll(query?: Query, options?: GetAllOptions): Promise<DBRecord[]>;
-  getAllKeys(query?: Query, options?: GetAllOptions): Promise<string[]>;
-  count(query?: Query): Promise<number>;
-  openCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
-}
-
-export interface MigrationTransaction {
-  store(name: string): MigrationTransactionStore;
-  commit(): Promise<void>;
-  abort(reason?: string): Promise<void>;
-}
-
-export interface MigrationTransactionStore {
-  get(id: string): Promise<DBRecord>;
-  getAll(query?: Query, options?: GetAllOptions): Promise<DBRecord[]>;
-  getAllKeys(query?: Query, options?: GetAllOptions): Promise<string[]>;
-  count(query?: Query): Promise<number>;
-  put(record: DBRecord): Promise<void>;
-  delete(id: string): Promise<void>;
-  deleteRange(query: Query): Promise<number>;
-  clear(): Promise<void>;
-}
-
-/**
  * A declarative schema revision. The SDK diffs desired-vs-current and applies
  * only the delta.
  */
 export interface SchemaRevision {
   id: string;
   schema: SchemaDeclaration;
-  up?: never;
-  down?: never;
+  backfill?: never;
 }
 
-/**
- * An imperative data revision (escape hatch, for backfills). `up` runs against a
- * restricted, idempotent-only handle.
- */
-export interface ImperativeRevision {
+export interface BackfillTransform {
+  from: string;
+  into: string;
+  value: (row: DBRecord) => DBRecord;
+}
+
+export interface BackfillRevision {
   id: string;
-  up: (m: MigrationHandle) => Promise<void> | void;
-  down?: (m: MigrationHandle) => Promise<void> | void;
+  backfill: BackfillTransform;
   schema?: never;
 }
 
 /** One author-declared migration, identified by its stable, ordered `id`. */
-export type Revision = SchemaRevision | ImperativeRevision;
+export type Revision = SchemaRevision | BackfillRevision;
 
 export interface MigrationRunOptions {
   revisions: Revision[];
@@ -277,11 +218,19 @@ function validateRevisions(revisions: Revision[]): Revision[] {
       throw new MigrationError(`duplicate revision id ${JSON.stringify(id)}`);
     }
     seen.add(id);
-    const hasSchema = "schema" in revision && revision.schema !== undefined;
-    const hasUp = "up" in revision && typeof revision.up === "function";
-    if (hasSchema === hasUp) {
+    const hasSchema = "schema" in revision && revision.schema != null;
+    const backfill = revision.backfill;
+    const hasBackfill = backfill != null;
+    if (hasSchema === hasBackfill) {
       throw new MigrationError(
-        `revision ${JSON.stringify(id)} must declare exactly one of "schema" or "up"`,
+        `revision ${JSON.stringify(id)} must declare exactly one of "schema" or "backfill"`,
+      );
+    }
+    if (backfill && backfill.from === backfill.into) {
+      throw new MigrationError(
+        `revision ${JSON.stringify(id)} backfill "from" and "into" must differ: a ` +
+          `backfill reads an immutable source and writes a distinct target, so it ` +
+          `cannot read its own output and is idempotent by construction`,
       );
     }
   }
@@ -380,7 +329,31 @@ async function applyRevision(
     await applySchema(db, revision.schema, assertHeld);
     return;
   }
-  await revision.up(migrationHandle(db, assertHeld));
+  await applyBackfill(db, revision.backfill, assertHeld);
+}
+
+async function applyBackfill(
+  db: IndexedDB,
+  transform: BackfillTransform,
+  assertHeld: () => void,
+): Promise<void> {
+  const target = db.objectStore(transform.into);
+  const cursor = await db.objectStore(transform.from).openCursor();
+  if (cursor === null) {
+    return;
+  }
+  try {
+    while (await cursor.continue()) {
+      assertHeld();
+      const row = cursor.value;
+      if (row === undefined) {
+        continue;
+      }
+      await target.put(transform.value(row));
+    }
+  } finally {
+    cursor.close();
+  }
 }
 
 async function applySchema(
@@ -536,144 +509,8 @@ async function releaseQuietly(
   }
 }
 
-function migrationHandle(
-  db: IndexedDB,
-  assertHeld: () => void,
-): MigrationHandle {
-  return {
-    store: (name) => new MigrationStoreImpl(db.objectStore(name), assertHeld),
-    transaction: async (stores) =>
-      new MigrationTransactionImpl(
-        await db.transaction(stores, "readwrite"),
-        assertHeld,
-      ),
-  };
-}
-
-class MigrationStoreImpl implements MigrationStore {
-  constructor(
-    private readonly store: ObjectStore,
-    private readonly assertHeld: () => void,
-  ) {}
-
-  get(id: string): Promise<DBRecord> {
-    return this.store.get(id);
-  }
-  getAll(query?: Query, options?: GetAllOptions): Promise<DBRecord[]> {
-    return this.store.getAll(query, options);
-  }
-  getAllKeys(query?: Query, options?: GetAllOptions): Promise<string[]> {
-    return this.store.getAllKeys(query, options);
-  }
-  count(query?: Query): Promise<number> {
-    return this.store.count(query);
-  }
-  openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return this.store.openCursor(options);
-  }
-  index(name: string): MigrationIndex {
-    return new MigrationIndexImpl(this.store.index(name));
-  }
-  put(record: DBRecord): Promise<void> {
-    this.assertHeld();
-    return this.store.put(record);
-  }
-  delete(id: string): Promise<void> {
-    this.assertHeld();
-    return this.store.delete(id);
-  }
-  deleteRange(query: Query): Promise<number> {
-    this.assertHeld();
-    return this.store.deleteRange(query);
-  }
-  clear(): Promise<void> {
-    this.assertHeld();
-    return this.store.clear();
-  }
-}
-
-class MigrationIndexImpl implements MigrationIndex {
-  constructor(private readonly index: StoreIndex) {}
-
-  get(query?: Query): Promise<DBRecord> {
-    return this.index.get(query);
-  }
-  getKey(query?: Query): Promise<string> {
-    return this.index.getKey(query);
-  }
-  getAll(query?: Query, options?: GetAllOptions): Promise<DBRecord[]> {
-    return this.index.getAll(query, options);
-  }
-  getAllKeys(query?: Query, options?: GetAllOptions): Promise<string[]> {
-    return this.index.getAllKeys(query, options);
-  }
-  count(query?: Query): Promise<number> {
-    return this.index.count(query);
-  }
-  openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return this.index.openCursor(options);
-  }
-}
-
-class MigrationTransactionImpl implements MigrationTransaction {
-  constructor(
-    private readonly tx: Transaction,
-    private readonly assertHeld: () => void,
-  ) {}
-
-  store(name: string): MigrationTransactionStore {
-    return new MigrationTransactionStoreImpl(
-      this.tx.objectStore(name),
-      this.assertHeld,
-    );
-  }
-  commit(): Promise<void> {
-    this.assertHeld();
-    return this.tx.commit();
-  }
-  abort(reason?: string): Promise<void> {
-    return this.tx.abort(reason);
-  }
-}
-
-class MigrationTransactionStoreImpl implements MigrationTransactionStore {
-  constructor(
-    private readonly store: TransactionObjectStore,
-    private readonly assertHeld: () => void,
-  ) {}
-
-  get(id: string): Promise<DBRecord> {
-    return this.store.get(id);
-  }
-  getAll(query?: Query, options?: GetAllOptions): Promise<DBRecord[]> {
-    return this.store.getAll(query, options);
-  }
-  getAllKeys(query?: Query, options?: GetAllOptions): Promise<string[]> {
-    return this.store.getAllKeys(query, options);
-  }
-  count(query?: Query): Promise<number> {
-    return this.store.count(query);
-  }
-  put(record: DBRecord): Promise<void> {
-    this.assertHeld();
-    return this.store.put(record);
-  }
-  delete(id: string): Promise<void> {
-    this.assertHeld();
-    return this.store.delete(id);
-  }
-  deleteRange(query: Query): Promise<number> {
-    this.assertHeld();
-    return this.store.deleteRange(query);
-  }
-  clear(): Promise<void> {
-    this.assertHeld();
-    return this.store.clear();
-  }
-}
-
 function isSchemaRevision(revision: Revision): revision is SchemaRevision {
-  return "schema" in revision && revision.schema !== undefined;
+  return "schema" in revision && revision.schema != null;
 }
 
 function randomHolderId(): string {
