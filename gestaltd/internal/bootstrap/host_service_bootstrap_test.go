@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -45,7 +44,7 @@ func TestRegisterConfiguredAppPublicHostServicesRegistersDefaultRuntimeApp(t *te
 		},
 	}
 
-	cleanup := registerConfiguredAppPublicHostServices(context.Background(), cfg, deps)
+	cleanup := registerConfiguredAppPublicHostServices(cfg, deps)
 
 	assertPublicHostServicesVerified(t, registry, "indexeddb")
 	if !appIndexedDBRegistered(registry, "gIssues") {
@@ -72,7 +71,7 @@ func TestRegisterConfiguredAppPublicHostServicesRegistersDevActiveWithoutSupervi
 		},
 	}
 
-	registerConfiguredAppPublicHostServices(context.Background(), cfg, deps)
+	registerConfiguredAppPublicHostServices(cfg, deps)
 
 	if !appIndexedDBRegistered(registry, "gIssues") {
 		t.Fatalf("registry = %#v, want indexeddb host service registered without a DevSupervisor", registry.Snapshot())
@@ -93,7 +92,7 @@ func TestRegisterConfiguredAppPublicHostServicesNoopWithoutRelay(t *testing.T) {
 		},
 	}
 
-	registerConfiguredAppPublicHostServices(context.Background(), cfg, deps)
+	registerConfiguredAppPublicHostServices(cfg, deps)
 
 	if services := registry.Snapshot(); len(services) != 0 {
 		t.Fatalf("registry = %#v, want no registration when the public relay is unavailable", services)
