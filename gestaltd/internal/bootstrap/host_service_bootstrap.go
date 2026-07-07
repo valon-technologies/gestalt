@@ -258,7 +258,7 @@ func registerConfiguredAppPublicHostServices(ctx context.Context, cfg *config.Co
 	var cleanups []func()
 	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
-		if !entry.UsesRuntimePlacement() {
+		if entry != nil && entry.DevActive && deps.DevSupervisor != nil {
 			continue
 		}
 		_, runtimeProvider, _, err := effectiveRuntime(ctx, name, entry, deps)
