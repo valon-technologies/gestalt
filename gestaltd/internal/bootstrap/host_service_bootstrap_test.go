@@ -23,7 +23,16 @@ func eagerHostServiceTestDeps(registry *runtimehost.PublicHostServiceRegistry) D
 	}
 }
 
-func TestRegisterConfiguredAppPublicHostServicesRegistersBeforeActivation(t *testing.T) {
+func appIndexedDBRegistered(registry *runtimehost.PublicHostServiceRegistry, appName string) bool {
+	for _, service := range registry.Snapshot() {
+		if service.AppName == appName && service.Service.Name == "indexeddb" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRegisterConfiguredAppPublicHostServicesRegistersDefaultRuntimeApp(t *testing.T) {
 	t.Parallel()
 
 	registry := runtimehost.NewPublicHostServiceRegistry()
@@ -31,7 +40,6 @@ func TestRegisterConfiguredAppPublicHostServicesRegistersBeforeActivation(t *tes
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
 			"gIssues": {
-				Runtime:   &config.RuntimePlacementConfig{},
 				IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
 			},
 		},
@@ -40,13 +48,7 @@ func TestRegisterConfiguredAppPublicHostServicesRegistersBeforeActivation(t *tes
 	cleanup := registerConfiguredAppPublicHostServices(context.Background(), cfg, deps)
 
 	assertPublicHostServicesVerified(t, registry, "indexeddb")
-	found := false
-	for _, service := range registry.Snapshot() {
-		if service.AppName == "gIssues" && service.Service.Name == "indexeddb" {
-			found = true
-		}
-	}
-	if !found {
+	if !appIndexedDBRegistered(registry, "gIssues") {
 		t.Fatalf("registry = %#v, want indexeddb host service for gIssues before activation", registry.Snapshot())
 	}
 
@@ -56,14 +58,15 @@ func TestRegisterConfiguredAppPublicHostServicesRegistersBeforeActivation(t *tes
 	}
 }
 
-func TestRegisterConfiguredAppPublicHostServicesSkipsNonRuntimeApps(t *testing.T) {
+func TestRegisterConfiguredAppPublicHostServicesRegistersDevActiveWithoutSupervisor(t *testing.T) {
 	t.Parallel()
 
 	registry := runtimehost.NewPublicHostServiceRegistry()
 	deps := eagerHostServiceTestDeps(registry)
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
-			"localApp": {
+			"gIssues": {
+				DevActive: true,
 				IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
 			},
 		},
@@ -71,8 +74,8 @@ func TestRegisterConfiguredAppPublicHostServicesSkipsNonRuntimeApps(t *testing.T
 
 	registerConfiguredAppPublicHostServices(context.Background(), cfg, deps)
 
-	if services := registry.Snapshot(); len(services) != 0 {
-		t.Fatalf("registry = %#v, want no eager registration for a non-runtime-placed app", services)
+	if !appIndexedDBRegistered(registry, "gIssues") {
+		t.Fatalf("registry = %#v, want indexeddb host service registered without a DevSupervisor", registry.Snapshot())
 	}
 }
 
@@ -85,7 +88,6 @@ func TestRegisterConfiguredAppPublicHostServicesNoopWithoutRelay(t *testing.T) {
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
 			"gIssues": {
-				Runtime:   &config.RuntimePlacementConfig{},
 				IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
 			},
 		},
