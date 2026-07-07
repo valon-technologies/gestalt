@@ -22,6 +22,7 @@
     "src/s3.ts",
     "src/secrets.ts",
     "src/test.ts",
+    "src/testing/index.ts",
     "src/workflow.ts",
     "src/vite.js"
   ],

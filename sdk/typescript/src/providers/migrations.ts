@@ -324,6 +324,14 @@ async function applyRevision(
   await applyBackfill(db, revision.backfill, assertHeld);
 }
 
+export async function applyRevisionForVerification(
+  db: IndexedDB,
+  revision: Revision,
+): Promise<void> {
+  validateRevisions([revision]);
+  await applyRevision(db, revision, () => {});
+}
+
 async function applyBackfill(
   db: IndexedDB,
   transform: BackfillTransform,

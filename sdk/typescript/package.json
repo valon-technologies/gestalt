@@ -29,6 +29,7 @@
     "./services/s3": "./src/s3.ts",
     "./services/secrets": "./src/secrets.ts",
     "./services/test": "./src/test.ts",
+    "./testing": "./src/testing/index.ts",
     "./services/workflow": "./src/workflow.ts",
     "./vite": {
       "types": "./src/vite.d.ts",
