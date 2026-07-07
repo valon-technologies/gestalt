@@ -230,14 +230,15 @@ export async function runMigrations(
       if (applied.has(revision.id)) {
         continue;
       }
-      if (renew.lost()) {
-        throw leaseLostError(revision.id, current, attemptedHead);
-      }
-      try {
-        await applyRevision(db, revision);
+      const assertHeld = (): void => {
         if (renew.lost()) {
           throw leaseLostError(revision.id, current, attemptedHead);
         }
+      };
+      assertHeld();
+      try {
+        await applyRevision(db, revision, assertHeld);
+        assertHeld();
         await recordRevision(db, ledgerStore, revision.id);
         appliedNow.push(revision.id);
         current = revision.id;
@@ -363,28 +364,37 @@ async function ensureLedgerStore(
   });
 }
 
-async function applyRevision(db: IndexedDB, revision: Revision): Promise<void> {
+async function applyRevision(
+  db: IndexedDB,
+  revision: Revision,
+  assertHeld: () => void,
+): Promise<void> {
   if (isSchemaRevision(revision)) {
-    await applySchema(db, revision.schema);
+    await applySchema(db, revision.schema, assertHeld);
     return;
   }
-  await revision.up(migrationHandle(db));
+  await revision.up(migrationHandle(db, assertHeld));
 }
 
 async function applySchema(
   db: IndexedDB,
   schema: SchemaDeclaration,
+  assertHeld: () => void,
 ): Promise<void> {
   for (const store of schema.stores ?? []) {
+    assertHeld();
     await createStoreIfAbsent(db, store);
   }
   for (const entry of schema.addIndexes ?? []) {
+    assertHeld();
     await createIndexIfAbsent(db, entry.store, entry.index);
   }
   for (const entry of schema.dropIndexes ?? []) {
+    assertHeld();
     await dropIndexIfPresent(db, entry.store, entry.name);
   }
   for (const name of schema.dropStores ?? []) {
+    assertHeld();
     await dropStoreIfPresent(db, name);
   }
 }
@@ -516,16 +526,25 @@ async function releaseQuietly(
   }
 }
 
-function migrationHandle(db: IndexedDB): MigrationHandle {
+function migrationHandle(
+  db: IndexedDB,
+  assertHeld: () => void,
+): MigrationHandle {
   return {
-    store: (name) => new MigrationStoreImpl(db.objectStore(name)),
+    store: (name) => new MigrationStoreImpl(db.objectStore(name), assertHeld),
     transaction: async (stores) =>
-      new MigrationTransactionImpl(await db.transaction(stores, "readwrite")),
+      new MigrationTransactionImpl(
+        await db.transaction(stores, "readwrite"),
+        assertHeld,
+      ),
   };
 }
 
 class MigrationStoreImpl implements MigrationStore {
-  constructor(private readonly store: ObjectStore) {}
+  constructor(
+    private readonly store: ObjectStore,
+    private readonly assertHeld: () => void,
+  ) {}
 
   get(id: string): Promise<DBRecord> {
     return this.store.get(id);
@@ -546,15 +565,19 @@ class MigrationStoreImpl implements MigrationStore {
     return new MigrationIndexImpl(this.store.index(name));
   }
   put(record: DBRecord): Promise<void> {
+    this.assertHeld();
     return this.store.put(record);
   }
   delete(id: string): Promise<void> {
+    this.assertHeld();
     return this.store.delete(id);
   }
   deleteRange(query: Query): Promise<number> {
+    this.assertHeld();
     return this.store.deleteRange(query);
   }
   clear(): Promise<void> {
+    this.assertHeld();
     return this.store.clear();
   }
 }
@@ -583,12 +606,19 @@ class MigrationIndexImpl implements MigrationIndex {
 }
 
 class MigrationTransactionImpl implements MigrationTransaction {
-  constructor(private readonly tx: Transaction) {}
+  constructor(
+    private readonly tx: Transaction,
+    private readonly assertHeld: () => void,
+  ) {}
 
   store(name: string): MigrationTransactionStore {
-    return new MigrationTransactionStoreImpl(this.tx.objectStore(name));
+    return new MigrationTransactionStoreImpl(
+      this.tx.objectStore(name),
+      this.assertHeld,
+    );
   }
   commit(): Promise<void> {
+    this.assertHeld();
     return this.tx.commit();
   }
   abort(reason?: string): Promise<void> {
@@ -597,7 +627,10 @@ class MigrationTransactionImpl implements MigrationTransaction {
 }
 
 class MigrationTransactionStoreImpl implements MigrationTransactionStore {
-  constructor(private readonly store: TransactionObjectStore) {}
+  constructor(
+    private readonly store: TransactionObjectStore,
+    private readonly assertHeld: () => void,
+  ) {}
 
   get(id: string): Promise<DBRecord> {
     return this.store.get(id);
@@ -612,15 +645,19 @@ class MigrationTransactionStoreImpl implements MigrationTransactionStore {
     return this.store.count(query);
   }
   put(record: DBRecord): Promise<void> {
+    this.assertHeld();
     return this.store.put(record);
   }
   delete(id: string): Promise<void> {
+    this.assertHeld();
     return this.store.delete(id);
   }
   deleteRange(query: Query): Promise<number> {
+    this.assertHeld();
     return this.store.deleteRange(query);
   }
   clear(): Promise<void> {
+    this.assertHeld();
     return this.store.clear();
   }
 }
