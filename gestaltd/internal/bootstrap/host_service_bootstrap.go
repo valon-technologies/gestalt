@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -248,6 +249,41 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 		providerName: providerName,
 		provider:     runtimeProvider,
 	}, false)
+}
+
+func registerConfiguredAppPublicHostServices(ctx context.Context, cfg *config.Config, deps Deps) func() {
+	if cfg == nil || !hostCanRelayRuntimeHostServices(deps) {
+		return func() {}
+	}
+	var cleanups []func()
+	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
+		entry := cfg.Apps[name]
+		if !entry.UsesRuntimePlacement() {
+			continue
+		}
+		_, runtimeProvider, _, err := effectiveRuntime(ctx, name, entry, deps)
+		if err != nil {
+			slog.Warn("eager public host service registration skipped", "provider", name, "error", err)
+			continue
+		}
+		hostServices, err := buildProviderHostServices(name, appProviderHostServiceDeps(entry, deps))
+		if err != nil {
+			slog.Warn("eager public host service registration skipped", "provider", name, "error", err)
+			continue
+		}
+		if len(hostServices) == 0 {
+			continue
+		}
+		cleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimeProvider)
+		if err != nil {
+			slog.Warn("eager public host service registration failed", "provider", name, "error", err)
+			continue
+		}
+		if cleanup != nil {
+			cleanups = append(cleanups, cleanup)
+		}
+	}
+	return chainCleanup(cleanups...)
 }
 
 type workflowProviderHostServiceSessionVerifier struct{}
