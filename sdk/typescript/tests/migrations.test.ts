@@ -24,6 +24,7 @@ class FakeIndexedDB {
   lock: { holder: string; expiresAt: number } | null = null;
   createObjectStoreError: Error | null = null;
   acquireLockError: Error | null = null;
+  putHook: (() => Promise<void> | void) | null = null;
 
   async createObjectStore(
     name: string,
@@ -99,10 +100,45 @@ class FakeIndexedDB {
       },
       async put(record: DBRecord): Promise<void> {
         const s = state();
+        if (db.putHook) {
+          await db.putHook();
+        }
         s.rows.set(String(record[s.pk]), record);
       },
       async delete(id: string): Promise<void> {
         state().rows.delete(id);
+      },
+      async openCursor(): Promise<unknown> {
+        const s = state();
+        const entries = [...s.rows.entries()];
+        let i = -1;
+        const cursor = {
+          key: undefined as unknown,
+          primaryKey: "",
+          value: undefined as DBRecord | undefined,
+          done: false,
+          continue: async (): Promise<boolean> => {
+            i += 1;
+            const entry = entries[i];
+            if (entry === undefined) {
+              cursor.done = true;
+              cursor.value = undefined;
+              cursor.primaryKey = "";
+              return false;
+            }
+            cursor.primaryKey = entry[0];
+            cursor.value = entry[1];
+            return true;
+          },
+          update: async (record: DBRecord): Promise<void> => {
+            if (db.putHook) {
+              await db.putHook();
+            }
+            s.rows.set(String(record[s.pk]), record);
+          },
+          close: (): void => {},
+        };
+        return cursor;
       },
     };
   }
@@ -226,7 +262,7 @@ describe("runMigrations", () => {
     expect(await ledgerIds(fake)).toEqual(["0001_issues", "0002_index"]);
   });
 
-  test("imperative revision runs up() with a restricted, idempotent handle", async () => {
+  test("backfill revision applies a pure in-place transform", async () => {
     const { db, fake } = fakeDb();
     const seed: Revision = {
       id: "0001_seed",
@@ -234,12 +270,40 @@ describe("runMigrations", () => {
     };
     const backfill: Revision = {
       id: "0002_backfill",
-      up: async (m) => {
-        const store = m.store("issues");
-        expect((store as unknown as { add?: unknown }).add).toBeUndefined();
-        for (const row of await store.getAll()) {
-          await store.put({ ...row, status: row.status ?? "open" });
-        }
+      backfill: {
+        from: "issues",
+        into: "issues",
+        value: (row) => ({ ...row, status: row.status ?? "open" }),
+      },
+    };
+
+    await runMigrations(db, { revisions: [seed] });
+    await db.objectStore("issues").put({ id: "a" });
+    await db.objectStore("issues").put({ id: "b", status: "closed" });
+    await runMigrations(db, { revisions: [seed, backfill] });
+
+    expect((await db.objectStore("issues").get("a")).status).toBe("open");
+    expect((await db.objectStore("issues").get("b")).status).toBe("closed");
+    expect(await ledgerIds(fake)).toEqual(["0001_seed", "0002_backfill"]);
+  });
+
+  test("backfill revision copies rows into another store", async () => {
+    const { db, fake } = fakeDb();
+    const seed: Revision = {
+      id: "0001_seed",
+      schema: {
+        stores: [
+          { name: "issues", columns: [{ name: "id", primaryKey: true }] },
+          { name: "issue_index", columns: [{ name: "id", primaryKey: true }] },
+        ],
+      },
+    };
+    const backfill: Revision = {
+      id: "0002_index",
+      backfill: {
+        from: "issues",
+        into: "issue_index",
+        value: (row) => ({ id: row.id, text: `issue-${String(row.id)}` }),
       },
     };
 
@@ -247,17 +311,19 @@ describe("runMigrations", () => {
     await db.objectStore("issues").put({ id: "a" });
     await runMigrations(db, { revisions: [seed, backfill] });
 
-    const stored = await db.objectStore("issues").get("a");
-    expect(stored.status).toBe("open");
-    expect(await ledgerIds(fake)).toEqual(["0001_seed", "0002_backfill"]);
+    expect((await db.objectStore("issue_index").get("a")).text).toBe("issue-a");
+    expect((await db.objectStore("issues").get("a")).id).toBe("a");
+    expect(await ledgerIds(fake)).toEqual(["0001_seed", "0002_index"]);
   });
 
   test("a failing revision aborts and is not recorded", async () => {
     const { db, fake } = fakeDb();
     const boom: Revision = {
       id: "0002_boom",
-      up: async () => {
-        throw new Error("kaboom");
+      backfill: {
+        from: "missing",
+        into: "missing",
+        value: (row) => row,
       },
     };
 
@@ -273,8 +339,10 @@ describe("runMigrations", () => {
     const { db } = fakeDb();
     const boom: Revision = {
       id: "0002_boom",
-      up: async () => {
-        throw new Error("kaboom");
+      backfill: {
+        from: "missing",
+        into: "missing",
+        value: (row) => row,
       },
     };
 
@@ -294,47 +362,75 @@ describe("runMigrations", () => {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const seed: Revision = {
       id: "0001_seed",
-      up: async () => {
-        fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
-        await sleep(1_400);
-      },
-    };
-    const next: Revision = {
-      id: "0002_next",
-      schema: { stores: [{ name: "x", columns: [{ name: "id", primaryKey: true }] }] },
-    };
-
-    await expect(
-      runMigrations(db, { revisions: [seed, next], lockTtlMs: 2_000 }),
-    ).rejects.toThrow(/lost the migration lease/);
-    expect(await ledgerIds(fake)).toEqual([]);
-    expect(fake.stores.has("x")).toBe(false);
-  });
-
-  test("a mutating op inside up() throws once the lease is lost mid-revision", async () => {
-    const { db, fake } = fakeDb();
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    const seed: Revision = {
-      id: "0001_seed",
-      schema: { stores: [{ name: "issues", columns: [{ name: "id", primaryKey: true }] }] },
-    };
-    const backfill: Revision = {
-      id: "0002_backfill",
-      up: async (m) => {
-        // Another instance reclaims the lease while up() is running.
-        fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
-        await sleep(1_400);
-        // The guarded handle must refuse further writes once the lease is lost.
-        await m.store("issues").put({ id: "x" });
+      schema: {
+        stores: [
+          { name: "src", columns: [{ name: "id", primaryKey: true }] },
+          { name: "dst", columns: [{ name: "id", primaryKey: true }] },
+        ],
       },
     };
 
     await runMigrations(db, { revisions: [seed] });
+    await db.objectStore("src").put({ id: "a" });
+
+    fake.putHook = async () => {
+      fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
+      await sleep(1_400);
+    };
+    const backfill: Revision = {
+      id: "0002_backfill",
+      backfill: {
+        from: "src",
+        into: "dst",
+        value: (row) => ({ ...row }),
+      },
+    };
+
     await expect(
       runMigrations(db, { revisions: [seed, backfill], lockTtlMs: 2_000 }),
     ).rejects.toThrow(/lost the migration lease/);
     expect(await ledgerIds(fake)).toEqual(["0001_seed"]);
-    expect(fake.stores.get("issues")?.rows.has("x")).toBe(false);
+  });
+
+  test("a backfill write is refused once the lease is lost mid-revision", async () => {
+    const { db, fake } = fakeDb();
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const seed: Revision = {
+      id: "0001_seed",
+      schema: {
+        stores: [
+          { name: "src", columns: [{ name: "id", primaryKey: true }] },
+          { name: "dst", columns: [{ name: "id", primaryKey: true }] },
+        ],
+      },
+    };
+
+    await runMigrations(db, { revisions: [seed] });
+    await db.objectStore("src").put({ id: "a" });
+    await db.objectStore("src").put({ id: "b" });
+
+    let puts = 0;
+    fake.putHook = async () => {
+      puts += 1;
+      if (puts === 1) {
+        fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
+        await sleep(1_400);
+      }
+    };
+    const backfill: Revision = {
+      id: "0002_backfill",
+      backfill: {
+        from: "src",
+        into: "dst",
+        value: (row) => ({ ...row }),
+      },
+    };
+
+    await expect(
+      runMigrations(db, { revisions: [seed, backfill], lockTtlMs: 2_000 }),
+    ).rejects.toThrow(/lost the migration lease/);
+    expect(await ledgerIds(fake)).toEqual(["0001_seed"]);
+    expect(fake.stores.get("dst")?.rows.has("b")).toBe(false);
   });
 
   test("runs lockless when acquireLock is Unimplemented", async () => {
@@ -377,7 +473,7 @@ describe("runMigrations", () => {
     // A new revision is inserted before an already-applied successor.
     const inserted: Revision = {
       id: "0002_between",
-      up: async () => {},
+      schema: { stores: [{ name: "between", columns: [{ name: "id", primaryKey: true }] }] },
     };
     await expect(
       runMigrations(db, { revisions: [first, inserted, later] }),
@@ -416,7 +512,7 @@ describe("runMigrations", () => {
     ).rejects.toThrow(/duplicate revision id/);
   });
 
-  test("rejects a revision that is neither schema nor imperative", async () => {
+  test("rejects a revision that is neither schema nor backfill", async () => {
     const { db } = fakeDb();
     const bad = { id: "0001_bad" } as unknown as Revision;
     await expect(runMigrations(db, { revisions: [bad] })).rejects.toThrow(
