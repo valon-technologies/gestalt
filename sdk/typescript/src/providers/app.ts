@@ -114,8 +114,10 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
   /**
-   * Revisions the SDK discovers and runs during provider startup, before the
-   * author's own configure handler. The author never calls a runner.
+   * Revisions the SDK runs once, on the first request the app receives, before
+   * handling it. They run at request time rather than during provider
+   * configuration because the indexeddb host service they need is only
+   * reachable while serving a request. The author never calls a runner.
    */
   migrations?: MigrationsOption;
 }
@@ -189,6 +191,7 @@ export class AppProvider extends ProviderBase {
   private readonly httpSubjectResolver: HTTPSubjectResolver | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
   private readonly migrations: MigrationRunOptions | undefined;
+  private migrationRun: Promise<void> | undefined;
 
   constructor(options: AppDefinitionOptions) {
     super(options);
@@ -212,25 +215,30 @@ export class AppProvider extends ProviderBase {
     }
   }
 
-  /**
-   * Runs declared migrations before delegating to the author's configure
-   * handler. Migrations are app-scoped and need a DB binding, so this override
-   * lives on {@link AppProvider} rather than the generic provider base. The
-   * connection is opened and released even on error.
-   */
-  override async configureProvider(
-    name: string,
-    config: Record<string, unknown>,
-  ): Promise<void> {
-    if (this.migrations) {
-      const db = new IndexedDB(this.migrations.dbBinding);
-      try {
-        await runMigrations(db, this.migrations);
-      } finally {
-        db.close();
-      }
+  private ensureMigrations(): Promise<void> {
+    if (!this.migrations) {
+      return Promise.resolve();
     }
-    await super.configureProvider(name, config);
+    if (!this.migrationRun) {
+      this.migrationRun = this.applyMigrations().catch((error: unknown) => {
+        this.migrationRun = undefined;
+        throw error;
+      });
+    }
+    return this.migrationRun;
+  }
+
+  private async applyMigrations(): Promise<void> {
+    const options = this.migrations;
+    if (!options) {
+      return;
+    }
+    const db = new IndexedDB(options.dbBinding);
+    try {
+      await runMigrations(db, options);
+    } finally {
+      db.close();
+    }
   }
 
   /**
@@ -246,6 +254,7 @@ export class AppProvider extends ProviderBase {
   async catalogForRequest(
     request: Request,
   ): Promise<SessionCatalog | null | undefined> {
+    await this.ensureMigrations();
     return await this.sessionCatalogHandler?.(request);
   }
 
@@ -257,6 +266,7 @@ export class AppProvider extends ProviderBase {
     request: HTTPSubjectRequest,
     context: HTTPSubjectResolutionContext,
   ): Promise<SubjectInput | null | undefined> {
+    await this.ensureMigrations();
     return await this.httpSubjectResolver?.(
       cloneHTTPSubjectRequest(request),
       cloneHTTPSubjectResolutionContext(context),
@@ -352,6 +362,12 @@ export class AppProvider extends ProviderBase {
     params: Record<string, unknown>,
     request: Request,
   ): Promise<OperationResult> {
+    try {
+      await this.ensureMigrations();
+    } catch (error) {
+      return errorResult(500, errorMessage(error));
+    }
+
     const entry = this.operations.get(operationId);
     if (!entry) {
       return errorResult(404, "unknown operation");
