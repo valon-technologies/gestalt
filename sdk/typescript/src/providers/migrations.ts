@@ -195,9 +195,12 @@ export class MigrationError extends Error {
 
 /**
  * Brings the database up to head, acquiring the migration lease first so only
- * one instance migrates at a time. Idempotent — a no-op when nothing is
- * pending. Releases the lease and never leaves it held on error. Returns the
- * revision ids applied this run and the declared head.
+ * one instance migrates at a time. If the backend does not support the lease
+ * (or acquiring it errors), it degrades to running lockless — idempotency is
+ * the correctness guarantee, the lease only prevents redundant concurrent work.
+ * Idempotent — a no-op when nothing is pending. Releases the lease and never
+ * leaves it held on error. Returns the revision ids applied this run and the
+ * declared head.
  */
 export async function runMigrations(
   db: IndexedDB,
@@ -215,9 +218,11 @@ export async function runMigrations(
   const holder = options.holder?.trim() || randomHolderId();
 
   await ensureLedgerStore(db, ledgerStore);
-  await acquireLease(db, lockKey, holder, ttlMs, acquireTimeoutMs);
+  const held = await acquireLease(db, lockKey, holder, ttlMs, acquireTimeoutMs);
 
-  const renew = startLeaseRenewal(db, lockKey, holder, ttlMs);
+  const renew = held
+    ? startLeaseRenewal(db, lockKey, holder, ttlMs)
+    : { stop: () => {}, lost: () => false };
   try {
     const applied = new Set(await db.objectStore(ledgerStore).getAllKeys());
     assertNotAheadOfCode(revisions, applied);
@@ -255,7 +260,9 @@ export async function runMigrations(
     return { applied: appliedNow, head: attemptedHead };
   } finally {
     renew.stop();
-    await releaseQuietly(db, lockKey, holder);
+    if (held) {
+      await releaseQuietly(db, lockKey, holder);
+    }
   }
 }
 
@@ -470,12 +477,15 @@ async function acquireLease(
   holder: string,
   ttlMs: number,
   timeoutMs: number,
-): Promise<void> {
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const lease = await db.acquireLock(key, holder, ttlMs);
+    const lease = await db.acquireLock(key, holder, ttlMs).catch(() => null);
+    if (lease === null) {
+      return false;
+    }
     if (lease.acquired) {
-      return;
+      return true;
     }
     if (Date.now() >= deadline) {
       throw new MigrationError(

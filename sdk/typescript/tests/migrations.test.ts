@@ -23,6 +23,7 @@ class FakeIndexedDB {
   readonly calls: string[] = [];
   lock: { holder: string; expiresAt: number } | null = null;
   createObjectStoreError: Error | null = null;
+  acquireLockError: Error | null = null;
 
   async createObjectStore(
     name: string,
@@ -112,6 +113,9 @@ class FakeIndexedDB {
     ttlMs: number,
   ): Promise<AcquireLockResult> {
     this.calls.push(`acquireLock:${holder}`);
+    if (this.acquireLockError) {
+      throw this.acquireLockError;
+    }
     const now = Date.now();
     if (this.lock && this.lock.holder !== holder && this.lock.expiresAt > now) {
       return {
@@ -331,6 +335,19 @@ describe("runMigrations", () => {
     ).rejects.toThrow(/lost the migration lease/);
     expect(await ledgerIds(fake)).toEqual(["0001_seed"]);
     expect(fake.stores.get("issues")?.rows.has("x")).toBe(false);
+  });
+
+  test("runs lockless when acquireLock is Unimplemented", async () => {
+    const { db, fake } = fakeDb();
+    fake.acquireLockError = Object.assign(new Error("advisory locks not supported"), {
+      code: 12,
+    });
+
+    await runMigrations(db, { revisions: [issuesRevision] });
+
+    expect(fake.stores.has("issues")).toBe(true);
+    expect(await ledgerIds(fake)).toEqual(["0001_issues"]);
+    expect(fake.calls.some((c) => c.startsWith("releaseLock:"))).toBe(false);
   });
 
   test("fails closed when the ledger is ahead of the code", async () => {
