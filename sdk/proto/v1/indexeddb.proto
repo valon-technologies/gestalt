@@ -163,27 +163,6 @@ message CountResponse {
   int64 count = 1;
 }
 
-// AcquireLockRequest requests a keyed, TTL'd advisory lease.
-message AcquireLockRequest {
-  string key = 1;
-  string holder = 2;
-  int64 ttl_ms = 3;
-}
-
-// AcquireLockResponse reports whether the lease was acquired and its current owner.
-message AcquireLockResponse {
-  bool acquired = 1;
-  string holder = 2;
-  google.protobuf.Timestamp expires_at = 3;
-  int64 fencing_token = 4;
-}
-
-// ReleaseLockRequest releases a lease previously acquired by holder.
-message ReleaseLockRequest {
-  string key = 1;
-  string holder = 2;
-}
-
 // CursorDirection controls IndexedDB cursor traversal order.
 enum CursorDirection {
   CURSOR_NEXT = 0;
@@ -455,17 +434,6 @@ service IndexedDB {
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
-  }
-
-  // Advisory locks
-  rpc AcquireLock(AcquireLockRequest) returns (AcquireLockResponse) {
-    option (signature) = "key";
-    option (signature) = "holder";
-    option (signature) = "ttl_ms";
-  }
-  rpc ReleaseLock(ReleaseLockRequest) returns (google.protobuf.Empty) {
-    option (signature) = "key";
-    option (signature) = "holder";
   }
 
   // Cursor iteration (bidirectional stream)

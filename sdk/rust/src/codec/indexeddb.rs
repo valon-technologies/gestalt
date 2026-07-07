@@ -7,41 +7,20 @@ use crate::codec::support::{
 };
 use crate::generated::v1;
 use crate::indexeddb::{
-    AcquireLockRequest, AcquireLockResponse, BeginTransactionRequest, ColumnDef, CountResponse,
-    CreateIndexRequest, CreateObjectStoreRequest, CursorClientMessage, CursorClientMessageMsg,
-    CursorCommand, CursorCommandCommand, CursorEntry, CursorKeyTarget, CursorResponse,
-    CursorResponseResult, DeleteIndexRequest, DeleteObjectStoreRequest, DeleteResponse,
-    IndexQueryRequest, IndexSchema, IndexedDBQuery, IndexedDBQueryQuery, KeyRange, KeyResponse,
-    KeyValue, KeyValueArray, KeyValueKind, KeysResponse, ObjectStoreNameRequest,
-    ObjectStoreRangeRequest, ObjectStoreRequest, ObjectStoreSchema, OpenCursorRequest, Record,
-    RecordRequest, RecordResponse, RecordsResponse, ReleaseLockRequest, TransactionAbortRequest,
-    TransactionAbortResponse, TransactionBeginResponse, TransactionClientMessage,
-    TransactionClientMessageMsg, TransactionCommitRequest, TransactionCommitResponse,
-    TransactionOperation, TransactionOperationOperation, TransactionOperationResponse,
+    BeginTransactionRequest, ColumnDef, CountResponse, CreateIndexRequest,
+    CreateObjectStoreRequest, CursorClientMessage, CursorClientMessageMsg, CursorCommand,
+    CursorCommandCommand, CursorEntry, CursorKeyTarget, CursorResponse, CursorResponseResult,
+    DeleteIndexRequest, DeleteObjectStoreRequest, DeleteResponse, IndexQueryRequest, IndexSchema,
+    IndexedDBQuery, IndexedDBQueryQuery, KeyRange, KeyResponse, KeyValue, KeyValueArray,
+    KeyValueKind, KeysResponse, ObjectStoreNameRequest, ObjectStoreRangeRequest,
+    ObjectStoreRequest, ObjectStoreSchema, OpenCursorRequest, Record, RecordRequest,
+    RecordResponse, RecordsResponse, TransactionAbortRequest, TransactionAbortResponse,
+    TransactionBeginResponse, TransactionClientMessage, TransactionClientMessageMsg,
+    TransactionCommitRequest, TransactionCommitResponse, TransactionOperation,
+    TransactionOperationOperation, TransactionOperationResponse,
     TransactionOperationResponseResult, TransactionServerMessage, TransactionServerMessageMsg,
     TypedValue, TypedValueKind,
 };
-
-/// Converts a native `AcquireLockRequest` to its wire message.
-pub(crate) fn to_wire_acquire_lock_request(value: AcquireLockRequest) -> v1::AcquireLockRequest {
-    v1::AcquireLockRequest {
-        key: value.key,
-        holder: value.holder,
-        ttl_ms: value.ttl_ms,
-    }
-}
-
-/// Converts a wire `AcquireLockResponse` to its native message.
-pub(crate) fn from_wire_acquire_lock_response(
-    value: v1::AcquireLockResponse,
-) -> AcquireLockResponse {
-    AcquireLockResponse {
-        acquired: value.acquired,
-        holder: value.holder,
-        expires_at: value.expires_at.map(from_wire_timestamp),
-        fencing_token: value.fencing_token,
-    }
-}
 
 /// Converts a native `BeginTransactionRequest` to its wire message.
 pub(crate) fn to_wire_begin_transaction_request(
@@ -385,14 +364,6 @@ pub(crate) fn from_wire_record_response(value: v1::RecordResponse) -> RecordResp
 pub(crate) fn from_wire_records_response(value: v1::RecordsResponse) -> RecordsResponse {
     RecordsResponse {
         records: value.records.into_iter().map(from_wire_record).collect(),
-    }
-}
-
-/// Converts a native `ReleaseLockRequest` to its wire message.
-pub(crate) fn to_wire_release_lock_request(value: ReleaseLockRequest) -> v1::ReleaseLockRequest {
-    v1::ReleaseLockRequest {
-        key: value.key,
-        holder: value.holder,
     }
 }
 
