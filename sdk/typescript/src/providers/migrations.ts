@@ -12,6 +12,10 @@ import {
 const DEFAULT_LEDGER_STORE = "_gestalt_migrations";
 const LEDGER_KEY_COLUMN = "revision_id";
 const LEDGER_APPLIED_COLUMN = "applied_at";
+const DEFAULT_LOCK_KEY = "_gestalt_migrations";
+const DEFAULT_LOCK_TTL_MS = 30_000;
+const DEFAULT_ACQUIRE_TIMEOUT_MS = 10 * 60_000;
+const LOCK_POLL_INTERVAL_MS = 500;
 
 export type Query = Key | KeyRange;
 
@@ -85,6 +89,14 @@ export interface MigrationRunOptions {
   dbBinding?: string;
   /** Ledger store name. Defaults to `_gestalt_migrations`. */
   ledgerStore?: string;
+  /** Advisory-lock key. Defaults to `_gestalt_migrations`. */
+  lockKey?: string;
+  /** Lease TTL in milliseconds. Defaults to 30s (renewed while running). */
+  lockTtlMs?: number;
+  /** Max time to wait to acquire the lease. Defaults to 10 minutes. */
+  acquireTimeoutMs?: number;
+  /** Stable identifier for this instance. Defaults to a random id. */
+  holder?: string;
 }
 
 /**
@@ -123,11 +135,13 @@ export class MigrationError extends Error {
 }
 
 /**
- * Brings the database up to head. Concurrent instances may run this at once;
- * that is safe because every revision is idempotent by construction, so
- * concurrent runs converge to the same state and the ledger records each
- * revision once. Idempotent — a no-op when nothing is pending. Returns the
- * revision ids applied this run and the declared head.
+ * Brings the database up to head, acquiring the migration lease first so only
+ * one instance migrates at a time. If the backend does not support the lease
+ * (or acquiring it errors), it degrades to running lockless — idempotency is
+ * the correctness guarantee, the lease only prevents redundant concurrent work.
+ * Idempotent — a no-op when nothing is pending. Releases the lease and never
+ * leaves it held on error. Returns the revision ids applied this run and the
+ * declared head.
  */
 export async function runMigrations(
   db: IndexedDB,
@@ -139,35 +153,58 @@ export async function runMigrations(
   }
 
   const ledgerStore = options.ledgerStore?.trim() || DEFAULT_LEDGER_STORE;
+  const lockKey = options.lockKey?.trim() || DEFAULT_LOCK_KEY;
+  const ttlMs = options.lockTtlMs ?? DEFAULT_LOCK_TTL_MS;
+  const acquireTimeoutMs = options.acquireTimeoutMs ?? DEFAULT_ACQUIRE_TIMEOUT_MS;
+  const holder = options.holder?.trim() || randomHolderId();
+
   await ensureLedgerStore(db, ledgerStore);
+  const held = await acquireLease(db, lockKey, holder, ttlMs, acquireTimeoutMs);
 
-  const applied = new Set(await db.objectStore(ledgerStore).getAllKeys());
-  assertNotAheadOfCode(revisions, applied);
-  assertContiguousPrefix(revisions, applied);
+  const renew = held
+    ? startLeaseRenewal(db, lockKey, holder, ttlMs)
+    : { stop: () => {}, lost: () => false };
+  try {
+    const applied = new Set(await db.objectStore(ledgerStore).getAllKeys());
+    assertNotAheadOfCode(revisions, applied);
+    assertContiguousPrefix(revisions, applied);
 
-  const attemptedHead = revisions[revisions.length - 1]?.id ?? "";
-  let current = latestAppliedId(revisions, applied);
-  const appliedNow: string[] = [];
-  for (const revision of revisions) {
-    if (applied.has(revision.id)) {
-      continue;
-    }
-    try {
-      await applyRevision(db, revision);
-      await recordRevision(db, ledgerStore, revision.id);
-      appliedNow.push(revision.id);
-      current = revision.id;
-    } catch (error) {
-      if (error instanceof MigrationError) {
-        throw error;
+    const attemptedHead = revisions[revisions.length - 1]?.id ?? "";
+    let current = latestAppliedId(revisions, applied);
+    const appliedNow: string[] = [];
+    for (const revision of revisions) {
+      if (applied.has(revision.id)) {
+        continue;
       }
-      throw new MigrationError(
-        `migration ${JSON.stringify(revision.id)} failed: ${errorText(error)}`,
-        { current, attempted: attemptedHead, cause: error },
-      );
+      const assertHeld = (): void => {
+        if (renew.lost()) {
+          throw leaseLostError(revision.id, current, attemptedHead);
+        }
+      };
+      assertHeld();
+      try {
+        await applyRevision(db, revision, assertHeld);
+        assertHeld();
+        await recordRevision(db, ledgerStore, revision.id);
+        appliedNow.push(revision.id);
+        current = revision.id;
+      } catch (error) {
+        if (error instanceof MigrationError) {
+          throw error;
+        }
+        throw new MigrationError(
+          `migration ${JSON.stringify(revision.id)} failed: ${errorText(error)}`,
+          { current, attempted: attemptedHead, cause: error },
+        );
+      }
+    }
+    return { applied: appliedNow, head: attemptedHead };
+  } finally {
+    renew.stop();
+    if (held) {
+      await releaseQuietly(db, lockKey, holder);
     }
   }
-  return { applied: appliedNow, head: attemptedHead };
 }
 
 function validateRevisions(revisions: Revision[]): Revision[] {
@@ -258,6 +295,18 @@ function latestAppliedId(
   return current;
 }
 
+function leaseLostError(
+  revisionId: string,
+  current: string | undefined,
+  attemptedHead: string,
+): MigrationError {
+  return new MigrationError(
+    `lost the migration lease while migrating ${JSON.stringify(revisionId)}; ` +
+      `another instance may hold it — aborting to avoid concurrent migration`,
+    { current, attempted: attemptedHead },
+  );
+}
+
 async function ensureLedgerStore(
   db: IndexedDB,
   ledgerStore: string,
@@ -271,17 +320,22 @@ async function ensureLedgerStore(
   });
 }
 
-async function applyRevision(db: IndexedDB, revision: Revision): Promise<void> {
+async function applyRevision(
+  db: IndexedDB,
+  revision: Revision,
+  assertHeld: () => void,
+): Promise<void> {
   if (isSchemaRevision(revision)) {
-    await applySchema(db, revision.schema);
+    await applySchema(db, revision.schema, assertHeld);
     return;
   }
-  await applyBackfill(db, revision.backfill);
+  await applyBackfill(db, revision.backfill, assertHeld);
 }
 
 async function applyBackfill(
   db: IndexedDB,
   transform: BackfillTransform,
+  assertHeld: () => void,
 ): Promise<void> {
   const target = db.objectStore(transform.into);
   const cursor = await db.objectStore(transform.from).openCursor();
@@ -290,6 +344,7 @@ async function applyBackfill(
   }
   try {
     while (await cursor.continue()) {
+      assertHeld();
       const row = cursor.value;
       if (row === undefined) {
         continue;
@@ -304,17 +359,22 @@ async function applyBackfill(
 async function applySchema(
   db: IndexedDB,
   schema: SchemaDeclaration,
+  assertHeld: () => void,
 ): Promise<void> {
   for (const store of schema.stores ?? []) {
+    assertHeld();
     await createStoreIfAbsent(db, store);
   }
   for (const entry of schema.addIndexes ?? []) {
+    assertHeld();
     await createIndexIfAbsent(db, entry.store, entry.index);
   }
   for (const entry of schema.dropIndexes ?? []) {
+    assertHeld();
     await dropIndexIfPresent(db, entry.store, entry.name);
   }
   for (const name of schema.dropStores ?? []) {
+    assertHeld();
     await dropStoreIfPresent(db, name);
   }
 }
@@ -384,8 +444,81 @@ async function recordRevision(
   });
 }
 
+async function acquireLease(
+  db: IndexedDB,
+  key: string,
+  holder: string,
+  ttlMs: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const lease = await db.acquireLock(key, holder, ttlMs).catch(() => null);
+    if (lease === null) {
+      return false;
+    }
+    if (lease.acquired) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      throw new MigrationError(
+        `timed out after ${timeoutMs}ms waiting for the migration lease ` +
+          `(held by ${JSON.stringify(lease.holder)})`,
+      );
+    }
+    await sleep(LOCK_POLL_INTERVAL_MS);
+  }
+}
+
+function startLeaseRenewal(
+  db: IndexedDB,
+  key: string,
+  holder: string,
+  ttlMs: number,
+): { stop: () => void; lost: () => boolean } {
+  const interval = Math.max(1, Math.min(Math.floor(ttlMs / 2), ttlMs - 1));
+  let lost = false;
+  const timer = setInterval(() => {
+    void db.acquireLock(key, holder, ttlMs).then(
+      (lease) => {
+        if (!lease.acquired) {
+          lost = true;
+        }
+      },
+      () => {},
+    );
+  }, interval);
+  if (typeof timer === "object" && "unref" in timer) {
+    (timer as { unref: () => void }).unref();
+  }
+  return {
+    stop: () => clearInterval(timer),
+    lost: () => lost,
+  };
+}
+
+async function releaseQuietly(
+  db: IndexedDB,
+  key: string,
+  holder: string,
+): Promise<void> {
+  try {
+    await db.releaseLock(key, holder);
+  } catch {
+    return;
+  }
+}
+
 function isSchemaRevision(revision: Revision): revision is SchemaRevision {
   return "schema" in revision && revision.schema != null;
+}
+
+function randomHolderId(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) {
+    return uuid;
+  }
+  return `holder-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 }
 
 function errorText(error: unknown): string {
@@ -393,4 +526,8 @@ function errorText(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
