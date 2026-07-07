@@ -48,7 +48,7 @@ func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *conf
 	if err != nil {
 		return nil, err
 	}
-	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimeProvider)
+	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps)
 	if err != nil {
 		launch.close()
 		return nil, err

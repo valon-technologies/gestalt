@@ -23,7 +23,6 @@ import (
 	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
@@ -205,53 +204,21 @@ func applyHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 	return env, allowedHosts, nil
 }
 
-type runtimeHostServiceSessionVerifier struct {
-	providerName string
-	provider     runtimeprovider.Provider
+type runtimeHostServiceSessionVerifier struct{}
+
+func (runtimeHostServiceSessionVerifier) VerifyHostServiceSession(context.Context, string) error {
+	// The signed relay token already scopes the call by provider, service, and
+	// method. Runtime sessions are process-local to the replica that started the
+	// app, so re-checking them here cannot work once a callback is load-balanced
+	// to another replica; trust the token instead.
+	return nil
 }
 
-func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.Context, sessionID string) error {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return fmt.Errorf("runtime session id is required")
-	}
-	if v.provider == nil {
-		return fmt.Errorf("runtime provider is not configured")
-	}
-	session, err := v.provider.GetSession(ctx, &proto.GetRuntimeSessionRequest{SessionId: sessionID})
-	if err != nil {
-		return err
-	}
-	if session == nil {
-		return fmt.Errorf("runtime session %q was not found", sessionID)
-	}
-	if expected := strings.TrimSpace(v.providerName); expected != "" {
-		if got := strings.TrimSpace(session.GetMetadata()["provider_name"]); got != "" && got != expected {
-			return fmt.Errorf("runtime session %q belongs to provider %q", sessionID, got)
-		}
-	}
-	if session.GetLifecycle().GetExpiresAt() != nil {
-		expiresAt := session.GetLifecycle().GetExpiresAt().AsTime().UTC()
-		if !time.Now().UTC().Before(expiresAt) {
-			return fmt.Errorf("runtime session %q expired at %s", sessionID, expiresAt.Format(time.RFC3339Nano))
-		}
-	}
-	switch session.GetState() {
-	case runtimeprovider.SessionStatePending, runtimeprovider.SessionStateReady, runtimeprovider.SessionStateRunning:
-		return nil
-	default:
-		return fmt.Errorf("runtime session %q is %s", sessionID, session.GetState())
-	}
+func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps) (func(), error) {
+	return registerVerifiedPublicHostServices(providerName, hostServices, deps, runtimeHostServiceSessionVerifier{}, false)
 }
 
-func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimeProvider runtimeprovider.Provider) (func(), error) {
-	return registerVerifiedPublicHostServices(providerName, hostServices, deps, runtimeHostServiceSessionVerifier{
-		providerName: providerName,
-		provider:     runtimeProvider,
-	}, false)
-}
-
-func registerConfiguredAppPublicHostServices(ctx context.Context, cfg *config.Config, deps Deps) func() {
+func registerConfiguredAppPublicHostServices(cfg *config.Config, deps Deps) func() {
 	if cfg == nil || !hostCanRelayRuntimeHostServices(deps) {
 		return func() {}
 	}
@@ -259,11 +226,6 @@ func registerConfiguredAppPublicHostServices(ctx context.Context, cfg *config.Co
 	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
 		if entry != nil && entry.DevActive && deps.DevSupervisor != nil {
-			continue
-		}
-		_, runtimeProvider, _, err := effectiveRuntime(ctx, name, entry, deps)
-		if err != nil {
-			slog.Warn("eager public host service registration skipped", "provider", name, "error", err)
 			continue
 		}
 		hostServices, err := buildProviderHostServices(name, appProviderHostServiceDeps(entry, deps))
@@ -274,7 +236,7 @@ func registerConfiguredAppPublicHostServices(ctx context.Context, cfg *config.Co
 		if len(hostServices) == 0 {
 			continue
 		}
-		cleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimeProvider)
+		cleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps)
 		if err != nil {
 			slog.Warn("eager public host service registration failed", "provider", name, "error", err)
 			continue
