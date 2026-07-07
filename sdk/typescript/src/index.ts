@@ -296,7 +296,6 @@ export {
   TransactionError,
   IndexedDBCursorSnapshot,
   ColumnType,
-  type AcquireLockResult,
   compareKeys,
   compareIndexedDBValues,
   keyInRange,

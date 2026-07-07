@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import {
   AlreadyExistsError,
-  type AcquireLockResult,
   type IndexedDB,
   MigrationError,
   NotFoundError,
@@ -21,10 +20,7 @@ class FakeIndexedDB {
   readonly stores = new Map<string, FakeStoreState>();
   readonly indexes = new Set<string>();
   readonly calls: string[] = [];
-  lock: { holder: string; expiresAt: number } | null = null;
   createObjectStoreError: Error | null = null;
-  acquireLockError: Error | null = null;
-  putHook: (() => Promise<void> | void) | null = null;
 
   async createObjectStore(
     name: string,
@@ -100,9 +96,6 @@ class FakeIndexedDB {
       },
       async put(record: DBRecord): Promise<void> {
         const s = state();
-        if (db.putHook) {
-          await db.putHook();
-        }
         s.rows.set(String(record[s.pk]), record);
       },
       async delete(id: string): Promise<void> {
@@ -131,9 +124,6 @@ class FakeIndexedDB {
             return true;
           },
           update: async (record: DBRecord): Promise<void> => {
-            if (db.putHook) {
-              await db.putHook();
-            }
             s.rows.set(String(record[s.pk]), record);
           },
           close: (): void => {},
@@ -141,40 +131,6 @@ class FakeIndexedDB {
         return cursor;
       },
     };
-  }
-
-  async acquireLock(
-    _key: string,
-    holder: string,
-    ttlMs: number,
-  ): Promise<AcquireLockResult> {
-    this.calls.push(`acquireLock:${holder}`);
-    if (this.acquireLockError) {
-      throw this.acquireLockError;
-    }
-    const now = Date.now();
-    if (this.lock && this.lock.holder !== holder && this.lock.expiresAt > now) {
-      return {
-        acquired: false,
-        holder: this.lock.holder,
-        expiresAt: new Date(this.lock.expiresAt),
-        fencingToken: 0n,
-      };
-    }
-    this.lock = { holder, expiresAt: now + ttlMs };
-    return {
-      acquired: true,
-      holder,
-      expiresAt: new Date(this.lock.expiresAt),
-      fencingToken: 1n,
-    };
-  }
-
-  async releaseLock(_key: string, holder: string): Promise<void> {
-    this.calls.push(`releaseLock:${holder}`);
-    if (this.lock?.holder === holder) {
-      this.lock = null;
-    }
   }
 
   close(): void {}
@@ -211,9 +167,6 @@ describe("runMigrations", () => {
 
     expect(fake.stores.has("issues")).toBe(true);
     expect(await ledgerIds(fake)).toEqual(["0001_issues"]);
-    expect(fake.calls.some((c) => c.startsWith("acquireLock:"))).toBe(true);
-    expect(fake.calls.some((c) => c.startsWith("releaseLock:"))).toBe(true);
-    expect(fake.lock).toBeNull();
   });
 
   test("returns the applied ids and declared head", async () => {
@@ -323,7 +276,6 @@ describe("runMigrations", () => {
     ).rejects.toThrow(MigrationError);
 
     expect(await ledgerIds(fake)).toEqual(["0001_issues"]);
-    expect(fake.lock).toBeNull();
   });
 
   test("failure after an earlier revision reports the applied one as current", async () => {
@@ -348,97 +300,42 @@ describe("runMigrations", () => {
     expect((error as MigrationError).attempted).toBe("0002_boom");
   });
 
-  test("lease lost during a revision aborts before recording it", async () => {
+  test("concurrent runners converge without a lock", async () => {
     const { db, fake } = fakeDb();
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const seed: Revision = {
       id: "0001_seed",
-      schema: {
-        stores: [
-          { name: "src", columns: [{ name: "id", primaryKey: true }] },
-          { name: "dst", columns: [{ name: "id", primaryKey: true }] },
-        ],
-      },
+      schema: { stores: [{ name: "issues", columns: [{ name: "id", primaryKey: true }] }] },
     };
-
     await runMigrations(db, { revisions: [seed] });
-    await db.objectStore("src").put({ id: "a" });
+    await db.objectStore("issues").put({ id: "a" });
+    await db.objectStore("issues").put({ id: "b", status: "closed" });
 
-    fake.putHook = async () => {
-      fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
-      await sleep(1_400);
-    };
     const backfill: Revision = {
-      id: "0002_backfill",
+      id: "0002_index",
       backfill: {
-        from: "src",
-        into: "dst",
-        value: (row) => ({ ...row }),
+        from: "issues",
+        into: "issue_index",
+        value: (row) => ({ id: row.id, text: `issue-${String(row.id)}` }),
       },
     };
+    const full: Revision[] = [
+      seed,
+      { id: "0001_5_index", schema: { stores: [{ name: "issue_index", columns: [{ name: "id", primaryKey: true }] }] } },
+      backfill,
+    ];
 
-    await expect(
-      runMigrations(db, { revisions: [seed, backfill], lockTtlMs: 2_000 }),
-    ).rejects.toThrow(/lost the migration lease/);
-    expect(await ledgerIds(fake)).toEqual(["0001_seed"]);
-  });
+    await Promise.all([
+      runMigrations(db, { revisions: full }),
+      runMigrations(db, { revisions: full }),
+    ]);
 
-  test("a backfill write is refused once the lease is lost mid-revision", async () => {
-    const { db, fake } = fakeDb();
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    const seed: Revision = {
-      id: "0001_seed",
-      schema: {
-        stores: [
-          { name: "src", columns: [{ name: "id", primaryKey: true }] },
-          { name: "dst", columns: [{ name: "id", primaryKey: true }] },
-        ],
-      },
-    };
-
-    await runMigrations(db, { revisions: [seed] });
-    await db.objectStore("src").put({ id: "a" });
-    await db.objectStore("src").put({ id: "b" });
-
-    let puts = 0;
-    fake.putHook = async () => {
-      puts += 1;
-      if (puts === 1) {
-        fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
-        await sleep(1_400);
-      }
-    };
-    const backfill: Revision = {
-      id: "0002_backfill",
-      backfill: {
-        from: "src",
-        into: "dst",
-        value: (row) => ({ ...row }),
-      },
-    };
-
-    await expect(
-      runMigrations(db, { revisions: [seed, backfill], lockTtlMs: 2_000 }),
-    ).rejects.toThrow(/lost the migration lease/);
-    expect(await ledgerIds(fake)).toEqual(["0001_seed"]);
-    expect(fake.stores.get("dst")?.rows.has("b")).toBe(false);
-  });
-
-  test("runs lockless when acquireLock is Unimplemented", async () => {
-    const { db, fake } = fakeDb();
-    fake.acquireLockError = Object.assign(new Error("advisory locks not supported"), {
-      code: 12,
-    });
-
-    await runMigrations(db, { revisions: [issuesRevision] });
-
-    expect(fake.stores.has("issues")).toBe(true);
-    expect(await ledgerIds(fake)).toEqual(["0001_issues"]);
-    expect(fake.calls.some((c) => c.startsWith("releaseLock:"))).toBe(false);
+    expect(await ledgerIds(fake)).toEqual(["0001_seed", "0001_5_index", "0002_index"]);
+    expect((await db.objectStore("issue_index").get("a")).text).toBe("issue-a");
+    expect((await db.objectStore("issue_index").get("b")).text).toBe("issue-b");
   });
 
   test("fails closed when the ledger is ahead of the code", async () => {
-    const { db, fake } = fakeDb();
+    const { db } = fakeDb();
     await runMigrations(db, { revisions: [issuesRevision] });
 
     await db.objectStore("_gestalt_migrations").put({
@@ -449,7 +346,6 @@ describe("runMigrations", () => {
     await expect(
       runMigrations(db, { revisions: [issuesRevision] }),
     ).rejects.toThrow(/ledger is ahead/);
-    expect(fake.lock).toBeNull();
   });
 
   test("fails closed when a revision is inserted before an applied one", async () => {
@@ -469,31 +365,6 @@ describe("runMigrations", () => {
     await expect(
       runMigrations(db, { revisions: [first, inserted, later] }),
     ).rejects.toThrow(/ledger has gaps/);
-  });
-
-  test("waits for a contended lease then acquires it", async () => {
-    const { db, fake } = fakeDb();
-    fake.lock = { holder: "other", expiresAt: Date.now() + 40 };
-
-    await runMigrations(db, {
-      revisions: [issuesRevision],
-      lockTtlMs: 1_000,
-      acquireTimeoutMs: 5_000,
-    });
-
-    expect(await ledgerIds(fake)).toEqual(["0001_issues"]);
-  });
-
-  test("times out if the lease is never free", async () => {
-    const { db, fake } = fakeDb();
-    fake.lock = { holder: "other", expiresAt: Date.now() + 60_000 };
-
-    await expect(
-      runMigrations(db, {
-        revisions: [issuesRevision],
-        acquireTimeoutMs: 50,
-      }),
-    ).rejects.toThrow(/waiting for the migration lease/);
   });
 
   test("rejects duplicate revision ids", async () => {

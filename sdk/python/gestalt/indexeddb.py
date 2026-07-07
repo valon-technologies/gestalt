@@ -68,25 +68,6 @@ class TransactionModeValues:
 
 
 @dataclass(frozen=True, slots=True)
-class AcquireLockRequest:
-    """AcquireLockRequest requests a keyed, TTL'd advisory lease."""
-
-    key: str = ""
-    holder: str = ""
-    ttl_ms: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class AcquireLockResponse:
-    """AcquireLockResponse reports whether the lease was acquired and its current owner."""
-
-    acquired: bool = False
-    holder: str = ""
-    expires_at: datetime.datetime | None = None
-    fencing_token: int = 0
-
-
-@dataclass(frozen=True, slots=True)
 class BeginTransactionRequest:
     """BeginTransactionRequest starts an IndexedDB transaction stream."""
 
@@ -430,14 +411,6 @@ class RecordsResponse:
     """RecordsResponse wraps repeated row payloads."""
 
     records: list[Record] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class ReleaseLockRequest:
-    """ReleaseLockRequest releases a lease previously acquired by holder."""
-
-    key: str = ""
-    holder: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1406,59 +1379,6 @@ class IndexedDB:
             )
         )
         return _codec.from_wire_delete_response(response)
-
-    @overload
-    def acquire_lock(self, request: AcquireLockRequest) -> AcquireLockResponse: ...
-
-    @overload
-    def acquire_lock(
-        self, *, key: str = ..., holder: str = ..., ttl_ms: int = ...
-    ) -> AcquireLockResponse: ...
-
-    def acquire_lock(
-        self,
-        request: AcquireLockRequest | None = None,
-        *,
-        key: str | None = None,
-        holder: str | None = None,
-        ttl_ms: int | None = None,
-    ) -> AcquireLockResponse:
-        """Advisory locks"""
-        if request is None:
-            request = AcquireLockRequest(
-                key=key or "", holder=holder or "", ttl_ms=ttl_ms or 0
-            )
-        elif key is not None or holder is not None or ttl_ms is not None:
-            raise ValueError("pass either request or keyword arguments, not both")
-        response = _support.call_unary(
-            lambda: self._stub.AcquireLock(
-                _codec.to_wire_acquire_lock_request(request), timeout=self._timeout
-            )
-        )
-        return _codec.from_wire_acquire_lock_response(response)
-
-    @overload
-    def release_lock(self, request: ReleaseLockRequest) -> None: ...
-
-    @overload
-    def release_lock(self, *, key: str = ..., holder: str = ...) -> None: ...
-
-    def release_lock(
-        self,
-        request: ReleaseLockRequest | None = None,
-        *,
-        key: str | None = None,
-        holder: str | None = None,
-    ) -> None:
-        if request is None:
-            request = ReleaseLockRequest(key=key or "", holder=holder or "")
-        elif key is not None or holder is not None:
-            raise ValueError("pass either request or keyword arguments, not both")
-        _support.call_unary(
-            lambda: self._stub.ReleaseLock(
-                _codec.to_wire_release_lock_request(request), timeout=self._timeout
-            )
-        )
 
     def open_cursor(
         self, requests: Iterable[CursorClientMessage]
