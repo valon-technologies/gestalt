@@ -19,7 +19,7 @@ type AppProvider struct {
 }
 
 var (
-	_ core.Provider            = (*AppProvider)(nil)
+	_ core.Provider              = (*AppProvider)(nil)
 	_ core.GraphQLSurfaceInvoker = (*AppProvider)(nil)
 )
 
@@ -100,8 +100,8 @@ func (p *AppProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLReq
 	}
 	cred := invocation.CredentialContextFromContext(ctx)
 	req := &proto.AppInvokeGraphQLRequest{
-		App:      p.spec.Name,
-		Document: strings.TrimSpace(request.Document),
+		App:       p.spec.Name,
+		Document:  strings.TrimSpace(request.Document),
 		Variables: variables,
 		Connection: firstNonEmpty(
 			invocation.ConnectionFromContext(ctx),
