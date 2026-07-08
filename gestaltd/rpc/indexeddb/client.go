@@ -143,7 +143,7 @@ type objectStore struct {
 
 // Get loads one record by primary key.
 func (o *objectStore) Get(ctx context.Context, id string) (idb.Record, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	if err != nil {
@@ -158,7 +158,7 @@ func (o *objectStore) Get(ctx context.Context, id string) (idb.Record, error) {
 
 // GetKey resolves the primary key for the supplied lookup id.
 func (o *objectStore) GetKey(ctx context.Context, id string) (string, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	if err != nil {
@@ -169,7 +169,7 @@ func (o *objectStore) GetKey(ctx context.Context, id string) (string, error) {
 
 // Add inserts a new record and fails if its primary key already exists.
 func (o *objectStore) Add(ctx context.Context, record idb.Record) error {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	pbRecord, err := idb.RecordToProto(record)
 	if err != nil {
@@ -181,7 +181,7 @@ func (o *objectStore) Add(ctx context.Context, record idb.Record) error {
 
 // Put upserts a record by primary key.
 func (o *objectStore) Put(ctx context.Context, record idb.Record) error {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	pbRecord, err := idb.RecordToProto(record)
 	if err != nil {
@@ -193,7 +193,7 @@ func (o *objectStore) Put(ctx context.Context, record idb.Record) error {
 
 // Delete removes one record by primary key.
 func (o *objectStore) Delete(ctx context.Context, id string) error {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	return grpcErr(err)
@@ -201,7 +201,7 @@ func (o *objectStore) Delete(ctx context.Context, id string) error {
 
 // Clear removes every record from the object store.
 func (o *objectStore) Clear(ctx context.Context) error {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{Store: o.store})
 	return grpcErr(err)
@@ -209,7 +209,7 @@ func (o *objectStore) Clear(ctx context.Context) error {
 
 // GetAll loads all records that match query.
 func (o *objectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	resp, err := o.client.GetAll(ctx, objectStoreRangeRequest(o.store, query, count...))
 	if err != nil {
@@ -224,7 +224,7 @@ func (o *objectStore) GetAll(ctx context.Context, query any, count ...uint32) ([
 
 // GetAllKeys loads the primary keys for all records that match query.
 func (o *objectStore) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	resp, err := o.client.GetAllKeys(ctx, objectStoreRangeRequest(o.store, query, count...))
 	if err != nil {
@@ -235,7 +235,7 @@ func (o *objectStore) GetAllKeys(ctx context.Context, query any, count ...uint32
 
 // Count returns the number of records that match query.
 func (o *objectStore) Count(ctx context.Context, query any) (int64, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Query: toWireQuery(query)})
 	if err != nil {
@@ -246,7 +246,7 @@ func (o *objectStore) Count(ctx context.Context, query any) (int64, error) {
 
 // DeleteRange removes all records that match query and reports how many were deleted.
 func (o *objectStore) DeleteRange(ctx context.Context, query any) (int64, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, o.opts)
 	defer cancel()
 	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Query: toWireQuery(query)})
 	if err != nil {
@@ -280,7 +280,7 @@ type indexClient struct {
 
 // Get loads the first record that matches query.
 func (idx *indexClient) Get(ctx context.Context, query any) (idb.Record, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, idx.opts)
 	defer cancel()
 	resp, err := idx.client.IndexGet(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {
@@ -295,7 +295,7 @@ func (idx *indexClient) Get(ctx context.Context, query any) (idb.Record, error) 
 
 // GetKey resolves the primary key for the first row that matches query.
 func (idx *indexClient) GetKey(ctx context.Context, query any) (string, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, idx.opts)
 	defer cancel()
 	resp, err := idx.client.IndexGetKey(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {
@@ -306,7 +306,7 @@ func (idx *indexClient) GetKey(ctx context.Context, query any) (string, error) {
 
 // GetAll loads every record that matches query.
 func (idx *indexClient) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, idx.opts)
 	defer cancel()
 	resp, err := idx.client.IndexGetAll(ctx, indexQueryRequest(idx.store, idx.index, query, count...))
 	if err != nil {
@@ -321,7 +321,7 @@ func (idx *indexClient) GetAll(ctx context.Context, query any, count ...uint32) 
 
 // GetAllKeys loads every primary key that matches query.
 func (idx *indexClient) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, idx.opts)
 	defer cancel()
 	resp, err := idx.client.IndexGetAllKeys(ctx, indexQueryRequest(idx.store, idx.index, query, count...))
 	if err != nil {
@@ -332,7 +332,7 @@ func (idx *indexClient) GetAllKeys(ctx context.Context, query any, count ...uint
 
 // Count returns the number of rows that match query.
 func (idx *indexClient) Count(ctx context.Context, query any) (int64, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, idx.opts)
 	defer cancel()
 	resp, err := idx.client.IndexCount(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {
@@ -343,7 +343,7 @@ func (idx *indexClient) Count(ctx context.Context, query any) (int64, error) {
 
 // Delete removes all rows that match query.
 func (idx *indexClient) Delete(ctx context.Context, query any) (int64, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
+	ctx, cancel := callCtxWithOpts(ctx, idx.opts)
 	defer cancel()
 	resp, err := idx.client.IndexDelete(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {

@@ -1284,6 +1284,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	appHostServiceCleanup := registerConfiguredAppPublicHostServices(cfg, prepared.Deps)
+	remotePublished, err := publishRemoteProviders(ctx, cfg, &prepared.Deps)
+	if err != nil {
+		failPendingStartupProviders(prepared.Deps, err)
+		return nil, err
+	}
+	prepared.ExtraIndexedDBs = append(prepared.ExtraIndexedDBs, remotePublished.extraIndexedDBs...)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
