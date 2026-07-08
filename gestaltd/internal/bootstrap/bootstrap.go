@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -185,6 +186,7 @@ type Deps struct {
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
 	Placement             *PlacementPlan
+	RemoteClients         *remote.ClientSet
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -883,6 +885,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 		Placement:            NewPlacementPlan(cfg),
 	}
+	remoteClients, err := dialRemoteClients(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: remote client: %w", err)
+	}
+	deps.RemoteClients = remoteClients
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
@@ -1115,6 +1122,13 @@ func hostServiceTLSCAFromEnv() (caFile string, caPEM string, err error) {
 	return "", strings.TrimSpace(string(data)), nil
 }
 
+func closeRemoteClients(clients *remote.ClientSet) error {
+	if clients == nil {
+		return nil
+	}
+	return clients.Close()
+}
+
 func (p *preparedCore) Close(ctx context.Context) error {
 	if p == nil {
 		return nil
@@ -1132,6 +1146,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		authorizationCloseErr,
 		externalCredentialsCloseErr,
 		p.Services.Close(),
+		closeRemoteClients(p.Deps.RemoteClients),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeCaches(p.ExtraCaches...),
 		closeS3s(p.ExtraS3s...),

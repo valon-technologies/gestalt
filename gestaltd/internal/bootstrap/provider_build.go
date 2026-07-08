@@ -91,6 +91,9 @@ func prepareProviderBuilds(
 		connAuth:       connAuth,
 		manualConnAuth: manualConnAuth,
 	}
+	if err := registerRemoteApps(builds.providers, cfg, deps.Placement, deps.RemoteClients); err != nil {
+		return nil, err
+	}
 	if len(cfg.Apps) == 0 {
 		return builds, nil
 	}
