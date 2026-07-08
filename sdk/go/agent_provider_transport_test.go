@@ -35,18 +35,6 @@ func (p *fullAgentProvider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func testAgentAuditSubjectID(subject *gestalt.Subject, reqCtx *proto.RequestContext) string {
-	if reqCtx != nil && reqCtx.GetSubject() != nil {
-		if id := strings.TrimSpace(reqCtx.GetSubject().GetId()); id != "" {
-			return id
-		}
-	}
-	if subject != nil {
-		return strings.TrimSpace(subject.ID)
-	}
-	return ""
-}
-
 func (p *fullAgentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
 	p.receivedSessionRequest = req
 	return &gestalt.AgentSession{
@@ -56,7 +44,7 @@ func (p *fullAgentProvider) CreateSession(_ context.Context, req *gestalt.Create
 		ClientRef:          req.ClientRef,
 		State:              gestalt.AgentSessionStateActive,
 		Metadata:           req.Metadata,
-		CreatedBySubjectID: testAgentAuditSubjectID(req.Subject, req.Context),
+		CreatedBySubjectID: strings.TrimSpace(req.Context.GetSubject().GetId()),
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}, nil
@@ -123,7 +111,7 @@ func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAge
 		Messages:           req.Messages,
 		Output:             output,
 		StatusMessage:      "waiting for input",
-		CreatedBySubjectID: testAgentAuditSubjectID(req.Subject, req.Context),
+		CreatedBySubjectID: strings.TrimSpace(req.Context.GetSubject().GetId()),
 		CreatedAt:          time.Now(),
 		StartedAt:          timePtr(time.Now()),
 		ExecutionRef:       req.ExecutionRef,
@@ -301,13 +289,13 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	session, err := agentClient.CreateSession(rpcCtx, &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:     "session-req-1",
-		Model:              "gpt-5.1",
-		ClientRef:          "client-session-1",
-		Metadata:           mustStruct(t, map[string]any{"source": "go-test"}),
+		IdempotencyKey: "session-req-1",
+		Model:          "gpt-5.1",
+		ClientRef:      "client-session-1",
+		Metadata:       mustStruct(t, map[string]any{"source": "go-test"}),
 		Subject: &proto.SubjectContext{
-			Id:                  "borrower:borrower-1",
-						Email:               "borrower@example.com",
+			Id:    "borrower:borrower-1",
+			Email: "borrower@example.com",
 		},
 		Context: &proto.RequestContext{
 			Subject: &proto.SubjectContext{Id: "user:session"},
@@ -433,9 +421,9 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 				Structured: &proto.AgentStructuredOutput{Schema: mustStruct(t, map[string]any{"type": "object"})},
 			},
 		},
-		Metadata:           mustStruct(t, map[string]any{"requireInteraction": true}),
-		ExecutionRef:       "exec-turn-1",
-		Subject:            &proto.SubjectContext{Id: "borrower:borrower-1"},
+		Metadata:     mustStruct(t, map[string]any{"requireInteraction": true}),
+		ExecutionRef: "exec-turn-1",
+		Subject:      &proto.SubjectContext{Id: "borrower:borrower-1"},
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,
 		}),

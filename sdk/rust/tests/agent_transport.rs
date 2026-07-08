@@ -106,7 +106,10 @@ impl AgentProvider for TestAgentProvider {
             client_ref: request.client_ref,
             state: AgentSessionState::Active,
             metadata: request.metadata,
-            created_by_subject_id: audit_subject_id(request.subject.as_ref(), request.context.as_ref()),
+            created_by_subject_id: {
+                let id = request_context_subject_id(gestalt::current_request_context().as_ref());
+                if id.trim().is_empty() { None } else { Some(id) }
+            },
             created_at: Some(SystemTime::now()),
             updated_at: Some(SystemTime::now()),
             ..Default::default()
@@ -193,7 +196,10 @@ impl AgentProvider for TestAgentProvider {
                 text: "echo:Plan it".to_string(),
             })),
             status_message: "waiting for input".to_string(),
-            created_by_subject_id: audit_subject_id(request.subject.as_ref(), request.context.as_ref()),
+            created_by_subject_id: {
+                let id = request_context_subject_id(request.context.as_ref());
+                if id.trim().is_empty() { None } else { Some(id) }
+            },
             created_at: Some(SystemTime::now()),
             started_at: Some(SystemTime::now()),
             execution_ref: request.execution_ref,
@@ -688,20 +694,6 @@ fn configured_name(provider: &TestAgentProvider) -> String {
         .lock()
         .expect("configured_name lock")
         .clone()
-}
-
-fn audit_subject_id(
-    subject: Option<&gestalt::Subject>,
-    context: Option<&sdk_pb::RequestContext>,
-) -> Option<String> {
-    if let Some(id) = request_context_subject_id(context).trim()
-        && !id.is_empty()
-    {
-        return Some(id.to_string());
-    }
-    subject
-        .map(|subject| subject.id.clone())
-        .filter(|id| !id.trim().is_empty())
 }
 
 fn request_context_subject_id(context: Option<&sdk_pb::RequestContext>) -> String {

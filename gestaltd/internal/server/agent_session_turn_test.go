@@ -247,7 +247,7 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           mapFromStruct(req.GetMetadata()),
-		CreatedBySubjectID: agentmanager.AuditSubjectID(req.GetContext()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -336,7 +336,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 		Model:              req.GetModel(),
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           messagesFromProto(req.GetMessages()),
-		CreatedBySubjectID: agentmanager.AuditSubjectID(req.GetContext()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,

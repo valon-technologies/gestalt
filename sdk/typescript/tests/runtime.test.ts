@@ -1673,7 +1673,11 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       metadata: {
         source: "runtime-test",
       },
-      createdBySubjectId: "user:user-123",
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, {
+          id: "user:user-123",
+        }),
+      }),
     }),
   );
   expect(session.id).toBe("session-1");
@@ -1837,7 +1841,11 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
           },
         },
       ],
-      createdBySubjectId: "user:user-123",
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, {
+          id: "user:user-123",
+        }),
+      }),
       output: { kind: { case: "text", value: {} } },
       executionRef: "exec-turn-2",
     }),

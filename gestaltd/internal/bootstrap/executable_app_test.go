@@ -41,8 +41,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -1657,7 +1657,7 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           stubAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBySubjectID: agentmanager.AuditSubjectID(req.GetContext()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -1721,7 +1721,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           stubAgentMessagesFromProto(req.GetMessages()),
 		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBySubjectID: agentmanager.AuditSubjectID(req.GetContext()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,

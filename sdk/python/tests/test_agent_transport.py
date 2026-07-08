@@ -87,10 +87,6 @@ def _native_context_subject_id(context: Any) -> str:
     return context.subject.id
 
 
-def _audit_subject_id(context: Any) -> str:
-    return _native_context_subject_id(context)
-
-
 class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def __init__(self) -> None:
         self.configured: list[tuple[str, dict[str, object]]] = []
@@ -131,7 +127,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             client_ref=request.client_ref,
             state=AGENT_SESSION_STATE_ACTIVE,
             metadata=request.metadata,
-            created_by_subject_id=_audit_subject_id(request.context),
+            created_by_subject_id=_native_context_subject_id(request.context),
         )
 
     def get_session(self, request: Any) -> Any:
@@ -182,7 +178,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
                 text="echo:Plan it",
             ),
             status_message="waiting for input",
-            created_by_subject_id=_audit_subject_id(request.context),
+            created_by_subject_id=_native_context_subject_id(request.context),
             execution_ref=request.execution_ref,
         )
 

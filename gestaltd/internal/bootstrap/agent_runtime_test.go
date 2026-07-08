@@ -185,7 +185,11 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	}
 	key := ""
 	if idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey()); idempotencyKey != "" {
-		key = agentmanager.IdempotencySubjectID(req.GetContext(), req.GetSubject()) + "\x1f" + idempotencyKey
+		subjectID := strings.TrimSpace(req.GetSubject().GetId())
+		if subjectID == "" {
+			subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
+		}
+		key = subjectID + "\x1f" + idempotencyKey
 		if existing := p.sessionsByKey[key]; existing != nil {
 			cloned := *existing
 			return &cloned, nil
@@ -196,7 +200,7 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 		ProviderName:       "simple",
 		Model:              req.GetModel(),
 		State:              coreagent.SessionStateActive,
-		CreatedBySubjectID: agentmanager.AuditSubjectID(req.GetContext()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
 	}
 	if p.sessions == nil {
 		p.sessions = map[string]*coreagent.Session{}
@@ -285,7 +289,7 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	t.Cleanup(func() { _ = pool.Close() })
 
 	session, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		Model:              "gpt-test",
+		Model:   "gpt-test",
 		Context: &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-1"}},
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
@@ -409,9 +413,9 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 		}},
 	})
 	first, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:     "workspace-create-1",
-		Context: &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-1"}},
-		Workspace:          workspace,
+		IdempotencyKey: "workspace-create-1",
+		Context:        &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-1"}},
+		Workspace:      workspace,
 	})
 	if err != nil {
 		t.Fatalf("CreateSession first: %v", err)
@@ -422,9 +426,9 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 		return
 	}
 	second, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:     "workspace-create-1",
-		Context: &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-1"}},
-		Workspace:          workspace,
+		IdempotencyKey: "workspace-create-1",
+		Context:        &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-1"}},
+		Workspace:      workspace,
 	})
 	if err != nil {
 		t.Fatalf("CreateSession replay: %v", err)
@@ -1798,7 +1802,11 @@ func TestHostedAgentProviderPoolConcurrentKeyedCreatesConvergeOnOneBackend(t *te
 					state.mu.Lock()
 					defer state.mu.Unlock()
 					state.calls++
-					key := agentmanager.IdempotencySubjectID(req.GetContext(), req.GetSubject()) + "\x1f" + strings.TrimSpace(req.GetIdempotencyKey())
+					subjectID := strings.TrimSpace(req.GetSubject().GetId())
+					if subjectID == "" {
+						subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
+					}
+					key := subjectID + "\x1f" + strings.TrimSpace(req.GetIdempotencyKey())
 					if existing, ok := state.sessions[key]; ok {
 						return existing, nil
 					}
@@ -1834,8 +1842,8 @@ func TestHostedAgentProviderPoolConcurrentKeyedCreatesConvergeOnOneBackend(t *te
 		go func(i int) {
 			defer wg.Done()
 			session, err := pool.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-				IdempotencyKey:     "race-key",
-				Context: &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-1"}},
+				IdempotencyKey: "race-key",
+				Context:        &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-1"}},
 			})
 			if err != nil {
 				errs[i] = err
@@ -2098,10 +2106,10 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 	sessionID := session.ID
 
 	replayed, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:     "session-req-1",
-		Model:              "gpt-test",
-		ClientRef:          "cli-session-1",
-		Context: &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-123"}},
+		IdempotencyKey: "session-req-1",
+		Model:          "gpt-test",
+		ClientRef:      "cli-session-1",
+		Context:        &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-123"}},
 	})
 	if err != nil {
 		t.Fatalf("CreateSession(replay): %v", err)
@@ -2230,12 +2238,12 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 	}
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TurnId:             "turn-2",
-		SessionId:          sessionID,
-		Model:              "gpt-test",
-		Context: &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-123"}},
-		Output:             agentRuntimeTextOutput(),
-		TimeoutSeconds:     1,
+		TurnId:         "turn-2",
+		SessionId:      sessionID,
+		Model:          "gpt-test",
+		Context:        &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:user-123"}},
+		Output:         agentRuntimeTextOutput(),
+		TimeoutSeconds: 1,
 		Metadata: mustTestProtoStruct(t, map[string]any{
 			"requireInteraction": true,
 		}),

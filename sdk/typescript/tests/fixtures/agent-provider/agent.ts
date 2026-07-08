@@ -36,12 +36,13 @@ export const provider = defineAgentProvider({
     canceledTurns = 0;
   },
   async createSession(request) {
+    const createdBySubjectId = request.context?.subject?.id?.trim() || undefined;
     return createCanonicalSession({
       idempotencyKey: request.idempotencyKey,
       model: request.model,
       clientRef: request.clientRef,
       metadata: request.metadata,
-      createdBySubjectId: request.createdBySubjectId,
+      createdBySubjectId,
     });
   },
   async getSession(request) {
@@ -178,6 +179,7 @@ async function createCanonicalTurn(
     ? `echo:${request.messages.at(-1)!.text}`
     : "";
   const output = turnOutputForRequest(request, outputText);
+  const createdBySubjectId = request.context?.subject?.id?.trim() || undefined;
   const turn: AgentTurn = {
     id: request.turnId || `turn-${turns.size + 1}`,
     sessionId: request.sessionId,
@@ -187,7 +189,7 @@ async function createCanonicalTurn(
     messages: request.messages,
     output,
     statusMessage: waitingForInput ? "waiting for input" : "completed",
-    ...(request.createdBySubjectId !== undefined ? { createdBySubjectId: request.createdBySubjectId } : {}),
+    ...(createdBySubjectId !== undefined ? { createdBySubjectId } : {}),
     createdAt: timestampNow(),
     startedAt: timestampNow(),
     ...(waitingForInput ? {} : { completedAt: timestampNow() }),

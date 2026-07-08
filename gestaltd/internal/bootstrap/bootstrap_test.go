@@ -247,15 +247,6 @@ func bootstrapAgentMapToProtoStruct(src map[string]any) *structpb.Struct {
 	return out
 }
 
-func bootstrapAgentSubjectFromProto(src *proto.SubjectContext) core.RunAsSubject {
-	if src == nil {
-		return core.RunAsSubject{}
-	}
-	return core.RunAsSubject{
-		SubjectID: src.GetId(),
-	}
-}
-
 func bootstrapAgentMessagesFromProto(src []*proto.AgentMessage) []coreagent.Message {
 	out := make([]coreagent.Message, 0, len(src))
 	for _, message := range src {
@@ -319,7 +310,11 @@ func agentProviderSessionIdempotencyScope(req *proto.CreateAgentProviderSessionR
 	if idempotencyKey == "" {
 		return ""
 	}
-	return strings.Join([]string{"session", agentmanager.IdempotencySubjectID(req.GetContext(), req.GetSubject()), idempotencyKey}, "\x00")
+	subjectID := strings.TrimSpace(req.GetSubject().GetId())
+	if subjectID == "" {
+		subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
+	}
+	return strings.Join([]string{"session", subjectID, idempotencyKey}, "\x00")
 }
 
 func agentProviderTurnIdempotencyScope(req *proto.CreateAgentProviderTurnRequest) string {
@@ -327,7 +322,11 @@ func agentProviderTurnIdempotencyScope(req *proto.CreateAgentProviderTurnRequest
 	if idempotencyKey == "" {
 		return ""
 	}
-	return strings.Join([]string{"turn", agentmanager.IdempotencySubjectID(req.GetContext(), req.GetSubject()), strings.TrimSpace(req.GetSessionId()), idempotencyKey}, "\x00")
+	subjectID := strings.TrimSpace(req.GetSubject().GetId())
+	if subjectID == "" {
+		subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
+	}
+	return strings.Join([]string{"turn", subjectID, strings.TrimSpace(req.GetSessionId()), idempotencyKey}, "\x00")
 }
 
 func turnStatusIsTerminalForTest(status coreagent.ExecutionStatus) bool {
@@ -343,7 +342,7 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
-	callerSubjectID := agentmanager.AuditSubjectID(req.GetContext())
+	callerSubjectID := strings.TrimSpace(req.GetContext().GetSubject().GetId())
 	idempotencyScope := agentProviderSessionIdempotencyScope(req)
 	if sessionID, ok := p.sessionIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		session, ok := p.sessions[sessionID]
@@ -420,7 +419,7 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req *proto.Create
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
-	callerSubjectID := agentmanager.AuditSubjectID(req.GetContext())
+	callerSubjectID := strings.TrimSpace(req.GetContext().GetSubject().GetId())
 	idempotencyScope := agentProviderTurnIdempotencyScope(req)
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]
@@ -648,7 +647,7 @@ func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callba
 func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	p.ensureStateLocked()
-	callerSubjectID := agentmanager.AuditSubjectID(req.GetContext())
+	callerSubjectID := strings.TrimSpace(req.GetContext().GetSubject().GetId())
 	idempotencyScope := agentProviderTurnIdempotencyScope(req)
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]
