@@ -14,18 +14,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 )
 
@@ -623,5 +630,273 @@ func TestMCPAllowedOperationsForSpecCompositeOmitsMCPWhenNoMCPAllowlistEntries(t
 	}
 	if filtered != nil {
 		t.Fatalf("filtered allowedOperations = %#v, want nil", filtered)
+	}
+}
+
+type recordingRemoteAppClient struct {
+	mu    sync.Mutex
+	calls []remoteAppInvokeCall
+	err   error
+}
+
+type remoteAppInvokeCall struct {
+	app       string
+	operation string
+}
+
+func (c *recordingRemoteAppClient) Invoke(_ context.Context, req *proto.AppInvokeRequest, _ ...grpc.CallOption) (*proto.OperationResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err != nil {
+		return nil, c.err
+	}
+	c.calls = append(c.calls, remoteAppInvokeCall{
+		app:       req.GetApp(),
+		operation: req.GetOperation(),
+	})
+	return &proto.OperationResult{Status: 202, Body: []byte("relayed")}, nil
+}
+
+func (c *recordingRemoteAppClient) InvokeGraphQL(context.Context, *proto.AppInvokeGraphQLRequest, ...grpc.CallOption) (*proto.OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAppClient) snapshot() []remoteAppInvokeCall {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]remoteAppInvokeCall, len(c.calls))
+	copy(out, c.calls)
+	return out
+}
+
+func remoteRoutingAppEntry(t *testing.T, name string, operations ...string) *config.ProviderEntry {
+	t.Helper()
+	catalogOps := make([]catalog.CatalogOperation, len(operations))
+	for i, op := range operations {
+		catalogOps[i] = catalog.CatalogOperation{ID: op}
+	}
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name:       name,
+		Operations: catalogOps,
+	})
+	return &config.ProviderEntry{
+		ResolvedManifest:     newExecutableManifest(name, name),
+		ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+	}
+}
+
+func remoteRoutingConfig(t *testing.T, localDevActive map[string]bool) *config.Config {
+	t.Helper()
+	apps := map[string]*config.ProviderEntry{
+		"linear":        remoteRoutingAppEntry(t, "linear", "issues.list"),
+		"valon-profile": remoteRoutingAppEntry(t, "valon-profile", "issues.list"),
+		"ci-cd":         remoteRoutingAppEntry(t, "ci-cd", "ping"),
+	}
+	for name, active := range localDevActive {
+		if entry := apps[name]; entry != nil {
+			entry.DevActive = active
+		}
+	}
+	return &config.Config{
+		Server: config.ServerConfig{Remote: "https://remote.test"},
+		Apps:   apps,
+	}
+}
+
+func localRoutingAppStub(name string) *coretesting.StubIntegration {
+	return &coretesting.StubIntegration{
+		N:        name,
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Operations: []catalog.CatalogOperation{{ID: "ping"}},
+		},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: 201, Body: []byte("local")}, nil
+		},
+	}
+}
+
+func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteApp proto.AppClient, localApps ...core.Provider) *invocation.Broker {
+	t.Helper()
+	reg := registry.New()
+	for _, provider := range localApps {
+		if err := reg.Providers.Register(provider.Name(), provider); err != nil {
+			t.Fatalf("Register %q: %v", provider.Name(), err)
+		}
+	}
+	if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClients: &remote.ClientSet{App: remoteApp}}); err != nil {
+		t.Fatalf("registerRemoteApps: %v", err)
+	}
+	svc := testutil.NewStubServices(t)
+	return invocation.NewBroker(&reg.Providers, svc.Users, svc.ExternalCredentials)
+}
+
+func remoteRoutingPrincipal(scopes ...string) *principal.Principal {
+	return &principal.Principal{
+		SubjectID: "user:dev@example.com",
+		Kind:      principal.KindUser,
+		Scopes:    scopes,
+	}
+}
+
+func invokeRemoteRoutingApp(t *testing.T, broker *invocation.Broker, app, operation string) *core.OperationResult {
+	t.Helper()
+	result, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(app), app, "", operation, nil)
+	if err != nil {
+		t.Fatalf("Invoke(%q): %v", app, err)
+	}
+	return result
+}
+
+func TestRemoteAppRoutingLifecycles(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		localApps     map[string]bool
+		localStubs    []core.Provider
+		localChecks   []struct{ app, operation string }
+		remoteChecks  []struct{ app, operation string }
+		wantRemoteApp string
+		wantRemoteN   int
+	}{
+		{
+			name:      "nothing local",
+			localApps: nil,
+			remoteChecks: []struct{ app, operation string }{
+				{"linear", "issues.list"},
+				{"valon-profile", "issues.list"},
+			},
+			wantRemoteN: 2,
+		},
+		{
+			name:       "ci-cd local",
+			localApps:  map[string]bool{"ci-cd": true},
+			localStubs: []core.Provider{localRoutingAppStub("ci-cd")},
+			localChecks: []struct{ app, operation string }{
+				{"ci-cd", "ping"},
+			},
+			remoteChecks: []struct{ app, operation string }{
+				{"linear", "issues.list"},
+				{"valon-profile", "issues.list"},
+			},
+			wantRemoteN: 2,
+		},
+		{
+			name:      "ci-cd and valon-profile local",
+			localApps: map[string]bool{"ci-cd": true, "valon-profile": true},
+			localStubs: []core.Provider{
+				localRoutingAppStub("ci-cd"),
+				localRoutingAppStub("valon-profile"),
+			},
+			localChecks: []struct{ app, operation string }{
+				{"valon-profile", "ping"},
+			},
+			remoteChecks: []struct{ app, operation string }{
+				{"linear", "issues.list"},
+			},
+			wantRemoteApp: "linear",
+			wantRemoteN:   1,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			remoteClient := &recordingRemoteAppClient{}
+			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), remoteClient, tc.localStubs...)
+
+			for _, check := range tc.localChecks {
+				result := invokeRemoteRoutingApp(t, broker, check.app, check.operation)
+				if result.Status != 201 || string(result.Body) != "local" {
+					t.Fatalf("Invoke(%q) = %#v, want local 201", check.app, result)
+				}
+			}
+			for _, check := range tc.remoteChecks {
+				result := invokeRemoteRoutingApp(t, broker, check.app, check.operation)
+				if result.Status != 202 || string(result.Body) != "relayed" {
+					t.Fatalf("Invoke(%q) = %#v, want remote 202 relayed", check.app, result)
+				}
+			}
+
+			calls := remoteClient.snapshot()
+			if len(calls) != tc.wantRemoteN {
+				t.Fatalf("remote client calls = %d, want %d", len(calls), tc.wantRemoteN)
+			}
+			if tc.wantRemoteApp != "" && (len(calls) != 1 || calls[0].app != tc.wantRemoteApp) {
+				t.Fatalf("remote client calls = %#v, want %q only", calls, tc.wantRemoteApp)
+			}
+		})
+	}
+}
+
+func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
+	t.Parallel()
+
+	t.Run("undeclared provider remains not found", func(t *testing.T) {
+		t.Parallel()
+
+		remoteClient := &recordingRemoteAppClient{}
+		broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, nil), remoteClient)
+
+		_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal("missing"), "missing", "", "op", nil)
+		if !errors.Is(err, invocation.ErrProviderNotFound) {
+			t.Fatalf("err = %v, want ErrProviderNotFound", err)
+		}
+	})
+
+	t.Run("dev active does not fall back to remote", func(t *testing.T) {
+		t.Parallel()
+
+		remoteClient := &recordingRemoteAppClient{}
+		cfg := remoteRoutingConfig(t, map[string]bool{"linear": true})
+		broker := newRemoteRoutingBroker(t, cfg, remoteClient)
+
+		_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal("linear"), "linear", "", "issues.list", nil)
+		if !errors.Is(err, invocation.ErrProviderNotFound) {
+			t.Fatalf("err = %v, want ErrProviderNotFound without local provider", err)
+		}
+		if len(remoteClient.snapshot()) != 0 {
+			t.Fatalf("remote client calls = %d, want 0", len(remoteClient.snapshot()))
+		}
+	})
+
+	t.Run("remote client auth error surfaces not authenticated", func(t *testing.T) {
+		t.Parallel()
+
+		remoteClient := &recordingRemoteAppClient{
+			err: status.Error(codes.Unauthenticated, "invalid token"),
+		}
+		broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, nil), remoteClient)
+
+		_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal("linear"), "linear", "", "issues.list", nil)
+		if err == nil {
+			t.Fatal("expected auth error, got nil")
+		}
+		if !errors.Is(err, invocation.ErrNotAuthenticated) {
+			t.Fatalf("err = %v, want ErrNotAuthenticated", err)
+		}
+		if len(remoteClient.snapshot()) != 0 {
+			t.Fatalf("remote client calls = %d, want 0", len(remoteClient.snapshot()))
+		}
+	})
+}
+
+func TestProviderBuildsLocal(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{Server: config.ServerConfig{Remote: "https://remote.test"}}
+
+	if !providerBuildsLocal(cfg, &config.ProviderEntry{DevActive: true}) {
+		t.Fatal("DevActive entry should build local")
+	}
+	if providerBuildsLocal(cfg, &config.ProviderEntry{}) {
+		t.Fatal("non-DevActive entry with remote configured should not build local")
+	}
+	if !providerBuildsLocal(&config.Config{}, &config.ProviderEntry{}) {
+		t.Fatal("entry without remote configured should build local")
+	}
+	if providerBuildsLocal(cfg, nil) {
+		t.Fatal("nil entry should not build local")
 	}
 }
