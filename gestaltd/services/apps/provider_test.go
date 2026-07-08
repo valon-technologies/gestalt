@@ -168,9 +168,9 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	client := newAppProviderClient(t, NewProviderServer(&roundTripProvider{}))
-	prov, err := NewRemoteProvider(context.Background(), client, roundTripStaticSpec(), nil, WithHostContext(" https://gestalt.example.test/ "))
+	prov, err := NewRemote(context.Background(), client, roundTripStaticSpec(), nil, WithHostContext(" https://gestalt.example.test/ "))
 	if err != nil {
-		t.Fatalf("NewRemoteProvider: %v", err)
+		t.Fatalf("NewRemote: %v", err)
 	}
 
 	if prov.Name() != "roundtrip" {
@@ -656,9 +656,9 @@ func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
 	client := newAppProviderClient(t, &unsupportedCapabilityProviderServer{})
-	prov, err := NewRemoteProvider(context.Background(), client, manualOnlyStaticSpec(), nil)
+	prov, err := NewRemote(context.Background(), client, manualOnlyStaticSpec(), nil)
 	if err != nil {
-		t.Fatalf("NewRemoteProvider: %v", err)
+		t.Fatalf("NewRemote: %v", err)
 	}
 
 	if got := prov.AuthTypes(); len(got) != 1 || got[0] != "manual" {
@@ -751,9 +751,9 @@ func TestRemoteProviderUnsupportedCapabilitiesDoNotDispatchRPCs(t *testing.T) {
 			t.Parallel()
 
 			server := &unsupportedCapabilityProviderServer{metadataErr: tc.metadataErr}
-			prov, err := NewRemoteProvider(context.Background(), newAppProviderClient(t, server), manualOnlyStaticSpec(), nil)
+			prov, err := NewRemote(context.Background(), newAppProviderClient(t, server), manualOnlyStaticSpec(), nil)
 			if err != nil {
-				t.Fatalf("NewRemoteProvider: %v", err)
+				t.Fatalf("NewRemote: %v", err)
 			}
 			if _, ok := prov.(core.SessionCatalogProvider); !ok {
 				t.Fatal("expected remote provider to implement SessionCatalogProvider")
@@ -785,16 +785,16 @@ func TestRemoteProviderUnsupportedCapabilitiesDoNotDispatchRPCs(t *testing.T) {
 	}
 }
 
-func TestNewRemoteProviderLabelsMetadataFailures(t *testing.T) {
+func TestNewRemoteLabelsMetadataFailures(t *testing.T) {
 	t.Parallel()
 
 	client := newAppProviderClient(t, &metadataFailureProviderServer{})
-	_, err := NewRemoteProvider(context.Background(), client, roundTripStaticSpec(), nil)
+	_, err := NewRemote(context.Background(), client, roundTripStaticSpec(), nil)
 	if err == nil {
-		t.Fatal("expected NewRemoteProvider to fail")
+		t.Fatal("expected NewRemote to fail")
 	}
 	if got := err.Error(); got != `get provider metadata: rpc error: code = Unknown desc = provider metadata: metadata exploded` {
-		t.Fatalf("NewRemoteProvider error = %q", got)
+		t.Fatalf("NewRemote error = %q", got)
 	}
 }
 

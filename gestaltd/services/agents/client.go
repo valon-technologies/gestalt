@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/egress"
@@ -300,27 +301,11 @@ func cloneAgentRequest[T interface {
 	return gproto.Clone(req).(T)
 }
 
-func setProviderNameIfEmpty(req gproto.Message, name string) {
-	name = strings.TrimSpace(name)
-	if req == nil || name == "" {
-		return
-	}
-	msg := req.ProtoReflect()
-	field := msg.Descriptor().Fields().ByName("provider_name")
-	if field == nil || field.Kind() != protoreflect.StringKind {
-		return
-	}
-	if strings.TrimSpace(msg.Get(field).String()) != "" {
-		return
-	}
-	msg.Set(field, protoreflect.ValueOfString(name))
-}
-
 func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message, providerName string) error {
 	if req == nil {
 		return nil
 	}
-	setProviderNameIfEmpty(req, providerName)
+	protoutil.SetProviderNameIfEmpty(req, providerName)
 	reqCtx, err := appaccess.RequestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		return err

@@ -928,7 +928,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if selectedIndexedDBName == "" || def == nil {
 		return nil, fmt.Errorf("bootstrap: indexeddb resource name is required")
 	}
-	store, storeErr := buildIndexedDB(def, factories)
+	store, storeErr := buildIndexedDB(cfg, selectedIndexedDBName, def, factories, deps)
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
@@ -944,19 +944,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		if name == selectedIndexedDBName || entry == nil {
 			continue
 		}
-		if !providerBuildsLocal(cfg, entry) {
-			ds, err := indexeddbpkg.NewPublicRemote(deps.RemoteClients.IndexedDB, name)
-			if err != nil {
-				_ = svc.Close()
-				_ = closeIndexedDBs(extraIndexedDBs...)
-				return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
-			}
-			ds = metricutil.InstrumentIndexedDB(ds, name)
-			indexedDBs[name] = ds
-			extraIndexedDBs = append(extraIndexedDBs, ds)
-			continue
-		}
-		ds, err := buildIndexedDB(entry, factories)
+		ds, err := buildIndexedDB(cfg, name, entry, factories, deps)
 		if err != nil {
 			_ = svc.Close()
 			_ = closeIndexedDBs(extraIndexedDBs...)
@@ -2099,9 +2087,15 @@ func resolveCallerTokenKey(ctx context.Context, sm core.SecretManager, name stri
 	return value, nil
 }
 
-func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
+func buildIndexedDB(cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (indexeddb.IndexedDB, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("indexeddb provider is required")
+	}
+	if !providerBuildsLocal(cfg, entry) {
+		return indexeddbpkg.NewRemote(indexeddbpkg.RemoteConfig{
+			Client: deps.RemoteClients.IndexedDB,
+			Name:   name,
+		})
 	}
 	if factories.IndexedDB == nil {
 		return nil, fmt.Errorf("indexeddb factory is not registered")
