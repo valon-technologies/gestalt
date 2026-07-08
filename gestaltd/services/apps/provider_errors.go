@@ -35,3 +35,29 @@ func remoteProviderExecuteError(err error) error {
 		return err
 	}
 }
+
+func gestaltRemoteExecuteError(err error) error {
+	if err == nil {
+		return nil
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return err
+	}
+	switch st.Code() {
+	case codes.Unauthenticated:
+		return invocation.ErrNotAuthenticated
+	case codes.PermissionDenied:
+		return fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, strings.TrimSpace(st.Message()))
+	case codes.NotFound:
+		msg := strings.ToLower(strings.TrimSpace(st.Message()))
+		if strings.Contains(msg, "operation") {
+			return invocation.ErrOperationNotFound
+		}
+		return invocation.ErrProviderNotFound
+	case codes.FailedPrecondition:
+		return remoteProviderExecuteError(err)
+	default:
+		return err
+	}
+}

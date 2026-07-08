@@ -885,11 +885,15 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
-	remoteClients, err := dialRemoteClients(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: remote client: %w", err)
+	if remoteURL := strings.TrimSpace(cfg.Server.Remote); remoteURL != "" {
+		deps.RemoteClients, err = remote.NewClientSet(ctx, remote.Config{
+			URL:   remoteURL,
+			Token: cfg.Server.RemoteToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: remote client: %w", err)
+		}
 	}
-	deps.RemoteClients = remoteClients
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
@@ -1100,13 +1104,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}, nil
 }
 
-func closeRemoteClients(clients *remote.ClientSet) error {
-	if clients == nil {
-		return nil
-	}
-	return clients.Close()
-}
-
 func hostServiceTLSCAFromEnv() (caFile string, caPEM string, err error) {
 	if pemValue := strings.TrimSpace(os.Getenv(hostServiceTLSCAPEMEnv)); pemValue != "" {
 		return "", pemValue, nil
@@ -1141,7 +1138,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		authCloseErr,
 		authorizationCloseErr,
 		externalCredentialsCloseErr,
-		closeRemoteClients(p.Deps.RemoteClients),
+		p.Deps.RemoteClients.Close(),
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeCaches(p.ExtraCaches...),

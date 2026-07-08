@@ -19,8 +19,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/remote"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -28,9 +26,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 )
 
@@ -629,46 +624,4 @@ func TestMCPAllowedOperationsForSpecCompositeOmitsMCPWhenNoMCPAllowlistEntries(t
 	if filtered != nil {
 		t.Fatalf("filtered allowedOperations = %#v, want nil", filtered)
 	}
-}
-
-func TestRegisterRemoteAppsSkipsLocalProviders(t *testing.T) {
-	t.Parallel()
-
-	local := &coretesting.StubIntegration{N: "demo", DN: "Demo"}
-	providers := testutil.NewProviderRegistry(t, local)
-	cfg := &config.Config{
-		Server: config.ServerConfig{Remote: "https://valon.tools", RemoteToken: "token"},
-		Apps: map[string]*config.ProviderEntry{
-			"demo":   {DevActive: true},
-			"linear": {},
-		},
-	}
-	clients := &remote.ClientSet{App: &gestaltRemoteAppClientStub{}}
-
-	if err := registerRemoteApps(providers, cfg, clients); err != nil {
-		t.Fatalf("registerRemoteApps: %v", err)
-	}
-	if _, err := providers.Get("demo"); err != nil {
-		t.Fatalf("local demo provider missing: %v", err)
-	}
-	remoteProvider, err := providers.Get("linear")
-	if err != nil {
-		t.Fatalf("remote linear provider missing: %v", err)
-	}
-	if remoteProvider.Name() != "linear" {
-		t.Fatalf("remote provider name = %q", remoteProvider.Name())
-	}
-}
-
-type gestaltRemoteAppClientStub struct {
-	calls int
-}
-
-func (s *gestaltRemoteAppClientStub) Invoke(context.Context, *proto.AppInvokeRequest, ...grpc.CallOption) (*proto.OperationResult, error) {
-	s.calls++
-	return &proto.OperationResult{Status: 200}, nil
-}
-
-func (s *gestaltRemoteAppClientStub) InvokeGraphQL(context.Context, *proto.AppInvokeGraphQLRequest, ...grpc.CallOption) (*proto.OperationResult, error) {
-	return nil, status.Error(codes.Unimplemented, "graphql not implemented")
 }

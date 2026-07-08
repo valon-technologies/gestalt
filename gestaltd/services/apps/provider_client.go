@@ -308,3 +308,118 @@ func requestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 func normalizePublicBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
+
+type staticSpecProvider struct {
+	spec StaticProviderSpec
+}
+
+func newStaticSpecProvider(spec StaticProviderSpec) staticSpecProvider {
+	name := strings.TrimSpace(spec.Name)
+	if name == "" {
+		return staticSpecProvider{}
+	}
+	spec.Name = name
+	if strings.TrimSpace(spec.DisplayName) == "" {
+		spec.DisplayName = name
+	}
+	return staticSpecProvider{spec: spec}
+}
+
+func (p staticSpecProvider) Name() string        { return p.spec.Name }
+func (p staticSpecProvider) DisplayName() string { return p.spec.DisplayName }
+func (p staticSpecProvider) Description() string { return p.spec.Description }
+
+func (p staticSpecProvider) ConnectionMode() core.ConnectionMode {
+	if p.spec.ConnectionMode == "" {
+		return core.ConnectionModeSubject
+	}
+	return core.NormalizeConnectionMode(p.spec.ConnectionMode)
+}
+
+func (p staticSpecProvider) AuthTypes() []string {
+	return append([]string(nil), p.spec.AuthTypes...)
+}
+
+func (p staticSpecProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return p.spec.ConnectionParams
+}
+
+func (p staticSpecProvider) CredentialFields() []core.CredentialFieldDef {
+	return append([]core.CredentialFieldDef(nil), p.spec.CredentialFields...)
+}
+
+func (p staticSpecProvider) DiscoveryConfig() *core.DiscoveryConfig {
+	return p.spec.DiscoveryConfig
+}
+
+func (p staticSpecProvider) ConnectionForOperation(string) string { return "" }
+
+func (p staticSpecProvider) Catalog() *catalog.Catalog {
+	return p.spec.Catalog
+}
+
+type gestaltRemoteProvider struct {
+	staticSpecProvider
+	client proto.AppClient
+}
+
+var (
+	_ core.Provider              = (*gestaltRemoteProvider)(nil)
+	_ core.GraphQLSurfaceInvoker = (*gestaltRemoteProvider)(nil)
+)
+
+// NewGestaltRemote routes app invocations through a remote gestaltd public App API.
+func NewGestaltRemote(client proto.AppClient, spec StaticProviderSpec) core.Provider {
+	base := newStaticSpecProvider(spec)
+	if client == nil || base.spec.Name == "" {
+		return nil
+	}
+	return &gestaltRemoteProvider{staticSpecProvider: base, client: client}
+}
+
+func (p *gestaltRemoteProvider) Execute(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+	paramsStruct, err := protoutil.StructFromMap(params)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.client.Invoke(ctx, &proto.AppInvokeRequest{
+		App:            p.spec.Name,
+		Operation:      strings.TrimSpace(operation),
+		Params:         paramsStruct,
+		Connection:     strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
+		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
+	})
+	if err != nil {
+		return nil, gestaltRemoteExecuteError(err)
+	}
+	return remoteOperationResult(resp), nil
+}
+
+func (p *gestaltRemoteProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, _ string) (*core.OperationResult, error) {
+	variables, err := protoutil.StructFromMap(request.Variables)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.client.InvokeGraphQL(ctx, &proto.AppInvokeGraphQLRequest{
+		App:            p.spec.Name,
+		Document:       strings.TrimSpace(request.Document),
+		Variables:      variables,
+		Connection:     strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
+		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
+	})
+	if err != nil {
+		return nil, gestaltRemoteExecuteError(err)
+	}
+	return remoteOperationResult(resp), nil
+}
+
+func remoteOperationResult(resp *proto.OperationResult) *core.OperationResult {
+	if resp == nil {
+		return &core.OperationResult{}
+	}
+	return &core.OperationResult{
+		Status:  int(resp.GetStatus()),
+		Headers: protoutil.StringListsFromProto(resp.GetHeaders()),
+		Body:    resp.GetBody(),
+	}
+}
