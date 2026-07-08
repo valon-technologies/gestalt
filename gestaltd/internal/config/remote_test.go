@@ -147,6 +147,7 @@ func TestApplyServerRemoteOverrides(t *testing.T) {
 	t.Parallel()
 
 	t.Run("cli overrides config", func(t *testing.T) {
+		t.Parallel()
 		server := ServerConfig{
 			Remote:      "https://old.example/",
 			RemoteToken: "old-token",
