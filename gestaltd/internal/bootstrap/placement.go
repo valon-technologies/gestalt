@@ -30,5 +30,5 @@ func (p *PlacementPlan) ShouldBuildLocal(entry *config.ProviderEntry) bool {
 }
 
 func (p *PlacementPlan) ShouldRouteRemote(entry *config.ProviderEntry) bool {
-	return entry != nil && entry.DevActive == false && p != nil && p.remote
+	return entry != nil && !entry.DevActive && p != nil && p.remote
 }
