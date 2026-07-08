@@ -14,16 +14,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/grpc/reflection/grpc_reflection_v1"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 func TestPublicGRPCAppInvokeSucceedsWithBearer(t *testing.T) {
@@ -325,15 +325,15 @@ func newPublicGRPCTestHandler(
 	transport.SetPublicBaseURL("https://gestalt.example")
 
 	cfg := server.Config{
-		Auth:                 auth,
-		Services:             testutil.NewStubServices(t),
-		Providers:            testutil.NewProviderRegistry(t),
-		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
-		RouteProfile:         server.RouteProfilePublic,
-		Invoker:              invoker,
-		AppInvocation:        invoker,
-		PublicGateway:        transport,
-		RawAuthorization:     allowAllAuthorizationProvider{},
+		Auth:             auth,
+		Services:         testutil.NewStubServices(t),
+		Providers:        testutil.NewProviderRegistry(t),
+		StateSecret:      []byte("0123456789abcdef0123456789abcdef"),
+		RouteProfile:     server.RouteProfilePublic,
+		Invoker:          invoker,
+		AppInvocation:    invoker,
+		PublicGateway:    transport,
+		RawAuthorization: allowAllAuthorizationProvider{},
 	}
 	for _, opt := range opts {
 		opt(&cfg)

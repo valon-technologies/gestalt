@@ -268,8 +268,8 @@ func TestRemoteIntegrationLocalStartupFailureDoesNotFallbackToRemote(t *testing.
 	cfg := remoteIntegrationBaseConfig(remoteSrv.BaseURL())
 	cfg.Apps = map[string]*config.ProviderEntry{
 		"ci-cd": {
-			DevActive:            true,
-			ResolvedManifest:     newExecutableManifest("CI/CD", "local app"),
+			DevActive:        true,
+			ResolvedManifest: newExecutableManifest("CI/CD", "local app"),
 			ResolvedManifestPath: filepath.Join(writeStaticCatalog(t, &catalog.Catalog{
 				Name: "ci-cd",
 				Operations: []catalog.CatalogOperation{{
