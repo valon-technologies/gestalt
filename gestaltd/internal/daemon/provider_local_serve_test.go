@@ -5,7 +5,97 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/config"
 )
+
+func TestServeProviderLocalAppliesRemoteTokenOverrides(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := setupAppDir(t, dir)
+	setAppManifestSource(t, appDir, "github.com/acme/apps/demo")
+
+	baseCfg := filepath.Join(dir, "base.yaml")
+	baseYAML := `apiVersion: gestaltd.config/v8
+server:
+  remote: https://valon.tools/
+apps:
+  demo:
+    source: https://example.invalid/apps/demo
+`
+	if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile base config: %v", err)
+	}
+
+	appManifest := componentProviderManifestPath(t, appDir)
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
+		Paths:        []string{appManifest},
+		ConfigPaths:  []string{baseCfg},
+		Locked:       true,
+		FleetOverlay: true,
+		RemoteToken:  "test-token",
+	})
+	if err != nil {
+		t.Fatalf("prepareProviderLocalSession: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(session.Dir) }()
+
+	cfg, err := config.LoadPaths(session.ConfigPaths)
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+	if err := config.ApplyServeRemoteOverrides(cfg, "", "test-token"); err != nil {
+		t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+	}
+	if got := cfg.Server.Remote; got != "https://valon.tools" {
+		t.Fatalf("Server.Remote = %q, want https://valon.tools", got)
+	}
+	if got := cfg.Server.RemoteToken; got != "test-token" {
+		t.Fatalf("Server.RemoteToken = %q, want test-token", got)
+	}
+}
+
+func TestServeProviderLocalRequiresRemoteTokenWhenRemoteSet(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := setupAppDir(t, dir)
+	setAppManifestSource(t, appDir, "github.com/acme/apps/demo")
+
+	baseCfg := filepath.Join(dir, "base.yaml")
+	baseYAML := `apiVersion: gestaltd.config/v8
+server:
+  remote: https://valon.tools/
+apps:
+  demo:
+    source: https://example.invalid/apps/demo
+`
+	if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile base config: %v", err)
+	}
+
+	appManifest := componentProviderManifestPath(t, appDir)
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
+		Paths:        []string{appManifest},
+		ConfigPaths:  []string{baseCfg},
+		Locked:       true,
+		FleetOverlay: true,
+	})
+	if err != nil {
+		t.Fatalf("prepareProviderLocalSession: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(session.Dir) }()
+
+	cfg, err := config.LoadPaths(session.ConfigPaths)
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+	err = config.ApplyServeRemoteOverrides(cfg, "", "")
+	if err == nil || !strings.Contains(err.Error(), "server.remoteToken is required") {
+		t.Fatalf("error = %v, want server.remoteToken is required", err)
+	}
+}
 
 func TestMaybeRunServeProviderLocalRejectsLockedWithoutConfig(t *testing.T) {
 	t.Parallel()

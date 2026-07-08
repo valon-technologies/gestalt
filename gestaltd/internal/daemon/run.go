@@ -146,6 +146,8 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			Locked:        locked,
 			NoSync:        noSync,
 			LockedAllowed: lockedFlag != nil,
+			Remote:        *remoteFlag,
+			RemoteToken:   *remoteTokenFlag,
 		})
 		if ranProviderLocal || err != nil {
 			return err
@@ -174,6 +176,8 @@ type serveProviderLocalOptions struct {
 	Locked        bool
 	NoSync        bool
 	LockedAllowed bool
+	Remote        string
+	RemoteToken   string
 }
 
 func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
@@ -200,6 +204,8 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 		NoSync:       opts.NoSync,
 		ArtifactsDir: opts.ArtifactsDir,
 		LockfilePath: opts.LockfilePath,
+		Remote:       opts.Remote,
+		RemoteToken:  opts.RemoteToken,
 	})
 }
 
