@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/descriptor.proto";
+
+// SDK annotations: a closed vocabulary of options that move API conventions
+// out of comments and into the schema, so sdkgen can generate ergonomic
+// surfaces once for every language. Each annotation is validated during
+// generation; naming a missing field or annotating the wrong shape fails
+// with a diagnostic. See the sdkgen RFC's SDK Annotations section.
+
+// OptionalResult declares that `value` is meaningful only when the bool
+// `guard` field is true. At API boundaries the message collapses to an
+// optional value (TypeScript `T | undefined`, Python `T | None`, Go
+// `(T, bool)`, Rust `Option<T>`).
+message OptionalResult {
+  string guard = 1;
+  string value = 2;
+}
+
+// Keyed declares that the repeated `entries` field is a collection keyed by
+// each entry's `key` field; entries whose bool `present` field is false are
+// omitted. At API boundaries the message collapses to a native map from key
+// to the entry's `value` field.
+message Keyed {
+  string entries = 1;
+  string key = 2;
+  string present = 3;
+  string value = 4;
+}
+
+// Initial declares a header-then-payload stream protocol over a streamed
+// message with a oneof: the first message always carries the `header`
+// variant, and every later message carries the `chunk` variant. Generated
+// surfaces expose the typed header and a native payload stream instead of
+// raw messages.
+message Initial {
+  string header = 1;
+  string chunk = 2;
+}
+
+// JsonResult declares that a unary method's HTTP-shaped result carries the
+// standard JSON operation envelope in its body: success envelopes return
+// their data, error envelopes and HTTP-error statuses raise the canonical
+// invoke error, and any other JSON body passes through unchanged. `status`
+// and `body` name the output message's int32 status and bytes payload
+// fields. The faithful result stays reachable on the Raw surface.
+message JsonResult {
+  string status = 1;
+  string body = 2;
+}
+
+// PublicPolicy declares how public service paths adapt external requests.
+// Fields listed in `fill` are rejected when supplied by public callers and
+// derived server-side instead. Fields listed in `reject` are rejected when
+// supplied by public callers. Exposure is controlled separately by
+// google.api.method_visibility.
+message PublicPolicy {
+  repeated string fill = 1;
+  repeated string reject = 2;
+}
+
+extend google.protobuf.MethodOptions {
+  // Flattened call signature: the named request fields become parameters,
+  // in order. Fields with presence must come last and become optional
+  // parameters.
+  repeated string signature = 50001;
+
+  // Header-then-payload protocol for the streaming side of this method.
+  Initial initial = 50002;
+
+  // JSON operation-envelope decoding for this method's result.
+  JsonResult json_result = 50003;
+
+  // Optional call options: the named request fields are callable without —
+  // they render as a trailing options bag (an options object in TypeScript,
+  // an options struct in Go and Rust, keyword arguments in Python) instead
+  // of positional parameters. Fields here must not repeat the signature
+  // list.
+  repeated string optional_signature = 50004;
+
+  // Public request adaptation policy for this method.
+  PublicPolicy public = 51001;
+}
+
+extend google.protobuf.MessageOptions {
+  OptionalResult optional_result = 50001;
+  Keyed keyed = 50002;
+
+  // At API boundaries the message collapses to the named field: a response
+  // whose only meaning is one field is returned as that field directly.
+  string unwrap = 50003;
+}
+
+extend google.protobuf.ServiceOptions {
+  // Host-service binding name, enabling a generated zero-configuration
+  // constructor for the client.
+  string host_binding = 50001;
+}
