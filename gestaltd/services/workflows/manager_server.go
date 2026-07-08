@@ -528,9 +528,13 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
+	appName := strings.TrimSpace(req.GetAppName())
+	if appName == "" {
+		appName = authCtx.CallerName()
+	}
 	delivered, err := s.manager.DeliverEvent(s.managerContext(ctx, authCtx), p, workflowmanager.EventDeliver{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      authCtx.CallerName(),
+		AppName:      appName,
 		Event:        event,
 	})
 	if err != nil {

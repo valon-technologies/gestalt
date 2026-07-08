@@ -60,7 +60,7 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	if err := t.enforcePublicAuthorization(ctx, p, publicResourceID(req, fullMethod), fullMethod); err != nil {
 		return nil, nil, err
 	}
-	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, p, req, policy)
+	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, p, req, policy, fullMethod)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -130,6 +130,11 @@ func publicResourceID(req gproto.Message, fullMethod string) string {
 			return app
 		}
 	}
+	if fd := msg.Descriptor().Fields().ByName("app_name"); fd != nil {
+		if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
+			return app
+		}
+	}
 	if fd := msg.Descriptor().Fields().ByName("provider_name"); fd != nil {
 		if name := strings.TrimSpace(msg.Get(fd).String()); name != "" {
 			return name
@@ -160,6 +165,7 @@ func adaptPublicRequest(
 	p *principal.Principal,
 	req gproto.Message,
 	policy publicrpc.PublicMethodPolicy,
+	fullMethod string,
 ) (gproto.Message, error) {
 	adapted := gproto.Clone(req)
 	msg := adapted.ProtoReflect()
@@ -172,14 +178,25 @@ func adaptPublicRequest(
 		if fieldSet(msg, name) {
 			return nil, status.Errorf(codes.InvalidArgument, "%s is server-filled", name)
 		}
-		if err := fillPublicField(ctx, publicBaseURL, p, msg, name); err != nil {
+		if err := fillPublicField(ctx, publicBaseURL, p, msg, name, fullMethod); err != nil {
 			return nil, err
 		}
 	}
 	return adapted, nil
 }
 
-func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, name string) error {
+func publicCallerProvider(msg protoreflect.Message, fullMethod string) invocation.CallerProvider {
+	if strings.HasPrefix(fullMethod, "/"+proto.App_ServiceDesc.ServiceName+"/") {
+		if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
+			if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
+				return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: app}
+			}
+		}
+	}
+	return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "gestaltd"}
+}
+
+func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, name, fullMethod string) error {
 	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
 	if fd == nil {
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
@@ -187,7 +204,7 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 	switch name {
 	case "context":
 		callCtx := principal.WithPrincipal(ctx, principal.Canonicalized(p))
-		reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, invocation.CallerProvider{})
+		reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, publicCallerProvider(msg, fullMethod))
 		if err != nil {
 			return status.Errorf(codes.Internal, "provider gateway: build request context: %v", err)
 		}
@@ -201,11 +218,11 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 			return status.Error(codes.Internal, "provider gateway: subject is required")
 		}
 		msg.Set(fd, protoreflect.ValueOfMessage(subject.ProtoReflect()))
-	case "created_by_subject_id":
+	case "created_by_subject_id", "delivered_by_subject_id":
 		p = principal.Canonicalized(p)
 		subjectID := strings.TrimSpace(p.SubjectID)
 		if subjectID == "" {
-			return status.Error(codes.Internal, "provider gateway: created_by_subject_id is required")
+			return status.Errorf(codes.Internal, "provider gateway: %s is required", name)
 		}
 		msg.Set(fd, protoreflect.ValueOfString(subjectID))
 	default:
