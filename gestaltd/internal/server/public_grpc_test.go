@@ -50,13 +50,6 @@ func publicGRPCTestBearer(scope string) string {
 	return scopedTestBearerToken("public-grpc-user", scope)
 }
 
-func publicGRPCContext(t *testing.T, bearerToken string) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	t.Cleanup(cancel)
-	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+bearerToken))
-}
-
 func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) (*httptest.Server, *relayTestInvoker) {
 	t.Helper()
 	invoker := &relayTestInvoker{}
@@ -92,40 +85,11 @@ func TestPublicGRPCRouting(t *testing.T) {
 				},
 			})
 		})
-		conn := newRelayGRPCConn(t, ts)
-		defer func() { _ = conn.Close() }()
 
-		_, err := proto.NewAppClient(conn).Invoke(publicGRPCContext(t, publicGRPCTestBearer("roadmap")), &proto.AppInvokeRequest{
-			App:       "roadmap",
-			Operation: "sync",
-		})
-		if err != nil {
-			t.Fatalf("public App.Invoke: %v", err)
-		}
-		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "roadmap" || call.operation != "sync" {
-			t.Fatalf("invoker call = %+v, want roadmap/sync", call)
-		}
-	})
-
-	t.Run("remote client set dials public surface", func(t *testing.T) {
-		t.Parallel()
-
-		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-				N:        "roadmap",
-				ConnMode: core.ConnectionModeNone,
-				CatalogVal: &catalog.Catalog{
-					Name:       "roadmap",
-					Operations: []catalog.CatalogOperation{{ID: "sync", Method: "POST"}},
-				},
-			})
-		})
-
-		bearer := publicGRPCTestBearer("roadmap")
 		clients, err := remote.NewClientSet(context.Background(), remote.Config{
 			URL:       ts.URL,
-			Token:     bearer,
-			TLSConfig: &tls.Config{InsecureSkipVerify: true},
+			Token:     publicGRPCTestBearer("roadmap"),
+			TLSConfig: publicGRPCTestTLS(),
 		})
 		if err != nil {
 			t.Fatalf("remote.NewClientSet: %v", err)

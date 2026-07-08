@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// Config configures an authenticated client to a remote public gestaltd API.
+// Config configures a client to a remote public gestaltd API.
 type Config struct {
 	URL       string
 	Token     string
@@ -32,30 +32,43 @@ type ClientSet struct {
 	conn *grpc.ClientConn
 }
 
-// NewClientSet dials the remote public gestaltd gRPC surface and returns typed clients.
-func NewClientSet(_ context.Context, cfg Config) (*ClientSet, error) {
+// Dial opens a gRPC connection to the remote public gestaltd surface.
+// Token is optional; when set, bearer authorization is attached to every RPC.
+func Dial(_ context.Context, cfg Config) (*grpc.ClientConn, error) {
 	url := strings.TrimSpace(cfg.URL)
 	if url == "" {
 		return nil, fmt.Errorf("remote: URL is required")
-	}
-	token := strings.TrimSpace(cfg.Token)
-	if token == "" {
-		return nil, fmt.Errorf("remote: token is required")
 	}
 
 	target, creds, err := grpcTarget(url, cfg.TLSConfig)
 	if err != nil {
 		return nil, err
 	}
-	unary, stream := bearerTokenInterceptors(token)
-	conn, err := grpc.NewClient(
-		target,
-		grpc.WithTransportCredentials(creds),
-		grpc.WithChainUnaryInterceptor(unary),
-		grpc.WithChainStreamInterceptor(stream),
-	)
+
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
+	if token := strings.TrimSpace(cfg.Token); token != "" {
+		unary, stream := bearerTokenInterceptors(token)
+		opts = append(opts,
+			grpc.WithChainUnaryInterceptor(unary),
+			grpc.WithChainStreamInterceptor(stream),
+		)
+	}
+
+	conn, err := grpc.NewClient(target, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("remote: dial %s: %w", target, err)
+	}
+	return conn, nil
+}
+
+// NewClientSet dials the remote public gestaltd gRPC surface and returns typed clients.
+func NewClientSet(ctx context.Context, cfg Config) (*ClientSet, error) {
+	if strings.TrimSpace(cfg.Token) == "" {
+		return nil, fmt.Errorf("remote: token is required")
+	}
+	conn, err := Dial(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
 	return clientSetFromConn(conn), nil
 }

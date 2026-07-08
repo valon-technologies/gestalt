@@ -45,6 +45,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
@@ -72,7 +73,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -1757,16 +1757,12 @@ func TestEgressProxyConnectForwardsBufferedClientBytes(t *testing.T) {
 
 func newRelayGRPCConn(t *testing.T, ts *httptest.Server) *grpc.ClientConn {
 	t.Helper()
-	targetURL, err := url.Parse(ts.URL)
+	conn, err := remote.Dial(context.Background(), remote.Config{
+		URL:       ts.URL,
+		TLSConfig: &tls.Config{InsecureSkipVerify: true},
+	})
 	if err != nil {
-		t.Fatalf("parse relay URL: %v", err)
-	}
-	conn, err := grpc.NewClient(
-		targetURL.Host,
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
+		t.Fatalf("remote.Dial: %v", err)
 	}
 	return conn
 }
