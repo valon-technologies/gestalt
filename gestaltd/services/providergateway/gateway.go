@@ -53,8 +53,9 @@ type ProviderGatewayTransport struct {
 	authorization        AuthorizationProvider
 	callerTokenPublicKey string
 	identity             core.IdentityProvider
-	publicMethods        *publicrpc.Registry
+	publicMethods        publicrpc.PublicMethodRegistry
 	publicBaseURL        string
+	publicCallerApp      string
 }
 
 func NewProviderGatewayTransport() *ProviderGatewayTransport {
@@ -82,7 +83,7 @@ func (t *ProviderGatewayTransport) SetIdentityProvider(identity core.IdentityPro
 	t.identity = identity
 }
 
-func (t *ProviderGatewayTransport) SetPublicMethods(publicMethods *publicrpc.Registry) {
+func (t *ProviderGatewayTransport) SetPublicMethods(publicMethods publicrpc.PublicMethodRegistry) {
 	if t == nil {
 		return
 	}
@@ -94,6 +95,13 @@ func (t *ProviderGatewayTransport) SetPublicBaseURL(publicBaseURL string) {
 		return
 	}
 	t.publicBaseURL = strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
+}
+
+func (t *ProviderGatewayTransport) SetPublicCallerApp(callerApp string) {
+	if t == nil {
+		return
+	}
+	t.publicCallerApp = strings.TrimSpace(callerApp)
 }
 
 func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (resp ProviderGatewayResponse, err error) {

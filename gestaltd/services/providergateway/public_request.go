@@ -4,14 +4,12 @@ import (
 	"context"
 	"strings"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -60,7 +58,7 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	if err := t.enforcePublicAuthorization(ctx, p, publicResourceID(req, fullMethod), fullMethod); err != nil {
 		return nil, nil, err
 	}
-	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, p, req, policy)
+	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, t.publicCallerApp, p, req, policy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -104,25 +102,6 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	return nil
 }
 
-func bearerTokenFromContext(ctx context.Context) string {
-	if token := strings.TrimSpace(gestalt.CallerBearerTokenFromIncomingContext(ctx)); token != "" {
-		return token
-	}
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
-	for _, value := range md.Get("authorization") {
-		value = strings.TrimSpace(value)
-		if len(value) > 7 && strings.EqualFold(value[:7], "Bearer ") {
-			if token := strings.TrimSpace(value[7:]); token != "" {
-				return token
-			}
-		}
-	}
-	return ""
-}
-
 func publicResourceID(req gproto.Message, fullMethod string) string {
 	msg := req.ProtoReflect()
 	if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
@@ -156,7 +135,7 @@ func splitFullMethod(fullMethod string) (service, method string) {
 
 func adaptPublicRequest(
 	ctx context.Context,
-	publicBaseURL string,
+	publicBaseURL, publicCallerApp string,
 	p *principal.Principal,
 	req gproto.Message,
 	policy publicrpc.PublicMethodPolicy,
@@ -172,14 +151,14 @@ func adaptPublicRequest(
 		if fieldSet(msg, name) {
 			return nil, status.Errorf(codes.InvalidArgument, "%s is server-filled", name)
 		}
-		if err := fillPublicField(ctx, publicBaseURL, p, msg, name); err != nil {
+		if err := fillPublicField(ctx, publicBaseURL, publicCallerApp, p, msg, name); err != nil {
 			return nil, err
 		}
 	}
 	return adapted, nil
 }
 
-func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, name string) error {
+func fillPublicField(ctx context.Context, publicBaseURL, publicCallerApp string, p *principal.Principal, msg protoreflect.Message, name string) error {
 	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
 	if fd == nil {
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
@@ -187,7 +166,8 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 	switch name {
 	case "context":
 		callCtx := principal.WithPrincipal(ctx, principal.Canonicalized(p))
-		reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, invocation.CallerProvider{})
+		caller := invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: publicCallerApp}
+		reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, caller)
 		if err != nil {
 			return status.Errorf(codes.Internal, "provider gateway: build request context: %v", err)
 		}
@@ -201,11 +181,11 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 			return status.Error(codes.Internal, "provider gateway: subject is required")
 		}
 		msg.Set(fd, protoreflect.ValueOfMessage(subject.ProtoReflect()))
-	case "created_by_subject_id":
+	case "created_by_subject_id", "delivered_by_subject_id":
 		p = principal.Canonicalized(p)
 		subjectID := strings.TrimSpace(p.SubjectID)
 		if subjectID == "" {
-			return status.Error(codes.Internal, "provider gateway: created_by_subject_id is required")
+			return status.Error(codes.Internal, "provider gateway: subject id is required")
 		}
 		msg.Set(fd, protoreflect.ValueOfString(subjectID))
 	default:

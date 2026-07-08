@@ -129,6 +129,7 @@ type Server struct {
 	prometheusMetrics      http.Handler
 	mcpHandler             http.Handler
 	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
+	publicGRPCHandler      http.Handler
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[uint64]http.Handler
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
@@ -396,6 +397,13 @@ func New(cfg Config) (*Server, error) {
 		MCPConnection:     cfg.MCPConnection,
 		Now:               now,
 	})
+	publicGRPC, err := buildPublicGRPCSurface(cfg, s.workflowSchedules)
+	if err != nil {
+		return nil, err
+	}
+	if publicGRPC != nil {
+		s.publicGRPCHandler = publicGRPC.handler
+	}
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}
