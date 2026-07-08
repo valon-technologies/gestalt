@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -25,15 +27,12 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 }
 
 func (t *ProviderGatewayTransport) shadowAuthorizationCheck(ctx context.Context, params AuthorizationParams) (bool, *proto.CheckAccessRequest) {
-	req, err := t.checkAccessRequest(params)
+	subject, err := t.authorizationSubject(params.CallerToken)
 	if err != nil {
 		return false, nil
 	}
-	resp, err := t.authorization.CheckAccess(ctx, req)
-	if err != nil || resp == nil {
-		return false, req
-	}
-	return resp.GetAllowed(), req
+	allowed, req, _ := t.runAuthorizationCheck(ctx, subject, params.ProviderID, params.Operation)
+	return allowed, req
 }
 
 type DirectTransport struct{}
@@ -53,6 +52,9 @@ func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, n
 type ProviderGatewayTransport struct {
 	authorization        AuthorizationProvider
 	callerTokenPublicKey string
+	identity             core.IdentityProvider
+	publicMethods        *publicrpc.Registry
+	publicBaseURL        string
 }
 
 func NewProviderGatewayTransport() *ProviderGatewayTransport {
@@ -71,6 +73,27 @@ func (t *ProviderGatewayTransport) SetCallerTokenPublicKey(publicKey string) {
 		return
 	}
 	t.callerTokenPublicKey = strings.TrimSpace(publicKey)
+}
+
+func (t *ProviderGatewayTransport) SetIdentityProvider(identity core.IdentityProvider) {
+	if t == nil {
+		return
+	}
+	t.identity = identity
+}
+
+func (t *ProviderGatewayTransport) SetPublicMethods(publicMethods *publicrpc.Registry) {
+	if t == nil {
+		return
+	}
+	t.publicMethods = publicMethods
+}
+
+func (t *ProviderGatewayTransport) SetPublicBaseURL(publicBaseURL string) {
+	if t == nil {
+		return
+	}
+	t.publicBaseURL = strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
 }
 
 func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (resp ProviderGatewayResponse, err error) {
@@ -99,24 +122,32 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 	return next(ctx, req)
 }
 
-func (t *ProviderGatewayTransport) checkAccessRequest(params AuthorizationParams) (*proto.CheckAccessRequest, error) {
-	subject, err := t.authorizationSubject(params.CallerToken)
-	if err != nil {
-		return nil, err
+func (t *ProviderGatewayTransport) runAuthorizationCheck(
+	ctx context.Context,
+	subject *proto.Subject,
+	providerID, operation string,
+) (bool, *proto.CheckAccessRequest, error) {
+	if t == nil || t.authorization == nil {
+		return true, nil, nil
 	}
-	resource, err := authorizationResource(params.ProviderID)
+	resource, err := authorizationResource(providerID)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
-	action, err := authorizationAction(params.Operation)
+	action, err := authorizationAction(operation)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
-	return &proto.CheckAccessRequest{
+	req := &proto.CheckAccessRequest{
 		Subject:  subject,
 		Resource: resource,
 		Action:   action,
-	}, nil
+	}
+	resp, err := t.authorization.CheckAccess(ctx, req)
+	if err != nil || resp == nil {
+		return false, req, err
+	}
+	return resp.GetAllowed(), req, nil
 }
 
 func (t *ProviderGatewayTransport) authorizationSubject(callerToken string) (*proto.Subject, error) {
