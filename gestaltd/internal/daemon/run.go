@@ -97,6 +97,8 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json in the current working directory")
 	portFlag := fs.Int("port", 0, "public listener port; overrides server.public.port. If in use, gestaltd tries the next free port unless --port was given explicitly")
+	remoteFlag := fs.String("remote", "", "remote gestaltd public API URL; overrides server.remote")
+	remoteTokenFlag := fs.String("remote-token", "", "bearer token for remote gestaltd; overrides server.remoteToken")
 	var lockedFlag *bool
 	var noSyncFlag *bool
 	if opts.allowLocked {
@@ -153,6 +155,13 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if err != nil {
 		return err
 	}
+	if err := applyServeConfigOverrides(env.Config, serveConfigOverrides{
+		Remote:      strings.TrimSpace(*remoteFlag),
+		RemoteToken: strings.TrimSpace(*remoteTokenFlag),
+	}); err != nil {
+		env.Close()
+		return err
+	}
 	if err := resolveServePort(env.Config, flagIntValue(portFlag)); err != nil {
 		env.Close()
 		return err
@@ -203,6 +212,26 @@ func flagIntValue(flag *int) int {
 		return 0
 	}
 	return *flag
+}
+
+type serveConfigOverrides struct {
+	Remote      string
+	RemoteToken string
+}
+
+func applyServeConfigOverrides(cfg *config.Config, overrides serveConfigOverrides) error {
+	if cfg == nil {
+		return fmt.Errorf("config is required")
+	}
+	if overrides.Remote != "" {
+		cfg.Server.Remote = overrides.Remote
+	}
+	if overrides.RemoteToken != "" {
+		cfg.Server.RemoteToken = overrides.RemoteToken
+	}
+	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
+	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
+	return config.ValidateServerRemoteConfig(cfg.Server)
 }
 
 func runServer(env *bootstrapEnv) error {
@@ -393,6 +422,8 @@ func logConfigSummary(paths []string, cfg *config.Config) {
 		"server_public_addr", cfg.Server.PublicAddr(),
 		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
+		"server_remote", maskEmpty(cfg.Server.Remote),
+		"server_remote_token", maskSecret(cfg.Server.RemoteToken),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
 		"authentication_provider", selectedProviderLabel(cfg.SelectedIdentityProvider()),
 		"runtime_secrets_provider", selectedProviderLabel(cfg.SelectedSecretsProvider()),
@@ -448,7 +479,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
-	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
 	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
@@ -471,10 +502,11 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
 	writeUsageLine(w, "--port overrides server.public.port; if the port is in use, gestaltd tries the next free port unless --port was given explicitly.")
+	writeUsageLine(w, "--remote and --remote-token override server.remote and server.remoteToken for delegating to a remote gestaltd.")
 	writeUsageLine(w, "PATH arguments (repeatable) override selected UIs to local source trees; with --config and --locked,")
 	writeUsageLine(w, "the fleet loads pinned artifacts while PATH UIs with a manifest run: block hot-reload.")
 	writeUsageLine(w, "Without --config, PATH arguments run an isolated synthesized baseline (unlocked).")
