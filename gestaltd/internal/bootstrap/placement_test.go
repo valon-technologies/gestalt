@@ -15,7 +15,7 @@ func TestPlacementPlanLocalAppOverridesRemote(t *testing.T) {
 			RemoteToken: "gst_api_test",
 		},
 		Apps: map[string]*config.ProviderEntry{
-			"ci-cd":        {},
+			"ci-cd":         {},
 			"valon-profile": {DevActive: true},
 		},
 	}
@@ -137,7 +137,7 @@ func TestPlacementPlanLocalOnlyBehaviorWithoutRemote(t *testing.T) {
 
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
-			"linear":      {},
+			"linear":        {},
 			"valon-profile": {DevActive: true},
 		},
 		Providers: config.ProvidersConfig{
