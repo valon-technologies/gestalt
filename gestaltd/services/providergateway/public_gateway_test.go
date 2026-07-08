@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	testAppInvokeFullMethod         = "/gestalt.provider.v1.App/Invoke"
+	testAppInvokeFullMethod          = "/gestalt.provider.v1.App/Invoke"
 	testAgentCreateSessionFullMethod = "/gestalt.provider.v1.Agent/CreateSession"
 )
 
@@ -230,9 +230,9 @@ func newTestPublicGateway(
 }
 
 type stubIdentityProvider struct {
-	introspect *core.IntrospectResponse
+	introspect    *core.IntrospectResponse
 	introspectErr error
-	userInfo     *core.UserInfoResponse
+	userInfo      *core.UserInfoResponse
 }
 
 func (p *stubIdentityProvider) Authorize(context.Context, *core.AuthorizeRequest) (*core.AuthorizeResponse, error) {
