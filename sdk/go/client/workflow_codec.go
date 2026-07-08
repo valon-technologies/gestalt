@@ -12,11 +12,10 @@ func ToWireApplyWorkflowProviderDefinitionRequest(value *ApplyWorkflowProviderDe
 		return nil
 	}
 	out := &proto.ApplyWorkflowProviderDefinitionRequest{
-		ProviderName:         value.ProviderName,
-		Spec:                 ToWireWorkflowDefinitionSpec(value.Spec),
-		IdempotencyKey:       value.IdempotencyKey,
-		RequestedBySubjectId: value.RequestedBySubjectId,
-		Context:              ToWireRequestContext(value.Context),
+		ProviderName:   value.ProviderName,
+		Spec:           ToWireWorkflowDefinitionSpec(value.Spec),
+		IdempotencyKey: value.IdempotencyKey,
+		Context:        ToWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -26,11 +25,10 @@ func FromWireApplyWorkflowProviderDefinitionRequest(value *proto.ApplyWorkflowPr
 		return nil
 	}
 	out := &ApplyWorkflowProviderDefinitionRequest{
-		ProviderName:         value.ProviderName,
-		Spec:                 FromWireWorkflowDefinitionSpec(value.Spec),
-		IdempotencyKey:       value.IdempotencyKey,
-		RequestedBySubjectId: value.RequestedBySubjectId,
-		Context:              FromWireRequestContext(value.Context),
+		ProviderName:   value.ProviderName,
+		Spec:           FromWireWorkflowDefinitionSpec(value.Spec),
+		IdempotencyKey: value.IdempotencyKey,
+		Context:        FromWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -108,11 +106,10 @@ func ToWireDeliverWorkflowProviderEventRequest(value *DeliverWorkflowProviderEve
 		return nil
 	}
 	out := &proto.DeliverWorkflowProviderEventRequest{
-		AppName:              value.AppName,
-		Event:                ToWireWorkflowEvent(value.Event),
-		DeliveredBySubjectId: value.DeliveredBySubjectId,
-		ProviderName:         value.ProviderName,
-		Context:              ToWireRequestContext(value.Context),
+		AppName:      value.AppName,
+		Event:        ToWireWorkflowEvent(value.Event),
+		ProviderName: value.ProviderName,
+		Context:      ToWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -122,11 +119,10 @@ func FromWireDeliverWorkflowProviderEventRequest(value *proto.DeliverWorkflowPro
 		return nil
 	}
 	out := &DeliverWorkflowProviderEventRequest{
-		AppName:              value.AppName,
-		Event:                FromWireWorkflowEvent(value.Event),
-		DeliveredBySubjectId: value.DeliveredBySubjectId,
-		ProviderName:         value.ProviderName,
-		Context:              FromWireRequestContext(value.Context),
+		AppName:      value.AppName,
+		Event:        FromWireWorkflowEvent(value.Event),
+		ProviderName: value.ProviderName,
+		Context:      FromWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -362,11 +358,10 @@ func ToWireSetWorkflowProviderActivationPausedRequest(value *SetWorkflowProvider
 		return nil
 	}
 	out := &proto.SetWorkflowProviderActivationPausedRequest{
-		DefinitionId:         value.DefinitionId,
-		ActivationId:         value.ActivationId,
-		Paused:               value.Paused,
-		RequestedBySubjectId: value.RequestedBySubjectId,
-		Context:              ToWireRequestContext(value.Context),
+		DefinitionId: value.DefinitionId,
+		ActivationId: value.ActivationId,
+		Paused:       value.Paused,
+		Context:      ToWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -376,11 +371,10 @@ func FromWireSetWorkflowProviderActivationPausedRequest(value *proto.SetWorkflow
 		return nil
 	}
 	out := &SetWorkflowProviderActivationPausedRequest{
-		DefinitionId:         value.DefinitionId,
-		ActivationId:         value.ActivationId,
-		Paused:               value.Paused,
-		RequestedBySubjectId: value.RequestedBySubjectId,
-		Context:              FromWireRequestContext(value.Context),
+		DefinitionId: value.DefinitionId,
+		ActivationId: value.ActivationId,
+		Paused:       value.Paused,
+		Context:      FromWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -390,10 +384,9 @@ func ToWireSetWorkflowProviderDefinitionPausedRequest(value *SetWorkflowProvider
 		return nil
 	}
 	out := &proto.SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionId:         value.DefinitionId,
-		Paused:               value.Paused,
-		RequestedBySubjectId: value.RequestedBySubjectId,
-		Context:              ToWireRequestContext(value.Context),
+		DefinitionId: value.DefinitionId,
+		Paused:       value.Paused,
+		Context:      ToWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -403,10 +396,9 @@ func FromWireSetWorkflowProviderDefinitionPausedRequest(value *proto.SetWorkflow
 		return nil
 	}
 	out := &SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionId:         value.DefinitionId,
-		Paused:               value.Paused,
-		RequestedBySubjectId: value.RequestedBySubjectId,
-		Context:              FromWireRequestContext(value.Context),
+		DefinitionId: value.DefinitionId,
+		Paused:       value.Paused,
+		Context:      FromWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -418,11 +410,9 @@ func ToWireSignalOrStartWorkflowProviderRunRequest(value *SignalOrStartWorkflowP
 	out := &proto.SignalOrStartWorkflowProviderRunRequest{
 		WorkflowKey:                  value.WorkflowKey,
 		IdempotencyKey:               value.IdempotencyKey,
-		CreatedBySubjectId:           value.CreatedBySubjectId,
 		Signal:                       ToWireWorkflowSignal(value.Signal),
 		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
-		RunAs:                        ToWireSubjectContext(value.RunAs),
 		Input:                        toWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      ToWireRequestContext(value.Context),
@@ -437,11 +427,9 @@ func FromWireSignalOrStartWorkflowProviderRunRequest(value *proto.SignalOrStartW
 	out := &SignalOrStartWorkflowProviderRunRequest{
 		WorkflowKey:                  value.WorkflowKey,
 		IdempotencyKey:               value.IdempotencyKey,
-		CreatedBySubjectId:           value.CreatedBySubjectId,
 		Signal:                       FromWireWorkflowSignal(value.Signal),
 		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
-		RunAs:                        FromWireSubjectContext(value.RunAs),
 		Input:                        fromWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      FromWireRequestContext(value.Context),
@@ -505,11 +493,9 @@ func ToWireStartWorkflowProviderRunRequest(value *StartWorkflowProviderRunReques
 	}
 	out := &proto.StartWorkflowProviderRunRequest{
 		IdempotencyKey:               value.IdempotencyKey,
-		CreatedBySubjectId:           value.CreatedBySubjectId,
 		WorkflowKey:                  value.WorkflowKey,
 		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
-		RunAs:                        ToWireSubjectContext(value.RunAs),
 		Input:                        toWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      ToWireRequestContext(value.Context),
@@ -523,11 +509,9 @@ func FromWireStartWorkflowProviderRunRequest(value *proto.StartWorkflowProviderR
 	}
 	out := &StartWorkflowProviderRunRequest{
 		IdempotencyKey:               value.IdempotencyKey,
-		CreatedBySubjectId:           value.CreatedBySubjectId,
 		WorkflowKey:                  value.WorkflowKey,
 		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
-		RunAs:                        FromWireSubjectContext(value.RunAs),
 		Input:                        fromWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      FromWireRequestContext(value.Context),

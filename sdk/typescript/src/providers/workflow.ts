@@ -409,7 +409,6 @@ export interface GetWorkflowProviderRunOutputResponse {
 export interface ApplyWorkflowProviderDefinitionRequest {
   spec?: WorkflowDefinitionSpec | undefined;
   idempotencyKey?: string | undefined;
-  requestedBySubjectId?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -425,7 +424,6 @@ export interface ListWorkflowProviderDefinitionsRequest {
 export interface SetWorkflowProviderDefinitionPausedRequest {
   definitionId: string;
   paused: boolean;
-  requestedBySubjectId?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -433,7 +431,6 @@ export interface SetWorkflowProviderActivationPausedRequest {
   definitionId: string;
   activationId: string;
   paused: boolean;
-  requestedBySubjectId?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -447,8 +444,6 @@ export interface StartWorkflowProviderRunRequest {
   expectedDefinitionGeneration?: bigint | number | undefined;
   input?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
-  createdBySubjectId?: string | undefined;
-  runAs?: SubjectInput | undefined;
   workflowKey?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
@@ -494,8 +489,6 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   expectedDefinitionGeneration?: bigint | number | undefined;
   input?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
-  createdBySubjectId?: string | undefined;
-  runAs?: SubjectInput | undefined;
   signal?: WorkflowSignal | undefined;
   context?: ProtoRequestContext | undefined;
 }
@@ -510,7 +503,6 @@ export interface SignalWorkflowRunResponse {
 export interface DeliverWorkflowProviderEventRequest {
   appName?: string | undefined;
   event?: WorkflowEvent | undefined;
-  deliveredBySubjectId?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -1592,7 +1584,6 @@ function applyWorkflowProviderDefinitionRequestFromProto(input: ProtoApplyWorkfl
   return {
     spec: workflowDefinitionSpecFromProto(input.spec),
     idempotencyKey: input.idempotencyKey,
-    requestedBySubjectId: input.requestedBySubjectId,
     context: input.context,
   };
 }
@@ -1606,11 +1597,11 @@ function listWorkflowProviderDefinitionsRequestFromProto(input: ProtoListWorkflo
 }
 
 function setWorkflowProviderDefinitionPausedRequestFromProto(input: ProtoSetWorkflowProviderDefinitionPausedRequest): SetWorkflowProviderDefinitionPausedRequest {
-  return { definitionId: input.definitionId, paused: input.paused, requestedBySubjectId: input.requestedBySubjectId, context: input.context };
+  return { definitionId: input.definitionId, paused: input.paused, context: input.context };
 }
 
 function setWorkflowProviderActivationPausedRequestFromProto(input: ProtoSetWorkflowProviderActivationPausedRequest): SetWorkflowProviderActivationPausedRequest {
-  return { definitionId: input.definitionId, activationId: input.activationId, paused: input.paused, requestedBySubjectId: input.requestedBySubjectId, context: input.context };
+  return { definitionId: input.definitionId, activationId: input.activationId, paused: input.paused, context: input.context };
 }
 
 function deleteWorkflowProviderDefinitionRequestFromProto(input: ProtoDeleteWorkflowProviderDefinitionRequest): DeleteWorkflowProviderDefinitionRequest {
@@ -1623,8 +1614,6 @@ function startWorkflowProviderRunRequestFromProto(input: ProtoStartWorkflowProvi
     expectedDefinitionGeneration: input.expectedDefinitionGeneration,
     input: optionalObjectFromStruct(input.input),
     idempotencyKey: input.idempotencyKey,
-    createdBySubjectId: input.createdBySubjectId,
-    runAs: subjectInputFromProto(input.runAs),
     workflowKey: input.workflowKey,
     context: input.context,
   };
@@ -1667,8 +1656,6 @@ function signalOrStartWorkflowProviderRunRequestFromProto(input: ProtoSignalOrSt
     expectedDefinitionGeneration: input.expectedDefinitionGeneration,
     input: optionalObjectFromStruct(input.input),
     idempotencyKey: input.idempotencyKey,
-    createdBySubjectId: input.createdBySubjectId,
-    runAs: subjectInputFromProto(input.runAs),
     signal: workflowSignalFromProto(input.signal),
     context: input.context,
   };
@@ -1678,7 +1665,6 @@ function deliverWorkflowProviderEventRequestFromProto(input: ProtoDeliverWorkflo
   return {
     appName: input.appName,
     event: workflowEventFromProto(input.event),
-    deliveredBySubjectId: input.deliveredBySubjectId,
     context: input.context,
   };
 }

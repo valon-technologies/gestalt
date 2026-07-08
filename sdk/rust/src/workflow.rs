@@ -77,8 +77,6 @@ pub struct ApplyWorkflowProviderDefinitionRequest {
     pub spec: Option<WorkflowDefinitionSpec>,
     /// The `idempotency_key` field.
     pub idempotency_key: String,
-    /// The `requested_by_subject_id` field.
-    pub requested_by_subject_id: String,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
 }
@@ -117,8 +115,6 @@ pub struct DeliverWorkflowProviderEventRequest {
     pub app_name: String,
     /// The `event` field; None when unset.
     pub event: Option<WorkflowEvent>,
-    /// The `delivered_by_subject_id` field.
-    pub delivered_by_subject_id: String,
     /// The `provider_name` field.
     pub provider_name: String,
     /// The `context` field; None when unset.
@@ -222,8 +218,6 @@ pub struct SetWorkflowProviderActivationPausedRequest {
     pub activation_id: String,
     /// The `paused` field.
     pub paused: bool,
-    /// The `requested_by_subject_id` field.
-    pub requested_by_subject_id: String,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
 }
@@ -235,8 +229,6 @@ pub struct SetWorkflowProviderDefinitionPausedRequest {
     pub definition_id: String,
     /// The `paused` field.
     pub paused: bool,
-    /// The `requested_by_subject_id` field.
-    pub requested_by_subject_id: String,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
 }
@@ -248,16 +240,12 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub workflow_key: String,
     /// The `idempotency_key` field.
     pub idempotency_key: String,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: String,
     /// The `signal` field; None when unset.
     pub signal: Option<WorkflowSignal>,
     /// The `provider_name` field.
     pub provider_name: String,
     /// The `definition_id` field.
     pub definition_id: String,
-    /// The `run_as` field; None when unset.
-    pub run_as: Option<SubjectContext>,
     /// The `input` field; None when unset.
     pub input: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `expected_definition_generation` field.
@@ -295,16 +283,12 @@ pub struct SignalWorkflowRunResponse {
 pub struct StartWorkflowProviderRunRequest {
     /// The `idempotency_key` field.
     pub idempotency_key: String,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: String,
     /// The `workflow_key` field.
     pub workflow_key: String,
     /// The `provider_name` field.
     pub provider_name: String,
     /// The `definition_id` field.
     pub definition_id: String,
-    /// The `run_as` field; None when unset.
-    pub run_as: Option<SubjectContext>,
     /// The `input` field; None when unset.
     pub input: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `expected_definition_generation` field.
@@ -809,7 +793,6 @@ impl Workflow {
             idempotency_key,
             spec,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_apply_workflow_provider_definition_request(request));
@@ -927,7 +910,6 @@ impl Workflow {
             definition_id,
             paused,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(
             to_wire_set_workflow_provider_definition_paused_request(request),
@@ -970,7 +952,6 @@ impl Workflow {
             activation_id,
             paused,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(
             to_wire_set_workflow_provider_activation_paused_request(request),
@@ -1035,7 +1016,6 @@ impl Workflow {
     }
 
     /// Calls `gestalt.provider.v1.Workflow.StartRun`.
-    #[allow(clippy::too_many_arguments)]
     pub async fn start_run(
         &mut self,
         idempotency_key: String,
@@ -1043,7 +1023,6 @@ impl Workflow {
         provider_name: String,
         definition_id: String,
         expected_definition_generation: i64,
-        run_as: Option<SubjectContext>,
         input: Option<serde_json::Map<String, serde_json::Value>>,
     ) -> Result<WorkflowRun, GestaltError> {
         let request = StartWorkflowProviderRunRequest {
@@ -1052,10 +1031,8 @@ impl Workflow {
             provider_name,
             definition_id,
             expected_definition_generation,
-            run_as,
             input,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_start_workflow_provider_run_request(request));
@@ -1333,7 +1310,6 @@ impl Workflow {
         definition_id: String,
         expected_definition_generation: i64,
         signal: Option<WorkflowSignal>,
-        run_as: Option<SubjectContext>,
         input: Option<serde_json::Map<String, serde_json::Value>>,
     ) -> Result<SignalWorkflowRunResponse, GestaltError> {
         let request = SignalOrStartWorkflowProviderRunRequest {
@@ -1343,10 +1319,8 @@ impl Workflow {
             definition_id,
             expected_definition_generation,
             signal,
-            run_as,
             input,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(
             to_wire_signal_or_start_workflow_provider_run_request(request),
@@ -1392,7 +1366,6 @@ impl Workflow {
             app_name: options.app_name,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_deliver_workflow_provider_event_request(request));

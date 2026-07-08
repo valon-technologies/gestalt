@@ -41,7 +41,6 @@ pub(crate) fn to_wire_apply_workflow_provider_definition_request(
         provider_name: value.provider_name,
         spec: value.spec.map(to_wire_workflow_definition_spec),
         idempotency_key: value.idempotency_key,
-        requested_by_subject_id: value.requested_by_subject_id,
         context: value.context.map(to_wire_request_context),
     }
 }
@@ -94,7 +93,6 @@ pub(crate) fn to_wire_deliver_workflow_provider_event_request(
     v1::DeliverWorkflowProviderEventRequest {
         app_name: value.app_name,
         event: value.event.map(to_wire_workflow_event),
-        delivered_by_subject_id: value.delivered_by_subject_id,
         provider_name: value.provider_name,
         context: value.context.map(to_wire_request_context),
     }
@@ -215,7 +213,6 @@ pub(crate) fn to_wire_set_workflow_provider_activation_paused_request(
         definition_id: value.definition_id,
         activation_id: value.activation_id,
         paused: value.paused,
-        requested_by_subject_id: value.requested_by_subject_id,
         context: value.context.map(to_wire_request_context),
     }
 }
@@ -227,7 +224,6 @@ pub(crate) fn to_wire_set_workflow_provider_definition_paused_request(
     v1::SetWorkflowProviderDefinitionPausedRequest {
         definition_id: value.definition_id,
         paused: value.paused,
-        requested_by_subject_id: value.requested_by_subject_id,
         context: value.context.map(to_wire_request_context),
     }
 }
@@ -239,11 +235,9 @@ pub(crate) fn to_wire_signal_or_start_workflow_provider_run_request(
     v1::SignalOrStartWorkflowProviderRunRequest {
         workflow_key: value.workflow_key,
         idempotency_key: value.idempotency_key,
-        created_by_subject_id: value.created_by_subject_id,
         signal: value.signal.map(to_wire_workflow_signal),
         provider_name: value.provider_name,
         definition_id: value.definition_id,
-        run_as: value.run_as.map(to_wire_subject_context),
         input: value.input.map(to_wire_struct),
         expected_definition_generation: value.expected_definition_generation,
         context: value.context.map(to_wire_request_context),
@@ -279,11 +273,9 @@ pub(crate) fn to_wire_start_workflow_provider_run_request(
 ) -> v1::StartWorkflowProviderRunRequest {
     v1::StartWorkflowProviderRunRequest {
         idempotency_key: value.idempotency_key,
-        created_by_subject_id: value.created_by_subject_id,
         workflow_key: value.workflow_key,
         provider_name: value.provider_name,
         definition_id: value.definition_id,
-        run_as: value.run_as.map(to_wire_subject_context),
         input: value.input.map(to_wire_struct),
         expected_definition_generation: value.expected_definition_generation,
         context: value.context.map(to_wire_request_context),

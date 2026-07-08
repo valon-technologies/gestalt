@@ -79,7 +79,6 @@ export interface ApplyWorkflowProviderDefinitionRequest {
   providerName: string;
   spec?: WorkflowDefinitionSpec;
   idempotencyKey: string;
-  requestedBySubjectId: string;
   context?: RequestContext;
 }
 
@@ -101,7 +100,6 @@ export interface DeleteWorkflowProviderDefinitionRequest {
 export interface DeliverWorkflowProviderEventRequest {
   appName: string;
   event?: WorkflowEvent;
-  deliveredBySubjectId: string;
   providerName: string;
   context?: RequestContext;
 }
@@ -159,25 +157,21 @@ export interface SetWorkflowProviderActivationPausedRequest {
   definitionId: string;
   activationId: string;
   paused: boolean;
-  requestedBySubjectId: string;
   context?: RequestContext;
 }
 
 export interface SetWorkflowProviderDefinitionPausedRequest {
   definitionId: string;
   paused: boolean;
-  requestedBySubjectId: string;
   context?: RequestContext;
 }
 
 export interface SignalOrStartWorkflowProviderRunRequest {
   workflowKey: string;
   idempotencyKey: string;
-  createdBySubjectId: string;
   signal?: WorkflowSignal;
   providerName: string;
   definitionId: string;
-  runAs?: SubjectContext;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
   context?: RequestContext;
@@ -198,11 +192,9 @@ export interface SignalWorkflowRunResponse {
 
 export interface StartWorkflowProviderRunRequest {
   idempotencyKey: string;
-  createdBySubjectId: string;
   workflowKey: string;
   providerName: string;
   definitionId: string;
-  runAs?: SubjectContext;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
   context?: RequestContext;
@@ -566,7 +558,6 @@ export class Workflow {
     const request = {
       providerName,
       idempotencyKey,
-      requestedBySubjectId: "",
       ...(spec !== undefined ? { spec } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<ApplyWorkflowProviderDefinitionRequest>;
@@ -680,7 +671,6 @@ export class Workflow {
     const request = {
       definitionId,
       paused,
-      requestedBySubjectId: "",
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<SetWorkflowProviderDefinitionPausedRequest>;
     const response = await callUnary(() =>
@@ -723,7 +713,6 @@ export class Workflow {
       definitionId,
       activationId,
       paused,
-      requestedBySubjectId: "",
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<SetWorkflowProviderActivationPausedRequest>;
     const response = await callUnary(() =>
@@ -797,7 +786,6 @@ export class Workflow {
     providerName: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
-    runAs?: Init<SubjectContext>,
     input?: JsonObject,
   ): Promise<WorkflowRun> {
     const request = {
@@ -806,8 +794,6 @@ export class Workflow {
       providerName,
       definitionId,
       expectedDefinitionGeneration,
-      createdBySubjectId: "",
-      ...(runAs !== undefined ? { runAs } : {}),
       ...(input !== undefined ? { input } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<StartWorkflowProviderRunRequest>;
@@ -1082,7 +1068,6 @@ export class Workflow {
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     signal?: Init<WorkflowSignal>,
-    runAs?: Init<SubjectContext>,
     input?: JsonObject,
   ): Promise<SignalWorkflowRunResponse> {
     const request = {
@@ -1091,9 +1076,7 @@ export class Workflow {
       providerName,
       definitionId,
       expectedDefinitionGeneration,
-      createdBySubjectId: "",
       ...(signal !== undefined ? { signal } : {}),
-      ...(runAs !== undefined ? { runAs } : {}),
       ...(input !== undefined ? { input } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<SignalOrStartWorkflowProviderRunRequest>;
@@ -1138,7 +1121,6 @@ export class Workflow {
     const request = {
       appName: options?.appName ?? "",
       providerName: options?.providerName ?? "",
-      deliveredBySubjectId: "",
       ...(event !== undefined ? { event } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<DeliverWorkflowProviderEventRequest>;

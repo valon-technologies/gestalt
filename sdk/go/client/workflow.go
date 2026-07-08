@@ -53,11 +53,10 @@ const (
 
 // ApplyWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.
 type ApplyWorkflowProviderDefinitionRequest struct {
-	ProviderName         string
-	Spec                 *WorkflowDefinitionSpec
-	IdempotencyKey       string
-	RequestedBySubjectId string
-	Context              *RequestContext
+	ProviderName   string
+	Spec           *WorkflowDefinitionSpec
+	IdempotencyKey string
+	Context        *RequestContext
 }
 
 // BoundWorkflowTarget is the native message type for gestalt.provider.v1.BoundWorkflowTarget.
@@ -80,11 +79,10 @@ type DeleteWorkflowProviderDefinitionRequest struct {
 
 // DeliverWorkflowProviderEventRequest is the native message type for gestalt.provider.v1.DeliverWorkflowProviderEventRequest.
 type DeliverWorkflowProviderEventRequest struct {
-	AppName              string
-	Event                *WorkflowEvent
-	DeliveredBySubjectId string
-	ProviderName         string
-	Context              *RequestContext
+	AppName      string
+	Event        *WorkflowEvent
+	ProviderName string
+	Context      *RequestContext
 }
 
 // GetWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.
@@ -148,30 +146,26 @@ type ListWorkflowProviderRunsResponse struct {
 
 // SetWorkflowProviderActivationPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.
 type SetWorkflowProviderActivationPausedRequest struct {
-	DefinitionId         string
-	ActivationId         string
-	Paused               bool
-	RequestedBySubjectId string
-	Context              *RequestContext
+	DefinitionId string
+	ActivationId string
+	Paused       bool
+	Context      *RequestContext
 }
 
 // SetWorkflowProviderDefinitionPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.
 type SetWorkflowProviderDefinitionPausedRequest struct {
-	DefinitionId         string
-	Paused               bool
-	RequestedBySubjectId string
-	Context              *RequestContext
+	DefinitionId string
+	Paused       bool
+	Context      *RequestContext
 }
 
 // SignalOrStartWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.
 type SignalOrStartWorkflowProviderRunRequest struct {
 	WorkflowKey                  string
 	IdempotencyKey               string
-	CreatedBySubjectId           string
 	Signal                       *WorkflowSignal
 	ProviderName                 string
 	DefinitionId                 string
-	RunAs                        *SubjectContext
 	Input                        map[string]any
 	ExpectedDefinitionGeneration int64
 	Context                      *RequestContext
@@ -195,11 +189,9 @@ type SignalWorkflowRunResponse struct {
 // StartWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.StartWorkflowProviderRunRequest.
 type StartWorkflowProviderRunRequest struct {
 	IdempotencyKey               string
-	CreatedBySubjectId           string
 	WorkflowKey                  string
 	ProviderName                 string
 	DefinitionId                 string
-	RunAs                        *SubjectContext
 	Input                        map[string]any
 	ExpectedDefinitionGeneration int64
 	Context                      *RequestContext
@@ -750,8 +742,8 @@ func (c *Workflow) DeleteDefinitionRaw(ctx context.Context, request *DeleteWorkf
 }
 
 // StartRun is the ergonomic form of [Workflow.StartRunRaw].
-func (c *Workflow) StartRun(ctx context.Context, idempotencyKey string, workflowKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, runAs *SubjectContext, input map[string]any) (*WorkflowRun, error) {
-	request := &StartWorkflowProviderRunRequest{IdempotencyKey: idempotencyKey, WorkflowKey: workflowKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, RunAs: runAs, Input: input, Context: c.context}
+func (c *Workflow) StartRun(ctx context.Context, idempotencyKey string, workflowKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, input map[string]any) (*WorkflowRun, error) {
+	request := &StartWorkflowProviderRunRequest{IdempotencyKey: idempotencyKey, WorkflowKey: workflowKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Input: input, Context: c.context}
 	response, err := c.client.StartRun(ctx, ToWireStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -920,8 +912,8 @@ func (c *Workflow) SignalRunRaw(ctx context.Context, request *SignalWorkflowProv
 }
 
 // SignalOrStartRun is the ergonomic form of [Workflow.SignalOrStartRunRaw].
-func (c *Workflow) SignalOrStartRun(ctx context.Context, workflowKey string, idempotencyKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, signal *WorkflowSignal, runAs *SubjectContext, input map[string]any) (*SignalWorkflowRunResponse, error) {
-	request := &SignalOrStartWorkflowProviderRunRequest{WorkflowKey: workflowKey, IdempotencyKey: idempotencyKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Signal: signal, RunAs: runAs, Input: input, Context: c.context}
+func (c *Workflow) SignalOrStartRun(ctx context.Context, workflowKey string, idempotencyKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, signal *WorkflowSignal, input map[string]any) (*SignalWorkflowRunResponse, error) {
+	request := &SignalOrStartWorkflowProviderRunRequest{WorkflowKey: workflowKey, IdempotencyKey: idempotencyKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Signal: signal, Input: input, Context: c.context}
 	response, err := c.client.SignalOrStartRun(ctx, ToWireSignalOrStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

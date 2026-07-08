@@ -5,9 +5,8 @@ import "context"
 // ApplyWorkflowProviderDefinitionRequest atomically stores one workflow
 // definition specification and its activations.
 type ApplyWorkflowProviderDefinitionRequest struct {
-	Spec                 *WorkflowDefinitionSpec
-	IdempotencyKey       string
-	RequestedBySubjectID string
+	Spec           *WorkflowDefinitionSpec
+	IdempotencyKey string
 }
 
 // GetWorkflowProviderDefinitionRequest identifies one workflow definition.
@@ -34,18 +33,16 @@ func (r *ListWorkflowProviderDefinitionsResponse) GetDefinitions() []WorkflowDef
 // SetWorkflowProviderDefinitionPausedRequest changes definition-wide pause
 // state. Paused definitions do not start new manual, schedule, or event runs.
 type SetWorkflowProviderDefinitionPausedRequest struct {
-	DefinitionID         string
-	Paused               bool
-	RequestedBySubjectID string
+	DefinitionID string
+	Paused       bool
 }
 
 // SetWorkflowProviderActivationPausedRequest changes one activation pause
 // state without affecting other activations on the same definition.
 type SetWorkflowProviderActivationPausedRequest struct {
-	DefinitionID         string
-	ActivationID         string
-	Paused               bool
-	RequestedBySubjectID string
+	DefinitionID string
+	ActivationID string
+	Paused       bool
 }
 
 // DeleteWorkflowProviderDefinitionRequest identifies a workflow definition to
@@ -61,8 +58,6 @@ type StartWorkflowProviderRunRequest struct {
 	ExpectedDefinitionGeneration int64
 	Input                        map[string]any
 	IdempotencyKey               string
-	CreatedBySubjectID           string
-	RunAs                        *Subject
 	WorkflowKey                  string
 }
 
@@ -149,8 +144,6 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	ExpectedDefinitionGeneration int64
 	Input                        map[string]any
 	IdempotencyKey               string
-	CreatedBySubjectID           string
-	RunAs                        *Subject
 	Signal                       *WorkflowSignal
 }
 
@@ -166,9 +159,8 @@ type SignalWorkflowRunResponse struct {
 // DeliverWorkflowProviderEventRequest requests delivery of a workflow event to
 // provider-owned activation matching.
 type DeliverWorkflowProviderEventRequest struct {
-	AppName              string
-	Event                *WorkflowEvent
-	DeliveredBySubjectID string
+	AppName string
+	Event   *WorkflowEvent
 }
 
 // WorkflowProvider is implemented by providers that serve the workflow base

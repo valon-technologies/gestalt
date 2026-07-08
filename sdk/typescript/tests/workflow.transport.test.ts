@@ -14,6 +14,10 @@ import {
   StartWorkflowProviderRunRequestSchema,
   Workflow as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
+import {
+  RequestContextSchema,
+  SubjectContextSchema,
+} from "../src/internal/gen/v1/app_pb.ts";
 import { jsonObjectFromStruct, structFromObject } from "../src/protocol.ts";
 import {
   WorkflowRunStatus,
@@ -55,13 +59,14 @@ test("WorkflowProvider service converts transport messages to native callbacks",
   const provider = defineWorkflowProvider({
     displayName: "Workflow transport fixture",
     async applyDefinition(request) {
-      calls.push({ method: "apply-definition", detail: request.requestedBySubjectId ?? "" });
+      const subjectId = request.context?.subject?.id ?? "";
+      calls.push({ method: "apply-definition", detail: subjectId });
       return workflowDefinition({
         id: request.spec?.id,
         generation: 7n,
         target: request.spec?.target,
         activations: request.spec?.activations,
-        createdBySubjectId: request.requestedBySubjectId,
+        createdBySubjectId: subjectId,
       });
     },
     async getDefinition(request) {
@@ -90,7 +95,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         definitionGeneration: request.expectedDefinitionGeneration,
         workflowKey: request.workflowKey,
         input: request.input,
-        createdBySubjectId: request.createdBySubjectId,
+        createdBySubjectId: request.context?.subject?.id ?? "",
         currentStepId: "sync",
         steps: [{
           stepId: "sync",
@@ -176,7 +181,9 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     );
     const definition = await client.applyDefinition(create(ApplyWorkflowProviderDefinitionRequestSchema, {
       idempotencyKey: "definition-native-ts",
-      requestedBySubjectId: "user:ada",
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, { id: "user:ada" }),
+      }),
       spec: {
         id: "definition-native-ts",
         target: {

@@ -3719,8 +3719,6 @@ pub struct ApplyWorkflowProviderDefinitionRequest {
     pub spec: ::core::option::Option<WorkflowDefinitionSpec>,
     #[prost(string, tag = "4")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub requested_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3747,8 +3745,6 @@ pub struct SetWorkflowProviderDefinitionPausedRequest {
     pub definition_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub paused: bool,
-    #[prost(string, tag = "4")]
-    pub requested_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3760,8 +3756,6 @@ pub struct SetWorkflowProviderActivationPausedRequest {
     pub activation_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "3")]
     pub paused: bool,
-    #[prost(string, tag = "5")]
-    pub requested_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3776,16 +3770,12 @@ pub struct DeleteWorkflowProviderDefinitionRequest {
 pub struct StartWorkflowProviderRunRequest {
     #[prost(string, tag = "2")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub workflow_key: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub definition_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
-    pub run_as: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "11")]
     pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(int64, tag = "12")]
@@ -3844,16 +3834,12 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub workflow_key: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(string, tag = "7")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub definition_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
-    pub run_as: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "11")]
     pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(int64, tag = "12")]
@@ -3878,8 +3864,6 @@ pub struct DeliverWorkflowProviderEventRequest {
     pub app_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
-    #[prost(string, tag = "3")]
-    pub delivered_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]

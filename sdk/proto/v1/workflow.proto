@@ -254,12 +254,12 @@ message WorkflowSignal {
 }
 
 message ApplyWorkflowProviderDefinitionRequest {
-  reserved 3;
+  reserved 3, 5;
+  reserved "requested_by_subject_id";
 
   string provider_name = 1;
   WorkflowDefinitionSpec spec = 2;
   string idempotency_key = 4;
-  string requested_by_subject_id = 5;
   RequestContext context = 6;
 }
 
@@ -283,21 +283,21 @@ message ListWorkflowProviderDefinitionsResponse {
 }
 
 message SetWorkflowProviderDefinitionPausedRequest {
-  reserved 3;
+  reserved 3, 4;
+  reserved "requested_by_subject_id";
 
   string definition_id = 1;
   bool paused = 2;
-  string requested_by_subject_id = 4;
   RequestContext context = 5;
 }
 
 message SetWorkflowProviderActivationPausedRequest {
-  reserved 4;
+  reserved 4, 5;
+  reserved "requested_by_subject_id";
 
   string definition_id = 1;
   string activation_id = 2;
   bool paused = 3;
-  string requested_by_subject_id = 5;
   RequestContext context = 6;
 }
 
@@ -309,14 +309,13 @@ message DeleteWorkflowProviderDefinitionRequest {
 }
 
 message StartWorkflowProviderRunRequest {
-  reserved 1, 8;
+  reserved 1, 4, 8, 10;
+  reserved "created_by_subject_id", "run_as";
 
   string idempotency_key = 2;
-  string created_by_subject_id = 4;
   string workflow_key = 6;
   string provider_name = 7;
   string definition_id = 9;
-  SubjectContext run_as = 10;
   google.protobuf.Struct input = 11;
   int64 expected_definition_generation = 12;
   RequestContext context = 13;
@@ -361,16 +360,14 @@ message SignalWorkflowProviderRunRequest {
 }
 
 message SignalOrStartWorkflowProviderRunRequest {
-  reserved 8;
+  reserved 2, 4, 8, 10;
+  reserved "created_by_subject_id", "run_as";
 
   string workflow_key = 1;
-  reserved 2;
   string idempotency_key = 3;
-  string created_by_subject_id = 4;
   WorkflowSignal signal = 6;
   string provider_name = 7;
   string definition_id = 9;
-  SubjectContext run_as = 10;
   google.protobuf.Struct input = 11;
   int64 expected_definition_generation = 12;
   RequestContext context = 13;
@@ -384,11 +381,11 @@ message SignalWorkflowRunResponse {
 }
 
 message DeliverWorkflowProviderEventRequest {
-  reserved 4;
+  reserved 3, 4;
+  reserved "delivered_by_subject_id";
 
   string app_name = 1;
   WorkflowEvent event = 2;
-  string delivered_by_subject_id = 3;
   string provider_name = 5;
   RequestContext context = 6;
 }
@@ -459,7 +456,6 @@ service Workflow {
     option (signature) = "provider_name";
     option (signature) = "definition_id";
     option (signature) = "expected_definition_generation";
-    option (signature) = "run_as";
     option (signature) = "input";
   }
   rpc ListRuns(ListWorkflowProviderRunsRequest) returns (ListWorkflowProviderRunsResponse) {
@@ -492,7 +488,6 @@ service Workflow {
     option (signature) = "definition_id";
     option (signature) = "expected_definition_generation";
     option (signature) = "signal";
-    option (signature) = "run_as";
     option (signature) = "input";
   }
 
@@ -502,7 +497,6 @@ service Workflow {
     };
     option (public) = {
       fill: "context"
-      fill: "delivered_by_subject_id"
     };
     option (signature) = "event";
     option (optional_signature) = "app_name";

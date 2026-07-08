@@ -84,7 +84,6 @@ export function toWireApplyWorkflowProviderDefinitionRequest(
       ? { spec: toWireWorkflowDefinitionSpec(value.spec) }
       : {}),
     idempotencyKey: value.idempotencyKey ?? "",
-    requestedBySubjectId: value.requestedBySubjectId ?? "",
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -100,7 +99,6 @@ export function fromWireApplyWorkflowProviderDefinitionRequest(
       ? { spec: fromWireWorkflowDefinitionSpec(value.spec) }
       : {}),
     idempotencyKey: value.idempotencyKey,
-    requestedBySubjectId: value.requestedBySubjectId,
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -177,7 +175,6 @@ export function toWireDeliverWorkflowProviderEventRequest(
     ...(value.event !== undefined
       ? { event: toWireWorkflowEvent(value.event) }
       : {}),
-    deliveredBySubjectId: value.deliveredBySubjectId ?? "",
     providerName: value.providerName ?? "",
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
@@ -193,7 +190,6 @@ export function fromWireDeliverWorkflowProviderEventRequest(
     ...(value.event !== undefined
       ? { event: fromWireWorkflowEvent(value.event) }
       : {}),
-    deliveredBySubjectId: value.deliveredBySubjectId,
     providerName: value.providerName,
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
@@ -414,7 +410,6 @@ export function toWireSetWorkflowProviderActivationPausedRequest(
     definitionId: value.definitionId ?? "",
     activationId: value.activationId ?? "",
     paused: value.paused ?? false,
-    requestedBySubjectId: value.requestedBySubjectId ?? "",
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -428,7 +423,6 @@ export function fromWireSetWorkflowProviderActivationPausedRequest(
     definitionId: value.definitionId,
     activationId: value.activationId,
     paused: value.paused,
-    requestedBySubjectId: value.requestedBySubjectId,
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -441,7 +435,6 @@ export function toWireSetWorkflowProviderDefinitionPausedRequest(
   return create(wire.SetWorkflowProviderDefinitionPausedRequestSchema, {
     definitionId: value.definitionId ?? "",
     paused: value.paused ?? false,
-    requestedBySubjectId: value.requestedBySubjectId ?? "",
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -454,7 +447,6 @@ export function fromWireSetWorkflowProviderDefinitionPausedRequest(
   return {
     definitionId: value.definitionId,
     paused: value.paused,
-    requestedBySubjectId: value.requestedBySubjectId,
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -467,15 +459,11 @@ export function toWireSignalOrStartWorkflowProviderRunRequest(
   return create(wire.SignalOrStartWorkflowProviderRunRequestSchema, {
     workflowKey: value.workflowKey ?? "",
     idempotencyKey: value.idempotencyKey ?? "",
-    createdBySubjectId: value.createdBySubjectId ?? "",
     ...(value.signal !== undefined
       ? { signal: toWireWorkflowSignal(value.signal) }
       : {}),
     providerName: value.providerName ?? "",
     definitionId: value.definitionId ?? "",
-    ...(value.runAs !== undefined
-      ? { runAs: toWireSubjectContext(value.runAs) }
-      : {}),
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
     ...(value.context !== undefined
@@ -490,15 +478,11 @@ export function fromWireSignalOrStartWorkflowProviderRunRequest(
   return {
     workflowKey: value.workflowKey,
     idempotencyKey: value.idempotencyKey,
-    createdBySubjectId: value.createdBySubjectId,
     ...(value.signal !== undefined
       ? { signal: fromWireWorkflowSignal(value.signal) }
       : {}),
     providerName: value.providerName,
     definitionId: value.definitionId,
-    ...(value.runAs !== undefined
-      ? { runAs: fromWireSubjectContext(value.runAs) }
-      : {}),
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration,
     ...(value.context !== undefined
@@ -566,13 +550,9 @@ export function toWireStartWorkflowProviderRunRequest(
 ): wire.StartWorkflowProviderRunRequest {
   return create(wire.StartWorkflowProviderRunRequestSchema, {
     idempotencyKey: value.idempotencyKey ?? "",
-    createdBySubjectId: value.createdBySubjectId ?? "",
     workflowKey: value.workflowKey ?? "",
     providerName: value.providerName ?? "",
     definitionId: value.definitionId ?? "",
-    ...(value.runAs !== undefined
-      ? { runAs: toWireSubjectContext(value.runAs) }
-      : {}),
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
     ...(value.context !== undefined
@@ -586,13 +566,9 @@ export function fromWireStartWorkflowProviderRunRequest(
 ): StartWorkflowProviderRunRequest {
   return {
     idempotencyKey: value.idempotencyKey,
-    createdBySubjectId: value.createdBySubjectId,
     workflowKey: value.workflowKey,
     providerName: value.providerName,
     definitionId: value.definitionId,
-    ...(value.runAs !== undefined
-      ? { runAs: fromWireSubjectContext(value.runAs) }
-      : {}),
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration,
     ...(value.context !== undefined

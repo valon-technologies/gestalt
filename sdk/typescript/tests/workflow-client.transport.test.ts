@@ -180,7 +180,6 @@ test("Workflow forwards request context to provider calls", async () => {
       "basic",
       "def-1",
       0n,
-      undefined,
       { itemId: "item-1" },
     );
     const signaledRun = await workflow.signalRun("run-1", {

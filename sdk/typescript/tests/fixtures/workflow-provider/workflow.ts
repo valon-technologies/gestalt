@@ -26,6 +26,10 @@ function appStepTarget(appName: string, operation: string): BoundWorkflowTarget 
   });
 }
 
+function workflowSubjectFromContext(context: { subject?: { id?: string } | undefined } | undefined): string {
+  return context?.subject?.id ?? "";
+}
+
 export const provider = defineWorkflowProvider({
   displayName: "Fixture Workflow",
   description: "Workflow provider fixture used by SDK tests",
@@ -46,7 +50,7 @@ export const provider = defineWorkflowProvider({
       target: spec.target,
       activations: spec.activations,
       paused: spec.paused,
-      createdBySubjectId: request.requestedBySubjectId,
+      createdBySubjectId: workflowSubjectFromContext(request.context),
       updatedAt: new Date("2026-05-08T12:00:00.000Z"),
     });
     definitions.set(id, definition);
@@ -88,7 +92,7 @@ export const provider = defineWorkflowProvider({
       request.definitionId,
       request.workflowKey ?? "",
       request.input,
-      request.createdBySubjectId,
+      workflowSubjectFromContext(request.context),
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
     );
     runs.set(run.id ?? "", run);
@@ -143,7 +147,7 @@ export const provider = defineWorkflowProvider({
       request.definitionId,
       request.workflowKey,
       request.input,
-      request.createdBySubjectId,
+      workflowSubjectFromContext(request.context),
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
     );
     runs.set(run.id ?? "", run);
