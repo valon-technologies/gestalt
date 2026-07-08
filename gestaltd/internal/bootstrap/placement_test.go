@@ -15,7 +15,7 @@ func TestPlacementPlanLocalAppOverridesRemote(t *testing.T) {
 			RemoteToken: "token",
 		},
 		Apps: map[string]*config.ProviderEntry{
-			"demo": {DevActive: true},
+			"demo":   {DevActive: true},
 			"linear": {},
 		},
 	}
