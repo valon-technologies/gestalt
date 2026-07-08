@@ -15,10 +15,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/remotetest"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 )
 
 func plan6RemoteConfig(fake *remotetest.Server, localApps map[string]bool) *config.Config {
