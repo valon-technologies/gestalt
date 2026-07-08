@@ -21,10 +21,6 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 )
 
-func workflowRequestSubjectID(reqCtx *proto.RequestContext) string {
-	return appaccessservice.SubjectIDFromRequestContext(reqCtx)
-}
-
 func testWorkflowAppStepTarget(appName, operation string, input map[string]any) coreworkflow.Target {
 	call := &coreworkflow.AppCall{Name: appName, Operation: operation}
 	if input != nil {
@@ -304,7 +300,7 @@ func (p *testWorkflowProvider) ApplyDefinition(_ context.Context, req *proto.App
 		Target:             spec.Target,
 		Activations:        spec.Activations,
 		Paused:             spec.Paused,
-		CreatedBySubjectID: workflowRequestSubjectID(req.GetContext()),
+		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
 		RunAs:              spec.RunAs,
 	}
 	p.definitions[id] = definition
@@ -365,12 +361,12 @@ func (p *testWorkflowProvider) DeleteDefinition(_ context.Context, req *proto.De
 
 func (p *testWorkflowProvider) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	p.startRunRequests = append(p.startRunRequests, gproto.Clone(req).(*proto.StartWorkflowProviderRunRequest))
-	return p.startDefinitionRun(req.GetDefinitionId(), req.GetExpectedDefinitionGeneration(), req.GetWorkflowKey(), protoutil.MapFromStruct(req.GetInput()), workflowRequestSubjectID(req.GetContext()))
+	return p.startDefinitionRun(req.GetDefinitionId(), req.GetExpectedDefinitionGeneration(), req.GetWorkflowKey(), protoutil.MapFromStruct(req.GetInput()), appaccessservice.SubjectIDFromRequestContext(req.GetContext()))
 }
 
 func (p *testWorkflowProvider) SignalOrStartRun(_ context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	p.signalOrStartRequests = append(p.signalOrStartRequests, gproto.Clone(req).(*proto.SignalOrStartWorkflowProviderRunRequest))
-	runProto, err := p.startDefinitionRun(req.GetDefinitionId(), req.GetExpectedDefinitionGeneration(), req.GetWorkflowKey(), protoutil.MapFromStruct(req.GetInput()), workflowRequestSubjectID(req.GetContext()))
+	runProto, err := p.startDefinitionRun(req.GetDefinitionId(), req.GetExpectedDefinitionGeneration(), req.GetWorkflowKey(), protoutil.MapFromStruct(req.GetInput()), appaccessservice.SubjectIDFromRequestContext(req.GetContext()))
 	if err != nil {
 		return nil, err
 	}

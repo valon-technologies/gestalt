@@ -193,10 +193,7 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 			return &cloned, nil
 		}
 	}
-	createdBy := ""
-	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
-		createdBy = principal.SubjectID
-	}
+	createdBy := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 	session := &coreagent.Session{
 		ID:                 fmt.Sprintf("minted-session-%d", len(p.sessions)+1),
 		ProviderName:       "simple",

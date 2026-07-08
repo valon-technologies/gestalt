@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -443,7 +444,7 @@ func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, r
 			ID:  "run",
 			App: &coreworkflow.AppCall{Name: "github", Operation: "issues.triage"},
 		}}},
-		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
+		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
 	})
 	if err != nil {
 		return nil, err
