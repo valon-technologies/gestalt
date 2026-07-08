@@ -849,11 +849,11 @@ func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
 			wantErr:   invocation.ErrProviderNotFound,
 		},
 		{
-			name:       "dev active does not fall back to remote",
-			localApps:  map[string]bool{"linear": true},
-			app:        "linear",
-			operation:  "issues.list",
-			wantErr:    invocation.ErrProviderNotFound,
+			name:      "dev active does not fall back to remote",
+			localApps: map[string]bool{"linear": true},
+			app:       "linear",
+			operation: "issues.list",
+			wantErr:   invocation.ErrProviderNotFound,
 		},
 		{
 			name:      "remote client auth error surfaces not authenticated",
