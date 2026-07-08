@@ -1514,6 +1514,29 @@ func failPendingStartupProviders(deps Deps, err error) {
 	}
 }
 
+func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
+	if entry == nil {
+		return false
+	}
+	if entry.DevActive {
+		return true
+	}
+	return cfg == nil || strings.TrimSpace(cfg.Server.Remote) == ""
+}
+
+func localProviderEntries(cfg *config.Config, entries map[string]*config.ProviderEntry) map[string]*config.ProviderEntry {
+	if cfg == nil || strings.TrimSpace(cfg.Server.Remote) == "" {
+		return entries
+	}
+	filtered := make(map[string]*config.ProviderEntry, len(entries))
+	for name, entry := range entries {
+		if providerBuildsLocal(cfg, entry) {
+			filtered[name] = entry
+		}
+	}
+	return filtered
+}
+
 func buildConfiguredProviders[T any](
 	ctx context.Context,
 	entries map[string]*config.ProviderEntry,
@@ -1607,7 +1630,7 @@ func buildConfiguredProviders[T any](
 }
 
 func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, cfg.Providers.Workflow,
+	return buildConfiguredProviders(ctx, localProviderEntries(cfg, cfg.Providers.Workflow),
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
 			return buildWorkflow(ctx, name, entry, factories, deps)
 		},
@@ -1639,7 +1662,7 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 }
 
 func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, cfg.Providers.Agent,
+	return buildConfiguredProviders(ctx, localProviderEntries(cfg, cfg.Providers.Agent),
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
 			return buildAgent(ctx, name, entry, factories, deps)
 		},

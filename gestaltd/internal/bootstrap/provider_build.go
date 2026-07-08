@@ -96,12 +96,15 @@ func prepareProviderBuilds(
 	}
 
 	for name := range cfg.Apps {
-		intgDef := cfg.Apps[name]
-		sha := currentAppSHA(intgDef)
-		spec, operationRouting, err := buildStartupProviderSpec(name, intgDef)
+		entry := cfg.Apps[name]
+		if !providerBuildsLocal(cfg, entry) {
+			continue
+		}
+		sha := currentAppSHA(entry)
+		spec, operationRouting, err := buildStartupProviderSpec(name, entry)
 		if err != nil {
 			slog.Warn("building startup provider proxy metadata failed", "provider", name, "error", err)
-			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, sha: sha})
+			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: entry, sha: sha})
 			continue
 		}
 		var tracker *startupWaitTracker
@@ -112,10 +115,10 @@ func prepareProviderBuilds(
 		if err := reg.Providers.Register(name, proxy); err != nil {
 			builds.errs = append(builds.errs, fmt.Errorf("integration %q: %w", name, err))
 			slog.Warn("registering startup provider proxy failed", "provider", name, "error", err)
-			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, sha: sha})
+			builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: entry, sha: sha})
 			continue
 		}
-		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, proxy: proxy, sha: sha})
+		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: entry, proxy: proxy, sha: sha})
 	}
 	return builds, nil
 }
