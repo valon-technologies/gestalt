@@ -630,6 +630,7 @@ func (s *relayTestCacheServer) calls() int {
 type relayTestInvoker struct {
 	mu             sync.Mutex
 	calls          int
+	history        []relayTestInvokerCall
 	providerName   string
 	instance       string
 	operation      string
@@ -641,11 +642,20 @@ func (i *relayTestInvoker) Invoke(ctx context.Context, _ *principal.Principal, p
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.calls++
+	call := relayTestInvokerCall{
+		calls:          i.calls,
+		providerName:   providerName,
+		instance:       instance,
+		operation:      operation,
+		idempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
+		params:         maps.Clone(params),
+	}
+	i.history = append(i.history, call)
 	i.providerName = providerName
 	i.instance = instance
 	i.operation = operation
-	i.idempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
-	i.params = maps.Clone(params)
+	i.idempotencyKey = call.idempotencyKey
+	i.params = call.params
 	return &core.OperationResult{Status: 202, Body: []byte("relayed")}, nil
 }
 
@@ -661,14 +671,23 @@ type relayTestInvokerCall struct {
 func (i *relayTestInvoker) snapshot() relayTestInvokerCall {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return relayTestInvokerCall{
-		calls:          i.calls,
-		providerName:   i.providerName,
-		instance:       i.instance,
-		operation:      i.operation,
-		idempotencyKey: i.idempotencyKey,
-		params:         maps.Clone(i.params),
+	if len(i.history) == 0 {
+		return relayTestInvokerCall{}
 	}
+	last := i.history[len(i.history)-1]
+	last.params = maps.Clone(last.params)
+	return last
+}
+
+func (i *relayTestInvoker) snapshots() []relayTestInvokerCall {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	out := make([]relayTestInvokerCall, len(i.history))
+	for j, call := range i.history {
+		call.params = maps.Clone(call.params)
+		out[j] = call
+	}
+	return out
 }
 
 type callerTokenRecordingInvoker struct {
