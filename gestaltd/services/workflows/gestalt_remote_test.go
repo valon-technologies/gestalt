@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -15,8 +15,8 @@ import (
 )
 
 type fakeGestaltWorkflowClient struct {
-	startRun          func(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error)
-	listDefinitions   func(context.Context, *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error)
+	startRun        func(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error)
+	listDefinitions func(context.Context, *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error)
 }
 
 func (f *fakeGestaltWorkflowClient) ApplyDefinition(context.Context, *proto.ApplyWorkflowProviderDefinitionRequest, ...grpc.CallOption) (*proto.WorkflowDefinition, error) {
