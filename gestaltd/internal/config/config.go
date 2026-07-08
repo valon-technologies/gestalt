@@ -1929,6 +1929,8 @@ type ServerConfig struct {
 	BaseURL       string                   `yaml:"baseUrl"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
+	Remote        string                   `yaml:"remote,omitempty"`
+	RemoteToken   string                   `yaml:"remoteToken,omitempty"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
@@ -1956,6 +1958,36 @@ func (s *ServerRuntimeConfig) UnmarshalYAML(value *yaml.Node) error {
 	}
 	*s = ServerRuntimeConfig(decoded)
 	return nil
+}
+
+// NormalizeRemoteURL trims whitespace and trailing slashes from a remote gestaltd URL.
+func NormalizeRemoteURL(raw string) string {
+	return strings.TrimRight(strings.TrimSpace(raw), "/")
+}
+
+func (s *ServerConfig) NormalizeRemote() {
+	if s == nil {
+		return
+	}
+	s.Remote = NormalizeRemoteURL(s.Remote)
+}
+
+func (s ServerConfig) HasRemote() bool {
+	return NormalizeRemoteURL(s.Remote) != ""
+}
+
+// ApplyRemoteOverrides layers CLI overrides onto server.remote settings.
+func (cfg *Config) ApplyRemoteOverrides(remoteURL, remoteToken string) {
+	if cfg == nil {
+		return
+	}
+	if strings.TrimSpace(remoteURL) != "" {
+		cfg.Server.Remote = remoteURL
+	}
+	if strings.TrimSpace(remoteToken) != "" {
+		cfg.Server.RemoteToken = remoteToken
+	}
+	cfg.Server.NormalizeRemote()
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {

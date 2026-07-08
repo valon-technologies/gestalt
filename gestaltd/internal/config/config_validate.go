@@ -61,6 +61,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateServerListeners(cfg.Server); err != nil {
 		return err
 	}
+	if err := validateServerRemote(&cfg.Server); err != nil {
+		return err
+	}
 	if err := validateAdminConfig(cfg); err != nil {
 		return err
 	}
@@ -2473,6 +2476,23 @@ func validateAuthValueDef(integration, subject, path string, value AuthValueDef,
 	}
 	if _, ok := credentialNames[name]; !ok {
 		return fmt.Errorf("config validation: integration %q %s %s.valueFrom.credentialFieldRef references undeclared credential %q", integration, subject, path, name)
+	}
+	return nil
+}
+
+func validateServerRemote(cfg *ServerConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	cfg.NormalizeRemote()
+	if !cfg.HasRemote() {
+		return nil
+	}
+	if _, err := validateAbsoluteBaseURL("server.remote", cfg.Remote); err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.RemoteToken) == "" {
+		return fmt.Errorf("config validation: server.remoteToken is required when server.remote is set")
 	}
 	return nil
 }

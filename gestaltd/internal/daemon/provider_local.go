@@ -34,6 +34,8 @@ type providerLocalCommandOptions struct {
 	Paths        []string
 	ConfigPaths  []string
 	Port         int
+	RemoteURL    string
+	RemoteToken  string
 	Locked       bool
 	NoSync       bool
 	ArtifactsDir string
@@ -128,6 +130,10 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	}
 	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, forcedDevAppKeys...)
 	if err != nil {
+		return err
+	}
+	if err := applyServeRemoteConfig(env.Config, opts.RemoteURL, opts.RemoteToken); err != nil {
+		env.Close()
 		return err
 	}
 	if err := resolveServePort(env.Config, session.PublicPort); err != nil {
