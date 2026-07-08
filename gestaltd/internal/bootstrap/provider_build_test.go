@@ -833,53 +833,52 @@ func TestRemoteAppRoutingLifecycles(t *testing.T) {
 func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
 	t.Parallel()
 
-	t.Run("undeclared provider remains not found", func(t *testing.T) {
-		t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		localApps  map[string]bool
+		remoteErr  error
+		app        string
+		operation  string
+		wantErr    error
+		wantRemote int
+	}{
+		{
+			name:      "undeclared provider remains not found",
+			app:       "missing",
+			operation: "op",
+			wantErr:   invocation.ErrProviderNotFound,
+		},
+		{
+			name:       "dev active does not fall back to remote",
+			localApps:  map[string]bool{"linear": true},
+			app:        "linear",
+			operation:  "issues.list",
+			wantErr:    invocation.ErrProviderNotFound,
+		},
+		{
+			name:      "remote client auth error surfaces not authenticated",
+			remoteErr: status.Error(codes.Unauthenticated, "invalid token"),
+			app:       "linear",
+			operation: "issues.list",
+			wantErr:   invocation.ErrNotAuthenticated,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-		remoteClient := &recordingRemoteAppClient{}
-		broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, nil), remoteClient)
+			remoteClient := &recordingRemoteAppClient{err: tc.remoteErr}
+			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), remoteClient)
 
-		_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal("missing"), "missing", "", "op", nil)
-		if !errors.Is(err, invocation.ErrProviderNotFound) {
-			t.Fatalf("err = %v, want ErrProviderNotFound", err)
-		}
-	})
-
-	t.Run("dev active does not fall back to remote", func(t *testing.T) {
-		t.Parallel()
-
-		remoteClient := &recordingRemoteAppClient{}
-		cfg := remoteRoutingConfig(t, map[string]bool{"linear": true})
-		broker := newRemoteRoutingBroker(t, cfg, remoteClient)
-
-		_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal("linear"), "linear", "", "issues.list", nil)
-		if !errors.Is(err, invocation.ErrProviderNotFound) {
-			t.Fatalf("err = %v, want ErrProviderNotFound without local provider", err)
-		}
-		if len(remoteClient.snapshot()) != 0 {
-			t.Fatalf("remote client calls = %d, want 0", len(remoteClient.snapshot()))
-		}
-	})
-
-	t.Run("remote client auth error surfaces not authenticated", func(t *testing.T) {
-		t.Parallel()
-
-		remoteClient := &recordingRemoteAppClient{
-			err: status.Error(codes.Unauthenticated, "invalid token"),
-		}
-		broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, nil), remoteClient)
-
-		_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal("linear"), "linear", "", "issues.list", nil)
-		if err == nil {
-			t.Fatal("expected auth error, got nil")
-		}
-		if !errors.Is(err, invocation.ErrNotAuthenticated) {
-			t.Fatalf("err = %v, want ErrNotAuthenticated", err)
-		}
-		if len(remoteClient.snapshot()) != 0 {
-			t.Fatalf("remote client calls = %d, want 0", len(remoteClient.snapshot()))
-		}
-	})
+			_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(tc.app), tc.app, "", tc.operation, nil)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tc.wantErr)
+			}
+			if len(remoteClient.snapshot()) != tc.wantRemote {
+				t.Fatalf("remote client calls = %d, want %d", len(remoteClient.snapshot()), tc.wantRemote)
+			}
+		})
+	}
 }
 
 func TestProviderBuildsLocal(t *testing.T) {

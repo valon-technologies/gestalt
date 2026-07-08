@@ -112,34 +112,7 @@ func remoteRoutingAppStub(name, operation string) *coretesting.StubIntegration {
 func TestPublicGRPCRouting(t *testing.T) {
 	t.Parallel()
 
-	t.Run("bearer routes through public gateway", func(t *testing.T) {
-		t.Parallel()
-
-		ts, invoker := startExamplePublicGRPCServer(t)
-		clients, err := remote.NewClientSet(context.Background(), remote.Config{
-			URL:       ts.URL,
-			Token:     publicGRPCTestBearer("example"),
-			TLSConfig: &tls.Config{InsecureSkipVerify: true},
-		})
-		if err != nil {
-			t.Fatalf("remote.NewClientSet: %v", err)
-		}
-		defer func() { _ = clients.Close() }()
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, err := clients.App.Invoke(ctx, &proto.AppInvokeRequest{
-			App:       "example",
-			Operation: "sync",
-		}); err != nil {
-			t.Fatalf("remote App.Invoke: %v", err)
-		}
-		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "example" || call.operation != "sync" {
-			t.Fatalf("invoker call = %+v, want example/sync", call)
-		}
-	})
-
-	t.Run("multiple apps relay through public gateway", func(t *testing.T) {
+	t.Run("bearer routes apps through public gateway", func(t *testing.T) {
 		t.Parallel()
 
 		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
@@ -175,59 +148,50 @@ func TestPublicGRPCRouting(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid bearer rejects remote client", func(t *testing.T) {
-		t.Parallel()
-
-		ts, invoker := startExamplePublicGRPCServer(t)
-		clients, err := remote.NewClientSet(context.Background(), remote.Config{
-			URL:       ts.URL,
-			Token:     "wrong-token",
-			TLSConfig: &tls.Config{InsecureSkipVerify: true},
-		})
-		if err != nil {
-			t.Fatalf("remote.NewClientSet: %v", err)
-		}
-		t.Cleanup(func() { _ = clients.Close() })
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, err = clients.App.Invoke(ctx, &proto.AppInvokeRequest{
-			App:       "example",
-			Operation: "sync",
-		})
-		if status.Code(err) != codes.Unauthenticated {
-			t.Fatalf("remote App.Invoke code = %v, want %v (%v)", status.Code(err), codes.Unauthenticated, err)
-		}
-		if call := invoker.snapshot(); call.calls != 0 {
-			t.Fatalf("invoker calls = %d, want 0", call.calls)
-		}
-	})
-
 	for _, tc := range []struct {
-		name     string
-		metadata []string
+		name        string
+		metadata    []string
+		remoteToken string
 	}{
 		{name: "missing bearer is rejected"},
 		{name: "invalid bearer scheme is rejected", metadata: []string{"authorization", "Basic not-a-bearer-token"}},
+		{name: "invalid bearer via remote client is rejected", remoteToken: "wrong-token"},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			ts, invoker := startExamplePublicGRPCServer(t)
-			conn := newRelayGRPCConn(t, ts)
-			defer func() { _ = conn.Close() }()
-
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if len(tc.metadata) > 0 {
-				ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(tc.metadata...))
+
+			var err error
+			if tc.remoteToken != "" {
+				clients, clientErr := remote.NewClientSet(context.Background(), remote.Config{
+					URL:       ts.URL,
+					Token:     tc.remoteToken,
+					TLSConfig: &tls.Config{InsecureSkipVerify: true},
+				})
+				if clientErr != nil {
+					t.Fatalf("remote.NewClientSet: %v", clientErr)
+				}
+				t.Cleanup(func() { _ = clients.Close() })
+				_, err = clients.App.Invoke(ctx, &proto.AppInvokeRequest{
+					App:       "example",
+					Operation: "sync",
+				})
+			} else {
+				conn := newRelayGRPCConn(t, ts)
+				defer func() { _ = conn.Close() }()
+				if len(tc.metadata) > 0 {
+					ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(tc.metadata...))
+				}
+				_, err = proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+					App:       "example",
+					Operation: "sync",
+				})
 			}
 
-			_, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
-				App:       "example",
-				Operation: "sync",
-			})
 			if status.Code(err) != codes.Unauthenticated {
 				t.Fatalf("public App.Invoke code = %v, want %v (%v)", status.Code(err), codes.Unauthenticated, err)
 			}
