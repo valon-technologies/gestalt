@@ -1132,6 +1132,30 @@ Once the local server is running, invoke an operation:
 gestalt app invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
 ```
 
+#### Remote attach
+
+When the fleet config declares more apps than you run locally, layer a URL-only
+overlay and pass a remote-issued bearer token at serve time. Local `gestaltd`
+delegates missing providers to the remote instance over generated public gRPC
+APIs; local apps and PATH overrides still win for the same provider name.
+
+```yaml
+# deploy/local/config.yaml
+server:
+  remote: https://valon.tools
+```
+
+```sh
+gestaltd serve \
+  --config deploy/config.yaml \
+  --config deploy/local/config.yaml \
+  --remote-token "$GESTALT_API_KEY" \
+  valon-tools/apps/ci-cd
+```
+
+Issue tokens with `POST /api/v1/tokens`, https://valon.tools/tokens, or
+`gestalt tokens create`. See [CLI > Remote attach](/reference/cli#remote-attach).
+
 ## What to read next
 
 For application composition, see [Applications](/applications).

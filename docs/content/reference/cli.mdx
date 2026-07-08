@@ -205,6 +205,37 @@ gestaltd serve --locked \
   ./apps/delta/ui
 ```
 
+## Remote attach
+
+Run one Valon Tools app locally while delegating other configured providers to
+`https://valon.tools`. Check in only the remote URL; pass your bearer token at
+serve time with `--remote-token` (or `GESTALT_API_KEY` in the environment).
+
+Create a token with `POST /api/v1/tokens`, the Gestalt token UI at
+https://valon.tools/tokens, or `gestalt tokens create`.
+
+```sh
+gestaltd serve \
+  --config deploy/config.yaml \
+  --config deploy/local/config.yaml \
+  --remote-token "$GESTALT_API_KEY" \
+  valon-tools/apps/ci-cd
+```
+
+Run CI/CD and Valon Profile locally while other apps stay remote:
+
+```sh
+gestaltd serve \
+  --config deploy/config.yaml \
+  --config deploy/local/config.yaml \
+  --remote-token "$GESTALT_API_KEY" \
+  valon-tools/apps/ci-cd \
+  valon-tools/apps/valon-profile
+```
+
+See [Configuration > server.remote](/reference/config-file#server) and
+[App providers > Testing locally](/providers/apps#testing-locally).
+
 For a standalone local provider without the full fleet config, pass PATH to
 `gestaltd serve` for a source tree or layer a small local config that includes only the app under test:
 
