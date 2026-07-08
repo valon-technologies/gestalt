@@ -10,9 +10,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 func TestAuthorizeAllowsRequests(t *testing.T) {
@@ -418,4 +425,215 @@ func testGatewayAuthorizeCallerTokenKeyPair(t testing.TB) (string, string) {
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
 	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
 	return string(privateKeyPEM), string(publicKeyPEM)
+}
+
+func TestPreparePublicRequest(t *testing.T) {
+	t.Parallel()
+
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		t.Fatalf("NewGeneratedRegistry: %v", err)
+	}
+
+	activeAlice := &core.IntrospectResponse{Active: true, Subject: "user:alice"}
+	inactive := &core.IntrospectResponse{Active: false}
+	denied := false
+
+	tests := []struct {
+		name         string
+		fullMethod   string
+		withOrigin   bool
+		introspect   *core.IntrospectResponse
+		authAllow    *bool
+		req          gproto.Message
+		wantCode     codes.Code
+		setup        func(*ProviderGatewayTransport)
+		checkAdapted func(t *testing.T, adapted gproto.Message)
+		checkAuth    func(t *testing.T, auth *stubAuthorizationProvider)
+	}{
+		{
+			name:       "app invoke fills context",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			checkAdapted: func(t *testing.T, adapted gproto.Message) {
+				t.Helper()
+				out, ok := adapted.(*proto.AppInvokeRequest)
+				if !ok {
+					t.Fatalf("adapted type = %T, want *proto.AppInvokeRequest", adapted)
+				}
+				if out.GetContext() == nil || out.GetContext().GetSubject().GetId() != "user:alice" {
+					t.Fatalf("context subject = %#v, want user:alice", out.GetContext())
+				}
+				if out.GetRunAs() != nil {
+					t.Fatal("run_as should remain unset")
+				}
+			},
+			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {
+				t.Helper()
+				if got := auth.request.GetResource().GetId(); got != "roadmap" {
+					t.Fatalf("Resource.Id = %q, want %q", got, "roadmap")
+				}
+				if got := auth.request.GetAction().GetName(); got != proto.App_Invoke_FullMethodName {
+					t.Fatalf("Action.Name = %q, want %q", got, proto.App_Invoke_FullMethodName)
+				}
+			},
+		},
+		{
+			name:       "app invoke rejects run_as",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req: &proto.AppInvokeRequest{
+				App:       "roadmap",
+				Operation: "sync",
+				RunAs:     &proto.SubjectContext{Id: "user:bob"},
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:       "app invoke rejects client context",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req: &proto.AppInvokeRequest{
+				App:       "roadmap",
+				Operation: "sync",
+				Context:   &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:bob"}},
+			},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			name:       "agent create session fills subject fields",
+			fullMethod: proto.Agent_CreateSession_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.CreateAgentProviderSessionRequest{Model: "gpt-test"},
+			checkAdapted: func(t *testing.T, adapted gproto.Message) {
+				t.Helper()
+				out, ok := adapted.(*proto.CreateAgentProviderSessionRequest)
+				if !ok {
+					t.Fatalf("adapted type = %T, want *proto.CreateAgentProviderSessionRequest", adapted)
+				}
+				if out.GetSubject().GetId() != "user:alice" {
+					t.Fatalf("subject = %#v, want user:alice", out.GetSubject())
+				}
+				if out.GetCreatedBySubjectId() != "user:alice" {
+					t.Fatalf("created_by_subject_id = %q, want %q", out.GetCreatedBySubjectId(), "user:alice")
+				}
+			},
+		},
+		{
+			name:       "workflow deliver event fills delivered_by",
+			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.DeliverWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{}},
+			checkAdapted: func(t *testing.T, adapted gproto.Message) {
+				t.Helper()
+				out, ok := adapted.(*proto.DeliverWorkflowProviderEventRequest)
+				if !ok {
+					t.Fatalf("adapted type = %T, want *proto.DeliverWorkflowProviderEventRequest", adapted)
+				}
+				if out.GetDeliveredBySubjectId() != "user:alice" {
+					t.Fatalf("delivered_by_subject_id = %q, want %q", out.GetDeliveredBySubjectId(), "user:alice")
+				}
+			},
+		},
+		{
+			name:       "requires authorization provider",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			wantCode:   codes.PermissionDenied,
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetAuthorizationProvider(nil)
+			},
+		},
+		{
+			name:       "authorization denied",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			authAllow:  &denied,
+			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			wantCode:   codes.PermissionDenied,
+		},
+		{
+			name:       "identity failure",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: inactive,
+			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			wantCode:   codes.Unauthenticated,
+		},
+		{
+			name:       "requires public origin",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			introspect: activeAlice,
+			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			wantCode:   codes.Internal,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			authorization := &stubAuthorizationProvider{allowedResult: tc.authAllow}
+			identity := &coretesting.StubAuthProvider{
+				IntrospectFn: func(context.Context, *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+					return tc.introspect, nil
+				},
+			}
+			transport := NewProviderGatewayTransport()
+			transport.SetPublicMethods(registry)
+			transport.SetIdentityProvider(identity)
+			transport.SetAuthorizationProvider(authorization)
+			transport.SetPublicBaseURL("https://gestalt.example")
+			if tc.setup != nil {
+				tc.setup(transport)
+			}
+
+			ctx := context.Background()
+			if tc.withOrigin {
+				ctx = publicrpc.WithPublicOrigin(ctx, tc.fullMethod)
+			}
+			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
+
+			p, adapted, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
+			if tc.wantCode != codes.OK {
+				assertGRPCCode(t, err, tc.wantCode)
+				return
+			}
+			if err != nil {
+				t.Fatalf("PreparePublicRequest: %v", err)
+			}
+			if p.SubjectID != "user:alice" {
+				t.Fatalf("SubjectID = %q, want %q", p.SubjectID, "user:alice")
+			}
+			if tc.checkAdapted != nil {
+				tc.checkAdapted(t, adapted)
+			}
+			if tc.checkAuth != nil {
+				if !authorization.called {
+					t.Fatal("authorization provider was not called")
+				}
+				tc.checkAuth(t, authorization)
+			}
+		})
+	}
+}
+
+func assertGRPCCode(t *testing.T, err error, want codes.Code) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("error = nil, want %v", want)
+	}
+	if status.Code(err) != want {
+		t.Fatalf("status.Code(err) = %v, want %v (%v)", status.Code(err), want, err)
+	}
 }
