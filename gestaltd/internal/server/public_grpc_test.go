@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -112,14 +113,16 @@ func remoteRoutingAppStub(name, operation string) *coretesting.StubIntegration {
 func TestPublicGRPCRouting(t *testing.T) {
 	t.Parallel()
 
-	t.Run("bearer routes apps through public gateway", func(t *testing.T) {
+	t.Run("bearer routes public gateway services", func(t *testing.T) {
 		t.Parallel()
 
+		stubDB := &coretesting.StubIndexedDB{}
 		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t,
 				remoteRoutingAppStub("linear", "issues.list"),
 				remoteRoutingAppStub("valon-profile", "issues.list"),
 			)
+			cfg.IndexedDB = stubDB
 		})
 		clients := publicGRPCRemoteClientSet(t, ts, "linear")
 
@@ -145,6 +148,25 @@ func TestPublicGRPCRouting(t *testing.T) {
 			if calls[i].providerName != want.provider || calls[i].operation != want.operation {
 				t.Fatalf("invoker call[%d] = %+v, want %s/%s", i, calls[i], want.provider, want.operation)
 			}
+		}
+
+		recordValue, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "task-1", "value": "ship-it"})
+		if err != nil {
+			t.Fatalf("RecordToProto: %v", err)
+		}
+		idbCtx := metadata.AppendToOutgoingContext(ctx, runtimehost.HostServiceBindingHeader, "main-db")
+		if _, err := clients.IndexedDB.Put(idbCtx, &proto.RecordRequest{
+			Store:  "tasks",
+			Record: recordValue,
+		}); err != nil {
+			t.Fatalf("remote IndexedDB.Put: %v", err)
+		}
+		got, err := stubDB.ObjectStore("tasks").Get(ctx, "task-1")
+		if err != nil {
+			t.Fatalf("stub IndexedDB.Get: %v", err)
+		}
+		if got["value"] != "ship-it" {
+			t.Fatalf("stored value = %#v, want %q", got["value"], "ship-it")
 		}
 	})
 
