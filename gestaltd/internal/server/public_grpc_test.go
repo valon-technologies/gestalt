@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	grpcstatus "google.golang.org/grpc/status"
 )
 

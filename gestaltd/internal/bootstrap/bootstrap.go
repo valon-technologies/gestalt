@@ -232,30 +232,30 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth                 core.IdentityProvider
-	SelectedAuthProvider string
-	AuthProviders        map[string]core.IdentityProvider
-	Authorization        map[string]core.AuthorizationProvider
-	Services             *coredata.Services
-	ExtraIndexedDBs      []indexeddb.IndexedDB
-	ExtraCaches          []corecache.Cache
-	S3                   map[string]s3sdk.S3
-	ExtraS3s             []s3sdk.S3
-	ExtraWorkflows       []coreworkflow.Provider
-	ExtraAgents          []coreagent.Provider
-	Providers            *registry.ProviderMap[core.Provider]
-	WorkflowControl      WorkflowControl
-	AgentControl         AgentControl
-	AgentManager         agentmanager.Service
-	ProvidersReady       <-chan struct{}
-	ConnectionAuth       func() map[string]map[string]OAuthHandler
-	ManualConnectionAuth func() map[string]map[string]ManualTokenExchanger
-	Invoker              invocation.Invoker
-	AppInvocation        invocation.Invoker
-	CapabilityLister     invocation.CapabilityLister
-	AuditSink            core.AuditSink
-	SecretManager        core.SecretManager
-	Telemetry            core.TelemetryProvider
+	Auth                   core.IdentityProvider
+	SelectedAuthProvider   string
+	AuthProviders          map[string]core.IdentityProvider
+	Authorization          map[string]core.AuthorizationProvider
+	Services               *coredata.Services
+	ExtraIndexedDBs        []indexeddb.IndexedDB
+	ExtraCaches            []corecache.Cache
+	S3                     map[string]s3sdk.S3
+	ExtraS3s               []s3sdk.S3
+	ExtraWorkflows         []coreworkflow.Provider
+	ExtraAgents            []coreagent.Provider
+	Providers              *registry.ProviderMap[core.Provider]
+	WorkflowControl        WorkflowControl
+	AgentControl           AgentControl
+	AgentManager           agentmanager.Service
+	ProvidersReady         <-chan struct{}
+	ConnectionAuth         func() map[string]map[string]OAuthHandler
+	ManualConnectionAuth   func() map[string]map[string]ManualTokenExchanger
+	Invoker                invocation.Invoker
+	AppInvocation          invocation.Invoker
+	CapabilityLister       invocation.CapabilityLister
+	AuditSink              core.AuditSink
+	SecretManager          core.SecretManager
+	Telemetry              core.TelemetryProvider
 	Runtimes               RuntimeInspector
 	PublicHostServices     *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport *providergateway.ProviderGatewayTransport

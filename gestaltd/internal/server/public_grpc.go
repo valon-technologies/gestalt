@@ -110,7 +110,7 @@ func bearerTokenFromHTTPRequest(r *http.Request) string {
 	return ""
 }
 
-func preparePublicRequest[T gproto.Message](transport *providergateway.ProviderGatewayTransport, ctx context.Context, fullMethod string, req T) (T, error) {
+func preparePublicRequest[T gproto.Message](ctx context.Context, transport *providergateway.ProviderGatewayTransport, fullMethod string, req T) (T, error) {
 	var zero T
 	if transport == nil {
 		return zero, status.Error(codes.Unavailable, "public gateway transport is not configured")
@@ -137,7 +137,7 @@ func newPublicAdaptedAppServer(transport *providergateway.ProviderGatewayTranspo
 }
 
 func (s *publicAdaptedAppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*proto.OperationResult, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.App_Invoke_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.App_Invoke_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (s *publicAdaptedAppServer) Invoke(ctx context.Context, req *proto.AppInvok
 }
 
 func (s *publicAdaptedAppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.App_InvokeGraphQL_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.App_InvokeGraphQL_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func newPublicAdaptedAgentServer(transport *providergateway.ProviderGatewayTrans
 }
 
 func (s *publicAdaptedAgentServer) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_CreateSession_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_CreateSession_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (s *publicAdaptedAgentServer) CreateSession(ctx context.Context, req *proto
 }
 
 func (s *publicAdaptedAgentServer) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_GetSession_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_GetSession_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (s *publicAdaptedAgentServer) GetSession(ctx context.Context, req *proto.Ge
 }
 
 func (s *publicAdaptedAgentServer) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_ListSessions_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_ListSessions_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (s *publicAdaptedAgentServer) ListSessions(ctx context.Context, req *proto.
 }
 
 func (s *publicAdaptedAgentServer) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_UpdateSession_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_UpdateSession_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (s *publicAdaptedAgentServer) UpdateSession(ctx context.Context, req *proto
 }
 
 func (s *publicAdaptedAgentServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_CreateTurn_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_CreateTurn_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (s *publicAdaptedAgentServer) CreateTurn(ctx context.Context, req *proto.Cr
 }
 
 func (s *publicAdaptedAgentServer) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_GetTurn_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_GetTurn_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (s *publicAdaptedAgentServer) GetTurn(ctx context.Context, req *proto.GetAg
 }
 
 func (s *publicAdaptedAgentServer) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_ListTurns_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_ListTurns_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (s *publicAdaptedAgentServer) ListTurns(ctx context.Context, req *proto.Lis
 }
 
 func (s *publicAdaptedAgentServer) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_CancelTurn_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_CancelTurn_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (s *publicAdaptedAgentServer) CancelTurn(ctx context.Context, req *proto.Ca
 }
 
 func (s *publicAdaptedAgentServer) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Agent_ListTurnEvents_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Agent_ListTurnEvents_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func newPublicAdaptedWorkflowServer(transport *providergateway.ProviderGatewayTr
 }
 
 func (s *publicAdaptedWorkflowServer) DeliverEvent(ctx context.Context, req *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
-	adapted, err := preparePublicRequest(s.transport, ctx, proto.Workflow_DeliverEvent_FullMethodName, req)
+	adapted, err := preparePublicRequest(ctx, s.transport, proto.Workflow_DeliverEvent_FullMethodName, req)
 	if err != nil {
 		return nil, err
 	}
