@@ -1557,7 +1557,7 @@ func buildConfiguredProviders[T any](
 		if entry == nil {
 			continue
 		}
-		if placement != nil && !placement.ShouldBuildLocal(kind, name) {
+		if placement != nil && placement.Placement(kind, name) == ProviderPlacementAbsent {
 			continue
 		}
 		pending = append(pending, struct {
