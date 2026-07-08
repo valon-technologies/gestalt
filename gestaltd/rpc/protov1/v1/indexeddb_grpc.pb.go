@@ -40,8 +40,6 @@ const (
 	IndexedDB_IndexGetAllKeys_FullMethodName   = "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys"
 	IndexedDB_IndexCount_FullMethodName        = "/gestalt.provider.v1.IndexedDB/IndexCount"
 	IndexedDB_IndexDelete_FullMethodName       = "/gestalt.provider.v1.IndexedDB/IndexDelete"
-	IndexedDB_AcquireLock_FullMethodName       = "/gestalt.provider.v1.IndexedDB/AcquireLock"
-	IndexedDB_ReleaseLock_FullMethodName       = "/gestalt.provider.v1.IndexedDB/ReleaseLock"
 	IndexedDB_OpenCursor_FullMethodName        = "/gestalt.provider.v1.IndexedDB/OpenCursor"
 	IndexedDB_Transaction_FullMethodName       = "/gestalt.provider.v1.IndexedDB/Transaction"
 )
@@ -76,9 +74,6 @@ type IndexedDBClient interface {
 	IndexGetAllKeys(ctx context.Context, in *IndexQueryRequest, opts ...grpc.CallOption) (*KeysResponse, error)
 	IndexCount(ctx context.Context, in *IndexQueryRequest, opts ...grpc.CallOption) (*CountResponse, error)
 	IndexDelete(ctx context.Context, in *IndexQueryRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
-	// Advisory locks
-	AcquireLock(ctx context.Context, in *AcquireLockRequest, opts ...grpc.CallOption) (*AcquireLockResponse, error)
-	ReleaseLock(ctx context.Context, in *ReleaseLockRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Cursor iteration (bidirectional stream)
 	OpenCursor(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CursorClientMessage, CursorResponse], error)
 	// Transaction stream. The first client message must be
@@ -294,26 +289,6 @@ func (c *indexedDBClient) IndexDelete(ctx context.Context, in *IndexQueryRequest
 	return out, nil
 }
 
-func (c *indexedDBClient) AcquireLock(ctx context.Context, in *AcquireLockRequest, opts ...grpc.CallOption) (*AcquireLockResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AcquireLockResponse)
-	err := c.cc.Invoke(ctx, IndexedDB_AcquireLock_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *indexedDBClient) ReleaseLock(ctx context.Context, in *ReleaseLockRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, IndexedDB_ReleaseLock_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *indexedDBClient) OpenCursor(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CursorClientMessage, CursorResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[0], IndexedDB_OpenCursor_FullMethodName, cOpts...)
@@ -370,9 +345,6 @@ type IndexedDBServer interface {
 	IndexGetAllKeys(context.Context, *IndexQueryRequest) (*KeysResponse, error)
 	IndexCount(context.Context, *IndexQueryRequest) (*CountResponse, error)
 	IndexDelete(context.Context, *IndexQueryRequest) (*DeleteResponse, error)
-	// Advisory locks
-	AcquireLock(context.Context, *AcquireLockRequest) (*AcquireLockResponse, error)
-	ReleaseLock(context.Context, *ReleaseLockRequest) (*emptypb.Empty, error)
 	// Cursor iteration (bidirectional stream)
 	OpenCursor(grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]) error
 	// Transaction stream. The first client message must be
@@ -447,12 +419,6 @@ func (UnimplementedIndexedDBServer) IndexCount(context.Context, *IndexQueryReque
 }
 func (UnimplementedIndexedDBServer) IndexDelete(context.Context, *IndexQueryRequest) (*DeleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method IndexDelete not implemented")
-}
-func (UnimplementedIndexedDBServer) AcquireLock(context.Context, *AcquireLockRequest) (*AcquireLockResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AcquireLock not implemented")
-}
-func (UnimplementedIndexedDBServer) ReleaseLock(context.Context, *ReleaseLockRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method ReleaseLock not implemented")
 }
 func (UnimplementedIndexedDBServer) OpenCursor(grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]) error {
 	return status.Error(codes.Unimplemented, "method OpenCursor not implemented")
@@ -841,42 +807,6 @@ func _IndexedDB_IndexDelete_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _IndexedDB_AcquireLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AcquireLockRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IndexedDBServer).AcquireLock(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IndexedDB_AcquireLock_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IndexedDBServer).AcquireLock(ctx, req.(*AcquireLockRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _IndexedDB_ReleaseLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReleaseLockRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IndexedDBServer).ReleaseLock(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IndexedDB_ReleaseLock_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IndexedDBServer).ReleaseLock(ctx, req.(*ReleaseLockRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _IndexedDB_OpenCursor_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(IndexedDBServer).OpenCursor(&grpc.GenericServerStream[CursorClientMessage, CursorResponse]{ServerStream: stream})
 }
@@ -977,14 +907,6 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "IndexDelete",
 			Handler:    _IndexedDB_IndexDelete_Handler,
-		},
-		{
-			MethodName: "AcquireLock",
-			Handler:    _IndexedDB_AcquireLock_Handler,
-		},
-		{
-			MethodName: "ReleaseLock",
-			Handler:    _IndexedDB_ReleaseLock_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

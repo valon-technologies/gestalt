@@ -5,35 +5,25 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-const (
-	testAppInvokeFullMethod         = "/gestalt.provider.v1.App/Invoke"
-	testAgentCreateSessionFullMethod = "/gestalt.provider.v1.Agent/CreateSession"
-)
-
 func TestPreparePublicRequestAppInvokeFillsContext(t *testing.T) {
 	t.Parallel()
 
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAppInvokeFullMethod: {
-			Fill:   []string{"context"},
-			Reject: []string{"run_as"},
-		},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
 	}, &stubAuthorizationProvider{})
 
-	ctx := publicrpc.WithPublicOrigin(context.Background(), testAppInvokeFullMethod)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.App_Invoke_FullMethodName)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"}
 
-	p, adapted, err := gateway.PreparePublicRequest(ctx, testAppInvokeFullMethod, req)
+	p, adapted, err := gateway.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, req)
 	if err != nil {
 		t.Fatalf("PreparePublicRequest: %v", err)
 	}
@@ -55,13 +45,11 @@ func TestPreparePublicRequestAppInvokeFillsContext(t *testing.T) {
 func TestPreparePublicRequestAppInvokeRejectsRunAs(t *testing.T) {
 	t.Parallel()
 
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAppInvokeFullMethod: {Reject: []string{"run_as"}},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
 	}, &stubAuthorizationProvider{})
 
-	ctx := publicrpc.WithPublicOrigin(context.Background(), testAppInvokeFullMethod)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.App_Invoke_FullMethodName)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.AppInvokeRequest{
 		App:       "roadmap",
@@ -69,20 +57,18 @@ func TestPreparePublicRequestAppInvokeRejectsRunAs(t *testing.T) {
 		RunAs:     &proto.SubjectContext{Id: "user:bob"},
 	}
 
-	_, _, err := gateway.PreparePublicRequest(ctx, testAppInvokeFullMethod, req)
+	_, _, err := gateway.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, req)
 	assertGRPCCode(t, err, codes.InvalidArgument)
 }
 
 func TestPreparePublicRequestAppInvokeRejectsClientContext(t *testing.T) {
 	t.Parallel()
 
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAppInvokeFullMethod: {Fill: []string{"context"}},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
 	}, &stubAuthorizationProvider{})
 
-	ctx := publicrpc.WithPublicOrigin(context.Background(), testAppInvokeFullMethod)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.App_Invoke_FullMethodName)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.AppInvokeRequest{
 		App:       "roadmap",
@@ -90,26 +76,22 @@ func TestPreparePublicRequestAppInvokeRejectsClientContext(t *testing.T) {
 		Context:   &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user:bob"}},
 	}
 
-	_, _, err := gateway.PreparePublicRequest(ctx, testAppInvokeFullMethod, req)
+	_, _, err := gateway.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, req)
 	assertGRPCCode(t, err, codes.InvalidArgument)
 }
 
 func TestPreparePublicRequestAgentCreateSessionFillsSubjectFields(t *testing.T) {
 	t.Parallel()
 
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAgentCreateSessionFullMethod: {
-			Fill: []string{"context", "subject", "created_by_subject_id"},
-		},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
 	}, &stubAuthorizationProvider{})
 
-	ctx := publicrpc.WithPublicOrigin(context.Background(), testAgentCreateSessionFullMethod)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.Agent_CreateSession_FullMethodName)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.CreateAgentProviderSessionRequest{Model: "gpt-test"}
 
-	_, adapted, err := gateway.PreparePublicRequest(ctx, testAgentCreateSessionFullMethod, req)
+	_, adapted, err := gateway.PreparePublicRequest(ctx, proto.Agent_CreateSession_FullMethodName, req)
 	if err != nil {
 		t.Fatalf("PreparePublicRequest: %v", err)
 	}
@@ -132,50 +114,44 @@ func TestPreparePublicRequestAuthorizationDenied(t *testing.T) {
 	t.Parallel()
 
 	denied := false
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAppInvokeFullMethod: {},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
 	}, &stubAuthorizationProvider{allowedResult: &denied})
 
-	ctx := publicrpc.WithPublicOrigin(context.Background(), testAppInvokeFullMethod)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.App_Invoke_FullMethodName)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"}
 
-	_, _, err := gateway.PreparePublicRequest(ctx, testAppInvokeFullMethod, req)
+	_, _, err := gateway.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, req)
 	assertGRPCCode(t, err, codes.PermissionDenied)
 }
 
 func TestPreparePublicRequestIdentityFailure(t *testing.T) {
 	t.Parallel()
 
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAppInvokeFullMethod: {},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: false},
 	}, &stubAuthorizationProvider{})
 
-	ctx := publicrpc.WithPublicOrigin(context.Background(), testAppInvokeFullMethod)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.App_Invoke_FullMethodName)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"}
 
-	_, _, err := gateway.PreparePublicRequest(ctx, testAppInvokeFullMethod, req)
+	_, _, err := gateway.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, req)
 	assertGRPCCode(t, err, codes.Unauthenticated)
 }
 
 func TestPreparePublicRequestRequiresPublicOrigin(t *testing.T) {
 	t.Parallel()
 
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAppInvokeFullMethod: {},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
 	}, &stubAuthorizationProvider{})
 
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"}
 
-	_, _, err := gateway.PreparePublicRequest(ctx, testAppInvokeFullMethod, req)
+	_, _, err := gateway.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, req)
 	assertGRPCCode(t, err, codes.Internal)
 }
 
@@ -183,17 +159,15 @@ func TestPreparePublicRequestAuthorizationMapping(t *testing.T) {
 	t.Parallel()
 
 	authorization := &stubAuthorizationProvider{}
-	gateway := newTestPublicGateway(t, map[string]publicrpc.PublicMethodPolicy{
-		testAppInvokeFullMethod: {},
-	}, &stubIdentityProvider{
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
 		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
 	}, authorization)
 
-	ctx := publicrpc.WithPublicOrigin(context.Background(), testAppInvokeFullMethod)
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.App_Invoke_FullMethodName)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
 	req := &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"}
 
-	if _, _, err := gateway.PreparePublicRequest(ctx, testAppInvokeFullMethod, req); err != nil {
+	if _, _, err := gateway.PreparePublicRequest(ctx, proto.App_Invoke_FullMethodName, req); err != nil {
 		t.Fatalf("PreparePublicRequest: %v", err)
 	}
 	if !authorization.called {
@@ -208,27 +182,30 @@ func TestPreparePublicRequestAuthorizationMapping(t *testing.T) {
 	if got := authorization.request.GetResource().GetId(); got != "roadmap" {
 		t.Fatalf("Resource.Id = %q, want %q", got, "roadmap")
 	}
-	if got := authorization.request.GetAction().GetName(); got != testAppInvokeFullMethod {
-		t.Fatalf("Action.Name = %q, want %q", got, testAppInvokeFullMethod)
+	if got := authorization.request.GetAction().GetName(); got != proto.App_Invoke_FullMethodName {
+		t.Fatalf("Action.Name = %q, want %q", got, proto.App_Invoke_FullMethodName)
 	}
 }
 
 func newTestPublicGateway(
 	t *testing.T,
-	policies map[string]publicrpc.PublicMethodPolicy,
 	identity *stubIdentityProvider,
 	authorization *stubAuthorizationProvider,
 ) *Gateway {
 	t.Helper()
-	gateway := NewGateway(publicrpc.NewMapRegistry(policies), identity, authorization)
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		t.Fatalf("NewGeneratedRegistry: %v", err)
+	}
+	gateway := NewGateway(registry, identity, authorization)
 	gateway.SetPublicBaseURL("https://gestalt.example")
 	return gateway
 }
 
 type stubIdentityProvider struct {
-	introspect *core.IntrospectResponse
+	introspect    *core.IntrospectResponse
 	introspectErr error
-	userInfo     *core.UserInfoResponse
+	userInfo      *core.UserInfoResponse
 }
 
 func (p *stubIdentityProvider) Authorize(context.Context, *core.AuthorizeRequest) (*core.AuthorizeResponse, error) {

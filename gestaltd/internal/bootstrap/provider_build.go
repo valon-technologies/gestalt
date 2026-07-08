@@ -1058,7 +1058,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	if err != nil {
 		return nil, err
 	}
-	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimeProvider)
+	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1228,7 +1228,7 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 		launch.close()
 		return nil, fmt.Errorf("parse hosted agent runtime lifecycle policy: %w", err)
 	}
-	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimeProvider)
+	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps)
 	if err != nil {
 		launch.close()
 		return nil, err

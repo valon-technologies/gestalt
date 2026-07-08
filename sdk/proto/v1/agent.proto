@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/visibility.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "v1/annotations.proto";
@@ -464,6 +465,14 @@ service Agent {
   option (host_binding) = "agent";
 
   rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+      fill: "created_by_subject_id"
+    };
     option (signature) = "idempotency_key";
     option (signature) = "model";
     option (optional_signature) = "provider_name";
@@ -473,10 +482,24 @@ service Agent {
     option (optional_signature) = "tools";
   }
   rpc GetSession(GetAgentProviderSessionRequest) returns (AgentSession) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+    };
     option (signature) = "session_id";
     option (optional_signature) = "provider_name";
   }
   rpc ListSessions(ListAgentProviderSessionsRequest) returns (ListAgentProviderSessionsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+    };
     option (optional_signature) = "session_ids";
     option (optional_signature) = "state";
     option (optional_signature) = "limit";
@@ -484,6 +507,13 @@ service Agent {
     option (optional_signature) = "provider_name";
   }
   rpc UpdateSession(UpdateAgentProviderSessionRequest) returns (AgentSession) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+    };
     option (signature) = "session_id";
     option (optional_signature) = "client_ref";
     option (optional_signature) = "state";
@@ -492,6 +522,14 @@ service Agent {
   }
 
   rpc CreateTurn(CreateAgentProviderTurnRequest) returns (AgentTurn) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+      fill: "created_by_subject_id"
+    };
     option (signature) = "session_id";
     option (signature) = "idempotency_key";
     option (signature) = "model";
@@ -504,10 +542,24 @@ service Agent {
     option (optional_signature) = "output";
   }
   rpc GetTurn(GetAgentProviderTurnRequest) returns (AgentTurn) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+    };
     option (signature) = "turn_id";
     option (optional_signature) = "provider_name";
   }
   rpc ListTurns(ListAgentProviderTurnsRequest) returns (ListAgentProviderTurnsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+    };
     option (signature) = "session_id";
     option (optional_signature) = "turn_ids";
     option (optional_signature) = "status";
@@ -516,12 +568,26 @@ service Agent {
     option (optional_signature) = "provider_name";
   }
   rpc CancelTurn(CancelAgentProviderTurnRequest) returns (AgentTurn) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+    };
     option (signature) = "turn_id";
     option (optional_signature) = "reason";
     option (optional_signature) = "provider_name";
   }
 
   rpc ListTurnEvents(ListAgentProviderTurnEventsRequest) returns (ListAgentProviderTurnEventsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "subject"
+    };
     option (signature) = "turn_id";
     option (optional_signature) = "after_seq";
     option (optional_signature) = "limit";

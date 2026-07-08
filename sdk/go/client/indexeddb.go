@@ -57,25 +57,6 @@ const (
 	TransactionModeTransactionReadwrite TransactionMode = 1
 )
 
-// AcquireLockRequest is the native message type for gestalt.provider.v1.AcquireLockRequest.
-//
-// AcquireLockRequest requests a keyed, TTL'd advisory lease.
-type AcquireLockRequest struct {
-	Key    string
-	Holder string
-	TtlMs  int64
-}
-
-// AcquireLockResponse is the native message type for gestalt.provider.v1.AcquireLockResponse.
-//
-// AcquireLockResponse reports whether the lease was acquired and its current owner.
-type AcquireLockResponse struct {
-	Acquired     bool
-	Holder       string
-	ExpiresAt    *time.Time
-	FencingToken int64
-}
-
 // BeginTransactionRequest is the native message type for gestalt.provider.v1.BeginTransactionRequest.
 //
 // BeginTransactionRequest starts an IndexedDB transaction stream.
@@ -451,14 +432,6 @@ type RecordResponse struct {
 // RecordsResponse wraps repeated row payloads.
 type RecordsResponse struct {
 	Records []*Record
-}
-
-// ReleaseLockRequest is the native message type for gestalt.provider.v1.ReleaseLockRequest.
-//
-// ReleaseLockRequest releases a lease previously acquired by holder.
-type ReleaseLockRequest struct {
-	Key    string
-	Holder string
 }
 
 // TransactionAbortRequest is the native message type for gestalt.provider.v1.TransactionAbortRequest.
@@ -1275,46 +1248,6 @@ func (c *IndexedDB) IndexDeleteRaw(ctx context.Context, request *IndexQueryReque
 		return nil, toGestaltError(err)
 	}
 	return FromWireDeleteResponse(response), nil
-}
-
-// AcquireLock is the ergonomic form of [IndexedDB.AcquireLockRaw].
-//
-// Advisory locks
-func (c *IndexedDB) AcquireLock(ctx context.Context, key string, holder string, ttlMs int64) (*AcquireLockResponse, error) {
-	request := &AcquireLockRequest{Key: key, Holder: holder, TtlMs: ttlMs}
-	response, err := c.client.AcquireLock(ctx, ToWireAcquireLockRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireAcquireLockResponse(response), nil
-}
-
-// AcquireLockRaw is the faithful form of [IndexedDB.AcquireLock].
-//
-// Advisory locks
-func (c *IndexedDB) AcquireLockRaw(ctx context.Context, request *AcquireLockRequest) (*AcquireLockResponse, error) {
-	response, err := c.client.AcquireLock(ctx, ToWireAcquireLockRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireAcquireLockResponse(response), nil
-}
-
-// ReleaseLock is the ergonomic form of [IndexedDB.ReleaseLockRaw].
-func (c *IndexedDB) ReleaseLock(ctx context.Context, key string, holder string) error {
-	request := &ReleaseLockRequest{Key: key, Holder: holder}
-	if _, err := c.client.ReleaseLock(ctx, ToWireReleaseLockRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
-}
-
-// ReleaseLockRaw is the faithful form of [IndexedDB.ReleaseLock].
-func (c *IndexedDB) ReleaseLockRaw(ctx context.Context, request *ReleaseLockRequest) error {
-	if _, err := c.client.ReleaseLock(ctx, ToWireReleaseLockRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
 }
 
 // OpenCursor calls the OpenCursor RPC of IndexedDB.

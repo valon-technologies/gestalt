@@ -28,7 +28,6 @@ func fakeTool(t *testing.T, version string) *Tool {
 }
 
 func TestVerifyAcceptsPinnedVersion(t *testing.T) {
-	t.Parallel()
 	tool := fakeTool(t, "9.9.9")
 	tool.Version = "9.9.9"
 	if err := tool.Verify(); err != nil {
@@ -37,7 +36,6 @@ func TestVerifyAcceptsPinnedVersion(t *testing.T) {
 }
 
 func TestVerifyRejectsVersionMismatch(t *testing.T) {
-	t.Parallel()
 	tool := fakeTool(t, "9.9.9")
 	tool.Version = "1.2.3"
 	tool.InstallHint = "install hint"

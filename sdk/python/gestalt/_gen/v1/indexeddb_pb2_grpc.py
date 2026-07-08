@@ -136,16 +136,6 @@ class IndexedDBStub(object):
                 request_serializer=v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
                 response_deserializer=v1_dot_indexeddb__pb2.DeleteResponse.FromString,
                 _registered_method=True)
-        self.AcquireLock = channel.unary_unary(
-                '/gestalt.provider.v1.IndexedDB/AcquireLock',
-                request_serializer=v1_dot_indexeddb__pb2.AcquireLockRequest.SerializeToString,
-                response_deserializer=v1_dot_indexeddb__pb2.AcquireLockResponse.FromString,
-                _registered_method=True)
-        self.ReleaseLock = channel.unary_unary(
-                '/gestalt.provider.v1.IndexedDB/ReleaseLock',
-                request_serializer=v1_dot_indexeddb__pb2.ReleaseLockRequest.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                _registered_method=True)
         self.OpenCursor = channel.stream_stream(
                 '/gestalt.provider.v1.IndexedDB/OpenCursor',
                 request_serializer=v1_dot_indexeddb__pb2.CursorClientMessage.SerializeToString,
@@ -286,19 +276,6 @@ class IndexedDBServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def AcquireLock(self, request, context):
-        """Advisory locks
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ReleaseLock(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def OpenCursor(self, request_iterator, context):
         """Cursor iteration (bidirectional stream)
         """
@@ -416,16 +393,6 @@ def add_IndexedDBServicer_to_server(servicer, server):
                     servicer.IndexDelete,
                     request_deserializer=v1_dot_indexeddb__pb2.IndexQueryRequest.FromString,
                     response_serializer=v1_dot_indexeddb__pb2.DeleteResponse.SerializeToString,
-            ),
-            'AcquireLock': grpc.unary_unary_rpc_method_handler(
-                    servicer.AcquireLock,
-                    request_deserializer=v1_dot_indexeddb__pb2.AcquireLockRequest.FromString,
-                    response_serializer=v1_dot_indexeddb__pb2.AcquireLockResponse.SerializeToString,
-            ),
-            'ReleaseLock': grpc.unary_unary_rpc_method_handler(
-                    servicer.ReleaseLock,
-                    request_deserializer=v1_dot_indexeddb__pb2.ReleaseLockRequest.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'OpenCursor': grpc.stream_stream_rpc_method_handler(
                     servicer.OpenCursor,
@@ -979,60 +946,6 @@ class IndexedDB(object):
             '/gestalt.provider.v1.IndexedDB/IndexDelete',
             v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
             v1_dot_indexeddb__pb2.DeleteResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def AcquireLock(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.IndexedDB/AcquireLock',
-            v1_dot_indexeddb__pb2.AcquireLockRequest.SerializeToString,
-            v1_dot_indexeddb__pb2.AcquireLockResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ReleaseLock(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.IndexedDB/ReleaseLock',
-            v1_dot_indexeddb__pb2.ReleaseLockRequest.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,

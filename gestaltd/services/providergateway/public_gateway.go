@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,15 +20,20 @@ import (
 // IdentityProvider authenticates public bearer tokens.
 type IdentityProvider = core.IdentityProvider
 
+// PublicMethodRegistry resolves public method policy by grpc-go full method.
+type PublicMethodRegistry interface {
+	Lookup(fullMethod string) (publicrpc.PublicMethodPolicy, bool)
+}
+
 // Gateway adapts public/external gRPC requests before shared service dispatch.
 type Gateway struct {
-	publicMethods publicrpc.PublicMethodRegistry
+	publicMethods PublicMethodRegistry
 	identity      IdentityProvider
 	authorization AuthorizationProvider
 	publicBaseURL string
 }
 
-func NewGateway(publicMethods publicrpc.PublicMethodRegistry, identity IdentityProvider, authorization AuthorizationProvider) *Gateway {
+func NewGateway(publicMethods PublicMethodRegistry, identity IdentityProvider, authorization AuthorizationProvider) *Gateway {
 	return &Gateway{
 		publicMethods: publicMethods,
 		identity:      identity,
@@ -60,11 +65,12 @@ func (g *Gateway) PreparePublicRequest(
 	if fullMethod == "" {
 		return nil, nil, status.Error(codes.Internal, "provider gateway: full method is required")
 	}
-	if !publicrpc.IsPublicOrigin(ctx) {
+	origin, ok := publicrpc.PublicOriginFromContext(ctx)
+	if !ok {
 		return nil, nil, status.Error(codes.Internal, "provider gateway: public origin marker is required")
 	}
-	if originMethod, ok := publicrpc.FullMethodFromContext(ctx); ok && originMethod != fullMethod {
-		return nil, nil, status.Errorf(codes.Internal, "provider gateway: public origin method %q does not match %q", originMethod, fullMethod)
+	if origin.FullMethod != fullMethod {
+		return nil, nil, status.Errorf(codes.Internal, "provider gateway: public origin method %q does not match %q", origin.FullMethod, fullMethod)
 	}
 
 	policy, ok := g.lookupPublicMethod(fullMethod)
@@ -81,7 +87,7 @@ func (g *Gateway) PreparePublicRequest(
 		return nil, nil, err
 	}
 
-	resourceID := publicResourceID(req, policy)
+	resourceID := publicResourceID(req, fullMethod)
 	if err := g.authorizePublic(ctx, p, fullMethod, resourceID); err != nil {
 		return nil, nil, err
 	}
@@ -157,7 +163,7 @@ func authorizationSubjectFromPrincipal(p *principal.Principal) (*proto.Subject, 
 	}, nil
 }
 
-func publicResourceID(req gproto.Message, policy publicrpc.PublicMethodPolicy) string {
+func publicResourceID(req gproto.Message, fullMethod string) string {
 	msg := req.ProtoReflect()
 	if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
 		if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
@@ -169,11 +175,23 @@ func publicResourceID(req gproto.Message, policy publicrpc.PublicMethodPolicy) s
 			return name
 		}
 	}
-	service := strings.TrimSpace(policy.Service)
+	service, _ := splitFullMethod(fullMethod)
 	if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
 		return strings.ToLower(service[idx+1:])
 	}
 	return service
+}
+
+func splitFullMethod(fullMethod string) (service, method string) {
+	fullMethod = strings.TrimSpace(fullMethod)
+	if !strings.HasPrefix(fullMethod, "/") {
+		return "", ""
+	}
+	service, method, ok := strings.Cut(strings.TrimPrefix(fullMethod, "/"), "/")
+	if !ok {
+		return "", ""
+	}
+	return service, method
 }
 
 func adaptPublicRequest(

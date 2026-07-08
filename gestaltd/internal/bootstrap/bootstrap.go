@@ -265,6 +265,7 @@ type Result struct {
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
 	workflowConfigReconcileTasksStarted bool
 	auditClose                          func(context.Context) error
+	appHostServiceCleanup               func()
 	activateAppProviders                func(context.Context)
 	deferred                            *deferredProviders
 	mu                                  sync.Mutex
@@ -419,6 +420,9 @@ func (r *Result) Close(ctx context.Context) error {
 		closeSecretManager(r.SecretManager),
 		closeRuntimeRegistry(r.runtimeRegistry),
 	)
+	if r.appHostServiceCleanup != nil {
+		r.appHostServiceCleanup()
+	}
 	if r.auditClose != nil {
 		errs = append(errs, r.auditClose(ctx))
 	}
@@ -1240,6 +1244,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
+	appHostServiceCleanup := registerConfiguredAppPublicHostServices(cfg, prepared.Deps)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
@@ -1385,6 +1390,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
+		appHostServiceCleanup:        appHostServiceCleanup,
 		activateAppProviders:         activateAppProviders,
 		deferred:                     deferred,
 	}

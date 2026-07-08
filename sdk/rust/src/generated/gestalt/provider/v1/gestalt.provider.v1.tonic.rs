@@ -625,7 +625,6 @@ pub mod app_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn invoke(
             &mut self,
             request: impl tonic::IntoRequest<super::AppInvokeRequest>,
@@ -671,7 +670,6 @@ pub mod app_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AppServer.
     #[async_trait]
     pub trait App: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn invoke(
             &self,
             request: tonic::Request<super::AppInvokeRequest>,
@@ -977,7 +975,6 @@ pub mod agent_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn get_session(
             &mut self,
             request: impl tonic::IntoRequest<super::GetAgentProviderSessionRequest>,
@@ -993,7 +990,6 @@ pub mod agent_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "GetSession"));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn list_sessions(
             &mut self,
             request: impl tonic::IntoRequest<super::ListAgentProviderSessionsRequest>,
@@ -1212,12 +1208,10 @@ pub mod agent_server {
             &self,
             request: tonic::Request<super::CreateAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
-        ///
         async fn get_session(
             &self,
             request: tonic::Request<super::GetAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
-        ///
         async fn list_sessions(
             &self,
             request: tonic::Request<super::ListAgentProviderSessionsRequest>,
@@ -4859,8 +4853,6 @@ pub mod indexed_db_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        /** Lifecycle
-        */
         pub async fn create_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectStoreRequest>,
@@ -5203,44 +5195,6 @@ pub mod indexed_db_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        /** Advisory locks
-        */
-        pub async fn acquire_lock(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AcquireLockRequest>,
-        ) -> std::result::Result<tonic::Response<super::AcquireLockResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/AcquireLock");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.IndexedDB",
-                "AcquireLock",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn release_lock(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ReleaseLockRequest>,
-        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/ReleaseLock");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.IndexedDB",
-                "ReleaseLock",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
         /** Cursor iteration (bidirectional stream)
         */
         pub async fn open_cursor(
@@ -5301,8 +5255,6 @@ pub mod indexed_db_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
-        /** Lifecycle
-        */
         async fn create_object_store(
             &self,
             request: tonic::Request<super::CreateObjectStoreRequest>,
@@ -5405,17 +5357,6 @@ pub mod indexed_db_server {
             &self,
             request: tonic::Request<super::IndexQueryRequest>,
         ) -> std::result::Result<tonic::Response<super::DeleteResponse>, tonic::Status>;
-        /** Advisory locks
-        */
-        async fn acquire_lock(
-            &self,
-            request: tonic::Request<super::AcquireLockRequest>,
-        ) -> std::result::Result<tonic::Response<super::AcquireLockResponse>, tonic::Status>;
-        ///
-        async fn release_lock(
-            &self,
-            request: tonic::Request<super::ReleaseLockRequest>,
-        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
         /// Server streaming response type for the OpenCursor method.
         type OpenCursorStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::CursorResponse, tonic::Status>,
@@ -6273,84 +6214,6 @@ pub mod indexed_db_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = IndexDeleteSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.IndexedDB/AcquireLock" => {
-                    #[allow(non_camel_case_types)]
-                    struct AcquireLockSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<T: IndexedDb> tonic::server::UnaryService<super::AcquireLockRequest> for AcquireLockSvc<T> {
-                        type Response = super::AcquireLockResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::AcquireLockRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::acquire_lock(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = AcquireLockSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.IndexedDB/ReleaseLock" => {
-                    #[allow(non_camel_case_types)]
-                    struct ReleaseLockSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<T: IndexedDb> tonic::server::UnaryService<super::ReleaseLockRequest> for ReleaseLockSvc<T> {
-                        type Response = ();
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ReleaseLockRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::release_lock(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ReleaseLockSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -9243,6 +9106,7 @@ pub mod workflow_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        ///
         pub async fn apply_definition(
             &mut self,
             request: impl tonic::IntoRequest<super::ApplyWorkflowProviderDefinitionRequest>,
@@ -9540,6 +9404,7 @@ pub mod workflow_server {
     /// Generated trait containing gRPC methods that should be implemented for use with WorkflowServer.
     #[async_trait]
     pub trait Workflow: std::marker::Send + std::marker::Sync + 'static {
+        ///
         async fn apply_definition(
             &self,
             request: tonic::Request<super::ApplyWorkflowProviderDefinitionRequest>,
