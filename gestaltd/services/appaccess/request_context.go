@@ -278,7 +278,7 @@ func (c ProviderRequestContext) Restore(ctx context.Context, connectionOverride 
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(c.principal))
 	}
 	if c.agentSubject != nil {
-		ctx = invocation.WithRunAsAudit(ctx, c.agentSubject, agentwire.RunAsSubjectFromProto(subjectContextFromPrincipal(c.principal)))
+		ctx = invocation.WithRunAsAudit(ctx, c.agentSubject, agentwire.RunAsSubjectFromProto(SubjectContextFromPrincipal(c.principal)))
 	}
 	if c.callerName != "" && c.callerKind != "" {
 		ctx = invocation.WithCallerProvider(ctx, c.callerKind, c.callerName)
@@ -361,7 +361,7 @@ func PrincipalFromSubjectContext(subject *proto.SubjectContext) *principal.Princ
 	return p
 }
 
-func subjectContextFromPrincipal(p *principal.Principal) *proto.SubjectContext {
+func SubjectContextFromPrincipal(p *principal.Principal) *proto.SubjectContext {
 	p = principal.Canonicalized(p)
 	if p == nil {
 		return nil
