@@ -1,11 +1,12 @@
 package publicrpc_test
 
 import (
+	"context"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/bufbuild/protocompile"
-	"golang.org/x/net/context"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	gestaltproto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -76,10 +77,10 @@ func TestRegistryReadsFillRejectPolicy(t *testing.T) {
 	if !ok {
 		t.Fatalf("Lookup(%q) = false, want true", gestaltproto.App_Invoke_FullMethodName)
 	}
-	if got, want := policy.Fill, []string{"context"}; !stringSlicesEqual(got, want) {
+	if got, want := policy.Fill, []string{"context"}; !slices.Equal(got, want) {
 		t.Fatalf("Fill = %#v, want %#v", got, want)
 	}
-	if got, want := policy.Reject, []string{"run_as"}; !stringSlicesEqual(got, want) {
+	if got, want := policy.Reject, []string{"run_as"}; !slices.Equal(got, want) {
 		t.Fatalf("Reject = %#v, want %#v", got, want)
 	}
 
@@ -87,7 +88,7 @@ func TestRegistryReadsFillRejectPolicy(t *testing.T) {
 	if !ok {
 		t.Fatalf("Lookup(%q) = false, want true", gestaltproto.App_InvokeGraphQL_FullMethodName)
 	}
-	if got, want := graphql.Fill, []string{"context"}; !stringSlicesEqual(got, want) {
+	if got, want := graphql.Fill, []string{"context"}; !slices.Equal(got, want) {
 		t.Fatalf("InvokeGraphQL Fill = %#v, want %#v", got, want)
 	}
 	if len(graphql.Reject) != 0 {
@@ -168,16 +169,4 @@ func compileFixture(t *testing.T, filename string) (protoreflect.FileDescriptor,
 		return nil, err
 	}
 	return files[0], nil
-}
-
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
