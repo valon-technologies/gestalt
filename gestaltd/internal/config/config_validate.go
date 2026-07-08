@@ -734,6 +734,14 @@ func validateRuntimeConfig(cfg *Config) error {
 	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
 		return err
 	}
+	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
+	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
+	if err := validateRemoteGestaltdURL(cfg.Server.Remote); err != nil {
+		return err
+	}
+	if err := ValidateRemoteGestaltd(cfg); err != nil {
+		return err
+	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
 			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
@@ -767,20 +775,57 @@ func validateRuntimeConfig(cfg *Config) error {
 	return nil
 }
 
-func validateRuntimeRelayBaseURL(raw string) error {
-	parsed, err := validateAbsoluteBaseURL("server.runtime.relayBaseUrl", raw)
+func validateHTTPOriginURL(label, raw string) error {
+	parsed, err := validateAbsoluteBaseURL(label, raw)
 	if err != nil || parsed == nil {
 		return err
 	}
 	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
-		return fmt.Errorf("config validation: server.runtime.relayBaseUrl must not include a path")
+		return fmt.Errorf("config validation: %s must not include a path", label)
 	}
 	switch strings.ToLower(parsed.Scheme) {
 	case "http", "https":
 		return nil
 	default:
-		return fmt.Errorf("config validation: server.runtime.relayBaseUrl must use http or https")
+		return fmt.Errorf("config validation: %s must use http or https", label)
 	}
+}
+
+func validateRuntimeRelayBaseURL(raw string) error {
+	return validateHTTPOriginURL("server.runtime.relayBaseUrl", raw)
+}
+
+func validateRemoteGestaltdURL(raw string) error {
+	return validateHTTPOriginURL("server.remote", raw)
+}
+
+// ValidateRemoteGestaltd requires server.remoteToken when server.remote is set.
+func ValidateRemoteGestaltd(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if strings.TrimSpace(cfg.Server.Remote) == "" {
+		return nil
+	}
+	if strings.TrimSpace(cfg.Server.RemoteToken) == "" {
+		return fmt.Errorf("config validation: server.remoteToken is required when server.remote is set")
+	}
+	return nil
+}
+
+// ApplyServeRemoteOverrides applies gestaltd serve CLI overrides for remote
+// gestaltd delegation and validates the resolved remote configuration.
+func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
+	if cfg == nil {
+		return nil
+	}
+	if remote != "" {
+		cfg.Server.Remote = remote
+	}
+	if remoteToken != "" {
+		cfg.Server.RemoteToken = remoteToken
+	}
+	return validateRuntimeConfig(cfg)
 }
 
 func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {

@@ -4987,6 +4987,66 @@ server:
 	})
 }
 
+func TestLoadConfigRemoteGestaltd(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts and trims remote url", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools/
+  remoteToken: test-token
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Server.Remote; got != "https://valon.tools" {
+			t.Fatalf("server.remote = %q", got)
+		}
+		if got := cfg.Server.RemoteToken; got != "test-token" {
+			t.Fatalf("server.remoteToken = %q", got)
+		}
+	})
+
+	t.Run("rejects remote url with path", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools/api
+  remoteToken: test-token
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.remote must not include a path") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("requires token when remote set", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.remoteToken is required when server.remote is set") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	t.Parallel()
 
