@@ -52,11 +52,11 @@ where
     F: FnOnce(&str) -> Result<()>,
 {
     if api::env_api_key_is_set() {
-        bail!(
-            "{} is set in your environment and takes priority over stored CLI credentials. \
-             Unset it before logging in, or use the API key directly.",
+        output::print_warning(&format!(
+            "{} is set in your environment. Gestalt will prioritize it over credentials saved by this login; unset {} to use stored CLI credentials.",
             api::ENV_API_KEY,
-        );
+            api::ENV_API_KEY,
+        ));
     }
 
     let base_url = api::resolve_url(url_override)?;
