@@ -12,6 +12,7 @@ import (
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -197,6 +198,8 @@ type Config struct {
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
 	ActivateAppProviders   func(context.Context)
+	IndexedDBs             map[string]indexeddb.IndexedDB
+	SelectedIndexedDBName  string
 }
 
 func New(cfg Config) (*Server, error) {
@@ -399,11 +402,13 @@ func New(cfg Config) (*Server, error) {
 		Now:               now,
 	})
 	s.publicGRPCHandler = buildPublicGRPCHandler(publicGRPCConfig{
-		Transport:       cfg.PublicGatewayTransport,
-		Invoker:         cfg.Invoker,
-		AgentManager:    cfg.AgentManager,
-		WorkflowManager: s.workflowSchedules,
-		Authorization:   cfg.Authorization,
+		Transport:             cfg.PublicGatewayTransport,
+		Invoker:               cfg.Invoker,
+		AgentManager:          cfg.AgentManager,
+		WorkflowManager:       s.workflowSchedules,
+		Authorization:         cfg.Authorization,
+		IndexedDBs:            cfg.IndexedDBs,
+		SelectedIndexedDBName: cfg.SelectedIndexedDBName,
 	})
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

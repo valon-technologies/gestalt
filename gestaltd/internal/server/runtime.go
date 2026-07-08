@@ -67,6 +67,12 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	if authorizationEntry != nil {
 		authorizationProvider = result.Authorization[authorizationName]
 	}
+	indexedDBs := result.IndexedDBs
+	selectedIndexedDBName := result.SelectedIndexedDBName
+	if strings.TrimSpace(cfg.Server.Remote) != "" {
+		indexedDBs = nil
+		selectedIndexedDBName = ""
+	}
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
@@ -101,6 +107,8 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		PrometheusMetrics:      result.Telemetry.PrometheusHandler(),
 		PublicHostServices:     result.PublicHostServices,
 		ActivateAppProviders:   result.ActivateAppProviders,
+		IndexedDBs:             indexedDBs,
+		SelectedIndexedDBName:  selectedIndexedDBName,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),

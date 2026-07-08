@@ -267,6 +267,8 @@ type Result struct {
 	PublicGatewayTransport *providergateway.ProviderGatewayTransport
 	CallerTokenIssuer      *providergateway.CallerTokenIssuer
 	DevSupervisor          *providerdev.Supervisor
+	IndexedDBs             map[string]indexeddb.IndexedDB
+	SelectedIndexedDBName  string
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -1410,6 +1412,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		PublicGatewayTransport:       publicGatewayTransport,
 		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		DevSupervisor:                prepared.Deps.DevSupervisor,
+		IndexedDBs:                   prepared.Deps.IndexedDBs,
+		SelectedIndexedDBName:        prepared.Deps.SelectedIndexedDBName,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,

@@ -5,10 +5,12 @@ import (
 	"net/http"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -20,11 +22,13 @@ import (
 )
 
 type publicGRPCConfig struct {
-	Transport       *providergateway.ProviderGatewayTransport
-	Invoker         invocation.Invoker
-	AgentManager    agentmanager.Service
-	WorkflowManager workflowmanager.Service
-	Authorization   core.AuthorizationProvider
+	Transport             *providergateway.ProviderGatewayTransport
+	Invoker               invocation.Invoker
+	AgentManager          agentmanager.Service
+	WorkflowManager       workflowmanager.Service
+	Authorization         core.AuthorizationProvider
+	IndexedDBs            map[string]indexeddb.IndexedDB
+	SelectedIndexedDBName string
 }
 
 func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
@@ -48,6 +52,14 @@ func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
 			cfg.WorkflowManager,
 			cfg.Authorization,
 			workflowservice.WithAgentWorkflowInvocationAuthorizer(cfg.AgentManager),
+		))
+	}
+	if len(cfg.IndexedDBs) > 0 {
+		publicrpc.RegisterPublicIndexedDBServer(srv, indexeddbservice.NewRoutingServer(
+			cfg.IndexedDBs,
+			cfg.SelectedIndexedDBName,
+			"gestaltd",
+			indexeddbservice.ServerOptions{},
 		))
 	}
 	return http.HandlerFunc(srv.ServeHTTP)

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/visibility.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -340,97 +341,157 @@ service IndexedDB {
 
   // Lifecycle
   rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "name";
     option (signature) = "schema";
   }
   rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "name";
   }
   rpc CreateIndex(CreateIndexRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "name";
     option (signature) = "key_path";
     option (signature) = "unique";
   }
   rpc DeleteIndex(DeleteIndexRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "name";
   }
 
   // Primary key CRUD
   rpc Get(ObjectStoreRequest) returns (RecordResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "id";
   }
   rpc GetKey(ObjectStoreRequest) returns (KeyResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "id";
   }
   rpc Add(RecordRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "record";
   }
   rpc Put(RecordRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "record";
   }
   rpc Delete(ObjectStoreRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "id";
   }
 
   // Bulk operations (with optional query)
   rpc Clear(ObjectStoreNameRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
   }
   rpc GetAll(ObjectStoreRangeRequest) returns (RecordsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "query";
     option (optional_signature) = "count";
   }
   rpc GetAllKeys(ObjectStoreRangeRequest) returns (KeysResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "query";
     option (optional_signature) = "count";
   }
   rpc Count(ObjectStoreRangeRequest) returns (CountResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "query";
   }
   rpc DeleteRange(ObjectStoreRangeRequest) returns (DeleteResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "query";
   }
 
   // Index queries
   rpc IndexGet(IndexQueryRequest) returns (RecordResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
   }
   rpc IndexGetKey(IndexQueryRequest) returns (KeyResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
   }
   rpc IndexGetAll(IndexQueryRequest) returns (RecordsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
     option (optional_signature) = "count";
   }
   rpc IndexGetAllKeys(IndexQueryRequest) returns (KeysResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
     option (optional_signature) = "count";
   }
   rpc IndexCount(IndexQueryRequest) returns (CountResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
   }
   rpc IndexDelete(IndexQueryRequest) returns (DeleteResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
