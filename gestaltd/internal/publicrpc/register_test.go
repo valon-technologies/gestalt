@@ -10,8 +10,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
-	gestaltproto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	gestaltproto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type originAppServer struct {
@@ -66,7 +66,6 @@ func TestPublicRegistrationMarksOrigin(t *testing.T) {
 			conn := dialGRPC(t, func(s *grpc.Server) {
 				publicrpc.RegisterPublicAppServer(s, serverImpl)
 			})
-			defer conn.Close()
 
 			if err := tc.call(gestaltproto.NewAppClient(conn)); err != nil {
 				t.Fatalf("call: %v", err)
@@ -85,7 +84,6 @@ func TestPublicRegistrationExcludesInternalMethods(t *testing.T) {
 	conn := dialGRPC(t, func(s *grpc.Server) {
 		publicrpc.RegisterPublicWorkflowServer(s, tracker)
 	})
-	defer conn.Close()
 
 	client := gestaltproto.NewWorkflowClient(conn)
 	if _, err := client.DeliverEvent(context.Background(), &gestaltproto.DeliverWorkflowProviderEventRequest{}); status.Code(err) != codes.Unimplemented {
