@@ -2,6 +2,7 @@ package publicrpc
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"google.golang.org/genproto/googleapis/api/visibility"
@@ -85,6 +86,21 @@ func (r *Registry) Lookup(fullMethod string) (PublicMethodPolicy, bool) {
 	}
 	policy, ok := r.methods[fullMethod]
 	return policy, ok
+}
+
+// Range calls fn for each discovered public method policy in stable order.
+func (r *Registry) Range(fn func(PublicMethodPolicy)) {
+	if r == nil || fn == nil {
+		return
+	}
+	fullMethods := make([]string, 0, len(r.methods))
+	for fullMethod := range r.methods {
+		fullMethods = append(fullMethods, fullMethod)
+	}
+	sort.Strings(fullMethods)
+	for _, fullMethod := range fullMethods {
+		fn(r.methods[fullMethod])
+	}
 }
 
 func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool, error) {
