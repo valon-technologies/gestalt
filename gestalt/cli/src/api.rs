@@ -4,9 +4,7 @@ use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::fmt;
-use std::path::{Path, PathBuf};
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
@@ -15,8 +13,6 @@ use crate::http;
 pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
 pub const ENV_URL: &str = "GESTALT_URL";
-pub const PROJECT_CONFIG_DIR: &str = ".gestalt";
-pub const PROJECT_CONFIG_FILE: &str = ".gestalt/config.json";
 pub const AUTH_INFO_PATH: &str = "/api/v1/auth/info";
 pub const AUTH_LOGIN_PATH: &str = "/api/v1/auth/login";
 pub const AUTH_LOGIN_CALLBACK_PATH: &str = "/api/v1/auth/login/callback";
@@ -76,19 +72,6 @@ pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     }
 }
 
-pub fn resolve_url_with_fallback(
-    url_override: Option<&str>,
-    fallback_url: Option<&str>,
-) -> Result<String> {
-    match find_configured_url(url_override)? {
-        Some(url) => Ok(url),
-        None => match fallback_url {
-            Some(url) => Ok(normalize_url(url)),
-            None => bail_no_url_configured(),
-        },
-    }
-}
-
 pub fn fetch_auth_info(base_url: &str) -> Result<AuthInfo> {
     let auth_info_url = format!("{}{}", base_url.trim_end_matches('/'), AUTH_INFO_PATH);
     let client = Client::builder()
@@ -135,13 +118,6 @@ fn find_configured_url_with_source(url_override: Option<&str>) -> Result<Option<
             format!("{ENV_URL} environment variable"),
         )));
     }
-    if let Some((url, path)) = find_project_config_value("url")? {
-        return Ok(Some((
-            normalize_url(&url),
-            format!("project config ({})", path.display()),
-        )));
-    }
-
     let config_store = ConfigStore::new()?;
     match config_store.get("url")? {
         Some(url) => Ok(Some((
@@ -161,42 +137,10 @@ pub fn describe_server_config(url_override: Option<&str>) -> Option<(String, Str
 fn bail_no_url_configured() -> Result<String> {
     let config_store = ConfigStore::new()?;
     bail!(
-        "no URL configured: use --url, {}, {}, or the user-local config file at {}",
+        "no URL configured: use --url, {}, or the user-local config file at {}",
         ENV_URL,
-        PROJECT_CONFIG_FILE,
         config_store.path().display()
     )
-}
-
-fn find_project_config_value(key: &str) -> Result<Option<(String, PathBuf)>> {
-    let mut dir = std::env::current_dir().context("failed to determine current directory")?;
-    loop {
-        let candidate = dir.join(PROJECT_CONFIG_FILE);
-        if let Some(value) = read_project_config_value(&candidate, key)? {
-            return Ok(Some((value, candidate)));
-        }
-        if !dir.pop() {
-            return Ok(None);
-        }
-    }
-}
-
-fn read_project_config_value(path: &Path, key: &str) -> Result<Option<String>> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    if !path.is_file() {
-        bail!(
-            "project config path {} exists but is not a file",
-            path.display()
-        );
-    }
-
-    let contents = std::fs::read_to_string(path)
-        .with_context(|| format!("failed to read project config {}", path.display()))?;
-    let map: BTreeMap<String, String> = serde_json::from_str(&contents)
-        .with_context(|| format!("failed to parse project config {}", path.display()))?;
-    Ok(map.get(key).cloned())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,16 +211,7 @@ impl ApiClient {
             None
         };
 
-        let base_url = match resolve_url(url_override) {
-            Ok(url) => url,
-            Err(err) => match stored_credentials
-                .as_ref()
-                .and_then(|creds| creds.api_url())
-            {
-                Some(url) => normalize_url(url),
-                None => return Err(err),
-            },
-        };
+        let base_url = resolve_url(url_override)?;
         let (token, source) = match env_api_key {
             Some(key) => (key, TokenSource::EnvVar),
             None => match stored_credentials.as_ref() {

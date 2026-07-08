@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use crate::api::{self, DEFAULT_URL, PROJECT_CONFIG_DIR, PROJECT_CONFIG_FILE};
+use crate::api::{self, DEFAULT_URL};
 use crate::commands::auth;
 use crate::config::ConfigStore;
 use crate::interactive::{InputPrompt, prompt_confirm, prompt_input};
@@ -28,16 +28,6 @@ pub fn run(url_override: Option<&str>) -> Result<()> {
         eprintln!();
         auth::login(Some(&url))?;
         eprintln!();
-    }
-
-    if prompt_confirm("Create .gestalt/config.json in current directory?", false)? {
-        let config = serde_json::json!({"url": url});
-        let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
-        std::fs::create_dir_all(PROJECT_CONFIG_DIR)
-            .with_context(|| format!("failed to create {}", PROJECT_CONFIG_DIR))?;
-        std::fs::write(PROJECT_CONFIG_FILE, format!("{json}\n"))
-            .context("failed to write .gestalt/config.json")?;
-        output::print_success(&format!("Created {}", PROJECT_CONFIG_FILE));
     }
 
     eprintln!();

@@ -6,19 +6,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credentials {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_url: Option<String>,
     pub api_token: String,
     pub api_token_id: String,
-}
-
-impl Credentials {
-    pub fn api_url(&self) -> Option<&str> {
-        self.api_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|url| !url.is_empty())
-    }
 }
 
 pub struct CredentialStore {

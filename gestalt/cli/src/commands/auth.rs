@@ -188,7 +188,6 @@ where
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
-        api_url: Some(base_url),
         api_token: token_result["token"]
             .as_str()
             .context("token response missing token field")?
@@ -232,11 +231,7 @@ pub fn logout() -> Result<()> {
     let store = CredentialStore::new()?;
     match store.load() {
         Ok(Some(creds)) => {
-            let revoke_url = creds
-                .api_url()
-                .map(str::to_owned)
-                .or_else(|| api::resolve_url(None).ok());
-            if let Some(url) = revoke_url {
+            if let Ok(url) = api::resolve_url(None) {
                 let client = ApiClient::new(&url, &creds.api_token)?;
                 if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
                     output::print_warning(&format!(
@@ -246,7 +241,7 @@ pub fn logout() -> Result<()> {
                 }
             } else {
                 output::print_warning(&format!(
-                    "Stored CLI token {} has no associated URL and no configured fallback; removing it locally only.",
+                    "Stored CLI token {} has no configured server URL; removing it locally only.",
                     creds.api_token_id
                 ));
             }

@@ -44,7 +44,7 @@ fn test_auth_login_stores_credentials_and_serves_browser_callback_page() {
     .unwrap();
 
     let LoginServer {
-        base_url,
+        base_url: _,
         state,
         handle,
     } = server;
@@ -68,7 +68,7 @@ fn test_auth_login_stores_credentials_and_serves_browser_callback_page() {
         .join("credentials.json");
     let credentials: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(credentials_path).unwrap()).unwrap();
-    assert_eq!(credentials["api_url"], base_url);
+    assert!(credentials.get("api_url").is_none());
     assert_eq!(credentials["api_token"], "cli-long-secret");
     assert_eq!(credentials["api_token_id"], "tok-long");
 }
@@ -96,7 +96,7 @@ fn test_auth_login_fails_when_server_auth_is_disabled() {
 }
 
 #[test]
-fn test_auth_logout_revokes_token_using_credential_url_even_when_configured_url_differs() {
+fn test_auth_logout_revokes_token_using_configured_url() {
     let mut token_server = Server::new();
     let revoke = authed_json_mock!(
         token_server,
@@ -106,20 +106,18 @@ fn test_auth_logout_revokes_token_using_credential_url_even_when_configured_url_
     )
     .with_body(r#"{"status":"ok"}"#)
     .create();
-    let wrong_server = Server::new();
 
     let home = tempfile::tempdir().unwrap();
     write_credentials(
         home.path(),
         serde_json::json!({
-            "api_url": token_server.url(),
             "api_token": TEST_TOKEN,
             "api_token_id": "tok-123",
         }),
     );
 
     cli_command(home.path())
-        .args(["config", "set", "url", &wrong_server.url()])
+        .args(["config", "set", "url", &token_server.url()])
         .assert()
         .success();
 
@@ -173,7 +171,6 @@ fn test_auth_status_reports_auth_disabled_before_stored_credentials() {
     write_credentials(
         home.path(),
         serde_json::json!({
-            "api_url": server.url(),
             "api_token": TEST_TOKEN,
             "api_token_id": "tok-123",
         }),
@@ -197,7 +194,6 @@ fn test_auth_status_reports_unreachable_server() {
     write_credentials(
         home.path(),
         serde_json::json!({
-            "api_url": "http://127.0.0.1:1",
             "api_token": TEST_TOKEN,
             "api_token_id": "tok-123",
         }),

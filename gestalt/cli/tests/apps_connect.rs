@@ -607,11 +607,14 @@ fn test_cli_apps_list_table_output() {
     write_credentials(
         home.path(),
         serde_json::json!({
-            "api_url": server.url(),
             "api_token": TEST_TOKEN,
             "api_token_id": "tok-123",
         }),
     );
+    cli_command(home.path())
+        .args(["config", "set", "url", &server.url()])
+        .assert()
+        .success();
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
 		.with_body(
 			r#"[
