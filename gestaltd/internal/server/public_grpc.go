@@ -22,12 +22,12 @@ import (
 )
 
 type publicGRPCConfig struct {
-	Transport             *providergateway.ProviderGatewayTransport
-	Invoker               invocation.Invoker
-	AgentManager          agentmanager.Service
-	WorkflowManager       workflowmanager.Service
-	Authorization         core.AuthorizationProvider
-	IndexedDB             indexeddb.IndexedDB
+	Transport       *providergateway.ProviderGatewayTransport
+	Invoker         invocation.Invoker
+	AgentManager    agentmanager.Service
+	WorkflowManager workflowmanager.Service
+	Authorization   core.AuthorizationProvider
+	IndexedDB       indexeddb.IndexedDB
 }
 
 func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
