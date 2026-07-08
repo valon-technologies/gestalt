@@ -110,15 +110,19 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 }
 
 type Broker struct {
-	providers         *registry.ProviderMap[core.Provider]
-	users             UserStore
-	externalCreds     core.ExternalCredentialProvider
-	connMapper        ConnectionMapper
-	mcpMapper         ConnectionMapper
-	connectionRuntime ConnectionRuntimeResolver
-	authorization     core.AuthorizationProvider
-	logger            *slog.Logger
-	tracerProvider    trace.TracerProvider
+	providers           *registry.ProviderMap[core.Provider]
+	users               UserStore
+	externalCreds       core.ExternalCredentialProvider
+	connMapper          ConnectionMapper
+	mcpMapper           ConnectionMapper
+	connectionRuntime   ConnectionRuntimeResolver
+	authorization       core.AuthorizationProvider
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
+	remoteApps            proto.AppClient
+	remoteAppRouter       RemoteAppRouter
+	remotePublicBaseURL   string
+	remoteRequestContext  RemoteRequestContextBuilder
 }
 
 type BrokerOption func(*Broker)
@@ -237,18 +241,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
-		} else {
-			err = fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
-		}
-		return fail(err)
-	}
-
-	metricProvider = providerName
-
 	if p == nil {
 		return fail(ErrNotAuthenticated)
 	}
@@ -262,6 +254,38 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+
+	prov, err := b.providers.Get(providerName)
+	if err != nil {
+		if b.shouldDelegateApp(providerName, err) {
+			if !principal.AllowsOperationPermission(p, providerName, operation) {
+				return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, operation))
+			}
+			if err := b.checkAuthorizationAccess(ctx, p, providerName, operation); err != nil {
+				return fail(err)
+			}
+			metricProvider = providerName
+			metricOperation = operation
+			metricTransport = metricutil.AttrValue(catalog.TransportApp)
+			metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveRemoteConnectionMode(ctx, providerName))
+			span.SetAttributes(attrTransport.String(metricTransport), attrConnectionMode.String(metricConnectionMode))
+			result, err = b.invokeRemoteApp(ctx, p, providerName, instance, operation, params)
+			if err != nil {
+				return fail(err)
+			}
+			b.observePlugin5xxResult(ctx, span, p, providerName, operation, catalog.TransportApp, result)
+			return result, nil
+		}
+		if errors.Is(err, core.ErrNotFound) {
+			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+		} else {
+			err = fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+		}
+		return fail(err)
+	}
+
+	metricProvider = providerName
+
 	conn := ConnectionFromContext(ctx)
 	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
@@ -427,22 +451,6 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		}
 	}
 
-	prov, err := b.providers.Get(providerName)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
-		} else {
-			err = fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
-		}
-		return fail(err)
-	}
-	graphQLProv, ok := prov.(core.GraphQLSurfaceInvoker)
-	if !ok {
-		return fail(fmt.Errorf("%w: %s.%s", ErrOperationNotFound, providerName, graphQLOperationID))
-	}
-
-	metricProvider = providerName
-
 	if p == nil {
 		return fail(ErrNotAuthenticated)
 	}
@@ -459,6 +467,36 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+
+	prov, err := b.providers.Get(providerName)
+	if err != nil {
+		if b.shouldDelegateApp(providerName, err) {
+			if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
+				return fail(err)
+			}
+			metricProvider = providerName
+			metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveRemoteConnectionMode(ctx, providerName))
+			span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
+			result, err = b.invokeRemoteGraphQL(ctx, p, providerName, instance, request)
+			if err != nil {
+				return fail(err)
+			}
+			return result, nil
+		}
+		if errors.Is(err, core.ErrNotFound) {
+			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+		} else {
+			err = fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+		}
+		return fail(err)
+	}
+	graphQLProv, ok := prov.(core.GraphQLSurfaceInvoker)
+	if !ok {
+		return fail(fmt.Errorf("%w: %s.%s", ErrOperationNotFound, providerName, graphQLOperationID))
+	}
+
+	metricProvider = providerName
+
 	if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
 		return fail(err)
 	}
