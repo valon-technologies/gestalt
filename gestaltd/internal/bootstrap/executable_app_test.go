@@ -6641,7 +6641,7 @@ func testRuntimePublicEndpointDeps(t *testing.T, deps Deps) Deps {
 			if entry == nil {
 				continue
 			}
-			db, err := buildIndexedDB(entry, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory})
+			db, err := buildIndexedDB(nil, name, entry, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory}, Deps{})
 			if err != nil {
 				t.Fatalf("build test indexeddb %q: %v", name, err)
 			}

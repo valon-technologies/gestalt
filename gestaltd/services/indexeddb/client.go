@@ -100,17 +100,21 @@ func (r *remoteIndexedDB) DeleteIndex(ctx context.Context, store, name string) e
 	return manager.DeleteIndex(ctx, store, name)
 }
 
-// NewPublicRemote returns an IndexedDB provider backed by a remote public gestaltd API.
-func NewPublicRemote(client proto.IndexedDBClient, name string) (coreindexeddb.IndexedDB, error) {
-	name = strings.TrimSpace(name)
-	if client == nil {
+type RemoteConfig struct {
+	Client proto.IndexedDBClient
+	Name   string
+}
+
+func NewRemote(cfg RemoteConfig) (coreindexeddb.IndexedDB, error) {
+	name := strings.TrimSpace(cfg.Name)
+	if cfg.Client == nil {
 		return nil, status.Error(codes.InvalidArgument, "indexeddb provider client is required")
 	}
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "indexeddb provider name is required")
 	}
 	return &remoteIndexedDB{
-		Database: rpcidb.NewClient(client, rpcidb.Options{
+		Database: rpcidb.NewClient(cfg.Client, rpcidb.Options{
 			UnaryTimeout: runtimehost.ProviderRPCTimeout,
 			Binding:      name,
 		}),

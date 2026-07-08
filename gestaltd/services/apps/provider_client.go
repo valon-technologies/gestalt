@@ -58,7 +58,7 @@ type integrationProviderSupport struct {
 	sessionCatalog bool
 }
 
-// RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
+// RemoteProviderOption configures a remote provider returned by NewRemote.
 type RemoteProviderOption func(*remoteProviderBase)
 
 // WithCloser attaches a closer that is called when the provider is closed.
@@ -106,10 +106,6 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 	}
 
 	return base, nil
-}
-
-func NewRemoteProvider(ctx context.Context, client proto.AppProviderClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
-	return NewRemote(ctx, client, spec, config, opts...)
 }
 
 func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProviderClient) (*integrationProviderSupport, error) {
