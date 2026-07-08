@@ -5029,7 +5029,7 @@ server:
 		}
 	})
 
-	t.Run("requires token when remote set", func(t *testing.T) {
+	t.Run("allows remote without token before serve", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -5037,9 +5037,17 @@ server:
   remote: https://valon.tools
 `)
 
-		_, err := Load(path)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Server.Remote; got != "https://valon.tools" {
+			t.Fatalf("server.remote = %q", got)
+		}
+
+		err = ApplyServeRemoteOverrides(cfg, "", "")
 		if err == nil {
-			t.Fatal("Load: expected error, got nil")
+			t.Fatal("ApplyServeRemoteOverrides: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), "server.remoteToken is required when server.remote is set") {
 			t.Fatalf("unexpected error: %v", err)

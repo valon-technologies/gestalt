@@ -1514,7 +1514,7 @@ func failPendingStartupProviders(deps Deps, err error) {
 	}
 }
 
-func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
+func providerRunsLocally(cfg *config.Config, entry *config.ProviderEntry) bool {
 	if entry == nil {
 		return false
 	}
@@ -1530,7 +1530,7 @@ func localProviderEntries(cfg *config.Config, entries map[string]*config.Provide
 	}
 	filtered := make(map[string]*config.ProviderEntry, len(entries))
 	for name, entry := range entries {
-		if providerBuildsLocal(cfg, entry) {
+		if providerRunsLocally(cfg, entry) {
 			filtered[name] = entry
 		}
 	}

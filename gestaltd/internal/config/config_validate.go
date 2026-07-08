@@ -734,12 +734,7 @@ func validateRuntimeConfig(cfg *Config) error {
 	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
 		return err
 	}
-	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
-	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
-	if err := validateRemoteGestaltdURL(cfg.Server.Remote); err != nil {
-		return err
-	}
-	if err := ValidateRemoteGestaltd(cfg); err != nil {
+	if err := normalizeRemoteGestaltdConfig(cfg); err != nil {
 		return err
 	}
 	for name, entry := range cfg.Runtime.Providers {
@@ -799,7 +794,16 @@ func validateRemoteGestaltdURL(raw string) error {
 	return validateHTTPOriginURL("server.remote", raw)
 }
 
-// ValidateRemoteGestaltd requires server.remoteToken when server.remote is set.
+func normalizeRemoteGestaltdConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
+	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
+	return validateRemoteGestaltdURL(cfg.Server.Remote)
+}
+
+// ValidateRemoteGestaltd checks serve-time remote requirements.
 func ValidateRemoteGestaltd(cfg *Config) error {
 	if cfg == nil {
 		return nil
@@ -825,7 +829,10 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
 	if remoteToken != "" {
 		cfg.Server.RemoteToken = remoteToken
 	}
-	return validateRuntimeConfig(cfg)
+	if err := normalizeRemoteGestaltdConfig(cfg); err != nil {
+		return err
+	}
+	return ValidateRemoteGestaltd(cfg)
 }
 
 func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {

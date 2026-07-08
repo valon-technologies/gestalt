@@ -151,12 +151,11 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			return err
 		}
 	}
-	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, *lockfilePath, *artifactsDir, locked, noSync)
+	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, *lockfilePath, *artifactsDir, locked, noSync, bootstrapSetupOptions{
+		Remote:      *remoteFlag,
+		RemoteToken: *remoteTokenFlag,
+	})
 	if err != nil {
-		return err
-	}
-	if err := config.ApplyServeRemoteOverrides(env.Config, *remoteFlag, *remoteTokenFlag); err != nil {
-		env.Close()
 		return err
 	}
 	if err := resolveServePort(env.Config, flagIntValue(portFlag)); err != nil {
@@ -457,7 +456,6 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
-	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--port PORT] [--remote URL] [--remote-token TOKEN]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")

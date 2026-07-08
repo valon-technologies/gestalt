@@ -34,14 +34,24 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithConfigPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevAppKeys...)
+type bootstrapSetupOptions struct {
+	ForcedDevAppKeys []string
+	Remote           string
+	RemoteToken      string
 }
 
-func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
-	cfg, err := loadConfigForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevAppKeys...)
+func setupBootstrapWithConfigPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, opts bootstrapSetupOptions) (*bootstrapEnv, error) {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, opts)
+}
+
+func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, opts bootstrapSetupOptions) (*bootstrapEnv, error) {
+	cfg, err := loadConfigForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync, opts.ForcedDevAppKeys)
 	if err != nil {
+		stop()
+		return nil, err
+	}
+	if err := config.ApplyServeRemoteOverrides(cfg, opts.Remote, opts.RemoteToken); err != nil {
 		stop()
 		return nil, err
 	}

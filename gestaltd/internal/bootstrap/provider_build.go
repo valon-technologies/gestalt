@@ -97,7 +97,7 @@ func prepareProviderBuilds(
 
 	for name := range cfg.Apps {
 		entry := cfg.Apps[name]
-		if !providerBuildsLocal(cfg, entry) {
+		if !providerRunsLocally(cfg, entry) {
 			continue
 		}
 		sha := currentAppSHA(entry)

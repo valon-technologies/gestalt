@@ -126,7 +126,9 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	if session.Locked {
 		forcedDevAppKeys = session.DevAppKeys
 	}
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, forcedDevAppKeys...)
+	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, bootstrapSetupOptions{
+		ForcedDevAppKeys: forcedDevAppKeys,
+	})
 	if err != nil {
 		return err
 	}
