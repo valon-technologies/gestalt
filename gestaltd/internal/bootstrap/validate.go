@@ -27,7 +27,13 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return nil, err
 	}
 
-	prepared, err := prepareCore(ctx, cfg, factories, false)
+	placement := NewPlacementPlan(cfg)
+	remoteClients, err := prepareRemoteClients(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	prepared, err := prepareCore(ctx, cfg, factories, false, placement, remoteClients)
 	if err != nil {
 		return nil, err
 	}
