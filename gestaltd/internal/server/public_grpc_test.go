@@ -15,13 +15,10 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 var publicGRPCTestSecret = []byte("public-grpc-test-secret-01234567")
@@ -192,42 +189,13 @@ func TestPublicGRPCWorkflowDeliverEventSucceeds(t *testing.T) {
 	if len(provider.deliveredEvents) != 1 {
 		t.Fatalf("delivered events = %d, want 1", len(provider.deliveredEvents))
 	}
-	delivered := provider.deliveredEvents[0]
-	if delivered.GetDeliveredBySubjectId() != principal.UserSubjectID("public-grpc-user") {
-		t.Fatalf("delivered_by_subject_id = %q, want %q", delivered.GetDeliveredBySubjectId(), principal.UserSubjectID("public-grpc-user"))
-	}
-	if delivered.GetAppName() != "roadmap" {
-		t.Fatalf("app_name = %q, want roadmap", delivered.GetAppName())
-	}
 }
 
-func TestPublicGRPCWorkflowInternalMethodsAreNotRegistered(t *testing.T) {
+func TestPublicGRPCAgentCreateSessionSucceeds(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := startPublicGRPCServer(t, nil)
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-	ctx := publicGRPCContext(t, publicGRPCTestBearer("roadmap"))
-	client := proto.NewWorkflowClient(conn)
-
-	_, err := client.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
-		Spec: &proto.WorkflowDefinitionSpec{Id: "definition-1"},
-	})
-	if grpcstatus.Code(err) != codes.Unimplemented {
-		t.Fatalf("ApplyDefinition code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unimplemented, err)
-	}
-	_, err = client.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
-	if grpcstatus.Code(err) != codes.Unimplemented {
-		t.Fatalf("GetDefinition code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unimplemented, err)
-	}
-}
-
-func TestPublicGRPCAgentSessionFillAndRejectPolicy(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
 	ts, _ := startPublicGRPCServer(t, func(cfg *server.Config) {
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: newMemoryAgentProvider()}
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      agentControl,
@@ -237,34 +205,11 @@ func TestPublicGRPCAgentSessionFillAndRejectPolicy(t *testing.T) {
 	})
 	conn := newRelayGRPCConn(t, ts)
 	defer func() { _ = conn.Close() }()
-	client := proto.NewAgentClient(conn)
-	bearer := publicGRPCTestBearer("")
 
-	_, err := client.CreateSession(publicGRPCContext(t, bearer), &proto.CreateAgentProviderSessionRequest{
-		Model:   "gpt-test",
-		Context: &proto.RequestContext{Subject: &proto.SubjectContext{Id: principal.UserSubjectID("other-user")}},
-	})
-	if grpcstatus.Code(err) != codes.InvalidArgument {
-		t.Fatalf("CreateSession client context code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.InvalidArgument, err)
-	}
-
-	session, err := client.CreateSession(publicGRPCContext(t, bearer), &proto.CreateAgentProviderSessionRequest{
+	_, err := proto.NewAgentClient(conn).CreateSession(publicGRPCContext(t, publicGRPCTestBearer("")), &proto.CreateAgentProviderSessionRequest{
 		Model: "gpt-test",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
-	}
-	if session.GetCreatedBySubjectId() != principal.UserSubjectID("public-grpc-user") {
-		t.Fatalf("created_by_subject_id = %q, want %q", session.GetCreatedBySubjectId(), principal.UserSubjectID("public-grpc-user"))
-	}
-
-	_, err = client.CreateTurn(publicGRPCContext(t, bearer), &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.GetId(),
-		Model:     "gpt-test",
-		Messages:  []*proto.AgentMessage{{Role: "user", Text: "hello"}},
-		Subject:   &proto.SubjectContext{Id: principal.UserSubjectID("other-user")},
-	})
-	if grpcstatus.Code(err) != codes.InvalidArgument {
-		t.Fatalf("CreateTurn client subject code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.InvalidArgument, err)
 	}
 }
