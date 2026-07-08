@@ -229,9 +229,38 @@ func TestPlan6RemoteLifecycleCICDLocal(t *testing.T) {
 		}
 	}
 
+	deps := Deps{Placement: NewPlacementPlan(cfg)}
+	clients, err := fake.NewClientSet(context.Background())
+	if err != nil {
+		t.Fatalf("NewClientSet: %v", err)
+	}
+	defer func() { _ = clients.Close() }()
+	deps.RemoteClients = clients
+
+	agentRuntime, err := newAgentRuntime(cfg, nil)
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+	deps.AgentRuntime = agentRuntime
+	if _, err := publishRemoteProviders(context.Background(), cfg, &deps); err != nil {
+		t.Fatalf("publishRemoteProviders: %v", err)
+	}
+
+	_, provider, err := agentRuntime.ResolveProvider(context.Background(), "managed")
+	if err != nil {
+		t.Fatalf("ResolveProvider(agent): %v", err)
+	}
+	if _, err := provider.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
 	appInvokes := fake.Recorder.AppInvokesSnapshot()
 	if len(appInvokes) != 2 {
 		t.Fatalf("remote app invokes = %d, want 2", len(appInvokes))
+	}
+	agentCreates := fake.Recorder.AgentCreatesSnapshot()
+	if len(agentCreates) != 1 || agentCreates[0].ProviderName != "managed" {
+		t.Fatalf("agent creates = %#v, want remote managed", agentCreates)
 	}
 }
 
@@ -258,9 +287,38 @@ func TestPlan6RemoteLifecycleCICDAndProfileLocal(t *testing.T) {
 		t.Fatalf("Invoke(linear) = %#v, want remote 200", result)
 	}
 
+	deps := Deps{Placement: NewPlacementPlan(cfg)}
+	clients, err := fake.NewClientSet(context.Background())
+	if err != nil {
+		t.Fatalf("NewClientSet: %v", err)
+	}
+	defer func() { _ = clients.Close() }()
+	deps.RemoteClients = clients
+
+	agentRuntime, err := newAgentRuntime(cfg, nil)
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+	deps.AgentRuntime = agentRuntime
+	if _, err := publishRemoteProviders(context.Background(), cfg, &deps); err != nil {
+		t.Fatalf("publishRemoteProviders: %v", err)
+	}
+
+	_, provider, err := agentRuntime.ResolveProvider(context.Background(), "managed")
+	if err != nil {
+		t.Fatalf("ResolveProvider(agent): %v", err)
+	}
+	if _, err := provider.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
 	appInvokes := fake.Recorder.AppInvokesSnapshot()
 	if len(appInvokes) != 1 || appInvokes[0].App != "linear" {
 		t.Fatalf("remote app invokes = %#v, want linear only", appInvokes)
+	}
+	agentCreates := fake.Recorder.AgentCreatesSnapshot()
+	if len(agentCreates) != 1 || agentCreates[0].ProviderName != "managed" {
+		t.Fatalf("agent creates = %#v, want remote managed", agentCreates)
 	}
 }
 
