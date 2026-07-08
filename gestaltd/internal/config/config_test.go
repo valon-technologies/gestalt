@@ -5038,52 +5038,53 @@ server:
 		}
 	})
 
-	t.Run("fills remote token from env before serve", func(t *testing.T) {
-		t.Setenv("GESTALT_API_KEY", "env-token")
+	t.Run("resolves default remote token before serve", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			envToken    string
+			storedToken string
+			wantToken   string
+			wantErr     string
+		}{
+			{name: "env", envToken: "env-token", wantToken: "env-token"},
+			{name: "stored credentials", storedToken: "stored-token", wantToken: "stored-token"},
+			{name: "missing", wantErr: "server.remoteToken is required when server.remote is set"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Setenv("GESTALT_API_KEY", tc.envToken)
+				xdg := t.TempDir()
+				t.Setenv("XDG_CONFIG_HOME", xdg)
+				if tc.storedToken != "" {
+					credentialsDir := filepath.Join(xdg, "gestalt")
+					if err := os.MkdirAll(credentialsDir, 0o755); err != nil {
+						t.Fatalf("MkdirAll: %v", err)
+					}
+					credentials := fmt.Sprintf(`{"api_token":%q,"api_token_id":"tok_1"}`, tc.storedToken)
+					if err := os.WriteFile(filepath.Join(credentialsDir, "credentials.json"), []byte(credentials), 0o600); err != nil {
+						t.Fatalf("WriteFile credentials: %v", err)
+					}
+				}
 
-		cfg, err := loadRemoteConfigForServe(t)
-		if err != nil {
-			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
-		}
-		if got := cfg.Server.RemoteToken; got != "env-token" {
-			t.Fatalf("server.remoteToken = %q, want env-token", got)
-		}
-	})
-
-	t.Run("fills remote token from stored credentials before serve", func(t *testing.T) {
-		t.Setenv("GESTALT_API_KEY", "")
-		xdg := t.TempDir()
-		t.Setenv("XDG_CONFIG_HOME", xdg)
-		credentialsDir := filepath.Join(xdg, "gestalt")
-		if err := os.MkdirAll(credentialsDir, 0o755); err != nil {
-			t.Fatalf("MkdirAll: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(credentialsDir, "credentials.json"), []byte(`{"api_token":"stored-token","api_token_id":"tok_1"}`), 0o600); err != nil {
-			t.Fatalf("WriteFile credentials: %v", err)
-		}
-
-		cfg, err := loadRemoteConfigForServe(t)
-		if err != nil {
-			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
-		}
-		if got := cfg.Server.RemoteToken; got != "stored-token" {
-			t.Fatalf("server.remoteToken = %q, want stored-token", got)
-		}
-	})
-
-	t.Run("requires token before serve when no default exists", func(t *testing.T) {
-		t.Setenv("GESTALT_API_KEY", "")
-		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-		cfg, err := loadRemoteConfigForServe(t)
-		if got := cfg.Server.Remote; got != "https://valon.tools" {
-			t.Fatalf("server.remote = %q", got)
-		}
-		if err == nil {
-			t.Fatal("ApplyServeRemoteOverrides: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), "server.remoteToken is required when server.remote is set") {
-			t.Fatalf("unexpected error: %v", err)
+				cfg, err := loadRemoteConfigForServe(t)
+				if got := cfg.Server.Remote; got != "https://valon.tools" {
+					t.Fatalf("server.remote = %q", got)
+				}
+				if tc.wantErr != "" {
+					if err == nil {
+						t.Fatal("ApplyServeRemoteOverrides: expected error, got nil")
+					}
+					if !strings.Contains(err.Error(), tc.wantErr) {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+				}
+				if got := cfg.Server.RemoteToken; got != tc.wantToken {
+					t.Fatalf("server.remoteToken = %q, want %q", got, tc.wantToken)
+				}
+			})
 		}
 	})
 }
