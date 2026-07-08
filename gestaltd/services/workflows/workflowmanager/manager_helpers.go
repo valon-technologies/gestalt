@@ -37,14 +37,6 @@ func workflowCallerSubjectID(_ context.Context, reqCtx *proto.RequestContext, p 
 	return "", ErrWorkflowSubjectRequired
 }
 
-func workflowSubjectIDFromPrincipal(p *principal.Principal) string {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.SubjectID)
-}
-
 func principalSubjectID(p *principal.Principal) string {
 	if p == nil {
 		return ""
