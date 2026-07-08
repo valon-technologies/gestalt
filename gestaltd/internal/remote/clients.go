@@ -33,7 +33,7 @@ type ClientSet struct {
 }
 
 // NewClientSet dials a remote public gestaltd and returns typed gRPC clients.
-func NewClientSet(ctx context.Context, cfg Config) (*ClientSet, error) {
+func NewClientSet(_ context.Context, cfg Config) (*ClientSet, error) {
 	target, dialOpts, err := resolveDialConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -45,16 +45,6 @@ func NewClientSet(ctx context.Context, cfg Config) (*ClientSet, error) {
 	conn, err := grpc.NewClient(target, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("dial remote gestaltd %q: %w", cfg.URL, err)
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	conn.Connect()
-	select {
-	case <-ctx.Done():
-		_ = conn.Close()
-		return nil, ctx.Err()
-	default:
 	}
 	return &ClientSet{
 		App:       proto.NewAppClient(conn),

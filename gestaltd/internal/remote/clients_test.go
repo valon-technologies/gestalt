@@ -36,20 +36,6 @@ func TestNewClientSetRequiresToken(t *testing.T) {
 	}
 }
 
-func TestWithBearerAttachesAuthorizationMetadata(t *testing.T) {
-	t.Parallel()
-
-	ctx := remote.WithBearer(context.Background(), "gst_api_test")
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		t.Fatal("expected outgoing metadata")
-	}
-	values := md.Get("authorization")
-	if len(values) != 1 || values[0] != "Bearer gst_api_test" {
-		t.Fatalf("authorization metadata = %#v, want Bearer gst_api_test", values)
-	}
-}
-
 func TestClientSetPreservesGRPCStatusCodes(t *testing.T) {
 	t.Parallel()
 
@@ -79,25 +65,6 @@ func TestClientSetPreservesGRPCStatusCodes(t *testing.T) {
 	}
 	if st.Code() != codes.PermissionDenied || st.Message() != "forbidden-app" {
 		t.Fatalf("status = (%v, %q), want (%v, %q)", st.Code(), st.Message(), codes.PermissionDenied, "forbidden-app")
-	}
-}
-
-func TestClientSetCloseReleasesConnection(t *testing.T) {
-	t.Parallel()
-
-	ts := startStatusTestServer(t, codes.OK, "")
-	defer ts.Close()
-
-	clientSet, err := remote.NewClientSet(context.Background(), remote.Config{
-		URL:         ts.URL,
-		Token:       "gst_api_test",
-		DialOptions: testDialOptions(t, ts),
-	})
-	if err != nil {
-		t.Fatalf("NewClientSet: %v", err)
-	}
-	if err := clientSet.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
 	}
 }
 

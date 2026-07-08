@@ -2397,7 +2397,6 @@ func normalizeServerRuntimeConfig(cfg *Config) {
 		return
 	}
 	cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
-	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
 	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
 }
 

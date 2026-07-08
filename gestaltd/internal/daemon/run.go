@@ -155,10 +155,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if err != nil {
 		return err
 	}
-	if err := applyServeConfigOverrides(env.Config, serveConfigOverrides{
-		Remote:      strings.TrimSpace(*remoteFlag),
-		RemoteToken: strings.TrimSpace(*remoteTokenFlag),
-	}); err != nil {
+	if err := applyServeConfigOverrides(env.Config, strings.TrimSpace(*remoteFlag), strings.TrimSpace(*remoteTokenFlag)); err != nil {
 		env.Close()
 		return err
 	}
@@ -214,20 +211,12 @@ func flagIntValue(flag *int) int {
 	return *flag
 }
 
-type serveConfigOverrides struct {
-	Remote      string
-	RemoteToken string
-}
-
-func applyServeConfigOverrides(cfg *config.Config, overrides serveConfigOverrides) error {
-	if cfg == nil {
-		return fmt.Errorf("config is required")
+func applyServeConfigOverrides(cfg *config.Config, remote, remoteToken string) error {
+	if remote != "" {
+		cfg.Server.Remote = remote
 	}
-	if overrides.Remote != "" {
-		cfg.Server.Remote = overrides.Remote
-	}
-	if overrides.RemoteToken != "" {
-		cfg.Server.RemoteToken = overrides.RemoteToken
+	if remoteToken != "" {
+		cfg.Server.RemoteToken = remoteToken
 	}
 	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
 	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
@@ -480,7 +469,6 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
-	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--locked] [--no-sync] [--artifacts-dir PATH] [--lockfile PATH] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
