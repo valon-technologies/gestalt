@@ -7,6 +7,7 @@
 package proto
 
 import (
+	_ "google.golang.org/genproto/googleapis/api/visibility"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -3653,7 +3654,7 @@ var File_v1_agent_proto protoreflect.FileDescriptor
 
 const file_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x0ev1/agent.proto\x12\x13gestalt.provider.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14v1/annotations.proto\x1a\fv1/app.proto\"\xa8\x01\n" +
+	"\x0ev1/agent.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/api/visibility.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14v1/annotations.proto\x1a\fv1/app.proto\"\xa8\x01\n" +
 	"\fAgentMessage\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12;\n" +
@@ -3987,26 +3988,46 @@ const file_v1_agent_proto_rawDesc = "" +
 	"#AGENT_INTERACTION_STATE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fAGENT_INTERACTION_STATE_PENDING\x10\x01\x12$\n" +
 	" AGENT_INTERACTION_STATE_RESOLVED\x10\x02\x12$\n" +
-	" AGENT_INTERACTION_STATE_CANCELED\x10\x032\xc3\x11\n" +
-	"\x05Agent\x12\xc9\x01\n" +
-	"\rCreateSession\x126.gestalt.provider.v1.CreateAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"]\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\n" +
-	"client_ref\xa2\xb5\x18\bmetadata\xa2\xb5\x18\tworkspace\xa2\xb5\x18\x05tools\x12\x85\x01\n" +
+	" AGENT_INTERACTION_STATE_CANCELED\x10\x032\xb7\x14\n" +
+	"\x05Agent\x12\x85\x02\n" +
+	"\rCreateSession\x126.gestalt.provider.v1.CreateAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"\x98\x01\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\n" +
+	"client_ref\xa2\xb5\x18\bmetadata\xa2\xb5\x18\tworkspace\xa2\xb5\x18\x05tools\xca\xf3\x18)\n" +
+	"\acontext\n" +
+	"\asubject\n" +
+	"\x15created_by_subject_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xa9\x01\n" +
 	"\n" +
-	"GetSession\x123.gestalt.provider.v1.GetAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"\x1f\x8a\xb5\x18\n" +
-	"session_id\xa2\xb5\x18\rprovider_name\x12\xc1\x01\n" +
-	"\fListSessions\x125.gestalt.provider.v1.ListAgentProviderSessionsRequest\x1a6.gestalt.provider.v1.ListAgentProviderSessionsResponse\"B\xa2\xb5\x18\vsession_ids\xa2\xb5\x18\x05state\xa2\xb5\x18\x05limit\xa2\xb5\x18\fsummary_only\xa2\xb5\x18\rprovider_name\x12\xae\x01\n" +
-	"\rUpdateSession\x126.gestalt.provider.v1.UpdateAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"B\x8a\xb5\x18\n" +
+	"GetSession\x123.gestalt.provider.v1.GetAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"C\x8a\xb5\x18\n" +
+	"session_id\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
+	"\acontext\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xe5\x01\n" +
+	"\fListSessions\x125.gestalt.provider.v1.ListAgentProviderSessionsRequest\x1a6.gestalt.provider.v1.ListAgentProviderSessionsResponse\"f\xa2\xb5\x18\vsession_ids\xa2\xb5\x18\x05state\xa2\xb5\x18\x05limit\xa2\xb5\x18\fsummary_only\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
+	"\acontext\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xd2\x01\n" +
+	"\rUpdateSession\x126.gestalt.provider.v1.UpdateAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"f\x8a\xb5\x18\n" +
 	"session_id\xa2\xb5\x18\n" +
-	"client_ref\xa2\xb5\x18\x05state\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\bmetadata\x12\xf6\x01\n" +
+	"client_ref\xa2\xb5\x18\x05state\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\bmetadata\xca\xf3\x18\x12\n" +
+	"\acontext\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xb1\x02\n" +
 	"\n" +
-	"CreateTurn\x123.gestalt.provider.v1.CreateAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"\x92\x01\x8a\xb5\x18\n" +
-	"session_id\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\x8a\xb5\x18\bmessages\xa2\xb5\x18\rexecution_ref\xa2\xb5\x18\x0ftimeout_seconds\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\bmetadata\xa2\xb5\x18\rmodel_options\xa2\xb5\x18\x06output\x12y\n" +
-	"\aGetTurn\x120.gestalt.provider.v1.GetAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"\x1c\x8a\xb5\x18\aturn_id\xa2\xb5\x18\rprovider_name\x12\xc4\x01\n" +
-	"\tListTurns\x122.gestalt.provider.v1.ListAgentProviderTurnsRequest\x1a3.gestalt.provider.v1.ListAgentProviderTurnsResponse\"N\x8a\xb5\x18\n" +
-	"session_id\xa2\xb5\x18\bturn_ids\xa2\xb5\x18\x06status\xa2\xb5\x18\x05limit\xa2\xb5\x18\fsummary_only\xa2\xb5\x18\rprovider_name\x12\x89\x01\n" +
+	"CreateTurn\x123.gestalt.provider.v1.CreateAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"\xcd\x01\x8a\xb5\x18\n" +
+	"session_id\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\x8a\xb5\x18\bmessages\xa2\xb5\x18\rexecution_ref\xa2\xb5\x18\x0ftimeout_seconds\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\bmetadata\xa2\xb5\x18\rmodel_options\xa2\xb5\x18\x06output\xca\xf3\x18)\n" +
+	"\acontext\n" +
+	"\asubject\n" +
+	"\x15created_by_subject_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x9d\x01\n" +
+	"\aGetTurn\x120.gestalt.provider.v1.GetAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"@\x8a\xb5\x18\aturn_id\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
+	"\acontext\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xe8\x01\n" +
+	"\tListTurns\x122.gestalt.provider.v1.ListAgentProviderTurnsRequest\x1a3.gestalt.provider.v1.ListAgentProviderTurnsResponse\"r\x8a\xb5\x18\n" +
+	"session_id\xa2\xb5\x18\bturn_ids\xa2\xb5\x18\x06status\xa2\xb5\x18\x05limit\xa2\xb5\x18\fsummary_only\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
+	"\acontext\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xad\x01\n" +
 	"\n" +
-	"CancelTurn\x123.gestalt.provider.v1.CancelAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"&\x8a\xb5\x18\aturn_id\xa2\xb5\x18\x06reason\xa2\xb5\x18\rprovider_name\x12\xb7\x01\n" +
-	"\x0eListTurnEvents\x127.gestalt.provider.v1.ListAgentProviderTurnEventsRequest\x1a8.gestalt.provider.v1.ListAgentProviderTurnEventsResponse\"2\x8a\xb5\x18\aturn_id\xa2\xb5\x18\tafter_seq\xa2\xb5\x18\x05limit\xa2\xb5\x18\rprovider_name\x12\x84\x01\n" +
+	"CancelTurn\x123.gestalt.provider.v1.CancelAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"J\x8a\xb5\x18\aturn_id\xa2\xb5\x18\x06reason\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
+	"\acontext\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xdb\x01\n" +
+	"\x0eListTurnEvents\x127.gestalt.provider.v1.ListAgentProviderTurnEventsRequest\x1a8.gestalt.provider.v1.ListAgentProviderTurnEventsResponse\"V\x8a\xb5\x18\aturn_id\xa2\xb5\x18\tafter_seq\xa2\xb5\x18\x05limit\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
+	"\acontext\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x84\x01\n" +
 	"\x0eGetInteraction\x127.gestalt.provider.v1.GetAgentProviderInteractionRequest\x1a%.gestalt.provider.v1.AgentInteraction\"\x12\x8a\xb5\x18\x0einteraction_id\x12\xa7\x01\n" +
 	"\x10ListInteractions\x129.gestalt.provider.v1.ListAgentProviderInteractionsRequest\x1a:.gestalt.provider.v1.ListAgentProviderInteractionsResponse\"\x1c\x8a\xb5\x18\aturn_id\xa2\xb5\x18\rprovider_name\x12\xb6\x01\n" +
 	"\x12ResolveInteraction\x12;.gestalt.provider.v1.ResolveAgentProviderInteractionRequest\x1a%.gestalt.provider.v1.AgentInteraction\"<\x8a\xb5\x18\x0einteraction_id\x8a\xb5\x18\n" +

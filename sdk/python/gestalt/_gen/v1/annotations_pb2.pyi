@@ -1,6 +1,8 @@
 from google.protobuf import descriptor_pb2 as _descriptor_pb2
+from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
+from collections.abc import Iterable as _Iterable
 from typing import ClassVar as _ClassVar, Optional as _Optional
 
 DESCRIPTOR: _descriptor.FileDescriptor
@@ -12,6 +14,8 @@ JSON_RESULT_FIELD_NUMBER: _ClassVar[int]
 json_result: _descriptor.FieldDescriptor
 OPTIONAL_SIGNATURE_FIELD_NUMBER: _ClassVar[int]
 optional_signature: _descriptor.FieldDescriptor
+PUBLIC_FIELD_NUMBER: _ClassVar[int]
+public: _descriptor.FieldDescriptor
 OPTIONAL_RESULT_FIELD_NUMBER: _ClassVar[int]
 optional_result: _descriptor.FieldDescriptor
 KEYED_FIELD_NUMBER: _ClassVar[int]
@@ -56,3 +60,11 @@ class JsonResult(_message.Message):
     status: str
     body: str
     def __init__(self, status: _Optional[str] = ..., body: _Optional[str] = ...) -> None: ...
+
+class PublicPolicy(_message.Message):
+    __slots__ = ()
+    FILL_FIELD_NUMBER: _ClassVar[int]
+    REJECT_FIELD_NUMBER: _ClassVar[int]
+    fill: _containers.RepeatedScalarFieldContainer[str]
+    reject: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, fill: _Optional[_Iterable[str]] = ..., reject: _Optional[_Iterable[str]] = ...) -> None: ...

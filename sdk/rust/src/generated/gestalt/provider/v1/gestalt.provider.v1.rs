@@ -57,6 +57,18 @@ pub struct JsonResult {
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
 }
+/// PublicPolicy declares how public service paths adapt external requests.
+/// Fields listed in `fill` are rejected when supplied by public callers and
+/// derived server-side instead. Fields listed in `reject` are rejected when
+/// supplied by public callers. Exposure is controlled separately by
+/// google.api.method_visibility.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PublicPolicy {
+    #[prost(string, repeated, tag = "1")]
+    pub fill: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag = "2")]
+    pub reject: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
 /// CatalogParameter describes one input parameter surfaced in the generated
 /// catalog for an operation.
 #[derive(Clone, PartialEq, ::prost::Message)]

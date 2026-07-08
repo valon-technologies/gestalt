@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/annotations.proto.
  */
 export const file_v1_annotations: GenFile = /*@__PURE__*/
-  fileDesc("ChR2MS9hbm5vdGF0aW9ucy5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSIuCg5PcHRpb25hbFJlc3VsdBINCgVndWFyZBgBIAEoCRINCgV2YWx1ZRgCIAEoCSJFCgVLZXllZBIPCgdlbnRyaWVzGAEgASgJEgsKA2tleRgCIAEoCRIPCgdwcmVzZW50GAMgASgJEg0KBXZhbHVlGAQgASgJIigKB0luaXRpYWwSDgoGaGVhZGVyGAEgASgJEg0KBWNodW5rGAIgASgJIioKCkpzb25SZXN1bHQSDgoGc3RhdHVzGAEgASgJEgwKBGJvZHkYAiABKAk6PgoJc2lnbmF0dXJlEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY0YYDIAMoCVIJc2lnbmF0dXJlOlgKB2luaXRpYWwSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxjShgMgASgLMhwuZ2VzdGFsdC5wcm92aWRlci52MS5Jbml0aWFsUgdpbml0aWFsOmIKC2pzb25fcmVzdWx0Eh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY04YDIAEoCzIfLmdlc3RhbHQucHJvdmlkZXIudjEuSnNvblJlc3VsdFIKanNvblJlc3VsdDpPChJvcHRpb25hbF9zaWduYXR1cmUSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxjUhgMgAygJUhFvcHRpb25hbFNpZ25hdHVyZTpvCg9vcHRpb25hbF9yZXN1bHQSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMY0YYDIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuT3B0aW9uYWxSZXN1bHRSDm9wdGlvbmFsUmVzdWx0OlMKBWtleWVkEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNKGAyABKAsyGi5nZXN0YWx0LnByb3ZpZGVyLnYxLktleWVkUgVrZXllZDo5CgZ1bndyYXASHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMY04YDIAEoCVIGdW53cmFwOkQKDGhvc3RfYmluZGluZxIfLmdvb2dsZS5wcm90b2J1Zi5TZXJ2aWNlT3B0aW9ucxjRhgMgASgJUgtob3N0QmluZGluZ2IGcHJvdG8z", [file_google_protobuf_descriptor]);
+  fileDesc("ChR2MS9hbm5vdGF0aW9ucy5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSIuCg5PcHRpb25hbFJlc3VsdBINCgVndWFyZBgBIAEoCRINCgV2YWx1ZRgCIAEoCSJFCgVLZXllZBIPCgdlbnRyaWVzGAEgASgJEgsKA2tleRgCIAEoCRIPCgdwcmVzZW50GAMgASgJEg0KBXZhbHVlGAQgASgJIigKB0luaXRpYWwSDgoGaGVhZGVyGAEgASgJEg0KBWNodW5rGAIgASgJIioKCkpzb25SZXN1bHQSDgoGc3RhdHVzGAEgASgJEgwKBGJvZHkYAiABKAkiLAoMUHVibGljUG9saWN5EgwKBGZpbGwYASADKAkSDgoGcmVqZWN0GAIgAygJOj4KCXNpZ25hdHVyZRIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNGGAyADKAlSCXNpZ25hdHVyZTpYCgdpbml0aWFsEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY0oYDIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuSW5pdGlhbFIHaW5pdGlhbDpiCgtqc29uX3Jlc3VsdBIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNOGAyABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkpzb25SZXN1bHRSCmpzb25SZXN1bHQ6TwoSb3B0aW9uYWxfc2lnbmF0dXJlEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY1IYDIAMoCVIRb3B0aW9uYWxTaWduYXR1cmU6WwoGcHVibGljEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMYuY4DIAEoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuUHVibGljUG9saWN5UgZwdWJsaWM6bwoPb3B0aW9uYWxfcmVzdWx0Eh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNGGAyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wdGlvbmFsUmVzdWx0Ug5vcHRpb25hbFJlc3VsdDpTCgVrZXllZBIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxjShgMgASgLMhouZ2VzdGFsdC5wcm92aWRlci52MS5LZXllZFIFa2V5ZWQ6OQoGdW53cmFwEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNOGAyABKAlSBnVud3JhcDpECgxob3N0X2JpbmRpbmcSHy5nb29nbGUucHJvdG9idWYuU2VydmljZU9wdGlvbnMY0YYDIAEoCVILaG9zdEJpbmRpbmdiBnByb3RvMw", [file_google_protobuf_descriptor]);
 
 /**
  * OptionalResult declares that `value` is meaningful only when the bool
@@ -136,6 +136,34 @@ export const JsonResultSchema: GenMessage<JsonResult> = /*@__PURE__*/
   messageDesc(file_v1_annotations, 3);
 
 /**
+ * PublicPolicy declares how public service paths adapt external requests.
+ * Fields listed in `fill` are rejected when supplied by public callers and
+ * derived server-side instead. Fields listed in `reject` are rejected when
+ * supplied by public callers. Exposure is controlled separately by
+ * google.api.method_visibility.
+ *
+ * @generated from message gestalt.provider.v1.PublicPolicy
+ */
+export type PublicPolicy = Message<"gestalt.provider.v1.PublicPolicy"> & {
+  /**
+   * @generated from field: repeated string fill = 1;
+   */
+  fill: string[];
+
+  /**
+   * @generated from field: repeated string reject = 2;
+   */
+  reject: string[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.PublicPolicy.
+ * Use `create(PublicPolicySchema)` to create a new message.
+ */
+export const PublicPolicySchema: GenMessage<PublicPolicy> = /*@__PURE__*/
+  messageDesc(file_v1_annotations, 4);
+
+/**
  * Flattened call signature: the named request fields become parameters,
  * in order. Fields with presence must come last and become optional
  * parameters.
@@ -174,16 +202,24 @@ export const optional_signature: GenExtension<MethodOptions, string[]> = /*@__PU
   extDesc(file_v1_annotations, 3);
 
 /**
+ * Public request adaptation policy for this method.
+ *
+ * @generated from extension: gestalt.provider.v1.PublicPolicy public = 51001;
+ */
+export const public$: GenExtension<MethodOptions, PublicPolicy> = /*@__PURE__*/
+  extDesc(file_v1_annotations, 4);
+
+/**
  * @generated from extension: gestalt.provider.v1.OptionalResult optional_result = 50001;
  */
 export const optional_result: GenExtension<MessageOptions, OptionalResult> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 4);
+  extDesc(file_v1_annotations, 5);
 
 /**
  * @generated from extension: gestalt.provider.v1.Keyed keyed = 50002;
  */
 export const keyed: GenExtension<MessageOptions, Keyed> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 5);
+  extDesc(file_v1_annotations, 6);
 
 /**
  * At API boundaries the message collapses to the named field: a response
@@ -192,7 +228,7 @@ export const keyed: GenExtension<MessageOptions, Keyed> = /*@__PURE__*/
  * @generated from extension: string unwrap = 50003;
  */
 export const unwrap: GenExtension<MessageOptions, string> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 6);
+  extDesc(file_v1_annotations, 7);
 
 /**
  * Host-service binding name, enabling a generated zero-configuration
@@ -201,5 +237,5 @@ export const unwrap: GenExtension<MessageOptions, string> = /*@__PURE__*/
  * @generated from extension: string host_binding = 50001;
  */
 export const host_binding: GenExtension<ServiceOptions, string> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 7);
+  extDesc(file_v1_annotations, 8);
 
