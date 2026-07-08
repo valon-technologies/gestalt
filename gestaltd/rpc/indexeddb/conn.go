@@ -2,17 +2,23 @@ package indexeddb
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
+
+const hostServiceBindingHeader = "x-gestalt-host-binding"
 
 // Options configures an IndexedDB gRPC client.
 type Options struct {
 	// UnaryTimeout applies an additional deadline to each unary RPC when positive.
 	UnaryTimeout time.Duration
+	// Binding selects a named indexeddb provider on a remote gestaltd.
+	Binding string
 }
 
 // NewClient returns a Database implementation backed by an existing gRPC stub.
@@ -39,5 +45,9 @@ func attachTimeout(ctx context.Context, timeout time.Duration) (context.Context,
 }
 
 func (db *clientDB) callCtx(ctx context.Context) (context.Context, context.CancelFunc) {
-	return attachTimeout(ctx, db.opts.UnaryTimeout)
+	ctx, cancel := attachTimeout(ctx, db.opts.UnaryTimeout)
+	if binding := strings.TrimSpace(db.opts.Binding); binding != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, hostServiceBindingHeader, binding)
+	}
+	return ctx, cancel
 }
