@@ -1929,6 +1929,8 @@ type ServerConfig struct {
 	BaseURL       string                   `yaml:"baseUrl"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
+	Remote        string                   `yaml:"remote,omitempty" json:"remote,omitempty"`
+	RemoteToken   string                   `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`

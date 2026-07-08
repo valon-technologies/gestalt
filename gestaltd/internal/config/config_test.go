@@ -4987,6 +4987,122 @@ server:
 	})
 }
 
+func TestLoadConfigRemoteGestaltd(t *testing.T) {
+
+	t.Run("accepts and trims remote url", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools/
+  remoteToken: test-token
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Server.Remote; got != "https://valon.tools" {
+			t.Fatalf("server.remote = %q", got)
+		}
+		if got := cfg.Server.RemoteToken; got != "test-token" {
+			t.Fatalf("server.remoteToken = %q", got)
+		}
+	})
+
+	t.Run("expands remote token from environment", func(t *testing.T) {
+		t.Setenv("GESTALT_API_KEY", "env-token")
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools
+  remoteToken: ${GESTALT_API_KEY}
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Server.RemoteToken; got != "env-token" {
+			t.Fatalf("server.remoteToken = %q, want env-token", got)
+		}
+	})
+
+	t.Run("rejects remote url with path", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools/api
+  remoteToken: test-token
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.remote must not include a path") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("layered configs override remote settings", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		basePath := filepath.Join(dir, "base.yaml")
+		overridePath := filepath.Join(dir, "override.yaml")
+		if err := os.WriteFile(basePath, []byte(withDefaultConfigAPIVersion(`
+server:
+  remote: https://old.example.test
+  remoteToken: old-token
+`)), 0o644); err != nil {
+			t.Fatalf("write base config: %v", err)
+		}
+		if err := os.WriteFile(overridePath, []byte(withDefaultConfigAPIVersion(`
+server:
+  remote: https://valon.tools/
+  remoteToken: new-token
+`)), 0o644); err != nil {
+			t.Fatalf("write override config: %v", err)
+		}
+
+		cfg, err := LoadPaths([]string{basePath, overridePath})
+		if err != nil {
+			t.Fatalf("LoadPaths: %v", err)
+		}
+		if got := cfg.Server.Remote; got != "https://valon.tools" {
+			t.Fatalf("server.remote = %q", got)
+		}
+		if got := cfg.Server.RemoteToken; got != "new-token" {
+			t.Fatalf("server.remoteToken = %q", got)
+		}
+	})
+}
+
+func TestValidateRemoteGestaltd(t *testing.T) {
+	t.Parallel()
+
+	t.Run("allows empty remote", func(t *testing.T) {
+		t.Parallel()
+		if err := ValidateRemoteGestaltd(&Config{}); err != nil {
+			t.Fatalf("ValidateRemoteGestaltd: %v", err)
+		}
+	})
+
+	t.Run("requires token when remote set", func(t *testing.T) {
+		t.Parallel()
+		err := ValidateRemoteGestaltd(&Config{
+			Server: ServerConfig{Remote: "https://valon.tools"},
+		})
+		if err == nil {
+			t.Fatal("ValidateRemoteGestaltd: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.remoteToken is required when server.remote is set") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	t.Parallel()
 
