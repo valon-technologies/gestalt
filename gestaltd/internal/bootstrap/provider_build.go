@@ -96,6 +96,9 @@ func prepareProviderBuilds(
 	}
 
 	for name := range cfg.Apps {
+		if deps.Placement != nil && !deps.Placement.ShouldBuildLocal(RemoteProviderKindApp, name) {
+			continue
+		}
 		intgDef := cfg.Apps[name]
 		sha := currentAppSHA(intgDef)
 		spec, operationRouting, err := buildStartupProviderSpec(name, intgDef)
@@ -202,7 +205,7 @@ func (b *preparedProviderBuilds) Start(
 					pending.proxy.fail(err)
 					b.providers.Remove(pending.name)
 				}
-				slog.Warn("skipping provider", "provider", pending.name, "error", err)
+				slog.Error("local provider startup failed", "provider", pending.name, "error", err)
 				return
 			}
 			if err := validateProviderConnectionMode(pending.name, result.Provider.ConnectionMode()); err != nil {
@@ -214,7 +217,7 @@ func (b *preparedProviderBuilds) Start(
 					b.providers.Remove(pending.name)
 				}
 				closeIfPossible(result.Provider)
-				slog.Warn("skipping provider", "provider", pending.name, "error", err)
+				slog.Error("local provider startup failed", "provider", pending.name, "error", err)
 				return
 			}
 			if pending.proxy != nil {
