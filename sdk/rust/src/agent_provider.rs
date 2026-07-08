@@ -1104,7 +1104,6 @@ fn timestamp_from_time(value: Option<SystemTime>) -> Option<Timestamp> {
     value.map(protocol::timestamp_from_system_time)
 }
 
-
 pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef {
     AgentToolRef {
         app: value.app,

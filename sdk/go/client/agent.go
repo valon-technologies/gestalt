@@ -382,7 +382,7 @@ type CancelAgentProviderTurnRequest struct {
 // CreateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.CreateAgentProviderSessionRequest.
 type CreateAgentProviderSessionRequest struct {
 	// The provider mints the session id returned on AgentSession. Creation is
-	// idempotent on idempotency_key scoped per subject (context.subject.id):
+	// idempotent on idempotency_key scoped per caller (context.subject.id):
 	// a replayed key returns the existing session, an empty key always creates.
 	// Idempotency is scoped to the provider's session store.
 	IdempotencyKey    string

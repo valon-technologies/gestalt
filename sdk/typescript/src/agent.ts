@@ -22,7 +22,6 @@ import {
   type AgentToolRef,
   type OperationAnnotations,
   type RequestContext,
-  type SubjectContext,
 } from "./app.ts";
 import {
   fromWireAgentInteraction,
@@ -348,7 +347,7 @@ export interface CancelAgentProviderTurnRequest {
 export interface CreateAgentProviderSessionRequest {
   /**
    * The provider mints the session id returned on AgentSession. Creation is
-   * idempotent on idempotency_key scoped per subject (context.subject.id):
+   * idempotent on idempotency_key scoped per caller (context.subject.id):
    * a replayed key returns the existing session, an empty key always creates.
    * Idempotency is scoped to the provider's session store.
    */

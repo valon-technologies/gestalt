@@ -500,7 +500,7 @@ pub struct CancelAgentProviderTurnRequest {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CreateAgentProviderSessionRequest {
     /// The provider mints the session id returned on AgentSession. Creation is
-    /// idempotent on idempotency_key scoped per subject (context.subject.id):
+    /// idempotent on idempotency_key scoped per caller (context.subject.id):
     /// a replayed key returns the existing session, an empty key always creates.
     /// Idempotency is scoped to the provider's session store.
     ///
@@ -868,7 +868,6 @@ impl Agent {
             session_id,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_get_agent_provider_session_request(request));
@@ -909,7 +908,6 @@ impl Agent {
             summary_only: options.summary_only,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_list_agent_provider_sessions_request(request));
@@ -955,7 +953,6 @@ impl Agent {
             provider_name: options.provider_name,
             metadata: options.metadata,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_update_agent_provider_session_request(request));
@@ -1044,7 +1041,6 @@ impl Agent {
             turn_id,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_get_agent_provider_turn_request(request));
@@ -1087,7 +1083,6 @@ impl Agent {
             summary_only: options.summary_only,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_list_agent_provider_turns_request(request));
@@ -1131,7 +1126,6 @@ impl Agent {
             reason: options.reason,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_cancel_agent_provider_turn_request(request));
@@ -1172,7 +1166,6 @@ impl Agent {
             limit: options.limit,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_list_agent_provider_turn_events_request(request));
@@ -1216,7 +1209,6 @@ impl Agent {
         let request = GetAgentProviderInteractionRequest {
             interaction_id,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_get_agent_provider_interaction_request(request));
@@ -1255,7 +1247,6 @@ impl Agent {
             turn_id,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_list_agent_provider_interactions_request(request));
@@ -1304,7 +1295,6 @@ impl Agent {
             turn_id: options.turn_id,
             provider_name: options.provider_name,
             context: self.context.clone(),
-            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_resolve_agent_provider_interaction_request(request));

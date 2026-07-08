@@ -284,10 +284,6 @@ func agentProviderRequestContext(ctx context.Context, p *principal.Principal, ex
 	return ctx, reqCtx, err
 }
 
-func agentSubjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
-	return agentwire.RunAsSubjectToProto(&subject)
-}
-
 func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
 	if workspace == nil {
 		return nil
