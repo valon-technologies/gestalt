@@ -2488,7 +2488,21 @@ func validateServerRemote(cfg *ServerConfig) error {
 	if !cfg.HasRemote() {
 		return nil
 	}
-	if _, err := validateAbsoluteBaseURL("server.remote", cfg.Remote); err != nil {
+	_, err := validateAbsoluteBaseURL("server.remote", cfg.Remote)
+	return err
+}
+
+// ValidateServerRemoteCredentials requires a bearer token when server.remote is configured.
+// Call this after CLI overrides such as --remote-token are applied.
+func ValidateServerRemoteCredentials(cfg *ServerConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	cfg.NormalizeRemote()
+	if !cfg.HasRemote() {
+		return nil
+	}
+	if err := validateServerRemote(cfg); err != nil {
 		return err
 	}
 	if strings.TrimSpace(cfg.RemoteToken) == "" {

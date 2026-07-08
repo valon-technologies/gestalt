@@ -1126,6 +1126,34 @@ See [Applications > Local Development](/applications#local-development) and
 [CLI > Local Frontend Development](/reference/cli#local-frontend-development)
 for the `GESTALT_DEV_*` contract.
 
+Delegate undeclared local providers to a remote deployment by layering a URL-only
+overlay and passing a bearer token at serve time:
+
+```yaml
+# deploy/local/config.yaml
+server:
+  remote: https://valon.tools
+```
+
+```sh
+gestaltd serve \
+  --config ./deploy/config.yaml \
+  --config ./deploy/local/config.yaml \
+  --remote-token "$GESTALT_API_KEY" \
+  ./apps/ci-cd
+```
+
+Serve multiple local apps while still delegating the rest of the fleet remotely:
+
+```sh
+gestaltd serve \
+  --config ./deploy/config.yaml \
+  --config ./deploy/local/config.yaml \
+  --remote-token "$GESTALT_API_KEY" \
+  ./apps/ci-cd \
+  ./apps/valon-profile
+```
+
 Once the local server is running, invoke an operation:
 
 ```sh

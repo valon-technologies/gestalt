@@ -212,7 +212,10 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 
 func applyServeRemoteConfig(cfg *config.Config, remoteURL, remoteToken string) error {
 	cfg.ApplyRemoteOverrides(remoteURL, remoteToken)
-	return config.ValidateStructure(cfg)
+	if err := config.ValidateStructure(cfg); err != nil {
+		return err
+	}
+	return config.ValidateServerRemoteCredentials(&cfg.Server)
 }
 
 func flagIntValue(flag *int) int {

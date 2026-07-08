@@ -72,21 +72,63 @@ server:
 	})
 }
 
+func TestLoadLocalRemoteOverlayWithoutToken(t *testing.T) {
+	t.Parallel()
+
+	basePath := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  providers:
+    indexeddb: sqlite
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+      config:
+        path: ./gestalt.db
+`)
+	localYAML := `
+server:
+  remote: https://valon.tools
+`
+	localPath := mustWriteConfigFile(t, localYAML)
+	cfg, err := LoadPaths([]string{basePath, localPath})
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+	if cfg.Server.Remote != "https://valon.tools" {
+		t.Fatalf("Server.Remote = %q", cfg.Server.Remote)
+	}
+	if cfg.Server.RemoteToken != "" {
+		t.Fatalf("local overlay must not set remoteToken, got %q", cfg.Server.RemoteToken)
+	}
+	if strings.Contains(localYAML, "gst_api_") {
+		t.Fatal("local overlay must not contain gst_api_ token literals")
+	}
+	if err := ValidateServerRemoteCredentials(&cfg.Server); err == nil {
+		t.Fatal("expected credentials validation to require token")
+	}
+}
+
 func TestValidateServerRemote(t *testing.T) {
 	t.Parallel()
 
 	cfg := validRuntimeConfig(t)
 	cfg.Server.Remote = "https://valon.tools"
 	cfg.Server.RemoteToken = ""
-	if err := ValidateStructure(cfg); err == nil {
+	if err := ValidateStructure(cfg); err != nil {
+		t.Fatalf("ValidateStructure with url-only remote: %v", err)
+	}
+	if err := ValidateServerRemoteCredentials(&cfg.Server); err == nil {
 		t.Fatal("expected missing remote token error")
 	} else if !strings.Contains(err.Error(), "server.remoteToken is required") {
 		t.Fatalf("error = %v, want remoteToken required", err)
 	}
 
 	cfg.Server.RemoteToken = "gst_api_test"
-	if err := ValidateStructure(cfg); err != nil {
-		t.Fatalf("ValidateStructure: %v", err)
+	if err := ValidateServerRemoteCredentials(&cfg.Server); err != nil {
+		t.Fatalf("ValidateServerRemoteCredentials: %v", err)
 	}
 }
 
