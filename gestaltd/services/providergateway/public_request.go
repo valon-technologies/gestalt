@@ -128,14 +128,13 @@ func bearerTokenFromContext(ctx context.Context) string {
 
 func publicResourceID(req gproto.Message, fullMethod string) string {
 	msg := req.ProtoReflect()
-	if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
-		if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
-			return app
+	for _, field := range []protoreflect.Name{"app", "app_name", "provider_name"} {
+		fd := msg.Descriptor().Fields().ByName(field)
+		if fd == nil {
+			continue
 		}
-	}
-	if fd := msg.Descriptor().Fields().ByName("provider_name"); fd != nil {
-		if name := strings.TrimSpace(msg.Get(fd).String()); name != "" {
-			return name
+		if value := strings.TrimSpace(msg.Get(fd).String()); value != "" {
+			return value
 		}
 	}
 	service, _ := splitFullMethod(fullMethod)

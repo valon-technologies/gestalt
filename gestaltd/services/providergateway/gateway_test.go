@@ -529,7 +529,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
-			req:        &proto.DeliverWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{}},
+			req:        &proto.DeliverWorkflowProviderEventRequest{AppName: "roadmap", Event: &proto.WorkflowEvent{}},
 			checkAdapted: func(t *testing.T, adapted gproto.Message) {
 				t.Helper()
 				out, ok := adapted.(*proto.DeliverWorkflowProviderEventRequest)
@@ -538,6 +538,12 @@ func TestPreparePublicRequest(t *testing.T) {
 				}
 				if out.GetDeliveredBySubjectId() != "user:alice" {
 					t.Fatalf("delivered_by_subject_id = %q, want %q", out.GetDeliveredBySubjectId(), "user:alice")
+				}
+			},
+			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {
+				t.Helper()
+				if got := auth.request.GetResource().GetId(); got != "roadmap" {
+					t.Fatalf("Resource.Id = %q, want %q", got, "roadmap")
 				}
 			},
 		},
