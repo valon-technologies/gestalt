@@ -40,21 +40,17 @@ func setupBootstrapWithConfigPaths(configPaths []string, lockfilePath, artifacts
 
 func setupBootstrapWithConfigPathsRemote(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, remoteOverrides config.RemoteOverrides, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	return setupBootstrapWithConfigPathsContextRemote(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, remoteOverrides, forcedDevAppKeys...)
+	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, remoteOverrides, forcedDevAppKeys...)
 }
 
-func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
-	return setupBootstrapWithConfigPathsContextRemote(ctx, stop, configPaths, lockfilePath, artifactsDir, locked, noSync, config.RemoteOverrides{}, forcedDevAppKeys...)
-}
-
-func setupBootstrapWithConfigPathsContextRemote(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, remoteOverrides config.RemoteOverrides, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
+func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, remoteOverrides config.RemoteOverrides, forcedDevAppKeys ...string) (*bootstrapEnv, error) {
 	cfg, err := loadConfigForExecutionAtPaths(configPaths, lockfilePath, artifactsDir, locked, noSync, forcedDevAppKeys...)
 	if err != nil {
 		stop()
 		return nil, err
 	}
 	config.ApplyRemoteOverrides(cfg, remoteOverrides)
-	if err := finalizeRemoteServeConfig(cfg); err != nil {
+	if err := config.ValidateServerRemote(cfg.Server); err != nil {
 		stop()
 		return nil, err
 	}
@@ -194,10 +190,6 @@ func startDevSupervisor(ctx context.Context, cfg *config.Config) (*providerdev.S
 		}
 	}
 	return nil, nil
-}
-
-func finalizeRemoteServeConfig(cfg *config.Config) error {
-	return config.ValidateRemoteExecution(cfg)
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

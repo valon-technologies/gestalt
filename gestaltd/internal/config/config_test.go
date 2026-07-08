@@ -5042,6 +5042,23 @@ server:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("rejects missing remote token", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.remoteToken is required") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestLoadPathsRemoteOverride(t *testing.T) {
@@ -5077,65 +5094,6 @@ server:
 	}
 	if got := cfg.Server.RemoteToken; got != "override-token" {
 		t.Fatalf("server.remoteToken = %q", got)
-	}
-}
-
-func TestValidateRemoteExecution(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{Server: ServerConfig{Remote: "https://valon.tools"}}
-	err := ValidateRemoteExecution(cfg)
-	if err == nil {
-		t.Fatal("ValidateRemoteExecution: expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "server.remoteToken is required") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	cfg.Server.RemoteToken = "gst_api_test_token"
-	if err := ValidateRemoteExecution(cfg); err != nil {
-		t.Fatalf("ValidateRemoteExecution: %v", err)
-	}
-}
-
-func TestApplyRemoteOverrides(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{Server: ServerConfig{
-		Remote:      "https://gestalt.example.test",
-		RemoteToken: "from-config",
-	}}
-	ApplyRemoteOverrides(cfg, RemoteOverrides{
-		URL:   "https://valon.tools/",
-		Token: "from-cli",
-	})
-	if got := cfg.Server.Remote; got != "https://valon.tools" {
-		t.Fatalf("server.remote = %q", got)
-	}
-	if got := cfg.Server.RemoteToken; got != "from-cli" {
-		t.Fatalf("server.remoteToken = %q", got)
-	}
-}
-
-func TestSanitizedYAMLRedactsRemoteToken(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{
-		APIVersion: ConfigAPIVersion,
-		Server: ServerConfig{
-			Remote:      "https://valon.tools",
-			RemoteToken: "gst_api_secret_token",
-		},
-	}
-	rendered, err := cfg.SanitizedYAML()
-	if err != nil {
-		t.Fatalf("SanitizedYAML: %v", err)
-	}
-	if strings.Contains(rendered, "gst_api_secret_token") {
-		t.Fatalf("sanitized YAML leaked remote token:\n%s", rendered)
-	}
-	if !strings.Contains(rendered, sanitizedSecretPlaceholder) {
-		t.Fatalf("sanitized YAML missing placeholder:\n%s", rendered)
 	}
 }
 

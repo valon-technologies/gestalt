@@ -734,7 +734,7 @@ func validateRuntimeConfig(cfg *Config) error {
 	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
 		return err
 	}
-	if err := validateRemoteURL(cfg.Server.Remote); err != nil {
+	if err := ValidateServerRemote(cfg.Server); err != nil {
 		return err
 	}
 	for name, entry := range cfg.Runtime.Providers {
@@ -784,6 +784,19 @@ func validateRuntimeRelayBaseURL(raw string) error {
 	default:
 		return fmt.Errorf("config validation: server.runtime.relayBaseUrl must use http or https")
 	}
+}
+
+func ValidateServerRemote(server ServerConfig) error {
+	if strings.TrimSpace(server.Remote) == "" {
+		return nil
+	}
+	if err := validateRemoteURL(server.Remote); err != nil {
+		return err
+	}
+	if strings.TrimSpace(server.RemoteToken) == "" {
+		return fmt.Errorf("config validation: server.remoteToken is required when server.remote is set")
+	}
+	return nil
 }
 
 func validateRemoteURL(raw string) error {
