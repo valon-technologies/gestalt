@@ -2309,11 +2309,10 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.GetExecutionRef() != first.ID {
 		t.Fatalf("CreateTurn execution_ref = %q, want %q", createTurnReq.GetExecutionRef(), first.ID)
 	}
-	if createTurnReq.GetContext().GetSubject().GetId() != p.SubjectID {
-		t.Fatalf("CreateTurn context.subject.id = %q, want %q", createTurnReq.GetContext().GetSubject().GetId(), p.SubjectID)
-	}
-	if createTurnReq.GetContext() == nil {
+	if reqCtx := createTurnReq.GetContext(); reqCtx == nil {
 		t.Fatal("CreateTurn context is empty")
+	} else if reqCtx.GetSubject().GetId() != p.SubjectID {
+		t.Fatalf("CreateTurn context.subject.id = %q, want %q", reqCtx.GetSubject().GetId(), p.SubjectID)
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"subject":"user:user-123"`) || !strings.Contains(toolBodies[0], `"taskId":"task-123"`) {
 		t.Fatalf("tool callback bodies = %#v", toolBodies)
