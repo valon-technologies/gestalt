@@ -16,6 +16,9 @@ import {
   ColumnType,
   bound,
   only,
+  collectIndexPages,
+  paginateIndexGetAll,
+  prefixIndexRange,
 } from "../src/index.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
@@ -665,6 +668,53 @@ describe("IndexedDB transport", () => {
     ]);
     expect(await txos.index("by_status").getAllKeys("active", { count: 2 })).toEqual(["a", "b"]);
     await tx.commit();
+  });
+
+  test("paginateIndexGetAll uses getAll count and collectIndexPages matches total", async () => {
+    const store = "paginate_run_rows";
+    await db.createObjectStore(store, {
+      indexes: [{ name: "by_run_id", keyPath: ["run_id", "recorded_at", "record_id"] }],
+    });
+    const os = db.objectStore(store);
+    for (let i = 1; i <= 5; i += 1) {
+      const rowId = `row-${i}`;
+      await os.add({
+        id: rowId,
+        record_id: rowId,
+        run_id: "run-1",
+        recorded_at: `2026-01-0${i}`,
+      });
+    }
+
+    const idx = os.index("by_run_id");
+    const query = prefixIndexRange(["run-1"], {
+      upperSentinels: ["\uffff", "\uffff"],
+    });
+    const page1 = await paginateIndexGetAll(idx, query, {
+      limit: 2,
+      indexKeyPath: ["run_id", "recorded_at", "record_id"],
+    });
+    expect(page1.hasMore).toBe(true);
+    expect(page1.items.map((row) => row.id)).toEqual(["row-1", "row-2"]);
+    expect(page1.nextCursor).not.toBeNull();
+
+    const query2 = prefixIndexRange(["run-1"], {
+      afterCursor: page1.nextCursor,
+      upperSentinels: ["\uffff", "\uffff"],
+    });
+    const page2 = await paginateIndexGetAll(idx, query2, {
+      limit: 2,
+      indexKeyPath: ["run_id", "recorded_at", "record_id"],
+    });
+    expect(page2.hasMore).toBe(true);
+    expect(page2.items.map((row) => row.id)).toEqual(["row-3", "row-4"]);
+
+    const collected = await collectIndexPages(idx, ["run-1"], {
+      pageSize: 2,
+      upperSentinels: ["\uffff", "\uffff"],
+      indexKeyPath: ["run_id", "recorded_at", "record_id"],
+    });
+    expect(collected.map((row) => row.id)).toEqual(["row-1", "row-2", "row-3", "row-4", "row-5"]);
   });
 
   test("query parity: scalar key and bound range on object store", async () => {

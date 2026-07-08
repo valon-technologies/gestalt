@@ -704,6 +704,78 @@ class TestGetAllCount(unittest.TestCase):
         c.close()
 
 
+class TestIndexPaginate(unittest.TestCase):
+    def test_paginate_index_get_all_returns_has_more_and_collect_matches_total(self) -> None:
+        from gestalt import (
+            collect_index_pages,
+            paginate_index_get_all,
+            prefix_index_range,
+        )
+
+        c = _client()
+        c.create_object_store(
+            "paginate_run_rows",
+            ObjectStoreSchema(
+                indexes=[
+                    IndexSchema(
+                        name="by_run_id",
+                        key_path=["run_id", "recorded_at", "record_id"],
+                    )
+                ]
+            ),
+        )
+        s = c.object_store("paginate_run_rows")
+        for i in range(1, 6):
+            row_id = f"row-{i}"
+            s.add(
+                {
+                    "id": row_id,
+                    "record_id": row_id,
+                    "run_id": "run-1",
+                    "recorded_at": f"2026-01-0{i}",
+                }
+            )
+
+        idx = s.index("by_run_id")
+        query = prefix_index_range(
+            ["run-1"],
+            upper_sentinels=["\uffff", "\uffff"],
+        )
+        page1 = paginate_index_get_all(
+            idx,
+            query,
+            limit=2,
+            index_key_path=["run_id", "recorded_at", "record_id"],
+        )
+        self.assertTrue(page1.has_more)
+        self.assertEqual([row["id"] for row in page1.items], ["row-1", "row-2"])
+        self.assertIsNotNone(page1.next_cursor)
+
+        query2 = prefix_index_range(
+            ["run-1"],
+            after_cursor=page1.next_cursor,
+            upper_sentinels=["\uffff", "\uffff"],
+        )
+        page2 = paginate_index_get_all(
+            idx,
+            query2,
+            limit=2,
+            index_key_path=["run_id", "recorded_at", "record_id"],
+        )
+        self.assertTrue(page2.has_more)
+        self.assertEqual([row["id"] for row in page2.items], ["row-3", "row-4"])
+
+        collected = collect_index_pages(
+            idx,
+            ["run-1"],
+            page_size=2,
+            upper_sentinels=["\uffff", "\uffff"],
+            index_key_path=["run_id", "recorded_at", "record_id"],
+        )
+        self.assertEqual([row["id"] for row in collected], [f"row-{i}" for i in range(1, 6)])
+        c.close()
+
+
 class TestErrorMapping(unittest.TestCase):
     def test_not_found(self) -> None:
         c = _client()

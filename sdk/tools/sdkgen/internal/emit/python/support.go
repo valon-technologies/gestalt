@@ -22,6 +22,12 @@ var invokeSupportFile string
 //go:embed codec_support.py
 var runtimeFile string
 
+// indexedDBPaginationFile is emitted as indexeddb_pagination.py when the schema
+// includes the IndexedDB service.
+//
+//go:embed indexeddb_pagination.py
+var indexedDBPaginationFile string
+
 // codecInit makes the generated _codec directory an importable package. The
 // underscore-prefixed package name keeps every codec module internal by the
 // SDK's naming convention (like _gen), so the converters inside carry no

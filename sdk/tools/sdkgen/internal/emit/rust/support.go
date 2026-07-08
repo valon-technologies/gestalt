@@ -34,6 +34,9 @@ var invokeSupportFile string
 //go:embed host_service.rs
 var hostServiceFile string
 
+//go:embed indexeddb_pagination.rs
+var indexedDBPaginationFile string
+
 // supportDeps records converter-to-converter calls inside codec_support.rs:
 // keeping a converter keeps its callees.
 var supportDeps = map[string][]string{

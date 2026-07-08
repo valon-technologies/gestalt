@@ -15,6 +15,9 @@ var supportFile string
 //go:embed support_codec.go.tmpl
 var codecSupportFile string
 
+//go:embed indexeddb_pagination.go.tmpl
+var indexedDBPaginationFile string
+
 // invokeSupportFile is the JSON operation-envelope decode runtime, emitted as
 // support_invoke.go when any method carries the json_result annotation.
 const invokeSupportFile = `package client

@@ -1,0 +1,178 @@
+"""IndexedDB index pagination helpers for provider-side IndexedDB clients."""
+
+from __future__ import annotations
+
+import base64
+import json
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Generic, Protocol, TypeVar
+
+from ._indexeddb import Key, KeyRange, bound
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class IndexPageCursor:
+    index_key: Key
+    primary_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class Page(Generic[T]):
+    items: list[T]
+    limit: int
+    has_more: bool
+    next_cursor: str | None
+
+
+class IndexReader(Protocol):
+    def get_all(
+        self, query: Key | KeyRange | None = None, *, count: int | None = None
+    ) -> list[Any]: ...
+
+
+def _key_to_json(key: Key) -> Any:
+    if isinstance(key, list):
+        return [_key_to_json(part) for part in key]
+    if isinstance(key, (bytes, bytearray, memoryview)):
+        return {
+            "__type__": "bytes",
+            "value": base64.urlsafe_b64encode(bytes(key)).decode("ascii"),
+        }
+    if isinstance(key, datetime):
+        return {"__type__": "time", "value": key.isoformat()}
+    return key
+
+
+def _key_from_json(value: Any) -> Key:
+    if isinstance(value, list):
+        return [_key_from_json(part) for part in value]
+    if isinstance(value, dict):
+        kind = value.get("__type__")
+        if kind == "bytes":
+            raw = str(value.get("value") or "")
+            return base64.urlsafe_b64decode(raw.encode("ascii"))
+        if kind == "time":
+            return datetime.fromisoformat(str(value.get("value") or ""))
+    if not isinstance(value, (str, int, float, bytes, bytearray, memoryview, datetime)):
+        raise ValueError("invalid pagination cursor")
+    return value
+
+
+def encode_page_cursor(index_key: Key, primary_key: str) -> str:
+    payload = {
+        "index_key": _key_to_json(index_key),
+        "primary_key": str(primary_key or ""),
+    }
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii")
+
+
+def decode_page_cursor(cursor: str | None) -> IndexPageCursor | None:
+    text = (cursor or "").strip()
+    if not text:
+        return None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(text.encode("ascii")).decode("utf-8"))
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        raise ValueError("invalid pagination cursor") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("invalid pagination cursor")
+    if "index_key" not in payload:
+        recorded_at = str(payload.get("recorded_at") or "")
+        row_id = str(payload.get("row_id") or "")
+        if not recorded_at and not row_id:
+            raise ValueError("invalid pagination cursor")
+        return IndexPageCursor(index_key=[recorded_at, row_id], primary_key=row_id)
+    index_key = _key_from_json(payload.get("index_key"))
+    primary_key = str(payload.get("primary_key") or "")
+    if primary_key == "" and index_key in (None, "", []):
+        raise ValueError("invalid pagination cursor")
+    return IndexPageCursor(index_key=index_key, primary_key=primary_key)
+
+
+def prefix_index_range(
+    prefix: list[Key],
+    *,
+    after_cursor: str | None = None,
+    upper_sentinels: list[Key] | None = None,
+) -> KeyRange:
+    sentinels = upper_sentinels if upper_sentinels is not None else ["\uffff"]
+    upper: Key = [*prefix, *sentinels]
+    lower: Key = prefix
+    lower_open = False
+    decoded = decode_page_cursor(after_cursor)
+    if decoded is not None:
+        lower = decoded.index_key
+        if isinstance(lower, list) and len(prefix) == 1 and lower:
+            if lower[0] != prefix[0]:
+                lower = [prefix[0], *lower]
+        lower_open = True
+    return bound(lower, upper, lower_open=lower_open, upper_open=False)
+
+
+def _index_key_from_record(row: dict[str, Any], index_key_path: list[str]) -> Key:
+    if len(index_key_path) == 1:
+        return row.get(index_key_path[0])  # type: ignore[return-value]
+    return [row.get(name) for name in index_key_path]  # type: ignore[misc]
+
+
+def _primary_key_from_record(row: dict[str, Any]) -> str:
+    for name in ("id", "record_id"):
+        value = row.get(name)
+        if value is not None and str(value).strip():
+            return str(value)
+    return ""
+
+
+def paginate_index_get_all(
+    index: IndexReader,
+    query: Key | KeyRange | None,
+    *,
+    limit: int,
+    index_key_path: list[str] | None = None,
+) -> Page[dict[str, Any]]:
+    page_limit = max(1, int(limit))
+    rows = list(index.get_all(query, count=page_limit + 1))
+    has_more = len(rows) > page_limit
+    items = rows[:page_limit]
+    next_cursor: str | None = None
+    if has_more and items:
+        last = items[-1]
+        if index_key_path is not None:
+            index_key = _index_key_from_record(last, index_key_path)
+        else:
+            index_key = _primary_key_from_record(last) or str(last.get("id") or "")
+        next_cursor = encode_page_cursor(index_key, _primary_key_from_record(last))
+    return Page(items=items, limit=page_limit, has_more=has_more, next_cursor=next_cursor)
+
+
+def collect_index_pages(
+    index: IndexReader,
+    prefix: list[Key],
+    *,
+    page_size: int = 100,
+    upper_sentinels: list[Key] | None = None,
+    index_key_path: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        query = prefix_index_range(
+            prefix,
+            after_cursor=cursor,
+            upper_sentinels=upper_sentinels,
+        )
+        page = paginate_index_get_all(
+            index,
+            query,
+            limit=page_size,
+            index_key_path=index_key_path,
+        )
+        items.extend(page.items)
+        if not page.has_more:
+            break
+        cursor = page.next_cursor
+    return items

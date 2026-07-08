@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/sdk/go/client"
+	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -656,6 +658,61 @@ func TestTransport_GetAllCount(t *testing.T) {
 	}
 	if len(txPage) != 2 || txPage[0]["id"] != "a" || txPage[1]["id"] != "b" {
 		t.Fatalf("tx GetAll = %#v, want first two rows", txPage)
+	}
+}
+
+func TestTransport_PaginateIndexGetAll(t *testing.T) {
+	ctx := context.Background()
+	store := "paginate_run_" + t.Name()
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{
+		Indexes: []gestalt.IndexSchema{{
+			Name:    "by_run_id",
+			KeyPath: []string{"run_id", "recorded_at", "record_id"},
+		}},
+	}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	s := testClient.ObjectStore(store)
+	for i := 1; i <= 5; i++ {
+		rowID := fmt.Sprintf("row-%d", i)
+		if err := s.Put(ctx, gestalt.Record{
+			"id":          rowID,
+			"record_id":   rowID,
+			"run_id":      "run-1",
+			"recorded_at": fmt.Sprintf("2026-01-0%d", i),
+		}); err != nil {
+			t.Fatalf("Put %s: %v", rowID, err)
+		}
+	}
+
+	idx := s.Index("by_run_id")
+	query := indexeddb.PrefixIndexRange([]any{"run-1"}, nil, []any{"\uffff", "\uffff"})
+	page1, err := indexeddb.PaginateIndexGetAll(ctx, idx, query, 2, []string{"run_id", "recorded_at", "record_id"})
+	if err != nil {
+		t.Fatalf("PaginateIndexGetAll page1: %v", err)
+	}
+	if !page1.HasMore || len(page1.Items) != 2 || page1.Items[0]["id"] != "row-1" || page1.Items[1]["id"] != "row-2" {
+		t.Fatalf("page1 = %#v", page1)
+	}
+	if page1.NextCursor == nil {
+		t.Fatal("page1 next cursor missing")
+	}
+
+	query2 := indexeddb.PrefixIndexRange([]any{"run-1"}, page1.NextCursor, []any{"\uffff", "\uffff"})
+	page2, err := indexeddb.PaginateIndexGetAll(ctx, idx, query2, 2, []string{"run_id", "recorded_at", "record_id"})
+	if err != nil {
+		t.Fatalf("PaginateIndexGetAll page2: %v", err)
+	}
+	if !page2.HasMore || len(page2.Items) != 2 || page2.Items[0]["id"] != "row-3" || page2.Items[1]["id"] != "row-4" {
+		t.Fatalf("page2 = %#v", page2)
+	}
+
+	collected, err := indexeddb.CollectIndexPages(ctx, idx, []any{"run-1"}, 2, []any{"\uffff", "\uffff"}, []string{"run_id", "recorded_at", "record_id"})
+	if err != nil {
+		t.Fatalf("CollectIndexPages: %v", err)
+	}
+	if len(collected) != 5 {
+		t.Fatalf("collected len = %d, want 5", len(collected))
 	}
 }
 

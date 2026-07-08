@@ -22,3 +22,6 @@ var runtimeFile string
 //
 //go:embed invoke_support.ts
 var invokeSupportFile string
+
+//go:embed indexeddb_pagination.ts
+var indexedDBPaginationFile string

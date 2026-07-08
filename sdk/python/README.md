@@ -96,6 +96,8 @@ The top-level `gestalt` package exposes the supported authoring API:
   host-service provider runtimes.
 - `Cache`, `IndexedDB`, `S3`, `Workflow`, `Agent`, and `Request.app()` for
   calling sibling host services.
+- `prefix_index_range`, `paginate_index_get_all`, and
+  `collect_index_pages` for W3C-aligned indexed `getAll(count)` reads.
 - `gestalt.testing` for native fixture helpers used by SDK transport tests.
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 
@@ -106,9 +108,17 @@ and `AgentTurn`; structured fields accept dictionaries or dataclass instances,
 and timestamp fields use timezone-aware `datetime` values. Workflow helpers such as
 `bound_workflow_target`, `workflow_definition`, `workflow_run`, and
 `workflow_signal` accept plain dictionaries, dataclass instances, and native
-`datetime` values for structured payloads and timestamp fields. Provider-facing
-APIs should accept native Python values and keep transport serialization inside
-SDK adapters.
+`datetime` values for structured payloads and timestamp fields. Provider-facing APIs should accept native Python values and keep transport
+serialization inside SDK adapters.
+
+Use `gestalt.IndexedDB` for provider-side storage. The generated
+`gestalt.indexeddb` module is the wire-level RPC client for advanced cases.
+`request.app()` returns `gestalt.app.App`, which includes `close()`.
+
+IndexedDB pagination helpers require compound indexes whose keyPath includes
+primary-key disambiguation (for example `run_id`, `recorded_at`, `record_id`).
+Resume uses W3C `IDBKeyRange.bound` with `lowerOpen` after the last index key;
+partial keyPath indexes should use `open_cursor` instead.
 
 ## App invocation migration
 

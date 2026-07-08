@@ -122,3 +122,33 @@ class TestIndexedDBCursorSnapshot(unittest.TestCase):
         self.assertEqual(first.primary_key, "a")
         self.assertEqual(second.primary_key, "b")
         self.assertEqual(third.primary_key, "c")
+
+
+class TestIndexPaginateHelpers(unittest.TestCase):
+    def test_paginate_index_get_all_uses_get_all_count(self) -> None:
+        from gestalt import paginate_index_get_all
+
+        rows = [
+            {"id": "a", "record_id": "a", "run_id": "run-1", "recorded_at": "t1"},
+            {"id": "b", "record_id": "b", "run_id": "run-1", "recorded_at": "t2"},
+            {"id": "c", "record_id": "c", "run_id": "run-1", "recorded_at": "t3"},
+        ]
+        seen_count: list[int | None] = []
+
+        class _Reader:
+            def get_all(self, _query, *, count=None):
+                seen_count.append(count)
+                limit = count if count is not None else len(rows)
+                return rows[:limit]
+
+        page = paginate_index_get_all(
+            _Reader(),
+            None,
+            limit=2,
+            index_key_path=["run_id", "recorded_at", "record_id"],
+        )
+
+        self.assertEqual(seen_count, [3])
+        self.assertTrue(page.has_more)
+        self.assertEqual([row["id"] for row in page.items], ["a", "b"])
+        self.assertIsNotNone(page.next_cursor)

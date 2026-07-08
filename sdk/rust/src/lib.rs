@@ -31,6 +31,7 @@ mod identity_server;
 mod generated;
 /// Generated IndexedDB client and native types.
 pub mod indexeddb;
+mod indexeddb_pagination;
 mod indexeddb_provider;
 mod indexeddb_query_codec;
 /// Decoded app invocation results and the canonical invoke error.
@@ -117,6 +118,10 @@ pub use indexeddb_provider::{
     TransactionIndexApi, TransactionMode, TransactionObjectStore, TransactionObjectStoreApi,
     TransactionOptions, compare_indexeddb_values, compare_keys, indexeddb_range_bounds,
     key_in_range, match_query, new_indexeddb_cursor_snapshot,
+};
+pub use indexeddb_pagination::{
+    Page as IndexedDBPage, decode_page_cursor, encode_page_cursor, paginate_index_get_all,
+    prefix_index_bounds,
 };
 pub use invoke_support::{
     InvokeError, InvokeResultError, decode_app_result, decode_graphql_result, error_for_status,

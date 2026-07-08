@@ -140,6 +140,11 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("codec/support.rs", []byte(renderCodecSupport(supportUses))); err != nil {
 		return nil, err
 	}
+	if hasIndexedDBService(services) {
+		if err := set.Add("indexeddb_pagination.rs", []byte(indexedDBPaginationFile)); err != nil {
+			return nil, err
+		}
+	}
 	return set, nil
 }
 
@@ -247,4 +252,13 @@ func groupFiles(services []*model.Service, messages []*model.Message, enums []*m
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].base < out[j].base })
 	return out
+}
+
+func hasIndexedDBService(services []*model.Service) bool {
+	for _, svc := range services {
+		if svc.FullName == "gestalt.provider.v1.IndexedDB" {
+			return true
+		}
+	}
+	return false
 }

@@ -331,6 +331,12 @@ export {
   type OpenCursorOptions,
   type GetAllOptions,
 } from "./providers/indexeddb.ts";
+export {
+  collectIndexPages,
+  paginateIndexGetAll,
+  prefixIndexRange,
+  type Page as IndexedDBPage,
+} from "./indexeddb_pagination.ts";
 export type { IndexedDBQuery as WireIndexedDBQuery, KeyValue } from "./indexeddb.ts";
 export {
   PresignMethod,

@@ -1,0 +1,176 @@
+package indexeddb
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+)
+
+// Page is one paginated index read result.
+type Page struct {
+	Items      []Record
+	Limit      int
+	HasMore    bool
+	NextCursor *string
+}
+
+// IndexPageCursor is the resume position after a paginated index read.
+type IndexPageCursor struct {
+	IndexKey   any
+	PrimaryKey string
+}
+
+// IndexReader is the subset of Index used for pagination helpers.
+type IndexReader interface {
+	GetAll(ctx context.Context, query any, count ...uint32) ([]Record, error)
+}
+
+func encodePageCursor(indexKey any, primaryKey string) (string, error) {
+	payload := map[string]any{
+		"index_key":   indexKey,
+		"primary_key": primaryKey,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func DecodePageCursor(cursor string) (*IndexPageCursor, error) {
+	text := cursor
+	if text == "" {
+		return nil, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(text)
+	if err != nil {
+		return nil, fmt.Errorf("invalid pagination cursor: %w", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("invalid pagination cursor: %w", err)
+	}
+	if _, ok := payload["index_key"]; !ok {
+		recordedAt, _ := payload["recorded_at"].(string)
+		rowID, _ := payload["row_id"].(string)
+		if recordedAt == "" && rowID == "" {
+			return nil, fmt.Errorf("invalid pagination cursor")
+		}
+		return &IndexPageCursor{IndexKey: []any{recordedAt, rowID}, PrimaryKey: rowID}, nil
+	}
+	primaryKey, _ := payload["primary_key"].(string)
+	return &IndexPageCursor{IndexKey: payload["index_key"], PrimaryKey: primaryKey}, nil
+}
+
+// PrefixIndexRange builds a resume-aware prefix range for compound index keys.
+func PrefixIndexRange(prefix []any, afterCursor *string, upperSentinels []any) *KeyRange {
+	sentinels := upperSentinels
+	if len(sentinels) == 0 {
+		sentinels = []any{"\uffff"}
+	}
+	upper := append(append([]any{}, prefix...), sentinels...)
+	lower := any(prefix)
+	lowerOpen := false
+	if afterCursor != nil && *afterCursor != "" {
+		decoded, err := DecodePageCursor(*afterCursor)
+		if err == nil && decoded != nil {
+			lower = decoded.IndexKey
+			if parts, ok := lower.([]any); ok && len(prefix) == 1 && len(parts) > 0 {
+				if fmt.Sprint(parts[0]) != fmt.Sprint(prefix[0]) {
+					lower = append([]any{prefix[0]}, parts...)
+				}
+			}
+			lowerOpen = true
+		}
+	}
+	return Bound(lower, upper, lowerOpen, false)
+}
+
+func indexKeyFromRecord(row Record, indexKeyPath []string) any {
+	if len(indexKeyPath) == 1 {
+		return row[indexKeyPath[0]]
+	}
+	out := make([]any, len(indexKeyPath))
+	for i, name := range indexKeyPath {
+		out[i] = row[name]
+	}
+	return out
+}
+
+func primaryKeyFromRecord(row Record) string {
+	for _, name := range []string{"id", "record_id"} {
+		if value, ok := row[name]; ok && fmt.Sprint(value) != "" {
+			return fmt.Sprint(value)
+		}
+	}
+	return ""
+}
+
+// PaginateIndexGetAll reads one page from an index using count-limited GetAll.
+func PaginateIndexGetAll(
+	ctx context.Context,
+	index IndexReader,
+	query any,
+	limit int,
+	indexKeyPath []string,
+) (Page, error) {
+	pageLimit := limit
+	if pageLimit < 1 {
+		pageLimit = 1
+	}
+	rows, err := index.GetAll(ctx, query, uint32(pageLimit+1))
+	if err != nil {
+		return Page{}, err
+	}
+	hasMore := len(rows) > pageLimit
+	items := rows
+	if hasMore {
+		items = rows[:pageLimit]
+	}
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		var indexKey any
+		if len(indexKeyPath) > 0 {
+			indexKey = indexKeyFromRecord(last, indexKeyPath)
+		} else {
+			indexKey = primaryKeyFromRecord(last)
+		}
+		encoded, err := encodePageCursor(indexKey, primaryKeyFromRecord(last))
+		if err != nil {
+			return Page{}, err
+		}
+		nextCursor = &encoded
+	}
+	return Page{Items: items, Limit: pageLimit, HasMore: hasMore, NextCursor: nextCursor}, nil
+}
+
+// CollectIndexPages reads every page for a prefix range.
+func CollectIndexPages(
+	ctx context.Context,
+	index IndexReader,
+	prefix []any,
+	pageSize int,
+	upperSentinels []any,
+	indexKeyPath []string,
+) ([]Record, error) {
+	if pageSize < 1 {
+		pageSize = 100
+	}
+	items := make([]Record, 0)
+	var cursor *string
+	for {
+		query := PrefixIndexRange(prefix, cursor, upperSentinels)
+		page, err := PaginateIndexGetAll(ctx, index, query, pageSize, indexKeyPath)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, page.Items...)
+		if !page.HasMore {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	return items, nil
+}

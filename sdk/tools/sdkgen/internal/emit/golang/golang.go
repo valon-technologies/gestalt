@@ -79,6 +79,11 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("client/support_codec.go", []byte(codecSupportFile)); err != nil {
 		return nil, err
 	}
+	if hasIndexedDBService(services) {
+		if err := set.Add("indexeddb/pagination.go", []byte(indexedDBPaginationFile)); err != nil {
+			return nil, err
+		}
+	}
 	for _, g := range groupFiles(services, messages, enums) {
 		public := newRenderer(idx)
 		outputBase := g.base
@@ -117,6 +122,15 @@ func hasJsonResult(services []*model.Service) bool {
 			if m.JsonResult != nil {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func hasIndexedDBService(services []*model.Service) bool {
+	for _, svc := range services {
+		if svc.FullName == "gestalt.provider.v1.IndexedDB" {
+			return true
 		}
 	}
 	return false
