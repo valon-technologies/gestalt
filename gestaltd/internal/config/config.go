@@ -1928,8 +1928,6 @@ type ServerConfig struct {
 	Management    ManagementListenerConfig `yaml:"management"`
 	BaseURL       string                   `yaml:"baseUrl"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
-	Remote        string                   `yaml:"remote,omitempty"`
-	RemoteToken   string                   `yaml:"remoteToken,omitempty"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Remote        string                   `yaml:"remote,omitempty" json:"remote,omitempty"`
 	RemoteToken   string                   `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`

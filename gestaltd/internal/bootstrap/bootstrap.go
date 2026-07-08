@@ -185,7 +185,6 @@ type Deps struct {
 	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
-	Placement             *PlacementPlan
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -883,7 +882,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AgentToolIDs:         agentToolIDs,
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
-		Placement:            NewPlacementPlan(cfg),
 	}
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
@@ -1516,13 +1514,23 @@ func failPendingStartupProviders(deps Deps, err error) {
 	}
 }
 
-func filterPlacementEntries(entries map[string]*config.ProviderEntry, plan *PlacementPlan) map[string]*config.ProviderEntry {
-	if plan == nil {
+func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
+	if entry == nil {
+		return false
+	}
+	if entry.DevActive {
+		return true
+	}
+	return cfg == nil || strings.TrimSpace(cfg.Server.Remote) == ""
+}
+
+func localProviderEntries(cfg *config.Config, entries map[string]*config.ProviderEntry) map[string]*config.ProviderEntry {
+	if cfg == nil || strings.TrimSpace(cfg.Server.Remote) == "" {
 		return entries
 	}
 	filtered := make(map[string]*config.ProviderEntry, len(entries))
 	for name, entry := range entries {
-		if plan.ShouldBuildLocal(entry) {
+		if providerBuildsLocal(cfg, entry) {
 			filtered[name] = entry
 		}
 	}
@@ -1622,7 +1630,7 @@ func buildConfiguredProviders[T any](
 }
 
 func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, filterPlacementEntries(cfg.Providers.Workflow, deps.Placement),
+	return buildConfiguredProviders(ctx, localProviderEntries(cfg, cfg.Providers.Workflow),
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
 			return buildWorkflow(ctx, name, entry, factories, deps)
 		},
@@ -1654,7 +1662,7 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 }
 
 func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, filterPlacementEntries(cfg.Providers.Agent, deps.Placement),
+	return buildConfiguredProviders(ctx, localProviderEntries(cfg, cfg.Providers.Agent),
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
 			return buildAgent(ctx, name, entry, factories, deps)
 		},
