@@ -310,10 +310,7 @@ func agentProviderSessionIdempotencyScope(req *proto.CreateAgentProviderSessionR
 	if idempotencyKey == "" {
 		return ""
 	}
-	subjectID := strings.TrimSpace(req.GetSubject().GetId())
-	if subjectID == "" {
-		subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
-	}
+	subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 	return strings.Join([]string{"session", subjectID, idempotencyKey}, "\x00")
 }
 
@@ -322,10 +319,7 @@ func agentProviderTurnIdempotencyScope(req *proto.CreateAgentProviderTurnRequest
 	if idempotencyKey == "" {
 		return ""
 	}
-	subjectID := strings.TrimSpace(req.GetSubject().GetId())
-	if subjectID == "" {
-		subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
-	}
+	subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 	return strings.Join([]string{"turn", subjectID, strings.TrimSpace(req.GetSessionId()), idempotencyKey}, "\x00")
 }
 

@@ -153,19 +153,17 @@ message AgentSession {
 }
 
 message CreateAgentProviderSessionRequest {
-  reserved 1, 6, 7, 12, 14;
-  reserved "session_id", "provider_options", "workflow", "created_by_subject_id";
+  reserved 1, 6, 7, 8, 12, 14;
+  reserved "session_id", "provider_options", "workflow", "created_by_subject_id", "subject";
 
   // The provider mints the session id returned on AgentSession. Creation is
-  // idempotent on idempotency_key scoped per subject (context.subject.id,
-  // or top-level subject when set for delegated provider calls):
+  // idempotent on idempotency_key scoped per caller (context.subject.id):
   // a replayed key returns the existing session, an empty key always creates.
   // Idempotency is scoped to the provider's session store.
   string idempotency_key = 2;
   string model = 3;
   string client_ref = 4;
   google.protobuf.Struct metadata = 5;
-  SubjectContext subject = 8;
   AgentSessionStartConfig session_start = 9;
   PreparedAgentWorkspace prepared_workspace = 10;
   string provider_name = 11;
@@ -208,20 +206,18 @@ message AgentSessionStartHookOutput {
 }
 
 message GetAgentProviderSessionRequest {
-  reserved 3, 4;
-  reserved "workflow";
+  reserved 2, 3, 4;
+  reserved "workflow", "subject";
 
   string session_id = 1;
-  SubjectContext subject = 2;
   RequestContext context = 5;
   string provider_name = 6;
 }
 
 message ListAgentProviderSessionsRequest {
-  reserved 7, 8;
-  reserved "workflow";
+  reserved 1, 7, 8;
+  reserved "workflow", "subject";
 
-  SubjectContext subject = 1;
   repeated string session_ids = 2;
   AgentSessionState state = 3;
   // When non-zero and bounded_list_hydration is supported, cap results after
@@ -241,14 +237,13 @@ message ListAgentProviderSessionsResponse {
 }
 
 message UpdateAgentProviderSessionRequest {
-  reserved 6, 7;
-  reserved "workflow";
+  reserved 5, 6, 7;
+  reserved "workflow", "subject";
 
   string session_id = 1;
   string client_ref = 2;
   AgentSessionState state = 3;
   google.protobuf.Struct metadata = 4;
-  SubjectContext subject = 5;
   RequestContext context = 8;
   string provider_name = 9;
 }
@@ -297,8 +292,8 @@ message AgentTurnDisplay {
 }
 
 message CreateAgentProviderTurnRequest {
-  reserved 6, 9, 10, 12, 13, 15, 17, 19, 20, 22;
-  reserved "tools", "provider_options", "tool_refs", "tool_source", "tool_grant", "run_grant", "tool_refs_set", "workflow", "created_by_subject_id";
+  reserved 6, 9, 10, 12, 13, 14, 15, 17, 19, 20, 22;
+  reserved "tools", "provider_options", "tool_refs", "tool_source", "tool_grant", "run_grant", "tool_refs_set", "workflow", "created_by_subject_id", "subject";
 
   string turn_id = 1;
   string session_id = 2;
@@ -307,7 +302,6 @@ message CreateAgentProviderTurnRequest {
   repeated AgentMessage messages = 5;
   google.protobuf.Struct metadata = 8;
   string execution_ref = 11;
-  SubjectContext subject = 14;
   google.protobuf.Struct model_options = 16;
   // Optional provider-owned turn execution budget, in seconds.
   // If unset or zero, the provider chooses its own execution timeout. This does
@@ -332,21 +326,19 @@ message AgentOutput {
 }
 
 message GetAgentProviderTurnRequest {
-  reserved 3, 4;
-  reserved "workflow";
+  reserved 2, 3, 4;
+  reserved "workflow", "subject";
 
   string turn_id = 1;
-  SubjectContext subject = 2;
   RequestContext context = 5;
   string provider_name = 6;
 }
 
 message ListAgentProviderTurnsRequest {
-  reserved 7, 8;
-  reserved "workflow";
+  reserved 2, 7, 8;
+  reserved "workflow", "subject";
 
   string session_id = 1;
-  SubjectContext subject = 2;
   repeated string turn_ids = 3;
   AgentExecutionStatus status = 4;
   // When non-zero and bounded_list_hydration is supported, cap results after
@@ -367,12 +359,11 @@ message ListAgentProviderTurnsResponse {
 }
 
 message CancelAgentProviderTurnRequest {
-  reserved 4, 5;
-  reserved "workflow";
+  reserved 3, 4, 5;
+  reserved "workflow", "subject";
 
   string turn_id = 1;
   string reason = 2;
-  SubjectContext subject = 3;
   RequestContext context = 6;
   string provider_name = 7;
 }
@@ -390,13 +381,12 @@ message AgentTurnEvent {
 }
 
 message ListAgentProviderTurnEventsRequest {
-  reserved 5, 6;
-  reserved "workflow";
+  reserved 4, 5, 6;
+  reserved "workflow", "subject";
 
   string turn_id = 1;
   int64 after_seq = 2;
   int32 limit = 3;
-  SubjectContext subject = 4;
   RequestContext context = 7;
   string provider_name = 8;
 }
@@ -408,19 +398,18 @@ message ListAgentProviderTurnEventsResponse {
 }
 
 message GetAgentProviderInteractionRequest {
-  reserved 3;
+  reserved 2, 3;
+  reserved "subject";
 
   string interaction_id = 1;
-  SubjectContext subject = 2;
   RequestContext context = 4;
 }
 
 message ListAgentProviderInteractionsRequest {
-  reserved 3, 4;
-  reserved "workflow";
+  reserved 2, 3, 4;
+  reserved "workflow", "subject";
 
   string turn_id = 1;
-  SubjectContext subject = 2;
   RequestContext context = 5;
   string provider_name = 6;
 }
@@ -432,12 +421,11 @@ message ListAgentProviderInteractionsResponse {
 }
 
 message ResolveAgentProviderInteractionRequest {
-  reserved 4, 6;
-  reserved "workflow";
+  reserved 3, 4, 6;
+  reserved "workflow", "subject";
 
   string interaction_id = 1;
   google.protobuf.Struct resolution = 2;
-  SubjectContext subject = 3;
   string turn_id = 5;
   RequestContext context = 7;
   string provider_name = 8;
@@ -469,7 +457,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "idempotency_key";
     option (signature) = "model";
@@ -485,7 +472,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "session_id";
     option (optional_signature) = "provider_name";
@@ -496,7 +482,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (optional_signature) = "session_ids";
     option (optional_signature) = "state";
@@ -510,7 +495,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "session_id";
     option (optional_signature) = "client_ref";
@@ -525,7 +509,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "session_id";
     option (signature) = "idempotency_key";
@@ -544,7 +527,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "turn_id";
     option (optional_signature) = "provider_name";
@@ -555,7 +537,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "session_id";
     option (optional_signature) = "turn_ids";
@@ -570,7 +551,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "turn_id";
     option (optional_signature) = "reason";
@@ -583,7 +563,6 @@ service Agent {
     };
     option (public) = {
       fill: "context"
-      fill: "subject"
     };
     option (signature) = "turn_id";
     option (optional_signature) = "after_seq";

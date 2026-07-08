@@ -685,8 +685,7 @@ pub struct AgentSession {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateAgentProviderSessionRequest {
     /// The provider mints the session id returned on AgentSession. Creation is
-    /// idempotent on idempotency_key scoped per subject (context.subject.id,
-    /// or top-level subject when set for delegated provider calls):
+    /// idempotent on idempotency_key scoped per caller (context.subject.id):
     /// a replayed key returns the existing session, an empty key always creates.
     /// Idempotency is scoped to the provider's session store.
     #[prost(string, tag = "2")]
@@ -697,8 +696,6 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "9")]
     pub session_start: ::core::option::Option<AgentSessionStartConfig>,
     #[prost(message, optional, tag = "10")]
@@ -772,8 +769,6 @@ pub struct AgentSessionStartHookOutput {
 pub struct GetAgentProviderSessionRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "6")]
@@ -781,8 +776,6 @@ pub struct GetAgentProviderSessionRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderSessionsRequest {
-    #[prost(message, optional, tag = "1")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(string, repeated, tag = "2")]
     pub session_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(enumeration = "AgentSessionState", tag = "3")]
@@ -815,8 +808,6 @@ pub struct UpdateAgentProviderSessionRequest {
     pub state: i32,
     #[prost(message, optional, tag = "4")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "5")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "8")]
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "9")]
@@ -916,8 +907,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub metadata: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "14")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "16")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
     /// Optional provider-owned turn execution budget, in seconds.
@@ -958,8 +947,6 @@ pub mod agent_output {
 pub struct GetAgentProviderTurnRequest {
     #[prost(string, tag = "1")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "6")]
@@ -969,8 +956,6 @@ pub struct GetAgentProviderTurnRequest {
 pub struct ListAgentProviderTurnsRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(string, repeated, tag = "3")]
     pub turn_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(enumeration = "AgentExecutionStatus", tag = "4")]
@@ -1000,8 +985,6 @@ pub struct CancelAgentProviderTurnRequest {
     pub turn_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub reason: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "7")]
@@ -1036,8 +1019,6 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub after_seq: i64,
     #[prost(int32, tag = "3")]
     pub limit: i32,
-    #[prost(message, optional, tag = "4")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "7")]
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "8")]
@@ -1052,8 +1033,6 @@ pub struct ListAgentProviderTurnEventsResponse {
 pub struct GetAgentProviderInteractionRequest {
     #[prost(string, tag = "1")]
     pub interaction_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "4")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -1061,8 +1040,6 @@ pub struct GetAgentProviderInteractionRequest {
 pub struct ListAgentProviderInteractionsRequest {
     #[prost(string, tag = "1")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "6")]
@@ -1079,8 +1056,6 @@ pub struct ResolveAgentProviderInteractionRequest {
     pub interaction_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub resolution: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "3")]
-    pub subject: ::core::option::Option<SubjectContext>,
     #[prost(string, tag = "5")]
     pub turn_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]

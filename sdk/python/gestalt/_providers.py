@@ -589,8 +589,8 @@ class AgentProvider(AppProvider):
     ) -> AgentSession:
         """Create a session, minting its id.
 
-        Must be idempotent on ``request.idempotency_key`` scoped per subject
-        (``request.created_by_subject_id``); an empty key always creates.
+        Must be idempotent on ``request.idempotency_key`` scoped per
+        ``request.context.subject.id``; an empty key always creates.
         """
         self._unimplemented("create_session")
 

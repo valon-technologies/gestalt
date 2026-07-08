@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -28,7 +29,7 @@ func workflowSubjectOwnedBy(ownerSubjectID string, p *principal.Principal) bool 
 }
 
 func workflowCallerSubjectID(_ context.Context, reqCtx *proto.RequestContext, p *principal.Principal) (string, error) {
-	if id := strings.TrimSpace(reqCtx.GetSubject().GetId()); id != "" {
+	if id := appaccessservice.SubjectIDFromRequestContext(reqCtx); id != "" {
 		return id, nil
 	}
 	if id := strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))); id != "" {

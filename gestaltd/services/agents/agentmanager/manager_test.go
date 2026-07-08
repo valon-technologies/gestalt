@@ -237,10 +237,7 @@ func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto
 	p.createSessionReqs = append(p.createSessionReqs, cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{}))
 	key := ""
 	if idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey()); idempotencyKey != "" {
-		subjectID := strings.TrimSpace(req.GetSubject().GetId())
-		if subjectID == "" {
-			subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
-		}
+		subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 		key = subjectID + "\x1f" + idempotencyKey
 		if sessionID, ok := p.sessionIdempotency[key]; ok {
 			return cloneRouteSession(p.sessions[sessionID]), nil
@@ -304,7 +301,7 @@ func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req *proto.
 				continue
 			}
 		}
-		if req.GetSubject().GetId() != "" && session.CreatedBySubjectID != req.GetSubject().GetId() {
+		if subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext()); subjectID != "" && session.CreatedBySubjectID != subjectID {
 			continue
 		}
 		if state != "" && session.State != state {
@@ -402,7 +399,7 @@ func (p *routeCountingAgentProvider) ListTurns(_ context.Context, req *proto.Lis
 		if req.GetSessionId() != "" && turn.SessionID != req.GetSessionId() {
 			continue
 		}
-		if req.GetSubject().GetId() != "" && turn.CreatedBySubjectID != req.GetSubject().GetId() {
+		if subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext()); subjectID != "" && turn.CreatedBySubjectID != subjectID {
 			continue
 		}
 		if statusFilter != "" && turn.Status != statusFilter {

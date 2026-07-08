@@ -18,8 +18,7 @@ type AgentProvider interface {
 	Provider
 	// CreateSession mints the session id returned on the AgentSession.
 	// Creation must be idempotent on IdempotencyKey scoped per subject
-	// (context.subject.id, or top-level subject when set for delegated provider
-	// calls); an empty key always creates a new session.
+	// (context.subject.id); an empty key always creates a new session.
 	CreateSession(ctx context.Context, req *CreateAgentProviderSessionRequest) (*AgentSession, error)
 	// GetSession returns one agent session by ID.
 	GetSession(ctx context.Context, req *GetAgentProviderSessionRequest) (*AgentSession, error)
@@ -247,7 +246,6 @@ type CreateAgentProviderSessionRequest struct {
 	Model              string
 	ClientRef          string
 	Metadata           map[string]any
-	Subject            *Subject
 	Context            *proto.RequestContext
 	SessionStart       *AgentSessionStartConfig
 	PreparedWorkspace  *AgentPreparedWorkspace
@@ -299,14 +297,12 @@ type AgentSessionStartHookOutput struct {
 type GetAgentProviderSessionRequest struct {
 	ProviderName string
 	SessionID    string
-	Subject      *Subject
 	Context      *proto.RequestContext
 }
 
 // ListAgentProviderSessionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderSessionsRequest.
 type ListAgentProviderSessionsRequest struct {
 	ProviderName string
-	Subject      *Subject
 	Context      *proto.RequestContext
 	SessionIDs   []string
 	State        AgentSessionState
@@ -326,7 +322,6 @@ type UpdateAgentProviderSessionRequest struct {
 	ClientRef    string
 	State        AgentSessionState
 	Metadata     map[string]any
-	Subject      *Subject
 	Context      *proto.RequestContext
 }
 
@@ -391,7 +386,6 @@ type CreateAgentProviderTurnRequest struct {
 	Output             *AgentOutput
 	Metadata           map[string]any
 	ExecutionRef       string
-	Subject            *Subject
 	ModelOptions       map[string]any
 	Context            *proto.RequestContext
 	TimeoutSeconds     int32
@@ -415,7 +409,6 @@ type AgentStructuredOutput struct {
 type GetAgentProviderTurnRequest struct {
 	ProviderName string
 	TurnID       string
-	Subject      *Subject
 	Context      *proto.RequestContext
 }
 
@@ -423,7 +416,6 @@ type GetAgentProviderTurnRequest struct {
 type ListAgentProviderTurnsRequest struct {
 	ProviderName string
 	SessionID    string
-	Subject      *Subject
 	Context      *proto.RequestContext
 	TurnIDs      []string
 	Status       AgentExecutionStatus
@@ -441,7 +433,6 @@ type CancelAgentProviderTurnRequest struct {
 	ProviderName string
 	TurnID       string
 	Reason       string
-	Subject      *Subject
 	Context      *proto.RequestContext
 }
 
@@ -464,7 +455,6 @@ type ListAgentProviderTurnEventsRequest struct {
 	TurnID       string
 	AfterSeq     int64
 	Limit        int32
-	Subject      *Subject
 	Context      *proto.RequestContext
 }
 
@@ -476,7 +466,6 @@ type ListAgentProviderTurnEventsResponse struct {
 // GetAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.GetAgentProviderInteractionRequest.
 type GetAgentProviderInteractionRequest struct {
 	InteractionID string
-	Subject       *Subject
 	Context       *proto.RequestContext
 }
 
@@ -484,7 +473,6 @@ type GetAgentProviderInteractionRequest struct {
 type ListAgentProviderInteractionsRequest struct {
 	ProviderName string
 	TurnID       string
-	Subject      *Subject
 	Context      *proto.RequestContext
 }
 
@@ -499,7 +487,6 @@ type ResolveAgentProviderInteractionRequest struct {
 	TurnID        string
 	InteractionID string
 	Resolution    map[string]any
-	Subject       *Subject
 	Context       *proto.RequestContext
 }
 

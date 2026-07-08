@@ -600,8 +600,6 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: String,
     /// The `metadata` field.
     pub metadata: Option<AgentJson>,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
     /// The `session_start` field.
     pub session_start: Option<AgentSessionStartConfig>,
     /// The `prepared_workspace` field.
@@ -652,8 +650,6 @@ pub struct GetAgentProviderSessionRequest {
     pub provider_name: String,
     /// The `session_id` field.
     pub session_id: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -661,8 +657,6 @@ pub struct GetAgentProviderSessionRequest {
 pub struct ListAgentProviderSessionsRequest {
     /// The `provider_name` field.
     pub provider_name: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
     /// The `session_ids` field.
     pub session_ids: Vec<String>,
     /// The `state` field.
@@ -693,8 +687,6 @@ pub struct UpdateAgentProviderSessionRequest {
     pub state: AgentSessionState,
     /// The `metadata` field.
     pub metadata: Option<AgentJson>,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -803,8 +795,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub metadata: Option<AgentJson>,
     /// The `execution_ref` field.
     pub execution_ref: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
     /// The `model_options` field.
     pub model_options: Option<AgentJson>,
     /// The `timeout_seconds` field.
@@ -854,8 +844,6 @@ pub struct GetAgentProviderTurnRequest {
     pub provider_name: String,
     /// The `turn_id` field.
     pub turn_id: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -865,8 +853,6 @@ pub struct ListAgentProviderTurnsRequest {
     pub provider_name: String,
     /// The `session_id` field.
     pub session_id: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
     /// The `turn_ids` field.
     pub turn_ids: Vec<String>,
     /// The `status` field.
@@ -893,8 +879,6 @@ pub struct CancelAgentProviderTurnRequest {
     pub turn_id: String,
     /// The `reason` field.
     pub reason: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -931,8 +915,6 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub after_seq: i64,
     /// The `limit` field.
     pub limit: i32,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -947,8 +929,6 @@ pub struct ListAgentProviderTurnEventsResponse {
 pub struct GetAgentProviderInteractionRequest {
     /// The `interaction_id` field.
     pub interaction_id: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -958,8 +938,6 @@ pub struct ListAgentProviderInteractionsRequest {
     pub provider_name: String,
     /// The `turn_id` field.
     pub turn_id: String,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -978,8 +956,6 @@ pub struct ResolveAgentProviderInteractionRequest {
     pub interaction_id: String,
     /// The `resolution` field.
     pub resolution: Option<AgentJson>,
-    /// The `subject` field.
-    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1126,14 +1102,6 @@ fn value_from_json(value: Option<AgentJson>) -> Option<Value> {
 
 fn timestamp_from_time(value: Option<SystemTime>) -> Option<Timestamp> {
     value.map(protocol::timestamp_from_system_time)
-}
-
-fn agent_subject_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject> {
-    value.map(|value| Subject {
-        id: value.id,
-        email: value.email,
-        display_name: value.display_name,
-    })
 }
 
 pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef {
@@ -1387,7 +1355,6 @@ fn create_session_request_from_proto(
         model: value.model,
         client_ref: value.client_ref,
         metadata: json_from_struct(value.metadata),
-        subject: agent_subject_from_proto(value.subject),
         session_start: value.session_start.map(|value| AgentSessionStartConfig {
             hooks: value
                 .hooks
@@ -1434,7 +1401,6 @@ fn create_turn_request_from_proto(
         output: required_agent_output_from_proto(value.output)?,
         metadata: json_from_struct(value.metadata),
         execution_ref: value.execution_ref,
-        subject: agent_subject_from_proto(value.subject),
         model_options: json_from_struct(value.model_options),
         timeout_seconds: value.timeout_seconds,
         context: value.context,
@@ -1526,8 +1492,7 @@ pub trait AgentProvider: Send + Sync + 'static {
     ///
     /// Mints the session id returned on the [`AgentSession`]. Must be
     /// idempotent on `idempotency_key` scoped per subject
-    /// (`context.subject.id`, or top-level subject when set for delegated provider
-    /// calls); an empty key always creates.
+    /// (`context.subject.id`); an empty key always creates.
     async fn create_session(
         &self,
         _request: CreateAgentProviderSessionRequest,
@@ -1700,7 +1665,6 @@ where
             self.provider.get_session(GetAgentProviderSessionRequest {
                 provider_name: request.provider_name,
                 session_id: request.session_id,
-                subject: agent_subject_from_proto(request.subject),
             }),
         )
         .await
@@ -1721,7 +1685,6 @@ where
             self.provider
                 .list_sessions(ListAgentProviderSessionsRequest {
                     provider_name: request.provider_name,
-                    subject: agent_subject_from_proto(request.subject),
                     session_ids: request.session_ids,
                     state: AgentSessionState::from_i32_lossy(request.state),
                     limit: request.limit,
@@ -1755,7 +1718,6 @@ where
                     client_ref: request.client_ref,
                     state: AgentSessionState::from_i32_lossy(request.state),
                     metadata: json_from_struct(request.metadata),
-                    subject: agent_subject_from_proto(request.subject),
                 }),
         )
         .await
@@ -1796,7 +1758,6 @@ where
             self.provider.get_turn(GetAgentProviderTurnRequest {
                 provider_name: request.provider_name,
                 turn_id: request.turn_id,
-                subject: agent_subject_from_proto(request.subject),
             }),
         )
         .await
@@ -1817,7 +1778,6 @@ where
             self.provider.list_turns(ListAgentProviderTurnsRequest {
                 provider_name: request.provider_name,
                 session_id: request.session_id,
-                subject: agent_subject_from_proto(request.subject),
                 turn_ids: request.turn_ids,
                 status: AgentExecutionStatus::from_i32_lossy(request.status),
                 limit: request.limit,
@@ -1848,7 +1808,6 @@ where
                 provider_name: request.provider_name,
                 turn_id: request.turn_id,
                 reason: request.reason,
-                subject: agent_subject_from_proto(request.subject),
             }),
         )
         .await
@@ -1872,7 +1831,6 @@ where
                     turn_id: request.turn_id,
                     after_seq: request.after_seq,
                     limit: request.limit,
-                    subject: agent_subject_from_proto(request.subject),
                 }),
         )
         .await
@@ -1898,7 +1856,6 @@ where
             self.provider
                 .get_interaction(GetAgentProviderInteractionRequest {
                     interaction_id: request.interaction_id,
-                    subject: agent_subject_from_proto(request.subject),
                 }),
         )
         .await
@@ -1921,7 +1878,6 @@ where
                 .list_interactions(ListAgentProviderInteractionsRequest {
                     provider_name: request.provider_name,
                     turn_id: request.turn_id,
-                    subject: agent_subject_from_proto(request.subject),
                 }),
         )
         .await
@@ -1951,7 +1907,6 @@ where
                     provider_name: request.provider_name,
                     interaction_id: request.interaction_id,
                     resolution: json_from_struct(request.resolution),
-                    subject: agent_subject_from_proto(request.subject),
                 }),
         )
         .await
