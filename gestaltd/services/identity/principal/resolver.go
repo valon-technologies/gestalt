@@ -55,7 +55,6 @@ func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, 
 		if _, _, ok := core.ParseSubjectID(subject); !ok {
 			return nil, ErrInvalidToken
 		}
-		resp.Subject = subject
 		return r.enrichPrincipalWithUserInfo(ctx, token, principalFromIntrospection(resp)), nil
 	}
 	return nil, ErrInvalidToken
