@@ -22,6 +22,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -185,6 +186,7 @@ type Deps struct {
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
 	Placement             *PlacementPlan
+	RemoteClients         *remote.ClientSet
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -883,6 +885,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 		Placement:            NewPlacementPlan(cfg),
 	}
+	remoteClients, err := dialRemoteClients(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: remote client: %w", err)
+	}
+	deps.RemoteClients = remoteClients
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
@@ -940,6 +947,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			_ = closeIndexedDBs(extraIndexedDBs...)
 			return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
 		}
+		ds = metricutil.InstrumentIndexedDB(ds, name)
+		indexedDBs[name] = ds
+		extraIndexedDBs = append(extraIndexedDBs, ds)
+	}
+	for name, ds := range remoteIndexedDBBindings(cfg, placement, deps.RemoteClients, selectedIndexedDBName) {
 		ds = metricutil.InstrumentIndexedDB(ds, name)
 		indexedDBs[name] = ds
 		extraIndexedDBs = append(extraIndexedDBs, ds)
@@ -1115,6 +1127,13 @@ func hostServiceTLSCAFromEnv() (caFile string, caPEM string, err error) {
 	return "", strings.TrimSpace(string(data)), nil
 }
 
+func closeRemoteClients(clients *remote.ClientSet) error {
+	if clients == nil {
+		return nil
+	}
+	return clients.Close()
+}
+
 func (p *preparedCore) Close(ctx context.Context) error {
 	if p == nil {
 		return nil
@@ -1132,6 +1151,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		authorizationCloseErr,
 		externalCredentialsCloseErr,
 		p.Services.Close(),
+		closeRemoteClients(p.Deps.RemoteClients),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeCaches(p.ExtraCaches...),
 		closeS3s(p.ExtraS3s...),
@@ -1251,6 +1271,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	appHostServiceCleanup := registerConfiguredAppPublicHostServices(cfg, prepared.Deps)
+	registerRemoteAgents(cfg, prepared.Deps)
+	registerRemoteWorkflows(cfg, prepared.Deps)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
