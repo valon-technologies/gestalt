@@ -23,7 +23,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
-	"google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	"google.golang.org/grpc/reflection/grpc_reflection_v1"
 )
 
 func TestPublicGRPCAppInvokeSucceedsWithBearer(t *testing.T) {
@@ -176,13 +176,13 @@ func TestPublicGRPCReflectionOmitsInternalWorkflowMethods(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := grpc_reflection_v1alpha.NewServerReflectionClient(conn)
+	client := grpc_reflection_v1.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
 	if err != nil {
 		t.Fatalf("ServerReflectionInfo: %v", err)
 	}
-	if err := stream.Send(&grpc_reflection_v1alpha.ServerReflectionRequest{
-		MessageRequest: &grpc_reflection_v1alpha.ServerReflectionRequest_ListServices{},
+	if err := stream.Send(&grpc_reflection_v1.ServerReflectionRequest{
+		MessageRequest: &grpc_reflection_v1.ServerReflectionRequest_ListServices{},
 	}); err != nil {
 		t.Fatalf("Send list services: %v", err)
 	}
@@ -202,8 +202,8 @@ func TestPublicGRPCReflectionOmitsInternalWorkflowMethods(t *testing.T) {
 		t.Fatalf("workflow service missing from %v", services)
 	}
 
-	if err := stream.Send(&grpc_reflection_v1alpha.ServerReflectionRequest{
-		MessageRequest: &grpc_reflection_v1alpha.ServerReflectionRequest_FileContainingSymbol{
+	if err := stream.Send(&grpc_reflection_v1.ServerReflectionRequest{
+		MessageRequest: &grpc_reflection_v1.ServerReflectionRequest_FileContainingSymbol{
 			FileContainingSymbol: workflowService,
 		},
 	}); err != nil {
