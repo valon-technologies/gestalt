@@ -278,9 +278,6 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	if err != nil {
 		return nil, err
 	}
-	if req.GetRunAs() != nil {
-		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
-	}
 	managed, err := s.manager.StartRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunStart{
 		ProviderName:                 strings.TrimSpace(req.GetProviderName()),
 		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
@@ -489,9 +486,6 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	p, err := s.authorizeWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsSignalOrStart)
 	if err != nil {
 		return nil, err
-	}
-	if req.GetRunAs() != nil {
-		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
 	}
 	managed, err = s.manager.SignalOrStartRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunSignalOrStart{
 		ProviderName:                 strings.TrimSpace(req.GetProviderName()),

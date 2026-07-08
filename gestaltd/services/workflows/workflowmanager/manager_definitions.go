@@ -49,11 +49,13 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if err != nil {
 		return nil, err
 	}
+	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
+		return nil, err
+	}
 	definitionProto, err := provider.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
-		Spec:                 specProto,
-		IdempotencyKey:       strings.TrimSpace(req.IdempotencyKey),
-		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		Context:              reqContext,
+		Spec:           specProto,
+		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		Context:        reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -133,11 +135,13 @@ func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principa
 	if err != nil {
 		return nil, err
 	}
+	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
+		return nil, err
+	}
 	definitionProto, err := existing.provider.SetDefinitionPaused(ctx, &proto.SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionId:         strings.TrimSpace(definitionID),
-		Paused:               paused,
-		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		Context:              reqContext,
+		DefinitionId: strings.TrimSpace(definitionID),
+		Paused:       paused,
+		Context:      reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -169,12 +173,14 @@ func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principa
 	if err != nil {
 		return nil, err
 	}
+	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
+		return nil, err
+	}
 	definitionProto, err := existing.provider.SetActivationPaused(ctx, &proto.SetWorkflowProviderActivationPausedRequest{
-		DefinitionId:         strings.TrimSpace(definitionID),
-		ActivationId:         strings.TrimSpace(activationID),
-		Paused:               paused,
-		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		Context:              reqContext,
+		DefinitionId: strings.TrimSpace(definitionID),
+		ActivationId: strings.TrimSpace(activationID),
+		Paused:       paused,
+		Context:      reqContext,
 	})
 	if err != nil {
 		return nil, err

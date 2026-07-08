@@ -1,12 +1,14 @@
 package workflowmanager
 
 import (
+	"context"
 	"maps"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -25,12 +27,14 @@ func workflowSubjectOwnedBy(ownerSubjectID string, p *principal.Principal) bool 
 	return subjectID != "" && strings.TrimSpace(ownerSubjectID) == subjectID
 }
 
-func workflowSubjectIDFromPrincipal(p *principal.Principal) string {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
+func workflowCallerSubjectID(_ context.Context, reqCtx *proto.RequestContext, p *principal.Principal) (string, error) {
+	if id := strings.TrimSpace(reqCtx.GetSubject().GetId()); id != "" {
+		return id, nil
 	}
-	return strings.TrimSpace(p.SubjectID)
+	if id := strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))); id != "" {
+		return id, nil
+	}
+	return "", ErrWorkflowSubjectRequired
 }
 
 func principalSubjectID(p *principal.Principal) string {
@@ -40,7 +44,7 @@ func principalSubjectID(p *principal.Principal) string {
 	return p.SubjectID
 }
 
-func (m *Manager) normalizeSignal(signal coreworkflow.Signal, p *principal.Principal) (coreworkflow.Signal, error) {
+func (m *Manager) normalizeSignal(ctx context.Context, signal coreworkflow.Signal, reqCtx *proto.RequestContext, p *principal.Principal) (coreworkflow.Signal, error) {
 	signal.ID = strings.TrimSpace(signal.ID)
 	signal.Name = strings.TrimSpace(signal.Name)
 	signal.IdempotencyKey = strings.TrimSpace(signal.IdempotencyKey)
@@ -50,7 +54,11 @@ func (m *Manager) normalizeSignal(signal coreworkflow.Signal, p *principal.Princ
 		return coreworkflow.Signal{}, ErrWorkflowSignalNameRequired
 	}
 	if strings.TrimSpace(signal.CreatedBySubjectID) == "" {
-		signal.CreatedBySubjectID = workflowSubjectIDFromPrincipal(p)
+		subjectID, err := workflowCallerSubjectID(ctx, reqCtx, p)
+		if err != nil {
+			return coreworkflow.Signal{}, err
+		}
+		signal.CreatedBySubjectID = subjectID
 	}
 	if signal.CreatedAt == nil || signal.CreatedAt.IsZero() {
 		value := m.now().UTC()

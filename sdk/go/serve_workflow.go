@@ -62,9 +62,8 @@ func (s workflowProviderServer) ListDefinitions(ctx context.Context, req *proto.
 func (s workflowProviderServer) SetDefinitionPaused(ctx context.Context, req *proto.SetWorkflowProviderDefinitionPausedRequest) (*proto.WorkflowDefinition, error) {
 	ctx = withRequestContext(ctx, req.GetContext())
 	definition, err := s.provider.SetDefinitionPaused(ctx, &SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionID:         req.GetDefinitionId(),
-		Paused:               req.GetPaused(),
-		RequestedBySubjectID: req.GetRequestedBySubjectId(),
+		DefinitionID: req.GetDefinitionId(),
+		Paused:       req.GetPaused(),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow set definition paused", err)
@@ -76,10 +75,9 @@ func (s workflowProviderServer) SetDefinitionPaused(ctx context.Context, req *pr
 func (s workflowProviderServer) SetActivationPaused(ctx context.Context, req *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error) {
 	ctx = withRequestContext(ctx, req.GetContext())
 	definition, err := s.provider.SetActivationPaused(ctx, &SetWorkflowProviderActivationPausedRequest{
-		DefinitionID:         req.GetDefinitionId(),
-		ActivationID:         req.GetActivationId(),
-		Paused:               req.GetPaused(),
-		RequestedBySubjectID: req.GetRequestedBySubjectId(),
+		DefinitionID: req.GetDefinitionId(),
+		ActivationID: req.GetActivationId(),
+		Paused:       req.GetPaused(),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow set activation paused", err)
@@ -224,9 +222,8 @@ func applyWorkflowProviderDefinitionRequestFromProto(req *proto.ApplyWorkflowPro
 		spec = &input
 	}
 	return &ApplyWorkflowProviderDefinitionRequest{
-		Spec:                 spec,
-		IdempotencyKey:       req.GetIdempotencyKey(),
-		RequestedBySubjectID: req.GetRequestedBySubjectId(),
+		Spec:           spec,
+		IdempotencyKey: req.GetIdempotencyKey(),
 	}, nil
 }
 
@@ -239,8 +236,6 @@ func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRu
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		Input:                        mapFromStruct(req.GetInput()),
 		IdempotencyKey:               req.GetIdempotencyKey(),
-		CreatedBySubjectID:           req.GetCreatedBySubjectId(),
-		RunAs:                        subjectFromProto(req.GetRunAs()),
 		WorkflowKey:                  req.GetWorkflowKey(),
 	}
 }
@@ -275,8 +270,6 @@ func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWo
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		Input:                        mapFromStruct(req.GetInput()),
 		IdempotencyKey:               req.GetIdempotencyKey(),
-		CreatedBySubjectID:           req.GetCreatedBySubjectId(),
-		RunAs:                        subjectFromProto(req.GetRunAs()),
 		Signal:                       signal,
 	}
 }
@@ -291,9 +284,8 @@ func deliverWorkflowProviderEventRequestFromProto(req *proto.DeliverWorkflowProv
 		event = &input
 	}
 	return &DeliverWorkflowProviderEventRequest{
-		AppName:              req.GetAppName(),
-		Event:                event,
-		DeliveredBySubjectID: req.GetDeliveredBySubjectId(),
+		AppName: req.GetAppName(),
+		Event:   event,
 	}
 }
 

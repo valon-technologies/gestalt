@@ -880,12 +880,14 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
-	deliveredBySubjectID := workflowSubjectIDFromPrincipal(p)
 	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{
 		Kind: invocation.ProviderKindApp,
 		Name: appName,
 	})
 	if err != nil {
+		return coreworkflow.Event{}, err
+	}
+	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
 		return coreworkflow.Event{}, err
 	}
 
@@ -900,10 +902,9 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		deliveredProto, err := provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
-			AppName:              appName,
-			Event:                eventProto,
-			DeliveredBySubjectId: deliveredBySubjectID,
-			Context:              reqContext,
+			AppName: appName,
+			Event:   eventProto,
+			Context: reqContext,
 		})
 		if err != nil {
 			return coreworkflow.Event{}, err
@@ -937,10 +938,9 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		_, err = provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
-			AppName:              appName,
-			Event:                eventProto,
-			DeliveredBySubjectId: deliveredBySubjectID,
-			Context:              reqContext,
+			AppName: appName,
+			Event:   eventProto,
+			Context: reqContext,
 		})
 		if err != nil {
 			providerAudit.finish(ctx, err)

@@ -47,41 +47,18 @@ func TestManagerServerMissingOrDeniedAuthorizationDenyWorkflowManagerMethods(t *
 	}
 }
 
-func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
+func TestManagerServerRejectsCallerSuppliedDefinitionRunAs(t *testing.T) {
 	t.Parallel()
 
 	server := NewProviderServer("caller", nil, &managerServerAuthorizationProvider{allowed: true})
 	runAs := &proto.SubjectContext{Id: "user:ada"}
 
-	for name, call := range map[string]func() error{
-		"apply definition": func() error {
-			_, callErr := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
-				Context: managerServerRequestContext("caller"),
-				Spec:    &proto.WorkflowDefinitionSpec{RunAs: runAs},
-			})
-			return callErr
-		},
-		"start run": func() error {
-			_, callErr := server.StartRun(context.Background(), &proto.StartWorkflowProviderRunRequest{
-				Context: managerServerRequestContext("caller"),
-				RunAs:   runAs,
-			})
-			return callErr
-		},
-		"signal or start run": func() error {
-			_, callErr := server.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
-				Context: managerServerRequestContext("caller"),
-				RunAs:   runAs,
-			})
-			return callErr
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			if err := call(); status.Code(err) != codes.PermissionDenied {
-				t.Fatalf("status = %s, want %s (err=%v)", status.Code(err), codes.PermissionDenied, err)
-			}
-		})
+	_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
+		Context: managerServerRequestContext("caller"),
+		Spec:    &proto.WorkflowDefinitionSpec{RunAs: runAs},
+	})
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("status = %s, want %s (err=%v)", status.Code(err), codes.PermissionDenied, err)
 	}
 }
 

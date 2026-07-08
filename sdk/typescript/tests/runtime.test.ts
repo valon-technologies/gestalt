@@ -1582,7 +1582,9 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   const definition = await (workflow.applyDefinition as any)(
     create(ApplyWorkflowProviderDefinitionRequestSchema, {
       idempotencyKey: "def-1",
-      requestedBySubjectId: "service_account:planner",
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, { id: "service_account:planner" }),
+      }),
       spec: {
         id: "roadmap_sync",
         target: workflowAppStepTarget("roadmap", "sync", {
@@ -1605,7 +1607,9 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "req-1",
       definitionId: "roadmap_sync",
-      createdBySubjectId: "user:user-123",
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, { id: "user:user-123" }),
+      }),
     }),
   );
   const runApp = run.target?.steps[0]?.action.case === "app"

@@ -526,7 +526,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			},
 		},
 		{
-			name:       "workflow deliver event fills delivered_by",
+			name:       "workflow deliver event fills context subject",
 			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
@@ -537,8 +537,8 @@ func TestPreparePublicRequest(t *testing.T) {
 				if !ok {
 					t.Fatalf("adapted type = %T, want *proto.DeliverWorkflowProviderEventRequest", adapted)
 				}
-				if out.GetDeliveredBySubjectId() != "user:alice" {
-					t.Fatalf("delivered_by_subject_id = %q, want %q", out.GetDeliveredBySubjectId(), "user:alice")
+				if out.GetContext().GetSubject().GetId() != "user:alice" {
+					t.Fatalf("context.subject.id = %q, want %q", out.GetContext().GetSubject().GetId(), "user:alice")
 				}
 			},
 			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {

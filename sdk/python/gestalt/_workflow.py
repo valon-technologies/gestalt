@@ -1363,7 +1363,6 @@ def _workflow_start_run_request(value: Any | None = None, **kwargs: Any) -> Any:
         idempotency_key=data.get("idempotency_key", ""),
         workflow_key=data.get("workflow_key", ""),
         definition_id=data.get("definition_id", ""),
-        run_as=subject_to_proto(data.get("run_as")),
         input=_optional_struct(data.get("input")),
         expected_definition_generation=data.get("expected_definition_generation", 0),
     )
@@ -1393,7 +1392,6 @@ def _workflow_signal_or_start_run_request(
         idempotency_key=data.get("idempotency_key", ""),
         signal=workflow_signal(signal) if signal is not None else None,
         definition_id=data.get("definition_id", ""),
-        run_as=subject_to_proto(data.get("run_as")),
         input=_optional_struct(data.get("input")),
         expected_definition_generation=data.get("expected_definition_generation", 0),
     )
@@ -1729,11 +1727,9 @@ class StartWorkflowProviderRunRequest:
     __hash__ = None
 
     idempotency_key: str = ""
-    created_by_subject_id: str = ""
     workflow_key: str = ""
     definition_id: str = ""
     input: WorkflowJsonObject | None = None
-    run_as: Subject | Mapping[str, Any] | None = None
     expected_definition_generation: int = 0
     context: Any | None = None
 
@@ -1853,11 +1849,9 @@ class SignalOrStartWorkflowProviderRunRequest:
 
     workflow_key: str = ""
     idempotency_key: str = ""
-    created_by_subject_id: str = ""
     signal: WorkflowSignal | None = None
     definition_id: str = ""
     input: WorkflowJsonObject | None = None
-    run_as: Subject | Mapping[str, Any] | None = None
     expected_definition_generation: int = 0
     context: Any | None = None
 
@@ -1882,7 +1876,6 @@ class ApplyWorkflowProviderDefinitionRequest:
 
     spec: WorkflowDefinitionSpec | None = None
     idempotency_key: str = ""
-    requested_by_subject_id: str = ""
     context: Any | None = None
 
 
@@ -1922,7 +1915,6 @@ class SetWorkflowProviderDefinitionPausedRequest:
 
     definition_id: str = ""
     paused: bool = False
-    requested_by_subject_id: str = ""
     context: Any | None = None
 
 
@@ -1935,7 +1927,6 @@ class SetWorkflowProviderActivationPausedRequest:
     definition_id: str = ""
     activation_id: str = ""
     paused: bool = False
-    requested_by_subject_id: str = ""
     context: Any | None = None
 
 
@@ -1957,7 +1948,6 @@ class DeliverWorkflowProviderEventRequest:
 
     app_name: str = ""
     event: WorkflowEvent | None = None
-    delivered_by_subject_id: str = ""
     context: Any | None = None
 
 
@@ -1966,13 +1956,11 @@ def start_workflow_provider_run_request_from_proto(
 ) -> StartWorkflowProviderRunRequest:
     return StartWorkflowProviderRunRequest(
         idempotency_key=value.idempotency_key,
-        created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         definition_id=value.definition_id,
         input=cast(WorkflowJsonObject, struct_to_dict(value.input))
         if has_field(value, "input")
         else None,
-        run_as=subject_from_proto(value.run_as) if has_field(value, "run_as") else None,
         expected_definition_generation=value.expected_definition_generation,
         context=getattr(value, "context", None),
     )
@@ -2041,7 +2029,6 @@ def signal_or_start_workflow_provider_run_request_from_proto(
     return SignalOrStartWorkflowProviderRunRequest(
         workflow_key=value.workflow_key,
         idempotency_key=value.idempotency_key,
-        created_by_subject_id=value.created_by_subject_id,
         signal=workflow_signal_input_from_signal(value.signal)
         if has_field(value, "signal")
         else None,
@@ -2049,7 +2036,6 @@ def signal_or_start_workflow_provider_run_request_from_proto(
         input=cast(WorkflowJsonObject, struct_to_dict(value.input))
         if has_field(value, "input")
         else None,
-        run_as=subject_from_proto(value.run_as) if has_field(value, "run_as") else None,
         expected_definition_generation=value.expected_definition_generation,
         context=getattr(value, "context", None),
     )
@@ -2078,7 +2064,6 @@ def apply_workflow_provider_definition_request_from_proto(
         if has_field(value, "spec")
         else None,
         idempotency_key=value.idempotency_key,
-        requested_by_subject_id=value.requested_by_subject_id,
         context=getattr(value, "context", None),
     )
 
@@ -2119,7 +2104,6 @@ def set_workflow_provider_definition_paused_request_from_proto(
     return SetWorkflowProviderDefinitionPausedRequest(
         definition_id=value.definition_id,
         paused=value.paused,
-        requested_by_subject_id=value.requested_by_subject_id,
         context=getattr(value, "context", None),
     )
 
@@ -2131,7 +2115,6 @@ def set_workflow_provider_activation_paused_request_from_proto(
         definition_id=value.definition_id,
         activation_id=value.activation_id,
         paused=value.paused,
-        requested_by_subject_id=value.requested_by_subject_id,
         context=getattr(value, "context", None),
     )
 
@@ -2226,7 +2209,6 @@ def deliver_workflow_provider_event_request_from_proto(
         event=workflow_event_input_from_event(value.event)
         if has_field(value, "event")
         else None,
-        delivered_by_subject_id=value.delivered_by_subject_id,
         context=getattr(value, "context", None),
     )
 

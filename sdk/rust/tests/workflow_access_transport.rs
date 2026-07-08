@@ -530,7 +530,6 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
             "temporal".to_string(),
             "definition-42".to_string(),
             7,
-            None,
             Some(run_input.as_object().expect("run input object").clone()),
         )
         .await
@@ -586,7 +585,6 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
                 name: "message".to_string(),
                 ..Default::default()
             }),
-            None,
             Some(
                 signal_or_start_input
                     .as_object()

@@ -443,7 +443,7 @@ func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, r
 			ID:  "run",
 			App: &coreworkflow.AppCall{Name: "github", Operation: "issues.triage"},
 		}}},
-		CreatedBySubjectID: req.GetCreatedBySubjectId(),
+		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
 	})
 	if err != nil {
 		return nil, err

@@ -41,7 +41,6 @@ type WorkflowStartRun struct {
 	Input                        map[string]any
 	IdempotencyKey               string
 	WorkflowKey                  string
-	RunAs                        *Subject
 }
 
 // WorkflowSignalRun carries the inputs of the call that signals an existing workflow run.
@@ -59,7 +58,6 @@ type WorkflowSignalOrStartRun struct {
 	Input                        map[string]any
 	IdempotencyKey               string
 	Signal                       *WorkflowSignal
-	RunAs                        *Subject
 }
 
 // WorkflowGetRun carries the inputs of the call that fetches one workflow run.

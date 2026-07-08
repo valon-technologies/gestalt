@@ -59,7 +59,6 @@ class ApplyWorkflowProviderDefinitionRequest:
     provider_name: str = ""
     spec: WorkflowDefinitionSpec | None = None
     idempotency_key: str = ""
-    requested_by_subject_id: str = ""
     context: RequestContext | None = None
 
 
@@ -85,7 +84,6 @@ class DeleteWorkflowProviderDefinitionRequest:
 class DeliverWorkflowProviderEventRequest:
     app_name: str = ""
     event: WorkflowEvent | None = None
-    delivered_by_subject_id: str = ""
     provider_name: str = ""
     context: RequestContext | None = None
 
@@ -154,7 +152,6 @@ class SetWorkflowProviderActivationPausedRequest:
     definition_id: str = ""
     activation_id: str = ""
     paused: bool = False
-    requested_by_subject_id: str = ""
     context: RequestContext | None = None
 
 
@@ -162,7 +159,6 @@ class SetWorkflowProviderActivationPausedRequest:
 class SetWorkflowProviderDefinitionPausedRequest:
     definition_id: str = ""
     paused: bool = False
-    requested_by_subject_id: str = ""
     context: RequestContext | None = None
 
 
@@ -170,11 +166,9 @@ class SetWorkflowProviderDefinitionPausedRequest:
 class SignalOrStartWorkflowProviderRunRequest:
     workflow_key: str = ""
     idempotency_key: str = ""
-    created_by_subject_id: str = ""
     signal: WorkflowSignal | None = None
     provider_name: str = ""
     definition_id: str = ""
-    run_as: SubjectContext | None = None
     input: dict[str, JsonValue] | None = None
     expected_definition_generation: int = 0
     context: RequestContext | None = None
@@ -198,11 +192,9 @@ class SignalWorkflowRunResponse:
 @dataclass(frozen=True, slots=True)
 class StartWorkflowProviderRunRequest:
     idempotency_key: str = ""
-    created_by_subject_id: str = ""
     workflow_key: str = ""
     provider_name: str = ""
     definition_id: str = ""
-    run_as: SubjectContext | None = None
     input: dict[str, JsonValue] | None = None
     expected_definition_generation: int = 0
     context: RequestContext | None = None
@@ -808,7 +800,6 @@ class Workflow:
         provider_name: str = ...,
         definition_id: str = ...,
         expected_definition_generation: int = ...,
-        run_as: SubjectContext | None = ...,
         input: dict[str, JsonValue] | None = ...,
     ) -> WorkflowRun: ...
 
@@ -821,7 +812,6 @@ class Workflow:
         provider_name: str | None = None,
         definition_id: str | None = None,
         expected_definition_generation: int | None = None,
-        run_as: SubjectContext | None = None,
         input: dict[str, JsonValue] | None = None,
     ) -> WorkflowRun:
         if request is None:
@@ -831,7 +821,6 @@ class Workflow:
                 provider_name=provider_name or "",
                 definition_id=definition_id or "",
                 expected_definition_generation=expected_definition_generation or 0,
-                run_as=run_as,
                 input=input,
             )
         elif (
@@ -840,7 +829,6 @@ class Workflow:
             or provider_name is not None
             or definition_id is not None
             or expected_definition_generation is not None
-            or run_as is not None
             or input is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
@@ -1091,7 +1079,6 @@ class Workflow:
         definition_id: str = ...,
         expected_definition_generation: int = ...,
         signal: WorkflowSignal | None = ...,
-        run_as: SubjectContext | None = ...,
         input: dict[str, JsonValue] | None = ...,
     ) -> SignalWorkflowRunResponse: ...
 
@@ -1105,7 +1092,6 @@ class Workflow:
         definition_id: str | None = None,
         expected_definition_generation: int | None = None,
         signal: WorkflowSignal | None = None,
-        run_as: SubjectContext | None = None,
         input: dict[str, JsonValue] | None = None,
     ) -> SignalWorkflowRunResponse:
         if request is None:
@@ -1116,7 +1102,6 @@ class Workflow:
                 definition_id=definition_id or "",
                 expected_definition_generation=expected_definition_generation or 0,
                 signal=signal,
-                run_as=run_as,
                 input=input,
             )
         elif (
@@ -1126,7 +1111,6 @@ class Workflow:
             or definition_id is not None
             or expected_definition_generation is not None
             or signal is not None
-            or run_as is not None
             or input is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")

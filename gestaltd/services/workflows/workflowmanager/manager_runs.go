@@ -56,13 +56,15 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if err != nil {
 		return nil, err
 	}
+	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
+		return nil, err
+	}
 	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
 		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
 		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
 		Input:                        inputProto,
 		IdempotencyKey:               strings.TrimSpace(req.IdempotencyKey),
 		WorkflowKey:                  strings.TrimSpace(req.WorkflowKey),
-		CreatedBySubjectId:           workflowSubjectIDFromPrincipal(p),
 		Context:                      reqContext,
 	})
 	if err != nil {
@@ -174,15 +176,15 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	if value.Run != nil {
 		audit.setWorkflowTarget(value.Run.Target)
 	}
-	signal, err := m.normalizeSignal(req.Signal, p)
+	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{})
+	if err != nil {
+		return nil, err
+	}
+	signal, err := m.normalizeSignal(ctx, req.Signal, reqContext, p)
 	if err != nil {
 		return nil, err
 	}
 	signalProto, err := workflowwire.SignalToProto(signal)
-	if err != nil {
-		return nil, err
-	}
-	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{})
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +253,11 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
 	phase = "normalize_signal"
-	signal, err := m.normalizeSignal(req.Signal, p)
+	reqContext, err := workflowProviderRequestContext(ctx, p, caller)
+	if err != nil {
+		return nil, err
+	}
+	signal, err := m.normalizeSignal(ctx, req.Signal, reqContext, p)
 	if err != nil {
 		return nil, err
 	}
@@ -265,8 +271,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	reqContext, err := workflowProviderRequestContext(ctx, p, caller)
-	if err != nil {
+	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
 		return nil, err
 	}
 	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
@@ -275,7 +280,6 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
 		Input:                        inputProto,
 		IdempotencyKey:               strings.TrimSpace(req.IdempotencyKey),
-		CreatedBySubjectId:           workflowSubjectIDFromPrincipal(p),
 		Signal:                       signalProto,
 		Context:                      reqContext,
 	})

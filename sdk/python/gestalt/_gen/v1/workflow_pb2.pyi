@@ -442,14 +442,12 @@ class ApplyWorkflowProviderDefinitionRequest(_message.Message):
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     SPEC_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     provider_name: str
     spec: WorkflowDefinitionSpec
     idempotency_key: str
-    requested_by_subject_id: str
     context: _app_pb2.RequestContext
-    def __init__(self, provider_name: _Optional[str] = ..., spec: _Optional[_Union[WorkflowDefinitionSpec, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., requested_by_subject_id: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, provider_name: _Optional[str] = ..., spec: _Optional[_Union[WorkflowDefinitionSpec, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class GetWorkflowProviderDefinitionRequest(_message.Message):
     __slots__ = ()
@@ -475,27 +473,23 @@ class SetWorkflowProviderDefinitionPausedRequest(_message.Message):
     __slots__ = ()
     DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
-    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     definition_id: str
     paused: bool
-    requested_by_subject_id: str
     context: _app_pb2.RequestContext
-    def __init__(self, definition_id: _Optional[str] = ..., paused: _Optional[bool] = ..., requested_by_subject_id: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., paused: _Optional[bool] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class SetWorkflowProviderActivationPausedRequest(_message.Message):
     __slots__ = ()
     DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
-    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     definition_id: str
     activation_id: str
     paused: bool
-    requested_by_subject_id: str
     context: _app_pb2.RequestContext
-    def __init__(self, definition_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., paused: _Optional[bool] = ..., requested_by_subject_id: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., paused: _Optional[bool] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class DeleteWorkflowProviderDefinitionRequest(_message.Message):
     __slots__ = ()
@@ -508,24 +502,20 @@ class DeleteWorkflowProviderDefinitionRequest(_message.Message):
 class StartWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
-    RUN_AS_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     EXPECTED_DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     idempotency_key: str
-    created_by_subject_id: str
     workflow_key: str
     provider_name: str
     definition_id: str
-    run_as: _app_pb2.SubjectContext
     input: _struct_pb2.Struct
     expected_definition_generation: int
     context: _app_pb2.RequestContext
-    def __init__(self, idempotency_key: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., expected_definition_generation: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, idempotency_key: _Optional[str] = ..., workflow_key: _Optional[str] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., expected_definition_generation: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class GetWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()
@@ -581,25 +571,21 @@ class SignalOrStartWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     SIGNAL_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
-    RUN_AS_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     EXPECTED_DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     workflow_key: str
     idempotency_key: str
-    created_by_subject_id: str
     signal: WorkflowSignal
     provider_name: str
     definition_id: str
-    run_as: _app_pb2.SubjectContext
     input: _struct_pb2.Struct
     expected_definition_generation: int
     context: _app_pb2.RequestContext
-    def __init__(self, workflow_key: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., expected_definition_generation: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, workflow_key: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., expected_definition_generation: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class SignalWorkflowRunResponse(_message.Message):
     __slots__ = ()
@@ -617,15 +603,13 @@ class DeliverWorkflowProviderEventRequest(_message.Message):
     __slots__ = ()
     APP_NAME_FIELD_NUMBER: _ClassVar[int]
     EVENT_FIELD_NUMBER: _ClassVar[int]
-    DELIVERED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     app_name: str
     event: WorkflowEvent
-    delivered_by_subject_id: str
     provider_name: str
     context: _app_pb2.RequestContext
-    def __init__(self, app_name: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ..., delivered_by_subject_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, app_name: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ..., provider_name: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class WorkflowRunEvent(_message.Message):
     __slots__ = ()
