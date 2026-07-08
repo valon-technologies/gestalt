@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func valonToolsLocalConfigPath(t *testing.T) string {
@@ -18,14 +20,20 @@ func valonToolsLocalConfigPath(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(filename), "../../../docs/examples/valon-tools/deploy/local/config.yaml"))
 }
 
-func TestValonToolsLocalConfigHasNoCommittedToken(t *testing.T) {
-	t.Parallel()
+func readValonToolsLocalConfig(t *testing.T) []byte {
+	t.Helper()
 
 	raw, err := os.ReadFile(valonToolsLocalConfigPath(t))
 	if err != nil {
 		t.Fatalf("read local config: %v", err)
 	}
-	text := string(raw)
+	return raw
+}
+
+func TestValonToolsLocalConfigHasNoCommittedToken(t *testing.T) {
+	t.Parallel()
+
+	text := string(readValonToolsLocalConfig(t))
 	if strings.Contains(text, "remoteToken") {
 		t.Fatalf("local config must not set server.remoteToken:\n%s", text)
 	}
@@ -34,29 +42,45 @@ func TestValonToolsLocalConfigHasNoCommittedToken(t *testing.T) {
 	}
 }
 
-func TestValonToolsLocalConfigLayersWithRemoteToken(t *testing.T) {
+func TestValonToolsLocalConfigDeclaresRemoteURL(t *testing.T) {
 	t.Parallel()
 
-	basePath := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v8
-server:
-  encryptionKey: test-encryption-key
-`)
-	localPath := valonToolsLocalConfigPath(t)
-	tokenPath := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v8
-server:
-  remoteToken: gst_api_from_cli
-`)
+	var doc struct {
+		APIVersion string `yaml:"apiVersion"`
+		Server     struct {
+			Remote string `yaml:"remote"`
+		} `yaml:"server"`
+	}
+	if err := yaml.Unmarshal(readValonToolsLocalConfig(t), &doc); err != nil {
+		t.Fatalf("unmarshal local config: %v", err)
+	}
+	if doc.APIVersion != "gestaltd.config/v8" {
+		t.Fatalf("apiVersion = %q, want gestaltd.config/v8", doc.APIVersion)
+	}
+	if doc.Server.Remote != "https://valon.tools" {
+		t.Fatalf("server.remote = %q, want https://valon.tools", doc.Server.Remote)
+	}
+}
 
-	cfg, err := LoadPaths([]string{basePath, localPath, tokenPath})
+func valonToolsCLIDocPath(t *testing.T) string {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(filename), "../../../docs/content/reference/cli.mdx"))
+}
+
+func TestValonToolsDocumentedServeUsesRemoteTokenFlag(t *testing.T) {
+	t.Parallel()
+
+	cliDoc, err := os.ReadFile(valonToolsCLIDocPath(t))
 	if err != nil {
-		t.Fatalf("LoadPaths: %v", err)
+		t.Fatalf("read cli docs: %v", err)
 	}
-	if got := cfg.Server.Remote; got != "https://valon.tools" {
-		t.Fatalf("server.remote = %q, want https://valon.tools", got)
-	}
-	if got := cfg.Server.RemoteToken; got != "gst_api_from_cli" {
-		t.Fatalf("server.remoteToken = %q", got)
+	text := string(cliDoc)
+	if !strings.Contains(text, `--remote-token "$GESTALT_API_KEY"`) {
+		t.Fatalf("cli docs must document --remote-token \"$GESTALT_API_KEY\"")
 	}
 }
