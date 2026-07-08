@@ -261,6 +261,7 @@ type Result struct {
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 	DevSupervisor        *providerdev.Supervisor
+	Placement            *PlacementPlan
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -1142,6 +1143,11 @@ func (p *preparedCore) Close(ctx context.Context) error {
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
+	placement, err := NewPlacementPlan(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	prepared, err := prepareCore(ctx, cfg, factories, true)
 	if err != nil {
 		return nil, err
@@ -1391,6 +1397,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		PublicHostServices:           publicHostServices,
 		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		DevSupervisor:                prepared.Deps.DevSupervisor,
+		Placement:                    placement,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
