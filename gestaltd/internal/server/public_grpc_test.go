@@ -19,7 +19,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 var publicGRPCTestSecret = []byte("public-grpc-test-secret-01234567")
@@ -65,6 +67,20 @@ func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) (*httpt
 	return ts, invoker
 }
 
+func startExamplePublicGRPCServer(t *testing.T) (*httptest.Server, *relayTestInvoker) {
+	t.Helper()
+	return startPublicGRPCServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "example",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:       "example",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: "POST"}},
+			},
+		})
+	})
+}
+
 // TestPublicGRPCRouting verifies public gRPC wiring end-to-end: bearer-authenticated
 // gRPC is handled by the public gateway surface, while host-service relay traffic
 // continues through the trusted relay path. Individual RPC policy and per-service
@@ -75,20 +91,10 @@ func TestPublicGRPCRouting(t *testing.T) {
 	t.Run("bearer routes through public gateway", func(t *testing.T) {
 		t.Parallel()
 
-		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-				N:        "roadmap",
-				ConnMode: core.ConnectionModeNone,
-				CatalogVal: &catalog.Catalog{
-					Name:       "roadmap",
-					Operations: []catalog.CatalogOperation{{ID: "sync", Method: "POST"}},
-				},
-			})
-		})
-
+		ts, invoker := startExamplePublicGRPCServer(t)
 		clients, err := remote.NewClientSet(context.Background(), remote.Config{
 			URL:       ts.URL,
-			Token:     publicGRPCTestBearer("roadmap"),
+			Token:     publicGRPCTestBearer("example"),
 			TLSConfig: &tls.Config{InsecureSkipVerify: true},
 		})
 		if err != nil {
@@ -99,15 +105,49 @@ func TestPublicGRPCRouting(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if _, err := clients.App.Invoke(ctx, &proto.AppInvokeRequest{
-			App:       "roadmap",
+			App:       "example",
 			Operation: "sync",
 		}); err != nil {
 			t.Fatalf("remote App.Invoke: %v", err)
 		}
-		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "roadmap" || call.operation != "sync" {
-			t.Fatalf("invoker call = %+v, want roadmap/sync", call)
+		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "example" || call.operation != "sync" {
+			t.Fatalf("invoker call = %+v, want example/sync", call)
 		}
 	})
+
+	for _, tc := range []struct {
+		name     string
+		metadata []string
+	}{
+		{name: "missing bearer is rejected"},
+		{name: "invalid bearer scheme is rejected", metadata: []string{"authorization", "Basic not-a-bearer-token"}},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ts, invoker := startExamplePublicGRPCServer(t)
+			conn := newRelayGRPCConn(t, ts)
+			defer func() { _ = conn.Close() }()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if len(tc.metadata) > 0 {
+				ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(tc.metadata...))
+			}
+
+			_, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+				App:       "example",
+				Operation: "sync",
+			})
+			if status.Code(err) != codes.Unauthenticated {
+				t.Fatalf("public App.Invoke code = %v, want %v (%v)", status.Code(err), codes.Unauthenticated, err)
+			}
+			if call := invoker.snapshot(); call.calls != 0 {
+				t.Fatalf("invoker calls = %d, want 0", call.calls)
+			}
+		})
+	}
 
 	t.Run("relay token bypasses public gateway", func(t *testing.T) {
 		t.Parallel()

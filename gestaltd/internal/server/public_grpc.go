@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
@@ -79,11 +78,6 @@ func (s *Server) publicGRPCMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if !isGRPCRequest(r) || s.hostServiceRelayToken(r) != "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		auth := strings.TrimSpace(r.Header.Get("Authorization"))
-		if len(auth) <= 7 || !strings.EqualFold(auth[:7], "Bearer ") || strings.TrimSpace(auth[7:]) == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
