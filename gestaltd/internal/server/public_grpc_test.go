@@ -17,7 +17,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 var publicGRPCTestSecret = []byte("public-grpc-test-secret-01234567")
@@ -48,13 +50,6 @@ func publicGRPCTestBearer(scope string) string {
 	return scopedTestBearerToken("public-grpc-user", scope)
 }
 
-func publicGRPCContext(t *testing.T, bearerToken string) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	t.Cleanup(cancel)
-	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+bearerToken))
-}
-
 func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) (*httptest.Server, *relayTestInvoker) {
 	t.Helper()
 	invoker := &relayTestInvoker{}
@@ -70,6 +65,20 @@ func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) (*httpt
 	return ts, invoker
 }
 
+func startRoadmapPublicGRPCServer(t *testing.T) (*httptest.Server, *relayTestInvoker) {
+	t.Helper()
+	return startPublicGRPCServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:       "roadmap",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: "POST"}},
+			},
+		})
+	})
+}
+
 // TestPublicGRPCRouting verifies public gRPC wiring end-to-end: bearer-authenticated
 // gRPC is handled by the public gateway surface, while host-service relay traffic
 // continues through the trusted relay path. Individual RPC policy and per-service
@@ -77,31 +86,66 @@ func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) (*httpt
 func TestPublicGRPCRouting(t *testing.T) {
 	t.Parallel()
 
-	t.Run("bearer routes through public gateway", func(t *testing.T) {
+	t.Run("public gateway auth routing", func(t *testing.T) {
 		t.Parallel()
 
-		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-				N:        "roadmap",
-				ConnMode: core.ConnectionModeNone,
-				CatalogVal: &catalog.Catalog{
-					Name:       "roadmap",
-					Operations: []catalog.CatalogOperation{{ID: "sync", Method: "POST"}},
-				},
-			})
-		})
-		conn := newRelayGRPCConn(t, ts)
-		defer func() { _ = conn.Close() }()
-
-		_, err := proto.NewAppClient(conn).Invoke(publicGRPCContext(t, publicGRPCTestBearer("roadmap")), &proto.AppInvokeRequest{
-			App:       "roadmap",
-			Operation: "sync",
-		})
-		if err != nil {
-			t.Fatalf("public App.Invoke: %v", err)
+		tests := []struct {
+			name      string
+			metadata  []string
+			wantCode  codes.Code
+			wantCalls int
+		}{
+			{
+				name:      "bearer routes through public gateway",
+				metadata:  []string{"authorization", "Bearer " + publicGRPCTestBearer("roadmap")},
+				wantCalls: 1,
+			},
+			{
+				name:     "missing bearer is rejected",
+				wantCode: codes.Unauthenticated,
+			},
+			{
+				name:     "invalid bearer scheme is rejected",
+				metadata: []string{"authorization", "Basic not-a-bearer-token"},
+				wantCode: codes.Unauthenticated,
+			},
 		}
-		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "roadmap" || call.operation != "sync" {
-			t.Fatalf("invoker call = %+v, want roadmap/sync", call)
+
+		for _, tc := range tests {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				ts, invoker := startRoadmapPublicGRPCServer(t)
+				conn := newRelayGRPCConn(t, ts)
+				defer func() { _ = conn.Close() }()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if len(tc.metadata) > 0 {
+					ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(tc.metadata...))
+				}
+
+				_, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+					App:       "roadmap",
+					Operation: "sync",
+				})
+				if tc.wantCode != codes.OK {
+					if status.Code(err) != tc.wantCode {
+						t.Fatalf("public App.Invoke code = %v, want %v (%v)", status.Code(err), tc.wantCode, err)
+					}
+				} else if err != nil {
+					t.Fatalf("public App.Invoke: %v", err)
+				}
+
+				call := invoker.snapshot()
+				if call.calls != tc.wantCalls {
+					t.Fatalf("invoker calls = %d, want %d", call.calls, tc.wantCalls)
+				}
+				if tc.wantCalls == 1 && (call.providerName != "roadmap" || call.operation != "sync") {
+					t.Fatalf("invoker call = %+v, want roadmap/sync", call)
+				}
+			})
 		}
 	})
 
