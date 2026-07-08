@@ -53,6 +53,9 @@ func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, n
 type ProviderGatewayTransport struct {
 	authorization        AuthorizationProvider
 	callerTokenPublicKey string
+	identity             IdentityProvider
+	publicMethods        PublicMethodRegistry
+	publicBaseURL        string
 }
 
 func NewProviderGatewayTransport() *ProviderGatewayTransport {
