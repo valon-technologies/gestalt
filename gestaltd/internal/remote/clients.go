@@ -42,7 +42,10 @@ func NewClientSet(ctx context.Context, cfg Config) (*ClientSet, error) {
 	if token == "" {
 		return nil, fmt.Errorf("remote token is required")
 	}
-	conn, err := grpc.NewClient(target, dialOpts...)
+	conn, err := grpc.NewClient(target, append(dialOpts,
+		grpc.WithUnaryInterceptor(bearerUnaryInterceptor(token)),
+		grpc.WithStreamInterceptor(bearerStreamInterceptor(token)),
+	)...)
 	if err != nil {
 		return nil, fmt.Errorf("dial remote gestaltd %q: %w", cfg.URL, err)
 	}
@@ -88,6 +91,18 @@ func resolveDialConfig(cfg Config) (string, []grpc.DialOption, error) {
 		return target, cfg.DialOptions, nil
 	}
 	return dialOptions(cfg.URL)
+}
+
+func bearerUnaryInterceptor(token string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		return invoker(WithBearer(ctx, token), method, req, reply, cc, opts...)
+	}
+}
+
+func bearerStreamInterceptor(token string) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		return streamer(WithBearer(ctx, token), desc, cc, method, opts...)
+	}
 }
 
 func dialOptions(rawURL string) (string, []grpc.DialOption, error) {

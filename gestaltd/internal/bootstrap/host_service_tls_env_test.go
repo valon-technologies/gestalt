@@ -62,7 +62,7 @@ func TestPrepareCoreLoadsHostServiceTLSCAFileForHostedRuntimeEnv(t *testing.T) {
 		},
 	}
 
-	prepared, err := prepareCore(context.Background(), cfg, factories, true)
+	prepared, err := prepareCore(context.Background(), cfg, factories, true, nil, nil)
 	if err != nil {
 		t.Fatalf("prepareCore: %v", err)
 	}
