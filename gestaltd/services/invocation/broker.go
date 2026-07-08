@@ -110,19 +110,19 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 }
 
 type Broker struct {
-	providers           *registry.ProviderMap[core.Provider]
-	users               UserStore
-	externalCreds       core.ExternalCredentialProvider
-	connMapper          ConnectionMapper
-	mcpMapper           ConnectionMapper
-	connectionRuntime   ConnectionRuntimeResolver
-	authorization       core.AuthorizationProvider
-	logger              *slog.Logger
-	tracerProvider      trace.TracerProvider
-	remoteApps            proto.AppClient
-	remoteAppRouter       RemoteAppRouter
-	remotePublicBaseURL   string
-	remoteRequestContext  RemoteRequestContextBuilder
+	providers            *registry.ProviderMap[core.Provider]
+	users                UserStore
+	externalCreds        core.ExternalCredentialProvider
+	connMapper           ConnectionMapper
+	mcpMapper            ConnectionMapper
+	connectionRuntime    ConnectionRuntimeResolver
+	authorization        core.AuthorizationProvider
+	logger               *slog.Logger
+	tracerProvider       trace.TracerProvider
+	remoteApps           proto.AppClient
+	remoteAppRouter      RemoteAppRouter
+	remotePublicBaseURL  string
+	remoteRequestContext RemoteRequestContextBuilder
 }
 
 type BrokerOption func(*Broker)
