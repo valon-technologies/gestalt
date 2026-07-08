@@ -51,6 +51,16 @@ message JsonResult {
   string body = 2;
 }
 
+// PublicPolicy declares how public service paths adapt external requests.
+// Fields listed in `fill` are rejected when supplied by public callers and
+// derived server-side instead. Fields listed in `reject` are rejected when
+// supplied by public callers. Exposure is controlled separately by
+// google.api.method_visibility.
+message PublicPolicy {
+  repeated string fill = 1;
+  repeated string reject = 2;
+}
+
 extend google.protobuf.MethodOptions {
   // Flattened call signature: the named request fields become parameters,
   // in order. Fields with presence must come last and become optional
@@ -69,6 +79,9 @@ extend google.protobuf.MethodOptions {
   // of positional parameters. Fields here must not repeat the signature
   // list.
   repeated string optional_signature = 50004;
+
+  // Public request adaptation policy for this method.
+  PublicPolicy public = 51001;
 }
 
 extend google.protobuf.MessageOptions {

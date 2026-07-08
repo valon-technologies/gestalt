@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/visibility.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -496,6 +497,13 @@ service Workflow {
   }
 
   rpc DeliverEvent(DeliverWorkflowProviderEventRequest) returns (WorkflowEvent) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      fill: "delivered_by_subject_id"
+    };
     option (signature) = "event";
     option (optional_signature) = "app_name";
     option (optional_signature) = "provider_name";

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/visibility.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "v1/annotations.proto";
@@ -323,6 +324,13 @@ service App {
   option (host_binding) = "app";
 
   rpc Invoke(AppInvokeRequest) returns (OperationResult) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      reject: "run_as"
+    };
     option (json_result) = {
       status: "status"
       body: "body"
@@ -337,6 +345,12 @@ service App {
     option (optional_signature) = "run_as";
   }
   rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "app";
     option (signature) = "document";
     option (optional_signature) = "connection";
