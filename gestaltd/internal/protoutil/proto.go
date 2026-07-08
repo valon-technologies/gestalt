@@ -3,12 +3,9 @@ package protoutil
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -70,23 +67,6 @@ func ValueFromAny(value any) (*structpb.Value, error) {
 		return nil, err
 	}
 	return structpb.NewValue(normalized)
-}
-
-// SetProviderNameIfEmpty sets provider_name on a protobuf request when absent.
-func SetProviderNameIfEmpty(req gproto.Message, name string) {
-	name = strings.TrimSpace(name)
-	if req == nil || name == "" {
-		return
-	}
-	msg := req.ProtoReflect()
-	field := msg.Descriptor().Fields().ByName("provider_name")
-	if field == nil || field.Kind() != protoreflect.StringKind {
-		return
-	}
-	if strings.TrimSpace(msg.Get(field).String()) != "" {
-		return
-	}
-	msg.Set(field, protoreflect.ValueOfString(name))
 }
 
 func normalizeStructMap(values map[string]any) (map[string]any, error) {

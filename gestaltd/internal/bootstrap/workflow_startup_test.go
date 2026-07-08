@@ -129,7 +129,7 @@ func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 		},
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
-	provider, err := buildWorkflow(context.Background(), "local", &config.ProviderEntry{
+	provider, err := buildWorkflow(context.Background(), nil, "local", &config.ProviderEntry{
 		Config:    mustNode(t, map[string]any{"command": "/bin/workflow-provider"}),
 		IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
 	}, factories, deps)

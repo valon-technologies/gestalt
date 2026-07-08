@@ -26,12 +26,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	indexeddbpkg "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -40,6 +42,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"gopkg.in/yaml.v3"
 )
@@ -942,6 +945,15 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			continue
 		}
 		if !providerBuildsLocal(cfg, entry) {
+			ds, err := indexeddbpkg.NewPublicRemote(deps.RemoteClients.IndexedDB, name)
+			if err != nil {
+				_ = svc.Close()
+				_ = closeIndexedDBs(extraIndexedDBs...)
+				return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
+			}
+			ds = metricutil.InstrumentIndexedDB(ds, name)
+			indexedDBs[name] = ds
+			extraIndexedDBs = append(extraIndexedDBs, ds)
 			continue
 		}
 		ds, err := buildIndexedDB(entry, factories)
@@ -1262,12 +1274,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	appHostServiceCleanup := registerConfiguredAppPublicHostServices(cfg, prepared.Deps)
-	remotePublished, err := publishRemoteProviders(ctx, cfg, &prepared.Deps)
-	if err != nil {
-		failPendingStartupProviders(prepared.Deps, err)
-		return nil, err
-	}
-	prepared.ExtraIndexedDBs = append(prepared.ExtraIndexedDBs, remotePublished...)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
@@ -1545,19 +1551,6 @@ func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
 	return cfg == nil || strings.TrimSpace(cfg.Server.Remote) == ""
 }
 
-func localProviderEntries(cfg *config.Config, entries map[string]*config.ProviderEntry) map[string]*config.ProviderEntry {
-	if cfg == nil || strings.TrimSpace(cfg.Server.Remote) == "" {
-		return entries
-	}
-	filtered := make(map[string]*config.ProviderEntry, len(entries))
-	for name, entry := range entries {
-		if providerBuildsLocal(cfg, entry) {
-			filtered[name] = entry
-		}
-	}
-	return filtered
-}
-
 func buildConfiguredProviders[T any](
 	ctx context.Context,
 	entries map[string]*config.ProviderEntry,
@@ -1651,9 +1644,9 @@ func buildConfiguredProviders[T any](
 }
 
 func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, localProviderEntries(cfg, cfg.Providers.Workflow),
+	return buildConfiguredProviders(ctx, cfg.Providers.Workflow,
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
-			return buildWorkflow(ctx, name, entry, factories, deps)
+			return buildWorkflow(ctx, cfg, name, entry, factories, deps)
 		},
 		func(name string, provider coreworkflow.Provider) {
 			if deps.WorkflowRuntime != nil {
@@ -1683,9 +1676,9 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 }
 
 func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, localProviderEntries(cfg, cfg.Providers.Agent),
+	return buildConfiguredProviders(ctx, cfg.Providers.Agent,
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
-			return buildAgent(ctx, name, entry, factories, deps)
+			return buildAgent(ctx, cfg, name, entry, factories, deps)
 		},
 		func(name string, provider coreagent.Provider) {
 			if deps.AgentRuntime != nil {
@@ -2172,10 +2165,16 @@ func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistr
 	return client, nil
 }
 
-func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreworkflow.Provider, error) {
+func buildWorkflow(ctx context.Context, cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreworkflow.Provider, error) {
 	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindWorkflow, name)
 	if entry == nil {
 		return nil, fmt.Errorf("workflow provider is required")
+	}
+	if !providerBuildsLocal(cfg, entry) {
+		return workflowservice.NewRemote(ctx, workflowservice.RemoteConfig{
+			Client: deps.RemoteClients.Workflow,
+			Name:   name,
+		})
 	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
@@ -2227,10 +2226,16 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 	return provider, nil
 }
 
-func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreagent.Provider, error) {
+func buildAgent(ctx context.Context, cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreagent.Provider, error) {
 	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindAgent, name)
 	if entry == nil {
 		return nil, fmt.Errorf("agent provider is required")
+	}
+	if !providerBuildsLocal(cfg, entry) {
+		return agentservice.NewRemote(ctx, agentservice.RemoteConfig{
+			Client: deps.RemoteClients.Agent,
+			Name:   name,
+		})
 	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
