@@ -207,6 +207,61 @@ func (x *Initial) GetChunk() string {
 	return ""
 }
 
+// PublicPolicy declares how public/external requests handle trusted request
+// fields. fill rejects client input then derives server-side values; reject
+// rejects client input outright.
+type PublicPolicy struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Fill          []string               `protobuf:"bytes,1,rep,name=fill,proto3" json:"fill,omitempty"`
+	Reject        []string               `protobuf:"bytes,2,rep,name=reject,proto3" json:"reject,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublicPolicy) Reset() {
+	*x = PublicPolicy{}
+	mi := &file_v1_annotations_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublicPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublicPolicy) ProtoMessage() {}
+
+func (x *PublicPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_annotations_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublicPolicy.ProtoReflect.Descriptor instead.
+func (*PublicPolicy) Descriptor() ([]byte, []int) {
+	return file_v1_annotations_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *PublicPolicy) GetFill() []string {
+	if x != nil {
+		return x.Fill
+	}
+	return nil
+}
+
+func (x *PublicPolicy) GetReject() []string {
+	if x != nil {
+		return x.Reject
+	}
+	return nil
+}
+
 // JsonResult declares that a unary method's HTTP-shaped result carries the
 // standard JSON operation envelope in its body: success envelopes return
 // their data, error envelopes and HTTP-error statuses raise the canonical
@@ -223,7 +278,7 @@ type JsonResult struct {
 
 func (x *JsonResult) Reset() {
 	*x = JsonResult{}
-	mi := &file_v1_annotations_proto_msgTypes[3]
+	mi := &file_v1_annotations_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -235,7 +290,7 @@ func (x *JsonResult) String() string {
 func (*JsonResult) ProtoMessage() {}
 
 func (x *JsonResult) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_annotations_proto_msgTypes[3]
+	mi := &file_v1_annotations_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -248,7 +303,7 @@ func (x *JsonResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JsonResult.ProtoReflect.Descriptor instead.
 func (*JsonResult) Descriptor() ([]byte, []int) {
-	return file_v1_annotations_proto_rawDescGZIP(), []int{3}
+	return file_v1_annotations_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *JsonResult) GetStatus() string {
@@ -296,6 +351,14 @@ var file_v1_annotations_proto_extTypes = []protoimpl.ExtensionInfo{
 		Field:         50004,
 		Name:          "gestalt.provider.v1.optional_signature",
 		Tag:           "bytes,50004,rep,name=optional_signature",
+		Filename:      "v1/annotations.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
+		ExtensionType: (*PublicPolicy)(nil),
+		Field:         51001,
+		Name:          "gestalt.provider.v1.public",
+		Tag:           "bytes,51001,opt,name=public",
 		Filename:      "v1/annotations.proto",
 	},
 	{
@@ -356,19 +419,21 @@ var (
 	//
 	// repeated string optional_signature = 50004;
 	E_OptionalSignature = &file_v1_annotations_proto_extTypes[3]
+	// optional gestalt.provider.v1.PublicPolicy public = 51001;
+	E_Public = &file_v1_annotations_proto_extTypes[4]
 )
 
 // Extension fields to descriptorpb.MessageOptions.
 var (
 	// optional gestalt.provider.v1.OptionalResult optional_result = 50001;
-	E_OptionalResult = &file_v1_annotations_proto_extTypes[4]
+	E_OptionalResult = &file_v1_annotations_proto_extTypes[5]
 	// optional gestalt.provider.v1.Keyed keyed = 50002;
-	E_Keyed = &file_v1_annotations_proto_extTypes[5]
+	E_Keyed = &file_v1_annotations_proto_extTypes[6]
 	// At API boundaries the message collapses to the named field: a response
 	// whose only meaning is one field is returned as that field directly.
 	//
 	// optional string unwrap = 50003;
-	E_Unwrap = &file_v1_annotations_proto_extTypes[6]
+	E_Unwrap = &file_v1_annotations_proto_extTypes[7]
 )
 
 // Extension fields to descriptorpb.ServiceOptions.
@@ -377,7 +442,7 @@ var (
 	// constructor for the client.
 	//
 	// optional string host_binding = 50001;
-	E_HostBinding = &file_v1_annotations_proto_extTypes[7]
+	E_HostBinding = &file_v1_annotations_proto_extTypes[8]
 )
 
 var File_v1_annotations_proto protoreflect.FileDescriptor
@@ -395,7 +460,10 @@ const file_v1_annotations_proto_rawDesc = "" +
 	"\x05value\x18\x04 \x01(\tR\x05value\"7\n" +
 	"\aInitial\x12\x16\n" +
 	"\x06header\x18\x01 \x01(\tR\x06header\x12\x14\n" +
-	"\x05chunk\x18\x02 \x01(\tR\x05chunk\"8\n" +
+	"\x05chunk\x18\x02 \x01(\tR\x05chunk\":\n" +
+	"\fPublicPolicy\x12\x12\n" +
+	"\x04fill\x18\x01 \x03(\tR\x04fill\x12\x16\n" +
+	"\x06reject\x18\x02 \x03(\tR\x06reject\"8\n" +
 	"\n" +
 	"JsonResult\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x12\n" +
@@ -404,7 +472,8 @@ const file_v1_annotations_proto_rawDesc = "" +
 	"\ainitial\x12\x1e.google.protobuf.MethodOptions\x18҆\x03 \x01(\v2\x1c.gestalt.provider.v1.InitialR\ainitial:b\n" +
 	"\vjson_result\x12\x1e.google.protobuf.MethodOptions\x18ӆ\x03 \x01(\v2\x1f.gestalt.provider.v1.JsonResultR\n" +
 	"jsonResult:O\n" +
-	"\x12optional_signature\x12\x1e.google.protobuf.MethodOptions\x18Ԇ\x03 \x03(\tR\x11optionalSignature:o\n" +
+	"\x12optional_signature\x12\x1e.google.protobuf.MethodOptions\x18Ԇ\x03 \x03(\tR\x11optionalSignature:[\n" +
+	"\x06public\x12\x1e.google.protobuf.MethodOptions\x18\xb9\x8e\x03 \x01(\v2!.gestalt.provider.v1.PublicPolicyR\x06public:o\n" +
 	"\x0foptional_result\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2#.gestalt.provider.v1.OptionalResultR\x0eoptionalResult:S\n" +
 	"\x05keyed\x12\x1f.google.protobuf.MessageOptions\x18҆\x03 \x01(\v2\x1a.gestalt.provider.v1.KeyedR\x05keyed:9\n" +
 	"\x06unwrap\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\tR\x06unwrap:D\n" +
@@ -423,33 +492,36 @@ func file_v1_annotations_proto_rawDescGZIP() []byte {
 	return file_v1_annotations_proto_rawDescData
 }
 
-var file_v1_annotations_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_v1_annotations_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_v1_annotations_proto_goTypes = []any{
 	(*OptionalResult)(nil),              // 0: gestalt.provider.v1.OptionalResult
 	(*Keyed)(nil),                       // 1: gestalt.provider.v1.Keyed
 	(*Initial)(nil),                     // 2: gestalt.provider.v1.Initial
-	(*JsonResult)(nil),                  // 3: gestalt.provider.v1.JsonResult
-	(*descriptorpb.MethodOptions)(nil),  // 4: google.protobuf.MethodOptions
-	(*descriptorpb.MessageOptions)(nil), // 5: google.protobuf.MessageOptions
-	(*descriptorpb.ServiceOptions)(nil), // 6: google.protobuf.ServiceOptions
+	(*PublicPolicy)(nil),                // 3: gestalt.provider.v1.PublicPolicy
+	(*JsonResult)(nil),                  // 4: gestalt.provider.v1.JsonResult
+	(*descriptorpb.MethodOptions)(nil),  // 5: google.protobuf.MethodOptions
+	(*descriptorpb.MessageOptions)(nil), // 6: google.protobuf.MessageOptions
+	(*descriptorpb.ServiceOptions)(nil), // 7: google.protobuf.ServiceOptions
 }
 var file_v1_annotations_proto_depIdxs = []int32{
-	4,  // 0: gestalt.provider.v1.signature:extendee -> google.protobuf.MethodOptions
-	4,  // 1: gestalt.provider.v1.initial:extendee -> google.protobuf.MethodOptions
-	4,  // 2: gestalt.provider.v1.json_result:extendee -> google.protobuf.MethodOptions
-	4,  // 3: gestalt.provider.v1.optional_signature:extendee -> google.protobuf.MethodOptions
-	5,  // 4: gestalt.provider.v1.optional_result:extendee -> google.protobuf.MessageOptions
-	5,  // 5: gestalt.provider.v1.keyed:extendee -> google.protobuf.MessageOptions
-	5,  // 6: gestalt.provider.v1.unwrap:extendee -> google.protobuf.MessageOptions
-	6,  // 7: gestalt.provider.v1.host_binding:extendee -> google.protobuf.ServiceOptions
-	2,  // 8: gestalt.provider.v1.initial:type_name -> gestalt.provider.v1.Initial
-	3,  // 9: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
-	0,  // 10: gestalt.provider.v1.optional_result:type_name -> gestalt.provider.v1.OptionalResult
-	1,  // 11: gestalt.provider.v1.keyed:type_name -> gestalt.provider.v1.Keyed
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	8,  // [8:12] is the sub-list for extension type_name
-	0,  // [0:8] is the sub-list for extension extendee
+	5,  // 0: gestalt.provider.v1.signature:extendee -> google.protobuf.MethodOptions
+	5,  // 1: gestalt.provider.v1.initial:extendee -> google.protobuf.MethodOptions
+	5,  // 2: gestalt.provider.v1.json_result:extendee -> google.protobuf.MethodOptions
+	5,  // 3: gestalt.provider.v1.optional_signature:extendee -> google.protobuf.MethodOptions
+	5,  // 4: gestalt.provider.v1.public:extendee -> google.protobuf.MethodOptions
+	6,  // 5: gestalt.provider.v1.optional_result:extendee -> google.protobuf.MessageOptions
+	6,  // 6: gestalt.provider.v1.keyed:extendee -> google.protobuf.MessageOptions
+	6,  // 7: gestalt.provider.v1.unwrap:extendee -> google.protobuf.MessageOptions
+	7,  // 8: gestalt.provider.v1.host_binding:extendee -> google.protobuf.ServiceOptions
+	2,  // 9: gestalt.provider.v1.initial:type_name -> gestalt.provider.v1.Initial
+	4,  // 10: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
+	3,  // 11: gestalt.provider.v1.public:type_name -> gestalt.provider.v1.PublicPolicy
+	0,  // 12: gestalt.provider.v1.optional_result:type_name -> gestalt.provider.v1.OptionalResult
+	1,  // 13: gestalt.provider.v1.keyed:type_name -> gestalt.provider.v1.Keyed
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	9,  // [9:14] is the sub-list for extension type_name
+	0,  // [0:9] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
 }
 
@@ -464,8 +536,8 @@ func file_v1_annotations_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_annotations_proto_rawDesc), len(file_v1_annotations_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
-			NumExtensions: 8,
+			NumMessages:   5,
+			NumExtensions: 9,
 			NumServices:   0,
 		},
 		GoTypes:           file_v1_annotations_proto_goTypes,

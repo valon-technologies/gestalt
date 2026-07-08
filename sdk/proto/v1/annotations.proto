@@ -40,6 +40,14 @@ message Initial {
   string chunk = 2;
 }
 
+// PublicPolicy declares how public/external requests handle trusted request
+// fields. fill rejects client input then derives server-side values; reject
+// rejects client input outright.
+message PublicPolicy {
+  repeated string fill = 1;
+  repeated string reject = 2;
+}
+
 // JsonResult declares that a unary method's HTTP-shaped result carries the
 // standard JSON operation envelope in its body: success envelopes return
 // their data, error envelopes and HTTP-error statuses raise the canonical
@@ -69,6 +77,8 @@ extend google.protobuf.MethodOptions {
   // of positional parameters. Fields here must not repeat the signature
   // list.
   repeated string optional_signature = 50004;
+
+  PublicPolicy public = 51001;
 }
 
 extend google.protobuf.MessageOptions {
