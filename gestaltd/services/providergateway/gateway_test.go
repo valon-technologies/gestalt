@@ -565,6 +565,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			transport.SetIdentityProvider(identity)
 			transport.SetAuthorizationProvider(authorization)
 			transport.SetPublicBaseURL("https://gestalt.example")
+			transport.SetPublicCallerApp("gestaltd")
 
 			ctx := context.Background()
 			if tc.withOrigin {
