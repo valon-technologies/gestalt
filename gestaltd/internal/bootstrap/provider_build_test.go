@@ -204,7 +204,7 @@ func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing
 	providers, _, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
 		"ok":  {Source: config.ProviderSource{Path: "stub"}},
 		"bad": {Source: config.ProviderSource{Path: "stub"}},
-	}, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
+	}, RemoteProviderKindAgent, nil, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
 		if name == "bad" {
 			return nil, boom
 		}
@@ -299,7 +299,7 @@ func TestBuildConfiguredProvidersLeavesLateSuccessUnpublishedAfterFailure(t *tes
 		"first": {Source: config.ProviderSource{Path: "stub"}},
 		"bad":   {Source: config.ProviderSource{Path: "stub"}},
 		"late":  {Source: config.ProviderSource{Path: "stub"}},
-	}, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
+	}, RemoteProviderKindAgent, nil, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
 		switch name {
 		case "first":
 			return providerBuildOrderingAgentProvider{}, nil
