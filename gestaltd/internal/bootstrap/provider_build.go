@@ -91,6 +91,9 @@ func prepareProviderBuilds(
 		connAuth:       connAuth,
 		manualConnAuth: manualConnAuth,
 	}
+	if err := registerRemoteApps(builds.providers, cfg, deps); err != nil {
+		return nil, err
+	}
 	if len(cfg.Apps) == 0 {
 		return builds, nil
 	}
@@ -121,6 +124,38 @@ func prepareProviderBuilds(
 		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: entry, proxy: proxy, sha: sha})
 	}
 	return builds, nil
+}
+
+func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *config.Config, deps Deps) error {
+	if providers == nil || cfg == nil {
+		return nil
+	}
+	if strings.TrimSpace(cfg.Server.Remote) == "" {
+		return nil
+	}
+	clients := deps.RemoteClients
+	if clients == nil || clients.App == nil {
+		return fmt.Errorf("bootstrap: remote client is required when server.remote is configured")
+	}
+	for name, entry := range cfg.Apps {
+		name = strings.TrimSpace(name)
+		if name == "" || entry == nil || providerBuildsLocal(cfg, entry) {
+			continue
+		}
+		spec, _, err := buildStartupProviderSpec(name, entry)
+		if err != nil {
+			return fmt.Errorf("remote app %q: %w", name, err)
+		}
+		provider := appservice.NewGestaltRemote(clients.App, spec)
+		if provider == nil {
+			return fmt.Errorf("remote app %q: provider client is required", name)
+		}
+		if err := providers.Register(name, provider); err != nil {
+			return fmt.Errorf("remote app %q: %w", name, err)
+		}
+		slog.Info("registered remote app provider", "provider", name)
+	}
+	return nil
 }
 
 func (b *preparedProviderBuilds) partition(categorize func(string, *config.ProviderEntry) AppStartupCategory) (noop, update *preparedProviderBuilds) {
