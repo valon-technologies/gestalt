@@ -9,10 +9,10 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func TestRegisterRemoteAgentsSkipsLocalProviders(t *testing.T) {
@@ -160,8 +160,8 @@ func (s *stubAgentProvider) ResolveInteraction(context.Context, *proto.ResolveAg
 func (s *stubAgentProvider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	return nil, errors.New("not implemented")
 }
-func (s *stubAgentProvider) Ping(context.Context) error  { return nil }
-func (s *stubAgentProvider) Close() error                  { return nil }
+func (s *stubAgentProvider) Ping(context.Context) error { return nil }
+func (s *stubAgentProvider) Close() error               { return nil }
 
 type stubWorkflowProvider struct {
 	name string
@@ -213,14 +213,14 @@ func (s *stubWorkflowProvider) DeliverEvent(context.Context, *proto.DeliverWorkf
 	return nil, errors.New("not implemented")
 }
 func (s *stubWorkflowProvider) Ping(context.Context) error { return nil }
-func (s *stubWorkflowProvider) Close() error             { return nil }
+func (s *stubWorkflowProvider) Close() error               { return nil }
 
 type remoteAgentStub struct{ proto.AgentClient }
 type remoteWorkflowStub struct{ proto.WorkflowClient }
 type remoteIndexedDBStub struct{ proto.IndexedDBClient }
 
 var (
-	_ coreagent.Provider      = agentservice.NewGestaltRemoteProvider(&remoteAgentStub{}, "remote")
-	_ coreworkflow.Provider   = workflowservice.NewGestaltRemoteProvider(&remoteWorkflowStub{}, "remote")
-	_                         = indexeddbservice.NewGestaltRemoteProvider(&remoteIndexedDBStub{})
+	_ coreagent.Provider    = agentservice.NewGestaltRemoteProvider(&remoteAgentStub{}, "remote")
+	_ coreworkflow.Provider = workflowservice.NewGestaltRemoteProvider(&remoteWorkflowStub{}, "remote")
+	_                       = indexeddbservice.NewGestaltRemoteProvider(&remoteIndexedDBStub{})
 )
