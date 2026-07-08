@@ -409,7 +409,7 @@ func TestRunLockSyncLayeredConfigs(t *testing.T) {
 		t.Fatalf("runSync with layered configs: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, lockPath, artifactsDir, true, false)
+	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, lockPath, artifactsDir, true, false, "", "")
 	if err != nil {
 		t.Fatalf("setupBootstrapWithConfigPaths locked layered configs: %v", err)
 	}
@@ -427,6 +427,14 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0)
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	remoteCfg := strings.Replace(string(cfgBytes), "server:\n", "server:\n  remote: https://valon.tools/\n", 1)
+	if err := os.WriteFile(cfgPath, []byte(remoteCfg), 0o644); err != nil {
+		t.Fatalf("write remote config: %v", err)
+	}
 	lockPath := filepath.Join(dir, "state", "locked-serve", "gestalt.lock.json")
 	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
 		t.Fatalf("runLock with --lockfile: %v", err)
@@ -436,11 +444,17 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 		t.Fatalf("runSync with --lockfile: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, lockPath, artifactsDir, true, false)
+	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, lockPath, artifactsDir, true, false, "", "test-token")
 	if err != nil {
 		t.Fatalf("setupBootstrapWithConfigPaths locked with --lockfile: %v", err)
 	}
 	defer env.Close()
+	if got := env.Config.Server.Remote; got != "https://valon.tools" {
+		t.Fatalf("Server.Remote = %q, want https://valon.tools", got)
+	}
+	if got := env.Config.Server.RemoteToken; got != "test-token" {
+		t.Fatalf("Server.RemoteToken = %q, want test-token", got)
+	}
 	if env.Config.Apps["example"] == nil {
 		t.Fatal(`Apps["example"] = nil`)
 	}
