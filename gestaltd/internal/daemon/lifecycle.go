@@ -38,7 +38,7 @@ func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, 
 	return operatorLifecycle().SyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 }
 
-func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys []string) (*config.Config, error) {
+func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*config.Config, error) {
 	lc := operatorLifecycle().WithDevServeEligible(!locked)
 	if len(forcedDevAppKeys) > 0 {
 		lc = lc.WithForcedDevAppKeys(forcedDevAppKeys)

@@ -145,16 +145,15 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			LockfilePath:  *lockfilePath,
 			Locked:        locked,
 			NoSync:        noSync,
+			Remote:        *remoteFlag,
+			RemoteToken:   *remoteTokenFlag,
 			LockedAllowed: lockedFlag != nil,
 		})
 		if ranProviderLocal || err != nil {
 			return err
 		}
 	}
-	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, *lockfilePath, *artifactsDir, locked, noSync, bootstrapSetupOptions{
-		Remote:      *remoteFlag,
-		RemoteToken: *remoteTokenFlag,
-	})
+	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, *lockfilePath, *artifactsDir, locked, noSync, *remoteFlag, *remoteTokenFlag)
 	if err != nil {
 		return err
 	}
@@ -173,6 +172,8 @@ type serveProviderLocalOptions struct {
 	LockfilePath  string
 	Locked        bool
 	NoSync        bool
+	Remote        string
+	RemoteToken   string
 	LockedAllowed bool
 }
 
@@ -198,6 +199,8 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 		Port:         opts.Port,
 		Locked:       opts.Locked,
 		NoSync:       opts.NoSync,
+		Remote:       opts.Remote,
+		RemoteToken:  opts.RemoteToken,
 		ArtifactsDir: opts.ArtifactsDir,
 		LockfilePath: opts.LockfilePath,
 	})

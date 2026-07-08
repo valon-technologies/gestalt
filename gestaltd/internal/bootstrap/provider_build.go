@@ -139,7 +139,7 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 	}
 	for name, entry := range cfg.Apps {
 		name = strings.TrimSpace(name)
-		if name == "" || entry == nil || providerBuildsLocal(cfg, entry) {
+		if name == "" || entry == nil || providerRunsLocally(cfg, entry) {
 			continue
 		}
 		spec, _, err := buildStartupProviderSpec(name, entry)
