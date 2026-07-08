@@ -1928,6 +1928,8 @@ type ServerConfig struct {
 	Management    ManagementListenerConfig `yaml:"management"`
 	BaseURL       string                   `yaml:"baseUrl"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
+	Remote        string                   `yaml:"remote,omitempty"`
+	RemoteToken   string                   `yaml:"remoteToken,omitempty"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
@@ -1935,6 +1937,34 @@ type ServerConfig struct {
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
+}
+
+// NormalizeRemoteURL trims whitespace and trailing slashes from a remote gestaltd URL.
+func NormalizeRemoteURL(raw string) string {
+	return strings.TrimRight(strings.TrimSpace(raw), "/")
+}
+
+func (s *ServerConfig) NormalizeRemote() {
+	if s == nil {
+		return
+	}
+	s.Remote = NormalizeRemoteURL(s.Remote)
+}
+
+// ApplyServerRemoteOverrides applies serve-time CLI overrides and validates remote config.
+func ApplyServerRemoteOverrides(server *ServerConfig, remoteFlag, tokenFlag string) error {
+	if server == nil {
+		return fmt.Errorf("config validation: server config is required")
+	}
+	if strings.TrimSpace(remoteFlag) != "" {
+		server.Remote = NormalizeRemoteURL(remoteFlag)
+	} else {
+		server.NormalizeRemote()
+	}
+	if strings.TrimSpace(tokenFlag) != "" {
+		server.RemoteToken = strings.TrimSpace(tokenFlag)
+	}
+	return ValidateServerRemote(server)
 }
 
 type ServerAgentConfig struct{}

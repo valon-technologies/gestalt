@@ -34,6 +34,8 @@ type providerLocalCommandOptions struct {
 	Paths        []string
 	ConfigPaths  []string
 	Port         int
+	Remote       string
+	RemoteToken  string
 	Locked       bool
 	NoSync       bool
 	ArtifactsDir string
@@ -56,6 +58,8 @@ type providerLocalSession struct {
 	Locked            bool
 	NoSync            bool
 	PublicPort        int
+	Remote            string
+	RemoteToken       string
 	PublicURL         string
 	AdminURL          string
 	PublicUIPaths     []string
@@ -131,6 +135,10 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 		return err
 	}
 	if err := resolveServePort(env.Config, session.PublicPort); err != nil {
+		env.Close()
+		return err
+	}
+	if err := config.ApplyServerRemoteOverrides(&env.Config.Server, session.Remote, session.RemoteToken); err != nil {
 		env.Close()
 		return err
 	}
@@ -323,6 +331,8 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		Locked:        locked,
 		NoSync:        noSync,
 		PublicPort:    opts.Port,
+		Remote:        opts.Remote,
+		RemoteToken:   opts.RemoteToken,
 		PublicURL:     providerLocalPublicURL(loadedCfg),
 		AdminURL:      strings.TrimRight(providerLocalPublicURL(loadedCfg), "/") + "/admin/",
 		PublicUIPaths: publicUIPaths,
