@@ -8,8 +8,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/remoteroute"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
+	"github.com/valon-technologies/gestalt/server/internal/remoteroute"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 )
