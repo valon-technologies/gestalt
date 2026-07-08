@@ -1928,6 +1928,8 @@ type ServerConfig struct {
 	Management    ManagementListenerConfig `yaml:"management"`
 	BaseURL       string                   `yaml:"baseUrl"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
+	Remote        string                   `yaml:"remote,omitempty" json:"remote,omitempty"`
+	RemoteToken   string                   `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
@@ -1935,6 +1937,64 @@ type ServerConfig struct {
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
+}
+
+// RemoteOverrides carries CLI overrides for remote gestaltd delegation.
+type RemoteOverrides struct {
+	URL   string
+	Token string
+}
+
+const sanitizedSecretPlaceholder = "<redacted>"
+
+// ApplyRemoteOverrides layers CLI remote settings onto cfg and normalizes them.
+func ApplyRemoteOverrides(cfg *Config, overrides RemoteOverrides) {
+	if cfg == nil {
+		return
+	}
+	if overrides.URL != "" {
+		cfg.Server.Remote = overrides.URL
+	}
+	if overrides.Token != "" {
+		cfg.Server.RemoteToken = overrides.Token
+	}
+	NormalizeRemote(cfg)
+}
+
+// NormalizeRemote trims remote URL and token fields after config merge or overrides.
+func NormalizeRemote(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
+	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
+}
+
+// ValidateRemoteExecution requires a remote token when a remote URL is configured.
+func ValidateRemoteExecution(cfg *Config) error {
+	if cfg == nil || cfg.Server.Remote == "" {
+		return nil
+	}
+	if cfg.Server.RemoteToken == "" {
+		return fmt.Errorf("config validation: server.remoteToken is required when server.remote is set")
+	}
+	return nil
+}
+
+// SanitizedYAML returns cfg as YAML with sensitive remote credentials redacted.
+func (cfg *Config) SanitizedYAML() (string, error) {
+	if cfg == nil {
+		return "", nil
+	}
+	clone := *cfg
+	if clone.Server.RemoteToken != "" {
+		clone.Server.RemoteToken = sanitizedSecretPlaceholder
+	}
+	data, err := yaml.Marshal(&clone)
+	if err != nil {
+		return "", fmt.Errorf("marshaling sanitized config YAML: %w", err)
+	}
+	return string(data), nil
 }
 
 type ServerAgentConfig struct{}
@@ -3663,6 +3723,7 @@ func resolveBaseURL(cfg *Config) {
 	cfg.Server.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.BaseURL), "/")
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
 	cfg.Server.Runtime.RelayBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.RelayBaseURL), "/")
+	NormalizeRemote(cfg)
 }
 
 func resolveRelativePathsInValue(configPath string, root map[string]any) {

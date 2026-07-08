@@ -38,6 +38,7 @@ type providerLocalCommandOptions struct {
 	NoSync       bool
 	ArtifactsDir string
 	LockfilePath string
+	Remote       config.RemoteOverrides
 	// FleetOverlay is true for serve PATH arguments with --config. Validate always leaves
 	// this false so it keeps the synthesized baseline even with --config.
 	FleetOverlay bool
@@ -126,7 +127,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	if session.Locked {
 		forcedDevAppKeys = session.DevAppKeys
 	}
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, forcedDevAppKeys...)
+	env, err := setupBootstrapWithConfigPathsRemote(session.ConfigPaths, session.LockfilePath, session.ArtifactsDir, session.Locked, session.NoSync, opts.Remote, forcedDevAppKeys...)
 	if err != nil {
 		return err
 	}

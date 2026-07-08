@@ -4987,6 +4987,158 @@ server:
 	})
 }
 
+func TestLoadConfigRemoteSettings(t *testing.T) {
+	t.Run("loads and trims remote url", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools/
+  remoteToken: gst_api_test_token
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Server.Remote; got != "https://valon.tools" {
+			t.Fatalf("server.remote = %q", got)
+		}
+		if got := cfg.Server.RemoteToken; got != "gst_api_test_token" {
+			t.Fatalf("server.remoteToken = %q", got)
+		}
+	})
+
+	t.Run("expands remote token from environment", func(t *testing.T) {
+		t.Setenv("GESTALT_API_KEY", "gst_api_from_env")
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools
+  remoteToken: ${GESTALT_API_KEY}
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Server.RemoteToken; got != "gst_api_from_env" {
+			t.Fatalf("server.remoteToken = %q", got)
+		}
+	})
+
+	t.Run("rejects remote url with path", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools/api
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.remote must not include a path") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestLoadPathsRemoteOverride(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "base.yaml")
+	overridePath := filepath.Join(dir, "override.yaml")
+	if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v8
+server:
+  encryptionKey: server-key
+  remote: https://gestalt.example.test
+  remoteToken: base-token
+`), 0o644); err != nil {
+		t.Fatalf("writing base config: %v", err)
+	}
+	if err := os.WriteFile(overridePath, []byte(`
+apiVersion: gestaltd.config/v8
+server:
+  remote: https://valon.tools/
+  remoteToken: override-token
+`), 0o644); err != nil {
+		t.Fatalf("writing override config: %v", err)
+	}
+
+	cfg, err := LoadPaths([]string{basePath, overridePath})
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+	if got := cfg.Server.Remote; got != "https://valon.tools" {
+		t.Fatalf("server.remote = %q", got)
+	}
+	if got := cfg.Server.RemoteToken; got != "override-token" {
+		t.Fatalf("server.remoteToken = %q", got)
+	}
+}
+
+func TestValidateRemoteExecution(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Server: ServerConfig{Remote: "https://valon.tools"}}
+	err := ValidateRemoteExecution(cfg)
+	if err == nil {
+		t.Fatal("ValidateRemoteExecution: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "server.remoteToken is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg.Server.RemoteToken = "gst_api_test_token"
+	if err := ValidateRemoteExecution(cfg); err != nil {
+		t.Fatalf("ValidateRemoteExecution: %v", err)
+	}
+}
+
+func TestApplyRemoteOverrides(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Server: ServerConfig{
+		Remote:      "https://gestalt.example.test",
+		RemoteToken: "from-config",
+	}}
+	ApplyRemoteOverrides(cfg, RemoteOverrides{
+		URL:   "https://valon.tools/",
+		Token: "from-cli",
+	})
+	if got := cfg.Server.Remote; got != "https://valon.tools" {
+		t.Fatalf("server.remote = %q", got)
+	}
+	if got := cfg.Server.RemoteToken; got != "from-cli" {
+		t.Fatalf("server.remoteToken = %q", got)
+	}
+}
+
+func TestSanitizedYAMLRedactsRemoteToken(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Server: ServerConfig{
+			Remote:      "https://valon.tools",
+			RemoteToken: "gst_api_secret_token",
+		},
+	}
+	rendered, err := cfg.SanitizedYAML()
+	if err != nil {
+		t.Fatalf("SanitizedYAML: %v", err)
+	}
+	if strings.Contains(rendered, "gst_api_secret_token") {
+		t.Fatalf("sanitized YAML leaked remote token:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, sanitizedSecretPlaceholder) {
+		t.Fatalf("sanitized YAML missing placeholder:\n%s", rendered)
+	}
+}
+
 func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	t.Parallel()
 
