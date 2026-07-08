@@ -212,19 +212,6 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 			reqCtx = &proto.RequestContext{}
 		}
 		msg.Set(fd, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
-	case "subject":
-		subject := appaccess.SubjectContextFromPrincipal(p)
-		if subject == nil {
-			return status.Error(codes.Internal, "provider gateway: subject is required")
-		}
-		msg.Set(fd, protoreflect.ValueOfMessage(subject.ProtoReflect()))
-	case "created_by_subject_id":
-		p = principal.Canonicalized(p)
-		subjectID := strings.TrimSpace(p.SubjectID)
-		if subjectID == "" {
-			return status.Errorf(codes.Internal, "provider gateway: %s is required", name)
-		}
-		msg.Set(fd, protoreflect.ValueOfString(subjectID))
 	default:
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
 	}

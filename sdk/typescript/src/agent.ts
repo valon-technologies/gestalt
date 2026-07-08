@@ -341,7 +341,6 @@ export interface AgentWorkspaceGitCheckout {
 export interface CancelAgentProviderTurnRequest {
   turnId: string;
   reason: string;
-  subject?: SubjectContext;
   context?: RequestContext;
   providerName: string;
 }
@@ -349,8 +348,7 @@ export interface CancelAgentProviderTurnRequest {
 export interface CreateAgentProviderSessionRequest {
   /**
    * The provider mints the session id returned on AgentSession. Creation is
-   * idempotent on idempotency_key scoped per subject (context.subject.id,
-   * or top-level subject when set for delegated provider calls):
+   * idempotent on idempotency_key scoped per subject (context.subject.id):
    * a replayed key returns the existing session, an empty key always creates.
    * Idempotency is scoped to the provider's session store.
    */
@@ -358,7 +356,6 @@ export interface CreateAgentProviderSessionRequest {
   model: string;
   clientRef: string;
   metadata?: JsonObject;
-  subject?: SubjectContext;
   sessionStart?: AgentSessionStartConfig;
   preparedWorkspace?: PreparedAgentWorkspace;
   providerName: string;
@@ -375,7 +372,6 @@ export interface CreateAgentProviderTurnRequest {
   messages: AgentMessage[];
   metadata?: JsonObject;
   executionRef: string;
-  subject?: SubjectContext;
   modelOptions?: JsonObject;
   /**
    * Optional provider-owned turn execution budget, in seconds.
@@ -392,27 +388,23 @@ export interface GetAgentProviderCapabilitiesRequest {}
 
 export interface GetAgentProviderInteractionRequest {
   interactionId: string;
-  subject?: SubjectContext;
   context?: RequestContext;
 }
 
 export interface GetAgentProviderSessionRequest {
   sessionId: string;
-  subject?: SubjectContext;
   context?: RequestContext;
   providerName: string;
 }
 
 export interface GetAgentProviderTurnRequest {
   turnId: string;
-  subject?: SubjectContext;
   context?: RequestContext;
   providerName: string;
 }
 
 export interface ListAgentProviderInteractionsRequest {
   turnId: string;
-  subject?: SubjectContext;
   context?: RequestContext;
   providerName: string;
 }
@@ -422,7 +414,6 @@ export interface ListAgentProviderInteractionsResponse {
 }
 
 export interface ListAgentProviderSessionsRequest {
-  subject?: SubjectContext;
   sessionIds: string[];
   state: AgentSessionState;
   /**
@@ -447,7 +438,6 @@ export interface ListAgentProviderTurnEventsRequest {
   turnId: string;
   afterSeq: bigint;
   limit: number;
-  subject?: SubjectContext;
   context?: RequestContext;
   providerName: string;
 }
@@ -458,7 +448,6 @@ export interface ListAgentProviderTurnEventsResponse {
 
 export interface ListAgentProviderTurnsRequest {
   sessionId: string;
-  subject?: SubjectContext;
   turnIds: string[];
   status: AgentExecutionStatus;
   /**
@@ -501,7 +490,6 @@ export interface PreparedAgentWorkspace {
 export interface ResolveAgentProviderInteractionRequest {
   interactionId: string;
   resolution?: JsonObject;
-  subject?: SubjectContext;
   turnId: string;
   context?: RequestContext;
   providerName: string;
@@ -512,7 +500,6 @@ export interface UpdateAgentProviderSessionRequest {
   clientRef: string;
   state: AgentSessionState;
   metadata?: JsonObject;
-  subject?: SubjectContext;
   context?: RequestContext;
   providerName: string;
 }

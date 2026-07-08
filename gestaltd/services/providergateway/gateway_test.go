@@ -506,7 +506,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode: codes.InvalidArgument,
 		},
 		{
-			name:       "agent create session fills subject fields",
+			name:       "agent create session fills context subject",
 			fullMethod: proto.Agent_CreateSession_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
@@ -516,9 +516,6 @@ func TestPreparePublicRequest(t *testing.T) {
 				out, ok := adapted.(*proto.CreateAgentProviderSessionRequest)
 				if !ok {
 					t.Fatalf("adapted type = %T, want *proto.CreateAgentProviderSessionRequest", adapted)
-				}
-				if out.GetSubject().GetId() != "user:alice" {
-					t.Fatalf("subject = %#v, want user:alice", out.GetSubject())
 				}
 				if out.GetContext().GetSubject().GetId() != "user:alice" {
 					t.Fatalf("context.subject.id = %q, want %q", out.GetContext().GetSubject().GetId(), "user:alice")

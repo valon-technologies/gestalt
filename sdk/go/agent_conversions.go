@@ -468,7 +468,6 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		Model:              req.GetModel(),
 		ClientRef:          req.GetClientRef(),
 		Metadata:           mapFromStruct(req.GetMetadata()),
-		Subject:            subjectFromProto(req.GetSubject()),
 		Context:            cloneRequestContext(req.GetContext()),
 		SessionStart:       agentSessionStartConfigFromProto(req.GetSessionStart()),
 		PreparedWorkspace:  agentPreparedWorkspaceFromProto(req.GetPreparedWorkspace()),
@@ -520,7 +519,6 @@ func getAgentProviderSessionRequestFromProto(req *proto.GetAgentProviderSessionR
 	return &GetAgentProviderSessionRequest{
 		ProviderName: req.GetProviderName(),
 		SessionID:    req.GetSessionId(),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 	}
 }
@@ -531,7 +529,6 @@ func listAgentProviderSessionsRequestFromProto(req *proto.ListAgentProviderSessi
 	}
 	return &ListAgentProviderSessionsRequest{
 		ProviderName: req.GetProviderName(),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 		SessionIDs:   append([]string(nil), req.GetSessionIds()...),
 		State:        AgentSessionState(req.GetState()),
@@ -561,7 +558,6 @@ func updateAgentProviderSessionRequestFromProto(req *proto.UpdateAgentProviderSe
 		ClientRef:    req.GetClientRef(),
 		State:        AgentSessionState(req.GetState()),
 		Metadata:     mapFromStruct(req.GetMetadata()),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 	}
 }
@@ -626,7 +622,6 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		Output:             agentOutputFromProto(req.GetOutput()),
 		Metadata:           mapFromStruct(req.GetMetadata()),
 		ExecutionRef:       req.GetExecutionRef(),
-		Subject:            subjectFromProto(req.GetSubject()),
 		ModelOptions:       mapFromStruct(req.GetModelOptions()),
 		Context:            cloneRequestContext(req.GetContext()),
 		TimeoutSeconds:     req.GetTimeoutSeconds(),
@@ -640,7 +635,6 @@ func getAgentProviderTurnRequestFromProto(req *proto.GetAgentProviderTurnRequest
 	return &GetAgentProviderTurnRequest{
 		ProviderName: req.GetProviderName(),
 		TurnID:       req.GetTurnId(),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 	}
 }
@@ -652,7 +646,6 @@ func listAgentProviderTurnsRequestFromProto(req *proto.ListAgentProviderTurnsReq
 	return &ListAgentProviderTurnsRequest{
 		ProviderName: req.GetProviderName(),
 		SessionID:    req.GetSessionId(),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 		TurnIDs:      append([]string(nil), req.GetTurnIds()...),
 		Status:       AgentExecutionStatus(req.GetStatus()),
@@ -680,7 +673,6 @@ func cancelAgentProviderTurnRequestFromProto(req *proto.CancelAgentProviderTurnR
 		ProviderName: req.GetProviderName(),
 		TurnID:       req.GetTurnId(),
 		Reason:       req.GetReason(),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 	}
 }
@@ -763,7 +755,6 @@ func listAgentProviderTurnEventsRequestFromProto(req *proto.ListAgentProviderTur
 		TurnID:       req.GetTurnId(),
 		AfterSeq:     req.GetAfterSeq(),
 		Limit:        req.GetLimit(),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 	}
 }
@@ -785,7 +776,6 @@ func getAgentProviderInteractionRequestFromProto(req *proto.GetAgentProviderInte
 	}
 	return &GetAgentProviderInteractionRequest{
 		InteractionID: req.GetInteractionId(),
-		Subject:       subjectFromProto(req.GetSubject()),
 		Context:       cloneRequestContext(req.GetContext()),
 	}
 }
@@ -797,7 +787,6 @@ func listAgentProviderInteractionsRequestFromProto(req *proto.ListAgentProviderI
 	return &ListAgentProviderInteractionsRequest{
 		ProviderName: req.GetProviderName(),
 		TurnID:       req.GetTurnId(),
-		Subject:      subjectFromProto(req.GetSubject()),
 		Context:      cloneRequestContext(req.GetContext()),
 	}
 }
@@ -864,7 +853,6 @@ func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProv
 		TurnID:        req.GetTurnId(),
 		InteractionID: req.GetInteractionId(),
 		Resolution:    mapFromStruct(req.GetResolution()),
-		Subject:       subjectFromProto(req.GetSubject()),
 		Context:       cloneRequestContext(req.GetContext()),
 	}
 }

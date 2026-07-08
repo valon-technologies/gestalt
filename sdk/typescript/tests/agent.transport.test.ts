@@ -111,7 +111,6 @@ test("AgentProvider rejects structured output without a schema", async () => {
 });
 
 test("AgentProvider forwards request context subjects to handlers", async () => {
-  const seenSubjectIds: string[] = [];
   const seenContextSubjectIds: string[] = [];
   const seenSessionTools: Array<{
     toolRefOperation?: string | undefined;
@@ -119,7 +118,6 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
   }> = [];
   const provider = defineAgentProvider({
     createSession(request) {
-      seenSubjectIds.push(request.subject?.id ?? "");
       seenContextSubjectIds.push(request.context?.subject?.id ?? "");
       seenSessionTools.push({
         toolRefOperation: request.tools?.catalog?.refs?.[0]?.operation,
@@ -131,7 +129,6 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
       };
     },
     createTurn(request) {
-      seenSubjectIds.push(request.subject?.id ?? "");
       seenContextSubjectIds.push(request.context?.subject?.id ?? "");
       return {
         id: request.turnId,
@@ -183,7 +180,6 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
     }),
   );
 
-  expect(seenSubjectIds).toEqual(["user:session", "user:turn"]);
   expect(seenContextSubjectIds).toEqual(["user:session", "user:turn"]);
   expect(seenSessionTools).toEqual([{
     toolRefOperation: "chat.postMessage",

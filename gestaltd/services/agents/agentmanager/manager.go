@@ -511,7 +511,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.Model = strings.TrimSpace(req.GetModel())
 	providerReq.ClientRef = strings.TrimSpace(req.GetClientRef())
 	providerReq.Metadata = providerMetadata
-	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
 	providerReq.PreparedWorkspace = nil
@@ -612,7 +611,6 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			return nil, err
 		}
 		sessions, err := candidate.provider.ListSessions(callCtx, &proto.ListAgentProviderSessionsRequest{
-			Subject:     agentSubjectToProto(agentSubjectFromPrincipal(p)),
 			Context:     providerReqContext,
 			State:       req.GetState(),
 			Limit:       int32(limit),
@@ -737,7 +735,6 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.ClientRef = strings.TrimSpace(req.GetClientRef())
 	providerReq.State = req.GetState()
 	providerReq.Metadata = providerMetadata
-	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
 	if err != nil {
 		return nil, err
@@ -853,7 +850,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.IdempotencyKey = idempotencyKey
 	providerReq.Model = strings.TrimSpace(req.GetModel())
 	providerReq.ExecutionRef = turnID
-	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	ctx = invocation.WithAgentInvocationContext(ctx, invocation.AgentInvocationContext{
 		ProviderName: ownedSession.providerName,
 		SessionID:    ownedSession.session.ID,
@@ -951,7 +947,6 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req *pr
 	turns, err = ownedSession.provider.ListTurns(callCtx, &proto.ListAgentProviderTurnsRequest{
 		SessionId:    ownedSession.session.ID,
 		ProviderName: ownedSession.providerName,
-		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
 		Context:      providerReqContext,
 		TurnIds:      append([]string(nil), req.GetTurnIds()...),
 		Status:       req.GetStatus(),
@@ -1018,7 +1013,6 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.TurnId = strings.TrimSpace(req.GetTurnId())
 	providerReq.ProviderName = owned.providerName
 	providerReq.Reason = strings.TrimSpace(req.GetReason())
-	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
 	if err != nil {
 		return nil, err
@@ -1065,7 +1059,6 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, re
 		ProviderName: owned.providerName,
 		AfterSeq:     req.GetAfterSeq(),
 		Limit:        req.GetLimit(),
-		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
 		Context:      providerReqContext,
 	})
 	if err != nil {
@@ -1100,7 +1093,6 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	interactions, err := owned.provider.ListInteractions(callCtx, &proto.ListAgentProviderInteractionsRequest{
 		TurnId:       owned.turn.ID,
 		ProviderName: owned.providerName,
-		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
 		Context:      providerReqContext,
 	})
 	if err != nil {
@@ -1152,7 +1144,6 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	providerReq.InteractionId = interactionID
 	providerReq.TurnId = owned.turn.ID
 	providerReq.ProviderName = owned.providerName
-	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
 	if err != nil {
 		return nil, err
@@ -1338,7 +1329,6 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 		session, err := candidate.provider.GetSession(callCtx, &proto.GetAgentProviderSessionRequest{
 			SessionId:    sessionID,
 			ProviderName: candidate.name,
-			Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
 			Context:      providerReqContext,
 		})
 		if err != nil {
@@ -1409,7 +1399,6 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 		turn, err := candidate.provider.GetTurn(callCtx, &proto.GetAgentProviderTurnRequest{
 			TurnId:       turnID,
 			ProviderName: candidate.name,
-			Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
 			Context:      providerReqContext,
 		})
 		if err != nil {
@@ -1514,7 +1503,6 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 		session, err := candidate.provider.GetSession(callCtx, &proto.GetAgentProviderSessionRequest{
 			SessionId:    sessionID,
 			ProviderName: candidate.name,
-			Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
 			Context:      providerReqContext,
 		})
 		if err != nil {

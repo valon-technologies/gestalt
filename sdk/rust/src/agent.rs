@@ -2,7 +2,7 @@
 
 //! Generated native types and clients for agent.proto.
 
-use crate::app::{AgentToolRef, OperationAnnotations, RequestContext, SubjectContext};
+use crate::app::{AgentToolRef, OperationAnnotations, RequestContext};
 use crate::codec::agent::{
     from_wire_agent_interaction, from_wire_agent_provider_capabilities, from_wire_agent_session,
     from_wire_agent_turn, from_wire_list_agent_provider_interactions_response,
@@ -490,8 +490,6 @@ pub struct CancelAgentProviderTurnRequest {
     pub turn_id: String,
     /// The `reason` field.
     pub reason: String,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
@@ -502,8 +500,7 @@ pub struct CancelAgentProviderTurnRequest {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CreateAgentProviderSessionRequest {
     /// The provider mints the session id returned on AgentSession. Creation is
-    /// idempotent on idempotency_key scoped per subject (context.subject.id,
-    /// or top-level subject when set for delegated provider calls):
+    /// idempotent on idempotency_key scoped per subject (context.subject.id):
     /// a replayed key returns the existing session, an empty key always creates.
     /// Idempotency is scoped to the provider's session store.
     ///
@@ -515,8 +512,6 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: String,
     /// The `metadata` field; None when unset.
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `session_start` field; None when unset.
     pub session_start: Option<AgentSessionStartConfig>,
     /// The `prepared_workspace` field; None when unset.
@@ -548,8 +543,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `execution_ref` field.
     pub execution_ref: String,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `model_options` field; None when unset.
     pub model_options: Option<serde_json::Map<String, serde_json::Value>>,
     /// Optional provider-owned turn execution budget, in seconds.
@@ -575,8 +568,6 @@ pub struct GetAgentProviderCapabilitiesRequest {}
 pub struct GetAgentProviderInteractionRequest {
     /// The `interaction_id` field.
     pub interaction_id: String,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
 }
@@ -586,8 +577,6 @@ pub struct GetAgentProviderInteractionRequest {
 pub struct GetAgentProviderSessionRequest {
     /// The `session_id` field.
     pub session_id: String,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
@@ -599,8 +588,6 @@ pub struct GetAgentProviderSessionRequest {
 pub struct GetAgentProviderTurnRequest {
     /// The `turn_id` field.
     pub turn_id: String,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
@@ -612,8 +599,6 @@ pub struct GetAgentProviderTurnRequest {
 pub struct ListAgentProviderInteractionsRequest {
     /// The `turn_id` field.
     pub turn_id: String,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
@@ -630,8 +615,6 @@ pub struct ListAgentProviderInteractionsResponse {
 /// Native message type for `gestalt.provider.v1.ListAgentProviderSessionsRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListAgentProviderSessionsRequest {
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `session_ids` field.
     pub session_ids: Vec<String>,
     /// The `state` field.
@@ -668,8 +651,6 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub after_seq: i64,
     /// The `limit` field.
     pub limit: i32,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
@@ -688,8 +669,6 @@ pub struct ListAgentProviderTurnEventsResponse {
 pub struct ListAgentProviderTurnsRequest {
     /// The `session_id` field.
     pub session_id: String,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `turn_ids` field.
     pub turn_ids: Vec<String>,
     /// The `status` field.
@@ -759,8 +738,6 @@ pub struct ResolveAgentProviderInteractionRequest {
     pub interaction_id: String,
     /// The `resolution` field; None when unset.
     pub resolution: Option<serde_json::Map<String, serde_json::Value>>,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `turn_id` field.
     pub turn_id: String,
     /// The `context` field; None when unset.
@@ -780,8 +757,6 @@ pub struct UpdateAgentProviderSessionRequest {
     pub state: AgentSessionState,
     /// The `metadata` field; None when unset.
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
-    /// The `subject` field; None when unset.
-    pub subject: Option<SubjectContext>,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
     /// The `provider_name` field.

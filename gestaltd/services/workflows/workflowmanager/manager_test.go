@@ -15,13 +15,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	gproto "google.golang.org/protobuf/proto"
 )
 
 func workflowRequestSubjectID(reqCtx *proto.RequestContext) string {
-	return strings.TrimSpace(reqCtx.GetSubject().GetId())
+	return appaccessservice.SubjectIDFromRequestContext(reqCtx)
 }
 
 func testWorkflowAppStepTarget(appName, operation string, input map[string]any) coreworkflow.Target {
