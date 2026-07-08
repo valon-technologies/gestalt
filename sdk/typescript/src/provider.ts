@@ -3,6 +3,7 @@ import { IndexedDB } from "./providers/indexeddb.ts";
 import {
   type MigrationRunOptions,
   type Revision,
+  resolveMigrationDbBinding,
   runMigrations,
 } from "./providers/migrations.ts";
 
@@ -157,7 +158,7 @@ export abstract class ProviderBase {
   ): Promise<void> {
     const options = resolveMigrations(this.migrationsSource, name, config);
     if (options) {
-      const dbBinding = String(options.dbBinding ?? config.indexeddb ?? "");
+      const dbBinding = resolveMigrationDbBinding(options, config);
       const db = new IndexedDB(dbBinding);
       try {
         await runMigrations(db, options);

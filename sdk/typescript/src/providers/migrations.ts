@@ -87,6 +87,19 @@ export interface MigrationRunOptions {
   ledgerStore?: string;
 }
 
+/** Resolve the IndexedDB binding for migration runs. */
+export function resolveMigrationDbBinding(
+  options: MigrationRunOptions,
+  config: Record<string, unknown>,
+): string {
+  const explicit = String(options.dbBinding ?? "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  const configBinding = config.indexeddb;
+  return typeof configBinding === "string" ? configBinding.trim() : "";
+}
+
 /**
  * Outcome of a migration run: the revision ids applied this run, in order, and
  * the declared head afterwards (empty when no revisions are declared).

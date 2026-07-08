@@ -447,7 +447,7 @@ def test_rejects_revision_that_is_neither_schema_nor_backfill() -> None:
         id = "0001_bad"
 
     with pytest.raises(MigrationError, match="exactly one of"):
-        run_migrations(db, MigrationRunOptions(revisions=[BadRevision()]))  # type: ignore[list-item]
+        run_migrations(db, MigrationRunOptions(revisions=[BadRevision()]))  # type: ignore[arg-type]
 
 
 def test_null_schema_with_backfill_runs_backfill_not_apply_schema() -> None:
@@ -479,7 +479,7 @@ def test_null_schema_with_backfill_runs_backfill_not_apply_schema() -> None:
             value=lambda row: row,
         )
 
-    run_migrations(db, MigrationRunOptions(revisions=[seed, WeirdRevision()]))  # type: ignore[list-item]
+    run_migrations(db, MigrationRunOptions(revisions=[seed, WeirdRevision()]))  # type: ignore[arg-type]
 
     assert db.object_store("dst").get("a")["id"] == "a"
     assert ledger_ids(fake) == ["0001_seed", "0002_weird"]

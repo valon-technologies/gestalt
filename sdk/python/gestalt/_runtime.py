@@ -28,7 +28,6 @@ from ._codec import identity as _identity_codec
 from ._codec import s3 as _s3_codec
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
-from .migrations import configure_migrations
 from ._operations import INTERNAL_ERROR_MESSAGE, JSON_CONTENT_TYPE
 from ._protocol import string_lists_from_proto_map
 from ._providers import (
@@ -43,7 +42,6 @@ from ._providers import (
     IdentityCallContext,
     IdentityProvider,
     MetadataProvider,
-    MigrationsProvider,
     ProviderKind,
     ProviderMetadata,
     RuntimeProvider,
@@ -57,6 +55,7 @@ from ._providers import (
     WorkflowProvider,
 )
 from ._serialization import json_body
+from .migrations import configure_migrations
 from .s3 import ReadObjectChunk, ReadObjectChunkData, ReadObjectChunkMeta
 
 json_format: Any = cast(Any, None)

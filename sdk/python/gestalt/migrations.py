@@ -11,8 +11,8 @@ from typing import Any, Protocol, runtime_checkable
 from ._indexeddb import (
     AlreadyExistsError,
     ColumnDef,
-    IndexSchema,
     IndexedDB,
+    IndexSchema,
     NotFoundError,
     ObjectStoreSchema,
 )
@@ -205,9 +205,9 @@ def normalize_migrations(
 
     if input is None:
         return None
-    if isinstance(input, list):
-        return MigrationRunOptions(revisions=input) if input else None
-    return input if input.revisions else None
+    if isinstance(input, MigrationRunOptions):
+        return input if input.revisions else None
+    return MigrationRunOptions(revisions=input) if input else None
 
 
 def configure_migrations(provider: Any, name: str, config: dict[str, Any]) -> None:
@@ -338,10 +338,18 @@ def _ensure_ledger_store(db: MigrationDB, ledger_store: str) -> None:
 
 
 def _apply_revision(db: MigrationDB, revision: Revision) -> None:
-    if _is_schema_revision(revision):
-        _apply_schema(db, revision.schema)
+    schema = getattr(revision, "schema", None)
+    if schema is not None:
+        _apply_schema(db, schema)
         return
-    _apply_backfill(db, revision.backfill)
+    backfill = getattr(revision, "backfill", None)
+    if backfill is not None:
+        _apply_backfill(db, backfill)
+        return
+    raise MigrationError(
+        f'revision {json.dumps(getattr(revision, "id", ""))} must declare exactly one of '
+        f'"schema" or "backfill"'
+    )
 
 
 def _apply_backfill(db: MigrationDB, transform: BackfillTransform) -> None:

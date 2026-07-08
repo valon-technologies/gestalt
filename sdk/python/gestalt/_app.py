@@ -16,6 +16,13 @@ import yaml
 from ._api import Request, Subject
 from ._catalog_helpers import catalog_parameters
 from ._http_subject import HTTPSubjectRequest, clone_http_subject_request
+from ._operations import (
+    OperationDefinition,
+    OperationResult,
+    execute_operation,
+    inspect_handler,
+    run_sync,
+)
 from .migrations import MigrationRunOptions, normalize_migrations
 
 DEFAULT_OPERATION_METHOD: Final[str] = "POST"
