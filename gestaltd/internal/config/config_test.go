@@ -4988,11 +4988,20 @@ server:
 }
 
 func TestLoadConfigRemoteGestaltd(t *testing.T) {
-	t.Parallel()
+	loadRemoteConfigForServe := func(t *testing.T) (*Config, error) {
+		t.Helper()
+		path := mustWriteConfigFile(t, `
+server:
+  remote: https://valon.tools
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		return cfg, ApplyServeRemoteOverrides(cfg, "", "")
+	}
 
 	t.Run("accepts and trims remote url", func(t *testing.T) {
-		t.Parallel()
-
 		path := mustWriteConfigFile(t, `
 server:
   remote: https://valon.tools/
@@ -5012,8 +5021,6 @@ server:
 	})
 
 	t.Run("rejects remote url with path", func(t *testing.T) {
-		t.Parallel()
-
 		path := mustWriteConfigFile(t, `
 server:
   remote: https://valon.tools/api
@@ -5029,23 +5036,47 @@ server:
 		}
 	})
 
-	t.Run("allows remote without token before serve", func(t *testing.T) {
-		t.Parallel()
+	t.Run("fills remote token from env before serve", func(t *testing.T) {
+		t.Setenv("GESTALT_API_KEY", "env-token")
 
-		path := mustWriteConfigFile(t, `
-server:
-  remote: https://valon.tools
-`)
-
-		cfg, err := Load(path)
+		cfg, err := loadRemoteConfigForServe(t)
 		if err != nil {
-			t.Fatalf("Load: %v", err)
+			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
 		}
+		if got := cfg.Server.RemoteToken; got != "env-token" {
+			t.Fatalf("server.remoteToken = %q, want env-token", got)
+		}
+	})
+
+	t.Run("fills remote token from stored credentials before serve", func(t *testing.T) {
+		t.Setenv("GESTALT_API_KEY", "")
+		xdg := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		credentialsDir := filepath.Join(xdg, "gestalt")
+		if err := os.MkdirAll(credentialsDir, 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(credentialsDir, "credentials.json"), []byte(`{"api_token":"stored-token","api_token_id":"tok_1"}`), 0o600); err != nil {
+			t.Fatalf("WriteFile credentials: %v", err)
+		}
+
+		cfg, err := loadRemoteConfigForServe(t)
+		if err != nil {
+			t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+		}
+		if got := cfg.Server.RemoteToken; got != "stored-token" {
+			t.Fatalf("server.remoteToken = %q, want stored-token", got)
+		}
+	})
+
+	t.Run("requires token before serve when no default exists", func(t *testing.T) {
+		t.Setenv("GESTALT_API_KEY", "")
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+		cfg, err := loadRemoteConfigForServe(t)
 		if got := cfg.Server.Remote; got != "https://valon.tools" {
 			t.Fatalf("server.remote = %q", got)
 		}
-
-		err = ApplyServeRemoteOverrides(cfg, "", "")
 		if err == nil {
 			t.Fatal("ApplyServeRemoteOverrides: expected error, got nil")
 		}
