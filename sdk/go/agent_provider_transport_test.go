@@ -35,7 +35,7 @@ func (p *fullAgentProvider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *fullAgentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
+func (p *fullAgentProvider) CreateSession(ctx context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
 	p.receivedSessionRequest = req
 	return &gestalt.AgentSession{
 		ID:                 "session-1",
@@ -44,7 +44,7 @@ func (p *fullAgentProvider) CreateSession(_ context.Context, req *gestalt.Create
 		ClientRef:          req.ClientRef,
 		State:              gestalt.AgentSessionStateActive,
 		Metadata:           req.Metadata,
-		CreatedBySubjectID: strings.TrimSpace(req.Context.GetSubject().GetId()),
+		CreatedBySubjectID: strings.TrimSpace(gestalt.SubjectFromContext(ctx).ID),
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}, nil
@@ -91,7 +91,7 @@ func (p *fullAgentProvider) UpdateSession(_ context.Context, req *gestalt.Update
 	}, nil
 }
 
-func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
+func (p *fullAgentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
 	p.receivedTurnRequest = req
 	output := &gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: "echo:Plan it"}}
 	if req.Output != nil && req.Output.Structured != nil {
@@ -111,7 +111,7 @@ func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAge
 		Messages:           req.Messages,
 		Output:             output,
 		StatusMessage:      "waiting for input",
-		CreatedBySubjectID: strings.TrimSpace(req.Context.GetSubject().GetId()),
+		CreatedBySubjectID: strings.TrimSpace(gestalt.SubjectFromContext(ctx).ID),
 		CreatedAt:          time.Now(),
 		StartedAt:          timePtr(time.Now()),
 		ExecutionRef:       req.ExecutionRef,

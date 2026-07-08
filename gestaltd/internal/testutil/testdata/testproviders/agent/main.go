@@ -49,7 +49,7 @@ func (p *agentProvider) Configure(_ context.Context, name string, _ map[string]a
 	return nil
 }
 
-func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
+func (p *agentProvider) CreateSession(ctx context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	scopedKey := ""
@@ -59,7 +59,7 @@ func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgen
 			subjectID = strings.TrimSpace(req.Subject.ID)
 		}
 		if subjectID == "" {
-			subjectID = strings.TrimSpace(req.Context.GetSubject().GetId())
+			subjectID = strings.TrimSpace(gestalt.SubjectFromContext(ctx).ID)
 		}
 		scopedKey = subjectID + "\x00" + idempotencyKey
 		if sessionID, ok := p.sessionIDsByIdempotencyKey[scopedKey]; ok {
@@ -72,7 +72,7 @@ func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgen
 		"agent-session-"+uuid.NewString(),
 		strings.TrimSpace(req.Model),
 		strings.TrimSpace(req.ClientRef),
-		strings.TrimSpace(req.Context.GetSubject().GetId()),
+		strings.TrimSpace(gestalt.SubjectFromContext(ctx).ID),
 		req.Metadata,
 	)
 	if scopedKey != "" {
@@ -133,7 +133,7 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgent
 		req.Messages,
 		req.Metadata,
 		req.Output,
-		strings.TrimSpace(req.Context.GetSubject().GetId()),
+		strings.TrimSpace(gestalt.SubjectFromContext(ctx).ID),
 		strings.TrimSpace(req.ExecutionRef),
 	)
 	return turn, err

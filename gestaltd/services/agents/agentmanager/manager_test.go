@@ -253,7 +253,7 @@ func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           mapsCloneAny(protoutil.MapFromStruct(req.GetMetadata())),
-		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
+		CreatedBySubjectID: principalSubjectID(appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject())),
 	}
 	p.sessions[session.ID] = session
 	if key != "" {
@@ -357,7 +357,7 @@ func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req *proto.Cr
 		Status:             status,
 		Messages:           agentwire.MessagesFromProto(req.GetMessages()),
 		Output:             p.createTurnOutput,
-		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
+		CreatedBySubjectID: principalSubjectID(appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject())),
 		ExecutionRef:       req.GetExecutionRef(),
 	}
 	p.turns[turn.ID] = turn

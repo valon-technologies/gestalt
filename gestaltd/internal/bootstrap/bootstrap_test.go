@@ -342,7 +342,10 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
-	callerSubjectID := strings.TrimSpace(req.GetContext().GetSubject().GetId())
+	callerSubjectID := ""
+	if p := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); p != nil {
+		callerSubjectID = p.SubjectID
+	}
 	idempotencyScope := agentProviderSessionIdempotencyScope(req)
 	if sessionID, ok := p.sessionIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		session, ok := p.sessions[sessionID]
@@ -419,7 +422,10 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req *proto.Create
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
-	callerSubjectID := strings.TrimSpace(req.GetContext().GetSubject().GetId())
+	callerSubjectID := ""
+	if p := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); p != nil {
+		callerSubjectID = p.SubjectID
+	}
 	idempotencyScope := agentProviderTurnIdempotencyScope(req)
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]
@@ -647,7 +653,10 @@ func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callba
 func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	p.ensureStateLocked()
-	callerSubjectID := strings.TrimSpace(req.GetContext().GetSubject().GetId())
+	callerSubjectID := ""
+	if p := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); p != nil {
+		callerSubjectID = p.SubjectID
+	}
 	idempotencyScope := agentProviderTurnIdempotencyScope(req)
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]

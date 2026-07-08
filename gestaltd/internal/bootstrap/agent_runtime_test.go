@@ -25,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
@@ -195,12 +196,16 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 			return &cloned, nil
 		}
 	}
+	createdBy := ""
+	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
+		createdBy = principal.SubjectID
+	}
 	session := &coreagent.Session{
 		ID:                 fmt.Sprintf("minted-session-%d", len(p.sessions)+1),
 		ProviderName:       "simple",
 		Model:              req.GetModel(),
 		State:              coreagent.SessionStateActive,
-		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
+		CreatedBySubjectID: createdBy,
 	}
 	if p.sessions == nil {
 		p.sessions = map[string]*coreagent.Session{}

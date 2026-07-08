@@ -43,6 +43,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -1650,6 +1651,10 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 	defer p.mu.Unlock()
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createSessionRequests = append(p.createSessionRequests, req)
+	createdBy := ""
+	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
+		createdBy = principal.SubjectID
+	}
 	session := &coreagent.Session{
 		ID:                 fmt.Sprintf("managed-session-%d", len(p.sessions)+1),
 		ProviderName:       "managed",
@@ -1657,7 +1662,7 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           stubAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
+		CreatedBySubjectID: createdBy,
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -1712,6 +1717,10 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createTurnRequests = append(p.createTurnRequests, req)
+	createdBy := ""
+	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
+		createdBy = principal.SubjectID
+	}
 
 	turn := &coreagent.Turn{
 		ID:                 req.GetTurnId(),
@@ -1721,7 +1730,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           stubAgentMessagesFromProto(req.GetMessages()),
 		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBySubjectID: strings.TrimSpace(req.GetContext().GetSubject().GetId()),
+		CreatedBySubjectID: createdBy,
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,
