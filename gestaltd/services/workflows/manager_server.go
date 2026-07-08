@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -528,9 +529,15 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
+	appName := authCtx.CallerName()
+	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok && origin.FullMethod == proto.Workflow_DeliverEvent_FullMethodName {
+		if requested := strings.TrimSpace(req.GetAppName()); requested != "" {
+			appName = requested
+		}
+	}
 	delivered, err := s.manager.DeliverEvent(s.managerContext(ctx, authCtx), p, workflowmanager.EventDeliver{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      authCtx.CallerName(),
+		AppName:      appName,
 		Event:        event,
 	})
 	if err != nil {

@@ -131,6 +131,7 @@ type Server struct {
 	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[uint64]http.Handler
+	publicGRPCHandler      http.Handler
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
 	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
@@ -153,48 +154,49 @@ func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 }
 
 type Config struct {
-	Auth                 core.IdentityProvider
-	SelectedAuthProvider string
-	AuthProviders        map[string]core.IdentityProvider
-	Authorization        core.AuthorizationProvider
-	AuditSink            core.AuditSink
-	Services             *coredata.Services
-	Providers            *registry.ProviderMap[core.Provider]
-	CallerTokenIssuer    *providergateway.CallerTokenIssuer
-	Agent                bootstrap.AgentControl
-	AgentManager         agentmanager.Service
-	Workflow             bootstrap.WorkflowControl
-	Runtimes             bootstrap.RuntimeInspector
-	Invoker              invocation.Invoker
-	AppInvocation        invocation.Invoker
-	DefaultConnection    map[string]string
-	CatalogConnection    map[string]string
-	MCPConnection        map[string]string
-	ConnectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
-	ManualConnectionAuth func() map[string]map[string]bootstrap.ManualTokenExchanger
-	AppDefs              map[string]*config.ProviderEntry
-	AgentDefs            map[string]*config.ProviderEntry
-	PublicBaseURL        string
-	ManagementBaseURL    string
-	SecureCookies        bool
-	StateSecret          []byte
-	APIRouteTimeout      time.Duration
-	AgentStreamHeartbeat time.Duration
-	Now                  func() time.Time
-	Readiness            ReadinessChecker
-	PrometheusMetrics    http.Handler
-	MCPHandler           http.Handler
-	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	S3                   map[string]s3sdk.S3
-	MountedUIs           []MountedUI
-	DevHandlerResolver   func(name string) http.Handler
-	Admin                AdminRouteConfig
-	AdminUI              http.Handler
-	BuiltinAdminUI       *BuiltinAdminUIOptions
-	RouteProfile         RouteProfile
-	MeterProvider        metric.MeterProvider
-	TracerProvider       trace.TracerProvider
-	ActivateAppProviders func(context.Context)
+	Auth                   core.IdentityProvider
+	SelectedAuthProvider   string
+	AuthProviders          map[string]core.IdentityProvider
+	Authorization          core.AuthorizationProvider
+	AuditSink              core.AuditSink
+	Services               *coredata.Services
+	Providers              *registry.ProviderMap[core.Provider]
+	CallerTokenIssuer      *providergateway.CallerTokenIssuer
+	Agent                  bootstrap.AgentControl
+	AgentManager           agentmanager.Service
+	Workflow               bootstrap.WorkflowControl
+	Runtimes               bootstrap.RuntimeInspector
+	Invoker                invocation.Invoker
+	AppInvocation          invocation.Invoker
+	DefaultConnection      map[string]string
+	CatalogConnection      map[string]string
+	MCPConnection          map[string]string
+	ConnectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
+	ManualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
+	AppDefs                map[string]*config.ProviderEntry
+	AgentDefs              map[string]*config.ProviderEntry
+	PublicBaseURL          string
+	ManagementBaseURL      string
+	SecureCookies          bool
+	StateSecret            []byte
+	APIRouteTimeout        time.Duration
+	AgentStreamHeartbeat   time.Duration
+	Now                    func() time.Time
+	Readiness              ReadinessChecker
+	PrometheusMetrics      http.Handler
+	MCPHandler             http.Handler
+	PublicHostServices     *runtimehost.PublicHostServiceRegistry
+	PublicGatewayTransport *providergateway.ProviderGatewayTransport
+	S3                     map[string]s3sdk.S3
+	MountedUIs             []MountedUI
+	DevHandlerResolver     func(name string) http.Handler
+	Admin                  AdminRouteConfig
+	AdminUI                http.Handler
+	BuiltinAdminUI         *BuiltinAdminUIOptions
+	RouteProfile           RouteProfile
+	MeterProvider          metric.MeterProvider
+	TracerProvider         trace.TracerProvider
+	ActivateAppProviders   func(context.Context)
 }
 
 func New(cfg Config) (*Server, error) {
@@ -395,6 +397,13 @@ func New(cfg Config) (*Server, error) {
 		CatalogConnection: cfg.CatalogConnection,
 		MCPConnection:     cfg.MCPConnection,
 		Now:               now,
+	})
+	s.publicGRPCHandler = buildPublicGRPCHandler(publicGRPCConfig{
+		Transport:       cfg.PublicGatewayTransport,
+		Invoker:         cfg.Invoker,
+		AgentManager:    cfg.AgentManager,
+		WorkflowManager: s.workflowSchedules,
+		Authorization:   cfg.Authorization,
 	})
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

@@ -22,6 +22,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -232,34 +233,35 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth                 core.IdentityProvider
-	SelectedAuthProvider string
-	AuthProviders        map[string]core.IdentityProvider
-	Authorization        map[string]core.AuthorizationProvider
-	Services             *coredata.Services
-	ExtraIndexedDBs      []indexeddb.IndexedDB
-	ExtraCaches          []corecache.Cache
-	S3                   map[string]s3sdk.S3
-	ExtraS3s             []s3sdk.S3
-	ExtraWorkflows       []coreworkflow.Provider
-	ExtraAgents          []coreagent.Provider
-	Providers            *registry.ProviderMap[core.Provider]
-	WorkflowControl      WorkflowControl
-	AgentControl         AgentControl
-	AgentManager         agentmanager.Service
-	ProvidersReady       <-chan struct{}
-	ConnectionAuth       func() map[string]map[string]OAuthHandler
-	ManualConnectionAuth func() map[string]map[string]ManualTokenExchanger
-	Invoker              invocation.Invoker
-	AppInvocation        invocation.Invoker
-	CapabilityLister     invocation.CapabilityLister
-	AuditSink            core.AuditSink
-	SecretManager        core.SecretManager
-	Telemetry            core.TelemetryProvider
-	Runtimes             RuntimeInspector
-	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	CallerTokenIssuer    *providergateway.CallerTokenIssuer
-	DevSupervisor        *providerdev.Supervisor
+	Auth                   core.IdentityProvider
+	SelectedAuthProvider   string
+	AuthProviders          map[string]core.IdentityProvider
+	Authorization          map[string]core.AuthorizationProvider
+	Services               *coredata.Services
+	ExtraIndexedDBs        []indexeddb.IndexedDB
+	ExtraCaches            []corecache.Cache
+	S3                     map[string]s3sdk.S3
+	ExtraS3s               []s3sdk.S3
+	ExtraWorkflows         []coreworkflow.Provider
+	ExtraAgents            []coreagent.Provider
+	Providers              *registry.ProviderMap[core.Provider]
+	WorkflowControl        WorkflowControl
+	AgentControl           AgentControl
+	AgentManager           agentmanager.Service
+	ProvidersReady         <-chan struct{}
+	ConnectionAuth         func() map[string]map[string]OAuthHandler
+	ManualConnectionAuth   func() map[string]map[string]ManualTokenExchanger
+	Invoker                invocation.Invoker
+	AppInvocation          invocation.Invoker
+	CapabilityLister       invocation.CapabilityLister
+	AuditSink              core.AuditSink
+	SecretManager          core.SecretManager
+	Telemetry              core.TelemetryProvider
+	Runtimes               RuntimeInspector
+	PublicHostServices     *runtimehost.PublicHostServiceRegistry
+	PublicGatewayTransport *providergateway.ProviderGatewayTransport
+	CallerTokenIssuer      *providergateway.CallerTokenIssuer
+	DevSupervisor          *providerdev.Supervisor
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -1353,6 +1355,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
+	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
 	closeProviders = false
 	closeCore = false
 	closeAudit = false
@@ -1385,6 +1392,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Telemetry:                    prepared.Telemetry,
 		Runtimes:                     prepared.runtimeRegistry,
 		PublicHostServices:           publicHostServices,
+		PublicGatewayTransport:       publicGatewayTransport,
 		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		DevSupervisor:                prepared.Deps.DevSupervisor,
 		runtimeRegistry:              prepared.runtimeRegistry,
@@ -2213,4 +2221,28 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		providerName: name,
 	}
 	return tracked, nil
+}
+
+func buildPublicGatewayTransport(
+	cfg *config.Config,
+	auth core.IdentityProvider,
+	authorization map[string]core.AuthorizationProvider,
+) (*providergateway.ProviderGatewayTransport, error) {
+	if auth == nil {
+		return nil, nil
+	}
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("public rpc registry: %w", err)
+	}
+	transport := providergateway.NewProviderGatewayTransport()
+	transport.SetIdentityProvider(auth)
+	transport.SetPublicMethods(registry)
+	if cfg != nil {
+		if name, _, err := cfg.SelectedAuthorizationProvider(); err == nil && name != "" && authorization != nil {
+			transport.SetAuthorizationProvider(authorization[name])
+		}
+		transport.SetPublicBaseURL(cfg.Server.BaseURL)
+	}
+	return transport, nil
 }
