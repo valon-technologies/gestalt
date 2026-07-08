@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -421,9 +422,39 @@ func explicitPluginConnection(plan config.StaticConnectionPlan) bool {
 	return plan.AuthDefaultConnection() == config.AppConnectionName && len(plan.NamedConnectionNames()) > 0
 }
 
+func buildRemoteAppProvider(_ context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
+	if deps.RemoteClients == nil || deps.RemoteClients.App == nil {
+		return nil, fmt.Errorf("integration %q requires remote client", name)
+	}
+	spec, _, err := buildStartupProviderSpec(name, entry)
+	if err != nil {
+		return nil, fmt.Errorf("build remote app provider %q: %w", name, err)
+	}
+	prov := remote.NewAppProvider(deps.RemoteClients.App, spec)
+	manifest := entry.ResolvedManifest
+	allowedOperations := entry.AllowedOperations
+	if allowedOperations == nil {
+		if manifestApp := entry.ManifestSpec(); manifestApp != nil {
+			allowedOperations = maps.Clone(manifestApp.AllowedOperations)
+		}
+	}
+	restricted, err := applyAllowedOperations(name, allowedOperations, prov)
+	if err != nil {
+		return nil, err
+	}
+	pluginConfig, err := config.NodeToMap(entry.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decode app config for %q: %w", name, err)
+	}
+	return newProviderBuildResult(name, entry, manifest, pluginConfig, restricted, nil, deps)
+}
+
 func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("integration %q has no app defined", name)
+	}
+	if shouldRouteRemoteApp(deps, name) {
+		return buildRemoteAppProvider(ctx, name, entry, deps)
 	}
 
 	meta := resolveProviderMetadata(entry)

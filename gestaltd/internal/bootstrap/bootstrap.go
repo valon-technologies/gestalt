@@ -21,12 +21,15 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -38,6 +41,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"gopkg.in/yaml.v3"
 )
@@ -184,6 +188,8 @@ type Deps struct {
 	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
+	Placement             *PlacementPlan
+	RemoteClients         *remote.ClientSet
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -262,6 +268,7 @@ type Result struct {
 	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 	DevSupervisor        *providerdev.Supervisor
 	Placement            *PlacementPlan
+	remoteClients        *remote.ClientSet
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -431,6 +438,7 @@ func (r *Result) Close(ctx context.Context) error {
 	if r.Telemetry != nil {
 		errs = append(errs, r.Telemetry.Shutdown(ctx))
 	}
+	errs = append(errs, closeRemoteClients(r.remoteClients))
 	r.closed = true
 	return errors.Join(errs...)
 }
@@ -833,7 +841,7 @@ func resolveConfigSecrets(
 	return config.CanonicalizeStructure(cfg)
 }
 
-func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
+func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool, placement *PlacementPlan, remoteClients *remote.ClientSet) (*preparedCore, error) {
 	if err := ResolveConfigSecrets(ctx, cfg, factories); err != nil {
 		return nil, err
 	}
@@ -883,6 +891,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AgentToolIDs:         agentToolIDs,
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
+		Placement:            placement,
+		RemoteClients:        remoteClients,
 	}
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
@@ -931,11 +941,20 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		if name == selectedIndexedDBName || entry == nil {
 			continue
 		}
-		ds, err := buildIndexedDB(entry, factories)
-		if err != nil {
-			_ = svc.Close()
-			_ = closeIndexedDBs(extraIndexedDBs...)
-			return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
+		var ds indexeddb.IndexedDB
+		var err error
+		if shouldRouteRemoteIndexedDB(deps, name) {
+			if remoteClients == nil || remoteClients.IndexedDB == nil {
+				return nil, fmt.Errorf("bootstrap: indexeddb from resource %q requires remote client", name)
+			}
+			ds = indexeddbservice.NewPublicRemote(remoteClients.IndexedDB)
+		} else {
+			ds, err = buildIndexedDB(entry, factories)
+			if err != nil {
+				_ = svc.Close()
+				_ = closeIndexedDBs(extraIndexedDBs...)
+				return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
+			}
 		}
 		ds = metricutil.InstrumentIndexedDB(ds, name)
 		indexedDBs[name] = ds
@@ -1147,8 +1166,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
+	remoteClients, err := prepareRemoteClients(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
 
-	prepared, err := prepareCore(ctx, cfg, factories, true)
+	prepared, err := prepareCore(ctx, cfg, factories, true, placement, remoteClients)
 	if err != nil {
 		return nil, err
 	}
@@ -1398,6 +1421,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		DevSupervisor:                prepared.Deps.DevSupervisor,
 		Placement:                    placement,
+		remoteClients:                remoteClients,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
@@ -2136,6 +2160,12 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 	if entry == nil {
 		return nil, fmt.Errorf("workflow provider is required")
 	}
+	if shouldRouteRemoteWorkflow(deps, name) {
+		if deps.RemoteClients == nil || deps.RemoteClients.Workflow == nil {
+			return nil, fmt.Errorf("workflow provider %q requires remote client", name)
+		}
+		return workflowservice.NewPublicRemote(name, deps.RemoteClients.Workflow), nil
+	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
@@ -2190,6 +2220,12 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindAgent, name)
 	if entry == nil {
 		return nil, fmt.Errorf("agent provider is required")
+	}
+	if shouldRouteRemoteAgent(deps, name) {
+		if deps.RemoteClients == nil || deps.RemoteClients.Agent == nil {
+			return nil, fmt.Errorf("agent provider %q requires remote client", name)
+		}
+		return agentservice.NewPublicRemote(name, deps.RemoteClients.Agent), nil
 	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
