@@ -106,7 +106,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		PrometheusMetrics:      result.Telemetry.PrometheusHandler(),
 		PublicHostServices:     result.PublicHostServices,
 		ActivateAppProviders:   result.ActivateAppProviders,
-		IndexedDB:            publicIndexedDB,
+		IndexedDB:              publicIndexedDB,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),

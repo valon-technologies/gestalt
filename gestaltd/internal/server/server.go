@@ -197,8 +197,8 @@ type Config struct {
 	RouteProfile           RouteProfile
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
-	ActivateAppProviders func(context.Context)
-	IndexedDB            indexeddb.IndexedDB
+	ActivateAppProviders   func(context.Context)
+	IndexedDB              indexeddb.IndexedDB
 }
 
 func New(cfg Config) (*Server, error) {
@@ -401,12 +401,12 @@ func New(cfg Config) (*Server, error) {
 		Now:               now,
 	})
 	s.publicGRPCHandler = buildPublicGRPCHandler(publicGRPCConfig{
-		Transport:             cfg.PublicGatewayTransport,
-		Invoker:               cfg.Invoker,
-		AgentManager:          cfg.AgentManager,
-		WorkflowManager:       s.workflowSchedules,
-		Authorization:         cfg.Authorization,
-		IndexedDB:             cfg.IndexedDB,
+		Transport:       cfg.PublicGatewayTransport,
+		Invoker:         cfg.Invoker,
+		AgentManager:    cfg.AgentManager,
+		WorkflowManager: s.workflowSchedules,
+		Authorization:   cfg.Authorization,
+		IndexedDB:       cfg.IndexedDB,
 	})
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
