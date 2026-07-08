@@ -83,19 +83,16 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreworkflow.Provider, er
 		}
 		return nil, fmt.Errorf("workflow provider client is required")
 	}
-	if cfg.Runtime == nil {
-		if cfg.Closer != nil {
-			_ = cfg.Closer.Close()
+	name := strings.TrimSpace(cfg.Name)
+	if cfg.Runtime != nil {
+		if _, err := runtimehost.ConfigureRuntimeProvider(ctx, cfg.Runtime, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, name, cfg.Config); err != nil {
+			if cfg.Closer != nil {
+				_ = cfg.Closer.Close()
+			}
+			return nil, err
 		}
-		return nil, fmt.Errorf("workflow provider lifecycle client is required")
 	}
-	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, cfg.Runtime, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
-		if cfg.Closer != nil {
-			_ = cfg.Closer.Close()
-		}
-		return nil, err
-	}
-	return &remoteWorkflow{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer, name: cfg.Name}, nil
+	return &remoteWorkflow{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer, name: name}, nil
 }
 
 func (r *remoteWorkflow) ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (definition *proto.WorkflowDefinition, err error) {
@@ -311,6 +308,9 @@ func (r *remoteWorkflow) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 }
 
 func (r *remoteWorkflow) Ping(ctx context.Context) (err error) {
+	if r.runtime == nil {
+		return nil
+	}
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationPing, workflowDims{})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
@@ -320,6 +320,9 @@ func (r *remoteWorkflow) Ping(ctx context.Context) (err error) {
 }
 
 func (r *remoteWorkflow) Start(ctx context.Context) error {
+	if r.runtime == nil {
+		return nil
+	}
 	return runtimehost.StartRuntimeProvider(ctx, r.runtime)
 }
 
