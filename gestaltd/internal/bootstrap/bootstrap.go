@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -185,6 +186,7 @@ type Deps struct {
 	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
+	RemoteClients         *remote.ClientSet
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -883,6 +885,15 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
+	if remoteURL := strings.TrimSpace(cfg.Server.Remote); remoteURL != "" {
+		deps.RemoteClients, err = remote.NewClientSet(ctx, remote.Config{
+			URL:   remoteURL,
+			Token: cfg.Server.RemoteToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: remote client: %w", err)
+		}
+	}
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
@@ -1127,6 +1138,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		authCloseErr,
 		authorizationCloseErr,
 		externalCredentialsCloseErr,
+		p.Deps.RemoteClients.Close(),
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeCaches(p.ExtraCaches...),
