@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -48,13 +50,6 @@ func publicGRPCTestBearer(scope string) string {
 	return scopedTestBearerToken("public-grpc-user", scope)
 }
 
-func publicGRPCContext(t *testing.T, bearerToken string) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	t.Cleanup(cancel)
-	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+bearerToken))
-}
-
 func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) (*httptest.Server, *relayTestInvoker) {
 	t.Helper()
 	invoker := &relayTestInvoker{}
@@ -90,15 +85,24 @@ func TestPublicGRPCRouting(t *testing.T) {
 				},
 			})
 		})
-		conn := newRelayGRPCConn(t, ts)
-		defer func() { _ = conn.Close() }()
 
-		_, err := proto.NewAppClient(conn).Invoke(publicGRPCContext(t, publicGRPCTestBearer("roadmap")), &proto.AppInvokeRequest{
-			App:       "roadmap",
-			Operation: "sync",
+		clients, err := remote.NewClientSet(context.Background(), remote.Config{
+			URL:       ts.URL,
+			Token:     publicGRPCTestBearer("roadmap"),
+			TLSConfig: &tls.Config{InsecureSkipVerify: true},
 		})
 		if err != nil {
-			t.Fatalf("public App.Invoke: %v", err)
+			t.Fatalf("remote.NewClientSet: %v", err)
+		}
+		defer func() { _ = clients.Close() }()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := clients.App.Invoke(ctx, &proto.AppInvokeRequest{
+			App:       "roadmap",
+			Operation: "sync",
+		}); err != nil {
+			t.Fatalf("remote App.Invoke: %v", err)
 		}
 		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "roadmap" || call.operation != "sync" {
 			t.Fatalf("invoker call = %+v, want roadmap/sync", call)
