@@ -64,7 +64,7 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	if err := t.enforcePublicAuthorization(ctx, p, resourceID, fullMethod); err != nil {
 		return nil, nil, err
 	}
-	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, p, req, policy)
+	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, p, req, policy, fullMethod)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -176,6 +176,7 @@ func adaptPublicRequest(
 	p *principal.Principal,
 	req gproto.Message,
 	policy publicrpc.PublicMethodPolicy,
+	fullMethod string,
 ) (gproto.Message, error) {
 	adapted := gproto.Clone(req)
 	msg := adapted.ProtoReflect()
@@ -188,14 +189,25 @@ func adaptPublicRequest(
 		if fieldSet(msg, name) {
 			return nil, status.Errorf(codes.InvalidArgument, "%s is server-filled", name)
 		}
-		if err := fillPublicField(ctx, publicBaseURL, p, msg, name); err != nil {
+		if err := fillPublicField(ctx, publicBaseURL, p, msg, name, fullMethod); err != nil {
 			return nil, err
 		}
 	}
 	return adapted, nil
 }
 
-func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, name string) error {
+func publicCallerProvider(msg protoreflect.Message, fullMethod string) invocation.CallerProvider {
+	if strings.HasPrefix(fullMethod, "/"+proto.App_ServiceDesc.ServiceName+"/") {
+		if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
+			if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
+				return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: app}
+			}
+		}
+	}
+	return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "gestaltd"}
+}
+
+func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, name, fullMethod string) error {
 	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
 	if fd == nil {
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
@@ -203,7 +215,7 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 	switch name {
 	case "context":
 		callCtx := principal.WithPrincipal(ctx, principal.Canonicalized(p))
-		reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, invocation.CallerProvider{})
+		reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, publicCallerProvider(msg, fullMethod))
 		if err != nil {
 			return status.Errorf(codes.Internal, "provider gateway: build request context: %v", err)
 		}

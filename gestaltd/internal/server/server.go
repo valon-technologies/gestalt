@@ -131,6 +131,9 @@ type Server struct {
 	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[uint64]http.Handler
+	publicGatewayTransport *providergateway.ProviderGatewayTransport
+	publicGRPCMu           sync.Mutex
+	publicGRPCHandler      http.Handler
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
 	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
@@ -184,8 +187,9 @@ type Config struct {
 	Readiness            ReadinessChecker
 	PrometheusMetrics    http.Handler
 	MCPHandler           http.Handler
-	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	S3                   map[string]s3sdk.S3
+	PublicHostServices       *runtimehost.PublicHostServiceRegistry
+	PublicGatewayTransport   *providergateway.ProviderGatewayTransport
+	S3                       map[string]s3sdk.S3
 	MountedUIs           []MountedUI
 	DevHandlerResolver   func(name string) http.Handler
 	Admin                AdminRouteConfig
@@ -373,6 +377,7 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
+		publicGatewayTransport: cfg.PublicGatewayTransport,
 		publicHostServices:     cfg.PublicHostServices,
 		s3:                     cfg.S3,
 		s3ObjectAccessURLs:     s3ObjectAccessURLs,

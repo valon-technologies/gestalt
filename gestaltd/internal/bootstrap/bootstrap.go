@@ -256,10 +256,11 @@ type Result struct {
 	AuditSink            core.AuditSink
 	SecretManager        core.SecretManager
 	Telemetry            core.TelemetryProvider
-	Runtimes             RuntimeInspector
-	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	CallerTokenIssuer    *providergateway.CallerTokenIssuer
-	DevSupervisor        *providerdev.Supervisor
+	Runtimes               RuntimeInspector
+	PublicHostServices     *runtimehost.PublicHostServiceRegistry
+	PublicGatewayTransport *providergateway.ProviderGatewayTransport
+	CallerTokenIssuer      *providergateway.CallerTokenIssuer
+	DevSupervisor          *providerdev.Supervisor
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -1358,6 +1359,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAudit = false
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
+	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization)
+	if err != nil {
+		return nil, err
+	}
 	result := &Result{
 		Auth:                         prepared.Auth,
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
@@ -1385,6 +1390,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Telemetry:                    prepared.Telemetry,
 		Runtimes:                     prepared.runtimeRegistry,
 		PublicHostServices:           publicHostServices,
+		PublicGatewayTransport:       publicGatewayTransport,
 		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		DevSupervisor:                prepared.Deps.DevSupervisor,
 		runtimeRegistry:              prepared.runtimeRegistry,
