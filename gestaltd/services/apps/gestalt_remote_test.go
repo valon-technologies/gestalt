@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

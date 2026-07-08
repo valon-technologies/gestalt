@@ -17,7 +17,7 @@ type gestaltRemoteProvider struct {
 }
 
 var (
-	_ core.Provider             = (*gestaltRemoteProvider)(nil)
+	_ core.Provider              = (*gestaltRemoteProvider)(nil)
 	_ core.GraphQLSurfaceInvoker = (*gestaltRemoteProvider)(nil)
 )
 
@@ -76,10 +76,10 @@ func (p *gestaltRemoteProvider) Execute(ctx context.Context, operation string, p
 		return nil, err
 	}
 	resp, err := p.client.Invoke(ctx, &proto.AppInvokeRequest{
-		App:       p.spec.Name,
-		Operation: strings.TrimSpace(operation),
-		Params:    paramsStruct,
-		Connection: strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
+		App:            p.spec.Name,
+		Operation:      strings.TrimSpace(operation),
+		Params:         paramsStruct,
+		Connection:     strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
 		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
 	})
 	if err != nil {
@@ -94,10 +94,10 @@ func (p *gestaltRemoteProvider) InvokeGraphQL(ctx context.Context, request core.
 		return nil, err
 	}
 	resp, err := p.client.InvokeGraphQL(ctx, &proto.AppInvokeGraphQLRequest{
-		App:        p.spec.Name,
-		Document:   strings.TrimSpace(request.Document),
-		Variables:  variables,
-		Connection: strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
+		App:            p.spec.Name,
+		Document:       strings.TrimSpace(request.Document),
+		Variables:      variables,
+		Connection:     strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
 		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
 	})
 	if err != nil {
