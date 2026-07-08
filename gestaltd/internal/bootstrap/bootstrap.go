@@ -184,6 +184,7 @@ type Deps struct {
 	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
+	Placement             *PlacementPlan
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -880,6 +881,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AgentToolIDs:         agentToolIDs,
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
+		Placement:            NewPlacementPlan(cfg),
 	}
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
@@ -924,8 +926,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	indexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
+	placement := NewPlacementPlan(cfg)
 	for name, entry := range cfg.Providers.IndexedDB {
 		if name == selectedIndexedDBName || entry == nil {
+			continue
+		}
+		if !placement.ShouldBuildLocal(RemoteProviderKindIndexedDB, name) {
 			continue
 		}
 		ds, err := buildIndexedDB(entry, factories)
@@ -1276,11 +1282,15 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 
 	var noopConnAuth func() map[string]map[string]OAuthHandler
 	var noopManualConnAuth func() map[string]map[string]ManualTokenExchanger
-	noopReady, noopConnAuth, noopManualConnAuth, _ = noopBuilds.Start(ctx, prepared.Deps, buildProvider)
+	var noopBuildErrs func() []error
+	noopReady, noopConnAuth, noopManualConnAuth, noopBuildErrs = noopBuilds.Start(ctx, prepared.Deps, buildProvider)
 	select {
 	case <-noopReady:
 	case <-ctx.Done():
 		return nil, fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
+	}
+	if errs := noopBuildErrs(); len(errs) > 0 {
+		return nil, errors.Join(errs...)
 	}
 	slog.InfoContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
 
@@ -1509,6 +1519,8 @@ func failPendingStartupProviders(deps Deps, err error) {
 func buildConfiguredProviders[T any](
 	ctx context.Context,
 	entries map[string]*config.ProviderEntry,
+	kind RemoteProviderKind,
+	placement *PlacementPlan,
 	build func(context.Context, string, *config.ProviderEntry) (T, error),
 	publish func(string, T),
 	failStartupProvider func(string, error),
@@ -1523,6 +1535,9 @@ func buildConfiguredProviders[T any](
 	}
 	for name, entry := range entries {
 		if entry == nil {
+			continue
+		}
+		if placement != nil && !placement.ShouldBuildLocal(kind, name) {
 			continue
 		}
 		pending = append(pending, struct {
@@ -1599,7 +1614,7 @@ func buildConfiguredProviders[T any](
 }
 
 func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, cfg.Providers.Workflow,
+	return buildConfiguredProviders(ctx, cfg.Providers.Workflow, RemoteProviderKindWorkflow, deps.Placement,
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
 			return buildWorkflow(ctx, name, entry, factories, deps)
 		},
@@ -1631,7 +1646,7 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 }
 
 func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, []string, error) {
-	return buildConfiguredProviders(ctx, cfg.Providers.Agent,
+	return buildConfiguredProviders(ctx, cfg.Providers.Agent, RemoteProviderKindAgent, deps.Placement,
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
 			return buildAgent(ctx, name, entry, factories, deps)
 		},
