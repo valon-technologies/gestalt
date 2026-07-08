@@ -185,9 +185,9 @@ type Deps struct {
 	Telemetry             core.TelemetryProvider
 	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
-	DevSupervisor        *providerdev.Supervisor
-	Placement            *PlacementPlan
-	RemoteClients        *remote.ClientSet
+	DevSupervisor         *providerdev.Supervisor
+	Placement             *PlacementPlan
+	RemoteClients         *remote.ClientSet
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }

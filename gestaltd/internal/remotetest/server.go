@@ -23,18 +23,18 @@ type Server struct {
 	Recorder *Recorder
 
 	listener net.Listener
-	grpc    *grpc.Server
+	grpc     *grpc.Server
 }
 
 // Recorder captures inbound public RPC metadata and payloads.
 type Recorder struct {
 	mu sync.Mutex
 
-	AppInvokes      []AppInvokeRecord
-	AgentCreates    []AgentCreateRecord
-	WorkflowStarts  []WorkflowStartRecord
-	IndexedDBGets   []IndexedDBGetRecord
-	AuthFailures    int
+	AppInvokes     []AppInvokeRecord
+	AgentCreates   []AgentCreateRecord
+	WorkflowStarts []WorkflowStartRecord
+	IndexedDBGets  []IndexedDBGetRecord
+	AuthFailures   int
 }
 
 type AppInvokeRecord struct {
