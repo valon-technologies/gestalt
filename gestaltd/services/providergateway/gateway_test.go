@@ -443,6 +443,7 @@ func TestPreparePublicRequest(t *testing.T) {
 		name         string
 		fullMethod   string
 		withOrigin   bool
+		metadata     []string
 		introspect   *core.IntrospectResponse
 		authAllow    *bool
 		req          gproto.Message
@@ -584,6 +585,15 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode:   codes.Unauthenticated,
 		},
 		{
+			name:       "rejects caller bearer metadata",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			metadata:   []string{"x-gestalt-caller-bearer-token", "test-token"},
+			introspect: activeAlice,
+			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			wantCode:   codes.Unauthenticated,
+		},
+		{
 			name:       "requires public origin",
 			fullMethod: proto.App_Invoke_FullMethodName,
 			introspect: activeAlice,
@@ -616,7 +626,11 @@ func TestPreparePublicRequest(t *testing.T) {
 			if tc.withOrigin {
 				ctx = publicrpc.WithPublicOrigin(ctx, tc.fullMethod)
 			}
-			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
+			metadataPairs := tc.metadata
+			if metadataPairs == nil {
+				metadataPairs = []string{"authorization", "Bearer test-token"}
+			}
+			ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(metadataPairs...))
 
 			p, adapted, err := transport.PreparePublicRequest(ctx, tc.fullMethod, tc.req)
 			if tc.wantCode != codes.OK {

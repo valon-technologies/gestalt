@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -112,9 +111,6 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 }
 
 func bearerTokenFromContext(ctx context.Context) string {
-	if token := strings.TrimSpace(gestalt.CallerBearerTokenFromIncomingContext(ctx)); token != "" {
-		return token
-	}
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return ""
