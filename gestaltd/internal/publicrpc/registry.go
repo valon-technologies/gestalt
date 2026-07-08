@@ -118,10 +118,6 @@ func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool
 	return policy, true, nil
 }
 
-func errorsJoin(errs []error) error {
-	return errors.Join(errs...)
-}
-
 func hasPublicVisibility(opts protoreflect.Message) bool {
 	ext := visibility.E_MethodVisibility.TypeDescriptor()
 	if ext == nil || !opts.Has(ext) {
@@ -226,49 +222,6 @@ func fullGRPCMethod(md protoreflect.MethodDescriptor) string {
 	return "/" + string(md.Parent().FullName()) + "/" + string(md.Name())
 }
 
-// GeneratedFiles returns a file registry containing the generated Gestalt
-// provider service descriptors used for public RPC discovery.
-func GeneratedFiles() (*protoregistry.Files, error) {
-	return registerFiles(
-		gestaltproto.File_v1_app_proto,
-		gestaltproto.File_v1_agent_proto,
-		gestaltproto.File_v1_workflow_proto,
-	)
-}
-
-// RegisterFiles registers file descriptors and their imports into a new registry.
-func RegisterFiles(roots ...protoreflect.FileDescriptor) (*protoregistry.Files, error) {
-	return registerFiles(roots...)
-}
-
-func registerFiles(roots ...protoreflect.FileDescriptor) (*protoregistry.Files, error) {
-	registry := &protoregistry.Files{}
-	seen := map[string]struct{}{}
-	var register func(protoreflect.FileDescriptor) error
-	register = func(fd protoreflect.FileDescriptor) error {
-		if fd == nil {
-			return nil
-		}
-		path := fd.Path()
-		if _, ok := seen[path]; ok {
-			return nil
-		}
-		imports := fd.Imports()
-		for i := 0; i < imports.Len(); i++ {
-			if err := register(imports.Get(i).FileDescriptor); err != nil {
-				return err
-			}
-		}
-		if err := registry.RegisterFile(fd); err != nil {
-			return fmt.Errorf("register %s: %w", path, err)
-		}
-		seen[path] = struct{}{}
-		return nil
-	}
-	for _, root := range roots {
-		if err := register(root); err != nil {
-			return nil, err
-		}
-	}
-	return registry, nil
+func errorsJoin(errs []error) error {
+	return errors.Join(errs...)
 }
