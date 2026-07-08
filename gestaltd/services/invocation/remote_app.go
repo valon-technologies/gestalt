@@ -74,12 +74,12 @@ func (b *Broker) invokeRemoteApp(
 	}
 	conn := ConnectionFromContext(ctx)
 	req := &proto.AppInvokeRequest{
-		App:       providerName,
-		Operation: operation,
-		Params:    paramsStruct,
-		Context:   reqCtx,
+		App:        providerName,
+		Operation:  operation,
+		Params:     paramsStruct,
+		Context:    reqCtx,
 		Connection: strings.TrimSpace(conn),
-		Instance:  strings.TrimSpace(instance),
+		Instance:   strings.TrimSpace(instance),
 	}
 	if mode := CredentialModeOverrideFromContext(ctx); mode != "" {
 		req.CredentialMode = string(mode)
@@ -111,12 +111,12 @@ func (b *Broker) invokeRemoteGraphQL(
 	}
 	conn := ConnectionFromContext(ctx)
 	req := &proto.AppInvokeGraphQLRequest{
-		App:       providerName,
-		Document:  request.Document,
-		Variables: variables,
-		Context:   reqCtx,
+		App:        providerName,
+		Document:   request.Document,
+		Variables:  variables,
+		Context:    reqCtx,
 		Connection: strings.TrimSpace(conn),
-		Instance:  strings.TrimSpace(instance),
+		Instance:   strings.TrimSpace(instance),
 	}
 	if key := IdempotencyKeyFromContext(ctx); key != "" {
 		req.IdempotencyKey = key
