@@ -89,7 +89,7 @@ func TestPublicGRPCRouting(t *testing.T) {
 		clients, err := remote.NewClientSet(context.Background(), remote.Config{
 			URL:       ts.URL,
 			Token:     publicGRPCTestBearer("roadmap"),
-			TLSConfig: publicGRPCTestTLS(),
+			TLSConfig: &tls.Config{InsecureSkipVerify: true},
 		})
 		if err != nil {
 			t.Fatalf("remote.NewClientSet: %v", err)
