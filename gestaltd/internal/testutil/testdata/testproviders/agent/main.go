@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/sdk/go/client"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
