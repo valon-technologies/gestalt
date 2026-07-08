@@ -9,8 +9,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
