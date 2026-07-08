@@ -1,6 +1,7 @@
 package publicrpc
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,8 +18,6 @@ const publicVisibilityRestriction = "PUBLIC"
 // requests.
 type PublicMethodPolicy struct {
 	FullMethod string
-	Service    string
-	Method     string
 	Fill       []string
 	Reject     []string
 }
@@ -90,7 +89,7 @@ func (r *Registry) Lookup(fullMethod string) (PublicMethodPolicy, bool) {
 func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool, error) {
 	fullMethod := fullGRPCMethod(md)
 	opts := md.Options().ProtoReflect()
-	hasPublicPolicy := hasMethodExtension(opts, gestaltproto.E_Public.TypeDescriptor())
+	hasPublicPolicy := opts.Has(gestaltproto.E_Public.TypeDescriptor())
 	isPublic := hasPublicVisibility(opts)
 
 	if hasPublicPolicy && !isPublic {
@@ -103,11 +102,7 @@ func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool
 		return PublicMethodPolicy{}, false, nil
 	}
 
-	policy := PublicMethodPolicy{
-		FullMethod: fullMethod,
-		Service:    string(md.Parent().FullName()),
-		Method:     string(md.Name()),
-	}
+	policy := PublicMethodPolicy{FullMethod: fullMethod}
 	if hasPublicPolicy {
 		fill, reject, err := readPublicPolicy(opts)
 		if err != nil {
@@ -121,10 +116,6 @@ func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool
 		policy.Reject = reject
 	}
 	return policy, true, nil
-}
-
-func hasMethodExtension(opts protoreflect.Message, ext protoreflect.ExtensionTypeDescriptor) bool {
-	return opts.Has(ext)
 }
 
 func hasPublicVisibility(opts protoreflect.Message) bool {
@@ -232,15 +223,5 @@ func fullGRPCMethod(md protoreflect.MethodDescriptor) string {
 }
 
 func errorsJoin(errs []error) error {
-	if len(errs) == 0 {
-		return nil
-	}
-	if len(errs) == 1 {
-		return errs[0]
-	}
-	messages := make([]string, len(errs))
-	for i, err := range errs {
-		messages[i] = err.Error()
-	}
-	return fmt.Errorf("publicrpc: %s", strings.Join(messages, "; "))
+	return errors.Join(errs...)
 }
