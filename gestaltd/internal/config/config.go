@@ -1927,6 +1927,8 @@ type ServerConfig struct {
 	Public        ListenerConfig           `yaml:"public"`
 	Management    ManagementListenerConfig `yaml:"management"`
 	BaseURL       string                   `yaml:"baseUrl"`
+	Remote        string                   `yaml:"remote,omitempty"`
+	RemoteToken   string                   `yaml:"remoteToken,omitempty"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
@@ -2395,6 +2397,8 @@ func normalizeServerRuntimeConfig(cfg *Config) {
 		return
 	}
 	cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
+	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
+	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
 }
 
 func normalizeProviderEntries(cfg *Config) {
@@ -3663,6 +3667,7 @@ func resolveBaseURL(cfg *Config) {
 	cfg.Server.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.BaseURL), "/")
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
 	cfg.Server.Runtime.RelayBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.RelayBaseURL), "/")
+	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
 }
 
 func resolveRelativePathsInValue(configPath string, root map[string]any) {
