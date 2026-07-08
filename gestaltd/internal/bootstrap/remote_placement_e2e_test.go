@@ -28,9 +28,9 @@ type fakeRemoteGestaltd struct {
 	proto.UnimplementedAppServer
 	proto.UnimplementedAgentServer
 
-	mu        sync.Mutex
-	authToken string
-	appCalls  []fakeRemoteAppCall
+	mu         sync.Mutex
+	authToken  string
+	appCalls   []fakeRemoteAppCall
 	agentCalls []string
 }
 
