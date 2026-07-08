@@ -16,6 +16,7 @@ func GeneratedFiles() (*protoregistry.Files, error) {
 		gestaltproto.File_v1_app_proto,
 		gestaltproto.File_v1_agent_proto,
 		gestaltproto.File_v1_workflow_proto,
+		gestaltproto.File_v1_indexeddb_proto,
 	)
 }
 

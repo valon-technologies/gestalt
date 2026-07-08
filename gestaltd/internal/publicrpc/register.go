@@ -43,6 +43,11 @@ func RegisterPublicWorkflowServer(s grpc.ServiceRegistrar, srv proto.WorkflowSer
 	registerPublic(s, srv, proto.Workflow_ServiceDesc)
 }
 
+// RegisterPublicIndexedDBServer registers only PUBLIC IndexedDB methods.
+func RegisterPublicIndexedDBServer(s grpc.ServiceRegistrar, srv proto.IndexedDBServer) {
+	registerPublic(s, srv, proto.IndexedDB_ServiceDesc)
+}
+
 func registerPublic(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
 	reg, err := loadGeneratedRegistry()
 	if err != nil {

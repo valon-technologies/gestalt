@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
@@ -67,6 +68,10 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	if authorizationEntry != nil {
 		authorizationProvider = result.Authorization[authorizationName]
 	}
+	var publicIndexedDB indexeddb.IndexedDB
+	if strings.TrimSpace(cfg.Server.Remote) == "" && result.Services != nil {
+		publicIndexedDB = result.Services.DB
+	}
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
@@ -101,6 +106,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		PrometheusMetrics:      result.Telemetry.PrometheusHandler(),
 		PublicHostServices:     result.PublicHostServices,
 		ActivateAppProviders:   result.ActivateAppProviders,
+		IndexedDB:              publicIndexedDB,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
