@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -99,6 +101,44 @@ func TestPublicGRPCRouting(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("public App.Invoke: %v", err)
+		}
+		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "roadmap" || call.operation != "sync" {
+			t.Fatalf("invoker call = %+v, want roadmap/sync", call)
+		}
+	})
+
+	t.Run("remote client set dials public surface", func(t *testing.T) {
+		t.Parallel()
+
+		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "roadmap",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name:       "roadmap",
+					Operations: []catalog.CatalogOperation{{ID: "sync", Method: "POST"}},
+				},
+			})
+		})
+
+		bearer := publicGRPCTestBearer("roadmap")
+		clients, err := remote.NewClientSet(context.Background(), remote.Config{
+			URL:       ts.URL,
+			Token:     bearer,
+			TLSConfig: &tls.Config{InsecureSkipVerify: true},
+		})
+		if err != nil {
+			t.Fatalf("remote.NewClientSet: %v", err)
+		}
+		defer func() { _ = clients.Close() }()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := clients.App.Invoke(ctx, &proto.AppInvokeRequest{
+			App:       "roadmap",
+			Operation: "sync",
+		}); err != nil {
+			t.Fatalf("remote App.Invoke: %v", err)
 		}
 		if call := invoker.snapshot(); call.calls != 1 || call.providerName != "roadmap" || call.operation != "sync" {
 			t.Fatalf("invoker call = %+v, want roadmap/sync", call)
