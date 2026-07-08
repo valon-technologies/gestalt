@@ -143,30 +143,29 @@ server:
 	}
 }
 
-func TestApplyServerRemoteOverrides(t *testing.T) {
+func TestApplyServerRemoteOverridesCLI(t *testing.T) {
 	t.Parallel()
 
-	t.Run("cli overrides config", func(t *testing.T) {
-		t.Parallel()
-		server := ServerConfig{
-			Remote:      "https://old.example/",
-			RemoteToken: "old-token",
-		}
-		if err := ApplyServerRemoteOverrides(&server, "https://valon.tools/", "new-token"); err != nil {
-			t.Fatalf("ApplyServerRemoteOverrides: %v", err)
-		}
-		if server.Remote != "https://valon.tools" {
-			t.Fatalf("Remote = %q", server.Remote)
-		}
-		if server.RemoteToken != "new-token" {
-			t.Fatalf("RemoteToken = %q", server.RemoteToken)
-		}
-	})
+	server := ServerConfig{
+		Remote:      "https://old.example/",
+		RemoteToken: "old-token",
+	}
+	if err := ApplyServerRemoteOverrides(&server, "https://valon.tools/", "new-token"); err != nil {
+		t.Fatalf("ApplyServerRemoteOverrides: %v", err)
+	}
+	if server.Remote != "https://valon.tools" {
+		t.Fatalf("Remote = %q", server.Remote)
+	}
+	if server.RemoteToken != "new-token" {
+		t.Fatalf("RemoteToken = %q", server.RemoteToken)
+	}
+}
 
-	t.Run("missing token when remote configured", func(t *testing.T) {
-		server := ServerConfig{Remote: "https://valon.tools"}
-		if err := ApplyServerRemoteOverrides(&server, "", ""); err == nil {
-			t.Fatal("ApplyServerRemoteOverrides: expected error, got nil")
-		}
-	})
+func TestApplyServerRemoteOverridesRequiresToken(t *testing.T) {
+	t.Parallel()
+
+	server := ServerConfig{Remote: "https://valon.tools"}
+	if err := ApplyServerRemoteOverrides(&server, "", ""); err == nil {
+		t.Fatal("ApplyServerRemoteOverrides: expected error, got nil")
+	}
 }
