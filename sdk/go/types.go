@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/valon-technologies/gestalt/sdk/go/migrations"
 )
 
 // ProviderKind identifies the protocol surface a provider implements.
@@ -52,6 +54,13 @@ type ProviderMetadata struct {
 // Provider is the common startup contract shared by every provider kind.
 type Provider interface {
 	Configure(ctx context.Context, name string, config map[string]any) error
+}
+
+// MigrationsProvider is implemented by providers that run IndexedDB migrations
+// before configuration.
+type MigrationsProvider interface {
+	Provider
+	MigrationOptions(ctx context.Context, name string, config map[string]any) (migrations.RunOptions, string, error)
 }
 
 // MetadataProvider is implemented by providers that can describe themselves

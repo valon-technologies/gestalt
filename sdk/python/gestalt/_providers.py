@@ -250,6 +250,18 @@ class Starter(Protocol):
         ...
 
 
+@runtime_checkable
+class MigrationsProvider(Protocol):
+    """Optional mixin for providers that run IndexedDB migrations on configure."""
+
+    def migration_options(
+        self, name: str, config: dict[str, Any]
+    ) -> Any:
+        """Return migration revisions or run options for this configure call."""
+
+        ...
+
+
 class WarningsProvider:
     """Optional mixin for providers that emit startup warnings."""
 

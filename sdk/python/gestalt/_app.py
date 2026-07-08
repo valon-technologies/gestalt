@@ -16,13 +16,7 @@ import yaml
 from ._api import Request, Subject
 from ._catalog_helpers import catalog_parameters
 from ._http_subject import HTTPSubjectRequest, clone_http_subject_request
-from ._operations import (
-    OperationDefinition,
-    OperationResult,
-    execute_operation,
-    inspect_handler,
-    run_sync,
-)
+from .migrations import MigrationRunOptions, normalize_migrations
 
 DEFAULT_OPERATION_METHOD: Final[str] = "POST"
 
@@ -55,6 +49,7 @@ class App:
         name: str,
         *,
         module_name: str | None = None,
+        migrations: Any | None = None,
     ) -> None:
         self.name = _slug_name(name)
         self._module_name = module_name
@@ -62,6 +57,7 @@ class App:
         self._configure_handler: Any = None
         self._session_catalog_handler: tuple[Any, bool] | None = None
         self._http_subject_handler: tuple[Any, bool] | None = None
+        self._migrations: MigrationRunOptions | None = normalize_migrations(migrations)
 
     @classmethod
     def from_manifest(
@@ -139,8 +135,20 @@ class App:
             return decorator
         return decorator(func)
 
+    def migration_options(
+        self, name: str, config: dict[str, Any]
+    ) -> MigrationRunOptions | None:
+        """Return app-declared migration revisions for startup."""
+
+        _ = name, config
+        return self._migrations
+
     def configure_provider(self, name: str, config: dict[str, Any]) -> None:
         """Invoke the registered configuration hook if one exists."""
+
+        from .migrations import configure_migrations
+
+        configure_migrations(self, name, config)
 
         handler = self._resolve_configure_handler()
         if handler is None:

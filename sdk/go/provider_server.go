@@ -56,6 +56,9 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 	if config == nil {
 		config = map[string]any{}
 	}
+	if err := ConfigureMigrations(ctx, s.provider, req.GetName(), config); err != nil {
+		return nil, status.Errorf(codes.Unknown, "configure migrations: %v", err)
+	}
 	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
 		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
 	}
