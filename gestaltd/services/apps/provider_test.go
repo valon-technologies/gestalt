@@ -810,3 +810,39 @@ func TestGetAppProviderSupportWithRetryLabelsContextDoneFailures(t *testing.T) {
 		t.Fatalf("getAppProviderSupportWithRetry error = %q", got)
 	}
 }
+
+type gestaltRemoteAppClientStub struct {
+	calls int
+}
+
+func (s *gestaltRemoteAppClientStub) Invoke(_ context.Context, req *proto.AppInvokeRequest, _ ...grpc.CallOption) (*proto.OperationResult, error) {
+	s.calls++
+	if req.GetApp() != "linear" || req.GetOperation() != "issues.get" {
+		return nil, status.Error(codes.InvalidArgument, "unexpected invoke")
+	}
+	return &proto.OperationResult{Status: 200, Body: []byte("ok")}, nil
+}
+
+func (s *gestaltRemoteAppClientStub) InvokeGraphQL(context.Context, *proto.AppInvokeGraphQLRequest, ...grpc.CallOption) (*proto.OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "graphql not implemented")
+}
+
+func TestGestaltRemoteProviderInvokesPublicAppAPI(t *testing.T) {
+	t.Parallel()
+
+	stub := &gestaltRemoteAppClientStub{}
+	prov := NewGestaltRemoteProvider(stub, StaticProviderSpec{
+		Name:           "linear",
+		ConnectionMode: core.ConnectionModeNone,
+	})
+	result, err := prov.Execute(context.Background(), "issues.get", nil, "")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Status != 200 || string(result.Body) != "ok" {
+		t.Fatalf("result = %#v, want 200 ok", result)
+	}
+	if stub.calls != 1 {
+		t.Fatalf("remote calls = %d, want 1", stub.calls)
+	}
+}
