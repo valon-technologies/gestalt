@@ -975,6 +975,7 @@ pub mod agent_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        ///
         pub async fn get_session(
             &mut self,
             request: impl tonic::IntoRequest<super::GetAgentProviderSessionRequest>,
@@ -990,6 +991,7 @@ pub mod agent_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "GetSession"));
             self.inner.unary(req, path, codec).await
         }
+        ///
         pub async fn list_sessions(
             &mut self,
             request: impl tonic::IntoRequest<super::ListAgentProviderSessionsRequest>,
@@ -1208,10 +1210,12 @@ pub mod agent_server {
             &self,
             request: tonic::Request<super::CreateAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        ///
         async fn get_session(
             &self,
             request: tonic::Request<super::GetAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        ///
         async fn list_sessions(
             &self,
             request: tonic::Request<super::ListAgentProviderSessionsRequest>,

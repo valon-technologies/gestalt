@@ -362,14 +362,14 @@ class CancelAgentProviderTurnRequest:
 @dataclass(frozen=True, slots=True)
 class CreateAgentProviderSessionRequest:
     #: The provider mints the session id returned on AgentSession. Creation is
-    #: idempotent on idempotency_key scoped per subject (created_by_subject_id):
+    #: idempotent on idempotency_key scoped per subject (context.subject.id,
+    #: or top-level subject when set for delegated provider calls):
     #: a replayed key returns the existing session, an empty key always creates.
     #: Idempotency is scoped to the provider's session store.
     idempotency_key: str = ""
     model: str = ""
     client_ref: str = ""
     metadata: dict[str, JsonValue] | None = None
-    created_by_subject_id: str = ""
     subject: SubjectContext | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: PreparedAgentWorkspace | None = None
@@ -387,7 +387,6 @@ class CreateAgentProviderTurnRequest:
     model: str = ""
     messages: list[AgentMessage] = field(default_factory=list)
     metadata: dict[str, JsonValue] | None = None
-    created_by_subject_id: str = ""
     execution_ref: str = ""
     subject: SubjectContext | None = None
     model_options: dict[str, JsonValue] | None = None

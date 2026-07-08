@@ -349,7 +349,8 @@ export interface CancelAgentProviderTurnRequest {
 export interface CreateAgentProviderSessionRequest {
   /**
    * The provider mints the session id returned on AgentSession. Creation is
-   * idempotent on idempotency_key scoped per subject (created_by_subject_id):
+   * idempotent on idempotency_key scoped per subject (context.subject.id,
+   * or top-level subject when set for delegated provider calls):
    * a replayed key returns the existing session, an empty key always creates.
    * Idempotency is scoped to the provider's session store.
    */
@@ -357,7 +358,6 @@ export interface CreateAgentProviderSessionRequest {
   model: string;
   clientRef: string;
   metadata?: JsonObject;
-  createdBySubjectId: string;
   subject?: SubjectContext;
   sessionStart?: AgentSessionStartConfig;
   preparedWorkspace?: PreparedAgentWorkspace;
@@ -374,7 +374,6 @@ export interface CreateAgentProviderTurnRequest {
   model: string;
   messages: AgentMessage[];
   metadata?: JsonObject;
-  createdBySubjectId: string;
   executionRef: string;
   subject?: SubjectContext;
   modelOptions?: JsonObject;
@@ -570,7 +569,6 @@ export class Agent {
       model,
       providerName: options?.providerName ?? "",
       clientRef: options?.clientRef ?? "",
-      createdBySubjectId: "",
       ...(options?.metadata !== undefined
         ? { metadata: options.metadata }
         : {}),
@@ -772,7 +770,6 @@ export class Agent {
       timeoutSeconds: options?.timeoutSeconds ?? 0,
       providerName: options?.providerName ?? "",
       turnId: "",
-      createdBySubjectId: "",
       ...(options?.metadata !== undefined
         ? { metadata: options.metadata }
         : {}),

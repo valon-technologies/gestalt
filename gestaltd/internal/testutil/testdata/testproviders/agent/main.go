@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/sdk/go/client"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -48,12 +49,33 @@ func (p *agentProvider) Configure(_ context.Context, name string, _ map[string]a
 	return nil
 }
 
+func auditSubjectID(reqCtx *proto.RequestContext, subject *gestalt.Subject) string {
+	if reqCtx != nil && reqCtx.GetSubject() != nil {
+		if id := strings.TrimSpace(reqCtx.GetSubject().GetId()); id != "" {
+			return id
+		}
+	}
+	if subject != nil {
+		return strings.TrimSpace(subject.ID)
+	}
+	return ""
+}
+
+func idempotencySubjectID(reqCtx *proto.RequestContext, subject *gestalt.Subject) string {
+	if subject != nil {
+		if id := strings.TrimSpace(subject.ID); id != "" {
+			return id
+		}
+	}
+	return auditSubjectID(reqCtx, nil)
+}
+
 func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	scopedKey := ""
 	if idempotencyKey := strings.TrimSpace(req.IdempotencyKey); idempotencyKey != "" {
-		scopedKey = strings.TrimSpace(req.CreatedBySubjectID) + "\x00" + idempotencyKey
+		scopedKey = idempotencySubjectID(req.Context, req.Subject) + "\x00" + idempotencyKey
 		if sessionID, ok := p.sessionIDsByIdempotencyKey[scopedKey]; ok {
 			if existing, ok := p.sessions[sessionID]; ok {
 				return cloneSession(existing), nil
@@ -64,7 +86,7 @@ func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgen
 		"agent-session-"+uuid.NewString(),
 		strings.TrimSpace(req.Model),
 		strings.TrimSpace(req.ClientRef),
-		req.CreatedBySubjectID,
+		auditSubjectID(req.Context, req.Subject),
 		req.Metadata,
 	)
 	if scopedKey != "" {
@@ -125,7 +147,7 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgent
 		req.Messages,
 		req.Metadata,
 		req.Output,
-		req.CreatedBySubjectID,
+		auditSubjectID(req.Context, req.Subject),
 		strings.TrimSpace(req.ExecutionRef),
 	)
 	return turn, err

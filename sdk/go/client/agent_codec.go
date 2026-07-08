@@ -731,18 +731,17 @@ func ToWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRe
 		return nil
 	}
 	out := &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:     value.IdempotencyKey,
-		Model:              value.Model,
-		ClientRef:          value.ClientRef,
-		Metadata:           toWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		Subject:            ToWireSubjectContext(value.Subject),
-		SessionStart:       ToWireAgentSessionStartConfig(value.SessionStart),
-		PreparedWorkspace:  ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
-		ProviderName:       value.ProviderName,
-		Workspace:          ToWireAgentWorkspace(value.Workspace),
-		Context:            ToWireRequestContext(value.Context),
-		Tools:              ToWireAgentToolConfig(value.Tools),
+		IdempotencyKey:    value.IdempotencyKey,
+		Model:             value.Model,
+		ClientRef:         value.ClientRef,
+		Metadata:          toWireStruct(value.Metadata),
+		Subject:           ToWireSubjectContext(value.Subject),
+		SessionStart:      ToWireAgentSessionStartConfig(value.SessionStart),
+		PreparedWorkspace: ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
+		ProviderName:      value.ProviderName,
+		Workspace:         ToWireAgentWorkspace(value.Workspace),
+		Context:           ToWireRequestContext(value.Context),
+		Tools:             ToWireAgentToolConfig(value.Tools),
 	}
 	return out
 }
@@ -752,18 +751,17 @@ func FromWireCreateAgentProviderSessionRequest(value *proto.CreateAgentProviderS
 		return nil
 	}
 	out := &CreateAgentProviderSessionRequest{
-		IdempotencyKey:     value.IdempotencyKey,
-		Model:              value.Model,
-		ClientRef:          value.ClientRef,
-		Metadata:           fromWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		Subject:            FromWireSubjectContext(value.Subject),
-		SessionStart:       FromWireAgentSessionStartConfig(value.SessionStart),
-		PreparedWorkspace:  FromWirePreparedAgentWorkspace(value.PreparedWorkspace),
-		ProviderName:       value.ProviderName,
-		Workspace:          FromWireAgentWorkspace(value.Workspace),
-		Context:            FromWireRequestContext(value.Context),
-		Tools:              FromWireAgentToolConfig(value.Tools),
+		IdempotencyKey:    value.IdempotencyKey,
+		Model:             value.Model,
+		ClientRef:         value.ClientRef,
+		Metadata:          fromWireStruct(value.Metadata),
+		Subject:           FromWireSubjectContext(value.Subject),
+		SessionStart:      FromWireAgentSessionStartConfig(value.SessionStart),
+		PreparedWorkspace: FromWirePreparedAgentWorkspace(value.PreparedWorkspace),
+		ProviderName:      value.ProviderName,
+		Workspace:         FromWireAgentWorkspace(value.Workspace),
+		Context:           FromWireRequestContext(value.Context),
+		Tools:             FromWireAgentToolConfig(value.Tools),
 	}
 	return out
 }
@@ -773,19 +771,18 @@ func ToWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest)
 		return nil
 	}
 	out := &proto.CreateAgentProviderTurnRequest{
-		TurnId:             value.TurnId,
-		SessionId:          value.SessionId,
-		IdempotencyKey:     value.IdempotencyKey,
-		Model:              value.Model,
-		Metadata:           toWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		ExecutionRef:       value.ExecutionRef,
-		Subject:            ToWireSubjectContext(value.Subject),
-		ModelOptions:       toWireStruct(value.ModelOptions),
-		TimeoutSeconds:     value.TimeoutSeconds,
-		Output:             ToWireAgentOutput(value.Output),
-		Context:            ToWireRequestContext(value.Context),
-		ProviderName:       value.ProviderName,
+		TurnId:         value.TurnId,
+		SessionId:      value.SessionId,
+		IdempotencyKey: value.IdempotencyKey,
+		Model:          value.Model,
+		Metadata:       toWireStruct(value.Metadata),
+		ExecutionRef:   value.ExecutionRef,
+		Subject:        ToWireSubjectContext(value.Subject),
+		ModelOptions:   toWireStruct(value.ModelOptions),
+		TimeoutSeconds: value.TimeoutSeconds,
+		Output:         ToWireAgentOutput(value.Output),
+		Context:        ToWireRequestContext(value.Context),
+		ProviderName:   value.ProviderName,
 	}
 	for _, item := range value.Messages {
 		out.Messages = append(out.Messages, ToWireAgentMessage(item))
@@ -798,19 +795,18 @@ func FromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurn
 		return nil
 	}
 	out := &CreateAgentProviderTurnRequest{
-		TurnId:             value.TurnId,
-		SessionId:          value.SessionId,
-		IdempotencyKey:     value.IdempotencyKey,
-		Model:              value.Model,
-		Metadata:           fromWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		ExecutionRef:       value.ExecutionRef,
-		Subject:            FromWireSubjectContext(value.Subject),
-		ModelOptions:       fromWireStruct(value.ModelOptions),
-		TimeoutSeconds:     value.TimeoutSeconds,
-		Output:             FromWireAgentOutput(value.Output),
-		Context:            FromWireRequestContext(value.Context),
-		ProviderName:       value.ProviderName,
+		TurnId:         value.TurnId,
+		SessionId:      value.SessionId,
+		IdempotencyKey: value.IdempotencyKey,
+		Model:          value.Model,
+		Metadata:       fromWireStruct(value.Metadata),
+		ExecutionRef:   value.ExecutionRef,
+		Subject:        FromWireSubjectContext(value.Subject),
+		ModelOptions:   fromWireStruct(value.ModelOptions),
+		TimeoutSeconds: value.TimeoutSeconds,
+		Output:         FromWireAgentOutput(value.Output),
+		Context:        FromWireRequestContext(value.Context),
+		ProviderName:   value.ProviderName,
 	}
 	for _, item := range value.Messages {
 		out.Messages = append(out.Messages, FromWireAgentMessage(item))

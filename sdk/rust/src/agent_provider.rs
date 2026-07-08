@@ -600,8 +600,6 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: String,
     /// The `metadata` field.
     pub metadata: Option<AgentJson>,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: Option<String>,
     /// The `subject` field.
     pub subject: Option<Subject>,
     /// The `session_start` field.
@@ -803,8 +801,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub output: AgentOutput,
     /// The `metadata` field.
     pub metadata: Option<AgentJson>,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: Option<String>,
     /// The `execution_ref` field.
     pub execution_ref: String,
     /// The `subject` field.
@@ -1391,9 +1387,6 @@ fn create_session_request_from_proto(
         model: value.model,
         client_ref: value.client_ref,
         metadata: json_from_struct(value.metadata),
-        created_by_subject_id: Some(value.created_by_subject_id)
-            .filter(|value| !value.trim().is_empty())
-            .map(|value| value.to_string()),
         subject: agent_subject_from_proto(value.subject),
         session_start: value.session_start.map(|value| AgentSessionStartConfig {
             hooks: value
@@ -1440,9 +1433,6 @@ fn create_turn_request_from_proto(
         messages: value.messages.into_iter().map(message_from_proto).collect(),
         output: required_agent_output_from_proto(value.output)?,
         metadata: json_from_struct(value.metadata),
-        created_by_subject_id: Some(value.created_by_subject_id)
-            .filter(|value| !value.trim().is_empty())
-            .map(|value| value.to_string()),
         execution_ref: value.execution_ref,
         subject: agent_subject_from_proto(value.subject),
         model_options: json_from_struct(value.model_options),
@@ -1536,7 +1526,8 @@ pub trait AgentProvider: Send + Sync + 'static {
     ///
     /// Mints the session id returned on the [`AgentSession`]. Must be
     /// idempotent on `idempotency_key` scoped per subject
-    /// (`created_by_subject_id`); an empty key always creates.
+    /// (`context.subject.id`, or top-level subject when set for delegated provider
+    /// calls); an empty key always creates.
     async fn create_session(
         &self,
         _request: CreateAgentProviderSessionRequest,

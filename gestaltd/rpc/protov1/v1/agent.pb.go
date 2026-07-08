@@ -1239,23 +1239,23 @@ func (x *AgentSession) GetLastTurnAt() *timestamppb.Timestamp {
 type CreateAgentProviderSessionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The provider mints the session id returned on AgentSession. Creation is
-	// idempotent on idempotency_key scoped per subject (created_by_subject_id):
+	// idempotent on idempotency_key scoped per subject (context.subject.id,
+	// or top-level subject when set for delegated provider calls):
 	// a replayed key returns the existing session, an empty key always creates.
 	// Idempotency is scoped to the provider's session store.
-	IdempotencyKey     string                   `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	Model              string                   `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	ClientRef          string                   `protobuf:"bytes,4,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
-	Metadata           *structpb.Struct         `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	CreatedBySubjectId string                   `protobuf:"bytes,7,opt,name=created_by_subject_id,json=createdBySubjectId,proto3" json:"created_by_subject_id,omitempty"`
-	Subject            *SubjectContext          `protobuf:"bytes,8,opt,name=subject,proto3" json:"subject,omitempty"`
-	SessionStart       *AgentSessionStartConfig `protobuf:"bytes,9,opt,name=session_start,json=sessionStart,proto3" json:"session_start,omitempty"`
-	PreparedWorkspace  *PreparedAgentWorkspace  `protobuf:"bytes,10,opt,name=prepared_workspace,json=preparedWorkspace,proto3" json:"prepared_workspace,omitempty"`
-	ProviderName       string                   `protobuf:"bytes,11,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	Workspace          *AgentWorkspace          `protobuf:"bytes,13,opt,name=workspace,proto3" json:"workspace,omitempty"`
-	Context            *RequestContext          `protobuf:"bytes,15,opt,name=context,proto3" json:"context,omitempty"`
-	Tools              *AgentToolConfig         `protobuf:"bytes,16,opt,name=tools,proto3" json:"tools,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	IdempotencyKey    string                   `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Model             string                   `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	ClientRef         string                   `protobuf:"bytes,4,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
+	Metadata          *structpb.Struct         `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Subject           *SubjectContext          `protobuf:"bytes,8,opt,name=subject,proto3" json:"subject,omitempty"`
+	SessionStart      *AgentSessionStartConfig `protobuf:"bytes,9,opt,name=session_start,json=sessionStart,proto3" json:"session_start,omitempty"`
+	PreparedWorkspace *PreparedAgentWorkspace  `protobuf:"bytes,10,opt,name=prepared_workspace,json=preparedWorkspace,proto3" json:"prepared_workspace,omitempty"`
+	ProviderName      string                   `protobuf:"bytes,11,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Workspace         *AgentWorkspace          `protobuf:"bytes,13,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	Context           *RequestContext          `protobuf:"bytes,15,opt,name=context,proto3" json:"context,omitempty"`
+	Tools             *AgentToolConfig         `protobuf:"bytes,16,opt,name=tools,proto3" json:"tools,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CreateAgentProviderSessionRequest) Reset() {
@@ -1314,13 +1314,6 @@ func (x *CreateAgentProviderSessionRequest) GetMetadata() *structpb.Struct {
 		return x.Metadata
 	}
 	return nil
-}
-
-func (x *CreateAgentProviderSessionRequest) GetCreatedBySubjectId() string {
-	if x != nil {
-		return x.CreatedBySubjectId
-	}
-	return ""
 }
 
 func (x *CreateAgentProviderSessionRequest) GetSubject() *SubjectContext {
@@ -2437,17 +2430,16 @@ func (x *AgentTurnDisplay) GetLanguage() string {
 }
 
 type CreateAgentProviderTurnRequest struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	TurnId             string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	SessionId          string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	IdempotencyKey     string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	Model              string                 `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
-	Messages           []*AgentMessage        `protobuf:"bytes,5,rep,name=messages,proto3" json:"messages,omitempty"`
-	Metadata           *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	CreatedBySubjectId string                 `protobuf:"bytes,10,opt,name=created_by_subject_id,json=createdBySubjectId,proto3" json:"created_by_subject_id,omitempty"`
-	ExecutionRef       string                 `protobuf:"bytes,11,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
-	Subject            *SubjectContext        `protobuf:"bytes,14,opt,name=subject,proto3" json:"subject,omitempty"`
-	ModelOptions       *structpb.Struct       `protobuf:"bytes,16,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TurnId         string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	SessionId      string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Model          string                 `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
+	Messages       []*AgentMessage        `protobuf:"bytes,5,rep,name=messages,proto3" json:"messages,omitempty"`
+	Metadata       *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	ExecutionRef   string                 `protobuf:"bytes,11,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
+	Subject        *SubjectContext        `protobuf:"bytes,14,opt,name=subject,proto3" json:"subject,omitempty"`
+	ModelOptions   *structpb.Struct       `protobuf:"bytes,16,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
 	// Optional provider-owned turn execution budget, in seconds.
 	// If unset or zero, the provider chooses its own execution timeout. This does
 	// not control the CreateTurn RPC deadline.
@@ -2529,13 +2521,6 @@ func (x *CreateAgentProviderTurnRequest) GetMetadata() *structpb.Struct {
 		return x.Metadata
 	}
 	return nil
-}
-
-func (x *CreateAgentProviderTurnRequest) GetCreatedBySubjectId() string {
-	if x != nil {
-		return x.CreatedBySubjectId
-	}
-	return ""
 }
 
 func (x *CreateAgentProviderTurnRequest) GetExecutionRef() string {
@@ -3738,14 +3723,13 @@ const file_v1_agent_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12<\n" +
 	"\flast_turn_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastTurnAt\"\xfa\x05\n" +
+	"lastTurnAt\"\xe4\x05\n" +
 	"!CreateAgentProviderSessionRequest\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12\x14\n" +
 	"\x05model\x18\x03 \x01(\tR\x05model\x12\x1d\n" +
 	"\n" +
 	"client_ref\x18\x04 \x01(\tR\tclientRef\x123\n" +
-	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x121\n" +
-	"\x15created_by_subject_id\x18\a \x01(\tR\x12createdBySubjectId\x12=\n" +
+	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12=\n" +
 	"\asubject\x18\b \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12Q\n" +
 	"\rsession_start\x18\t \x01(\v2,.gestalt.provider.v1.AgentSessionStartConfigR\fsessionStart\x12Z\n" +
 	"\x12prepared_workspace\x18\n" +
@@ -3753,8 +3737,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\rprovider_name\x18\v \x01(\tR\fproviderName\x12A\n" +
 	"\tworkspace\x18\r \x01(\v2#.gestalt.provider.v1.AgentWorkspaceR\tworkspace\x12=\n" +
 	"\acontext\x18\x0f \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12:\n" +
-	"\x05tools\x18\x10 \x01(\v2$.gestalt.provider.v1.AgentToolConfigR\x05toolsJ\x04\b\x01\x10\x02J\x04\b\x06\x10\aJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\n" +
-	"session_idR\x10provider_optionsR\bworkflow\"\x9d\x01\n" +
+	"\x05tools\x18\x10 \x01(\v2$.gestalt.provider.v1.AgentToolConfigR\x05toolsJ\x04\b\x01\x10\x02J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\n" +
+	"session_idR\x10provider_optionsR\bworkflowR\x15created_by_subject_id\"\x9d\x01\n" +
 	"\x0fAgentToolConfig\x127\n" +
 	"\x04none\x18\x01 \x01(\v2!.gestalt.provider.v1.AgentNoToolsH\x00R\x04none\x12G\n" +
 	"\acatalog\x18\x02 \x01(\v2+.gestalt.provider.v1.AgentCatalogToolConfigH\x00R\acatalogB\b\n" +
@@ -3847,7 +3831,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x06action\x18\n" +
 	" \x01(\tR\x06action\x12\x16\n" +
 	"\x06format\x18\v \x01(\tR\x06format\x12\x1a\n" +
-	"\blanguage\x18\f \x01(\tR\blanguage\"\xbe\x06\n" +
+	"\blanguage\x18\f \x01(\tR\blanguage\"\xa8\x06\n" +
 	"\x1eCreateAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1d\n" +
 	"\n" +
@@ -3855,9 +3839,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\x12\x14\n" +
 	"\x05model\x18\x04 \x01(\tR\x05model\x12=\n" +
 	"\bmessages\x18\x05 \x03(\v2!.gestalt.provider.v1.AgentMessageR\bmessages\x123\n" +
-	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x121\n" +
-	"\x15created_by_subject_id\x18\n" +
-	" \x01(\tR\x12createdBySubjectId\x12#\n" +
+	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12#\n" +
 	"\rexecution_ref\x18\v \x01(\tR\fexecutionRef\x12=\n" +
 	"\asubject\x18\x0e \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12<\n" +
 	"\rmodel_options\x18\x10 \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\x12'\n" +
@@ -3865,8 +3847,9 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x06output\x18\x15 \x01(\v2 .gestalt.provider.v1.AgentOutputR\x06output\x12=\n" +
 	"\acontext\x18\x17 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
 	"\rprovider_name\x18\x18 \x01(\tR\fproviderNameJ\x04\b\x06\x10\aJ\x04\b\t\x10\n" +
-	"J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10J\x04\b\x11\x10\x12J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x16\x10\x17R\x05toolsR\x10provider_optionsR\ttool_refsR\vtool_sourceR\n" +
-	"tool_grantR\trun_grantR\rtool_refs_setR\bworkflow\"\x11\n" +
+	"J\x04\b\n" +
+	"\x10\vJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10J\x04\b\x11\x10\x12J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x16\x10\x17R\x05toolsR\x10provider_optionsR\ttool_refsR\vtool_sourceR\n" +
+	"tool_grantR\trun_grantR\rtool_refs_setR\bworkflowR\x15created_by_subject_id\"\x11\n" +
 	"\x0fAgentTextOutput\"H\n" +
 	"\x15AgentStructuredOutput\x12/\n" +
 	"\x06schema\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06schema\"\x9f\x01\n" +
@@ -3988,13 +3971,12 @@ const file_v1_agent_proto_rawDesc = "" +
 	"#AGENT_INTERACTION_STATE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fAGENT_INTERACTION_STATE_PENDING\x10\x01\x12$\n" +
 	" AGENT_INTERACTION_STATE_RESOLVED\x10\x02\x12$\n" +
-	" AGENT_INTERACTION_STATE_CANCELED\x10\x032\xb7\x14\n" +
-	"\x05Agent\x12\x85\x02\n" +
-	"\rCreateSession\x126.gestalt.provider.v1.CreateAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"\x98\x01\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\n" +
-	"client_ref\xa2\xb5\x18\bmetadata\xa2\xb5\x18\tworkspace\xa2\xb5\x18\x05tools\xca\xf3\x18)\n" +
+	" AGENT_INTERACTION_STATE_CANCELED\x10\x032\x89\x14\n" +
+	"\x05Agent\x12\xee\x01\n" +
+	"\rCreateSession\x126.gestalt.provider.v1.CreateAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"\x81\x01\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\n" +
+	"client_ref\xa2\xb5\x18\bmetadata\xa2\xb5\x18\tworkspace\xa2\xb5\x18\x05tools\xca\xf3\x18\x12\n" +
 	"\acontext\n" +
-	"\asubject\n" +
-	"\x15created_by_subject_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xa9\x01\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xa9\x01\n" +
 	"\n" +
 	"GetSession\x123.gestalt.provider.v1.GetAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"C\x8a\xb5\x18\n" +
 	"session_id\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
@@ -4007,13 +3989,12 @@ const file_v1_agent_proto_rawDesc = "" +
 	"session_id\xa2\xb5\x18\n" +
 	"client_ref\xa2\xb5\x18\x05state\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\bmetadata\xca\xf3\x18\x12\n" +
 	"\acontext\n" +
-	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xb1\x02\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x9a\x02\n" +
 	"\n" +
-	"CreateTurn\x123.gestalt.provider.v1.CreateAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"\xcd\x01\x8a\xb5\x18\n" +
-	"session_id\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\x8a\xb5\x18\bmessages\xa2\xb5\x18\rexecution_ref\xa2\xb5\x18\x0ftimeout_seconds\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\bmetadata\xa2\xb5\x18\rmodel_options\xa2\xb5\x18\x06output\xca\xf3\x18)\n" +
+	"CreateTurn\x123.gestalt.provider.v1.CreateAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"\xb6\x01\x8a\xb5\x18\n" +
+	"session_id\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\x8a\xb5\x18\bmessages\xa2\xb5\x18\rexecution_ref\xa2\xb5\x18\x0ftimeout_seconds\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\bmetadata\xa2\xb5\x18\rmodel_options\xa2\xb5\x18\x06output\xca\xf3\x18\x12\n" +
 	"\acontext\n" +
-	"\asubject\n" +
-	"\x15created_by_subject_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x9d\x01\n" +
+	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x9d\x01\n" +
 	"\aGetTurn\x120.gestalt.provider.v1.GetAgentProviderTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\"@\x8a\xb5\x18\aturn_id\xa2\xb5\x18\rprovider_name\xca\xf3\x18\x12\n" +
 	"\acontext\n" +
 	"\asubject\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xe8\x01\n" +

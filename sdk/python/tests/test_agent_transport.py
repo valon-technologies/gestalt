@@ -87,6 +87,10 @@ def _native_context_subject_id(context: Any) -> str:
     return context.subject.id
 
 
+def _audit_subject_id(context: Any) -> str:
+    return _native_context_subject_id(context)
+
+
 class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def __init__(self) -> None:
         self.configured: list[tuple[str, dict[str, object]]] = []
@@ -127,7 +131,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             client_ref=request.client_ref,
             state=AGENT_SESSION_STATE_ACTIVE,
             metadata=request.metadata,
-            created_by_subject_id=request.created_by_subject_id,
+            created_by_subject_id=_audit_subject_id(request.context),
         )
 
     def get_session(self, request: Any) -> Any:
@@ -178,7 +182,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
                 text="echo:Plan it",
             ),
             status_message="waiting for input",
-            created_by_subject_id=request.created_by_subject_id,
+            created_by_subject_id=_audit_subject_id(request.context),
             execution_ref=request.execution_ref,
         )
 
@@ -782,7 +786,6 @@ class AgentTransportTests(unittest.TestCase):
             idempotency_key="session-req-1",
             model="gpt-5.1",
             client_ref="cli-session-1",
-            created_by_subject_id="user:session-owner",
             context=app_pb2.RequestContext(
                 subject=app_pb2.SubjectContext(id="user:session")
             ),
@@ -849,7 +852,6 @@ class AgentTransportTests(unittest.TestCase):
                         ],
                     )
                 ],
-                created_by_subject_id="user:turn-owner",
                 execution_ref="exec-turn-1",
                 context=app_pb2.RequestContext(
                     subject=app_pb2.SubjectContext(id="user:turn")
@@ -898,14 +900,14 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(_provider.configured, [("agent-runtime", {"tenant": "acme"})])
         self.assertEqual(created_session.id, "session-1")
         self.assertEqual(created_session.state, agent_pb2.AGENT_SESSION_STATE_ACTIVE)
-        self.assertEqual(created_session.created_by_subject_id, "user:session-owner")
+        self.assertEqual(created_session.created_by_subject_id, "user:session")
         self.assertEqual(
             [session.id for session in listed_sessions.sessions], ["session-1"]
         )
         self.assertEqual(fetched_session.state, agent_pb2.AGENT_SESSION_STATE_ARCHIVED)
         self.assertEqual(updated_session.client_ref, "cli-session-2")
         self.assertEqual(created_turn.id, "turn-1")
-        self.assertEqual(created_turn.created_by_subject_id, "user:turn-owner")
+        self.assertEqual(created_turn.created_by_subject_id, "user:turn")
         self.assertEqual(_provider.context_subject_ids, ["user:session", "user:turn"])
         self.assertEqual(
             _provider.session_tools,

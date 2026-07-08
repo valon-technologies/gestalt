@@ -511,7 +511,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.Model = strings.TrimSpace(req.GetModel())
 	providerReq.ClientRef = strings.TrimSpace(req.GetClientRef())
 	providerReq.Metadata = providerMetadata
-	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
@@ -853,7 +852,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.ProviderName = ownedSession.providerName
 	providerReq.IdempotencyKey = idempotencyKey
 	providerReq.Model = strings.TrimSpace(req.GetModel())
-	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	ctx = invocation.WithAgentInvocationContext(ctx, invocation.AgentInvocationContext{
@@ -4284,14 +4282,6 @@ func normalizeAgentToolCredentialMode(mode core.ConnectionMode) (core.Connection
 	default:
 		return "", fmt.Errorf("unsupported agent tool credential mode %q", mode)
 	}
-}
-
-func agentSubjectIDFromPrincipal(p *principal.Principal) string {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.SubjectID)
 }
 
 func agentSubjectFromPrincipal(p *principal.Principal) core.RunAsSubject {

@@ -237,7 +237,7 @@ func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto
 	p.createSessionReqs = append(p.createSessionReqs, cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{}))
 	key := ""
 	if idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey()); idempotencyKey != "" {
-		key = strings.TrimSpace(req.GetCreatedBySubjectId()) + "\x1f" + idempotencyKey
+		key = IdempotencySubjectID(req.GetContext(), req.GetSubject()) + "\x1f" + idempotencyKey
 		if sessionID, ok := p.sessionIdempotency[key]; ok {
 			return cloneRouteSession(p.sessions[sessionID]), nil
 		}
@@ -249,7 +249,7 @@ func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           mapsCloneAny(protoutil.MapFromStruct(req.GetMetadata())),
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedBySubjectID: AuditSubjectID(req.GetContext()),
 	}
 	p.sessions[session.ID] = session
 	if key != "" {
@@ -353,7 +353,7 @@ func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req *proto.Cr
 		Status:             status,
 		Messages:           agentwire.MessagesFromProto(req.GetMessages()),
 		Output:             p.createTurnOutput,
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedBySubjectID: AuditSubjectID(req.GetContext()),
 		ExecutionRef:       req.GetExecutionRef(),
 	}
 	p.turns[turn.ID] = turn

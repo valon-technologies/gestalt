@@ -41,8 +41,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -1657,7 +1657,7 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           stubAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBySubjectID: req.GetCreatedBySubjectId(),
+		CreatedBySubjectID: agentmanager.AuditSubjectID(req.GetContext()),
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -1721,7 +1721,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           stubAgentMessagesFromProto(req.GetMessages()),
 		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBySubjectID: req.GetCreatedBySubjectId(),
+		CreatedBySubjectID: agentmanager.AuditSubjectID(req.GetContext()),
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,
@@ -3928,8 +3928,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if sessionReq.IdempotencyKey != "plugin-agent-session" {
 		t.Fatalf("CreateSession idempotency_key = %q, want %q", sessionReq.IdempotencyKey, "plugin-agent-session")
 	}
-	if sessionReq.GetCreatedBySubjectId() != "user:user-123" {
-		t.Fatalf("CreateSession created_by_subject_id = %q, want %q", sessionReq.GetCreatedBySubjectId(), "user:user-123")
+	if sessionReq.GetContext().GetSubject().GetId() != "user:user-123" {
+		t.Fatalf("CreateSession context.subject.id = %q, want %q", sessionReq.GetContext().GetSubject().GetId(), "user:user-123")
 	}
 	if turnReq.IdempotencyKey != "plugin-agent-turn" {
 		t.Fatalf("CreateTurn idempotency_key = %q, want %q", turnReq.IdempotencyKey, "plugin-agent-turn")
@@ -3937,8 +3937,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if turnReq.GetSessionId() != roundTrip.SessionID {
 		t.Fatalf("CreateTurn session_id = %q, want %q", turnReq.GetSessionId(), roundTrip.SessionID)
 	}
-	if turnReq.GetCreatedBySubjectId() != "user:user-123" {
-		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", turnReq.GetCreatedBySubjectId(), "user:user-123")
+	if turnReq.GetContext().GetSubject().GetId() != "user:user-123" {
+		t.Fatalf("CreateTurn context.subject.id = %q, want %q", turnReq.GetContext().GetSubject().GetId(), "user:user-123")
 	}
 	turnMetadata := stubAgentProtoStructToMap(turnReq.GetMetadata())
 	if requireInteraction, _ := turnMetadata["requireInteraction"].(bool); !requireInteraction {

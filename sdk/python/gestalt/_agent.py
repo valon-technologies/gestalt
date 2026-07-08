@@ -218,7 +218,6 @@ class CreateAgentProviderSessionRequest:
     model: str = ""
     client_ref: str = ""
     metadata: JsonObject | None = None
-    created_by_subject_id: str = ""
     subject: Subject | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: AgentPreparedWorkspace | None = None
@@ -343,7 +342,6 @@ class CreateAgentProviderTurnRequest:
     messages: Iterable[AgentMessage] = field(default_factory=list)
     output: AgentOutput | Mapping[str, Any] | None = None
     metadata: JsonObject | None = None
-    created_by_subject_id: str = ""
     execution_ref: str = ""
     subject: Subject | None = None
     model_options: JsonObject | None = None
@@ -491,7 +489,6 @@ def create_agent_provider_session_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by_subject_id=request.created_by_subject_id.strip(),
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
@@ -570,7 +567,6 @@ def create_agent_provider_turn_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by_subject_id=request.created_by_subject_id.strip(),
         execution_ref=request.execution_ref,
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")

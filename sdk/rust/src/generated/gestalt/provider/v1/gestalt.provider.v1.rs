@@ -685,7 +685,8 @@ pub struct AgentSession {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateAgentProviderSessionRequest {
     /// The provider mints the session id returned on AgentSession. Creation is
-    /// idempotent on idempotency_key scoped per subject (created_by_subject_id):
+    /// idempotent on idempotency_key scoped per subject (context.subject.id,
+    /// or top-level subject when set for delegated provider calls):
     /// a replayed key returns the existing session, an empty key always creates.
     /// Idempotency is scoped to the provider's session store.
     #[prost(string, tag = "2")]
@@ -696,8 +697,6 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "7")]
-    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
     pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "9")]
@@ -915,8 +914,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "10")]
-    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "14")]

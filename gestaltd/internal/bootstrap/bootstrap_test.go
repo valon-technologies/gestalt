@@ -314,27 +314,20 @@ func (p *recordingAgentProvider) ensureStateLocked() {
 	}
 }
 
-func agentProviderSessionIdempotencyScope(subject core.RunAsSubject, createdBySubjectID, idempotencyKey string) string {
-	idempotencyKey = strings.TrimSpace(idempotencyKey)
+func agentProviderSessionIdempotencyScope(req *proto.CreateAgentProviderSessionRequest) string {
+	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	if idempotencyKey == "" {
 		return ""
 	}
-	return strings.Join([]string{"session", agentProviderSubjectScope(subject, createdBySubjectID), idempotencyKey}, "\x00")
+	return strings.Join([]string{"session", agentmanager.IdempotencySubjectID(req.GetContext(), req.GetSubject()), idempotencyKey}, "\x00")
 }
 
-func agentProviderTurnIdempotencyScope(subject core.RunAsSubject, createdBySubjectID, sessionID, idempotencyKey string) string {
-	idempotencyKey = strings.TrimSpace(idempotencyKey)
+func agentProviderTurnIdempotencyScope(req *proto.CreateAgentProviderTurnRequest) string {
+	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	if idempotencyKey == "" {
 		return ""
 	}
-	return strings.Join([]string{"turn", agentProviderSubjectScope(subject, createdBySubjectID), strings.TrimSpace(sessionID), idempotencyKey}, "\x00")
-}
-
-func agentProviderSubjectScope(subject core.RunAsSubject, createdBySubjectID string) string {
-	if subjectID := strings.TrimSpace(subject.SubjectID); subjectID != "" {
-		return subjectID
-	}
-	return strings.TrimSpace(createdBySubjectID)
+	return strings.Join([]string{"turn", agentmanager.IdempotencySubjectID(req.GetContext(), req.GetSubject()), strings.TrimSpace(req.GetSessionId()), idempotencyKey}, "\x00")
 }
 
 func turnStatusIsTerminalForTest(status coreagent.ExecutionStatus) bool {
@@ -350,9 +343,8 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
-	subject := bootstrapAgentSubjectFromProto(req.GetSubject())
-	createdBySubjectID := strings.TrimSpace(req.GetCreatedBySubjectId())
-	idempotencyScope := agentProviderSessionIdempotencyScope(subject, createdBySubjectID, req.GetIdempotencyKey())
+	callerSubjectID := agentmanager.AuditSubjectID(req.GetContext())
+	idempotencyScope := agentProviderSessionIdempotencyScope(req)
 	if sessionID, ok := p.sessionIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		session, ok := p.sessions[sessionID]
 		if !ok {
@@ -369,7 +361,7 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 		ClientRef:          strings.TrimSpace(req.GetClientRef()),
 		State:              coreagent.SessionStateActive,
 		Metadata:           bootstrapAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBySubjectID: createdBySubjectID,
+		CreatedBySubjectID: callerSubjectID,
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 		LastTurnAt:         nil,
@@ -428,9 +420,8 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req *proto.Create
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
-	subject := bootstrapAgentSubjectFromProto(req.GetSubject())
-	createdBySubjectID := strings.TrimSpace(req.GetCreatedBySubjectId())
-	idempotencyScope := agentProviderTurnIdempotencyScope(subject, createdBySubjectID, req.GetSessionId(), req.GetIdempotencyKey())
+	callerSubjectID := agentmanager.AuditSubjectID(req.GetContext())
+	idempotencyScope := agentProviderTurnIdempotencyScope(req)
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]
 		if !ok {
@@ -451,7 +442,7 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req *proto.Create
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           cloneBootstrapAgentMessages(bootstrapAgentMessagesFromProto(req.GetMessages())),
 		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBySubjectID: createdBySubjectID,
+		CreatedBySubjectID: callerSubjectID,
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,
@@ -657,9 +648,8 @@ func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callba
 func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	p.ensureStateLocked()
-	subject := bootstrapAgentSubjectFromProto(req.GetSubject())
-	createdBySubjectID := strings.TrimSpace(req.GetCreatedBySubjectId())
-	idempotencyScope := agentProviderTurnIdempotencyScope(subject, createdBySubjectID, req.GetSessionId(), req.GetIdempotencyKey())
+	callerSubjectID := agentmanager.AuditSubjectID(req.GetContext())
+	idempotencyScope := agentProviderTurnIdempotencyScope(req)
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]
 		p.mu.Unlock()
@@ -689,7 +679,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 		Model:              strings.TrimSpace(req.GetModel()),
 		Status:             coreagent.ExecutionStatusRunning,
 		Messages:           cloneBootstrapAgentMessages(bootstrapAgentMessagesFromProto(req.GetMessages())),
-		CreatedBySubjectID: createdBySubjectID,
+		CreatedBySubjectID: callerSubjectID,
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		ExecutionRef:       strings.TrimSpace(req.GetExecutionRef()),
@@ -2311,8 +2301,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.GetExecutionRef() != first.ID {
 		t.Fatalf("CreateTurn execution_ref = %q, want %q", createTurnReq.GetExecutionRef(), first.ID)
 	}
-	if createTurnReq.GetCreatedBySubjectId() != p.SubjectID {
-		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", createTurnReq.GetCreatedBySubjectId(), p.SubjectID)
+	if createTurnReq.GetContext().GetSubject().GetId() != p.SubjectID {
+		t.Fatalf("CreateTurn context.subject.id = %q, want %q", createTurnReq.GetContext().GetSubject().GetId(), p.SubjectID)
 	}
 	if createTurnReq.GetContext() == nil {
 		t.Fatal("CreateTurn context is empty")
@@ -2651,19 +2641,23 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 	}
 	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
 	createdSession, err := selected.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
-		Model:              "gpt-test",
-		CreatedBySubjectId: "system:config",
+		Model: "gpt-test",
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: "system:config"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := selected.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:             "agent-turn-plain",
-		SessionId:          createdSession.ID,
-		Model:              "gpt-test",
-		CreatedBySubjectId: "system:config",
-		Output:             bootstrapTextAgentOutput(),
-		TimeoutSeconds:     1,
+		TurnId:         "agent-turn-plain",
+		SessionId:      createdSession.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: "system:config"},
+		},
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4822,12 +4816,14 @@ func TestBootstrapAgentProviderAcceptsMintedSessionIDAndRejectsMismatchedTurnID(
 	}
 
 	if _, err := provider.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:             "agent-turn-1",
-		SessionId:          createdSession.ID,
-		Model:              "gpt-test",
-		CreatedBySubjectId: "system:config",
-		Output:             bootstrapTextAgentOutput(),
-		TimeoutSeconds:     1,
+		TurnId:         "agent-turn-1",
+		SessionId:      createdSession.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: "system:config"},
+		},
 	}); err == nil {
 		t.Fatal("CreateTurn error = nil, want mismatched turn id failure")
 	} else if !strings.Contains(err.Error(), `returned turn id "generated-turn-1" for requested turn id "agent-turn-1"`) {
@@ -4846,13 +4842,15 @@ func TestBootstrapAgentProviderAcceptsMintedSessionIDAndRejectsMismatchedTurnID(
 	}
 
 	replayedTurn, err := provider.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:             "agent-turn-1",
-		SessionId:          createdSession.ID,
-		IdempotencyKey:     "workflow:github:run-1:turn",
-		Model:              "gpt-test",
-		CreatedBySubjectId: "system:config",
-		Output:             bootstrapTextAgentOutput(),
-		TimeoutSeconds:     1,
+		TurnId:         "agent-turn-1",
+		SessionId:      createdSession.ID,
+		IdempotencyKey: "workflow:github:run-1:turn",
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: "system:config"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn idempotent replay: %v", err)
