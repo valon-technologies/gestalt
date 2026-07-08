@@ -339,18 +339,6 @@ def _ensure_ledger_store(db: MigrationDB, ledger_store: str) -> None:
 
 
 def _apply_revision(db: MigrationDB, revision: Revision) -> None:
-<<<<<<< HEAD
-    schema = getattr(revision, "schema", None)
-    if schema is not None:
-        _apply_schema(db, schema)
-        return
-    backfill = getattr(revision, "backfill", None)
-    if backfill is not None:
-        _apply_backfill(db, backfill)
-        return
-    raise MigrationError(
-        f'revision {json.dumps(getattr(revision, "id", ""))} must declare exactly one of '
-=======
     if isinstance(revision, SchemaRevision):
         _apply_schema(db, revision.schema)
         return
@@ -359,7 +347,6 @@ def _apply_revision(db: MigrationDB, revision: Revision) -> None:
         return
     raise MigrationError(
         f'revision {json.dumps(revision.id)} must declare exactly one of '
->>>>>>> b7b7bfe0e (Trim migration SDK surface and fix Python CI regressions.)
         f'"schema" or "backfill"'
     )
 
