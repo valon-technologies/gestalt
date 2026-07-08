@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -185,6 +186,7 @@ type Deps struct {
 	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
+	RemoteClients         *remote.ClientSet
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -263,6 +265,7 @@ type Result struct {
 	CallerTokenIssuer      *providergateway.CallerTokenIssuer
 	DevSupervisor          *providerdev.Supervisor
 
+	remoteClients                       *remote.ClientSet
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
 	workflowConfigReconcileTasksStarted bool
@@ -430,6 +433,9 @@ func (r *Result) Close(ctx context.Context) error {
 	}
 	if r.Telemetry != nil {
 		errs = append(errs, r.Telemetry.Shutdown(ctx))
+	}
+	if r.remoteClients != nil {
+		errs = append(errs, r.remoteClients.Close())
 	}
 	r.closed = true
 	return errors.Join(errs...)
@@ -930,6 +936,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		if name == selectedIndexedDBName || entry == nil {
 			continue
 		}
+		if !providerBuildsLocal(cfg, entry) {
+			continue
+		}
 		ds, err := buildIndexedDB(entry, factories)
 		if err != nil {
 			_ = svc.Close()
@@ -1247,6 +1256,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	appHostServiceCleanup := registerConfiguredAppPublicHostServices(cfg, prepared.Deps)
+	remotePublished, err := publishRemoteProviders(ctx, cfg, &prepared.Deps)
+	if err != nil {
+		failPendingStartupProviders(prepared.Deps, err)
+		return nil, err
+	}
+	prepared.ExtraIndexedDBs = append(prepared.ExtraIndexedDBs, remotePublished.extraIndexedDBs...)
 	// Build workflow/agent providers before app providers: they establish their
 	// backend connection during build, which must not race concurrent app startup.
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
@@ -1395,6 +1410,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		PublicGatewayTransport:       publicGatewayTransport,
 		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		DevSupervisor:                prepared.Deps.DevSupervisor,
+		remoteClients:                prepared.Deps.RemoteClients,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
