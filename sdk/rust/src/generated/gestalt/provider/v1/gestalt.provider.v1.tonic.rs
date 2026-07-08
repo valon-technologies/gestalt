@@ -625,7 +625,6 @@ pub mod app_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn invoke(
             &mut self,
             request: impl tonic::IntoRequest<super::AppInvokeRequest>,
@@ -671,7 +670,6 @@ pub mod app_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AppServer.
     #[async_trait]
     pub trait App: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn invoke(
             &self,
             request: tonic::Request<super::AppInvokeRequest>,
@@ -977,7 +975,6 @@ pub mod agent_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn get_session(
             &mut self,
             request: impl tonic::IntoRequest<super::GetAgentProviderSessionRequest>,
@@ -993,7 +990,6 @@ pub mod agent_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "GetSession"));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn list_sessions(
             &mut self,
             request: impl tonic::IntoRequest<super::ListAgentProviderSessionsRequest>,
@@ -1212,12 +1208,10 @@ pub mod agent_server {
             &self,
             request: tonic::Request<super::CreateAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
-        ///
         async fn get_session(
             &self,
             request: tonic::Request<super::GetAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
-        ///
         async fn list_sessions(
             &self,
             request: tonic::Request<super::ListAgentProviderSessionsRequest>,
@@ -9112,6 +9106,7 @@ pub mod workflow_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        ///
         pub async fn apply_definition(
             &mut self,
             request: impl tonic::IntoRequest<super::ApplyWorkflowProviderDefinitionRequest>,
@@ -9409,6 +9404,7 @@ pub mod workflow_server {
     /// Generated trait containing gRPC methods that should be implemented for use with WorkflowServer.
     #[async_trait]
     pub trait Workflow: std::marker::Send + std::marker::Sync + 'static {
+        ///
         async fn apply_definition(
             &self,
             request: tonic::Request<super::ApplyWorkflowProviderDefinitionRequest>,
