@@ -71,6 +71,10 @@ func IdempotencyKeyFromContext(ctx context.Context) string {
 	return strings.TrimSpace(v)
 }
 
+type RemoteCredentialDelegated interface {
+	RemoteCredentialDelegated() bool
+}
+
 type Invoker interface {
 	Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
 }
@@ -692,6 +696,20 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		subjectID := principal.EffectiveCredentialSubjectID(p)
 		if subjectID == "" {
 			return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
+		}
+		if delegated, ok := prov.(RemoteCredentialDelegated); ok && delegated.RemoteCredentialDelegated() {
+			connection = core.ResolveConnectionAlias(connection)
+			if connection == "" {
+				connection = core.AppConnectionName
+			}
+			SetCredentialAudit(ctx, core.ConnectionModeSubject, subjectID, connection, instance)
+			ctx = WithCredentialContext(ctx, CredentialContext{
+				Mode:       core.ConnectionModeSubject,
+				SubjectID:  subjectID,
+				Connection: connection,
+				Instance:   strings.TrimSpace(instance),
+			})
+			return ctx, "", nil
 		}
 		return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 

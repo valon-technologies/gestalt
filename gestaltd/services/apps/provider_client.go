@@ -364,8 +364,9 @@ type gestaltRemoteProvider struct {
 }
 
 var (
-	_ core.Provider              = (*gestaltRemoteProvider)(nil)
-	_ core.GraphQLSurfaceInvoker = (*gestaltRemoteProvider)(nil)
+	_ core.Provider                        = (*gestaltRemoteProvider)(nil)
+	_ core.GraphQLSurfaceInvoker           = (*gestaltRemoteProvider)(nil)
+	_ invocation.RemoteCredentialDelegated = (*gestaltRemoteProvider)(nil)
 )
 
 // NewGestaltRemote routes app invocations through a remote gestaltd public App API.
@@ -377,20 +378,24 @@ func NewGestaltRemote(client proto.AppClient, spec StaticProviderSpec) core.Prov
 	return &gestaltRemoteProvider{staticSpecProvider: base, client: client}
 }
 
+func (p *gestaltRemoteProvider) RemoteCredentialDelegated() bool { return true }
+
 func (p *gestaltRemoteProvider) Execute(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
 	paramsStruct, err := protoutil.StructFromMap(params)
 	if err != nil {
 		return nil, err
 	}
+	connection, instance := remoteAppInvokeSelectors(ctx)
 	resp, err := p.client.Invoke(ctx, &proto.AppInvokeRequest{
 		App:            p.spec.Name,
 		Operation:      strings.TrimSpace(operation),
 		Params:         paramsStruct,
-		Connection:     strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
+		Connection:     connection,
+		Instance:       instance,
 		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
 	})
 	if err != nil {
-		return nil, gestaltRemoteExecuteError(err)
+		return nil, remoteProviderExecuteError(err)
 	}
 	return remoteOperationResult(resp), nil
 }
@@ -400,17 +405,28 @@ func (p *gestaltRemoteProvider) InvokeGraphQL(ctx context.Context, request core.
 	if err != nil {
 		return nil, err
 	}
+	connection, instance := remoteAppInvokeSelectors(ctx)
 	resp, err := p.client.InvokeGraphQL(ctx, &proto.AppInvokeGraphQLRequest{
 		App:            p.spec.Name,
 		Document:       strings.TrimSpace(request.Document),
 		Variables:      variables,
-		Connection:     strings.TrimSpace(invocation.ConnectionFromContext(ctx)),
+		Connection:     connection,
+		Instance:       instance,
 		IdempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
 	})
 	if err != nil {
-		return nil, gestaltRemoteExecuteError(err)
+		return nil, remoteProviderExecuteError(err)
 	}
 	return remoteOperationResult(resp), nil
+}
+
+func remoteAppInvokeSelectors(ctx context.Context) (connection, instance string) {
+	cred := invocation.CredentialContextFromContext(ctx)
+	connection = strings.TrimSpace(cred.Connection)
+	if connection == "" {
+		connection = strings.TrimSpace(invocation.ConnectionFromContext(ctx))
+	}
+	return connection, strings.TrimSpace(cred.Instance)
 }
 
 func remoteOperationResult(resp *proto.OperationResult) *core.OperationResult {

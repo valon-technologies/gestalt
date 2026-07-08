@@ -22,21 +22,6 @@ func providerExecuteError(err error) error {
 }
 
 func remoteProviderExecuteError(err error) error {
-	if status.Code(err) != codes.FailedPrecondition {
-		return err
-	}
-	message := status.Convert(err).Message()
-	switch {
-	case strings.Contains(message, invocation.ErrNoCredential.Error()):
-		return fmt.Errorf("%w: %s", invocation.ErrNoCredential, message)
-	case strings.Contains(message, invocation.ErrReconnectRequired.Error()):
-		return fmt.Errorf("%w: %s", invocation.ErrReconnectRequired, message)
-	default:
-		return err
-	}
-}
-
-func gestaltRemoteExecuteError(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -56,7 +41,15 @@ func gestaltRemoteExecuteError(err error) error {
 		}
 		return invocation.ErrProviderNotFound
 	case codes.FailedPrecondition:
-		return remoteProviderExecuteError(err)
+		message := strings.TrimSpace(st.Message())
+		switch {
+		case strings.Contains(message, invocation.ErrNoCredential.Error()):
+			return fmt.Errorf("%w: %s", invocation.ErrNoCredential, message)
+		case strings.Contains(message, invocation.ErrReconnectRequired.Error()):
+			return fmt.Errorf("%w: %s", invocation.ErrReconnectRequired, message)
+		default:
+			return err
+		}
 	default:
 		return err
 	}

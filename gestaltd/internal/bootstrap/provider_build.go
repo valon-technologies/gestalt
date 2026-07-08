@@ -127,9 +127,15 @@ func prepareProviderBuilds(
 }
 
 func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *config.Config, deps Deps) error {
-	clients := deps.RemoteClients
-	if providers == nil || cfg == nil || clients == nil || clients.App == nil {
+	if providers == nil || cfg == nil {
 		return nil
+	}
+	if strings.TrimSpace(cfg.Server.Remote) == "" {
+		return nil
+	}
+	clients := deps.RemoteClients
+	if clients == nil || clients.App == nil {
+		return fmt.Errorf("bootstrap: remote client is required when server.remote is configured")
 	}
 	for name, entry := range cfg.Apps {
 		name = strings.TrimSpace(name)
@@ -138,15 +144,7 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		}
 		spec, _, err := buildStartupProviderSpec(name, entry)
 		if err != nil {
-			displayName := strings.TrimSpace(entry.DisplayName)
-			if displayName == "" {
-				displayName = name
-			}
-			spec = appservice.StaticProviderSpec{
-				Name:        name,
-				DisplayName: displayName,
-				Description: strings.TrimSpace(entry.Description),
-			}
+			return fmt.Errorf("remote app %q: %w", name, err)
 		}
 		provider := appservice.NewGestaltRemote(clients.App, spec)
 		if provider == nil {
