@@ -22,6 +22,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -1354,15 +1355,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
+	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization)
+	if err != nil {
+		return nil, err
+	}
+
 	closeProviders = false
 	closeCore = false
 	closeAudit = false
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
-	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization)
-	if err != nil {
-		return nil, err
-	}
 	result := &Result{
 		Auth:                         prepared.Auth,
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
@@ -2219,4 +2221,28 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		providerName: name,
 	}
 	return tracked, nil
+}
+
+func buildPublicGatewayTransport(
+	cfg *config.Config,
+	auth core.IdentityProvider,
+	authorization map[string]core.AuthorizationProvider,
+) (*providergateway.ProviderGatewayTransport, error) {
+	if auth == nil {
+		return nil, nil
+	}
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("public rpc registry: %w", err)
+	}
+	transport := providergateway.NewProviderGatewayTransport()
+	transport.SetIdentityProvider(auth)
+	transport.SetPublicMethods(registry)
+	if cfg != nil {
+		if name, _, err := cfg.SelectedAuthorizationProvider(); err == nil && name != "" && authorization != nil {
+			transport.SetAuthorizationProvider(authorization[name])
+		}
+		transport.SetPublicBaseURL(cfg.Server.BaseURL)
+	}
+	return transport, nil
 }

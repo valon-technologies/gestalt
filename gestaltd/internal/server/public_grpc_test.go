@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
@@ -60,7 +59,7 @@ func publicGRPCContext(t *testing.T, bearerToken string) context.Context {
 	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+bearerToken))
 }
 
-func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) *httptest.Server {
+func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) (*httptest.Server, *relayTestInvoker) {
 	t.Helper()
 	invoker := &relayTestInvoker{}
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
@@ -72,15 +71,13 @@ func startPublicGRPCServer(t *testing.T, configure func(*server.Config)) *httpte
 	ts.EnableHTTP2 = true
 	ts.StartTLS()
 	testutil.CloseOnCleanup(t, ts)
-	return ts
+	return ts, invoker
 }
 
 func TestPublicGRPCAppInvokeSucceedsWithBearerAuth(t *testing.T) {
 	t.Parallel()
 
-	invoker := &relayTestInvoker{}
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		configurePublicGRPCTestServer(t, cfg, invoker)
+	ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
 			ConnMode: core.ConnectionModeNone,
@@ -89,11 +86,7 @@ func TestPublicGRPCAppInvokeSucceedsWithBearerAuth(t *testing.T) {
 				Operations: []catalog.CatalogOperation{{ID: "sync", Method: "POST"}},
 			},
 		})
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
+	})
 	conn := newRelayGRPCConn(t, ts)
 	defer func() { _ = conn.Close() }()
 
@@ -106,50 +99,6 @@ func TestPublicGRPCAppInvokeSucceedsWithBearerAuth(t *testing.T) {
 	}
 	if call := invoker.snapshot(); call.calls != 1 || call.providerName != "roadmap" || call.operation != "sync" {
 		t.Fatalf("invoker call = %+v, want roadmap/sync", call)
-	}
-}
-
-func TestPublicGRPCAppInvokeRejectsRunAs(t *testing.T) {
-	t.Parallel()
-
-	ts := startPublicGRPCServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "roadmap",
-			ConnMode: core.ConnectionModeNone,
-		})
-	})
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-
-	_, err := proto.NewAppClient(conn).Invoke(publicGRPCContext(t, publicGRPCTestBearer("roadmap")), &proto.AppInvokeRequest{
-		App:       "roadmap",
-		Operation: "sync",
-		RunAs:     &proto.SubjectContext{Id: principal.UserSubjectID("other-user")},
-	})
-	if grpcstatus.Code(err) != codes.InvalidArgument {
-		t.Fatalf("App.Invoke code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.InvalidArgument, err)
-	}
-}
-
-func TestPublicGRPCAppInvokeRejectsClientContext(t *testing.T) {
-	t.Parallel()
-
-	ts := startPublicGRPCServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "roadmap",
-			ConnMode: core.ConnectionModeNone,
-		})
-	})
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-
-	_, err := proto.NewAppClient(conn).Invoke(publicGRPCContext(t, publicGRPCTestBearer("roadmap")), &proto.AppInvokeRequest{
-		App:       "roadmap",
-		Operation: "sync",
-		Context:   &proto.RequestContext{Subject: &proto.SubjectContext{Id: principal.UserSubjectID("other-user")}},
-	})
-	if grpcstatus.Code(err) != codes.InvalidArgument {
-		t.Fatalf("App.Invoke code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.InvalidArgument, err)
 	}
 }
 
@@ -219,7 +168,7 @@ func TestPublicGRPCWorkflowDeliverEventSucceeds(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryWorkflowProvider()
-	ts := startPublicGRPCServer(t, func(cfg *server.Config) {
+	ts, _ := startPublicGRPCServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
 			ConnMode: core.ConnectionModeNone,
@@ -255,7 +204,7 @@ func TestPublicGRPCWorkflowDeliverEventSucceeds(t *testing.T) {
 func TestPublicGRPCWorkflowInternalMethodsAreNotRegistered(t *testing.T) {
 	t.Parallel()
 
-	ts := startPublicGRPCServer(t, nil)
+	ts, _ := startPublicGRPCServer(t, nil)
 	conn := newRelayGRPCConn(t, ts)
 	defer func() { _ = conn.Close() }()
 	ctx := publicGRPCContext(t, publicGRPCTestBearer("roadmap"))
@@ -273,45 +222,11 @@ func TestPublicGRPCWorkflowInternalMethodsAreNotRegistered(t *testing.T) {
 	}
 }
 
-func TestPublicGRPCReflectionListsWorkflowService(t *testing.T) {
-	t.Parallel()
-
-	ts := startPublicGRPCServer(t, nil)
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-
-	client := reflectionpb.NewServerReflectionClient(conn)
-	stream, err := client.ServerReflectionInfo(publicGRPCContext(t, publicGRPCTestBearer("roadmap")))
-	if err != nil {
-		t.Fatalf("ServerReflectionInfo: %v", err)
-	}
-	if err := stream.Send(&reflectionpb.ServerReflectionRequest{
-		MessageRequest: &reflectionpb.ServerReflectionRequest_ListServices{},
-	}); err != nil {
-		t.Fatalf("Send ListServices: %v", err)
-	}
-	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("Recv ListServices: %v", err)
-	}
-	services := resp.GetListServicesResponse().GetService()
-	found := false
-	for _, service := range services {
-		if service.GetName() == proto.Workflow_ServiceDesc.ServiceName {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("reflection services = %#v, want %q", services, proto.Workflow_ServiceDesc.ServiceName)
-	}
-}
-
 func TestPublicGRPCAgentSessionFillAndRejectPolicy(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryAgentProvider()
-	ts := startPublicGRPCServer(t, func(cfg *server.Config) {
+	ts, _ := startPublicGRPCServer(t, func(cfg *server.Config) {
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{

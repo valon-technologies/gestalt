@@ -131,8 +131,6 @@ type Server struct {
 	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[uint64]http.Handler
-	publicGatewayTransport *providergateway.ProviderGatewayTransport
-	publicGRPCMu           sync.Mutex
 	publicGRPCHandler      http.Handler
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
@@ -377,7 +375,6 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
-		publicGatewayTransport: cfg.PublicGatewayTransport,
 		publicHostServices:     cfg.PublicHostServices,
 		s3:                     cfg.S3,
 		s3ObjectAccessURLs:     s3ObjectAccessURLs,
@@ -400,6 +397,13 @@ func New(cfg Config) (*Server, error) {
 		CatalogConnection: cfg.CatalogConnection,
 		MCPConnection:     cfg.MCPConnection,
 		Now:               now,
+	})
+	s.publicGRPCHandler = buildPublicGRPCHandler(publicGRPCConfig{
+		Transport:       cfg.PublicGatewayTransport,
+		Invoker:         cfg.Invoker,
+		AgentManager:    cfg.AgentManager,
+		WorkflowManager: s.workflowSchedules,
+		Authorization:   cfg.Authorization,
 	})
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
