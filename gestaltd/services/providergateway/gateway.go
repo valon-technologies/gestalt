@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -53,6 +54,10 @@ func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, n
 type ProviderGatewayTransport struct {
 	authorization        AuthorizationProvider
 	callerTokenPublicKey string
+	publicMethods        publicrpc.PublicMethodRegistry
+	identity             IdentityProvider
+	publicBaseURL        string
+	publicCallerApp      string
 }
 
 func NewProviderGatewayTransport() *ProviderGatewayTransport {

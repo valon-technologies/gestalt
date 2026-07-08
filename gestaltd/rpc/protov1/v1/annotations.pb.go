@@ -207,61 +207,6 @@ func (x *Initial) GetChunk() string {
 	return ""
 }
 
-// PublicPolicy declares how public/external requests handle trusted request
-// fields. fill rejects client input then derives server-side values; reject
-// rejects client input outright.
-type PublicPolicy struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Fill          []string               `protobuf:"bytes,1,rep,name=fill,proto3" json:"fill,omitempty"`
-	Reject        []string               `protobuf:"bytes,2,rep,name=reject,proto3" json:"reject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PublicPolicy) Reset() {
-	*x = PublicPolicy{}
-	mi := &file_v1_annotations_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PublicPolicy) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PublicPolicy) ProtoMessage() {}
-
-func (x *PublicPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_annotations_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PublicPolicy.ProtoReflect.Descriptor instead.
-func (*PublicPolicy) Descriptor() ([]byte, []int) {
-	return file_v1_annotations_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *PublicPolicy) GetFill() []string {
-	if x != nil {
-		return x.Fill
-	}
-	return nil
-}
-
-func (x *PublicPolicy) GetReject() []string {
-	if x != nil {
-		return x.Reject
-	}
-	return nil
-}
-
 // JsonResult declares that a unary method's HTTP-shaped result carries the
 // standard JSON operation envelope in its body: success envelopes return
 // their data, error envelopes and HTTP-error statuses raise the canonical
@@ -278,7 +223,7 @@ type JsonResult struct {
 
 func (x *JsonResult) Reset() {
 	*x = JsonResult{}
-	mi := &file_v1_annotations_proto_msgTypes[4]
+	mi := &file_v1_annotations_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -290,7 +235,7 @@ func (x *JsonResult) String() string {
 func (*JsonResult) ProtoMessage() {}
 
 func (x *JsonResult) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_annotations_proto_msgTypes[4]
+	mi := &file_v1_annotations_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -303,7 +248,7 @@ func (x *JsonResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JsonResult.ProtoReflect.Descriptor instead.
 func (*JsonResult) Descriptor() ([]byte, []int) {
-	return file_v1_annotations_proto_rawDescGZIP(), []int{4}
+	return file_v1_annotations_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *JsonResult) GetStatus() string {
@@ -318,6 +263,63 @@ func (x *JsonResult) GetBody() string {
 		return x.Body
 	}
 	return ""
+}
+
+// PublicPolicy declares how public service paths adapt external requests.
+// Fields listed in `fill` are rejected when supplied by public callers and
+// derived server-side instead. Fields listed in `reject` are rejected when
+// supplied by public callers. Exposure is controlled separately by
+// google.api.method_visibility.
+type PublicPolicy struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Fill          []string               `protobuf:"bytes,1,rep,name=fill,proto3" json:"fill,omitempty"`
+	Reject        []string               `protobuf:"bytes,2,rep,name=reject,proto3" json:"reject,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublicPolicy) Reset() {
+	*x = PublicPolicy{}
+	mi := &file_v1_annotations_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublicPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublicPolicy) ProtoMessage() {}
+
+func (x *PublicPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_annotations_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublicPolicy.ProtoReflect.Descriptor instead.
+func (*PublicPolicy) Descriptor() ([]byte, []int) {
+	return file_v1_annotations_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PublicPolicy) GetFill() []string {
+	if x != nil {
+		return x.Fill
+	}
+	return nil
+}
+
+func (x *PublicPolicy) GetReject() []string {
+	if x != nil {
+		return x.Reject
+	}
+	return nil
 }
 
 var file_v1_annotations_proto_extTypes = []protoimpl.ExtensionInfo{
@@ -419,6 +421,8 @@ var (
 	//
 	// repeated string optional_signature = 50004;
 	E_OptionalSignature = &file_v1_annotations_proto_extTypes[3]
+	// Public request adaptation policy for this method.
+	//
 	// optional gestalt.provider.v1.PublicPolicy public = 51001;
 	E_Public = &file_v1_annotations_proto_extTypes[4]
 )
@@ -460,14 +464,14 @@ const file_v1_annotations_proto_rawDesc = "" +
 	"\x05value\x18\x04 \x01(\tR\x05value\"7\n" +
 	"\aInitial\x12\x16\n" +
 	"\x06header\x18\x01 \x01(\tR\x06header\x12\x14\n" +
-	"\x05chunk\x18\x02 \x01(\tR\x05chunk\":\n" +
-	"\fPublicPolicy\x12\x12\n" +
-	"\x04fill\x18\x01 \x03(\tR\x04fill\x12\x16\n" +
-	"\x06reject\x18\x02 \x03(\tR\x06reject\"8\n" +
+	"\x05chunk\x18\x02 \x01(\tR\x05chunk\"8\n" +
 	"\n" +
 	"JsonResult\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body:>\n" +
+	"\x04body\x18\x02 \x01(\tR\x04body\":\n" +
+	"\fPublicPolicy\x12\x12\n" +
+	"\x04fill\x18\x01 \x03(\tR\x04fill\x12\x16\n" +
+	"\x06reject\x18\x02 \x03(\tR\x06reject:>\n" +
 	"\tsignature\x12\x1e.google.protobuf.MethodOptions\x18ц\x03 \x03(\tR\tsignature:X\n" +
 	"\ainitial\x12\x1e.google.protobuf.MethodOptions\x18҆\x03 \x01(\v2\x1c.gestalt.provider.v1.InitialR\ainitial:b\n" +
 	"\vjson_result\x12\x1e.google.protobuf.MethodOptions\x18ӆ\x03 \x01(\v2\x1f.gestalt.provider.v1.JsonResultR\n" +
@@ -497,8 +501,8 @@ var file_v1_annotations_proto_goTypes = []any{
 	(*OptionalResult)(nil),              // 0: gestalt.provider.v1.OptionalResult
 	(*Keyed)(nil),                       // 1: gestalt.provider.v1.Keyed
 	(*Initial)(nil),                     // 2: gestalt.provider.v1.Initial
-	(*PublicPolicy)(nil),                // 3: gestalt.provider.v1.PublicPolicy
-	(*JsonResult)(nil),                  // 4: gestalt.provider.v1.JsonResult
+	(*JsonResult)(nil),                  // 3: gestalt.provider.v1.JsonResult
+	(*PublicPolicy)(nil),                // 4: gestalt.provider.v1.PublicPolicy
 	(*descriptorpb.MethodOptions)(nil),  // 5: google.protobuf.MethodOptions
 	(*descriptorpb.MessageOptions)(nil), // 6: google.protobuf.MessageOptions
 	(*descriptorpb.ServiceOptions)(nil), // 7: google.protobuf.ServiceOptions
@@ -514,8 +518,8 @@ var file_v1_annotations_proto_depIdxs = []int32{
 	6,  // 7: gestalt.provider.v1.unwrap:extendee -> google.protobuf.MessageOptions
 	7,  // 8: gestalt.provider.v1.host_binding:extendee -> google.protobuf.ServiceOptions
 	2,  // 9: gestalt.provider.v1.initial:type_name -> gestalt.provider.v1.Initial
-	4,  // 10: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
-	3,  // 11: gestalt.provider.v1.public:type_name -> gestalt.provider.v1.PublicPolicy
+	3,  // 10: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
+	4,  // 11: gestalt.provider.v1.public:type_name -> gestalt.provider.v1.PublicPolicy
 	0,  // 12: gestalt.provider.v1.optional_result:type_name -> gestalt.provider.v1.OptionalResult
 	1,  // 13: gestalt.provider.v1.keyed:type_name -> gestalt.provider.v1.Keyed
 	14, // [14:14] is the sub-list for method output_type

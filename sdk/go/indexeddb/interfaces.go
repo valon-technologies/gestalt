@@ -2,7 +2,6 @@ package indexeddb
 
 import (
 	"context"
-	"time"
 )
 
 // Database maps to the W3C IDBDatabase surface (with documented Gestalt deviations).
@@ -93,21 +92,6 @@ type Cursor interface {
 // Pinger is a server-side health extension; host clients may omit it.
 type Pinger interface {
 	Ping(ctx context.Context) error
-}
-
-// Locker is an optional capability implemented by backends that support keyed
-// advisory leases.
-type Locker interface {
-	AcquireLock(ctx context.Context, key, holder string, ttl time.Duration) (LockLease, error)
-	ReleaseLock(ctx context.Context, key, holder string) error
-}
-
-// LockLease is the outcome of an AcquireLock call.
-type LockLease struct {
-	Acquired     bool
-	Holder       string
-	ExpiresAt    time.Time
-	FencingToken int64
 }
 
 // IndexManager is an optional capability implemented by backends that support

@@ -16,6 +16,7 @@ func (s *Server) routes() {
 	r.Use(routePatternTelemetryMiddleware)
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(s.hostServiceRelayMiddleware)
+	r.Use(s.publicGRPCMiddleware)
 	r.Use(s.egressProxyMiddleware)
 	r.Use(maxBodyMiddleware(defaultMaxBodyBytes))
 

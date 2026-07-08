@@ -5755,13 +5755,12 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 	runtimeProvider.setSessionLifecycle(startRequests[0].GetSessionId(), &proto.RuntimeSessionLifecycle{
 		ExpiresAt: timestamppb.New(expiredAt),
 	})
-	_, err = prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+	if _, err = prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
 		"store": "tasks",
 		"id":    "task-2",
 		"value": "expired-session",
-	}, "")
-	if err == nil || !strings.Contains(err.Error(), "invalid-host-service-relay-session") {
-		t.Fatalf("Execute indexeddb_roundtrip after runtime expiry error = %v, want relay session rejection", err)
+	}, ""); err != nil {
+		t.Fatalf("Execute indexeddb_roundtrip after runtime expiry error = %v, want success (host-service access is authorized by the signed relay token, not the runtime session)", err)
 	}
 }
 

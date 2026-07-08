@@ -198,7 +198,7 @@ pub enum TokenCommands {
         #[arg(long)]
         name: Option<String>,
         /// OAuth scopes for the token (e.g. my-app or my-app:operation)
-        #[arg(long)]
+        #[arg(long, default_value = "")]
         scopes: String,
         /// Token lifetime in seconds (default: 30 days)
         #[arg(long = "expires-in", default_value_t = 30 * 24 * 3600)]

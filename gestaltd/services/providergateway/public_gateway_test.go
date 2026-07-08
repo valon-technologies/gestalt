@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/publicrpc"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -218,10 +218,14 @@ func newTestPublicGateway(
 	policies map[string]publicrpc.PublicMethodPolicy,
 	identity *stubIdentityProvider,
 	authorization *stubAuthorizationProvider,
-) *Gateway {
+) *ProviderGatewayTransport {
 	t.Helper()
-	gateway := NewGateway(publicrpc.NewMapRegistry(policies), identity, authorization)
+	gateway := NewProviderGatewayTransport()
+	gateway.SetPublicMethods(publicrpc.NewMapRegistry(policies))
+	gateway.SetIdentity(identity)
+	gateway.SetAuthorizationProvider(authorization)
 	gateway.SetPublicBaseURL("https://gestalt.example")
+	gateway.SetPublicCallerApp("gestaltd")
 	return gateway
 }
 

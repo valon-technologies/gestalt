@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package example.v1;
+
+import "google/api/visibility.proto";
+import "v1/annotations.proto";
+
+message ExampleRequest {
+  string allowed = 1;
+}
+
+message ExampleResponse {}
+
+service Example {
+  rpc PublicNoPolicy(ExampleRequest) returns (ExampleResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+  }
+}

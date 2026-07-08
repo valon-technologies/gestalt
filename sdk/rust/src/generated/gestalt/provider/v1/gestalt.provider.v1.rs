@@ -57,6 +57,18 @@ pub struct JsonResult {
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
 }
+/// PublicPolicy declares how public service paths adapt external requests.
+/// Fields listed in `fill` are rejected when supplied by public callers and
+/// derived server-side instead. Fields listed in `reject` are rejected when
+/// supplied by public callers. Exposure is controlled separately by
+/// google.api.method_visibility.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PublicPolicy {
+    #[prost(string, repeated, tag = "1")]
+    pub fill: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag = "2")]
+    pub reject: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
 /// CatalogParameter describes one input parameter surfaced in the generated
 /// catalog for an operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2373,36 +2385,6 @@ pub struct IndexQueryRequest {
 pub struct CountResponse {
     #[prost(int64, tag = "1")]
     pub count: i64,
-}
-/// AcquireLockRequest requests a keyed, TTL'd advisory lease.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AcquireLockRequest {
-    #[prost(string, tag = "1")]
-    pub key: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub holder: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
-    pub ttl_ms: i64,
-}
-/// AcquireLockResponse reports whether the lease was acquired and its current owner.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AcquireLockResponse {
-    #[prost(bool, tag = "1")]
-    pub acquired: bool,
-    #[prost(string, tag = "2")]
-    pub holder: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int64, tag = "4")]
-    pub fencing_token: i64,
-}
-/// ReleaseLockRequest releases a lease previously acquired by holder.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReleaseLockRequest {
-    #[prost(string, tag = "1")]
-    pub key: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub holder: ::prost::alloc::string::String,
 }
 /// OpenCursorRequest starts a streaming cursor over an object store or index.
 #[derive(Clone, PartialEq, ::prost::Message)]

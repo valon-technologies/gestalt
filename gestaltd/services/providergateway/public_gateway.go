@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,38 +20,43 @@ import (
 // IdentityProvider authenticates public bearer tokens.
 type IdentityProvider = core.IdentityProvider
 
-// Gateway adapts public/external gRPC requests before shared service dispatch.
-type Gateway struct {
-	publicMethods publicrpc.PublicMethodRegistry
-	identity      IdentityProvider
-	authorization AuthorizationProvider
-	publicBaseURL string
-}
-
-func NewGateway(publicMethods publicrpc.PublicMethodRegistry, identity IdentityProvider, authorization AuthorizationProvider) *Gateway {
-	return &Gateway{
-		publicMethods: publicMethods,
-		identity:      identity,
-		authorization: authorization,
-	}
-}
-
-func (g *Gateway) SetPublicBaseURL(publicBaseURL string) {
-	if g == nil {
+func (t *ProviderGatewayTransport) SetPublicMethods(publicMethods publicrpc.PublicMethodRegistry) {
+	if t == nil {
 		return
 	}
-	g.publicBaseURL = strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
+	t.publicMethods = publicMethods
+}
+
+func (t *ProviderGatewayTransport) SetIdentity(identity IdentityProvider) {
+	if t == nil {
+		return
+	}
+	t.identity = identity
+}
+
+func (t *ProviderGatewayTransport) SetPublicBaseURL(publicBaseURL string) {
+	if t == nil {
+		return
+	}
+	t.publicBaseURL = strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
+}
+
+func (t *ProviderGatewayTransport) SetPublicCallerApp(callerApp string) {
+	if t == nil {
+		return
+	}
+	t.publicCallerApp = strings.TrimSpace(callerApp)
 }
 
 // PreparePublicRequest authenticates, authorizes, and adapts a public request.
 // Internal/provider-runtime requests should not call this helper.
-func (g *Gateway) PreparePublicRequest(
+func (t *ProviderGatewayTransport) PreparePublicRequest(
 	ctx context.Context,
 	fullMethod string,
 	req gproto.Message,
 ) (*principal.Principal, gproto.Message, error) {
-	if g == nil {
-		return nil, nil, status.Error(codes.Internal, "provider gateway: gateway is nil")
+	if t == nil {
+		return nil, nil, status.Error(codes.Internal, "provider gateway: transport is nil")
 	}
 	if req == nil {
 		return nil, nil, status.Error(codes.InvalidArgument, "request is required")
@@ -67,7 +72,7 @@ func (g *Gateway) PreparePublicRequest(
 		return nil, nil, status.Errorf(codes.Internal, "provider gateway: public origin method %q does not match %q", originMethod, fullMethod)
 	}
 
-	policy, ok := g.lookupPublicMethod(fullMethod)
+	policy, ok := t.lookupPublicMethod(fullMethod)
 	if !ok {
 		return nil, nil, status.Error(codes.NotFound, "method is not public")
 	}
@@ -76,35 +81,35 @@ func (g *Gateway) PreparePublicRequest(
 	if token == "" {
 		return nil, nil, status.Error(codes.Unauthenticated, "bearer token is required")
 	}
-	p, err := g.resolvePrincipal(ctx, token)
+	p, err := t.resolvePublicPrincipal(ctx, token)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	resourceID := publicResourceID(req, policy)
-	if err := g.authorizePublic(ctx, p, fullMethod, resourceID); err != nil {
+	resourceID := publicResourceID(req, fullMethod)
+	if err := t.authorizePublic(ctx, p, fullMethod, resourceID); err != nil {
 		return nil, nil, err
 	}
 
-	adapted, err := adaptPublicRequest(ctx, g.publicBaseURL, p, req, policy)
+	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, t.publicCallerApp, p, req, policy)
 	if err != nil {
 		return nil, nil, err
 	}
 	return p, adapted, nil
 }
 
-func (g *Gateway) lookupPublicMethod(fullMethod string) (publicrpc.PublicMethodPolicy, bool) {
-	if g.publicMethods == nil {
+func (t *ProviderGatewayTransport) lookupPublicMethod(fullMethod string) (publicrpc.PublicMethodPolicy, bool) {
+	if t == nil || t.publicMethods == nil {
 		return publicrpc.PublicMethodPolicy{}, false
 	}
-	return g.publicMethods.Lookup(fullMethod)
+	return t.publicMethods.Lookup(fullMethod)
 }
 
-func (g *Gateway) resolvePrincipal(ctx context.Context, token string) (*principal.Principal, error) {
-	if g.identity == nil {
+func (t *ProviderGatewayTransport) resolvePublicPrincipal(ctx context.Context, token string) (*principal.Principal, error) {
+	if t.identity == nil {
 		return nil, status.Error(codes.Unauthenticated, "identity provider is not configured")
 	}
-	resolver := principal.NewResolver(g.identity)
+	resolver := principal.NewResolver(t.identity)
 	p, err := resolver.ResolveToken(ctx, token)
 	if err != nil {
 		if err == principal.ErrInvalidToken {
@@ -115,8 +120,8 @@ func (g *Gateway) resolvePrincipal(ctx context.Context, token string) (*principa
 	return p, nil
 }
 
-func (g *Gateway) authorizePublic(ctx context.Context, p *principal.Principal, fullMethod, resourceID string) error {
-	if g.authorization == nil {
+func (t *ProviderGatewayTransport) authorizePublic(ctx context.Context, p *principal.Principal, fullMethod, resourceID string) error {
+	if t.authorization == nil {
 		return nil
 	}
 	subject, err := authorizationSubjectFromPrincipal(p)
@@ -131,7 +136,7 @@ func (g *Gateway) authorizePublic(ctx context.Context, p *principal.Principal, f
 	if err != nil {
 		return err
 	}
-	resp, err := g.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+	resp, err := t.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject:  subject,
 		Resource: resource,
 		Action:   action,
@@ -157,7 +162,7 @@ func authorizationSubjectFromPrincipal(p *principal.Principal) (*proto.Subject, 
 	}, nil
 }
 
-func publicResourceID(req gproto.Message, policy publicrpc.PublicMethodPolicy) string {
+func publicResourceID(req gproto.Message, fullMethod string) string {
 	msg := req.ProtoReflect()
 	if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
 		if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
@@ -169,16 +174,23 @@ func publicResourceID(req gproto.Message, policy publicrpc.PublicMethodPolicy) s
 			return name
 		}
 	}
-	service := strings.TrimSpace(policy.Service)
-	if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
-		return strings.ToLower(service[idx+1:])
+	fullMethod = strings.TrimSpace(fullMethod)
+	if strings.HasPrefix(fullMethod, "/") {
+		service, _, ok := strings.Cut(strings.TrimPrefix(fullMethod, "/"), "/")
+		if ok {
+			if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
+				return strings.ToLower(service[idx+1:])
+			}
+			return service
+		}
 	}
-	return service
+	return ""
 }
 
 func adaptPublicRequest(
 	ctx context.Context,
 	publicBaseURL string,
+	publicCallerApp string,
 	p *principal.Principal,
 	req gproto.Message,
 	policy publicrpc.PublicMethodPolicy,
@@ -194,33 +206,34 @@ func adaptPublicRequest(
 		if fieldSet(msg, name) {
 			return nil, status.Errorf(codes.InvalidArgument, "%s is server-filled", name)
 		}
-		if err := fillPublicField(ctx, publicBaseURL, p, msg, name); err != nil {
+		if err := fillPublicField(ctx, publicBaseURL, publicCallerApp, p, msg, name); err != nil {
 			return nil, err
 		}
 	}
 	return adapted, nil
 }
 
-func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, name string) error {
+func fillPublicField(ctx context.Context, publicBaseURL, publicCallerApp string, p *principal.Principal, msg protoreflect.Message, name string) error {
 	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
 	if fd == nil {
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
 	}
 	switch name {
 	case "context":
-		return fillRequestContext(ctx, publicBaseURL, p, msg, fd)
+		return fillRequestContext(ctx, publicBaseURL, publicCallerApp, p, msg, fd)
 	case "subject":
 		return fillSubjectContext(p, msg, fd)
-	case "created_by_subject_id":
+	case "created_by_subject_id", "delivered_by_subject_id":
 		return fillCreatedBySubjectID(p, msg, fd)
 	default:
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
 	}
 }
 
-func fillRequestContext(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, fd protoreflect.FieldDescriptor) error {
+func fillRequestContext(ctx context.Context, publicBaseURL, publicCallerApp string, p *principal.Principal, msg protoreflect.Message, fd protoreflect.FieldDescriptor) error {
 	callCtx := principal.WithPrincipal(ctx, principal.Canonicalized(p))
-	reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, invocation.CallerProvider{})
+	caller := invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: publicCallerApp}
+	reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, caller)
 	if err != nil {
 		return status.Errorf(codes.Internal, "provider gateway: build request context: %v", err)
 	}
@@ -244,7 +257,7 @@ func fillCreatedBySubjectID(p *principal.Principal, msg protoreflect.Message, fd
 	p = principal.Canonicalized(p)
 	subjectID := strings.TrimSpace(p.SubjectID)
 	if subjectID == "" {
-		return status.Error(codes.Internal, "provider gateway: created_by_subject_id is required")
+		return status.Error(codes.Internal, "provider gateway: subject id is required")
 	}
 	msg.Set(fd, protoreflect.ValueOfString(subjectID))
 	return nil
