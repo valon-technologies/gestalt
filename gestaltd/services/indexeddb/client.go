@@ -3,6 +3,7 @@ package indexeddb
 import (
 	"context"
 	"io"
+	"strings"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -67,6 +68,9 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreindexeddb.IndexedDB
 }
 
 func (r *remoteIndexedDB) Ping(ctx context.Context) error {
+	if r.runtime == nil {
+		return nil
+	}
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	_, err := r.runtime.HealthCheck(ctx, &emptypb.Empty{})
@@ -94,4 +98,21 @@ func (r *remoteIndexedDB) DeleteIndex(ctx context.Context, store, name string) e
 		return status.Error(codes.Unimplemented, "indexeddb: index management not supported")
 	}
 	return manager.DeleteIndex(ctx, store, name)
+}
+
+// NewPublicRemote returns an IndexedDB provider backed by a remote public gestaltd API.
+func NewPublicRemote(client proto.IndexedDBClient, name string) (coreindexeddb.IndexedDB, error) {
+	name = strings.TrimSpace(name)
+	if client == nil {
+		return nil, status.Error(codes.InvalidArgument, "indexeddb provider client is required")
+	}
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "indexeddb provider name is required")
+	}
+	return &remoteIndexedDB{
+		Database: rpcidb.NewClient(client, rpcidb.Options{
+			UnaryTimeout: runtimehost.ProviderRPCTimeout,
+			Binding:      name,
+		}),
+	}, nil
 }

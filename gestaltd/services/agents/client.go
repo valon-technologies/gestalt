@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/egress"
@@ -38,6 +40,7 @@ type remoteAgent struct {
 	client  proto.AgentClient
 	runtime proto.ProviderLifecycleClient
 	closer  io.Closer
+	name    string
 }
 
 type RemoteConfig struct {
@@ -78,23 +81,23 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error
 	if cfg.Client == nil {
 		return nil, fmt.Errorf("agent provider client is required")
 	}
-	if cfg.Runtime == nil {
-		return nil, fmt.Errorf("agent provider lifecycle client is required")
-	}
-	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, cfg.Runtime, proto.ProviderKind_PROVIDER_KIND_AGENT, cfg.Name, cfg.Config); err != nil {
-		if cfg.Closer != nil {
-			_ = cfg.Closer.Close()
+	name := strings.TrimSpace(cfg.Name)
+	if cfg.Runtime != nil {
+		if _, err := runtimehost.ConfigureRuntimeProvider(ctx, cfg.Runtime, proto.ProviderKind_PROVIDER_KIND_AGENT, name, cfg.Config); err != nil {
+			if cfg.Closer != nil {
+				_ = cfg.Closer.Close()
+			}
+			return nil, err
 		}
-		return nil, err
 	}
-	return &remoteAgent{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer}, nil
+	return &remoteAgent{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer, name: name}, nil
 }
 
 func (r *remoteAgent) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderSessionCreateContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.CreateSession(ctx, providerReq)
@@ -108,7 +111,7 @@ func (r *remoteAgent) GetSession(ctx context.Context, req *proto.GetAgentProvide
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.GetAgentProviderSessionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.GetSession(ctx, providerReq)
@@ -122,7 +125,7 @@ func (r *remoteAgent) ListSessions(ctx context.Context, req *proto.ListAgentProv
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderSessionsRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.ListSessions(ctx, providerReq)
@@ -144,7 +147,7 @@ func (r *remoteAgent) UpdateSession(ctx context.Context, req *proto.UpdateAgentP
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.UpdateAgentProviderSessionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.UpdateSession(ctx, providerReq)
@@ -158,7 +161,7 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProv
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.CreateTurn(ctx, providerReq)
@@ -172,7 +175,7 @@ func (r *remoteAgent) GetTurn(ctx context.Context, req *proto.GetAgentProviderTu
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.GetAgentProviderTurnRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.GetTurn(ctx, providerReq)
@@ -186,7 +189,7 @@ func (r *remoteAgent) ListTurns(ctx context.Context, req *proto.ListAgentProvide
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderTurnsRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.ListTurns(ctx, providerReq)
@@ -208,7 +211,7 @@ func (r *remoteAgent) CancelTurn(ctx context.Context, req *proto.CancelAgentProv
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.CancelAgentProviderTurnRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.CancelTurn(ctx, providerReq)
@@ -222,7 +225,7 @@ func (r *remoteAgent) ListTurnEvents(ctx context.Context, req *proto.ListAgentPr
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderTurnEventsRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.ListTurnEvents(ctx, providerReq)
@@ -236,7 +239,7 @@ func (r *remoteAgent) GetInteraction(ctx context.Context, req *proto.GetAgentPro
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.GetAgentProviderInteractionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.GetInteraction(ctx, providerReq)
@@ -250,7 +253,7 @@ func (r *remoteAgent) ListInteractions(ctx context.Context, req *proto.ListAgent
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.ListAgentProviderInteractionsRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.ListInteractions(ctx, providerReq)
@@ -264,7 +267,7 @@ func (r *remoteAgent) ResolveInteraction(ctx context.Context, req *proto.Resolve
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.ResolveAgentProviderInteractionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq); err != nil {
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
 		return nil, err
 	}
 	resp, err := r.client.ResolveInteraction(ctx, providerReq)
@@ -298,10 +301,11 @@ func cloneAgentRequest[T interface {
 	return gproto.Clone(req).(T)
 }
 
-func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message) error {
+func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message, providerName string) error {
 	if req == nil {
 		return nil
 	}
+	protoutil.SetProviderNameIfEmpty(req, providerName)
 	reqCtx, err := appaccess.RequestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		return err
@@ -328,8 +332,10 @@ func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message) 
 }
 
 func (r *remoteAgent) Ping(ctx context.Context) error {
-	if err := runtimehost.CheckRuntimeProviderHealth(ctx, r.runtime); err != nil {
-		return err
+	if r.runtime != nil {
+		if err := runtimehost.CheckRuntimeProviderHealth(ctx, r.runtime); err != nil {
+			return err
+		}
 	}
 	capabilitiesCtx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()

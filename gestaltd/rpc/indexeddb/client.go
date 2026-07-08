@@ -143,7 +143,7 @@ type objectStore struct {
 
 // Get loads one record by primary key.
 func (o *objectStore) Get(ctx context.Context, id string) (idb.Record, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
+	ctx, cancel := o.opts.outgoingContext(ctx)
 	defer cancel()
 	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	if err != nil {
