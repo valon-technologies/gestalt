@@ -123,8 +123,8 @@ func TestBrokerInvokeLocalProviderWinsOverRemote(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	broker := NewBroker(
 		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "linear",
-			ConnMode: core.ConnectionModeNone,
+			N:          "linear",
+			ConnMode:   core.ConnectionModeNone,
 			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{ID: "issues.list"}}},
 			ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: 201, Body: []byte("local")}, nil
