@@ -30,6 +30,9 @@ fn test_auth_login_stores_credentials_and_serves_browser_callback_page() {
     let _lock = env_lock();
     let tempdir = tempfile::tempdir().unwrap();
     let _env = EnvGuard::new(tempdir.path());
+    unsafe {
+        std::env::set_var(gestalt::api::ENV_API_KEY, "env-token");
+    }
     let server = spawn_login_server();
     let browser = Arc::new(Mutex::new(None));
     let browser_handle = Arc::clone(&browser);
