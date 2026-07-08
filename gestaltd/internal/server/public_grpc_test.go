@@ -14,16 +14,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	grpc_reflection_v1 "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	grpcstatus "google.golang.org/grpc/status"
-	"google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 )
 
 func TestPublicGRPCAppInvokeSucceedsWithBearer(t *testing.T) {
@@ -176,13 +176,13 @@ func TestPublicGRPCReflectionOmitsInternalWorkflowMethods(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client := grpc_reflection_v1alpha.NewServerReflectionClient(conn)
+	client := grpc_reflection_v1.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
 	if err != nil {
 		t.Fatalf("ServerReflectionInfo: %v", err)
 	}
-	if err := stream.Send(&grpc_reflection_v1alpha.ServerReflectionRequest{
-		MessageRequest: &grpc_reflection_v1alpha.ServerReflectionRequest_ListServices{},
+	if err := stream.Send(&grpc_reflection_v1.ServerReflectionRequest{
+		MessageRequest: &grpc_reflection_v1.ServerReflectionRequest_ListServices{},
 	}); err != nil {
 		t.Fatalf("Send list services: %v", err)
 	}
@@ -202,8 +202,8 @@ func TestPublicGRPCReflectionOmitsInternalWorkflowMethods(t *testing.T) {
 		t.Fatalf("workflow service missing from %v", services)
 	}
 
-	if err := stream.Send(&grpc_reflection_v1alpha.ServerReflectionRequest{
-		MessageRequest: &grpc_reflection_v1alpha.ServerReflectionRequest_FileContainingSymbol{
+	if err := stream.Send(&grpc_reflection_v1.ServerReflectionRequest{
+		MessageRequest: &grpc_reflection_v1.ServerReflectionRequest_FileContainingSymbol{
 			FileContainingSymbol: workflowService,
 		},
 	}); err != nil {
@@ -325,15 +325,15 @@ func newPublicGRPCTestHandler(
 	transport.SetPublicBaseURL("https://gestalt.example")
 
 	cfg := server.Config{
-		Auth:                 auth,
-		Services:             testutil.NewStubServices(t),
-		Providers:            testutil.NewProviderRegistry(t),
-		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
-		RouteProfile:         server.RouteProfilePublic,
-		Invoker:              invoker,
-		AppInvocation:        invoker,
-		PublicGateway:        transport,
-		RawAuthorization:     allowAllAuthorizationProvider{},
+		Auth:             auth,
+		Services:         testutil.NewStubServices(t),
+		Providers:        testutil.NewProviderRegistry(t),
+		StateSecret:      []byte("0123456789abcdef0123456789abcdef"),
+		RouteProfile:     server.RouteProfilePublic,
+		Invoker:          invoker,
+		AppInvocation:    invoker,
+		PublicGateway:    transport,
+		RawAuthorization: allowAllAuthorizationProvider{},
 	}
 	for _, opt := range opts {
 		opt(&cfg)
