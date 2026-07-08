@@ -131,6 +131,10 @@ type Server struct {
 	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[uint64]http.Handler
+	publicGateway          *providergateway.ProviderGatewayTransport
+	rawAuthorization       core.AuthorizationProvider
+	publicGRPCMu           sync.Mutex
+	publicGRPCHandler      http.Handler
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
 	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
@@ -195,6 +199,8 @@ type Config struct {
 	MeterProvider        metric.MeterProvider
 	TracerProvider       trace.TracerProvider
 	ActivateAppProviders func(context.Context)
+	PublicGateway        *providergateway.ProviderGatewayTransport
+	RawAuthorization     core.AuthorizationProvider
 }
 
 func New(cfg Config) (*Server, error) {
@@ -373,6 +379,8 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
+		publicGateway:          cfg.PublicGateway,
+		rawAuthorization:       cfg.RawAuthorization,
 		publicHostServices:     cfg.PublicHostServices,
 		s3:                     cfg.S3,
 		s3ObjectAccessURLs:     s3ObjectAccessURLs,

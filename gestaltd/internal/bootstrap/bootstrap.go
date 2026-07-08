@@ -236,6 +236,7 @@ type Result struct {
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.IdentityProvider
 	Authorization        map[string]core.AuthorizationProvider
+	RawAuthorization     map[string]core.AuthorizationProvider
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -693,6 +694,7 @@ type preparedCore struct {
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.IdentityProvider
 	Authorization        map[string]core.AuthorizationProvider
+	RawAuthorization     map[string]core.AuthorizationProvider
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -1075,6 +1077,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		SelectedAuthProvider: selectedAuthName,
 		AuthProviders:        authProviders,
 		Authorization:        authorizationProviders.Guarded,
+		RawAuthorization:     authorizationProviders.Raw,
 		Services:             svc,
 		ExtraIndexedDBs:      extraIndexedDBs,
 		ExtraCaches:          extraCaches,
@@ -1363,6 +1366,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
 		Authorization:                prepared.Authorization,
+		RawAuthorization:             prepared.RawAuthorization,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		ExtraCaches:                  prepared.ExtraCaches,

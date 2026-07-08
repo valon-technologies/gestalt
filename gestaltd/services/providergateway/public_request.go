@@ -229,14 +229,20 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 		return fillSubjectContext(p, msg, fd)
 	case "created_by_subject_id":
 		return fillCreatedBySubjectID(p, msg, fd)
+	case "delivered_by_subject_id":
+		return fillCreatedBySubjectID(p, msg, fd)
 	default:
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
 	}
 }
 
 func fillRequestContext(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, fd protoreflect.FieldDescriptor) error {
+	origin, ok := publicrpc.PublicOriginFromContext(ctx)
+	if !ok {
+		return status.Error(codes.Internal, "provider gateway: public origin marker is required")
+	}
 	callCtx := principal.WithPrincipal(ctx, principal.Canonicalized(p))
-	reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, invocation.CallerProvider{})
+	reqCtx, err := appaccess.RequestContextProto(callCtx, publicBaseURL, publicCallerProvider(p, msg, origin.FullMethod))
 	if err != nil {
 		return status.Errorf(codes.Internal, "provider gateway: build request context: %v", err)
 	}
@@ -245,6 +251,47 @@ func fillRequestContext(ctx context.Context, publicBaseURL string, p *principal.
 	}
 	msg.Set(fd, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
 	return nil
+}
+
+func publicCallerProvider(p *principal.Principal, msg protoreflect.Message, fullMethod string) invocation.CallerProvider {
+	if app := messageStringField(msg, "app"); app != "" {
+		return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: app}
+	}
+	service, method := splitFullMethod(fullMethod)
+	if strings.HasSuffix(service, ".Workflow") && method == "DeliverEvent" {
+		if source := nestedMessageStringField(msg, "event", "source"); source != "" {
+			return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: source}
+		}
+	}
+	if providerName := messageStringField(msg, "provider_name"); providerName != "" {
+		if strings.HasSuffix(service, ".Workflow") {
+			return invocation.CallerProvider{Kind: invocation.ProviderKindWorkflow, Name: providerName}
+		}
+	}
+	p = principal.Canonicalized(p)
+	if p != nil && strings.TrimSpace(p.ClientID) != "" {
+		return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: p.ClientID}
+	}
+	return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: core.DefaultOAuthClientID}
+}
+
+func messageStringField(msg protoreflect.Message, name string) string {
+	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
+	if fd == nil || fd.Kind() != protoreflect.StringKind {
+		return ""
+	}
+	return strings.TrimSpace(msg.Get(fd).String())
+}
+
+func nestedMessageStringField(msg protoreflect.Message, messageName, fieldName string) string {
+	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(messageName))
+	if fd == nil || fd.Kind() != protoreflect.MessageKind {
+		return ""
+	}
+	if !msg.Has(fd) {
+		return ""
+	}
+	return messageStringField(msg.Get(fd).Message(), fieldName)
 }
 
 func fillSubjectContext(p *principal.Principal, msg protoreflect.Message, fd protoreflect.FieldDescriptor) error {

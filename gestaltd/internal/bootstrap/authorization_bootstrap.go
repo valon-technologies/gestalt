@@ -68,6 +68,11 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 }
 
 func selectedAuthorizationProviderInstance(cfg *config.Config, providers map[string]core.AuthorizationProvider) (string, core.AuthorizationProvider, error) {
+	return SelectedAuthorizationProviderInstance(cfg, providers)
+}
+
+// SelectedAuthorizationProviderInstance returns the configured authorization provider.
+func SelectedAuthorizationProviderInstance(cfg *config.Config, providers map[string]core.AuthorizationProvider) (string, core.AuthorizationProvider, error) {
 	name, entry, err := cfg.SelectedAuthorizationProvider()
 	if err != nil {
 		return "", nil, err

@@ -558,8 +558,8 @@ func (s *ProviderServer) requestContext(req workflowProviderAuthRequest) (workfl
 	if authCtx.CallerKind() != invocation.ProviderKindApp {
 		return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "app caller context is required")
 	}
-	if strings.TrimSpace(authCtx.CallerName()) != strings.TrimSpace(s.appName) {
-		return workflowManagerAuthContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match serving provider %q", authCtx.CallerName(), strings.TrimSpace(s.appName))
+	if expected := strings.TrimSpace(s.appName); expected != "" && strings.TrimSpace(authCtx.CallerName()) != expected {
+		return workflowManagerAuthContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match serving provider %q", authCtx.CallerName(), expected)
 	}
 	return workflowManagerAuthContext{request: authCtx, raw: raw}, nil
 }

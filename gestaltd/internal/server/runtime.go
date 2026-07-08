@@ -16,10 +16,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 )
 
 const (
@@ -67,6 +69,19 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	if authorizationEntry != nil {
 		authorizationProvider = result.Authorization[authorizationName]
 	}
+	publicMethodRegistry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		return fmt.Errorf("public method registry: %w", err)
+	}
+	_, rawAuthorization, err := bootstrap.SelectedAuthorizationProviderInstance(cfg, result.RawAuthorization)
+	if err != nil {
+		return err
+	}
+	publicGateway := providergateway.NewProviderGatewayTransport()
+	publicGateway.SetIdentityProvider(result.Auth)
+	publicGateway.SetAuthorizationProvider(rawAuthorization)
+	publicGateway.SetPublicMethodRegistry(publicMethodRegistry)
+	publicGateway.SetPublicBaseURL(cfg.Server.BaseURL)
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
@@ -100,6 +115,8 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
 		PublicHostServices:   result.PublicHostServices,
 		ActivateAppProviders: result.ActivateAppProviders,
+		PublicGateway:        publicGateway,
+		RawAuthorization:     rawAuthorization,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
