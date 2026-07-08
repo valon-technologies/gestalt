@@ -155,6 +155,43 @@ func TestPreparePublicRequestRequiresPublicOrigin(t *testing.T) {
 	assertGRPCCode(t, err, codes.Internal)
 }
 
+func TestPreparePublicRequestWorkflowDeliverEventFillsDeliveredBySubjectID(t *testing.T) {
+	t.Parallel()
+
+	authorization := &stubAuthorizationProvider{}
+	gateway := newTestPublicGateway(t, &stubIdentityProvider{
+		introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice"},
+	}, authorization)
+
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.Workflow_DeliverEvent_FullMethodName)
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer test-token"))
+	req := &proto.DeliverWorkflowProviderEventRequest{
+		AppName: "roadmap",
+		Event:   &proto.WorkflowEvent{Type: "sync"},
+	}
+
+	_, adapted, err := gateway.PreparePublicRequest(ctx, proto.Workflow_DeliverEvent_FullMethodName, req)
+	if err != nil {
+		t.Fatalf("PreparePublicRequest: %v", err)
+	}
+	out, ok := adapted.(*proto.DeliverWorkflowProviderEventRequest)
+	if !ok {
+		t.Fatalf("adapted type = %T, want *proto.DeliverWorkflowProviderEventRequest", adapted)
+	}
+	if out.GetDeliveredBySubjectId() != "user:alice" {
+		t.Fatalf("delivered_by_subject_id = %q, want %q", out.GetDeliveredBySubjectId(), "user:alice")
+	}
+	if out.GetContext() == nil || out.GetContext().GetSubject().GetId() != "user:alice" {
+		t.Fatalf("context subject = %#v, want user:alice", out.GetContext())
+	}
+	if !authorization.called {
+		t.Fatal("authorization provider was not called")
+	}
+	if got := authorization.request.GetResource().GetId(); got != "roadmap" {
+		t.Fatalf("Resource.Id = %q, want %q", got, "roadmap")
+	}
+}
+
 func TestPreparePublicRequestAuthorizationMapping(t *testing.T) {
 	t.Parallel()
 

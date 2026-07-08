@@ -6,11 +6,11 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -170,6 +170,11 @@ func publicResourceID(req gproto.Message, fullMethod string) string {
 			return app
 		}
 	}
+	if fd := msg.Descriptor().Fields().ByName("app_name"); fd != nil {
+		if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
+			return app
+		}
+	}
 	if fd := msg.Descriptor().Fields().ByName("provider_name"); fd != nil {
 		if name := strings.TrimSpace(msg.Get(fd).String()); name != "" {
 			return name
@@ -229,7 +234,7 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 		return fillRequestContext(ctx, publicBaseURL, p, msg, fd)
 	case "subject":
 		return fillSubjectContext(p, msg, fd)
-	case "created_by_subject_id":
+	case "created_by_subject_id", "delivered_by_subject_id":
 		return fillCreatedBySubjectID(p, msg, fd)
 	default:
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
