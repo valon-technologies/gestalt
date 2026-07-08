@@ -686,7 +686,10 @@ func TestTransport_PaginateIndexGetAll(t *testing.T) {
 	}
 
 	idx := s.Index("by_run_id")
-	query := indexeddb.PrefixIndexRange([]any{"run-1"}, nil, []any{"\uffff", "\uffff"})
+	query, err := indexeddb.PrefixIndexRange([]any{"run-1"}, nil, []any{"\uffff", "\uffff"})
+	if err != nil {
+		t.Fatalf("PrefixIndexRange page1: %v", err)
+	}
 	page1, err := indexeddb.PaginateIndexGetAll(ctx, idx, query, 2, []string{"run_id", "recorded_at", "record_id"})
 	if err != nil {
 		t.Fatalf("PaginateIndexGetAll page1: %v", err)
@@ -698,7 +701,10 @@ func TestTransport_PaginateIndexGetAll(t *testing.T) {
 		t.Fatal("page1 next cursor missing")
 	}
 
-	query2 := indexeddb.PrefixIndexRange([]any{"run-1"}, page1.NextCursor, []any{"\uffff", "\uffff"})
+	query2, err := indexeddb.PrefixIndexRange([]any{"run-1"}, page1.NextCursor, []any{"\uffff", "\uffff"})
+	if err != nil {
+		t.Fatalf("PrefixIndexRange page2: %v", err)
+	}
 	page2, err := indexeddb.PaginateIndexGetAll(ctx, idx, query2, 2, []string{"run_id", "recorded_at", "record_id"})
 	if err != nil {
 		t.Fatalf("PaginateIndexGetAll page2: %v", err)

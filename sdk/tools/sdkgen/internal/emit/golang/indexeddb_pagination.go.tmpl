@@ -64,7 +64,7 @@ func DecodePageCursor(cursor string) (*IndexPageCursor, error) {
 }
 
 // PrefixIndexRange builds a resume-aware prefix range for compound index keys.
-func PrefixIndexRange(prefix []any, afterCursor *string, upperSentinels []any) *KeyRange {
+func PrefixIndexRange(prefix []any, afterCursor *string, upperSentinels []any) (*KeyRange, error) {
 	sentinels := upperSentinels
 	if len(sentinels) == 0 {
 		sentinels = []any{"\uffff"}
@@ -74,7 +74,10 @@ func PrefixIndexRange(prefix []any, afterCursor *string, upperSentinels []any) *
 	lowerOpen := false
 	if afterCursor != nil && *afterCursor != "" {
 		decoded, err := DecodePageCursor(*afterCursor)
-		if err == nil && decoded != nil {
+		if err != nil {
+			return nil, err
+		}
+		if decoded != nil {
 			lower = decoded.IndexKey
 			if parts, ok := lower.([]any); ok && len(prefix) == 1 && len(parts) > 0 {
 				if fmt.Sprint(parts[0]) != fmt.Sprint(prefix[0]) {
@@ -84,7 +87,7 @@ func PrefixIndexRange(prefix []any, afterCursor *string, upperSentinels []any) *
 			lowerOpen = true
 		}
 	}
-	return Bound(lower, upper, lowerOpen, false)
+	return Bound(lower, upper, lowerOpen, false), nil
 }
 
 func indexKeyFromRecord(row Record, indexKeyPath []string) any {
@@ -161,7 +164,10 @@ func CollectIndexPages(
 	items := make([]Record, 0)
 	var cursor *string
 	for {
-		query := PrefixIndexRange(prefix, cursor, upperSentinels)
+		query, err := PrefixIndexRange(prefix, cursor, upperSentinels)
+		if err != nil {
+			return nil, err
+		}
 		page, err := PaginateIndexGetAll(ctx, index, query, pageSize, indexKeyPath)
 		if err != nil {
 			return nil, err

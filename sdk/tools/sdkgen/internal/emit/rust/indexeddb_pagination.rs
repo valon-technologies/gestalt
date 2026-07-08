@@ -1,4 +1,5 @@
 //! IndexedDB index pagination helpers for provider-side IndexedDB clients.
+#![allow(missing_docs)]
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -67,7 +68,11 @@ pub fn prefix_index_bounds(
     after_cursor: Option<&str>,
     upper_sentinels: Option<&[Value]>,
 ) -> Result<(Value, Value, bool), String> {
-    let sentinels = upper_sentinels.unwrap_or(&[Value::String("\u{ffff}".to_string())]);
+    let default_sentinels = [Value::String("\u{ffff}".to_string())];
+    let sentinels = match upper_sentinels {
+        None | Some([]) => &default_sentinels[..],
+        Some(values) => values,
+    };
     let mut upper_parts = prefix.to_vec();
     upper_parts.extend_from_slice(sentinels);
     let upper = if upper_parts.len() == 1 {

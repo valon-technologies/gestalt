@@ -4,21 +4,7 @@
  * IndexedDB index pagination helpers for provider-side IndexedDB clients.
  */
 
-import type { Key, KeyRange, Record } from "./providers/indexeddb.ts";
-
-function bound(
-  lower: Key | null | undefined,
-  upper: Key | null | undefined,
-  lowerOpen = false,
-  upperOpen = false,
-): KeyRange {
-  return {
-    ...(lower != null ? { lower } : {}),
-    ...(upper != null ? { upper } : {}),
-    lowerOpen,
-    upperOpen,
-  };
-}
+import { bound, type Key, type KeyRange, type Record } from "./providers/indexeddb.ts";
 
 export interface IndexPageCursor {
   indexKey: Key;
@@ -124,7 +110,10 @@ export function prefixIndexRange(
   prefix: Key[],
   options?: { afterCursor?: string | null; upperSentinels?: Key[] },
 ): KeyRange {
-  const sentinels = options?.upperSentinels ?? ["\uffff"];
+  const sentinels =
+    options?.upperSentinels == null || options.upperSentinels.length === 0
+      ? ["\uffff"]
+      : options.upperSentinels;
   const upper: Key = [...prefix, ...sentinels];
   let lower: Key = prefix;
   let lowerOpen = false;
@@ -195,12 +184,14 @@ export async function collectIndexPages(
   let cursor: string | null = null;
   for (;;) {
     const query = prefixIndexRange(prefix, {
-      afterCursor: cursor,
-      upperSentinels: options?.upperSentinels,
+      ...(cursor != null ? { afterCursor: cursor } : {}),
+      ...(options?.upperSentinels != null
+        ? { upperSentinels: options.upperSentinels }
+        : {}),
     });
     const page = await paginateIndexGetAll(index, query, {
       limit: options?.pageSize ?? 100,
-      indexKeyPath: options?.indexKeyPath,
+      ...(options?.indexKeyPath != null ? { indexKeyPath: options.indexKeyPath } : {}),
     });
     items.push(...page.items);
     if (!page.hasMore) {

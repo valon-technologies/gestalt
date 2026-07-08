@@ -103,7 +103,11 @@ def prefix_index_range(
     after_cursor: str | None = None,
     upper_sentinels: list[Key] | None = None,
 ) -> KeyRange:
-    sentinels = upper_sentinels if upper_sentinels is not None else ["\uffff"]
+    sentinels = (
+        ["\uffff"]
+        if upper_sentinels is None or len(upper_sentinels) == 0
+        else upper_sentinels
+    )
     upper: Key = [*prefix, *sentinels]
     lower: Key = prefix
     lower_open = False
@@ -119,8 +123,23 @@ def prefix_index_range(
 
 def _index_key_from_record(row: dict[str, Any], index_key_path: list[str]) -> Key:
     if len(index_key_path) == 1:
-        return row.get(index_key_path[0])  # type: ignore[return-value]
-    return [row.get(name) for name in index_key_path]  # type: ignore[misc]
+        value = row.get(index_key_path[0])
+        if not isinstance(value, (str, int, float, bytes, bytearray, memoryview, datetime)) and not (
+            isinstance(value, list)
+            and all(
+                isinstance(part, (str, int, float, bytes, bytearray, memoryview, datetime))
+                for part in value
+            )
+        ):
+            raise ValueError("invalid index key")
+        return value  # type: ignore[return-value]
+    parts: list[Key] = []
+    for name in index_key_path:
+        value = row.get(name)
+        if not isinstance(value, (str, int, float, bytes, bytearray, memoryview, datetime)):
+            raise ValueError("invalid index key")
+        parts.append(value)
+    return parts
 
 
 def _primary_key_from_record(row: dict[str, Any]) -> str:
@@ -150,9 +169,7 @@ def paginate_index_get_all(
         else:
             index_key = _primary_key_from_record(last) or str(last.get("id") or "")
         next_cursor = encode_page_cursor(index_key, _primary_key_from_record(last))
-    return Page(
-        items=items, limit=page_limit, has_more=has_more, next_cursor=next_cursor
-    )
+    return Page(items=items, limit=page_limit, has_more=has_more, next_cursor=next_cursor)
 
 
 def collect_index_pages(
