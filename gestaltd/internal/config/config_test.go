@@ -5002,6 +5002,7 @@ server:
 	}
 
 	t.Run("accepts and trims remote url", func(t *testing.T) {
+		t.Parallel()
 		path := mustWriteConfigFile(t, `
 server:
   remote: https://valon.tools/
@@ -5021,6 +5022,7 @@ server:
 	})
 
 	t.Run("rejects remote url with path", func(t *testing.T) {
+		t.Parallel()
 		path := mustWriteConfigFile(t, `
 server:
   remote: https://valon.tools/api
