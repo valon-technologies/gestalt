@@ -1,3 +1,4 @@
+// Package migrations runs declarative IndexedDB schema revisions with a ledger.
 package migrations
 
 import (

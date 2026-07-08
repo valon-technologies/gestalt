@@ -16,7 +16,6 @@ from ._indexeddb import (
     NotFoundError,
     ObjectStoreSchema,
 )
-from ._providers import MigrationsProvider
 
 DEFAULT_LEDGER_STORE = "_gestalt_migrations"
 LEDGER_KEY_COLUMN = "revision_id"
@@ -207,17 +206,19 @@ def normalize_migrations(
         return None
     if isinstance(input, MigrationRunOptions):
         return input if input.revisions else None
-    return MigrationRunOptions(revisions=input) if input else None
+    if isinstance(input, list):
+        return MigrationRunOptions(revisions=input) if input else None
+    return None
 
 
 def configure_migrations(provider: Any, name: str, config: dict[str, Any]) -> None:
     """Run declared migrations before provider configure."""
 
-    options: MigrationRunOptions | None
-    if isinstance(provider, MigrationsProvider):
-        options = normalize_migrations(provider.migration_options(name, config))
-    else:
-        options = None
+    migration_options = getattr(provider, "migration_options", None)
+    if not callable(migration_options):
+        return
+
+    options = normalize_migrations(migration_options(name, config))
     if options is None:
         return
 
@@ -338,6 +339,7 @@ def _ensure_ledger_store(db: MigrationDB, ledger_store: str) -> None:
 
 
 def _apply_revision(db: MigrationDB, revision: Revision) -> None:
+<<<<<<< HEAD
     schema = getattr(revision, "schema", None)
     if schema is not None:
         _apply_schema(db, schema)
@@ -348,6 +350,16 @@ def _apply_revision(db: MigrationDB, revision: Revision) -> None:
         return
     raise MigrationError(
         f'revision {json.dumps(getattr(revision, "id", ""))} must declare exactly one of '
+=======
+    if isinstance(revision, SchemaRevision):
+        _apply_schema(db, revision.schema)
+        return
+    if isinstance(revision, BackfillRevision):
+        _apply_backfill(db, revision.backfill)
+        return
+    raise MigrationError(
+        f'revision {json.dumps(revision.id)} must declare exactly one of '
+>>>>>>> b7b7bfe0e (Trim migration SDK surface and fix Python CI regressions.)
         f'"schema" or "backfill"'
     )
 
@@ -422,10 +434,6 @@ def _record_revision(db: MigrationDB, ledger_store: str, revision_id: str) -> No
     if LEDGER_KEY_COLUMN != "id":
         record["id"] = revision_id
     db.object_store(ledger_store).put(record)
-
-
-def _is_schema_revision(revision: Revision) -> bool:
-    return getattr(revision, "schema", None) is not None
 
 
 def _indexeddb_column(column: ColumnSchema) -> ColumnDef:

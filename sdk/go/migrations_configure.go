@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/valon-technologies/gestalt/sdk/go/migrations"
 )
 
 // ConfigureMigrations runs declared migrations before provider configuration when
@@ -24,7 +26,12 @@ func ConfigureMigrations(ctx context.Context, provider Provider, name string, co
 			}
 		}
 	}
-	if _, err := RunMigrationsWithBinding(ctx, binding, opts); err != nil {
+	db, err := IndexedDB(ctx, binding)
+	if err != nil {
+		return fmt.Errorf("migrations: open indexeddb: %w", err)
+	}
+	defer db.Close()
+	if _, err := migrations.Run(ctx, db, opts); err != nil {
 		return fmt.Errorf("migrations: run: %w", err)
 	}
 	return nil
