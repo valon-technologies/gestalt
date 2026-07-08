@@ -6,8 +6,8 @@ import (
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/remote"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type gestaltRemoteIndexedDB struct {
