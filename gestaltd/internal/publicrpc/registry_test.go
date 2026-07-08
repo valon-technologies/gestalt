@@ -1,15 +1,15 @@
 package publicrpc_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/bufbuild/protocompile"
-	"golang.org/x/net/context"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	gestaltproto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
+	gestaltproto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func TestRegistryDiscoversPublicMethods(t *testing.T) {
