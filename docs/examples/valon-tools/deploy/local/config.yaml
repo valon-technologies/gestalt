@@ -1,0 +1,5 @@
+# Valon Tools local overlay: delegate undeclared providers to production gestaltd.
+# Commit only the remote URL — pass the bearer token at serve time.
+apiVersion: gestaltd.config/v8
+server:
+  remote: https://valon.tools
