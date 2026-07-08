@@ -150,6 +150,38 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	})
 }
 
+func TestManagerServerDeliverEventIgnoresSpoofedAppNameOnInternalPath(t *testing.T) {
+	t.Parallel()
+
+	selected := &recordingWorkflowProvider{deliveredID: "provider-event"}
+	manager := workflowmanager.New(workflowmanager.Config{
+		Workflow: managerServerWorkflowControl{
+			defaultName: "selected",
+			names:       []string{"selected"},
+			providers: map[string]coreworkflow.Provider{
+				"selected": selected,
+			},
+		},
+	})
+	server := NewProviderServer("sourceApp", manager, &managerServerAuthorizationProvider{allowed: true})
+
+	_, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
+		ProviderName: "selected",
+		AppName:      "evilApp",
+		Context:      managerServerRequestContext("sourceApp"),
+		Event:        &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
+	})
+	if err != nil {
+		t.Fatalf("DeliverEvent: %v", err)
+	}
+	if len(selected.deliverReqs) != 1 {
+		t.Fatalf("selected deliver requests = %d, want 1", len(selected.deliverReqs))
+	}
+	if got := selected.deliverReqs[0].GetAppName(); got != "sourceApp" {
+		t.Fatalf("selected deliver app = %q, want sourceApp", got)
+	}
+}
+
 func TestWorkflowManagerDeliverEventSelectedProviderRequiresCallerApp(t *testing.T) {
 	t.Parallel()
 

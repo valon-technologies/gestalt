@@ -16,7 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 )
 
@@ -51,19 +51,18 @@ func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
 			workflowservice.WithAgentWorkflowInvocationAuthorizer(cfg.AgentManager),
 		))
 	}
-	reflection.Register(srv)
 	return http.HandlerFunc(srv.ServeHTTP)
 }
 
 func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTransport) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		msg, ok := req.(gproto.Message)
-		if !ok {
-			return handler(ctx, req)
-		}
 		origin, ok := publicrpc.PublicOriginFromContext(ctx)
 		if !ok {
-			return handler(ctx, req)
+			return nil, status.Error(codes.Unauthenticated, "bearer token is required")
+		}
+		msg, ok := req.(gproto.Message)
+		if !ok {
+			return nil, status.Error(codes.Internal, "request type mismatch")
 		}
 		_, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
 		if err != nil {

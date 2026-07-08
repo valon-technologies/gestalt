@@ -196,14 +196,7 @@ func adaptPublicRequest(
 	return adapted, nil
 }
 
-func publicCallerProvider(msg protoreflect.Message, fullMethod string) invocation.CallerProvider {
-	if strings.HasPrefix(fullMethod, "/"+proto.App_ServiceDesc.ServiceName+"/") {
-		if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
-			if app := strings.TrimSpace(msg.Get(fd).String()); app != "" {
-				return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: app}
-			}
-		}
-	}
+func publicCallerProvider(_ protoreflect.Message, _ string) invocation.CallerProvider {
 	return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "gestaltd"}
 }
 
