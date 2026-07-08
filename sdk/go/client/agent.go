@@ -383,35 +383,34 @@ type CancelAgentProviderTurnRequest struct {
 // CreateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.CreateAgentProviderSessionRequest.
 type CreateAgentProviderSessionRequest struct {
 	// The provider mints the session id returned on AgentSession. Creation is
-	// idempotent on idempotency_key scoped per subject (created_by_subject_id):
+	// idempotent on idempotency_key scoped per subject (context.subject.id,
+	// or top-level subject when set for delegated provider calls):
 	// a replayed key returns the existing session, an empty key always creates.
 	// Idempotency is scoped to the provider's session store.
-	IdempotencyKey     string
-	Model              string
-	ClientRef          string
-	Metadata           map[string]any
-	CreatedBySubjectId string
-	Subject            *SubjectContext
-	SessionStart       *AgentSessionStartConfig
-	PreparedWorkspace  *PreparedAgentWorkspace
-	ProviderName       string
-	Workspace          *AgentWorkspace
-	Context            *RequestContext
-	Tools              *AgentToolConfig
+	IdempotencyKey    string
+	Model             string
+	ClientRef         string
+	Metadata          map[string]any
+	Subject           *SubjectContext
+	SessionStart      *AgentSessionStartConfig
+	PreparedWorkspace *PreparedAgentWorkspace
+	ProviderName      string
+	Workspace         *AgentWorkspace
+	Context           *RequestContext
+	Tools             *AgentToolConfig
 }
 
 // CreateAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CreateAgentProviderTurnRequest.
 type CreateAgentProviderTurnRequest struct {
-	TurnId             string
-	SessionId          string
-	IdempotencyKey     string
-	Model              string
-	Messages           []*AgentMessage
-	Metadata           map[string]any
-	CreatedBySubjectId string
-	ExecutionRef       string
-	Subject            *SubjectContext
-	ModelOptions       map[string]any
+	TurnId         string
+	SessionId      string
+	IdempotencyKey string
+	Model          string
+	Messages       []*AgentMessage
+	Metadata       map[string]any
+	ExecutionRef   string
+	Subject        *SubjectContext
+	ModelOptions   map[string]any
 	// Optional provider-owned turn execution budget, in seconds.
 	// If unset or zero, the provider chooses its own execution timeout. This does
 	// not control the CreateTurn RPC deadline.

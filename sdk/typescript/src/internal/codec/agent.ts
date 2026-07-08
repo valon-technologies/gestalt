@@ -799,7 +799,6 @@ export function toWireCreateAgentProviderSessionRequest(
     model: value.model ?? "",
     clientRef: value.clientRef ?? "",
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    createdBySubjectId: value.createdBySubjectId ?? "",
     ...(value.subject !== undefined
       ? { subject: toWireSubjectContext(value.subject) }
       : {}),
@@ -834,7 +833,6 @@ export function fromWireCreateAgentProviderSessionRequest(
     model: value.model,
     clientRef: value.clientRef,
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    createdBySubjectId: value.createdBySubjectId,
     ...(value.subject !== undefined
       ? { subject: fromWireSubjectContext(value.subject) }
       : {}),
@@ -871,7 +869,6 @@ export function toWireCreateAgentProviderTurnRequest(
     model: value.model ?? "",
     messages: (value.messages ?? []).map(toWireAgentMessage),
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    createdBySubjectId: value.createdBySubjectId ?? "",
     executionRef: value.executionRef ?? "",
     ...(value.subject !== undefined
       ? { subject: toWireSubjectContext(value.subject) }
@@ -900,7 +897,6 @@ export function fromWireCreateAgentProviderTurnRequest(
     model: value.model,
     messages: value.messages.map(fromWireAgentMessage),
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    createdBySubjectId: value.createdBySubjectId,
     executionRef: value.executionRef,
     ...(value.subject !== undefined
       ? { subject: fromWireSubjectContext(value.subject) }

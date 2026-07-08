@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,6 +24,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -43,11 +43,15 @@ type providerBuildOrderingAgentProvider struct {
 func (providerBuildOrderingAgentProvider) SupportsWorkspaceRequests() bool { return true }
 
 func (providerBuildOrderingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
+	createdBy := ""
+	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
+		createdBy = principal.SubjectID
+	}
 	return &coreagent.Session{
 		ID:                 uuid.NewString(),
 		ProviderName:       "managed",
 		Model:              req.GetModel(),
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedBySubjectID: createdBy,
 	}, nil
 }
 

@@ -259,7 +259,6 @@ export interface CreateAgentProviderSessionRequest {
   model: string;
   clientRef: string;
   metadata?: JsonObjectInput | undefined;
-  createdBySubjectId?: string | undefined;
   subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
@@ -347,7 +346,6 @@ export interface CreateAgentProviderTurnRequest {
   messages: readonly AgentMessage[];
   output: AgentOutput;
   metadata?: JsonObjectInput | undefined;
-  createdBySubjectId?: string | undefined;
   executionRef: string;
   subject?: Subject | undefined;
   modelOptions?: JsonObjectInput | undefined;
@@ -487,8 +485,8 @@ export interface ListedAgentTool {
 export interface AgentProviderOptions extends ProviderBaseOptions {
   /**
    * Creates a session, minting its id. Must be idempotent on
-   * `idempotencyKey` scoped per subject (`createdBySubjectId`); an empty key
-   * always creates.
+   * `idempotencyKey` scoped per subject (`context.subject.id`, or top-level
+   * `subject` for delegated calls); an empty key always creates.
    */
   createSession?: (
     request: CreateAgentProviderSessionRequest,
@@ -711,7 +709,6 @@ function createAgentProviderSessionRequestFromProto(
     model: request.model,
     clientRef: request.clientRef,
     metadata: optionalObjectFromStruct(request.metadata),
-    createdBySubjectId: request.createdBySubjectId ?? "",
     subject: agentRequestSubjectFromProto(request),
     context: request.context,
     sessionStart: request.sessionStart === undefined ? undefined : {
@@ -801,7 +798,6 @@ function createAgentProviderTurnRequestFromProto(
     messages: request.messages.map(agentMessageFromProto),
     output,
     metadata: optionalObjectFromStruct(request.metadata),
-    createdBySubjectId: request.createdBySubjectId ?? "",
     executionRef: request.executionRef,
     subject: agentRequestSubjectFromProto(request),
     modelOptions: optionalObjectFromStruct(request.modelOptions),

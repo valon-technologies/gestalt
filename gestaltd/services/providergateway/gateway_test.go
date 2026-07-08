@@ -520,8 +520,8 @@ func TestPreparePublicRequest(t *testing.T) {
 				if out.GetSubject().GetId() != "user:alice" {
 					t.Fatalf("subject = %#v, want user:alice", out.GetSubject())
 				}
-				if out.GetCreatedBySubjectId() != "user:alice" {
-					t.Fatalf("created_by_subject_id = %q, want %q", out.GetCreatedBySubjectId(), "user:alice")
+				if out.GetContext().GetSubject().GetId() != "user:alice" {
+					t.Fatalf("context.subject.id = %q, want %q", out.GetContext().GetSubject().GetId(), "user:alice")
 				}
 			},
 		},

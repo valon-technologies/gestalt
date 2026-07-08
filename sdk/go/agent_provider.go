@@ -18,7 +18,8 @@ type AgentProvider interface {
 	Provider
 	// CreateSession mints the session id returned on the AgentSession.
 	// Creation must be idempotent on IdempotencyKey scoped per subject
-	// (CreatedBySubjectID); an empty key always creates a new session.
+	// (context.subject.id, or top-level subject when set for delegated provider
+	// calls); an empty key always creates a new session.
 	CreateSession(ctx context.Context, req *CreateAgentProviderSessionRequest) (*AgentSession, error)
 	// GetSession returns one agent session by ID.
 	GetSession(ctx context.Context, req *GetAgentProviderSessionRequest) (*AgentSession, error)
@@ -246,7 +247,6 @@ type CreateAgentProviderSessionRequest struct {
 	Model              string
 	ClientRef          string
 	Metadata           map[string]any
-	CreatedBySubjectID string
 	Subject            *Subject
 	Context            *proto.RequestContext
 	SessionStart       *AgentSessionStartConfig
@@ -390,7 +390,6 @@ type CreateAgentProviderTurnRequest struct {
 	Messages           []AgentMessage
 	Output             *AgentOutput
 	Metadata           map[string]any
-	CreatedBySubjectID string
 	ExecutionRef       string
 	Subject            *Subject
 	ModelOptions       map[string]any

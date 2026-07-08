@@ -663,7 +663,6 @@ def to_wire_create_agent_provider_session_request(
         model=value.model,
         client_ref=value.client_ref,
         metadata=None if value.metadata is None else to_wire_struct(value.metadata),
-        created_by_subject_id=value.created_by_subject_id,
         subject=None
         if value.subject is None
         else app.to_wire_subject_context(value.subject),
@@ -694,7 +693,6 @@ def from_wire_create_agent_provider_session_request(
         metadata=from_wire_struct(value.metadata)
         if value.HasField("metadata")
         else None,
-        created_by_subject_id=value.created_by_subject_id,
         subject=app.from_wire_subject_context(value.subject)
         if value.HasField("subject")
         else None,
@@ -727,7 +725,6 @@ def to_wire_create_agent_provider_turn_request(
         model=value.model,
         messages=[to_wire_agent_message(item) for item in value.messages],
         metadata=None if value.metadata is None else to_wire_struct(value.metadata),
-        created_by_subject_id=value.created_by_subject_id,
         execution_ref=value.execution_ref,
         subject=None
         if value.subject is None
@@ -756,7 +753,6 @@ def from_wire_create_agent_provider_turn_request(
         metadata=from_wire_struct(value.metadata)
         if value.HasField("metadata")
         else None,
-        created_by_subject_id=value.created_by_subject_id,
         execution_ref=value.execution_ref,
         subject=app.from_wire_subject_context(value.subject)
         if value.HasField("subject")

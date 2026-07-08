@@ -502,7 +502,8 @@ pub struct CancelAgentProviderTurnRequest {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CreateAgentProviderSessionRequest {
     /// The provider mints the session id returned on AgentSession. Creation is
-    /// idempotent on idempotency_key scoped per subject (created_by_subject_id):
+    /// idempotent on idempotency_key scoped per subject (context.subject.id,
+    /// or top-level subject when set for delegated provider calls):
     /// a replayed key returns the existing session, an empty key always creates.
     /// Idempotency is scoped to the provider's session store.
     ///
@@ -514,8 +515,6 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: String,
     /// The `metadata` field; None when unset.
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: String,
     /// The `subject` field; None when unset.
     pub subject: Option<SubjectContext>,
     /// The `session_start` field; None when unset.
@@ -547,8 +546,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub messages: Vec<AgentMessage>,
     /// The `metadata` field; None when unset.
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: String,
     /// The `execution_ref` field.
     pub execution_ref: String,
     /// The `subject` field; None when unset.

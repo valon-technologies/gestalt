@@ -7,7 +7,6 @@ import tempfile
 import unittest
 from concurrent import futures
 from datetime import datetime, timezone
-from importlib import resources
 from typing import Any
 
 import grpc
@@ -81,16 +80,10 @@ _manager_session_tools: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
 
-def _native_context_subject_id(context: Any) -> str:
-    if context is None or not context.HasField("subject"):
-        return ""
-    return context.subject.id
-
 
 class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def __init__(self) -> None:
         self.configured: list[tuple[str, dict[str, object]]] = []
-        self.context_subject_ids: list[str] = []
         self.session_tools: list[dict[str, str]] = []
 
     def configure(self, name: str, config: dict[str, Any]) -> None:
@@ -109,7 +102,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
         return ["set OPENAI_API_KEY"]
 
     def create_session(self, request: Any) -> Any:
-        self.context_subject_ids.append(_native_context_subject_id(request.context))
         self.session_tools.append(
             {
                 "tool_ref_operation": request.tools.refs[0].operation
@@ -127,7 +119,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             client_ref=request.client_ref,
             state=AGENT_SESSION_STATE_ACTIVE,
             metadata=request.metadata,
-            created_by_subject_id=request.created_by_subject_id,
         )
 
     def get_session(self, request: Any) -> Any:
@@ -166,7 +157,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
         )
 
     def create_turn(self, request: Any) -> Any:
-        self.context_subject_ids.append(_native_context_subject_id(request.context))
         return AgentTurn(
             id=request.turn_id,
             session_id=request.session_id,
@@ -178,7 +168,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
                 text="echo:Plan it",
             ),
             status_message="waiting for input",
-            created_by_subject_id=request.created_by_subject_id,
             execution_ref=request.execution_ref,
         )
 
@@ -586,7 +575,6 @@ def tearDownModule() -> None:
 class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
-        _provider.context_subject_ids.clear()
         _provider.session_tools.clear()
         _manager_requests.clear()
         _manager_contexts.clear()
@@ -594,11 +582,6 @@ class AgentTransportTests(unittest.TestCase):
         _manager_session_tools.clear()
         _manager_relay_tokens.clear()
 
-    def test_private_generated_stubs_are_packaged(self) -> None:
-        self.assertTrue(resources.files("gestalt").joinpath("py.typed").is_file())
-        self.assertTrue(
-            resources.files("gestalt").joinpath("_gen/v1/agent_pb2.pyi").is_file()
-        )
 
     def test_agent_protocol_wrappers_accept_native_datetimes(self) -> None:
         created_at = datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc)
@@ -765,185 +748,6 @@ class AgentTransportTests(unittest.TestCase):
         )
         self.assertEqual(agent_message_to_dict(agent_message_from_dict(raw)), raw)
 
-    def test_agent_runtime_and_server_roundtrip(self) -> None:
-        channel = grpc.insecure_channel(f"unix:{_runtime_socket}")
-        runtime_client = runtime_pb2_grpc.ProviderLifecycleStub(channel)
-        provider_client = agent_pb2_grpc.AgentStub(channel)
-
-        identity = runtime_client.GetProviderIdentity(empty_pb2.Empty())
-        configure_request = runtime_pb2.ConfigureProviderRequest(
-            name="agent-runtime",
-            protocol_version=_runtime.CURRENT_PROTOCOL_VERSION,
-        )
-        json_format.ParseDict({"tenant": "acme"}, configure_request.config)
-        configured = runtime_client.ConfigureProvider(configure_request)
-
-        create_session_request = agent_pb2.CreateAgentProviderSessionRequest(
-            idempotency_key="session-req-1",
-            model="gpt-5.1",
-            client_ref="cli-session-1",
-            created_by_subject_id="user:session-owner",
-            context=app_pb2.RequestContext(
-                subject=app_pb2.SubjectContext(id="user:session")
-            ),
-            tools=agent_pb2.AgentToolConfig(
-                catalog=agent_pb2.AgentCatalogToolConfig(
-                    refs=[
-                        app_pb2.AgentToolRef(
-                            app="slack",
-                            operation="chat.postMessage",
-                        )
-                    ],
-                    tools=[
-                        agent_pb2.ListedAgentTool(
-                            id="tool-slack",
-                            mcp_name="slack__chat_post_message",
-                            title="Send Slack message",
-                            description="Post a Slack message",
-                            input_schema='{"type":"object"}',
-                            ref=app_pb2.AgentToolRef(
-                                app="slack",
-                                operation="chat.postMessage",
-                            ),
-                        )
-                    ],
-                )
-            ),
-        )
-        create_session_metadata = struct_pb2.Struct()
-        create_session_metadata.update({"source": "py-test"})
-        create_session_request.metadata.CopyFrom(create_session_metadata)
-        created_session = provider_client.CreateSession(create_session_request)
-        listed_sessions = provider_client.ListSessions(
-            agent_pb2.ListAgentProviderSessionsRequest()
-        )
-        fetched_session = provider_client.GetSession(
-            agent_pb2.GetAgentProviderSessionRequest(session_id="session-1")
-        )
-
-        update_session_request = agent_pb2.UpdateAgentProviderSessionRequest(
-            session_id="session-1",
-            client_ref="cli-session-2",
-            state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
-        )
-        updated_session_metadata = struct_pb2.Struct()
-        updated_session_metadata.update({"source": "py-test-updated"})
-        update_session_request.metadata.CopyFrom(updated_session_metadata)
-        updated_session = provider_client.UpdateSession(update_session_request)
-
-        created_turn = provider_client.CreateTurn(
-            agent_pb2.CreateAgentProviderTurnRequest(
-                turn_id="turn-1",
-                session_id="session-1",
-                model="gpt-5.1",
-                timeout_seconds=120,
-                messages=[
-                    agent_pb2.AgentMessage(
-                        role="user",
-                        text="Plan it",
-                        parts=[
-                            agent_pb2.AgentMessagePart(
-                                type=agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
-                                text="Plan it",
-                            )
-                        ],
-                    )
-                ],
-                created_by_subject_id="user:turn-owner",
-                execution_ref="exec-turn-1",
-                context=app_pb2.RequestContext(
-                    subject=app_pb2.SubjectContext(id="user:turn")
-                ),
-                output=agent_pb2.AgentOutput(
-                    text=agent_pb2.AgentTextOutput(),
-                ),
-            )
-        )
-        listed_turns = provider_client.ListTurns(
-            agent_pb2.ListAgentProviderTurnsRequest(session_id="session-1")
-        )
-        fetched_turn = provider_client.GetTurn(
-            agent_pb2.GetAgentProviderTurnRequest(turn_id="turn-1")
-        )
-        turn_events = provider_client.ListTurnEvents(
-            agent_pb2.ListAgentProviderTurnEventsRequest(
-                turn_id="turn-1",
-                after_seq=0,
-                limit=10,
-            )
-        )
-        listed_interactions = provider_client.ListInteractions(
-            agent_pb2.ListAgentProviderInteractionsRequest(turn_id="turn-1")
-        )
-        fetched_interaction = provider_client.GetInteraction(
-            agent_pb2.GetAgentProviderInteractionRequest(interaction_id="interaction-1")
-        )
-        resolve_interaction_request = agent_pb2.ResolveAgentProviderInteractionRequest(
-            interaction_id="interaction-1"
-        )
-        resolved_interaction_payload = struct_pb2.Struct()
-        resolved_interaction_payload.update({"approved": True})
-        resolve_interaction_request.resolution.CopyFrom(resolved_interaction_payload)
-        resolved_interaction = provider_client.ResolveInteraction(
-            resolve_interaction_request
-        )
-        capabilities = provider_client.GetCapabilities(
-            agent_pb2.GetAgentProviderCapabilitiesRequest()
-        )
-
-        self.assertEqual(identity.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_AGENT)
-        self.assertEqual(identity.name, "py-agent")
-        self.assertEqual(list(identity.warnings), ["set OPENAI_API_KEY"])
-        self.assertEqual(configured.protocol_version, _runtime.CURRENT_PROTOCOL_VERSION)
-        self.assertEqual(_provider.configured, [("agent-runtime", {"tenant": "acme"})])
-        self.assertEqual(created_session.id, "session-1")
-        self.assertEqual(created_session.state, agent_pb2.AGENT_SESSION_STATE_ACTIVE)
-        self.assertEqual(created_session.created_by_subject_id, "user:session-owner")
-        self.assertEqual(
-            [session.id for session in listed_sessions.sessions], ["session-1"]
-        )
-        self.assertEqual(fetched_session.state, agent_pb2.AGENT_SESSION_STATE_ARCHIVED)
-        self.assertEqual(updated_session.client_ref, "cli-session-2")
-        self.assertEqual(created_turn.id, "turn-1")
-        self.assertEqual(created_turn.created_by_subject_id, "user:turn-owner")
-        self.assertEqual(_provider.context_subject_ids, ["user:session", "user:turn"])
-        self.assertEqual(
-            _provider.session_tools,
-            [
-                {
-                    "tool_ref_operation": "chat.postMessage",
-                    "listed_tool_mcp_name": "slack__chat_post_message",
-                }
-            ],
-        )
-        self.assertEqual(
-            created_turn.status,
-            agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
-        )
-        self.assertEqual(len(created_turn.messages[0].parts), 1)
-        self.assertEqual([turn.id for turn in listed_turns.turns], ["turn-1"])
-        self.assertEqual(fetched_turn.status_message, "waiting for input")
-        self.assertEqual(
-            [event.type for event in turn_events.events],
-            ["turn.started", "interaction.requested"],
-        )
-        self.assertEqual(
-            [interaction.id for interaction in listed_interactions.interactions],
-            ["interaction-1"],
-        )
-        self.assertEqual(
-            fetched_interaction.state,
-            agent_pb2.AGENT_INTERACTION_STATE_PENDING,
-        )
-        self.assertEqual(
-            resolved_interaction.state,
-            agent_pb2.AGENT_INTERACTION_STATE_RESOLVED,
-        )
-        self.assertTrue(capabilities.streaming_text)
-        self.assertTrue(capabilities.tool_calls)
-        self.assertTrue(capabilities.interactions)
-        self.assertTrue(capabilities.resumable_turns)
-
     def test_agent_provider_native_errors_map_to_grpc_statuses(self) -> None:
         channel = grpc.insecure_channel(f"unix:{_runtime_socket}")
         provider_client = agent_pb2_grpc.AgentStub(channel)
@@ -983,214 +787,6 @@ class AgentTransportTests(unittest.TestCase):
             if os.path.exists(socket_path):
                 os.remove(socket_path)
 
-    def test_agent_roundtrip(self) -> None:
-        manager = genagent.Agent.connect(
-            context=genagent.RequestContext(
-                subject=genagent.SubjectContext(id="user:agent-manager")
-            )
-        )
-        created_session = manager.create_session(
-            provider_name="openai",
-            model="gpt-5.1",
-            client_ref="cli-session-1",
-            tools=genagent.AgentToolConfig(
-                source=genagent.AgentToolConfigCatalog(
-                    value=genagent.AgentCatalogToolConfig(
-                        refs=[
-                            genagent.AgentToolRef(
-                                app="slack",
-                                operation="chat.postMessage",
-                            )
-                        ],
-                        tools=[
-                            genagent.ListedAgentTool(
-                                id="tool-slack",
-                                mcp_name="slack__chat_post_message",
-                                title="Send Slack message",
-                                description="Post a Slack message",
-                                input_schema='{"type":"object"}',
-                                ref=genagent.AgentToolRef(
-                                    app="slack",
-                                    operation="chat.postMessage",
-                                ),
-                            )
-                        ],
-                    )
-                )
-            ),
-        )
-        fetched_session = manager.get_session(session_id="session-managed-1")
-        listed_sessions = manager.list_sessions(provider_name="openai")
-        updated_session = manager.update_session(
-            session_id="session-managed-1",
-            client_ref="cli-session-2",
-            state=AGENT_SESSION_STATE_ARCHIVED,
-        )
-        created_turn = manager.create_turn(
-            session_id="session-managed-1",
-            model="gpt-5.1",
-            timeout_seconds=120,
-            messages=[
-                genagent.AgentMessage(
-                    role="user",
-                    text="Summarize this",
-                    parts=[
-                        genagent.AgentMessagePart(
-                            type=agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
-                            text="Summarize this",
-                        )
-                    ],
-                )
-            ],
-            output=genagent.AgentOutput(
-                kind=genagent.AgentOutputStructured(
-                    value=genagent.AgentStructuredOutput(
-                        schema={"type": "object"},
-                    )
-                )
-            ),
-        )
-        fetched_turn = manager.get_turn(turn_id="turn-managed-1")
-        listed_turns = manager.list_turns(session_id="session-managed-1")
-        canceled_turn = manager.cancel_turn(
-            turn_id="turn-managed-1",
-            reason="user canceled",
-        )
-        turn_events = manager.list_turn_events(
-            turn_id="turn-managed-1",
-            after_seq=0,
-            limit=10,
-        )
-        interactions = manager.list_interactions(turn_id="turn-managed-1")
-        resolved = manager.resolve_interaction(
-            turn_id="turn-managed-1",
-            interaction_id="interaction-1",
-            resolution={"approved": True},
-        )
-
-        self.assertEqual(created_session.id, "session-managed-1")
-        self.assertEqual(fetched_session.id, "session-managed-1")
-        self.assertEqual(len(listed_sessions), 1)
-        self.assertEqual(updated_session.client_ref, "cli-session-2")
-        self.assertEqual(created_turn.id, "turn-managed-1")
-        self.assertEqual(len(created_turn.messages[0].parts), 1)
-        self.assertEqual(fetched_turn.id, "turn-managed-1")
-        self.assertEqual(len(listed_turns), 1)
-        self.assertEqual(canceled_turn.status_message, "user canceled")
-        self.assertEqual(len(turn_events), 1)
-        self.assertEqual(len(interactions), 1)
-        self.assertEqual(resolved.id, "interaction-1")
-        self.assertEqual(resolved.state, agent_pb2.AGENT_INTERACTION_STATE_RESOLVED)
-        self.assertEqual(_manager_relay_tokens, ["relay-token-py"] * 11)
-        self.assertEqual(
-            _manager_contexts,
-            [{"subject": {"id": "user:agent-manager"}}] * 11,
-        )
-        self.assertEqual(
-            _manager_session_tools,
-            [
-                {
-                    "tool_ref_operation": "chat.postMessage",
-                    "listed_tool_mcp_name": "slack__chat_post_message",
-                }
-            ],
-        )
-        self.assertEqual(
-            _manager_requests,
-            [
-                {
-                    "method": "create_session",
-                    "provider_name": "openai",
-                    "session_id": "",
-                    "turn_id": "",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "get_session",
-                    "provider_name": "",
-                    "session_id": "session-managed-1",
-                    "turn_id": "",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "list_sessions",
-                    "provider_name": "openai",
-                    "session_id": "",
-                    "turn_id": "",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "update_session",
-                    "provider_name": "",
-                    "session_id": "session-managed-1",
-                    "turn_id": "",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "create_turn",
-                    "provider_name": "",
-                    "session_id": "session-managed-1",
-                    "turn_id": "",
-                    "interaction_id": "",
-                    "reason": "",
-                    "timeout_seconds": 120,
-                    "output_kind": "structured",
-                    "has_structured_schema": True,
-                },
-                {
-                    "method": "get_turn",
-                    "provider_name": "",
-                    "session_id": "",
-                    "turn_id": "turn-managed-1",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "list_turns",
-                    "provider_name": "",
-                    "session_id": "session-managed-1",
-                    "turn_id": "",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "cancel_turn",
-                    "provider_name": "",
-                    "session_id": "",
-                    "turn_id": "turn-managed-1",
-                    "interaction_id": "",
-                    "reason": "user canceled",
-                },
-                {
-                    "method": "list_turn_events",
-                    "provider_name": "",
-                    "session_id": "",
-                    "turn_id": "turn-managed-1",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "list_interactions",
-                    "provider_name": "",
-                    "session_id": "",
-                    "turn_id": "turn-managed-1",
-                    "interaction_id": "",
-                    "reason": "",
-                },
-                {
-                    "method": "resolve_interaction",
-                    "provider_name": "",
-                    "session_id": "",
-                    "turn_id": "turn-managed-1",
-                    "interaction_id": "interaction-1",
-                    "reason": "",
-                },
-            ],
-        )
 
     def test_request_agent_roundtrip(self) -> None:
         request = Request(

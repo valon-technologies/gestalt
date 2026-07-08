@@ -190,7 +190,11 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 		req = &proto.CreateAgentProviderSessionRequest{}
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
-	createKey := hostedAgentCreateKey(req.GetCreatedBySubjectId(), idempotencyKey)
+	subjectID := strings.TrimSpace(req.GetSubject().GetId())
+	if subjectID == "" {
+		subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
+	}
+	createKey := hostedAgentCreateKey(subjectID, idempotencyKey)
 	preferred := p.createKeyBackend(createKey)
 	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, preferred != nil)
 	if err != nil {
@@ -209,7 +213,7 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 	providerReq := protobuf.Clone(req).(*proto.CreateAgentProviderSessionRequest)
 	workspaceRef := ""
 	if req.GetWorkspace() != nil {
-		workspaceRef = hostedAgentWorkspaceRef(p.name, req.GetCreatedBySubjectId(), idempotencyKey)
+		workspaceRef = hostedAgentWorkspaceRef(p.name, subjectID, idempotencyKey)
 		prepared, err := p.prepareAgentWorkspace(ctx, backend, req, workspaceRef)
 		if err != nil {
 			if cleanupErr := p.removeAgentWorkspace(ctx, backend, workspaceRef); cleanupErr != nil {

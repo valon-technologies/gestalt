@@ -27,6 +27,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	gproto "google.golang.org/protobuf/proto"
@@ -240,6 +241,10 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
+	createdBy := ""
+	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
+		createdBy = principal.SubjectID
+	}
 	session := &coreagent.Session{
 		ID:                 fmt.Sprintf("managed-session-%d", len(p.sessions)+1),
 		ProviderName:       "managed",
@@ -247,7 +252,7 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           mapFromStruct(req.GetMetadata()),
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedBySubjectID: createdBy,
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -329,6 +334,10 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	metadata := mapFromStruct(req.GetMetadata())
+	createdBy := ""
+	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
+		createdBy = principal.SubjectID
+	}
 	turn := &coreagent.Turn{
 		ID:                 req.GetTurnId(),
 		SessionID:          req.GetSessionId(),
@@ -336,7 +345,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 		Model:              req.GetModel(),
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           messagesFromProto(req.GetMessages()),
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedBySubjectID: createdBy,
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,

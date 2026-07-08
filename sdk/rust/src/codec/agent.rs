@@ -471,7 +471,6 @@ pub(crate) fn to_wire_create_agent_provider_session_request(
         model: value.model,
         client_ref: value.client_ref,
         metadata: value.metadata.map(to_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
         subject: value.subject.map(to_wire_subject_context),
         session_start: value.session_start.map(to_wire_agent_session_start_config),
         prepared_workspace: value
@@ -499,7 +498,6 @@ pub(crate) fn to_wire_create_agent_provider_turn_request(
             .map(to_wire_agent_message)
             .collect(),
         metadata: value.metadata.map(to_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
         execution_ref: value.execution_ref,
         subject: value.subject.map(to_wire_subject_context),
         model_options: value.model_options.map(to_wire_struct),
