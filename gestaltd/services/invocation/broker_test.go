@@ -470,3 +470,51 @@ func (p *brokerOperationConnectionProvider) ResolveConnectionForOperation(operat
 func (p *brokerOperationConnectionProvider) OperationConnectionOverrideAllowed(string, map[string]any) bool {
 	return p.allowOverride
 }
+
+type remoteDelegatedProvider struct {
+	coretesting.StubIntegration
+}
+
+func (remoteDelegatedProvider) RemoteCredentialDelegated() bool { return true }
+
+func TestBrokerResolveTokenSkipsLocalCredentialForRemoteDelegatedProvider(t *testing.T) {
+	t.Parallel()
+
+	var credentialLookups int
+	creds := coretesting.NewStubExternalCredentialProvider()
+	creds.ResolveCredentialFunc = func(context.Context, *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+		credentialLookups++
+		return nil, errors.New("should not resolve local credentials")
+	}
+	svc := testutil.NewStubServices(t)
+	svc.ExternalCredentials = creds
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &remoteDelegatedProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "linear",
+				ConnMode: core.ConnectionModeSubject,
+			},
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+	p := &principal.Principal{
+		SubjectID: "user:alice@example.com",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+	}
+
+	ctx, token, err := broker.ResolveToken(context.Background(), p, "linear", "", "")
+	if err != nil {
+		t.Fatalf("ResolveToken: %v", err)
+	}
+	if token != "" {
+		t.Fatalf("token = %q, want empty for remote-delegated provider", token)
+	}
+	if credentialLookups != 0 {
+		t.Fatalf("credential lookups = %d, want 0 for remote-delegated provider", credentialLookups)
+	}
+	if got := CredentialContextFromContext(ctx).Mode; got != core.ConnectionModeSubject {
+		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeSubject)
+	}
+}

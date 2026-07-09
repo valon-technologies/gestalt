@@ -862,6 +862,20 @@ func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
 			operation: "issues.list",
 			wantErr:   invocation.ErrNotAuthenticated,
 		},
+		{
+			name:      "remote client permission denied surfaces authorization denied",
+			remoteErr: status.Error(codes.PermissionDenied, "forbidden"),
+			app:       "linear",
+			operation: "issues.list",
+			wantErr:   invocation.ErrAuthorizationDenied,
+		},
+		{
+			name:      "remote client operation not found surfaces operation not found",
+			remoteErr: status.Error(codes.NotFound, "operation missing"),
+			app:       "linear",
+			operation: "issues.list",
+			wantErr:   invocation.ErrOperationNotFound,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
