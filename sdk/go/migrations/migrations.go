@@ -137,14 +137,17 @@ func revisionNamespaces(revisions []Revision) (prefixes map[string]struct{}, has
 	return prefixes, hasFlat
 }
 
+func ledgerIDDirectoryPrefix(id string) string {
+	if i := strings.LastIndex(id, "/"); i >= 0 {
+		return id[:i+1]
+	}
+	return ""
+}
+
 func ledgerIDOwnedByProvider(id string, prefixes map[string]struct{}, hasFlat bool) bool {
 	if strings.Contains(id, "/") {
-		for prefix := range prefixes {
-			if strings.HasPrefix(id, prefix) {
-				return true
-			}
-		}
-		return false
+		_, ok := prefixes[ledgerIDDirectoryPrefix(id)]
+		return ok
 	}
 	return hasFlat && len(prefixes) == 0
 }

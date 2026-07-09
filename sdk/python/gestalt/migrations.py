@@ -283,11 +283,17 @@ def _revision_namespaces(revisions: list[Revision]) -> tuple[set[str], bool]:
     return prefixes, has_flat
 
 
+def _ledger_id_directory_prefix(revision_id: str) -> str:
+    if "/" not in revision_id:
+        return ""
+    return revision_id.rsplit("/", 1)[0] + "/"
+
+
 def _ledger_id_owned_by_provider(
     revision_id: str, prefixes: set[str], has_flat: bool
 ) -> bool:
     if "/" in revision_id:
-        return any(revision_id.startswith(prefix) for prefix in prefixes)
+        return _ledger_id_directory_prefix(revision_id) in prefixes
     return has_flat and not prefixes
 
 

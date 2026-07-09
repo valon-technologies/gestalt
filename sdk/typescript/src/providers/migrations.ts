@@ -236,18 +236,21 @@ function revisionNamespaces(revisions: Revision[]): {
   return { prefixes, hasFlat };
 }
 
+function ledgerIDDirectoryPrefix(id: string): string {
+  const slash = id.lastIndexOf("/");
+  if (slash < 0) {
+    return "";
+  }
+  return id.slice(0, slash + 1);
+}
+
 function ledgerIDOwnedByProvider(
   id: string,
   prefixes: Set<string>,
   hasFlat: boolean,
 ): boolean {
   if (id.includes("/")) {
-    for (const prefix of prefixes) {
-      if (id.startsWith(prefix)) {
-        return true;
-      }
-    }
-    return false;
+    return prefixes.has(ledgerIDDirectoryPrefix(id));
   }
   return hasFlat && prefixes.size === 0;
 }

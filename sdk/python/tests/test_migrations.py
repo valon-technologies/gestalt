@@ -119,6 +119,21 @@ class MigrationTests(unittest.TestCase):
             ),
         )
 
+    def test_ignores_deeper_namespace_ledger_rows_on_shared_db(self) -> None:
+        db = FakeDB()
+        run_migrations(
+            db,
+            MigrationRunOptions(
+                revisions=[init_revision("auth/oidc/nested/0001_init", "nested")]
+            ),
+        )
+        run_migrations(
+            db,
+            MigrationRunOptions(
+                revisions=[init_revision("auth/oidc/0001_init", "grants")]
+            ),
+        )
+
     def test_duplicate_revision_ids(self) -> None:
         db = FakeDB()
         revisions: list[Revision] = [
