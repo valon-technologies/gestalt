@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	IndexSchemaVersion = 1
-	EntrySchemaVersion = 1
-	IndexFileName      = "index.json"
+	IndexSchemaVersion  = 1
+	EntrySchemaVersion  = 1
+	IndexFileName       = "index.json"
 	appSourcePathPrefix = "apps/"
 )
 

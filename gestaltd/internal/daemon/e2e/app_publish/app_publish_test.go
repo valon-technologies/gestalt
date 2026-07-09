@@ -1,9 +1,8 @@
-package e2e
+package app_publish
 
 import (
 	"encoding/json"
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -34,49 +33,6 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app publish failed: %v\n%s", err, out)
 	}
-	archiveName := platformArchiveNameForTest(releaseTestAppName, version, runtime.GOOS, runtime.GOARCH)
-	got := string(out)
-	for _, want := range []string{
-		"dry-run upload",
-		"gs://gestalt-app-registry/apps/" + releaseTestAppName + "/artifacts/" + version + "/" + archiveName,
-		"gs://gestalt-app-registry/apps/" + releaseTestAppName + "/versions/" + version + ".json",
-		"dry-run update gs://gestalt-app-registry/apps/" + releaseTestAppName + "/index.json",
-		"registry entry: https://storage.googleapis.com/gestalt-app-registry/apps/" + releaseTestAppName + "/versions/" + version + ".json",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("app publish output missing %q\n%s", want, got)
-		}
-	}
-}
-
-func TestRun_AppPublishDryRunJSONPlansVersionedRegistryUploads(t *testing.T) {
-	t.Parallel()
-
-	rootDir := t.TempDir()
-	pluginDir := newAppRegistryPublishFixture(t, rootDir)
-	initProviderPublishGitRepo(t, rootDir, "https://github.com/testowner/apps.git")
-	outputDir := t.TempDir()
-	const version = "0.0.0-snapshot.g651a5c30feb995c9364c38f63d0d5c3880bc2055"
-	const ref = "651a5c30feb995c9364c38f63d0d5c3880bc2055"
-	runProviderPackageCommand(t, pluginDir,
-		"--version", version,
-		"--output", outputDir,
-	)
-
-	out, err := runAppCommandResult(rootDir,
-		"publish",
-		"--registry", "toolshed",
-		"--bucket", "gs://gestalt-app-registry",
-		"--app", releaseTestAppName,
-		"--version", version,
-		"--ref", ref,
-		"--dist-dir", outputDir,
-		"--dry-run",
-		"--format", "json",
-	)
-	if err != nil {
-		t.Fatalf("app publish failed: %v\n%s", err, out)
-	}
 	var plan struct {
 		Schema      string `json:"schema"`
 		AppName     string `json:"appName"`
@@ -84,6 +40,12 @@ func TestRun_AppPublishDryRunJSONPlansVersionedRegistryUploads(t *testing.T) {
 		EntryObject struct {
 			PublicURL string `json:"publicUrl"`
 		} `json:"entryObject"`
+		ArtifactObjects []struct {
+			StorageURL string `json:"storageUrl"`
+		} `json:"artifactObjects"`
+		IndexObject struct {
+			StorageURL string `json:"storageUrl"`
+		} `json:"indexObject"`
 	}
 	if err := json.Unmarshal(out, &plan); err != nil {
 		t.Fatalf("decode app publish plan: %v\n%s", err, out)
@@ -100,5 +62,14 @@ func TestRun_AppPublishDryRunJSONPlansVersionedRegistryUploads(t *testing.T) {
 	wantEntry := "https://storage.googleapis.com/gestalt-app-registry/apps/" + releaseTestAppName + "/versions/" + version + ".json"
 	if plan.EntryObject.PublicURL != wantEntry {
 		t.Fatalf("entry publicUrl = %q, want %q", plan.EntryObject.PublicURL, wantEntry)
+	}
+	archiveName := platformArchiveNameForTest(releaseTestAppName, version, runtime.GOOS, runtime.GOARCH)
+	wantArtifact := "gs://gestalt-app-registry/apps/" + releaseTestAppName + "/artifacts/" + version + "/" + archiveName
+	if len(plan.ArtifactObjects) != 1 || plan.ArtifactObjects[0].StorageURL != wantArtifact {
+		t.Fatalf("artifactObjects = %#v, want %q", plan.ArtifactObjects, wantArtifact)
+	}
+	wantIndex := "gs://gestalt-app-registry/apps/" + releaseTestAppName + "/index.json"
+	if plan.IndexObject.StorageURL != wantIndex {
+		t.Fatalf("indexObject.storageUrl = %q, want %q", plan.IndexObject.StorageURL, wantIndex)
 	}
 }

@@ -16,8 +16,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
@@ -71,8 +71,7 @@ func runAppPublish(args []string) (err error) {
 	appName := fs.String("app", "", "app name under apps/{app}/manifest.yaml")
 	version := fs.String("version", "", "semantic version guard")
 	ref := fs.String("ref", "", "full source commit SHA")
-	dryRun := fs.Bool("dry-run", false, "print the publish plan without uploading")
-	format := fs.String("format", providerPublishFormatText, "dry-run output format: text or json")
+	dryRun := fs.Bool("dry-run", false, "print the publish plan as JSON without uploading")
 	var distDirs appPublishDistDirs
 	fs.Var(&distDirs, "dist-dir", "directory containing release archives (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -86,9 +85,6 @@ func runAppPublish(args []string) (err error) {
 	}
 	if strings.TrimSpace(*bucket) == "" {
 		return fmt.Errorf("--bucket is required")
-	}
-	if err := validateProviderPublishFormat(*format, *dryRun); err != nil {
-		return err
 	}
 	if strings.TrimSpace(*appName) == "" {
 		return fmt.Errorf("--app is required")
@@ -161,17 +157,17 @@ func runAppPublish(args []string) (err error) {
 	}
 
 	plan, err := buildAppPublishPlan(appPublishPlanInput{
-		RegistryName:     *registryName,
-		Registry:         registry,
-		DisplayName:      sourceManifest.DisplayName,
-		Description:      sourceManifest.Description,
-		Version:          *version,
-		SourceRef:        sourceRef,
-		ManifestPath:     sourceInfo.ManifestPath,
-		Manifest:         sourceManifest,
-		Release:          releaseMetadata,
-		Archives:         releaseArchives,
-		MetadataPath:     filepath.Join(tmpDir, providerrelease.MetadataFile),
+		RegistryName: *registryName,
+		Registry:     registry,
+		DisplayName:  sourceManifest.DisplayName,
+		Description:  sourceManifest.Description,
+		Version:      *version,
+		SourceRef:    sourceRef,
+		ManifestPath: sourceInfo.ManifestPath,
+		Manifest:     sourceManifest,
+		Release:      releaseMetadata,
+		Archives:     releaseArchives,
+		MetadataPath: filepath.Join(tmpDir, providerrelease.MetadataFile),
 	})
 	if err != nil {
 		return err
@@ -179,11 +175,7 @@ func runAppPublish(args []string) (err error) {
 	defer func() { _ = os.Remove(plan.EntryObject.LocalPath) }()
 
 	if *dryRun {
-		if *format == providerPublishFormatJSON {
-			return printAppPublishPlanJSON(plan)
-		}
-		printAppPublishPlan(plan)
-		return nil
+		return printAppPublishPlanJSON(plan)
 	}
 	if err := preflightAppPublishPlan(plan); err != nil {
 		return err
@@ -214,17 +206,21 @@ func readAppPublishManifest(manifestPath string) ([]byte, *providermanifestv1.Ma
 const appPublishManifestFile = "manifest.yaml"
 
 func resolveAppPublishManifest(appName string) (string, error) {
-	appName = strings.TrimSpace(appName)
-	if appName == "" {
-		return "", fmt.Errorf("--app is required")
-	}
 	gitRoot, err := gitRootFromWorkingDirectory()
 	if err != nil {
 		return "", err
 	}
+	return resolveAppPublishManifestFromGitRoot(gitRoot, appName)
+}
+
+func resolveAppPublishManifestFromGitRoot(gitRoot, appName string) (string, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return "", fmt.Errorf("--app is required")
+	}
 	wantRel := filepath.ToSlash(filepath.Join("apps", appName, appPublishManifestFile))
 	var matches []string
-	err = filepath.WalkDir(gitRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(gitRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -233,7 +229,7 @@ func resolveAppPublishManifest(appName string) (string, error) {
 		}
 		rel, err := filepath.Rel(gitRoot, path)
 		if err != nil {
-			return nil
+			return err
 		}
 		rel = filepath.ToSlash(rel)
 		if rel == wantRel || strings.HasSuffix(rel, "/"+wantRel) {
@@ -261,13 +257,16 @@ func resolveAppPublishManifest(appName string) (string, error) {
 func appPublishManifestNotFoundHint(gitRoot, appName string) string {
 	wantDir := filepath.ToSlash(filepath.Join("apps", appName))
 	var appDirs []string
-	_ = filepath.WalkDir(gitRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil || !entry.IsDir() || entry.Name() != appName {
+	err := filepath.WalkDir(gitRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() || entry.Name() != appName {
 			return nil
 		}
 		rel, err := filepath.Rel(gitRoot, path)
 		if err != nil {
-			return nil
+			return err
 		}
 		rel = filepath.ToSlash(rel)
 		if rel == wantDir || strings.HasSuffix(rel, "/"+wantDir) {
@@ -275,6 +274,9 @@ func appPublishManifestNotFoundHint(gitRoot, appName string) string {
 		}
 		return nil
 	})
+	if err != nil {
+		return ""
+	}
 	switch len(appDirs) {
 	case 0:
 		return "verify --app and run from the repository checkout that contains apps/{app}/manifest.yaml"
@@ -312,16 +314,16 @@ func gitRootFromWorkingDirectory() (string, error) {
 }
 
 type appPublishPlanInput struct {
-	RegistryName     string
-	Registry         config.AppRegistryConfig
-	DisplayName      string
-	Description      string
-	Version          string
-	SourceRef        string
-	ManifestPath     string
-	Manifest         *providermanifestv1.Manifest
-	Release          *providerrelease.Metadata
-	Archives         []releaseArchive
+	RegistryName string
+	Registry     config.AppRegistryConfig
+	DisplayName  string
+	Description  string
+	Version      string
+	SourceRef    string
+	ManifestPath string
+	Manifest     *providermanifestv1.Manifest
+	Release      *providerrelease.Metadata
+	Archives     []releaseArchive
 	MetadataPath string
 }
 
@@ -695,15 +697,6 @@ func describeAppPublishObject(storageURL string) (int64, string, error) {
 	return int64(described.Generation), strings.TrimSpace(described.Metadata["sha256"]), nil
 }
 
-func printAppPublishPlan(plan appPublishPlan) {
-	for _, object := range plan.ArtifactObjects {
-		_, _ = fmt.Fprintf(os.Stdout, "dry-run upload %s -> %s sha256=%s\n", object.LocalPath, object.StorageURL, object.SHA256)
-	}
-	_, _ = fmt.Fprintf(os.Stdout, "dry-run upload %s -> %s sha256=%s\n", plan.EntryObject.LocalPath, plan.EntryObject.StorageURL, plan.EntryObject.SHA256)
-	_, _ = fmt.Fprintf(os.Stdout, "dry-run update %s\n", plan.IndexObject.StorageURL)
-	_, _ = fmt.Fprintf(os.Stdout, "registry entry: %s\n", plan.EntryObject.PublicURL)
-}
-
 func printAppPublishPlanJSON(plan appPublishPlan) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
@@ -722,8 +715,7 @@ func printAppPublishUsage(w io.Writer) {
 	writeUsageLine(w, "  --app        App name (manifest at apps/{app}/manifest.yaml)")
 	writeUsageLine(w, "  --bucket     GCS bucket name or gs:// URL")
 	writeUsageLine(w, "  --dist-dir   Directory containing release archives (repeatable)")
-	writeUsageLine(w, "  --dry-run    Print the upload plan without writing")
-	writeUsageLine(w, "  --format     Dry-run output format: text or json (default: text)")
+	writeUsageLine(w, "  --dry-run    Print the upload plan as JSON without writing")
 	writeUsageLine(w, "  --ref        Full source commit SHA")
 	writeUsageLine(w, "  --registry   Logical registry name recorded in publish output")
 	writeUsageLine(w, "  --version    Semantic version guard")
