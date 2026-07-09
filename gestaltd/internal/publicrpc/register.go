@@ -58,6 +58,11 @@ func RegisterPublicAuthorizationServer(s grpc.ServiceRegistrar, srv proto.Author
 	registerPublic(s, srv, proto.Authorization_ServiceDesc)
 }
 
+// RegisterPublicExternalCredentialsServer registers only PUBLIC ExternalCredentials methods.
+func RegisterPublicExternalCredentialsServer(s grpc.ServiceRegistrar, srv proto.ExternalCredentialsServer) {
+	registerPublic(s, srv, proto.ExternalCredentials_ServiceDesc)
+}
+
 func registerPublic(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
 	reg, err := loadGeneratedRegistry()
 	if err != nil {

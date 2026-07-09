@@ -3475,7 +3475,6 @@ pub mod external_credentials_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn upsert_credential(
             &mut self,
             request: impl tonic::IntoRequest<super::UpsertExternalCredentialRequest>,
@@ -3638,7 +3637,6 @@ pub mod external_credentials_server {
             &self,
             request: tonic::Request<super::CreateExternalCredentialRequest>,
         ) -> std::result::Result<tonic::Response<super::ExternalCredential>, tonic::Status>;
-        ///
         async fn upsert_credential(
             &self,
             request: tonic::Request<super::UpsertExternalCredentialRequest>,

@@ -1372,7 +1372,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 
-	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization)
+	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization, prepared.Services.Users)
 	if err != nil {
 		return nil, err
 	}
@@ -2288,6 +2288,7 @@ func buildPublicGatewayTransport(
 	cfg *config.Config,
 	auth core.IdentityProvider,
 	authorization map[string]core.AuthorizationProvider,
+	users providergateway.UserStore,
 ) (*providergateway.ProviderGatewayTransport, error) {
 	if auth == nil {
 		return nil, nil
@@ -2298,6 +2299,7 @@ func buildPublicGatewayTransport(
 	}
 	transport := providergateway.NewProviderGatewayTransport()
 	transport.SetIdentityProvider(auth)
+	transport.SetUserStore(users)
 	transport.SetPublicMethods(registry)
 	if cfg != nil {
 		if name, _, err := cfg.SelectedAuthorizationProvider(); err == nil && name != "" && authorization != nil {
