@@ -935,7 +935,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
 	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
-	svc, svcErr := coredata.NewWithContext(ctx, store)
+	skipSchemaBootstrap := !providerBuildsLocal(cfg, def)
+	svc, svcErr := coredata.NewWithOptions(ctx, store, coredata.NewOptions{SkipSchemaBootstrap: skipSchemaBootstrap})
 	if svcErr != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
@@ -1535,7 +1536,7 @@ func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
 	if entry == nil {
 		return false
 	}
-	if entry.DevActive {
+	if entry.DevActive || entry.Local {
 		return true
 	}
 	return cfg == nil || strings.TrimSpace(cfg.Server.Remote) == ""

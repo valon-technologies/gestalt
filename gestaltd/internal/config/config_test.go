@@ -143,6 +143,32 @@ func singletonProviderEntry(entry *ProviderEntry) map[string]*ProviderEntry {
 	}
 }
 
+func TestLoadConfigProviderLocalFlag(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v8
+server:
+  remote: https://valon.tools
+providers:
+  indexeddb:
+    local-dev:
+      local: true
+      source: https://example.com/indexeddb/provider-release.yaml
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	entry := cfg.Providers.IndexedDB["local-dev"]
+	if entry == nil {
+		t.Fatal("local-dev indexeddb provider is missing")
+	}
+	if !entry.Local {
+		t.Fatal("expected providers.indexeddb.local-dev.local = true")
+	}
+}
+
 func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 

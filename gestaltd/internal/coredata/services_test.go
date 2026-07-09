@@ -255,6 +255,18 @@ func TestNew(t *testing.T) {
 		}
 	})
 
+	t.Run("skip_schema_bootstrap", func(t *testing.T) {
+		t.Parallel()
+
+		db := newCreateContextRecordingIndexedDB(&coretesting.StubIndexedDB{})
+		if _, err := coredata.NewWithOptions(context.Background(), db, coredata.NewOptions{SkipSchemaBootstrap: true}); err != nil {
+			t.Fatalf("coredata.NewWithOptions: %v", err)
+		}
+		if len(db.createdStoreContexts()) != 0 {
+			t.Fatalf("CreateObjectStore calls = %d, want 0", len(db.createdStoreContexts()))
+		}
+	})
+
 }
 
 func TestUserService(t *testing.T) {
