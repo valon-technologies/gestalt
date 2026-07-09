@@ -48,6 +48,14 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 		return nil, nil, status.Error(codes.NotFound, "method is not public")
 	}
 
+	if publicIdentityLoginMethod(fullMethod) {
+		adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, nil, req, policy, fullMethod)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, adapted, nil
+	}
+
 	token := bearerTokenFromContext(ctx)
 	if token == "" {
 		return nil, nil, status.Error(codes.Unauthenticated, "bearer token is required")
@@ -89,6 +97,9 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	p *principal.Principal,
 	providerID, operation string,
 ) error {
+	if publicIdentityProviderID(providerID) {
+		return nil
+	}
 	if t == nil || t.authorization == nil {
 		return status.Error(codes.PermissionDenied, "authorization provider is not configured")
 	}
@@ -152,6 +163,20 @@ func publicResourceID(req gproto.Message, fullMethod string) (string, error) {
 		return "", status.Error(codes.InvalidArgument, "provider id is required")
 	}
 	return service, nil
+}
+
+func publicIdentityProviderID(providerID string) bool {
+	return strings.EqualFold(strings.TrimSpace(providerID), "identity")
+}
+
+func publicIdentityLoginMethod(fullMethod string) bool {
+	_, method := splitFullMethod(fullMethod)
+	switch method {
+	case "Authorize", "Token":
+		return true
+	default:
+		return false
+	}
 }
 
 func splitFullMethod(fullMethod string) (service, method string) {

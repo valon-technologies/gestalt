@@ -440,17 +440,18 @@ func TestPreparePublicRequest(t *testing.T) {
 	denied := false
 
 	tests := []struct {
-		name         string
-		fullMethod   string
-		withOrigin   bool
-		metadata     []string
-		introspect   *core.IntrospectResponse
-		authAllow    *bool
-		req          gproto.Message
-		wantCode     codes.Code
-		setup        func(*ProviderGatewayTransport)
-		checkAdapted func(t *testing.T, adapted gproto.Message)
-		checkAuth    func(t *testing.T, auth *stubAuthorizationProvider)
+		name             string
+		fullMethod       string
+		withOrigin       bool
+		metadata         []string
+		introspect       *core.IntrospectResponse
+		authAllow        *bool
+		req              gproto.Message
+		wantCode         codes.Code
+		setup            func(*ProviderGatewayTransport)
+		mustNotCallAuth  bool
+		checkAdapted     func(t *testing.T, adapted gproto.Message)
+		checkAuth        func(t *testing.T, auth *stubAuthorizationProvider)
 	}{
 		{
 			name:       "app invoke fills context",
@@ -574,6 +575,28 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode:   codes.PermissionDenied,
 		},
 		{
+			name:            "identity introspect skips provider authorization",
+			fullMethod:      proto.Identity_Introspect_FullMethodName,
+			withOrigin:      true,
+			introspect:      activeAlice,
+			authAllow:       &denied,
+			req:             &proto.IntrospectRequest{Token: "session-token"},
+			mustNotCallAuth: true,
+		},
+		{
+			name:       "identity authorize skips bearer and provider authorization",
+			fullMethod: proto.Identity_Authorize_FullMethodName,
+			withOrigin: true,
+			metadata:   []string{},
+			req: &proto.AuthorizeRequest{
+				ResponseType: "code",
+				ClientId:     "gestalt-cli",
+				RedirectUri:  "http://localhost:8080/api/v1/auth/login/callback",
+				State:        "login-state",
+			},
+			mustNotCallAuth: true,
+		},
+		{
 			name:       "identity failure",
 			fullMethod: proto.App_Invoke_FullMethodName,
 			withOrigin: true,
@@ -637,11 +660,14 @@ func TestPreparePublicRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("PreparePublicRequest: %v", err)
 			}
-			if p.SubjectID != "user:alice" {
+			if p != nil && p.SubjectID != "user:alice" {
 				t.Fatalf("SubjectID = %q, want %q", p.SubjectID, "user:alice")
 			}
 			if tc.checkAdapted != nil {
 				tc.checkAdapted(t, adapted)
+			}
+			if tc.mustNotCallAuth && authorization.called {
+				t.Fatal("authorization provider was called for identity")
 			}
 			if tc.checkAuth != nil {
 				if !authorization.called {
