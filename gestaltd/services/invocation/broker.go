@@ -274,8 +274,10 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
 	}
-	if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
-		return fail(err)
+	if !providerDelegatesRemoteAuthorization(prov) {
+		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+			return fail(err)
+		}
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -463,8 +465,10 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
-	if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
-		return fail(err)
+	if !providerDelegatesRemoteAuthorization(prov) {
+		if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
+			return fail(err)
+		}
 	}
 
 	conn := ConnectionFromContext(ctx)
@@ -529,6 +533,14 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
 	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
+}
+
+func providerDelegatesRemoteAuthorization(prov core.Provider) bool {
+	if prov == nil {
+		return false
+	}
+	delegated, ok := prov.(RemoteCredentialDelegated)
+	return ok && delegated.RemoteCredentialDelegated()
 }
 
 func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {

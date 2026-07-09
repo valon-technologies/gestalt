@@ -490,6 +490,9 @@ type ProviderEntry struct {
 	Source          ProviderSource                         `yaml:"source"`
 	Config          yaml.Node                              `yaml:"config,omitempty"`
 	Default         bool                                   `yaml:"default,omitempty"`
+	// Local forces this provider to build in-process locally even when
+	// server.remote delegates other host providers to a remote gestaltd.
+	Local           bool                                   `yaml:"local,omitempty"`
 	Env             map[string]string                      `yaml:"env,omitempty"`
 	Egress          *ProviderEgressConfig                  `yaml:"egress,omitempty"`
 	DisplayName     string                                 `yaml:"displayName,omitempty"`

@@ -322,6 +322,56 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 	}
 }
 
+func TestBrokerInvokeSkipsLocalAuthorizationForRemoteDelegatedApps(t *testing.T) {
+	t.Parallel()
+
+	executed := false
+	provider := &remoteDelegatedAppStub{
+		StubIntegration: &coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Operations: []catalog.CatalogOperation{{ID: "issues.list"}},
+			},
+			ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+				executed = true
+				return &core.OperationResult{Status: 200, Body: []byte("ok")}, nil
+			},
+		},
+	}
+	authz := &recordingAuthorizationProvider{allowed: false}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+	)
+
+	_, err := broker.Invoke(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", Kind: principal.KindUser},
+		"linear",
+		"",
+		"issues.list",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if !executed {
+		t.Fatal("Execute was not called")
+	}
+	if authz.lastCheckAccess != nil {
+		t.Fatal("CheckAccess should be skipped for remote-delegated apps")
+	}
+}
+
+type remoteDelegatedAppStub struct {
+	*coretesting.StubIntegration
+}
+
+func (p *remoteDelegatedAppStub) RemoteCredentialDelegated() bool { return true }
+
 func TestBrokerInvokeGraphQLAuthorizationDeniesBeforeCredentialResolution(t *testing.T) {
 	t.Parallel()
 

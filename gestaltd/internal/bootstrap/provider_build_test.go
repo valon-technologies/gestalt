@@ -889,6 +889,9 @@ func TestProviderBuildsLocal(t *testing.T) {
 	if !providerBuildsLocal(cfg, &config.ProviderEntry{DevActive: true}) {
 		t.Fatal("DevActive entry should build local")
 	}
+	if !providerBuildsLocal(cfg, &config.ProviderEntry{Local: true}) {
+		t.Fatal("local entry should build local when server.remote is configured")
+	}
 	if providerBuildsLocal(cfg, &config.ProviderEntry{}) {
 		t.Fatal("non-DevActive entry with remote configured should not build local")
 	}
