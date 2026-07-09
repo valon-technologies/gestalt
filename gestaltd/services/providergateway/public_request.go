@@ -98,9 +98,9 @@ func (t *ProviderGatewayTransport) resolvePublicPrincipal(ctx context.Context, t
 func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	ctx context.Context,
 	p *principal.Principal,
-	providerID, operation string,
+	providerID, fullMethod string,
 ) error {
-	if publicIdentityProviderID(providerID) {
+	if publicIdentityServiceMethod(fullMethod) {
 		return nil
 	}
 	if t == nil || t.authorization == nil {
@@ -114,7 +114,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	allowed, _, err := t.runAuthorizationCheck(ctx, &proto.Subject{
 		Type: "subject",
 		Id:   subjectID,
-	}, providerID, operation)
+	}, providerID, fullMethod)
 	if err != nil {
 		return status.Errorf(codes.Internal, "provider gateway: authorize: %v", err)
 	}
@@ -168,8 +168,12 @@ func publicResourceID(req gproto.Message, fullMethod string) (string, error) {
 	return service, nil
 }
 
-func publicIdentityProviderID(providerID string) bool {
-	return strings.EqualFold(strings.TrimSpace(providerID), "identity")
+func publicIdentityServiceMethod(fullMethod string) bool {
+	service, _ := splitFullMethod(fullMethod)
+	if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
+		return strings.EqualFold(service[idx+1:], "Identity")
+	}
+	return strings.EqualFold(service, "Identity")
 }
 
 func publicIdentityLoginMethod(fullMethod string) bool {

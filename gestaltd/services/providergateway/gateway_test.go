@@ -575,6 +575,15 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode:   codes.PermissionDenied,
 		},
 		{
+			name:       "app named identity still requires authorization",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			authAllow:  &denied,
+			req:        &proto.AppInvokeRequest{App: "identity", Operation: "sync"},
+			wantCode:   codes.PermissionDenied,
+		},
+		{
 			name:       "identity introspect skips provider authorization",
 			fullMethod: proto.Identity_Introspect_FullMethodName,
 			withOrigin: true,
