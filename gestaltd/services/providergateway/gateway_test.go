@@ -546,6 +546,23 @@ func TestPreparePublicRequest(t *testing.T) {
 			},
 		},
 		{
+			name:       "workflow get definition fills context subject",
+			fullMethod: proto.Workflow_GetDefinition_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			req:        &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"},
+			checkAdapted: func(t *testing.T, adapted gproto.Message) {
+				t.Helper()
+				out, ok := adapted.(*proto.GetWorkflowProviderDefinitionRequest)
+				if !ok {
+					t.Fatalf("adapted type = %T, want *proto.GetWorkflowProviderDefinitionRequest", adapted)
+				}
+				if out.GetContext().GetSubject().GetId() != "user:alice" {
+					t.Fatalf("context.subject.id = %q, want %q", out.GetContext().GetSubject().GetId(), "user:alice")
+				}
+			},
+		},
+		{
 			name:       "app invoke rejects empty app",
 			fullMethod: proto.App_Invoke_FullMethodName,
 			withOrigin: true,

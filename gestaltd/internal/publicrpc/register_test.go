@@ -80,25 +80,56 @@ func TestPublicRegistrationMarksOrigin(t *testing.T) {
 func TestPublicRegistrationExcludesInternalMethods(t *testing.T) {
 	t.Parallel()
 
-	tracker := &workflowTracker{}
-	conn := dialGRPC(t, func(s *grpc.Server) {
-		publicrpc.RegisterPublicWorkflowServer(s, tracker)
+	t.Run("workflow public methods reach handler", func(t *testing.T) {
+		t.Parallel()
+
+		tracker := &workflowTracker{}
+		conn := dialGRPC(t, func(s *grpc.Server) {
+			publicrpc.RegisterPublicWorkflowServer(s, tracker)
+		})
+
+		client := gestaltproto.NewWorkflowClient(conn)
+		if _, err := client.DeliverEvent(context.Background(), &gestaltproto.DeliverWorkflowProviderEventRequest{}); status.Code(err) != codes.Unimplemented {
+			t.Fatalf("DeliverEvent code = %v, want Unimplemented", status.Code(err))
+		}
+		if !tracker.deliverCalled {
+			t.Fatal("DeliverEvent did not reach public handler")
+		}
+
+		if _, err := client.ApplyDefinition(context.Background(), &gestaltproto.ApplyWorkflowProviderDefinitionRequest{}); status.Code(err) != codes.Unimplemented {
+			t.Fatalf("ApplyDefinition code = %v, want Unimplemented", status.Code(err))
+		}
+		if !tracker.applyCalled {
+			t.Fatal("ApplyDefinition did not reach public handler")
+		}
 	})
 
-	client := gestaltproto.NewWorkflowClient(conn)
-	if _, err := client.DeliverEvent(context.Background(), &gestaltproto.DeliverWorkflowProviderEventRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("DeliverEvent code = %v, want Unimplemented", status.Code(err))
-	}
-	if !tracker.deliverCalled {
-		t.Fatal("DeliverEvent did not reach public handler")
-	}
+	t.Run("agent internal methods stay unregistered", func(t *testing.T) {
+		t.Parallel()
 
-	if _, err := client.ApplyDefinition(context.Background(), &gestaltproto.ApplyWorkflowProviderDefinitionRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("ApplyDefinition code = %v, want Unimplemented", status.Code(err))
-	}
-	if tracker.applyCalled {
-		t.Fatal("ApplyDefinition reached server, want unregistered method")
-	}
+		tracker := &agentTracker{}
+		conn := dialGRPC(t, func(s *grpc.Server) {
+			publicrpc.RegisterPublicAgentServer(s, tracker)
+		})
+
+		client := gestaltproto.NewAgentClient(conn)
+		if _, err := client.GetInteraction(context.Background(), &gestaltproto.GetAgentProviderInteractionRequest{}); status.Code(err) != codes.Unimplemented {
+			t.Fatalf("GetInteraction code = %v, want Unimplemented", status.Code(err))
+		}
+		if tracker.getInteractionCalled {
+			t.Fatal("GetInteraction reached server, want unregistered method")
+		}
+	})
+}
+
+type agentTracker struct {
+	gestaltproto.UnimplementedAgentServer
+	getInteractionCalled bool
+}
+
+func (t *agentTracker) GetInteraction(context.Context, *gestaltproto.GetAgentProviderInteractionRequest) (*gestaltproto.AgentInteraction, error) {
+	t.getInteractionCalled = true
+	return nil, status.Error(codes.Unimplemented, "get interaction")
 }
 
 type workflowTracker struct {
