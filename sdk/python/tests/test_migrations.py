@@ -104,6 +104,21 @@ class MigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(MigrationError, "ledger is ahead of code"):
             run_migrations(db, MigrationRunOptions(revisions=revisions))
 
+    def test_ignores_other_provider_ledger_rows_on_shared_db(self) -> None:
+        db = FakeDB()
+        run_migrations(
+            db,
+            MigrationRunOptions(
+                revisions=[init_revision("authorization/indexeddb/0001_init", "relationships")]
+            ),
+        )
+        run_migrations(
+            db,
+            MigrationRunOptions(
+                revisions=[init_revision("auth/oidc/0001_init", "grants")]
+            ),
+        )
+
     def test_duplicate_revision_ids(self) -> None:
         db = FakeDB()
         revisions: list[Revision] = [

@@ -215,12 +215,55 @@ function validateRevisions(revisions: Revision[]): Revision[] {
   return normalized;
 }
 
+function revisionNamespaces(revisions: Revision[]): {
+  prefixes: Set<string>;
+  hasFlat: boolean;
+} {
+  const prefixes = new Set<string>();
+  let hasFlat = false;
+  for (const revision of revisions) {
+    const id = revision.id.trim();
+    if (!id) {
+      continue;
+    }
+    const slash = id.lastIndexOf("/");
+    if (slash >= 0) {
+      prefixes.add(id.slice(0, slash + 1));
+      continue;
+    }
+    hasFlat = true;
+  }
+  return { prefixes, hasFlat };
+}
+
+function ledgerIDOwnedByProvider(
+  id: string,
+  prefixes: Set<string>,
+  hasFlat: boolean,
+): boolean {
+  if (id.includes("/")) {
+    for (const prefix of prefixes) {
+      if (id.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return hasFlat && prefixes.size === 0;
+}
+
 function assertNotAheadOfCode(
   revisions: Revision[],
   applied: Set<string>,
 ): void {
   const declared = new Set(revisions.map((revision) => revision.id));
-  const unknown = [...applied].filter((id) => !declared.has(id)).sort();
+  const { prefixes, hasFlat } = revisionNamespaces(revisions);
+  const unknown = [...applied]
+    .filter(
+      (id) =>
+        !declared.has(id) && ledgerIDOwnedByProvider(id, prefixes, hasFlat),
+    )
+    .sort();
   if (unknown.length > 0) {
     const attemptedHead = revisions[revisions.length - 1]?.id;
     throw new MigrationError(

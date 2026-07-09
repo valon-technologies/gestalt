@@ -121,16 +121,49 @@ func validateRevisions(revisions []Revision) ([]Revision, error) {
 	return out, nil
 }
 
+func revisionNamespaces(revisions []Revision) (prefixes map[string]struct{}, hasFlat bool) {
+	prefixes = make(map[string]struct{}, len(revisions))
+	for _, revision := range revisions {
+		id := strings.TrimSpace(revision.ID)
+		if id == "" {
+			continue
+		}
+		if i := strings.LastIndex(id, "/"); i >= 0 {
+			prefixes[id[:i+1]] = struct{}{}
+			continue
+		}
+		hasFlat = true
+	}
+	return prefixes, hasFlat
+}
+
+func ledgerIDOwnedByProvider(id string, prefixes map[string]struct{}, hasFlat bool) bool {
+	if strings.Contains(id, "/") {
+		for prefix := range prefixes {
+			if strings.HasPrefix(id, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+	return hasFlat && len(prefixes) == 0
+}
+
 func assertNotAheadOfCode(revisions []Revision, applied map[string]struct{}) error {
 	declared := make(map[string]struct{}, len(revisions))
 	for _, revision := range revisions {
 		declared[revision.ID] = struct{}{}
 	}
+	prefixes, hasFlat := revisionNamespaces(revisions)
 	var unknown []string
 	for id := range applied {
-		if _, ok := declared[id]; !ok {
-			unknown = append(unknown, id)
+		if _, ok := declared[id]; ok {
+			continue
 		}
+		if !ledgerIDOwnedByProvider(id, prefixes, hasFlat) {
+			continue
+		}
+		unknown = append(unknown, id)
 	}
 	if len(unknown) == 0 {
 		return nil

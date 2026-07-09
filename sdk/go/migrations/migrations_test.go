@@ -273,6 +273,20 @@ func TestRun_LedgerAheadOfCode(t *testing.T) {
 	}
 }
 
+func TestRun_IgnoresOtherProviderLedgerRowsOnSharedDB(t *testing.T) {
+	ctx := context.Background()
+	db := newFakeDB()
+	otherRevision := initRevision("authorization/indexeddb/0001_init", "relationships")
+	if _, err := migrations.Run(ctx, db, migrations.RunOptions{Revisions: []migrations.Revision{otherRevision}}); err != nil {
+		t.Fatalf("seed other provider Run() error = %v", err)
+	}
+
+	revisions := []migrations.Revision{initRevision("auth/oidc/0001_init", "grants")}
+	if _, err := migrations.Run(ctx, db, migrations.RunOptions{Revisions: revisions}); err != nil {
+		t.Fatalf("Run() error = %v, want success on shared ledger", err)
+	}
+}
+
 func TestRun_DuplicateRevisionIDs(t *testing.T) {
 	ctx := context.Background()
 	db := newFakeDB()
