@@ -269,13 +269,45 @@ def _validate_revisions(revisions: list[Revision]) -> list[Revision]:
     return normalized
 
 
+def _revision_namespaces(revisions: list[Revision]) -> tuple[set[str], bool]:
+    prefixes: set[str] = set()
+    has_flat = False
+    for revision in revisions:
+        revision_id = (revision.id or "").strip()
+        if not revision_id:
+            continue
+        if "/" in revision_id:
+            prefixes.add(revision_id.rsplit("/", 1)[0] + "/")
+            continue
+        has_flat = True
+    return prefixes, has_flat
+
+
+def _ledger_id_directory_prefix(revision_id: str) -> str:
+    if "/" not in revision_id:
+        return ""
+    return revision_id.rsplit("/", 1)[0] + "/"
+
+
+def _ledger_id_owned_by_provider(
+    revision_id: str, prefixes: set[str], has_flat: bool
+) -> bool:
+    if "/" in revision_id:
+        return _ledger_id_directory_prefix(revision_id) in prefixes
+    return has_flat and not prefixes
+
+
 def _assert_not_ahead_of_code(
     revisions: list[Revision],
     applied: set[str],
 ) -> None:
     declared = {revision.id for revision in revisions}
+    prefixes, has_flat = _revision_namespaces(revisions)
     unknown = sorted(
-        revision_id for revision_id in applied if revision_id not in declared
+        revision_id
+        for revision_id in applied
+        if revision_id not in declared
+        and _ledger_id_owned_by_provider(revision_id, prefixes, has_flat)
     )
     if not unknown:
         return
