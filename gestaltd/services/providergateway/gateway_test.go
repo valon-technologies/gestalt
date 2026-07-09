@@ -575,6 +575,28 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode:   codes.PermissionDenied,
 		},
 		{
+			name:       "app named identity still requires authorization",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			authAllow:  &denied,
+			req:        &proto.AppInvokeRequest{App: "identity", Operation: "sync"},
+			wantCode:   codes.PermissionDenied,
+		},
+		{
+			name:       "identity authorize skips bearer and provider authorization",
+			fullMethod: proto.Identity_Authorize_FullMethodName,
+			withOrigin: true,
+			metadata:   []string{},
+			authAllow:  &denied,
+			req: &proto.AuthorizeRequest{
+				ResponseType: "code",
+				ClientId:     "gestalt-cli",
+				RedirectUri:  "http://localhost:8080/api/v1/auth/login/callback",
+				State:        "login-state",
+			},
+		},
+		{
 			name:       "identity failure",
 			fullMethod: proto.App_Invoke_FullMethodName,
 			withOrigin: true,
@@ -683,8 +705,11 @@ func TestPreparePublicRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("PreparePublicRequest: %v", err)
 			}
-			if p.SubjectID != wantSubjectID(tc.wantSubject, "user:alice") {
-				t.Fatalf("SubjectID = %q, want %q", p.SubjectID, wantSubjectID(tc.wantSubject, "user:alice"))
+			if p != nil {
+				want := wantSubjectID(tc.wantSubject, "user:alice")
+				if p.SubjectID != want {
+					t.Fatalf("SubjectID = %q, want %q", p.SubjectID, want)
+				}
 			}
 			if tc.checkAdapted != nil {
 				tc.checkAdapted(t, adapted)

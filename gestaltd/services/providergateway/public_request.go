@@ -48,6 +48,14 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 		return nil, nil, status.Error(codes.NotFound, "method is not public")
 	}
 
+	if publicIdentityLoginMethod(fullMethod) {
+		adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, nil, nil, req, policy, fullMethod)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, adapted, nil
+	}
+
 	token := bearerTokenFromContext(ctx)
 	if token == "" {
 		return nil, nil, status.Error(codes.Unauthenticated, "bearer token is required")
@@ -90,8 +98,11 @@ func (t *ProviderGatewayTransport) resolvePublicPrincipal(ctx context.Context, t
 func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	ctx context.Context,
 	p *principal.Principal,
-	providerID, operation string,
+	providerID, fullMethod string,
 ) error {
+	if publicIdentityServiceMethod(fullMethod) {
+		return nil
+	}
 	if t == nil || t.authorization == nil {
 		return status.Error(codes.PermissionDenied, "authorization provider is not configured")
 	}
@@ -103,7 +114,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	allowed, _, err := t.runAuthorizationCheck(ctx, &proto.Subject{
 		Type: "subject",
 		Id:   subjectID,
-	}, providerID, operation)
+	}, providerID, fullMethod)
 	if err != nil {
 		return status.Errorf(codes.Internal, "provider gateway: authorize: %v", err)
 	}
@@ -155,6 +166,24 @@ func publicResourceID(req gproto.Message, fullMethod string) (string, error) {
 		return "", status.Error(codes.InvalidArgument, "provider id is required")
 	}
 	return service, nil
+}
+
+func publicIdentityServiceMethod(fullMethod string) bool {
+	service, _ := splitFullMethod(fullMethod)
+	if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
+		return strings.EqualFold(service[idx+1:], "Identity")
+	}
+	return strings.EqualFold(service, "Identity")
+}
+
+func publicIdentityLoginMethod(fullMethod string) bool {
+	_, method := splitFullMethod(fullMethod)
+	switch method {
+	case "Authorize", "Token":
+		return true
+	default:
+		return false
+	}
 }
 
 func splitFullMethod(fullMethod string) (service, method string) {

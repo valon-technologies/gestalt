@@ -191,6 +191,44 @@ func TestPublicGRPCRouting(t *testing.T) {
 		}
 	})
 
+	t.Run("identity skips provider authorization", func(t *testing.T) {
+		t.Parallel()
+
+		deniedAuthz := &serviceAccountCredentialAuthorizationProvider{allowed: false}
+		ts, _ := startPublicGRPCServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, remoteRoutingAppStub("linear", "issues.list"))
+			cfg.Authorization = deniedAuthz
+			cfg.PublicGatewayTransport.SetAuthorizationProvider(deniedAuthz)
+		})
+		clients := publicGRPCRemoteClientSet(t, ts, "linear")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := clients.App.Invoke(ctx, &proto.AppInvokeRequest{
+			App:       "linear",
+			Operation: "issues.list",
+		})
+		if status.Code(err) != codes.PermissionDenied {
+			t.Fatalf("App.Invoke code = %v, want %v (%v)", status.Code(err), codes.PermissionDenied, err)
+		}
+
+		token := publicGRPCTestBearer("linear")
+		introspect, err := clients.Identity.Introspect(ctx, &proto.IntrospectRequest{Token: token})
+		if err != nil {
+			t.Fatalf("Identity.Introspect: %v", err)
+		}
+		if !introspect.GetActive() {
+			t.Fatal("Introspect active = false, want true")
+		}
+		if len(deniedAuthz.requests) != 1 {
+			t.Fatalf("authorization requests = %d, want 1 for app invoke only", len(deniedAuthz.requests))
+		}
+		if got := deniedAuthz.requests[0].GetResource().GetId(); got != "linear" {
+			t.Fatalf("authorization resource = %q, want linear", got)
+		}
+	})
+
 	for _, tc := range []struct {
 		name        string
 		metadata    []string
