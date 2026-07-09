@@ -81,10 +81,22 @@ class IndexSchema:
 
 
 @dataclass
+class ColumnDef:
+    """Column definition for an object store schema."""
+
+    name: str
+    type: int = 0
+    primary_key: bool = False
+    not_null: bool = False
+    unique: bool = False
+
+
+@dataclass
 class ObjectStoreSchema:
     """Schema definition for an object store."""
 
     indexes: list[IndexSchema] = field(default_factory=list)
+    columns: list[ColumnDef] = field(default_factory=list)
 
 
 class IndexedDBProtocol(Protocol):
@@ -97,6 +109,12 @@ class IndexedDBProtocol(Protocol):
 
     def delete_object_store(self, name: str) -> None:
         """Delete an object store by name."""
+
+    def create_index(self, store: str, index: IndexSchema) -> None:
+        """Add a secondary index to an existing object store."""
+
+    def delete_index(self, store: str, name: str) -> None:
+        """Remove a secondary index from an object store."""
 
     def object_store(self, name: str) -> ObjectStore:
         """Return a client bound to an object store."""
@@ -660,6 +678,16 @@ class IndexedDB:
 
         pb_schema = pb.ObjectStoreSchema()
         if schema:
+            for column in schema.columns:
+                pb_schema.columns.append(
+                    pb.ColumnDef(
+                        name=column.name,
+                        type=column.type,
+                        primary_key=column.primary_key,
+                        not_null=column.not_null,
+                        unique=column.unique,
+                    )
+                )
             for idx in schema.indexes:
                 pb_schema.indexes.append(
                     pb.IndexSchema(
@@ -676,6 +704,27 @@ class IndexedDB:
         """Delete an object store by name."""
 
         _grpc_call(self._stub.DeleteObjectStore, pb.DeleteObjectStoreRequest(name=name))
+
+    def create_index(self, store: str, index: IndexSchema) -> None:
+        """Add a secondary index to an existing object store."""
+
+        _grpc_call(
+            self._stub.CreateIndex,
+            pb.CreateIndexRequest(
+                store=store,
+                name=index.name,
+                key_path=index.key_path,
+                unique=index.unique,
+            ),
+        )
+
+    def delete_index(self, store: str, name: str) -> None:
+        """Remove a secondary index from an object store."""
+
+        _grpc_call(
+            self._stub.DeleteIndex,
+            pb.DeleteIndexRequest(store=store, name=name),
+        )
 
     def object_store(self, name: str) -> ObjectStore:
         """Return a client bound to an object store."""

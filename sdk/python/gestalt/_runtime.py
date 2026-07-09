@@ -55,6 +55,7 @@ from ._providers import (
     WorkflowProvider,
 )
 from ._serialization import json_body
+from .migrations import configure_migrations
 from .s3 import ReadObjectChunk, ReadObjectChunkData, ReadObjectChunkMeta
 
 json_format: Any = cast(Any, None)
@@ -1510,6 +1511,7 @@ def _runtime_servicer(*, provider: AppProvider, kind: ProviderKind) -> Any:
                 message=request.config,
                 request=request,
             )
+            configure_migrations(provider, request.name, config)
             provider.configure(request.name, config)
             return runtime_pb2.ConfigureProviderResponse(
                 protocol_version=CURRENT_PROTOCOL_VERSION

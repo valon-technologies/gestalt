@@ -46,6 +46,16 @@ from .invoke_support import (
     raise_for_status,
 )
 
+_MIGRATIONS_EXPORTS = (
+    "MigrationError",
+    "MigrationResult",
+    "MigrationRunOptions",
+    "SchemaDeclaration",
+    "SchemaRevision",
+    "StoreDeclaration",
+    "run_migrations",
+)
+
 _AGENT_PROTOCOL_EXPORTS = (
     "AGENT_EXECUTION_STATUS_CANCELED",
     "AGENT_EXECUTION_STATUS_FAILED",
@@ -422,6 +432,7 @@ _LAZY_EXPORTS = {
     "ListObjectsRequest": (".s3", "ListObjectsRequest"),
     "ListObjectsResponse": (".s3", "ListObjectsResponse"),
     "MetadataProvider": ("._providers", "MetadataProvider"),
+    "MigrationsProvider": ("._providers", "MigrationsProvider"),
     "NotFoundError": ("._indexeddb", "NotFoundError"),
     "ObjectBody": ("._providers", "ObjectBody"),
     "ObjectStore": ("._indexeddb", "ObjectStore"),
@@ -481,6 +492,7 @@ _LAZY_EXPORTS = {
     "session_catalog": ("._app", "session_catalog"),
 }
 
+_LAZY_EXPORTS.update({name: (".migrations", name) for name in _MIGRATIONS_EXPORTS})
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_PROTOCOL_EXPORTS})
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS})
 _LAZY_EXPORTS.update(
@@ -591,6 +603,14 @@ __all__ = [
     "ListObjectsRequest",
     "ListObjectsResponse",
     "MetadataProvider",
+    "MigrationsProvider",
+    "MigrationError",
+    "MigrationResult",
+    "MigrationRunOptions",
+    "SchemaDeclaration",
+    "SchemaRevision",
+    "StoreDeclaration",
+    "run_migrations",
     "Model",
     "NotFoundError",
     "OK",
