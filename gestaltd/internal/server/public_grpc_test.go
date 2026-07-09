@@ -168,23 +168,13 @@ func TestPublicGRPCRouting(t *testing.T) {
 		if got["value"] != "ship-it" {
 			t.Fatalf("stored value = %#v, want %q", got["value"], "ship-it")
 		}
-	})
 
-	t.Run("identity and authorization public clients", func(t *testing.T) {
-		t.Parallel()
-
-		ts, _ := startPublicGRPCServer(t, nil)
-		clients := publicGRPCRemoteClientSet(t, ts, "")
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		token := publicGRPCTestBearer("")
-		resp, err := clients.Identity.Introspect(ctx, &proto.IntrospectRequest{Token: token})
+		token := publicGRPCTestBearer("linear")
+		introspect, err := clients.Identity.Introspect(ctx, &proto.IntrospectRequest{Token: token})
 		if err != nil {
 			t.Fatalf("remote Identity.Introspect: %v", err)
 		}
-		if !resp.GetActive() {
+		if !introspect.GetActive() {
 			t.Fatalf("Introspect active = false, want true")
 		}
 

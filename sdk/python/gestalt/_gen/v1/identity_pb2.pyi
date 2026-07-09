@@ -1,3 +1,4 @@
+from google.api import visibility_pb2 as _visibility_pb2
 from . import annotations_pb2 as _annotations_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
