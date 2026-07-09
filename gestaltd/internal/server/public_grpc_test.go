@@ -229,6 +229,35 @@ func TestPublicGRPCRouting(t *testing.T) {
 		}
 	})
 
+	t.Run("app named identity still enforces provider authorization", func(t *testing.T) {
+		t.Parallel()
+
+		deniedAuthz := &serviceAccountCredentialAuthorizationProvider{allowed: false}
+		ts, _ := startPublicGRPCServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, remoteRoutingAppStub("identity", "sync"))
+			cfg.Authorization = deniedAuthz
+			cfg.PublicGatewayTransport.SetAuthorizationProvider(deniedAuthz)
+		})
+		clients := publicGRPCRemoteClientSet(t, ts, "identity")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := clients.App.Invoke(ctx, &proto.AppInvokeRequest{
+			App:       "identity",
+			Operation: "sync",
+		})
+		if status.Code(err) != codes.PermissionDenied {
+			t.Fatalf("App.Invoke code = %v, want %v (%v)", status.Code(err), codes.PermissionDenied, err)
+		}
+		if len(deniedAuthz.requests) != 1 {
+			t.Fatalf("authorization requests = %d, want 1", len(deniedAuthz.requests))
+		}
+		if got := deniedAuthz.requests[0].GetResource().GetId(); got != "identity" {
+			t.Fatalf("authorization resource = %q, want identity", got)
+		}
+	})
+
 	for _, tc := range []struct {
 		name        string
 		metadata    []string

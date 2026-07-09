@@ -97,7 +97,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	p *principal.Principal,
 	providerID, operation string,
 ) error {
-	if publicIdentityProviderID(providerID) {
+	if publicIdentityServiceMethod(operation) {
 		return nil
 	}
 	if t == nil || t.authorization == nil {
@@ -165,8 +165,12 @@ func publicResourceID(req gproto.Message, fullMethod string) (string, error) {
 	return service, nil
 }
 
-func publicIdentityProviderID(providerID string) bool {
-	return strings.EqualFold(strings.TrimSpace(providerID), "identity")
+func publicIdentityServiceMethod(fullMethod string) bool {
+	service, _ := splitFullMethod(fullMethod)
+	if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
+		return strings.EqualFold(service[idx+1:], "Identity")
+	}
+	return false
 }
 
 func publicIdentityLoginMethod(fullMethod string) bool {

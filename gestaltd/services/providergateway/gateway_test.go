@@ -582,6 +582,15 @@ func TestPreparePublicRequest(t *testing.T) {
 			req:        &proto.IntrospectRequest{Token: "session-token"},
 		},
 		{
+			name:       "app named identity still enforces provider authorization",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: activeAlice,
+			authAllow:  &denied,
+			req:        &proto.AppInvokeRequest{App: "identity", Operation: "sync"},
+			wantCode:   codes.PermissionDenied,
+		},
+		{
 			name:       "identity authorize skips bearer and provider authorization",
 			fullMethod: proto.Identity_Authorize_FullMethodName,
 			withOrigin: true,
