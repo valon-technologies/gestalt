@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -123,6 +124,21 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvi
 		return nil, err
 	}
 	return provider, nil
+}
+
+// NewRemote returns an authorization provider backed by a public gRPC client.
+func NewRemote(client proto.AuthorizationClient, name string) (core.AuthorizationProvider, error) {
+	if client == nil {
+		return nil, fmt.Errorf("authorization provider client is required")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("authorization provider name is required")
+	}
+	return rpcauthorization.NewClient(client, rpcauthorization.Options{
+		UnaryTimeout: runtimehost.ProviderRPCTimeout,
+		ProviderID:   name,
+	}, providergateway.DirectTransport{}), nil
 }
 
 func (r *remoteAuthorizationProvider) Ping(ctx context.Context) error {

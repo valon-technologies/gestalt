@@ -34,6 +34,8 @@ func TestRegistryDiscoversPublicMethods(t *testing.T) {
 		gestaltproto.Agent_ListTurns_FullMethodName,
 		gestaltproto.Agent_CancelTurn_FullMethodName,
 		gestaltproto.Agent_ListTurnEvents_FullMethodName,
+		gestaltproto.Identity_Introspect_FullMethodName,
+		gestaltproto.Authorization_CheckAccess_FullMethodName,
 	}
 	for _, fullMethod := range want {
 		if _, ok := registry.Lookup(fullMethod); !ok {

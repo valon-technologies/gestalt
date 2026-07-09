@@ -10,6 +10,8 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
+	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
@@ -22,12 +24,13 @@ import (
 )
 
 type publicGRPCConfig struct {
-	Transport       *providergateway.ProviderGatewayTransport
-	Invoker         invocation.Invoker
-	AgentManager    agentmanager.Service
-	WorkflowManager workflowmanager.Service
-	Authorization   core.AuthorizationProvider
-	IndexedDB       indexeddb.IndexedDB
+	Transport        *providergateway.ProviderGatewayTransport
+	Invoker          invocation.Invoker
+	AgentManager     agentmanager.Service
+	WorkflowManager  workflowmanager.Service
+	Authentication   core.IdentityProvider
+	Authorization    core.AuthorizationProvider
+	IndexedDB        indexeddb.IndexedDB
 }
 
 func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
@@ -59,6 +62,12 @@ func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
 			"gestaltd",
 			indexeddbservice.ServerOptions{},
 		))
+	}
+	if cfg.Authentication != nil {
+		publicrpc.RegisterPublicIdentityServer(srv, identityservice.NewProviderServer(cfg.Authentication))
+	}
+	if cfg.Authorization != nil {
+		publicrpc.RegisterPublicAuthorizationServer(srv, authorizationservice.NewProviderServer(cfg.Authorization))
 	}
 	return http.HandlerFunc(srv.ServeHTTP)
 }

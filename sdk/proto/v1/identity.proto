@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/visibility.proto";
 import "v1/annotations.proto";
 
 // AuthorizeRequest models RFC 6749 authorization endpoint parameters.
@@ -128,6 +129,9 @@ service Identity {
   option (host_binding) = "identity";
 
   rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "response_type";
     option (signature) = "client_id";
     option (signature) = "redirect_uri";
@@ -135,6 +139,9 @@ service Identity {
     option (signature) = "state";
   }
   rpc Token(TokenRequest) returns (TokenResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "grant_type";
     option (signature) = "code";
     option (signature) = "redirect_uri";
@@ -146,15 +153,32 @@ service Identity {
     option (optional_signature) = "expires_in";
   }
   rpc Introspect(IntrospectRequest) returns (IntrospectResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "token";
     option (signature) = "token_type_hint";
   }
-  rpc UserInfo(UserInfoRequest) returns (UserInfoResponse);
-  rpc ListGrants(ListGrantsRequest) returns (ListGrantsResponse);
+  rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+  }
+  rpc ListGrants(ListGrantsRequest) returns (ListGrantsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+  }
   rpc GetGrant(GetGrantRequest) returns (GetGrantResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "grant_id";
   }
   rpc RevokeGrant(RevokeGrantRequest) returns (RevokeGrantResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "grant_id";
   }
 }

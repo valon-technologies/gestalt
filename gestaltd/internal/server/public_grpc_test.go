@@ -170,6 +170,37 @@ func TestPublicGRPCRouting(t *testing.T) {
 		}
 	})
 
+	t.Run("identity and authorization public clients", func(t *testing.T) {
+		t.Parallel()
+
+		ts, _ := startPublicGRPCServer(t, nil)
+		clients := publicGRPCRemoteClientSet(t, ts, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		token := publicGRPCTestBearer("")
+		resp, err := clients.Identity.Introspect(ctx, &proto.IntrospectRequest{Token: token})
+		if err != nil {
+			t.Fatalf("remote Identity.Introspect: %v", err)
+		}
+		if !resp.GetActive() {
+			t.Fatalf("Introspect active = false, want true")
+		}
+
+		authResp, err := clients.Authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+			Subject:  &proto.Subject{Type: "subject", Id: "user:public-grpc-user"},
+			Action:   &proto.Action{Name: "CheckAccess"},
+			Resource: &proto.Resource{Type: "provider", Id: "authorization"},
+		})
+		if err != nil {
+			t.Fatalf("remote Authorization.CheckAccess: %v", err)
+		}
+		if !authResp.GetAllowed() {
+			t.Fatalf("CheckAccess allowed = false, want true")
+		}
+	})
+
 	for _, tc := range []struct {
 		name        string
 		metadata    []string

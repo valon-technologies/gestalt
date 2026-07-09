@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/visibility.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -212,34 +213,62 @@ service Authorization {
   option (host_binding) = "authorization";
 
   rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "action";
     option (signature) = "resource";
   }
   rpc CheckAccessMany(CheckAccessManyRequest) returns (CheckAccessManyResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "requests";
   }
 
   rpc ListRelationships(ListRelationshipsRequest) returns (ListRelationshipsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "page_size";
     option (signature) = "page_token";
     option (signature) = "filter";
   }
   rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "relationship";
   }
   rpc DeleteRelationship(DeleteRelationshipRequest) returns (DeleteRelationshipResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "relationship_tuple";
   }
   rpc SetAuthorizationState(SetAuthorizationStateRequest) returns (SetAuthorizationStateResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "relationships";
     option (signature) = "model";
   }
 
-  rpc GetActiveModelRef(google.protobuf.Empty) returns (GetActiveModelRefResponse);
+  rpc GetActiveModelRef(google.protobuf.Empty) returns (GetActiveModelRefResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+  }
   rpc SetActiveModel(SetActiveModelRequest) returns (SetActiveModelResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "model";
   }
   rpc ListActiveModelResourceTypes(ListActiveModelResourceTypesRequest) returns (ListActiveModelResourceTypesResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
     option (signature) = "page_size";
     option (signature) = "page_token";
     option (signature) = "filter";

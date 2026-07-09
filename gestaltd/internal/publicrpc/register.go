@@ -48,6 +48,16 @@ func RegisterPublicIndexedDBServer(s grpc.ServiceRegistrar, srv proto.IndexedDBS
 	registerPublic(s, srv, proto.IndexedDB_ServiceDesc)
 }
 
+// RegisterPublicIdentityServer registers only PUBLIC Identity methods.
+func RegisterPublicIdentityServer(s grpc.ServiceRegistrar, srv proto.IdentityServer) {
+	registerPublic(s, srv, proto.Identity_ServiceDesc)
+}
+
+// RegisterPublicAuthorizationServer registers only PUBLIC Authorization methods.
+func RegisterPublicAuthorizationServer(s grpc.ServiceRegistrar, srv proto.AuthorizationServer) {
+	registerPublic(s, srv, proto.Authorization_ServiceDesc)
+}
+
 func registerPublic(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
 	reg, err := loadGeneratedRegistry()
 	if err != nil {

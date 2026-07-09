@@ -33,6 +33,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
+	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	indexeddbpkg "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -1964,15 +1966,12 @@ func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Dep
 	if len(cfg.Providers.Identity) == 0 {
 		return selectedName, nil, nil
 	}
-	if factories.Auth == nil {
-		return "", nil, fmt.Errorf("bootstrap: authentication factory is not registered")
-	}
 	providers := make(map[string]core.IdentityProvider, len(cfg.Providers.Identity))
 	for name, authEntry := range cfg.Providers.Identity {
 		if authEntry == nil {
 			continue
 		}
-		auth, err := buildNamedAuthProvider(name, authEntry, factories, deps)
+		auth, err := buildNamedAuthProvider(cfg, name, authEntry, factories, deps)
 		if err != nil {
 			_ = closeAuthProviders(providers)
 			return "", nil, err
@@ -1982,9 +1981,18 @@ func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Dep
 	return selectedName, providers, nil
 }
 
-func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.IdentityProvider, error) {
+func buildNamedAuthProvider(cfg *config.Config, name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.IdentityProvider, error) {
 	if authEntry == nil {
 		return nil, nil
+	}
+	if !providerBuildsLocal(cfg, authEntry) {
+		if deps.RemoteClients == nil || deps.RemoteClients.Identity == nil {
+			return nil, fmt.Errorf("bootstrap: remote identity client is required when server.remote is configured")
+		}
+		return identityservice.NewRemote(deps.RemoteClients.Identity, name)
+	}
+	if factories.Auth == nil {
+		return nil, fmt.Errorf("bootstrap: authentication factory is not registered")
 	}
 	node := authEntry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
@@ -2014,9 +2022,6 @@ func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factor
 	if len(cfg.Providers.Authorization) == 0 {
 		return authorizationProviderSets{}, nil
 	}
-	if factories.Authorization == nil {
-		return authorizationProviderSets{}, fmt.Errorf("bootstrap: authorization factory is not registered")
-	}
 	name, entry, err := cfg.SelectedAuthorizationProvider()
 	if err != nil {
 		return authorizationProviderSets{}, err
@@ -2024,7 +2029,7 @@ func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factor
 	if entry == nil {
 		return authorizationProviderSets{}, nil
 	}
-	providers, err := buildNamedAuthorizationProvider(ctx, name, entry, factories, deps)
+	providers, err := buildNamedAuthorizationProvider(ctx, cfg, name, entry, factories, deps)
 	if err != nil {
 		return authorizationProviderSets{}, err
 	}
@@ -2034,13 +2039,26 @@ func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factor
 	}, nil
 }
 
-func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (providerdrivers.AuthorizationBuildResult, error) {
+func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (providerdrivers.AuthorizationBuildResult, error) {
 	logicalName := strings.TrimSpace(name)
 	if logicalName == "" {
 		logicalName = "authorization"
 	}
 	if entry == nil {
 		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
+	}
+	if !providerBuildsLocal(cfg, entry) {
+		if deps.RemoteClients == nil || deps.RemoteClients.Authorization == nil {
+			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: remote authorization client is required when server.remote is configured")
+		}
+		provider, err := authorizationservice.NewRemote(deps.RemoteClients.Authorization, logicalName)
+		if err != nil {
+			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		}
+		return providerdrivers.AuthorizationBuildResult{Raw: provider, Guarded: provider}, nil
+	}
+	if factories.Authorization == nil {
+		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization factory is not registered")
 	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
