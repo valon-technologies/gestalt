@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -444,18 +445,20 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 		t.Fatalf("runSync with --lockfile: %v", err)
 	}
 
-	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, lockPath, artifactsDir, true, false, "", "test-token")
+	cfg, err := loadConfigForExecutionAtPaths([]string{cfgPath}, lockPath, artifactsDir, true, false)
 	if err != nil {
-		t.Fatalf("setupBootstrapWithConfigPaths locked with --lockfile: %v", err)
+		t.Fatalf("loadConfigForExecutionAtPaths locked with --lockfile: %v", err)
 	}
-	defer env.Close()
-	if got := env.Config.Server.Remote; got != "https://valon.tools" {
+	if err := config.ApplyServeRemoteOverrides(cfg, "", "test-token"); err != nil {
+		t.Fatalf("ApplyServeRemoteOverrides: %v", err)
+	}
+	if got := cfg.Server.Remote; got != "https://valon.tools" {
 		t.Fatalf("Server.Remote = %q, want https://valon.tools", got)
 	}
-	if got := env.Config.Server.RemoteToken; got != "test-token" {
+	if got := cfg.Server.RemoteToken; got != "test-token" {
 		t.Fatalf("Server.RemoteToken = %q, want test-token", got)
 	}
-	if env.Config.Apps["example"] == nil {
+	if cfg.Apps["example"] == nil {
 		t.Fatal(`Apps["example"] = nil`)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
