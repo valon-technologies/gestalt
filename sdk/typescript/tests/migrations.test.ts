@@ -348,6 +348,25 @@ describe("runMigrations", () => {
     ).rejects.toThrow(/ledger is ahead/);
   });
 
+  test("ignores deeper namespace ledger rows on a shared db", async () => {
+    const { db } = fakeDb();
+    const nested: Revision = {
+      id: "auth/oidc/nested/0001_init",
+      schema: {
+        stores: [{ name: "nested", columns: [{ name: "id", primaryKey: true }] }],
+      },
+    };
+    await runMigrations(db, { revisions: [nested] });
+
+    const sibling: Revision = {
+      id: "auth/oidc/0001_init",
+      schema: {
+        stores: [{ name: "grants", columns: [{ name: "id", primaryKey: true }] }],
+      },
+    };
+    await expect(runMigrations(db, { revisions: [sibling] })).resolves.toBeDefined();
+  });
+
   test("fails closed when a revision is inserted before an applied one", async () => {
     const { db } = fakeDb();
     const first = issuesRevision; // 0001_issues

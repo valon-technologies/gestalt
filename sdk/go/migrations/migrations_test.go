@@ -287,6 +287,20 @@ func TestRun_IgnoresOtherProviderLedgerRowsOnSharedDB(t *testing.T) {
 	}
 }
 
+func TestRun_IgnoresDeeperNamespaceLedgerRowsOnSharedDB(t *testing.T) {
+	ctx := context.Background()
+	db := newFakeDB()
+	otherRevision := initRevision("auth/oidc/nested/0001_init", "nested")
+	if _, err := migrations.Run(ctx, db, migrations.RunOptions{Revisions: []migrations.Revision{otherRevision}}); err != nil {
+		t.Fatalf("seed deeper namespace Run() error = %v", err)
+	}
+
+	revisions := []migrations.Revision{initRevision("auth/oidc/0001_init", "grants")}
+	if _, err := migrations.Run(ctx, db, migrations.RunOptions{Revisions: revisions}); err != nil {
+		t.Fatalf("Run() error = %v, want success when ancestor prefix differs", err)
+	}
+}
+
 func TestRun_DuplicateRevisionIDs(t *testing.T) {
 	ctx := context.Background()
 	db := newFakeDB()
