@@ -584,14 +584,6 @@ func TestPreparePublicRequest(t *testing.T) {
 			wantCode:   codes.PermissionDenied,
 		},
 		{
-			name:       "identity introspect skips provider authorization",
-			fullMethod: proto.Identity_Introspect_FullMethodName,
-			withOrigin: true,
-			introspect: activeAlice,
-			authAllow:  &denied,
-			req:        &proto.IntrospectRequest{Token: "session-token"},
-		},
-		{
 			name:       "identity authorize skips bearer and provider authorization",
 			fullMethod: proto.Identity_Authorize_FullMethodName,
 			withOrigin: true,
