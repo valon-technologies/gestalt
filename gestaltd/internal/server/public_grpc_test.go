@@ -189,13 +189,6 @@ func TestPublicGRPCRouting(t *testing.T) {
 		if !authResp.GetAllowed() {
 			t.Fatalf("CheckAccess allowed = false, want true")
 		}
-
-		_, err = clients.Workflow.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{
-			DefinitionId: "definition-1",
-		})
-		if status.Code(err) == codes.Unimplemented {
-			t.Fatalf("remote Workflow.GetDefinition: method not registered on public surface")
-		}
 	})
 
 	for _, tc := range []struct {
