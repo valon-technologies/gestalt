@@ -9,7 +9,7 @@ import (
 
 const (
 	releaseTestAppName             = "release-test"
-	releaseTestSource              = "github.com/testowner/apps/catalog/release-test"
+	releaseTestSource              = "github.com/testowner/apps/apps/release-test"
 	releaseTestModule              = "example.com/release-test"
 	releaseTestIconPath            = "branding/icon.svg"
 	releaseProviderSchemaPath      = "schemas/provider.schema.json"

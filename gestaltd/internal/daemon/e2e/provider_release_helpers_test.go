@@ -66,6 +66,13 @@ func runProviderCommandResult(pluginDir string, args ...string) ([]byte, error) 
 	return cmd.CombinedOutput()
 }
 
+func runAppCommandResult(pluginDir string, args ...string) ([]byte, error) {
+	cmdArgs := append([]string{"app"}, args...)
+	cmd := gestaltdCommand(cmdArgs...)
+	cmd.Dir = pluginDir
+	return cmd.CombinedOutput()
+}
+
 // runProviderPackageAndReleaseCommandResult keeps archive-creation tests focused
 // on their historical assertions while exercising the new two-step CLI.
 func runProviderPackageAndReleaseCommandResult(pluginDir string, args ...string) ([]byte, error) {
@@ -367,6 +374,28 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 	artifactRel := ".gestaltd/bin/" + releaseTestAppName
 	writeGoAppBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", releaseTestAppName, artifactRel)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      releaseTestSource,
+		Version:     "0.0.1",
+		DisplayName: "Release Test",
+		Spec:        hostedHTTPMetadataSpec("echo"),
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+	})
+	return pluginDir
+}
+
+func newAppRegistryPublishFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, "apps", releaseTestAppName)
+	testutil.CopyExampleProviderPlugin(t, pluginDir)
+	artifactRel := ".gestaltd/bin/" + releaseTestAppName
+	writeGoAppBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", releaseTestAppName, artifactRel)
+	writeReleaseTestManifestFormat(t, pluginDir, "manifest.yaml", &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
