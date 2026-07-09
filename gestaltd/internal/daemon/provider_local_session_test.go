@@ -104,6 +104,80 @@ apps:
 	}
 }
 
+func TestPrepareProviderLocalSessionUsesConfiguredGitAppKey(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := filepath.Join(dir, "valon-tools", "apps", "ci-cd")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: app
+source: github.com/valon-technologies/valon-tools/apps/ci-cd
+version: 1.0.0
+displayName: CI/CD
+spec: {}
+run:
+  command: [sh, -c, echo]
+`
+	manifestPath := filepath.Join(appDir, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	baseCfg := filepath.Join(dir, "base.yaml")
+	baseYAML := `apiVersion: gestaltd.config/v8
+apps:
+  ciCd:
+    source:
+      git:
+        repo: https://github.com/valon-technologies/toolshed.git
+        ref: abcdef0123456789abcdef0123456789abcdef01
+        path: valon-tools/apps/ci-cd/manifest.yaml
+    static:
+      mount: /ci-cd
+`
+	if err := os.WriteFile(baseCfg, []byte(baseYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile base config: %v", err)
+	}
+
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
+		Paths:        []string{manifestPath},
+		ConfigPaths:  []string{baseCfg},
+		FleetOverlay: true,
+	})
+	if err != nil {
+		t.Fatalf("prepareProviderLocalSession: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(session.Dir) })
+
+	if got, want := session.Kind, providermanifestv1.KindApp; got != want {
+		t.Fatalf("session.Kind = %q, want %q", got, want)
+	}
+	if got, want := session.TargetKey, "ciCd"; got != want {
+		t.Fatalf("session.TargetKey = %q, want %q", got, want)
+	}
+	if got, want := session.AutoMountedUIPath, "/ci-cd"; got != want {
+		t.Fatalf("session.AutoMountedUIPath = %q, want %q", got, want)
+	}
+
+	cfg, err := config.LoadPaths(session.ConfigPaths)
+	if err != nil {
+		t.Fatalf("LoadPaths(session.ConfigPaths): %v", err)
+	}
+	app := cfg.Apps[session.TargetKey]
+	if app == nil {
+		t.Fatalf("Apps[%q] = nil", session.TargetKey)
+	}
+	wantManifestPath, err := canonicalPath(manifestPath)
+	if err != nil {
+		t.Fatalf("canonicalPath(%s): %v", manifestPath, err)
+	}
+	if got := app.SourcePath(); got != wantManifestPath {
+		t.Fatalf("App source path = %q, want %q", got, wantManifestPath)
+	}
+}
+
 func TestPrepareProviderLocalSessionLeavesAppWithoutUIUnmounted(t *testing.T) {
 	t.Parallel()
 
