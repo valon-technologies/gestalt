@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -721,18 +722,51 @@ func matchingPluginKeys(plugins map[string]*config.ProviderEntry, targetManifest
 }
 
 func providerEntryMatchesTarget(entry *config.ProviderEntry, targetManifestPath string) bool {
-	if entry == nil || !entry.HasLocalSource() {
-		return false
-	}
-	canonicalSource, err := canonicalPath(entry.SourcePath())
-	if err != nil {
+	if entry == nil {
 		return false
 	}
 	targetCanonical, err := canonicalPath(targetManifestPath)
 	if err != nil {
 		return false
 	}
-	return canonicalSource == targetCanonical
+	if entry.HasLocalSource() {
+		canonicalSource, err := canonicalPath(entry.SourcePath())
+		if err != nil {
+			return false
+		}
+		return canonicalSource == targetCanonical
+	}
+	if entry.HasGitSource() && entry.Source.Git != nil {
+		_, _, gitManifestPath := entry.Source.Git.NormalizedLocationParts()
+		return manifestPathSuffixMatch(gitManifestPath, targetCanonical)
+	}
+	return false
+}
+
+func manifestPathSuffixMatch(configuredPath, targetPath string) bool {
+	configuredPath = normalizeManifestPathCompare(configuredPath)
+	targetPath = normalizeManifestPathCompare(targetPath)
+	if configuredPath == "" || targetPath == "" {
+		return false
+	}
+	if targetPath == configuredPath {
+		return true
+	}
+	configuredElems := strings.Split(configuredPath, "/")
+	targetElems := strings.Split(targetPath, "/")
+	if len(targetElems) < len(configuredElems) {
+		return false
+	}
+	for i := range configuredElems {
+		if configuredElems[len(configuredElems)-1-i] != targetElems[len(targetElems)-1-i] {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeManifestPathCompare(raw string) string {
+	return path.Clean(filepath.ToSlash(strings.TrimSpace(raw)))
 }
 
 func writeYAMLFile(path string, value any) error {
