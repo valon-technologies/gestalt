@@ -429,28 +429,71 @@ service Workflow {
   option (host_binding) = "workflow";
 
   rpc ApplyDefinition(ApplyWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "provider_name";
     option (signature) = "idempotency_key";
     option (signature) = "spec";
   }
   rpc GetDefinition(GetWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "definition_id";
   }
-  rpc ListDefinitions(ListWorkflowProviderDefinitionsRequest) returns (ListWorkflowProviderDefinitionsResponse);
+  rpc ListDefinitions(ListWorkflowProviderDefinitionsRequest) returns (ListWorkflowProviderDefinitionsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
+  }
   rpc SetDefinitionPaused(SetWorkflowProviderDefinitionPausedRequest) returns (WorkflowDefinition) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "definition_id";
     option (signature) = "paused";
   }
   rpc SetActivationPaused(SetWorkflowProviderActivationPausedRequest) returns (WorkflowDefinition) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "definition_id";
     option (signature) = "activation_id";
     option (signature) = "paused";
   }
   rpc DeleteDefinition(DeleteWorkflowProviderDefinitionRequest) returns (google.protobuf.Empty) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "definition_id";
   }
 
   rpc StartRun(StartWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "idempotency_key";
     option (signature) = "workflow_key";
     option (signature) = "provider_name";
@@ -459,29 +502,71 @@ service Workflow {
     option (signature) = "input";
   }
   rpc ListRuns(ListWorkflowProviderRunsRequest) returns (ListWorkflowProviderRunsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "page_size";
     option (signature) = "page_token";
     option (signature) = "status";
     option (signature) = "target_app";
   }
   rpc GetRun(GetWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "run_id";
   }
   rpc GetRunEvents(GetWorkflowProviderRunEventsRequest) returns (GetWorkflowProviderRunEventsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "run_id";
   }
   rpc GetRunOutput(GetWorkflowProviderRunOutputRequest) returns (GetWorkflowProviderRunOutputResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "run_id";
   }
   rpc CancelRun(CancelWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "run_id";
     option (signature) = "reason";
   }
   rpc SignalRun(SignalWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "run_id";
     option (signature) = "signal";
   }
   rpc SignalOrStartRun(SignalOrStartWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "workflow_key";
     option (signature) = "idempotency_key";
     option (signature) = "provider_name";

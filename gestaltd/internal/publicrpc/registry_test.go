@@ -24,6 +24,7 @@ func TestRegistryDiscoversPublicMethods(t *testing.T) {
 	want := []string{
 		gestaltproto.App_Invoke_FullMethodName,
 		gestaltproto.App_InvokeGraphQL_FullMethodName,
+		gestaltproto.Workflow_GetDefinition_FullMethodName,
 		gestaltproto.Workflow_DeliverEvent_FullMethodName,
 		gestaltproto.Agent_CreateSession_FullMethodName,
 		gestaltproto.Agent_GetSession_FullMethodName,
@@ -51,7 +52,6 @@ func TestRegistryDoesNotExposeInternalMethods(t *testing.T) {
 	}
 
 	internal := []string{
-		gestaltproto.Workflow_ApplyDefinition_FullMethodName,
 		gestaltproto.Agent_GetInteraction_FullMethodName,
 		gestaltproto.Agent_ListInteractions_FullMethodName,
 		gestaltproto.Agent_ResolveInteraction_FullMethodName,

@@ -92,29 +92,16 @@ func TestPublicRegistrationExcludesInternalMethods(t *testing.T) {
 	if !tracker.deliverCalled {
 		t.Fatal("DeliverEvent did not reach public handler")
 	}
-
-	if _, err := client.ApplyDefinition(context.Background(), &gestaltproto.ApplyWorkflowProviderDefinitionRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("ApplyDefinition code = %v, want Unimplemented", status.Code(err))
-	}
-	if tracker.applyCalled {
-		t.Fatal("ApplyDefinition reached server, want unregistered method")
-	}
 }
 
 type workflowTracker struct {
 	gestaltproto.UnimplementedWorkflowServer
 	deliverCalled bool
-	applyCalled   bool
 }
 
 func (t *workflowTracker) DeliverEvent(context.Context, *gestaltproto.DeliverWorkflowProviderEventRequest) (*gestaltproto.WorkflowEvent, error) {
 	t.deliverCalled = true
 	return nil, status.Error(codes.Unimplemented, "deliver")
-}
-
-func (t *workflowTracker) ApplyDefinition(context.Context, *gestaltproto.ApplyWorkflowProviderDefinitionRequest) (*gestaltproto.WorkflowDefinition, error) {
-	t.applyCalled = true
-	return nil, status.Error(codes.Unimplemented, "apply")
 }
 
 func dialGRPC(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {
