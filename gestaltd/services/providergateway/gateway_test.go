@@ -448,6 +448,7 @@ func TestPreparePublicRequest(t *testing.T) {
 		authAllow    *bool
 		req          gproto.Message
 		wantCode     codes.Code
+		wantSubject  string
 		setup        func(*ProviderGatewayTransport)
 		checkAdapted func(t *testing.T, adapted gproto.Message)
 		checkAuth    func(t *testing.T, auth *stubAuthorizationProvider)
@@ -618,6 +619,51 @@ func TestPreparePublicRequest(t *testing.T) {
 			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
 			wantCode:   codes.Internal,
 		},
+		{
+			name:       "external credentials list uses persisted user subject",
+			fullMethod: proto.ExternalCredentials_ListCredentials_FullMethodName,
+			withOrigin: true,
+			introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice@example.com"},
+			req:        &proto.ListExternalCredentialsRequest{},
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetUserStore(stubGatewayUserStore{ids: map[string]string{"alice@example.com": "db-alice"}})
+			},
+			wantSubject: "user:db-alice",
+			checkAdapted: func(t *testing.T, adapted gproto.Message) {
+				t.Helper()
+				out, ok := adapted.(*proto.ListExternalCredentialsRequest)
+				if !ok {
+					t.Fatalf("adapted type = %T, want *proto.ListExternalCredentialsRequest", adapted)
+				}
+				if got := out.GetSubject(); got != "user:db-alice" {
+					t.Fatalf("subject = %q, want %q", got, "user:db-alice")
+				}
+			},
+		},
+		{
+			name:       "external credentials resolve leaves actor subject empty",
+			fullMethod: proto.ExternalCredentials_ResolveCredential_FullMethodName,
+			withOrigin: true,
+			introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice@example.com"},
+			req:        &proto.ResolveExternalCredentialRequest{Provider: "github", Connection: "default"},
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetUserStore(stubGatewayUserStore{ids: map[string]string{"alice@example.com": "db-alice"}})
+			},
+			wantSubject: "user:db-alice",
+			checkAdapted: func(t *testing.T, adapted gproto.Message) {
+				t.Helper()
+				out, ok := adapted.(*proto.ResolveExternalCredentialRequest)
+				if !ok {
+					t.Fatalf("adapted type = %T, want *proto.ResolveExternalCredentialRequest", adapted)
+				}
+				if got := out.GetCredentialSubjectId(); got != "user:db-alice" {
+					t.Fatalf("credential_subject_id = %q, want %q", got, "user:db-alice")
+				}
+				if got := out.GetActorSubjectId(); got != "" {
+					t.Fatalf("actor_subject_id = %q, want empty", got)
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -658,8 +704,11 @@ func TestPreparePublicRequest(t *testing.T) {
 			if err != nil {
 				t.Fatalf("PreparePublicRequest: %v", err)
 			}
-			if p != nil && p.SubjectID != "user:alice" {
-				t.Fatalf("SubjectID = %q, want %q", p.SubjectID, "user:alice")
+			if p != nil {
+				want := wantSubjectID(tc.wantSubject, "user:alice")
+				if p.SubjectID != want {
+					t.Fatalf("SubjectID = %q, want %q", p.SubjectID, want)
+				}
 			}
 			if tc.checkAdapted != nil {
 				tc.checkAdapted(t, adapted)
@@ -682,4 +731,23 @@ func assertGRPCCode(t *testing.T, err error, want codes.Code) {
 	if status.Code(err) != want {
 		t.Fatalf("status.Code(err) = %v, want %v (%v)", status.Code(err), want, err)
 	}
+}
+
+func wantSubjectID(override, fallback string) string {
+	if override != "" {
+		return override
+	}
+	return fallback
+}
+
+type stubGatewayUserStore struct {
+	ids map[string]string
+}
+
+func (s stubGatewayUserStore) FindOrCreateUser(_ context.Context, email string) (*core.User, error) {
+	id, ok := s.ids[email]
+	if !ok {
+		return nil, errors.New("user not found")
+	}
+	return &core.User{ID: id, Email: email}, nil
 }

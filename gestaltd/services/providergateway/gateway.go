@@ -49,10 +49,15 @@ func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, n
 	return next(ctx, req)
 }
 
+type UserStore interface {
+	FindOrCreateUser(ctx context.Context, email string) (*core.User, error)
+}
+
 type ProviderGatewayTransport struct {
 	authorization        AuthorizationProvider
 	callerTokenPublicKey string
 	identity             core.IdentityProvider
+	users                UserStore
 	publicMethods        *publicrpc.Registry
 	publicBaseURL        string
 }
@@ -80,6 +85,13 @@ func (t *ProviderGatewayTransport) SetIdentityProvider(identity core.IdentityPro
 		return
 	}
 	t.identity = identity
+}
+
+func (t *ProviderGatewayTransport) SetUserStore(users UserStore) {
+	if t == nil {
+		return
+	}
+	t.users = users
 }
 
 func (t *ProviderGatewayTransport) SetPublicMethods(publicMethods *publicrpc.Registry) {

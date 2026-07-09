@@ -49,7 +49,7 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	}
 
 	if publicIdentityLoginMethod(fullMethod) {
-		adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, nil, req, policy, fullMethod)
+		adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, nil, nil, req, policy, fullMethod)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -71,7 +71,10 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	if err := t.enforcePublicAuthorization(ctx, p, resourceID, fullMethod); err != nil {
 		return nil, nil, err
 	}
-	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, p, req, policy, fullMethod)
+	if err := t.canonicalizePublicCredentialPrincipal(ctx, fullMethod, p); err != nil {
+		return nil, nil, err
+	}
+	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, t.users, p, req, policy, fullMethod)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -194,6 +197,7 @@ func splitFullMethod(fullMethod string) (service, method string) {
 func adaptPublicRequest(
 	ctx context.Context,
 	publicBaseURL string,
+	users principal.CredentialUserResolver,
 	p *principal.Principal,
 	req gproto.Message,
 	policy publicrpc.PublicMethodPolicy,
@@ -213,6 +217,9 @@ func adaptPublicRequest(
 		if err := fillPublicField(ctx, publicBaseURL, p, msg, name, fullMethod); err != nil {
 			return nil, err
 		}
+	}
+	if err := adaptPublicExternalCredentialsRequest(ctx, users, p, adapted, fullMethod); err != nil {
+		return nil, err
 	}
 	return adapted, nil
 }
@@ -262,4 +269,128 @@ func fieldSet(msg protoreflect.Message, name string) bool {
 	default:
 		return msg.Has(fd)
 	}
+}
+
+func adaptPublicExternalCredentialsRequest(
+	ctx context.Context,
+	users principal.CredentialUserResolver,
+	p *principal.Principal,
+	adapted gproto.Message,
+	fullMethod string,
+) error {
+	if !strings.HasPrefix(fullMethod, "/"+proto.ExternalCredentials_ServiceDesc.ServiceName+"/") {
+		return nil
+	}
+	switch msg := adapted.(type) {
+	case *proto.CreateExternalCredentialRequest:
+		if msg.GetCredential() == nil {
+			return status.Error(codes.InvalidArgument, "credential is required")
+		}
+		subject, err := bindPublicCredentialSubject(ctx, users, p, msg.GetCredential().GetSubject())
+		if err != nil {
+			return err
+		}
+		msg.Credential.Subject = subject
+	case *proto.UpsertExternalCredentialRequest:
+		if msg.GetCredential() == nil {
+			return status.Error(codes.InvalidArgument, "credential is required")
+		}
+		subject, err := bindPublicCredentialSubject(ctx, users, p, msg.GetCredential().GetSubject())
+		if err != nil {
+			return err
+		}
+		msg.Credential.Subject = subject
+	case *proto.GetExternalCredentialRequest:
+		subject, err := bindPublicCredentialSubject(ctx, users, p, msg.GetSubject())
+		if err != nil {
+			return err
+		}
+		msg.Subject = subject
+	case *proto.ListExternalCredentialsRequest:
+		subject, err := bindPublicCredentialSubject(ctx, users, p, msg.GetSubject())
+		if err != nil {
+			return err
+		}
+		msg.Subject = subject
+	case *proto.ResolveExternalCredentialRequest:
+		credentialSubject, err := bindPublicCredentialSubject(ctx, users, p, msg.GetCredentialSubjectId())
+		if err != nil {
+			return err
+		}
+		msg.CredentialSubjectId = credentialSubject
+		actorSubject, err := bindPublicCredentialActorSubject(ctx, users, p, credentialSubject, msg.GetActorSubjectId())
+		if err != nil {
+			return err
+		}
+		msg.ActorSubjectId = actorSubject
+	case *proto.ExchangeExternalCredentialRequest:
+		credentialSubject, err := bindPublicCredentialSubject(ctx, users, p, msg.GetCredentialSubjectId())
+		if err != nil {
+			return err
+		}
+		msg.CredentialSubjectId = credentialSubject
+		actorSubject, err := bindPublicCredentialActorSubject(ctx, users, p, credentialSubject, msg.GetActorSubjectId())
+		if err != nil {
+			return err
+		}
+		msg.ActorSubjectId = actorSubject
+	}
+	return nil
+}
+
+func bindPublicCredentialSubject(ctx context.Context, users principal.CredentialUserResolver, p *principal.Principal, requested string) (string, error) {
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, users, p)
+	if err != nil {
+		switch err {
+		case principal.ErrCredentialSubjectRequired:
+			return "", status.Error(codes.Unauthenticated, "authenticated subject is required")
+		default:
+			return "", status.Errorf(codes.Internal, "provider gateway: resolve credential subject: %v", err)
+		}
+	}
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		return subjectID, nil
+	}
+	if requested != subjectID {
+		return "", status.Error(codes.PermissionDenied, "access denied")
+	}
+	return subjectID, nil
+}
+
+func bindPublicCredentialActorSubject(
+	ctx context.Context,
+	users principal.CredentialUserResolver,
+	p *principal.Principal,
+	credentialSubjectID, requested string,
+) (string, error) {
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		return "", nil
+	}
+	actorSubject, err := bindPublicCredentialSubject(ctx, users, p, requested)
+	if err != nil {
+		return "", err
+	}
+	if actorSubject == strings.TrimSpace(credentialSubjectID) {
+		return "", nil
+	}
+	return actorSubject, nil
+}
+
+func (t *ProviderGatewayTransport) canonicalizePublicCredentialPrincipal(ctx context.Context, fullMethod string, p *principal.Principal) error {
+	if !strings.HasPrefix(fullMethod, "/"+proto.ExternalCredentials_ServiceDesc.ServiceName+"/") {
+		return nil
+	}
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, t.users, p)
+	if err != nil {
+		switch err {
+		case principal.ErrCredentialSubjectRequired:
+			return status.Error(codes.Unauthenticated, "authenticated subject is required")
+		default:
+			return status.Errorf(codes.Internal, "provider gateway: resolve credential subject: %v", err)
+		}
+	}
+	p.SubjectID = subjectID
+	return nil
 }
