@@ -197,6 +197,48 @@ paths:
 	}
 }
 
+func TestProviderReleaseMetadataEmbedsContractFromManifest(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/release-test
+version: 1.0.0
+displayName: Contract App
+spec:
+  surfaces:
+    rest:
+      connection: default
+      baseUrl: https://api.example.test
+      operations:
+        - name: listThings
+          method: GET
+          path: /things
+  connections:
+    default:
+      auth:
+        type: none
+`, nil, []byte(`
+dependencies:
+  apps:
+    slack:
+      version: "^1.4.0"
+compatibility:
+  minGestaltdVersion: "0.20.0"
+`))
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Requires == nil {
+		t.Fatalf("requires missing: %#v", metadata.StaticValidation)
+	}
+	if metadata.StaticValidation.Requires.Apps["slack"].Version != "^1.4.0" {
+		t.Fatalf("requires = %#v", metadata.StaticValidation.Requires)
+	}
+	if metadata.StaticValidation.Compatibility == nil || metadata.StaticValidation.Compatibility.MinGestaltdVersion != "0.20.0" {
+		t.Fatalf("compatibility = %#v", metadata.StaticValidation.Compatibility)
+	}
+}
+
 func TestProviderReleaseMetadataMergesExecutableStaticAndAPICatalogs(t *testing.T) {
 	t.Parallel()
 
@@ -486,14 +528,16 @@ func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providerman
 		manifest,
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
+		nil,
 	)
 }
 
-func buildProviderReleaseMetadataForRawManifest(t *testing.T, rawManifest string, files map[string]string) (*providerrelease.Metadata, error) {
+func buildProviderReleaseMetadataForRawManifest(t *testing.T, rawManifest string, files map[string]string, contractRaw ...[]byte) (*providerrelease.Metadata, error) {
 	t.Helper()
 
 	packageDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(packageDir, "manifest.yaml"), []byte(rawManifest), 0o644); err != nil {
+	manifestPath := filepath.Join(packageDir, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte(rawManifest), 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
 	for name, contents := range files {
@@ -519,10 +563,16 @@ func buildProviderReleaseMetadataForRawManifest(t *testing.T, rawManifest string
 		t.Fatalf("ArchiveDigest: %v", err)
 	}
 
+	raw := []byte(rawManifest)
+	if len(contractRaw) > 0 && len(contractRaw[0]) > 0 {
+		raw = contractRaw[0]
+	}
+
 	return buildProviderReleaseMetadata(
 		manifest,
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
+		raw,
 	)
 }
 

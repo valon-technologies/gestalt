@@ -77,7 +77,13 @@ func DecodeManifestFormat(data []byte, format string) (*providermanifestv1.Manif
 
 func decodeManifest(data []byte, format string, sourceMode bool) (*providermanifestv1.Manifest, error) {
 	var manifest providermanifestv1.Manifest
-	if err := decodeStrict(data, format, "manifest", &manifest); err != nil {
+	var err error
+	if sourceMode {
+		err = decodeLenient(data, format, "manifest", &manifest)
+	} else {
+		err = decodeStrict(data, format, "manifest", &manifest)
+	}
+	if err != nil {
 		return nil, err
 	}
 	if err := validateManifest(&manifest, sourceMode); err != nil {
@@ -797,6 +803,26 @@ func decodeStrict(data []byte, format, subject string, target any) error {
 	case ManifestFormatYAML:
 		dec := yaml.NewDecoder(bytes.NewReader(data))
 		dec.KnownFields(true)
+		if err := dec.Decode(target); err != nil {
+			return fmt.Errorf("parse %s YAML: %w", subject, err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported %s format %q", subject, format)
+	}
+}
+
+func decodeLenient(data []byte, format, subject string, target any) error {
+	switch format {
+	case ManifestFormatJSON:
+		dec := json.NewDecoder(bytes.NewReader(data))
+		if err := dec.Decode(target); err != nil {
+			return fmt.Errorf("parse %s JSON: %w", subject, err)
+		}
+		return nil
+	case ManifestFormatYAML:
+		dec := yaml.NewDecoder(bytes.NewReader(data))
+		dec.KnownFields(false)
 		if err := dec.Decode(target); err != nil {
 			return fmt.Errorf("parse %s YAML: %w", subject, err)
 		}

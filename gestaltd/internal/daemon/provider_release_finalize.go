@@ -44,7 +44,7 @@ func runProviderRelease(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives, true); err != nil {
+	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives, nil, true); err != nil {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
 
@@ -214,8 +214,8 @@ func releaseArchiveTargetFromManifest(manifest *providermanifestv1.Manifest) (st
 	return target, nil
 }
 
-func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, verbose bool) error {
-	metadata, err := buildProviderReleaseMetadata(manifest, version, archives)
+func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, rawManifest []byte, verbose bool) error {
+	metadata, err := buildProviderReleaseMetadata(manifest, version, archives, rawManifest)
 	if err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 	return nil
 }
 
-func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) (*providerrelease.Metadata, error) {
+func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, rawManifest []byte) (*providerrelease.Metadata, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
@@ -244,6 +244,14 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	staticCatalog, err := staticValidationCatalogForRelease(manifest, archives)
 	if err != nil {
 		return nil, err
+	}
+	contractRaw, err := rawManifestBytesForRelease(archives, rawManifest)
+	if err != nil {
+		return nil, err
+	}
+	requires, compatibility, err := providerrelease.ParseContractFromManifestRaw(contractRaw)
+	if err != nil {
+		return nil, fmt.Errorf("parse release contract from manifest: %w", err)
 	}
 
 	metadata := &providerrelease.Metadata{
@@ -258,6 +266,12 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 			Manifest: staticManifest,
 			Catalog:  staticCatalog,
 		},
+	}
+	if len(requires.Apps) > 0 {
+		metadata.StaticValidation.Requires = &requires
+	}
+	if compatibility.MinGestaltdVersion != "" {
+		metadata.StaticValidation.Compatibility = &compatibility
 	}
 	if staticCatalog == nil && providerrelease.CatalogSessionModeAllowed(manifest.Kind, staticManifest) {
 		metadata.StaticValidation.CatalogSessionOnly = true
@@ -336,6 +350,20 @@ func staticValidationCatalogFromArchiveManifest(archive releaseArchive) (*catalo
 		return nil, nil
 	}
 	return cat, nil
+}
+
+func rawManifestBytesForRelease(archives []releaseArchive, explicit []byte) ([]byte, error) {
+	if len(explicit) > 0 {
+		return explicit, nil
+	}
+	if len(archives) == 0 {
+		return nil, nil
+	}
+	data, _, err := packageio.ReadPackageManifestIn(archives[0].Path, []string{"manifest.yaml", "manifest.yml", packageio.ManifestFile})
+	if err != nil {
+		return nil, fmt.Errorf("read release archive manifest from %s: %w", filepath.Base(archives[0].Path), err)
+	}
+	return data, nil
 }
 
 func printProviderReleaseUsage(w io.Writer) {
