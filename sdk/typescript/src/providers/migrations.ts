@@ -185,6 +185,7 @@ export async function runMigrations(
 
 function validateRevisions(revisions: Revision[]): Revision[] {
   const seen = new Set<string>();
+  const normalized: Revision[] = [];
   for (const revision of revisions) {
     const id = revision.id?.trim();
     if (!id) {
@@ -209,8 +210,9 @@ function validateRevisions(revisions: Revision[]): Revision[] {
           `cannot read its own output and is idempotent by construction`,
       );
     }
+    normalized.push({ ...revision, id });
   }
-  return revisions;
+  return normalized;
 }
 
 function assertNotAheadOfCode(
@@ -218,7 +220,7 @@ function assertNotAheadOfCode(
   applied: Set<string>,
 ): void {
   const declared = new Set(revisions.map((revision) => revision.id));
-  const unknown = [...applied].filter((id) => !declared.has(id));
+  const unknown = [...applied].filter((id) => !declared.has(id)).sort();
   if (unknown.length > 0) {
     const attemptedHead = revisions[revisions.length - 1]?.id;
     throw new MigrationError(

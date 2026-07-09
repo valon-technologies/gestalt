@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -134,6 +135,7 @@ func assertNotAheadOfCode(revisions []Revision, applied map[string]struct{}) err
 	if len(unknown) == 0 {
 		return nil
 	}
+	sort.Strings(unknown)
 	attemptedHead := revisions[len(revisions)-1].ID
 	return &MigrationError{
 		Message: fmt.Sprintf(

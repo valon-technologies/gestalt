@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol, runtime_checkable
 
 from ._indexeddb import (
@@ -236,6 +236,7 @@ def configure_migrations(provider: Any, name: str, config: dict[str, Any]) -> No
 
 def _validate_revisions(revisions: list[Revision]) -> list[Revision]:
     seen: set[str] = set()
+    normalized: list[Revision] = []
     for revision in revisions:
         revision_id = (revision.id or "").strip()
         if not revision_id:
@@ -264,7 +265,8 @@ def _validate_revisions(revisions: list[Revision]) -> list[Revision]:
                 f"target, so it cannot read its own output and is idempotent by "
                 f"construction"
             )
-    return revisions
+        normalized.append(replace(revision, id=revision_id))
+    return normalized
 
 
 def _assert_not_ahead_of_code(
@@ -272,7 +274,9 @@ def _assert_not_ahead_of_code(
     applied: set[str],
 ) -> None:
     declared = {revision.id for revision in revisions}
-    unknown = [revision_id for revision_id in applied if revision_id not in declared]
+    unknown = sorted(
+        revision_id for revision_id in applied if revision_id not in declared
+    )
     if not unknown:
         return
     attempted_head = revisions[-1].id if revisions else None
