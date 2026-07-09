@@ -487,9 +487,9 @@ func normalizeGitLocationManifestPath(raw string) string {
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source          ProviderSource                         `yaml:"source"`
-	Config          yaml.Node                              `yaml:"config,omitempty"`
-	Default         bool                                   `yaml:"default,omitempty"`
+	Source  ProviderSource `yaml:"source"`
+	Config  yaml.Node      `yaml:"config,omitempty"`
+	Default bool           `yaml:"default,omitempty"`
 	// Local forces this provider to build in-process locally even when
 	// server.remote delegates other host providers to a remote gestaltd.
 	Local           bool                                   `yaml:"local,omitempty"`
