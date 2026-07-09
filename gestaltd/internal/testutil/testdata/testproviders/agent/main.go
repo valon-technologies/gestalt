@@ -53,13 +53,7 @@ func (p *agentProvider) CreateSession(ctx context.Context, req *gestalt.CreateAg
 	defer p.mu.Unlock()
 	scopedKey := ""
 	if idempotencyKey := strings.TrimSpace(req.IdempotencyKey); idempotencyKey != "" {
-		subjectID := ""
-		if req.Subject != nil {
-			subjectID = strings.TrimSpace(req.Subject.ID)
-		}
-		if subjectID == "" {
-			subjectID = strings.TrimSpace(gestalt.SubjectFromContext(ctx).ID)
-		}
+		subjectID := strings.TrimSpace(gestalt.SubjectFromContext(ctx).ID)
 		scopedKey = subjectID + "\x00" + idempotencyKey
 		if sessionID, ok := p.sessionIDsByIdempotencyKey[scopedKey]; ok {
 			if existing, ok := p.sessions[sessionID]; ok {

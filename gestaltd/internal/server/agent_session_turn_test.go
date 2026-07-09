@@ -241,10 +241,6 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
-	createdBy := ""
-	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
-		createdBy = principal.SubjectID
-	}
 	session := &coreagent.Session{
 		ID:                 fmt.Sprintf("managed-session-%d", len(p.sessions)+1),
 		ProviderName:       "managed",
@@ -252,7 +248,7 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           mapFromStruct(req.GetMetadata()),
-		CreatedBySubjectID: createdBy,
+		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -334,10 +330,6 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	metadata := mapFromStruct(req.GetMetadata())
-	createdBy := ""
-	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
-		createdBy = principal.SubjectID
-	}
 	turn := &coreagent.Turn{
 		ID:                 req.GetTurnId(),
 		SessionID:          req.GetSessionId(),
@@ -345,7 +337,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 		Model:              req.GetModel(),
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           messagesFromProto(req.GetMessages()),
-		CreatedBySubjectID: createdBy,
+		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,
@@ -1003,8 +995,8 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	listSessionRequests := provider.capturedListSessionRequests()
 	if got := listSessionRequests[len(listSessionRequests)-1]; got.GetState() != proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE || got.GetLimit() != 100 || !got.GetSummaryOnly() {
 		t.Fatalf("provider list sessions request = %#v, want active summary default limit", got)
-	} else if got.GetSubject().GetId() == "" {
-		t.Fatalf("provider list sessions request subject = %#v, want caller subject", got.Subject)
+	} else if appaccessservice.SubjectIDFromRequestContext(got.GetContext()) == "" {
+		t.Fatalf("provider list sessions request context.subject = %#v, want caller subject", got.GetContext().GetSubject())
 	}
 
 	summaryTurnsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed&summary=true&limit=1&status=succeeded", nil)
@@ -1034,8 +1026,8 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	listTurnRequests := provider.capturedListTurnRequests()
 	if got := listTurnRequests[len(listTurnRequests)-1]; got.GetStatus() != proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED || got.GetLimit() != 1 || !got.GetSummaryOnly() {
 		t.Fatalf("provider list turns request = %#v, want succeeded summary limit 1", got)
-	} else if got.GetSubject().GetId() == "" {
-		t.Fatalf("provider list turns request subject = %#v, want caller subject", got.Subject)
+	} else if appaccessservice.SubjectIDFromRequestContext(got.GetContext()) == "" {
+		t.Fatalf("provider list turns request context.subject = %#v, want caller subject", got.GetContext().GetSubject())
 	}
 
 	cancelReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/turns/"+turnID+"/cancel?provider=managed", bytes.NewBufferString(`{"reason":"stop"}`))
@@ -1050,13 +1042,13 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("cancel turn status = %d body=%s", cancelResp.StatusCode, body)
 	}
 	for _, got := range provider.capturedGetSessionRequests() {
-		if got.GetSubject().GetId() == "" {
-			t.Fatalf("provider get session request subject = %#v, want caller subject", got.Subject)
+		if appaccessservice.SubjectIDFromRequestContext(got.GetContext()) == "" {
+			t.Fatalf("provider get session request context.subject = %#v, want caller subject", got.GetContext().GetSubject())
 		}
 	}
 	for _, got := range provider.capturedGetTurnRequests() {
-		if got.GetSubject().GetId() == "" {
-			t.Fatalf("provider get turn request subject = %#v, want caller subject", got.Subject)
+		if appaccessservice.SubjectIDFromRequestContext(got.GetContext()) == "" {
+			t.Fatalf("provider get turn request context.subject = %#v, want caller subject", got.GetContext().GetSubject())
 		}
 	}
 }

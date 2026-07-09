@@ -19,7 +19,7 @@ from ._grpc_transport import (
     ENV_HOST_SERVICE_TOKEN,
     host_service_channel,
 )
-from .app import AgentToolRef, OperationAnnotations, RequestContext, SubjectContext
+from .app import AgentToolRef, OperationAnnotations, RequestContext
 from .rpc_support import JsonValue
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -354,7 +354,6 @@ class AgentWorkspaceGitCheckout:
 class CancelAgentProviderTurnRequest:
     turn_id: str = ""
     reason: str = ""
-    subject: SubjectContext | None = None
     context: RequestContext | None = None
     provider_name: str = ""
 
@@ -362,15 +361,13 @@ class CancelAgentProviderTurnRequest:
 @dataclass(frozen=True, slots=True)
 class CreateAgentProviderSessionRequest:
     #: The provider mints the session id returned on AgentSession. Creation is
-    #: idempotent on idempotency_key scoped per subject (context.subject.id,
-    #: or top-level subject when set for delegated provider calls):
+    #: idempotent on idempotency_key scoped per caller (context.subject.id):
     #: a replayed key returns the existing session, an empty key always creates.
     #: Idempotency is scoped to the provider's session store.
     idempotency_key: str = ""
     model: str = ""
     client_ref: str = ""
     metadata: dict[str, JsonValue] | None = None
-    subject: SubjectContext | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: PreparedAgentWorkspace | None = None
     provider_name: str = ""
@@ -388,7 +385,6 @@ class CreateAgentProviderTurnRequest:
     messages: list[AgentMessage] = field(default_factory=list)
     metadata: dict[str, JsonValue] | None = None
     execution_ref: str = ""
-    subject: SubjectContext | None = None
     model_options: dict[str, JsonValue] | None = None
     #: Optional provider-owned turn execution budget, in seconds.
     #: If unset or zero, the provider chooses its own execution timeout. This does
@@ -407,14 +403,12 @@ class GetAgentProviderCapabilitiesRequest:
 @dataclass(frozen=True, slots=True)
 class GetAgentProviderInteractionRequest:
     interaction_id: str = ""
-    subject: SubjectContext | None = None
     context: RequestContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class GetAgentProviderSessionRequest:
     session_id: str = ""
-    subject: SubjectContext | None = None
     context: RequestContext | None = None
     provider_name: str = ""
 
@@ -422,7 +416,6 @@ class GetAgentProviderSessionRequest:
 @dataclass(frozen=True, slots=True)
 class GetAgentProviderTurnRequest:
     turn_id: str = ""
-    subject: SubjectContext | None = None
     context: RequestContext | None = None
     provider_name: str = ""
 
@@ -430,7 +423,6 @@ class GetAgentProviderTurnRequest:
 @dataclass(frozen=True, slots=True)
 class ListAgentProviderInteractionsRequest:
     turn_id: str = ""
-    subject: SubjectContext | None = None
     context: RequestContext | None = None
     provider_name: str = ""
 
@@ -442,7 +434,6 @@ class ListAgentProviderInteractionsResponse:
 
 @dataclass(frozen=True, slots=True)
 class ListAgentProviderSessionsRequest:
-    subject: SubjectContext | None = None
     session_ids: list[str] = field(default_factory=list)
     state: AgentSessionState = 0
     #: When non-zero and bounded_list_hydration is supported, cap results after
@@ -465,7 +456,6 @@ class ListAgentProviderTurnEventsRequest:
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
-    subject: SubjectContext | None = None
     context: RequestContext | None = None
     provider_name: str = ""
 
@@ -478,7 +468,6 @@ class ListAgentProviderTurnEventsResponse:
 @dataclass(frozen=True, slots=True)
 class ListAgentProviderTurnsRequest:
     session_id: str = ""
-    subject: SubjectContext | None = None
     turn_ids: list[str] = field(default_factory=list)
     status: AgentExecutionStatus = 0
     #: When non-zero and bounded_list_hydration is supported, cap results after
@@ -521,7 +510,6 @@ class PreparedAgentWorkspace:
 class ResolveAgentProviderInteractionRequest:
     interaction_id: str = ""
     resolution: dict[str, JsonValue] | None = None
-    subject: SubjectContext | None = None
     turn_id: str = ""
     context: RequestContext | None = None
     provider_name: str = ""
@@ -533,7 +521,6 @@ class UpdateAgentProviderSessionRequest:
     client_ref: str = ""
     state: AgentSessionState = 0
     metadata: dict[str, JsonValue] | None = None
-    subject: SubjectContext | None = None
     context: RequestContext | None = None
     provider_name: str = ""
 

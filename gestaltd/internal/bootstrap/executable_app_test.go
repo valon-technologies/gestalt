@@ -1651,10 +1651,6 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 	defer p.mu.Unlock()
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createSessionRequests = append(p.createSessionRequests, req)
-	createdBy := ""
-	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
-		createdBy = principal.SubjectID
-	}
 	session := &coreagent.Session{
 		ID:                 fmt.Sprintf("managed-session-%d", len(p.sessions)+1),
 		ProviderName:       "managed",
@@ -1662,7 +1658,7 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           stubAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBySubjectID: createdBy,
+		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -1717,10 +1713,6 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createTurnRequests = append(p.createTurnRequests, req)
-	createdBy := ""
-	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
-		createdBy = principal.SubjectID
-	}
 
 	turn := &coreagent.Turn{
 		ID:                 req.GetTurnId(),
@@ -1730,7 +1722,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           stubAgentMessagesFromProto(req.GetMessages()),
 		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBySubjectID: createdBy,
+		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,

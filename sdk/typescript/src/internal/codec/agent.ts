@@ -55,11 +55,9 @@ import {
   fromWireAgentToolRef,
   fromWireOperationAnnotations,
   fromWireRequestContext,
-  fromWireSubjectContext,
   toWireAgentToolRef,
   toWireOperationAnnotations,
   toWireRequestContext,
-  toWireSubjectContext,
 } from "./app.ts";
 import {
   fromWireTimestamp,
@@ -765,9 +763,6 @@ export function toWireCancelAgentProviderTurnRequest(
   return create(wire.CancelAgentProviderTurnRequestSchema, {
     turnId: value.turnId ?? "",
     reason: value.reason ?? "",
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -781,9 +776,6 @@ export function fromWireCancelAgentProviderTurnRequest(
   return {
     turnId: value.turnId,
     reason: value.reason,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -799,9 +791,6 @@ export function toWireCreateAgentProviderSessionRequest(
     model: value.model ?? "",
     clientRef: value.clientRef ?? "",
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.sessionStart !== undefined
       ? { sessionStart: toWireAgentSessionStartConfig(value.sessionStart) }
       : {}),
@@ -833,9 +822,6 @@ export function fromWireCreateAgentProviderSessionRequest(
     model: value.model,
     clientRef: value.clientRef,
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.sessionStart !== undefined
       ? { sessionStart: fromWireAgentSessionStartConfig(value.sessionStart) }
       : {}),
@@ -870,9 +856,6 @@ export function toWireCreateAgentProviderTurnRequest(
     messages: (value.messages ?? []).map(toWireAgentMessage),
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
     executionRef: value.executionRef ?? "",
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.modelOptions !== undefined
       ? { modelOptions: value.modelOptions }
       : {}),
@@ -898,9 +881,6 @@ export function fromWireCreateAgentProviderTurnRequest(
     messages: value.messages.map(fromWireAgentMessage),
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
     executionRef: value.executionRef,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.modelOptions !== undefined
       ? { modelOptions: value.modelOptions }
       : {}),
@@ -932,9 +912,6 @@ export function toWireGetAgentProviderInteractionRequest(
 ): wire.GetAgentProviderInteractionRequest {
   return create(wire.GetAgentProviderInteractionRequestSchema, {
     interactionId: value.interactionId ?? "",
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -946,9 +923,6 @@ export function fromWireGetAgentProviderInteractionRequest(
 ): GetAgentProviderInteractionRequest {
   return {
     interactionId: value.interactionId,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -960,9 +934,6 @@ export function toWireGetAgentProviderSessionRequest(
 ): wire.GetAgentProviderSessionRequest {
   return create(wire.GetAgentProviderSessionRequestSchema, {
     sessionId: value.sessionId ?? "",
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -975,9 +946,6 @@ export function fromWireGetAgentProviderSessionRequest(
 ): GetAgentProviderSessionRequest {
   return {
     sessionId: value.sessionId,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -990,9 +958,6 @@ export function toWireGetAgentProviderTurnRequest(
 ): wire.GetAgentProviderTurnRequest {
   return create(wire.GetAgentProviderTurnRequestSchema, {
     turnId: value.turnId ?? "",
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -1005,9 +970,6 @@ export function fromWireGetAgentProviderTurnRequest(
 ): GetAgentProviderTurnRequest {
   return {
     turnId: value.turnId,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -1020,9 +982,6 @@ export function toWireListAgentProviderInteractionsRequest(
 ): wire.ListAgentProviderInteractionsRequest {
   return create(wire.ListAgentProviderInteractionsRequestSchema, {
     turnId: value.turnId ?? "",
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -1035,9 +994,6 @@ export function fromWireListAgentProviderInteractionsRequest(
 ): ListAgentProviderInteractionsRequest {
   return {
     turnId: value.turnId,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -1065,9 +1021,6 @@ export function toWireListAgentProviderSessionsRequest(
   value: Init<ListAgentProviderSessionsRequest>,
 ): wire.ListAgentProviderSessionsRequest {
   return create(wire.ListAgentProviderSessionsRequestSchema, {
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     sessionIds: value.sessionIds ?? [],
     state: (value.state ?? 0) as wire.AgentSessionState,
     limit: value.limit ?? 0,
@@ -1083,9 +1036,6 @@ export function fromWireListAgentProviderSessionsRequest(
   value: wire.ListAgentProviderSessionsRequest,
 ): ListAgentProviderSessionsRequest {
   return {
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     sessionIds: value.sessionIds,
     state: value.state,
     limit: value.limit,
@@ -1120,9 +1070,6 @@ export function toWireListAgentProviderTurnEventsRequest(
     turnId: value.turnId ?? "",
     afterSeq: value.afterSeq ?? 0n,
     limit: value.limit ?? 0,
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -1137,9 +1084,6 @@ export function fromWireListAgentProviderTurnEventsRequest(
     turnId: value.turnId,
     afterSeq: value.afterSeq,
     limit: value.limit,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -1168,9 +1112,6 @@ export function toWireListAgentProviderTurnsRequest(
 ): wire.ListAgentProviderTurnsRequest {
   return create(wire.ListAgentProviderTurnsRequestSchema, {
     sessionId: value.sessionId ?? "",
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     turnIds: value.turnIds ?? [],
     status: (value.status ?? 0) as wire.AgentExecutionStatus,
     limit: value.limit ?? 0,
@@ -1187,9 +1128,6 @@ export function fromWireListAgentProviderTurnsRequest(
 ): ListAgentProviderTurnsRequest {
   return {
     sessionId: value.sessionId,
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     turnIds: value.turnIds,
     status: value.status,
     limit: value.limit,
@@ -1281,9 +1219,6 @@ export function toWireResolveAgentProviderInteractionRequest(
   return create(wire.ResolveAgentProviderInteractionRequestSchema, {
     interactionId: value.interactionId ?? "",
     ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     turnId: value.turnId ?? "",
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
@@ -1298,9 +1233,6 @@ export function fromWireResolveAgentProviderInteractionRequest(
   return {
     interactionId: value.interactionId,
     ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     turnId: value.turnId,
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
@@ -1317,9 +1249,6 @@ export function toWireUpdateAgentProviderSessionRequest(
     clientRef: value.clientRef ?? "",
     state: (value.state ?? 0) as wire.AgentSessionState,
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    ...(value.subject !== undefined
-      ? { subject: toWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -1335,9 +1264,6 @@ export function fromWireUpdateAgentProviderSessionRequest(
     clientRef: value.clientRef,
     state: value.state,
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    ...(value.subject !== undefined
-      ? { subject: fromWireSubjectContext(value.subject) }
-      : {}),
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),

@@ -43,15 +43,11 @@ type providerBuildOrderingAgentProvider struct {
 func (providerBuildOrderingAgentProvider) SupportsWorkspaceRequests() bool { return true }
 
 func (providerBuildOrderingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
-	createdBy := ""
-	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
-		createdBy = principal.SubjectID
-	}
 	return &coreagent.Session{
 		ID:                 uuid.NewString(),
 		ProviderName:       "managed",
 		Model:              req.GetModel(),
-		CreatedBySubjectID: createdBy,
+		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
 	}, nil
 }
 

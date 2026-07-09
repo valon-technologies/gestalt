@@ -186,20 +186,14 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	}
 	key := ""
 	if idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey()); idempotencyKey != "" {
-		subjectID := strings.TrimSpace(req.GetSubject().GetId())
-		if subjectID == "" {
-			subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
-		}
+		subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 		key = subjectID + "\x1f" + idempotencyKey
 		if existing := p.sessionsByKey[key]; existing != nil {
 			cloned := *existing
 			return &cloned, nil
 		}
 	}
-	createdBy := ""
-	if principal := appaccessservice.PrincipalFromSubjectContext(req.GetContext().GetSubject()); principal != nil {
-		createdBy = principal.SubjectID
-	}
+	createdBy := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 	session := &coreagent.Session{
 		ID:                 fmt.Sprintf("minted-session-%d", len(p.sessions)+1),
 		ProviderName:       "simple",
@@ -1807,10 +1801,7 @@ func TestHostedAgentProviderPoolConcurrentKeyedCreatesConvergeOnOneBackend(t *te
 					state.mu.Lock()
 					defer state.mu.Unlock()
 					state.calls++
-					subjectID := strings.TrimSpace(req.GetSubject().GetId())
-					if subjectID == "" {
-						subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
-					}
+					subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 					key := subjectID + "\x1f" + strings.TrimSpace(req.GetIdempotencyKey())
 					if existing, ok := state.sessions[key]; ok {
 						return existing, nil

@@ -375,7 +375,6 @@ type AgentWorkspaceGitCheckout struct {
 type CancelAgentProviderTurnRequest struct {
 	TurnId       string
 	Reason       string
-	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
 }
@@ -383,15 +382,13 @@ type CancelAgentProviderTurnRequest struct {
 // CreateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.CreateAgentProviderSessionRequest.
 type CreateAgentProviderSessionRequest struct {
 	// The provider mints the session id returned on AgentSession. Creation is
-	// idempotent on idempotency_key scoped per subject (context.subject.id,
-	// or top-level subject when set for delegated provider calls):
+	// idempotent on idempotency_key scoped per caller (context.subject.id):
 	// a replayed key returns the existing session, an empty key always creates.
 	// Idempotency is scoped to the provider's session store.
 	IdempotencyKey    string
 	Model             string
 	ClientRef         string
 	Metadata          map[string]any
-	Subject           *SubjectContext
 	SessionStart      *AgentSessionStartConfig
 	PreparedWorkspace *PreparedAgentWorkspace
 	ProviderName      string
@@ -409,7 +406,6 @@ type CreateAgentProviderTurnRequest struct {
 	Messages       []*AgentMessage
 	Metadata       map[string]any
 	ExecutionRef   string
-	Subject        *SubjectContext
 	ModelOptions   map[string]any
 	// Optional provider-owned turn execution budget, in seconds.
 	// If unset or zero, the provider chooses its own execution timeout. This does
@@ -426,14 +422,12 @@ type GetAgentProviderCapabilitiesRequest struct{}
 // GetAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.GetAgentProviderInteractionRequest.
 type GetAgentProviderInteractionRequest struct {
 	InteractionId string
-	Subject       *SubjectContext
 	Context       *RequestContext
 }
 
 // GetAgentProviderSessionRequest is the native message type for gestalt.provider.v1.GetAgentProviderSessionRequest.
 type GetAgentProviderSessionRequest struct {
 	SessionId    string
-	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
 }
@@ -441,7 +435,6 @@ type GetAgentProviderSessionRequest struct {
 // GetAgentProviderTurnRequest is the native message type for gestalt.provider.v1.GetAgentProviderTurnRequest.
 type GetAgentProviderTurnRequest struct {
 	TurnId       string
-	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
 }
@@ -449,7 +442,6 @@ type GetAgentProviderTurnRequest struct {
 // ListAgentProviderInteractionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsRequest.
 type ListAgentProviderInteractionsRequest struct {
 	TurnId       string
-	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
 }
@@ -461,7 +453,6 @@ type ListAgentProviderInteractionsResponse struct {
 
 // ListAgentProviderSessionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderSessionsRequest.
 type ListAgentProviderSessionsRequest struct {
-	Subject    *SubjectContext
 	SessionIds []string
 	State      AgentSessionState
 	// When non-zero and bounded_list_hydration is supported, cap results after
@@ -484,7 +475,6 @@ type ListAgentProviderTurnEventsRequest struct {
 	TurnId       string
 	AfterSeq     int64
 	Limit        int32
-	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
 }
@@ -497,7 +487,6 @@ type ListAgentProviderTurnEventsResponse struct {
 // ListAgentProviderTurnsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnsRequest.
 type ListAgentProviderTurnsRequest struct {
 	SessionId string
-	Subject   *SubjectContext
 	TurnIds   []string
 	Status    AgentExecutionStatus
 	// When non-zero and bounded_list_hydration is supported, cap results after
@@ -540,7 +529,6 @@ type PreparedAgentWorkspace struct {
 type ResolveAgentProviderInteractionRequest struct {
 	InteractionId string
 	Resolution    map[string]any
-	Subject       *SubjectContext
 	TurnId        string
 	Context       *RequestContext
 	ProviderName  string
@@ -552,7 +540,6 @@ type UpdateAgentProviderSessionRequest struct {
 	ClientRef    string
 	State        AgentSessionState
 	Metadata     map[string]any
-	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
 }

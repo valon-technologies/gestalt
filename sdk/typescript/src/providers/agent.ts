@@ -50,17 +50,13 @@ import {
   type UpdateAgentProviderSessionRequest as ProtoUpdateAgentProviderSessionRequest,
 } from "../internal/gen/v1/agent_pb.ts";
 import {
-  type SubjectContext as ProtoSubjectContext,
-  type SubjectPermissionContext as ProtoSubjectPermissionContext,
   type AgentToolRef as ProtoAgentToolRef,
   type RequestContext as ProtoRequestContext,
 } from "../internal/gen/v1/app_pb.ts";
 import {
   errorMessage,
   type MaybePromise,
-  type Subject,
   type SubjectInput,
-  type SubjectPermission,
 } from "../api.ts";
 import {
   agentOutputFromProto,
@@ -259,7 +255,6 @@ export interface CreateAgentProviderSessionRequest {
   model: string;
   clientRef: string;
   metadata?: JsonObjectInput | undefined;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
   preparedWorkspace?: AgentPreparedWorkspace | undefined;
@@ -269,13 +264,11 @@ export interface CreateAgentProviderSessionRequest {
 export interface GetAgentProviderSessionRequest {
   providerName?: string | undefined;
   sessionId: string;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListAgentProviderSessionsRequest {
   providerName?: string | undefined;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
   sessionIds: readonly string[];
   state: AgentSessionState;
@@ -293,7 +286,6 @@ export interface UpdateAgentProviderSessionRequest {
   clientRef: string;
   state: AgentSessionState;
   metadata?: JsonObjectInput | undefined;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -347,7 +339,6 @@ export interface CreateAgentProviderTurnRequest {
   output: AgentOutput;
   metadata?: JsonObjectInput | undefined;
   executionRef: string;
-  subject?: Subject | undefined;
   modelOptions?: JsonObjectInput | undefined;
   context?: ProtoRequestContext | undefined;
   timeoutSeconds: number;
@@ -367,14 +358,12 @@ export type AgentOutput =
 export interface GetAgentProviderTurnRequest {
   providerName?: string | undefined;
   turnId: string;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListAgentProviderTurnsRequest {
   providerName?: string | undefined;
   sessionId: string;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
   turnIds: readonly string[];
   status: AgentExecutionStatus;
@@ -390,7 +379,6 @@ export interface CancelAgentProviderTurnRequest {
   providerName?: string | undefined;
   turnId: string;
   reason: string;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -411,7 +399,6 @@ export interface ListAgentProviderTurnEventsRequest {
   turnId: string;
   afterSeq: bigint;
   limit: number;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -435,14 +422,12 @@ export interface AgentInteraction {
 
 export interface GetAgentProviderInteractionRequest {
   interactionId: string;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListAgentProviderInteractionsRequest {
   providerName?: string | undefined;
   turnId: string;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -455,7 +440,6 @@ export interface ResolveAgentProviderInteractionRequest {
   turnId?: string | undefined;
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
-  subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -485,8 +469,7 @@ export interface ListedAgentTool {
 export interface AgentProviderOptions extends ProviderBaseOptions {
   /**
    * Creates a session, minting its id. Must be idempotent on
-   * `idempotencyKey` scoped per subject (`context.subject.id`, or top-level
-   * `subject` for delegated calls); an empty key always creates.
+   * `idempotencyKey` scoped per `context.subject.id`; an empty key always creates.
    */
   createSession?: (
     request: CreateAgentProviderSessionRequest,
@@ -709,7 +692,6 @@ function createAgentProviderSessionRequestFromProto(
     model: request.model,
     clientRef: request.clientRef,
     metadata: optionalObjectFromStruct(request.metadata),
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
     sessionStart: request.sessionStart === undefined ? undefined : {
       hooks: request.sessionStart.hooks.map((hook) => ({
@@ -739,7 +721,6 @@ function getAgentProviderSessionRequestFromProto(
   return {
     providerName: request.providerName,
     sessionId: request.sessionId,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -749,7 +730,6 @@ function listAgentProviderSessionsRequestFromProto(
 ): ListAgentProviderSessionsRequest {
   return {
     providerName: request.providerName,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
     sessionIds: [...request.sessionIds],
     state: request.state as AgentSessionState,
@@ -766,7 +746,6 @@ function updateAgentProviderSessionRequestFromProto(
     clientRef: request.clientRef,
     state: request.state as AgentSessionState,
     metadata: optionalObjectFromStruct(request.metadata),
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -799,7 +778,6 @@ function createAgentProviderTurnRequestFromProto(
     output,
     metadata: optionalObjectFromStruct(request.metadata),
     executionRef: request.executionRef,
-    subject: agentRequestSubjectFromProto(request),
     modelOptions: optionalObjectFromStruct(request.modelOptions),
     context: request.context,
     timeoutSeconds: request.timeoutSeconds,
@@ -812,7 +790,6 @@ function getAgentProviderTurnRequestFromProto(
   return {
     providerName: request.providerName,
     turnId: request.turnId,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -823,7 +800,6 @@ function listAgentProviderTurnsRequestFromProto(
   return {
     providerName: request.providerName,
     sessionId: request.sessionId,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
     turnIds: [...request.turnIds],
     status: request.status as AgentExecutionStatus,
@@ -839,7 +815,6 @@ function cancelAgentProviderTurnRequestFromProto(
     providerName: request.providerName,
     turnId: request.turnId,
     reason: request.reason,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -852,7 +827,6 @@ function listAgentProviderTurnEventsRequestFromProto(
     turnId: request.turnId,
     afterSeq: request.afterSeq,
     limit: request.limit,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -862,7 +836,6 @@ function getAgentProviderInteractionRequestFromProto(
 ): GetAgentProviderInteractionRequest {
   return {
     interactionId: request.interactionId,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -873,7 +846,6 @@ function listAgentProviderInteractionsRequestFromProto(
   return {
     providerName: request.providerName,
     turnId: request.turnId,
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -886,7 +858,6 @@ function resolveAgentProviderInteractionRequestFromProto(
     turnId: request.turnId,
     interactionId: request.interactionId,
     resolution: optionalObjectFromStruct(request.resolution),
-    subject: agentRequestSubjectFromProto(request),
     context: request.context,
   };
 }
@@ -977,39 +948,6 @@ function capabilitiesToProto(
   };
 }
 
-
-function agentRequestSubjectFromProto(
-  request: {
-    context?: { subject?: ProtoSubjectContext | undefined } | undefined;
-    subject?: ProtoSubjectContext | undefined;
-  },
-): Subject | undefined {
-  return agentSubjectFromProto(request.context?.subject ?? request.subject);
-}
-
-function agentSubjectFromProto(
-  subject?: ProtoSubjectContext | undefined,
-): Subject | undefined {
-  if (subject === undefined) {
-    return undefined;
-  }
-  return {
-    id: subject.id,
-    email: subject.email,
-    displayName: subject.displayName,
-    scopes: [...subject.scopes],
-    permissions: agentSubjectPermissionsFromProto(subject.permissions),
-  };
-}
-
-function agentSubjectPermissionsFromProto(
-  permissions: readonly ProtoSubjectPermissionContext[],
-): SubjectPermission[] {
-  return permissions.map((permission) => ({
-    app: permission.app,
-    operations: permission.allOperations ? [] : [...permission.operations],
-  }));
-}
 
 function optionalTimestamp(value?: Date | undefined) {
   return value === undefined ? undefined : timestampFromDate(value);

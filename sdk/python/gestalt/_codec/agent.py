@@ -629,9 +629,6 @@ def to_wire_cancel_agent_provider_turn_request(
     return _agent_pb2.CancelAgentProviderTurnRequest(
         turn_id=value.turn_id,
         reason=value.reason,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -645,9 +642,6 @@ def from_wire_cancel_agent_provider_turn_request(
     return native.CancelAgentProviderTurnRequest(
         turn_id=value.turn_id,
         reason=value.reason,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
@@ -663,9 +657,6 @@ def to_wire_create_agent_provider_session_request(
         model=value.model,
         client_ref=value.client_ref,
         metadata=None if value.metadata is None else to_wire_struct(value.metadata),
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         session_start=None
         if value.session_start is None
         else to_wire_agent_session_start_config(value.session_start),
@@ -692,9 +683,6 @@ def from_wire_create_agent_provider_session_request(
         client_ref=value.client_ref,
         metadata=from_wire_struct(value.metadata)
         if value.HasField("metadata")
-        else None,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
         else None,
         session_start=from_wire_agent_session_start_config(value.session_start)
         if value.HasField("session_start")
@@ -726,9 +714,6 @@ def to_wire_create_agent_provider_turn_request(
         messages=[to_wire_agent_message(item) for item in value.messages],
         metadata=None if value.metadata is None else to_wire_struct(value.metadata),
         execution_ref=value.execution_ref,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         model_options=None
         if value.model_options is None
         else to_wire_struct(value.model_options),
@@ -754,9 +739,6 @@ def from_wire_create_agent_provider_turn_request(
         if value.HasField("metadata")
         else None,
         execution_ref=value.execution_ref,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         model_options=from_wire_struct(value.model_options)
         if value.HasField("model_options")
         else None,
@@ -788,9 +770,6 @@ def to_wire_get_agent_provider_interaction_request(
 ) -> Any:
     return _agent_pb2.GetAgentProviderInteractionRequest(
         interaction_id=value.interaction_id,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -802,9 +781,6 @@ def from_wire_get_agent_provider_interaction_request(
 ) -> native.GetAgentProviderInteractionRequest:
     return native.GetAgentProviderInteractionRequest(
         interaction_id=value.interaction_id,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
@@ -816,9 +792,6 @@ def to_wire_get_agent_provider_session_request(
 ) -> Any:
     return _agent_pb2.GetAgentProviderSessionRequest(
         session_id=value.session_id,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -831,9 +804,6 @@ def from_wire_get_agent_provider_session_request(
 ) -> native.GetAgentProviderSessionRequest:
     return native.GetAgentProviderSessionRequest(
         session_id=value.session_id,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
@@ -846,9 +816,6 @@ def to_wire_get_agent_provider_turn_request(
 ) -> Any:
     return _agent_pb2.GetAgentProviderTurnRequest(
         turn_id=value.turn_id,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -861,9 +828,6 @@ def from_wire_get_agent_provider_turn_request(
 ) -> native.GetAgentProviderTurnRequest:
     return native.GetAgentProviderTurnRequest(
         turn_id=value.turn_id,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
@@ -876,9 +840,6 @@ def to_wire_list_agent_provider_interactions_request(
 ) -> Any:
     return _agent_pb2.ListAgentProviderInteractionsRequest(
         turn_id=value.turn_id,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -891,9 +852,6 @@ def from_wire_list_agent_provider_interactions_request(
 ) -> native.ListAgentProviderInteractionsRequest:
     return native.ListAgentProviderInteractionsRequest(
         turn_id=value.turn_id,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
@@ -921,9 +879,6 @@ def to_wire_list_agent_provider_sessions_request(
     value: native.ListAgentProviderSessionsRequest,
 ) -> Any:
     return _agent_pb2.ListAgentProviderSessionsRequest(
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         session_ids=value.session_ids,
         state=to_wire_enum(value.state),
         limit=value.limit,
@@ -939,9 +894,6 @@ def from_wire_list_agent_provider_sessions_request(
     value: Any,
 ) -> native.ListAgentProviderSessionsRequest:
     return native.ListAgentProviderSessionsRequest(
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         session_ids=list(value.session_ids),
         state=value.state,
         limit=value.limit,
@@ -976,9 +928,6 @@ def to_wire_list_agent_provider_turn_events_request(
         turn_id=value.turn_id,
         after_seq=value.after_seq,
         limit=value.limit,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -993,9 +942,6 @@ def from_wire_list_agent_provider_turn_events_request(
         turn_id=value.turn_id,
         after_seq=value.after_seq,
         limit=value.limit,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
@@ -1024,9 +970,6 @@ def to_wire_list_agent_provider_turns_request(
 ) -> Any:
     return _agent_pb2.ListAgentProviderTurnsRequest(
         session_id=value.session_id,
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         turn_ids=value.turn_ids,
         status=to_wire_enum(value.status),
         limit=value.limit,
@@ -1043,9 +986,6 @@ def from_wire_list_agent_provider_turns_request(
 ) -> native.ListAgentProviderTurnsRequest:
     return native.ListAgentProviderTurnsRequest(
         session_id=value.session_id,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
-        else None,
         turn_ids=list(value.turn_ids),
         status=value.status,
         limit=value.limit,
@@ -1129,9 +1069,6 @@ def to_wire_resolve_agent_provider_interaction_request(
         resolution=None
         if value.resolution is None
         else to_wire_struct(value.resolution),
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         turn_id=value.turn_id,
         context=None
         if value.context is None
@@ -1147,9 +1084,6 @@ def from_wire_resolve_agent_provider_interaction_request(
         interaction_id=value.interaction_id,
         resolution=from_wire_struct(value.resolution)
         if value.HasField("resolution")
-        else None,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
         else None,
         turn_id=value.turn_id,
         context=app.from_wire_request_context(value.context)
@@ -1167,9 +1101,6 @@ def to_wire_update_agent_provider_session_request(
         client_ref=value.client_ref,
         state=to_wire_enum(value.state),
         metadata=None if value.metadata is None else to_wire_struct(value.metadata),
-        subject=None
-        if value.subject is None
-        else app.to_wire_subject_context(value.subject),
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -1186,9 +1117,6 @@ def from_wire_update_agent_provider_session_request(
         state=value.state,
         metadata=from_wire_struct(value.metadata)
         if value.HasField("metadata")
-        else None,
-        subject=app.from_wire_subject_context(value.subject)
-        if value.HasField("subject")
         else None,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")

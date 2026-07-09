@@ -218,7 +218,6 @@ class CreateAgentProviderSessionRequest:
     model: str = ""
     client_ref: str = ""
     metadata: JsonObject | None = None
-    subject: Subject | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: AgentPreparedWorkspace | None = None
     context: Any | None = None
@@ -242,13 +241,11 @@ AgentToolConfig: TypeAlias = AgentNoTools | AgentCatalogToolConfig
 @dataclass(slots=True)
 class GetAgentProviderSessionRequest:
     session_id: str = ""
-    subject: Subject | None = None
     context: Any | None = None
 
 
 @dataclass(slots=True)
 class ListAgentProviderSessionsRequest:
-    subject: Subject | None = None
     session_ids: Iterable[str] = field(default_factory=list)
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     limit: int = 0
@@ -268,7 +265,6 @@ class UpdateAgentProviderSessionRequest:
     client_ref: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     metadata: JsonObject | None = None
-    subject: Subject | None = None
     context: Any | None = None
 
 
@@ -343,7 +339,6 @@ class CreateAgentProviderTurnRequest:
     output: AgentOutput | Mapping[str, Any] | None = None
     metadata: JsonObject | None = None
     execution_ref: str = ""
-    subject: Subject | None = None
     model_options: JsonObject | None = None
     timeout_seconds: int = 0
     context: Any | None = None
@@ -352,14 +347,12 @@ class CreateAgentProviderTurnRequest:
 @dataclass(slots=True)
 class GetAgentProviderTurnRequest:
     turn_id: str = ""
-    subject: Subject | None = None
     context: Any | None = None
 
 
 @dataclass(slots=True)
 class ListAgentProviderTurnsRequest:
     session_id: str = ""
-    subject: Subject | None = None
     turn_ids: Iterable[str] = field(default_factory=list)
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
     limit: int = 0
@@ -376,7 +369,6 @@ class ListAgentProviderTurnsResponse:
 class CancelAgentProviderTurnRequest:
     turn_id: str = ""
     reason: str = ""
-    subject: Subject | None = None
     context: Any | None = None
 
 
@@ -398,7 +390,6 @@ class ListAgentProviderTurnEventsRequest:
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
-    subject: Subject | None = None
     context: Any | None = None
 
 
@@ -425,14 +416,12 @@ class AgentInteraction:
 @dataclass(slots=True)
 class GetAgentProviderInteractionRequest:
     interaction_id: str = ""
-    subject: Subject | None = None
     context: Any | None = None
 
 
 @dataclass(slots=True)
 class ListAgentProviderInteractionsRequest:
     turn_id: str = ""
-    subject: Subject | None = None
     context: Any | None = None
 
 
@@ -447,7 +436,6 @@ class ListAgentProviderInteractionsResponse:
 class ResolveAgentProviderInteractionRequest:
     interaction_id: str = ""
     resolution: JsonObject | None = None
-    subject: Subject | None = None
     turn_id: str = ""
     context: Any | None = None
 
@@ -489,9 +477,6 @@ def create_agent_provider_session_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         session_start=agent_session_start_config_from_proto(request.session_start)
         if has_field(request, "session_start")
         else None,
@@ -510,9 +495,6 @@ def get_agent_provider_session_request_from_proto(
 ) -> GetAgentProviderSessionRequest:
     return GetAgentProviderSessionRequest(
         session_id=request.session_id,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         context=request.context if has_field(request, "context") else None,
     )
 
@@ -521,9 +503,6 @@ def list_agent_provider_sessions_request_from_proto(
     request: Any,
 ) -> ListAgentProviderSessionsRequest:
     return ListAgentProviderSessionsRequest(
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         session_ids=list(request.session_ids),
         state=request.state,
         limit=request.limit,
@@ -542,9 +521,6 @@ def update_agent_provider_session_request_from_proto(
         state=request.state,
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
-        else None,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
         else None,
         context=request.context if has_field(request, "context") else None,
     )
@@ -568,9 +544,6 @@ def create_agent_provider_turn_request_from_proto(
         if has_field(request, "metadata")
         else None,
         execution_ref=request.execution_ref,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         model_options=struct_to_dict(request.model_options)
         if has_field(request, "model_options")
         else None,
@@ -584,9 +557,6 @@ def get_agent_provider_turn_request_from_proto(
 ) -> GetAgentProviderTurnRequest:
     return GetAgentProviderTurnRequest(
         turn_id=request.turn_id,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         context=request.context if has_field(request, "context") else None,
     )
 
@@ -596,9 +566,6 @@ def list_agent_provider_turns_request_from_proto(
 ) -> ListAgentProviderTurnsRequest:
     return ListAgentProviderTurnsRequest(
         session_id=request.session_id,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         turn_ids=list(request.turn_ids),
         status=request.status,
         limit=request.limit,
@@ -613,9 +580,6 @@ def cancel_agent_provider_turn_request_from_proto(
     return CancelAgentProviderTurnRequest(
         turn_id=request.turn_id,
         reason=request.reason,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         context=request.context if has_field(request, "context") else None,
     )
 
@@ -627,9 +591,6 @@ def list_agent_provider_turn_events_request_from_proto(
         turn_id=request.turn_id,
         after_seq=request.after_seq,
         limit=request.limit,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         context=request.context if has_field(request, "context") else None,
     )
 
@@ -639,9 +600,6 @@ def get_agent_provider_interaction_request_from_proto(
 ) -> GetAgentProviderInteractionRequest:
     return GetAgentProviderInteractionRequest(
         interaction_id=request.interaction_id,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         context=request.context if has_field(request, "context") else None,
     )
 
@@ -651,9 +609,6 @@ def list_agent_provider_interactions_request_from_proto(
 ) -> ListAgentProviderInteractionsRequest:
     return ListAgentProviderInteractionsRequest(
         turn_id=request.turn_id,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
-        else None,
         context=request.context if has_field(request, "context") else None,
     )
 
@@ -665,9 +620,6 @@ def resolve_agent_provider_interaction_request_from_proto(
         interaction_id=request.interaction_id,
         resolution=struct_to_dict(request.resolution)
         if has_field(request, "resolution")
-        else None,
-        subject=subject_from_proto(request.subject)
-        if has_field(request, "subject")
         else None,
         turn_id=request.turn_id,
         context=request.context if has_field(request, "context") else None,

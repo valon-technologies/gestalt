@@ -117,7 +117,6 @@ func (m *Manager) authorizeAgentInvocationScope(ctx context.Context, req agentIn
 	session, err := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
 		SessionId:    strings.TrimSpace(agent.SessionID),
 		ProviderName: providerName,
-		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
 		Context:      req.RequestContext,
 	})
 	if err != nil || session == nil {
@@ -198,9 +197,6 @@ func (m *Manager) getAgentInvocationTurn(ctx context.Context, provider coreagent
 			TurnId:       turnID,
 			ProviderName: strings.TrimSpace(scope.ProviderName),
 			Context:      reqCtx,
-			Subject: &proto.SubjectContext{
-				Id: strings.TrimSpace(scope.SubjectID),
-			},
 		})
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {

@@ -21,7 +21,6 @@ use crate::agent::{
 };
 use crate::codec::app::{
     to_wire_agent_tool_ref, to_wire_operation_annotations, to_wire_request_context,
-    to_wire_subject_context,
 };
 use crate::codec::support::{
     from_wire_struct, from_wire_timestamp, from_wire_value, to_wire_struct,
@@ -456,7 +455,6 @@ pub(crate) fn to_wire_cancel_agent_provider_turn_request(
     v1::CancelAgentProviderTurnRequest {
         turn_id: value.turn_id,
         reason: value.reason,
-        subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
     }
@@ -471,7 +469,6 @@ pub(crate) fn to_wire_create_agent_provider_session_request(
         model: value.model,
         client_ref: value.client_ref,
         metadata: value.metadata.map(to_wire_struct),
-        subject: value.subject.map(to_wire_subject_context),
         session_start: value.session_start.map(to_wire_agent_session_start_config),
         prepared_workspace: value
             .prepared_workspace
@@ -499,7 +496,6 @@ pub(crate) fn to_wire_create_agent_provider_turn_request(
             .collect(),
         metadata: value.metadata.map(to_wire_struct),
         execution_ref: value.execution_ref,
-        subject: value.subject.map(to_wire_subject_context),
         model_options: value.model_options.map(to_wire_struct),
         timeout_seconds: value.timeout_seconds,
         output: value.output.map(to_wire_agent_output),
@@ -521,7 +517,6 @@ pub(crate) fn to_wire_get_agent_provider_interaction_request(
 ) -> v1::GetAgentProviderInteractionRequest {
     v1::GetAgentProviderInteractionRequest {
         interaction_id: value.interaction_id,
-        subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
     }
 }
@@ -532,7 +527,6 @@ pub(crate) fn to_wire_get_agent_provider_session_request(
 ) -> v1::GetAgentProviderSessionRequest {
     v1::GetAgentProviderSessionRequest {
         session_id: value.session_id,
-        subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
     }
@@ -544,7 +538,6 @@ pub(crate) fn to_wire_get_agent_provider_turn_request(
 ) -> v1::GetAgentProviderTurnRequest {
     v1::GetAgentProviderTurnRequest {
         turn_id: value.turn_id,
-        subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
     }
@@ -556,7 +549,6 @@ pub(crate) fn to_wire_list_agent_provider_interactions_request(
 ) -> v1::ListAgentProviderInteractionsRequest {
     v1::ListAgentProviderInteractionsRequest {
         turn_id: value.turn_id,
-        subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
     }
@@ -580,7 +572,6 @@ pub(crate) fn to_wire_list_agent_provider_sessions_request(
     value: ListAgentProviderSessionsRequest,
 ) -> v1::ListAgentProviderSessionsRequest {
     v1::ListAgentProviderSessionsRequest {
-        subject: value.subject.map(to_wire_subject_context),
         session_ids: value.session_ids,
         state: value.state,
         limit: value.limit,
@@ -611,7 +602,6 @@ pub(crate) fn to_wire_list_agent_provider_turn_events_request(
         turn_id: value.turn_id,
         after_seq: value.after_seq,
         limit: value.limit,
-        subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
     }
@@ -636,7 +626,6 @@ pub(crate) fn to_wire_list_agent_provider_turns_request(
 ) -> v1::ListAgentProviderTurnsRequest {
     v1::ListAgentProviderTurnsRequest {
         session_id: value.session_id,
-        subject: value.subject.map(to_wire_subject_context),
         turn_ids: value.turn_ids,
         status: value.status,
         limit: value.limit,
@@ -698,7 +687,6 @@ pub(crate) fn to_wire_resolve_agent_provider_interaction_request(
     v1::ResolveAgentProviderInteractionRequest {
         interaction_id: value.interaction_id,
         resolution: value.resolution.map(to_wire_struct),
-        subject: value.subject.map(to_wire_subject_context),
         turn_id: value.turn_id,
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
@@ -714,7 +702,6 @@ pub(crate) fn to_wire_update_agent_provider_session_request(
         client_ref: value.client_ref,
         state: value.state,
         metadata: value.metadata.map(to_wire_struct),
-        subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
     }

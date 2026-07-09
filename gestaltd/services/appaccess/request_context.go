@@ -331,6 +331,18 @@ func (c ProviderRequestContext) Restore(ctx context.Context, connectionOverride 
 	return ctx
 }
 
+// SubjectIDFromRequestContext returns the caller subject ID carried on a
+// provider request context.
+func SubjectIDFromRequestContext(reqCtx *proto.RequestContext) string {
+	if reqCtx == nil {
+		return ""
+	}
+	if p := PrincipalFromSubjectContext(reqCtx.GetSubject()); p != nil {
+		return strings.TrimSpace(p.SubjectID)
+	}
+	return ""
+}
+
 // PrincipalFromSubjectContext reconstructs the trusted caller principal carried
 // on provider request context.
 func PrincipalFromSubjectContext(subject *proto.SubjectContext) *principal.Principal {

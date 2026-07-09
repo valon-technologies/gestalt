@@ -300,7 +300,7 @@ func TestRemoteAgentListSessionsForwardsBoundedSummaryRequest(t *testing.T) {
 	agent := &remoteAgent{
 		client: &fakeAgentProviderClient{
 			listSessions: func(_ context.Context, req *proto.ListAgentProviderSessionsRequest, _ ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error) {
-				if got := req.GetSubject().GetId(); got != "user-1" {
+				if got := req.GetContext().GetSubject().GetId(); got != "user-1" {
 					t.Fatalf("subject_id = %q, want user-1", got)
 				}
 				if got := req.GetSessionIds(); len(got) != 2 || got[0] != "session-a" || got[1] != "session-b" {
@@ -324,7 +324,7 @@ func TestRemoteAgentListSessionsForwardsBoundedSummaryRequest(t *testing.T) {
 	}
 
 	sessions, err := agent.ListSessions(context.Background(), &proto.ListAgentProviderSessionsRequest{
-		Subject:     &proto.SubjectContext{Id: "user-1"},
+		Context:     &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user-1"}},
 		SessionIds:  []string{"session-a", "session-b"},
 		State:       proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
 		Limit:       25,
@@ -347,7 +347,7 @@ func TestRemoteAgentListTurnsForwardsBoundedSummaryRequest(t *testing.T) {
 				if got := req.GetSessionId(); got != "session-1" {
 					t.Fatalf("session_id = %q, want session-1", got)
 				}
-				if got := req.GetSubject().GetId(); got != "user-1" {
+				if got := req.GetContext().GetSubject().GetId(); got != "user-1" {
 					t.Fatalf("subject_id = %q, want user-1", got)
 				}
 				if got := req.GetTurnIds(); len(got) != 1 || got[0] != "turn-1" {
@@ -373,7 +373,7 @@ func TestRemoteAgentListTurnsForwardsBoundedSummaryRequest(t *testing.T) {
 
 	turns, err := agent.ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{
 		SessionId:   "session-1",
-		Subject:     &proto.SubjectContext{Id: "user-1"},
+		Context:     &proto.RequestContext{Subject: &proto.SubjectContext{Id: "user-1"}},
 		TurnIds:     []string{"turn-1"},
 		Status:      proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
 		Limit:       10,

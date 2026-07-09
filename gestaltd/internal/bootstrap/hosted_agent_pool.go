@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc/codes"
@@ -190,10 +191,7 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 		req = &proto.CreateAgentProviderSessionRequest{}
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
-	subjectID := strings.TrimSpace(req.GetSubject().GetId())
-	if subjectID == "" {
-		subjectID = strings.TrimSpace(req.GetContext().GetSubject().GetId())
-	}
+	subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
 	createKey := hostedAgentCreateKey(subjectID, idempotencyKey)
 	preferred := p.createKeyBackend(createKey)
 	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, preferred != nil)
@@ -517,7 +515,7 @@ func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req *proto.
 	sessionID := strings.TrimSpace(req.GetSessionId())
 	backend := p.sessionBackend(sessionID)
 	if backend == nil {
-		session, err := p.GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: sessionID, Subject: req.GetSubject()})
+		session, err := p.GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: sessionID, Context: req.GetContext()})
 		if err != nil {
 			return nil, err
 		}
@@ -693,7 +691,7 @@ func (p *hostedAgentProviderPool) CancelTurn(ctx context.Context, req *proto.Can
 	turnID := strings.TrimSpace(req.GetTurnId())
 	backend := p.turnBackend(turnID)
 	if backend == nil {
-		turn, err := p.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{TurnId: turnID, Subject: req.GetSubject()})
+		turn, err := p.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{TurnId: turnID, Context: req.GetContext()})
 		if err != nil {
 			return nil, err
 		}
@@ -879,7 +877,7 @@ func (p *hostedAgentProviderPool) ResolveInteraction(ctx context.Context, req *p
 	interactionID := strings.TrimSpace(req.GetInteractionId())
 	backend := p.interactionBackend(interactionID)
 	if backend == nil {
-		interaction, err := p.GetInteraction(ctx, &proto.GetAgentProviderInteractionRequest{InteractionId: interactionID, Subject: req.GetSubject()})
+		interaction, err := p.GetInteraction(ctx, &proto.GetAgentProviderInteractionRequest{InteractionId: interactionID, Context: req.GetContext()})
 		if err != nil {
 			return nil, err
 		}
