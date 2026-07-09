@@ -193,6 +193,43 @@ func TestStaticAuthorizationModelCarriesResourceTypeDefaultRole(t *testing.T) {
 	}
 }
 
+func TestBootstrapAuthorizationProviderStateSkipsRemoteProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingAuthorizationProvider{}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Remote: "https://parent.gestalt.example",
+			Providers: config.ServerProvidersConfig{
+				Authorization: "authz",
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Authorization: map[string]*config.ProviderEntry{"authz": {Default: true}},
+		},
+		Authorization: config.AuthorizationConfig{
+			Models: map[string]config.AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
+						"github": {
+							Relations: map[string]config.AuthorizationRelationDef{
+								"viewer": {SubjectTypes: []string{"subject"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider}); err != nil {
+		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
+	}
+	if provider.setAuthorizationState != nil {
+		t.Fatal("SetAuthorizationState should not be called for remote authorization providers")
+	}
+}
+
 func TestBuildAuthorizationProviderPassesIndexedDBHostService(t *testing.T) {
 	t.Parallel()
 

@@ -25,10 +25,17 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 	if len(providers) == 0 {
 		return nil
 	}
-	name, provider, err := selectedAuthorizationProviderInstance(cfg, providers)
+	name, entry, err := cfg.SelectedAuthorizationProvider()
 	if err != nil {
 		return err
 	}
+	if entry == nil {
+		return nil
+	}
+	if !providerBuildsLocal(cfg, entry) {
+		return nil
+	}
+	provider := providers[name]
 	if provider == nil {
 		return nil
 	}
