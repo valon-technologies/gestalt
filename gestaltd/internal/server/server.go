@@ -401,13 +401,14 @@ func New(cfg Config) (*Server, error) {
 		Now:               now,
 	})
 	s.publicGRPCHandler = buildPublicGRPCHandler(publicGRPCConfig{
-		Transport:       cfg.PublicGatewayTransport,
-		Invoker:         cfg.Invoker,
-		AgentManager:    cfg.AgentManager,
-		WorkflowManager: s.workflowSchedules,
-		Authentication:  cfg.Auth,
-		Authorization:   cfg.Authorization,
-		IndexedDB:       cfg.IndexedDB,
+		Transport:           cfg.PublicGatewayTransport,
+		Invoker:             cfg.Invoker,
+		AgentManager:        cfg.AgentManager,
+		WorkflowManager:     s.workflowSchedules,
+		Authentication:      cfg.Auth,
+		Authorization:       cfg.Authorization,
+		IndexedDB:           cfg.IndexedDB,
+		ExternalCredentials: externalCredentials,
 	})
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

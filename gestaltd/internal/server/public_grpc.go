@@ -11,7 +11,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
+	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
@@ -24,13 +26,14 @@ import (
 )
 
 type publicGRPCConfig struct {
-	Transport       *providergateway.ProviderGatewayTransport
-	Invoker         invocation.Invoker
-	AgentManager    agentmanager.Service
-	WorkflowManager workflowmanager.Service
-	Authentication  core.IdentityProvider
-	Authorization   core.AuthorizationProvider
-	IndexedDB       indexeddb.IndexedDB
+	Transport           *providergateway.ProviderGatewayTransport
+	Invoker             invocation.Invoker
+	AgentManager        agentmanager.Service
+	WorkflowManager     workflowmanager.Service
+	Authentication      core.IdentityProvider
+	Authorization       core.AuthorizationProvider
+	IndexedDB           indexeddb.IndexedDB
+	ExternalCredentials core.ExternalCredentialProvider
 }
 
 func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
@@ -69,6 +72,9 @@ func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
 	if cfg.Authorization != nil {
 		publicrpc.RegisterPublicAuthorizationServer(srv, authorizationservice.NewProviderServer(cfg.Authorization))
 	}
+	if cfg.ExternalCredentials != nil {
+		publicrpc.RegisterPublicExternalCredentialsServer(srv, externalcredentialsservice.NewProviderServer(cfg.ExternalCredentials))
+	}
 	return http.HandlerFunc(srv.ServeHTTP)
 }
 
@@ -82,9 +88,12 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 		if !ok {
 			return nil, status.Error(codes.Internal, "request type mismatch")
 		}
-		_, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
+		p, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
 		if err != nil {
 			return nil, err
+		}
+		if p != nil {
+			ctx = principal.WithPrincipal(ctx, principal.Canonicalized(p))
 		}
 		return handler(ctx, adapted)
 	}

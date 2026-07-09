@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -85,6 +87,27 @@ func (s *externalCredentialProviderServer) ListCredentials(ctx context.Context, 
 func (s *externalCredentialProviderServer) DeleteCredential(ctx context.Context, req *proto.DeleteExternalCredentialRequest) (*emptypb.Empty, error) {
 	if req == nil || strings.TrimSpace(req.GetId()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "credential id is required")
+	}
+	if _, ok := publicrpc.PublicOriginFromContext(ctx); ok {
+		p := principal.FromContext(ctx)
+		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.Canonicalized(p)))
+		if subjectID == "" {
+			return nil, status.Error(codes.Unauthenticated, "not authenticated")
+		}
+		credentials, err := s.provider.ListCredentials(ctx, subjectID, "")
+		if err != nil {
+			return nil, externalCredentialToGRPCError("list external credentials", err)
+		}
+		owned := false
+		for _, credential := range credentials {
+			if credential != nil && credential.ID == req.GetId() {
+				owned = true
+				break
+			}
+		}
+		if !owned {
+			return &emptypb.Empty{}, nil
+		}
 	}
 	if err := s.provider.DeleteCredential(ctx, req.GetId()); err != nil && !errors.Is(err, core.ErrNotFound) {
 		return nil, externalCredentialToGRPCError("delete external credential", err)

@@ -24,12 +24,13 @@ type Config struct {
 
 // ClientSet exposes typed public gRPC clients for a remote gestaltd instance.
 type ClientSet struct {
-	App           proto.AppClient
-	Agent         proto.AgentClient
-	Workflow      proto.WorkflowClient
-	IndexedDB     proto.IndexedDBClient
-	Identity      proto.IdentityClient
-	Authorization proto.AuthorizationClient
+	App                 proto.AppClient
+	Agent               proto.AgentClient
+	Workflow            proto.WorkflowClient
+	IndexedDB           proto.IndexedDBClient
+	Identity            proto.IdentityClient
+	Authorization       proto.AuthorizationClient
+	ExternalCredentials proto.ExternalCredentialsClient
 
 	conn *grpc.ClientConn
 }
@@ -87,13 +88,14 @@ func (c *ClientSet) Close() error {
 
 func clientSetFromConn(conn *grpc.ClientConn) *ClientSet {
 	return &ClientSet{
-		App:           proto.NewAppClient(conn),
-		Agent:         proto.NewAgentClient(conn),
-		Workflow:      proto.NewWorkflowClient(conn),
-		IndexedDB:     proto.NewIndexedDBClient(conn),
-		Identity:      proto.NewIdentityClient(conn),
-		Authorization: proto.NewAuthorizationClient(conn),
-		conn:          conn,
+		App:                 proto.NewAppClient(conn),
+		Agent:               proto.NewAgentClient(conn),
+		Workflow:            proto.NewWorkflowClient(conn),
+		IndexedDB:           proto.NewIndexedDBClient(conn),
+		Identity:            proto.NewIdentityClient(conn),
+		Authorization:       proto.NewAuthorizationClient(conn),
+		ExternalCredentials: proto.NewExternalCredentialsClient(conn),
+		conn:                conn,
 	}
 }
 

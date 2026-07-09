@@ -1,5 +1,6 @@
 import datetime
 
+from google.api import visibility_pb2 as _visibility_pb2
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from . import annotations_pb2 as _annotations_pb2
