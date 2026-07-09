@@ -22,10 +22,11 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.api import visibility_pb2 as google_dot_api_dot_visibility__pb2
 from . import annotations_pb2 as v1_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11v1/identity.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"\xa3\x01\n\x10\x41uthorizeRequest\x12#\n\rresponse_type\x18\x01 \x01(\tR\x0cresponseType\x12\x1b\n\tclient_id\x18\x02 \x01(\tR\x08\x63lientId\x12!\n\x0credirect_uri\x18\x03 \x01(\tR\x0bredirectUri\x12\x14\n\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n\x05state\x18\x05 \x01(\tR\x05state\"6\n\x11\x41uthorizeResponse\x12!\n\x0credirect_uri\x18\x01 \x01(\tR\x0bredirectUri\"\xb4\x02\n\x0cTokenRequest\x12\x1d\n\ngrant_type\x18\x01 \x01(\tR\tgrantType\x12\x12\n\x04\x63ode\x18\x02 \x01(\tR\x04\x63ode\x12!\n\x0credirect_uri\x18\x03 \x01(\tR\x0bredirectUri\x12\x1b\n\tclient_id\x18\x05 \x01(\tR\x08\x63lientId\x12\x14\n\x05state\x18\x06 \x01(\tR\x05state\x12\x14\n\x05scope\x18\x07 \x01(\tR\x05scope\x12#\n\rsubject_token\x18\x08 \x01(\tR\x0csubjectToken\x12,\n\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenType\x12\x1d\n\nexpires_in\x18\n \x01(\x03R\texpiresInJ\x04\x08\x04\x10\x05R\rrefresh_token\"\xc6\x01\n\rTokenResponse\x12!\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\tR\x0b\x61\x63\x63\x65ssToken\x12\x1d\n\ntoken_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n\nexpires_in\x18\x03 \x01(\x03R\texpiresIn\x12#\n\rrefresh_token\x18\x04 \x01(\tR\x0crefreshToken\x12\x14\n\x05scope\x18\x05 \x01(\tR\x05scope\x12\x19\n\x08grant_id\x18\x06 \x01(\tR\x07grantId\"Q\n\x11IntrospectRequest\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\x12&\n\x0ftoken_type_hint\x18\x02 \x01(\tR\rtokenTypeHint\"\x95\x01\n\x12IntrospectResponse\x12\x16\n\x06\x61\x63tive\x18\x01 \x01(\x08R\x06\x61\x63tive\x12\x18\n\x07subject\x18\x02 \x01(\tR\x07subject\x12\x14\n\x05scope\x18\x03 \x01(\tR\x05scope\x12\x1b\n\tclient_id\x18\x04 \x01(\tR\x08\x63lientId\x12\x1a\n\x08\x61udience\x18\x05 \x03(\tR\x08\x61udience\"\x13\n\x11ListGrantsRequest\"1\n\x12ListGrantsResponse\x12\x1b\n\tgrant_ids\x18\x01 \x03(\tR\x08grantIds\",\n\x0fGetGrantRequest\x12\x19\n\x08grant_id\x18\x01 \x01(\tR\x07grantId\">\n\nGrantScope\x12\x14\n\x05scope\x18\x01 \x01(\tR\x05scope\x12\x1a\n\x08resource\x18\x02 \x03(\tR\x08resource\"\x89\x01\n\x10GetGrantResponse\x12\x37\n\x06scopes\x18\x01 \x03(\x0b\x32\x1f.gestalt.provider.v1.GrantScopeR\x06scopes\x12\x1d\n\ncreated_at\x18\x02 \x01(\x03R\tcreatedAt\x12\x1d\n\nexpires_at\x18\x03 \x01(\x03R\texpiresAt\"/\n\x12RevokeGrantRequest\x12\x19\n\x08grant_id\x18\x01 \x01(\tR\x07grantId\"\x15\n\x13RevokeGrantResponse\"\x11\n\x0fUserInfoRequest\"[\n\x10UserInfoResponse\x12\x1d\n\nsubject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n\x05\x65mail\x18\x02 \x01(\tR\x05\x65mail\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name2\x90\x07\n\x08Identity\x12\x9c\x01\n\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"@\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x0credirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\x12\xca\x01\n\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"z\x8a\xb5\x18\ngrant_type\x8a\xb5\x18\x04\x63ode\x8a\xb5\x18\x0credirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\xa2\xb5\x18\nexpires_in\x12{\n\nIntrospect\x12&.gestalt.provider.v1.IntrospectRequest\x1a\'.gestalt.provider.v1.IntrospectResponse\"\x1c\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\x12W\n\x08UserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\x12]\n\nListGrants\x12&.gestalt.provider.v1.ListGrantsRequest\x1a\'.gestalt.provider.v1.ListGrantsResponse\x12\x65\n\x08GetGrant\x12$.gestalt.provider.v1.GetGrantRequest\x1a%.gestalt.provider.v1.GetGrantResponse\"\x0c\x8a\xb5\x18\x08grant_id\x12n\n\x0bRevokeGrant\x12\'.gestalt.provider.v1.RevokeGrantRequest\x1a(.gestalt.provider.v1.RevokeGrantResponse\"\x0c\x8a\xb5\x18\x08grant_id\x1a\x0c\x8a\xb5\x18\x08identityb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11v1/identity.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/api/visibility.proto\x1a\x14v1/annotations.proto\"\xa3\x01\n\x10\x41uthorizeRequest\x12#\n\rresponse_type\x18\x01 \x01(\tR\x0cresponseType\x12\x1b\n\tclient_id\x18\x02 \x01(\tR\x08\x63lientId\x12!\n\x0credirect_uri\x18\x03 \x01(\tR\x0bredirectUri\x12\x14\n\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n\x05state\x18\x05 \x01(\tR\x05state\"6\n\x11\x41uthorizeResponse\x12!\n\x0credirect_uri\x18\x01 \x01(\tR\x0bredirectUri\"\xb4\x02\n\x0cTokenRequest\x12\x1d\n\ngrant_type\x18\x01 \x01(\tR\tgrantType\x12\x12\n\x04\x63ode\x18\x02 \x01(\tR\x04\x63ode\x12!\n\x0credirect_uri\x18\x03 \x01(\tR\x0bredirectUri\x12\x1b\n\tclient_id\x18\x05 \x01(\tR\x08\x63lientId\x12\x14\n\x05state\x18\x06 \x01(\tR\x05state\x12\x14\n\x05scope\x18\x07 \x01(\tR\x05scope\x12#\n\rsubject_token\x18\x08 \x01(\tR\x0csubjectToken\x12,\n\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenType\x12\x1d\n\nexpires_in\x18\n \x01(\x03R\texpiresInJ\x04\x08\x04\x10\x05R\rrefresh_token\"\xc6\x01\n\rTokenResponse\x12!\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\tR\x0b\x61\x63\x63\x65ssToken\x12\x1d\n\ntoken_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n\nexpires_in\x18\x03 \x01(\x03R\texpiresIn\x12#\n\rrefresh_token\x18\x04 \x01(\tR\x0crefreshToken\x12\x14\n\x05scope\x18\x05 \x01(\tR\x05scope\x12\x19\n\x08grant_id\x18\x06 \x01(\tR\x07grantId\"Q\n\x11IntrospectRequest\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\x12&\n\x0ftoken_type_hint\x18\x02 \x01(\tR\rtokenTypeHint\"\x95\x01\n\x12IntrospectResponse\x12\x16\n\x06\x61\x63tive\x18\x01 \x01(\x08R\x06\x61\x63tive\x12\x18\n\x07subject\x18\x02 \x01(\tR\x07subject\x12\x14\n\x05scope\x18\x03 \x01(\tR\x05scope\x12\x1b\n\tclient_id\x18\x04 \x01(\tR\x08\x63lientId\x12\x1a\n\x08\x61udience\x18\x05 \x03(\tR\x08\x61udience\"\x13\n\x11ListGrantsRequest\"1\n\x12ListGrantsResponse\x12\x1b\n\tgrant_ids\x18\x01 \x03(\tR\x08grantIds\",\n\x0fGetGrantRequest\x12\x19\n\x08grant_id\x18\x01 \x01(\tR\x07grantId\">\n\nGrantScope\x12\x14\n\x05scope\x18\x01 \x01(\tR\x05scope\x12\x1a\n\x08resource\x18\x02 \x03(\tR\x08resource\"\x89\x01\n\x10GetGrantResponse\x12\x37\n\x06scopes\x18\x01 \x03(\x0b\x32\x1f.gestalt.provider.v1.GrantScopeR\x06scopes\x12\x1d\n\ncreated_at\x18\x02 \x01(\x03R\tcreatedAt\x12\x1d\n\nexpires_at\x18\x03 \x01(\x03R\texpiresAt\"/\n\x12RevokeGrantRequest\x12\x19\n\x08grant_id\x18\x01 \x01(\tR\x07grantId\"\x15\n\x13RevokeGrantResponse\"\x11\n\x0fUserInfoRequest\"[\n\x10UserInfoResponse\x12\x1d\n\nsubject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n\x05\x65mail\x18\x02 \x01(\tR\x05\x65mail\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name2\xf8\x07\n\x08Identity\x12\xaa\x01\n\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"N\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x0credirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\x08\x12\x06PUBLIC\x12\xd9\x01\n\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\x88\x01\x8a\xb5\x18\ngrant_type\x8a\xb5\x18\x04\x63ode\x8a\xb5\x18\x0credirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\xa2\xb5\x18\nexpires_in\xfa\xd2\xe4\x93\x02\x08\x12\x06PUBLIC\x12\x89\x01\n\nIntrospect\x12&.gestalt.provider.v1.IntrospectRequest\x1a\'.gestalt.provider.v1.IntrospectResponse\"*\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\xfa\xd2\xe4\x93\x02\x08\x12\x06PUBLIC\x12g\n\x08UserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\"\x0e\xfa\xd2\xe4\x93\x02\x08\x12\x06PUBLIC\x12m\n\nListGrants\x12&.gestalt.provider.v1.ListGrantsRequest\x1a\'.gestalt.provider.v1.ListGrantsResponse\"\x0e\xfa\xd2\xe4\x93\x02\x08\x12\x06PUBLIC\x12s\n\x08GetGrant\x12$.gestalt.provider.v1.GetGrantRequest\x1a%.gestalt.provider.v1.GetGrantResponse\"\x1a\x8a\xb5\x18\x08grant_id\xfa\xd2\xe4\x93\x02\x08\x12\x06PUBLIC\x12|\n\x0bRevokeGrant\x12\'.gestalt.provider.v1.RevokeGrantRequest\x1a(.gestalt.provider.v1.RevokeGrantResponse\"\x1a\x8a\xb5\x18\x08grant_id\xfa\xd2\xe4\x93\x02\x08\x12\x06PUBLIC\x1a\x0c\x8a\xb5\x18\x08identityb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,45 +36,49 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_IDENTITY']._loaded_options = None
   _globals['_IDENTITY']._serialized_options = b'\212\265\030\010identity'
   _globals['_IDENTITY'].methods_by_name['Authorize']._loaded_options = None
-  _globals['_IDENTITY'].methods_by_name['Authorize']._serialized_options = b'\212\265\030\rresponse_type\212\265\030\tclient_id\212\265\030\014redirect_uri\212\265\030\005scope\212\265\030\005state'
+  _globals['_IDENTITY'].methods_by_name['Authorize']._serialized_options = b'\212\265\030\rresponse_type\212\265\030\tclient_id\212\265\030\014redirect_uri\212\265\030\005scope\212\265\030\005state\372\322\344\223\002\010\022\006PUBLIC'
   _globals['_IDENTITY'].methods_by_name['Token']._loaded_options = None
-  _globals['_IDENTITY'].methods_by_name['Token']._serialized_options = b'\212\265\030\ngrant_type\212\265\030\004code\212\265\030\014redirect_uri\212\265\030\tclient_id\212\265\030\005state\212\265\030\005scope\212\265\030\rsubject_token\212\265\030\022subject_token_type\242\265\030\nexpires_in'
+  _globals['_IDENTITY'].methods_by_name['Token']._serialized_options = b'\212\265\030\ngrant_type\212\265\030\004code\212\265\030\014redirect_uri\212\265\030\tclient_id\212\265\030\005state\212\265\030\005scope\212\265\030\rsubject_token\212\265\030\022subject_token_type\242\265\030\nexpires_in\372\322\344\223\002\010\022\006PUBLIC'
   _globals['_IDENTITY'].methods_by_name['Introspect']._loaded_options = None
-  _globals['_IDENTITY'].methods_by_name['Introspect']._serialized_options = b'\212\265\030\005token\212\265\030\017token_type_hint'
+  _globals['_IDENTITY'].methods_by_name['Introspect']._serialized_options = b'\212\265\030\005token\212\265\030\017token_type_hint\372\322\344\223\002\010\022\006PUBLIC'
+  _globals['_IDENTITY'].methods_by_name['UserInfo']._loaded_options = None
+  _globals['_IDENTITY'].methods_by_name['UserInfo']._serialized_options = b'\372\322\344\223\002\010\022\006PUBLIC'
+  _globals['_IDENTITY'].methods_by_name['ListGrants']._loaded_options = None
+  _globals['_IDENTITY'].methods_by_name['ListGrants']._serialized_options = b'\372\322\344\223\002\010\022\006PUBLIC'
   _globals['_IDENTITY'].methods_by_name['GetGrant']._loaded_options = None
-  _globals['_IDENTITY'].methods_by_name['GetGrant']._serialized_options = b'\212\265\030\010grant_id'
+  _globals['_IDENTITY'].methods_by_name['GetGrant']._serialized_options = b'\212\265\030\010grant_id\372\322\344\223\002\010\022\006PUBLIC'
   _globals['_IDENTITY'].methods_by_name['RevokeGrant']._loaded_options = None
-  _globals['_IDENTITY'].methods_by_name['RevokeGrant']._serialized_options = b'\212\265\030\010grant_id'
-  _globals['_AUTHORIZEREQUEST']._serialized_start=65
-  _globals['_AUTHORIZEREQUEST']._serialized_end=228
-  _globals['_AUTHORIZERESPONSE']._serialized_start=230
-  _globals['_AUTHORIZERESPONSE']._serialized_end=284
-  _globals['_TOKENREQUEST']._serialized_start=287
-  _globals['_TOKENREQUEST']._serialized_end=595
-  _globals['_TOKENRESPONSE']._serialized_start=598
-  _globals['_TOKENRESPONSE']._serialized_end=796
-  _globals['_INTROSPECTREQUEST']._serialized_start=798
-  _globals['_INTROSPECTREQUEST']._serialized_end=879
-  _globals['_INTROSPECTRESPONSE']._serialized_start=882
-  _globals['_INTROSPECTRESPONSE']._serialized_end=1031
-  _globals['_LISTGRANTSREQUEST']._serialized_start=1033
-  _globals['_LISTGRANTSREQUEST']._serialized_end=1052
-  _globals['_LISTGRANTSRESPONSE']._serialized_start=1054
-  _globals['_LISTGRANTSRESPONSE']._serialized_end=1103
-  _globals['_GETGRANTREQUEST']._serialized_start=1105
-  _globals['_GETGRANTREQUEST']._serialized_end=1149
-  _globals['_GRANTSCOPE']._serialized_start=1151
-  _globals['_GRANTSCOPE']._serialized_end=1213
-  _globals['_GETGRANTRESPONSE']._serialized_start=1216
-  _globals['_GETGRANTRESPONSE']._serialized_end=1353
-  _globals['_REVOKEGRANTREQUEST']._serialized_start=1355
-  _globals['_REVOKEGRANTREQUEST']._serialized_end=1402
-  _globals['_REVOKEGRANTRESPONSE']._serialized_start=1404
-  _globals['_REVOKEGRANTRESPONSE']._serialized_end=1425
-  _globals['_USERINFOREQUEST']._serialized_start=1427
-  _globals['_USERINFOREQUEST']._serialized_end=1444
-  _globals['_USERINFORESPONSE']._serialized_start=1446
-  _globals['_USERINFORESPONSE']._serialized_end=1537
-  _globals['_IDENTITY']._serialized_start=1540
-  _globals['_IDENTITY']._serialized_end=2452
+  _globals['_IDENTITY'].methods_by_name['RevokeGrant']._serialized_options = b'\212\265\030\010grant_id\372\322\344\223\002\010\022\006PUBLIC'
+  _globals['_AUTHORIZEREQUEST']._serialized_start=94
+  _globals['_AUTHORIZEREQUEST']._serialized_end=257
+  _globals['_AUTHORIZERESPONSE']._serialized_start=259
+  _globals['_AUTHORIZERESPONSE']._serialized_end=313
+  _globals['_TOKENREQUEST']._serialized_start=316
+  _globals['_TOKENREQUEST']._serialized_end=624
+  _globals['_TOKENRESPONSE']._serialized_start=627
+  _globals['_TOKENRESPONSE']._serialized_end=825
+  _globals['_INTROSPECTREQUEST']._serialized_start=827
+  _globals['_INTROSPECTREQUEST']._serialized_end=908
+  _globals['_INTROSPECTRESPONSE']._serialized_start=911
+  _globals['_INTROSPECTRESPONSE']._serialized_end=1060
+  _globals['_LISTGRANTSREQUEST']._serialized_start=1062
+  _globals['_LISTGRANTSREQUEST']._serialized_end=1081
+  _globals['_LISTGRANTSRESPONSE']._serialized_start=1083
+  _globals['_LISTGRANTSRESPONSE']._serialized_end=1132
+  _globals['_GETGRANTREQUEST']._serialized_start=1134
+  _globals['_GETGRANTREQUEST']._serialized_end=1178
+  _globals['_GRANTSCOPE']._serialized_start=1180
+  _globals['_GRANTSCOPE']._serialized_end=1242
+  _globals['_GETGRANTRESPONSE']._serialized_start=1245
+  _globals['_GETGRANTRESPONSE']._serialized_end=1382
+  _globals['_REVOKEGRANTREQUEST']._serialized_start=1384
+  _globals['_REVOKEGRANTREQUEST']._serialized_end=1431
+  _globals['_REVOKEGRANTRESPONSE']._serialized_start=1433
+  _globals['_REVOKEGRANTRESPONSE']._serialized_end=1454
+  _globals['_USERINFOREQUEST']._serialized_start=1456
+  _globals['_USERINFOREQUEST']._serialized_end=1473
+  _globals['_USERINFORESPONSE']._serialized_start=1475
+  _globals['_USERINFORESPONSE']._serialized_end=1566
+  _globals['_IDENTITY']._serialized_start=1569
+  _globals['_IDENTITY']._serialized_end=2585
 # @@protoc_insertion_point(module_scope)

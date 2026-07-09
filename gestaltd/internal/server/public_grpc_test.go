@@ -168,6 +168,27 @@ func TestPublicGRPCRouting(t *testing.T) {
 		if got["value"] != "ship-it" {
 			t.Fatalf("stored value = %#v, want %q", got["value"], "ship-it")
 		}
+
+		token := publicGRPCTestBearer("linear")
+		introspect, err := clients.Identity.Introspect(ctx, &proto.IntrospectRequest{Token: token})
+		if err != nil {
+			t.Fatalf("remote Identity.Introspect: %v", err)
+		}
+		if !introspect.GetActive() {
+			t.Fatalf("Introspect active = false, want true")
+		}
+
+		authResp, err := clients.Authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+			Subject:  &proto.Subject{Type: "subject", Id: "user:public-grpc-user"},
+			Action:   &proto.Action{Name: "CheckAccess"},
+			Resource: &proto.Resource{Type: "provider", Id: "authorization"},
+		})
+		if err != nil {
+			t.Fatalf("remote Authorization.CheckAccess: %v", err)
+		}
+		if !authResp.GetAllowed() {
+			t.Fatalf("CheckAccess allowed = false, want true")
+		}
 	})
 
 	for _, tc := range []struct {

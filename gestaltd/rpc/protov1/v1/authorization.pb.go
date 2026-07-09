@@ -7,6 +7,7 @@
 package proto
 
 import (
+	_ "google.golang.org/genproto/googleapis/api/visibility"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -1993,7 +1994,7 @@ var File_v1_authorization_proto protoreflect.FileDescriptor
 
 const file_v1_authorization_proto_rawDesc = "" +
 	"\n" +
-	"\x16v1/authorization.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14v1/annotations.proto\"f\n" +
+	"\x16v1/authorization.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/api/visibility.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14v1/annotations.proto\"f\n" +
 	"\aSubject\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x127\n" +
@@ -2126,19 +2127,20 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\vSourceLayer\x12\x1c\n" +
 	"\x18SOURCE_LAYER_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aSOURCE_LAYER_STATIC_CONFIG\x10\x01\x12\x18\n" +
-	"\x14SOURCE_LAYER_RUNTIME\x10\x022\xf1\t\n" +
-	"\rAuthorization\x12x\n" +
-	"\vCheckAccess\x12'.gestalt.provider.v1.CheckAccessRequest\x1a(.gestalt.provider.v1.CheckAccessResponse\"\x16\x8a\xb5\x18\x06action\x8a\xb5\x18\bresource\x12z\n" +
-	"\x0fCheckAccessMany\x12+.gestalt.provider.v1.CheckAccessManyRequest\x1a,.gestalt.provider.v1.CheckAccessManyResponse\"\f\x8a\xb5\x18\brequests\x12\x99\x01\n" +
-	"\x11ListRelationships\x12-.gestalt.provider.v1.ListRelationshipsRequest\x1a..gestalt.provider.v1.ListRelationshipsResponse\"%\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
-	"page_token\x8a\xb5\x18\x06filter\x12~\n" +
-	"\x0fAddRelationship\x12+.gestalt.provider.v1.AddRelationshipRequest\x1a,.gestalt.provider.v1.AddRelationshipResponse\"\x10\x8a\xb5\x18\frelationship\x12\x8d\x01\n" +
-	"\x12DeleteRelationship\x12..gestalt.provider.v1.DeleteRelationshipRequest\x1a/.gestalt.provider.v1.DeleteRelationshipResponse\"\x16\x8a\xb5\x18\x12relationship_tuple\x12\x9a\x01\n" +
-	"\x15SetAuthorizationState\x121.gestalt.provider.v1.SetAuthorizationStateRequest\x1a2.gestalt.provider.v1.SetAuthorizationStateResponse\"\x1a\x8a\xb5\x18\rrelationships\x8a\xb5\x18\x05model\x12[\n" +
-	"\x11GetActiveModelRef\x12\x16.google.protobuf.Empty\x1a..gestalt.provider.v1.GetActiveModelRefResponse\x12t\n" +
-	"\x0eSetActiveModel\x12*.gestalt.provider.v1.SetActiveModelRequest\x1a+.gestalt.provider.v1.SetActiveModelResponse\"\t\x8a\xb5\x18\x05model\x12\xba\x01\n" +
-	"\x1cListActiveModelResourceTypes\x128.gestalt.provider.v1.ListActiveModelResourceTypesRequest\x1a9.gestalt.provider.v1.ListActiveModelResourceTypesResponse\"%\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
-	"page_token\x8a\xb5\x18\x06filter\x1a\x11\x8a\xb5\x18\rauthorizationB\xde\x01\n" +
+	"\x14SOURCE_LAYER_RUNTIME\x10\x022\xf5\n" +
+	"\n" +
+	"\rAuthorization\x12\x86\x01\n" +
+	"\vCheckAccess\x12'.gestalt.provider.v1.CheckAccessRequest\x1a(.gestalt.provider.v1.CheckAccessResponse\"$\x8a\xb5\x18\x06action\x8a\xb5\x18\bresource\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x88\x01\n" +
+	"\x0fCheckAccessMany\x12+.gestalt.provider.v1.CheckAccessManyRequest\x1a,.gestalt.provider.v1.CheckAccessManyResponse\"\x1a\x8a\xb5\x18\brequests\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xa7\x01\n" +
+	"\x11ListRelationships\x12-.gestalt.provider.v1.ListRelationshipsRequest\x1a..gestalt.provider.v1.ListRelationshipsResponse\"3\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
+	"page_token\x8a\xb5\x18\x06filter\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x8c\x01\n" +
+	"\x0fAddRelationship\x12+.gestalt.provider.v1.AddRelationshipRequest\x1a,.gestalt.provider.v1.AddRelationshipResponse\"\x1e\x8a\xb5\x18\frelationship\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x9b\x01\n" +
+	"\x12DeleteRelationship\x12..gestalt.provider.v1.DeleteRelationshipRequest\x1a/.gestalt.provider.v1.DeleteRelationshipResponse\"$\x8a\xb5\x18\x12relationship_tuple\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xa8\x01\n" +
+	"\x15SetAuthorizationState\x121.gestalt.provider.v1.SetAuthorizationStateRequest\x1a2.gestalt.provider.v1.SetAuthorizationStateResponse\"(\x8a\xb5\x18\rrelationships\x8a\xb5\x18\x05model\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12k\n" +
+	"\x11GetActiveModelRef\x12\x16.google.protobuf.Empty\x1a..gestalt.provider.v1.GetActiveModelRefResponse\"\x0e\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x82\x01\n" +
+	"\x0eSetActiveModel\x12*.gestalt.provider.v1.SetActiveModelRequest\x1a+.gestalt.provider.v1.SetActiveModelResponse\"\x17\x8a\xb5\x18\x05model\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xc8\x01\n" +
+	"\x1cListActiveModelResourceTypes\x128.gestalt.provider.v1.ListActiveModelResourceTypesRequest\x1a9.gestalt.provider.v1.ListActiveModelResourceTypesResponse\"3\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
+	"page_token\x8a\xb5\x18\x06filter\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x1a\x11\x8a\xb5\x18\rauthorizationB\xde\x01\n" +
 	"\x17com.gestalt.provider.v1B\x12AuthorizationProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

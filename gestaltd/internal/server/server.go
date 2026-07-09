@@ -405,6 +405,7 @@ func New(cfg Config) (*Server, error) {
 		Invoker:         cfg.Invoker,
 		AgentManager:    cfg.AgentManager,
 		WorkflowManager: s.workflowSchedules,
+		Authentication:  cfg.Auth,
 		Authorization:   cfg.Authorization,
 		IndexedDB:       cfg.IndexedDB,
 	})

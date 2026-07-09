@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"io"
+	"strings"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -76,6 +77,21 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.IdentityProvider, 
 	return provider, nil
 }
 
+// NewRemote returns an identity provider backed by a public gRPC client.
+func NewRemote(client proto.IdentityClient, name string) (core.IdentityProvider, error) {
+	if client == nil {
+		return nil, status.Error(codes.InvalidArgument, "identity provider client is required")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "identity provider name is required")
+	}
+	return &remoteIdentityProvider{
+		client: client,
+		name:   name,
+	}, nil
+}
+
 func newRemoteIdentityProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client identityRPCClient, cfg ExecConfig) (*remoteIdentityProvider, error) {
 	provider := &remoteIdentityProvider{
 		runtime:     runtimeClient,
@@ -90,6 +106,12 @@ func newRemoteIdentityProvider(ctx context.Context, runtimeClient proto.Provider
 }
 
 func (p *remoteIdentityProvider) configure(ctx context.Context, name string, config map[string]any) error {
+	if p.runtime == nil {
+		if strings.TrimSpace(name) != "" {
+			p.name = name
+		}
+		return nil
+	}
 	meta, err := runtimehost.ConfigureRuntimeProvider(ctx, p.runtime, proto.ProviderKind_PROVIDER_KIND_IDENTITY, name, config)
 	if err != nil {
 		return err
