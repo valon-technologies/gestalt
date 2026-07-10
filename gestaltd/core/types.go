@@ -38,7 +38,7 @@ const (
 )
 
 // AppInstallation records the shared fleet-wide rollout for a registry-installed
-// app. app_name is the primary key.
+// app. The IndexedDB primary key id holds the app name (for example g-issues).
 type AppInstallation struct {
 	AppName                 string
 	VersionConstraint       string
@@ -56,16 +56,16 @@ type AppInstallation struct {
 }
 
 // AppInstallationEvent is an append-only audit record for install lifecycle
-// changes on one app.
+// changes on one app. InstallationID matches app_installations.id.
 type AppInstallationEvent struct {
-	ID          string
-	AppName     string
-	FromVersion string
-	ToVersion   string
-	Type        string
-	Actor       string
-	Timestamp   time.Time
-	Metadata    map[string]any
+	ID             string
+	InstallationID string
+	FromVersion    string
+	ToVersion      string
+	Type           string
+	Actor          string
+	Timestamp      time.Time
+	Metadata       map[string]any
 }
 
 type ExternalCredentialGrant struct {

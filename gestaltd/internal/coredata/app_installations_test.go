@@ -204,12 +204,12 @@ func TestAppInstallationEventService(t *testing.T) {
 		ctx := context.Background()
 
 		first, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:     "g-issues",
-			FromVersion: "",
-			ToVersion:   "v1",
-			Type:        core.AppInstallationEventTypeInstallRequested,
-			Actor:       "user:alice",
-			Metadata:    map[string]any{"registry": "toolshed"},
+			InstallationID: "g-issues",
+			FromVersion:    "",
+			ToVersion:      "v1",
+			Type:           core.AppInstallationEventTypeInstallRequested,
+			Actor:          "user:alice",
+			Metadata:       map[string]any{"registry": "toolshed"},
 		})
 		if err != nil {
 			t.Fatalf("AppendEvent(first): %v", err)
@@ -219,11 +219,11 @@ func TestAppInstallationEventService(t *testing.T) {
 		}
 
 		second, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:     "g-issues",
-			FromVersion: "v1",
-			ToVersion:   "v2",
-			Type:        core.AppInstallationEventTypePromoted,
-			Actor:       "user:alice",
+			InstallationID: "g-issues",
+			FromVersion:    "v1",
+			ToVersion:      "v2",
+			Type:           core.AppInstallationEventTypePromoted,
+			Actor:          "user:alice",
 		})
 		if err != nil {
 			t.Fatalf("AppendEvent(second): %v", err)
@@ -261,16 +261,16 @@ func TestAppInstallationEventService(t *testing.T) {
 		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
 		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:   "g-issues",
-			Type:      core.AppInstallationEventTypeInstallRequested,
-			Timestamp: secondAt,
+			InstallationID: "g-issues",
+			Type:           core.AppInstallationEventTypeInstallRequested,
+			Timestamp:      secondAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent(first): %v", err)
 		}
 		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:   "g-issues",
-			Type:      core.AppInstallationEventTypePromoted,
-			Timestamp: firstAt,
+			InstallationID: "g-issues",
+			Type:           core.AppInstallationEventTypePromoted,
+			Timestamp:      firstAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent(second): %v", err)
 		}
@@ -297,8 +297,8 @@ func TestAppInstallationEventService(t *testing.T) {
 			t.Fatalf("coredata.New: %v", err)
 		}
 		_, err = svc.AppInstallationEvents.AppendEvent(context.Background(), &core.AppInstallationEvent{
-			AppName: "g-issues",
-			Type:    "activated",
+			InstallationID: "g-issues",
+			Type:           "activated",
 		})
 		if err == nil {
 			t.Fatal("expected unsupported type error")

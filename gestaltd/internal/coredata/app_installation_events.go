@@ -25,9 +25,9 @@ func (s *AppInstallationEventService) AppendEvent(ctx context.Context, event *co
 	if event == nil {
 		return nil, fmt.Errorf("append app installation event: event is required")
 	}
-	appName := strings.TrimSpace(event.AppName)
-	if appName == "" {
-		return nil, fmt.Errorf("append app installation event: app_name is required")
+	installationID := strings.TrimSpace(event.InstallationID)
+	if installationID == "" {
+		return nil, fmt.Errorf("append app installation event: installation_id is required")
 	}
 	eventType := strings.TrimSpace(event.Type)
 	if eventType == "" {
@@ -49,14 +49,14 @@ func (s *AppInstallationEventService) AppendEvent(ctx context.Context, event *co
 		timestamp = timestamp.UTC().Truncate(time.Millisecond)
 	}
 	rec := idb.Record{
-		"id":            id,
-		"app_name":      appName,
-		"from_version":  strings.TrimSpace(event.FromVersion),
-		"to_version":    strings.TrimSpace(event.ToVersion),
-		"type":          eventType,
-		"actor":         strings.TrimSpace(event.Actor),
-		"timestamp":     timestamp,
-		"metadata_json": jsonValue(event.Metadata),
+		"id":              id,
+		"installation_id": installationID,
+		"from_version":    strings.TrimSpace(event.FromVersion),
+		"to_version":      strings.TrimSpace(event.ToVersion),
+		"type":            eventType,
+		"actor":           strings.TrimSpace(event.Actor),
+		"timestamp":       timestamp,
+		"metadata_json":   jsonValue(event.Metadata),
 	}
 	if err := s.store.Add(ctx, rec); err != nil {
 		return nil, fmt.Errorf("append app installation event: %w", err)
@@ -66,18 +66,18 @@ func (s *AppInstallationEventService) AppendEvent(ctx context.Context, event *co
 
 var indexedDBMaxTime = time.Date(2262, 1, 1, 0, 0, 0, 0, time.UTC)
 
-func (s *AppInstallationEventService) ListEventsByApp(ctx context.Context, appName string) ([]*core.AppInstallationEvent, error) {
-	appName = strings.TrimSpace(appName)
-	if appName == "" {
-		return nil, fmt.Errorf("list app installation events: app_name is required")
+func (s *AppInstallationEventService) ListEventsByApp(ctx context.Context, installationID string) ([]*core.AppInstallationEvent, error) {
+	installationID = strings.TrimSpace(installationID)
+	if installationID == "" {
+		return nil, fmt.Errorf("list app installation events: installation_id is required")
 	}
 	query := idb.Bound(
-		[]any{appName, time.Time{}},
-		[]any{appName, indexedDBMaxTime},
+		[]any{installationID, time.Time{}},
+		[]any{installationID, indexedDBMaxTime},
 		false,
 		false,
 	)
-	recs, err := s.store.Index("by_app_name_timestamp").GetAll(ctx, query)
+	recs, err := s.store.Index("by_installation_id_timestamp").GetAll(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("list app installation events: %w", err)
 	}
@@ -103,13 +103,13 @@ func validateAppInstallationEventType(eventType string) error {
 
 func recordToAppInstallationEvent(rec idb.Record) *core.AppInstallationEvent {
 	return &core.AppInstallationEvent{
-		ID:          recString(rec, "id"),
-		AppName:     recString(rec, "app_name"),
-		FromVersion: recString(rec, "from_version"),
-		ToVersion:   recString(rec, "to_version"),
-		Type:        recString(rec, "type"),
-		Actor:       recString(rec, "actor"),
-		Timestamp:   recTime(rec, "timestamp"),
-		Metadata:    recAnyMap(rec, "metadata_json"),
+		ID:             recString(rec, "id"),
+		InstallationID: recString(rec, "installation_id"),
+		FromVersion:    recString(rec, "from_version"),
+		ToVersion:      recString(rec, "to_version"),
+		Type:           recString(rec, "type"),
+		Actor:          recString(rec, "actor"),
+		Timestamp:      recTime(rec, "timestamp"),
+		Metadata:       recAnyMap(rec, "metadata_json"),
 	}
 }

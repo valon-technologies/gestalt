@@ -62,7 +62,6 @@ var AppInstallationsSchema = idb.ObjectStoreOptions{
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "app_name", Type: idb.TypeString, NotNull: true, Unique: true},
 		{Name: "version_constraint", Type: idb.TypeString},
 		{Name: "resolved_version", Type: idb.TypeString},
 		{Name: "source_ref", Type: idb.TypeString},
@@ -80,12 +79,12 @@ var AppInstallationsSchema = idb.ObjectStoreOptions{
 
 var AppInstallationEventsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
-		{Name: "by_app_name", KeyPath: []string{"app_name"}},
-		{Name: "by_app_name_timestamp", KeyPath: []string{"app_name", "timestamp"}},
+		{Name: "by_installation_id", KeyPath: []string{"installation_id"}},
+		{Name: "by_installation_id_timestamp", KeyPath: []string{"installation_id", "timestamp"}},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "app_name", Type: idb.TypeString, NotNull: true},
+		{Name: "installation_id", Type: idb.TypeString, NotNull: true},
 		{Name: "from_version", Type: idb.TypeString},
 		{Name: "to_version", Type: idb.TypeString},
 		{Name: "type", Type: idb.TypeString, NotNull: true},

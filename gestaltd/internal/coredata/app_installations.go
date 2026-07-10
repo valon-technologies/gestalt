@@ -76,7 +76,6 @@ func (s *AppInstallationService) PutInstallation(ctx context.Context, installati
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	rec := appInstallationToRecord(installation)
 	rec["id"] = appName
-	rec["app_name"] = appName
 	rec["rollout_status"] = rolloutStatus
 	installedAt := installation.InstalledAt
 	if installedAt.IsZero() {
@@ -120,7 +119,6 @@ func (s *AppInstallationService) UpdateInstallation(ctx context.Context, appName
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	rec := appInstallationToRecord(installation)
 	rec["id"] = appName
-	rec["app_name"] = appName
 	rec["rollout_status"] = rolloutStatus
 	rec["updated_at"] = now
 	if err := s.store.Put(ctx, rec); err != nil {
@@ -152,12 +150,8 @@ func validateAppInstallationRolloutStatus(rolloutStatus string) error {
 }
 
 func recordToAppInstallation(rec idb.Record) *core.AppInstallation {
-	appName := recString(rec, "app_name")
-	if appName == "" {
-		appName = recString(rec, "id")
-	}
 	return &core.AppInstallation{
-		AppName:                 appName,
+		AppName:                 recString(rec, "id"),
 		VersionConstraint:       recString(rec, "version_constraint"),
 		ResolvedVersion:         recString(rec, "resolved_version"),
 		SourceRef:               recString(rec, "source_ref"),
@@ -177,7 +171,6 @@ func appInstallationToRecord(installation *core.AppInstallation) idb.Record {
 	appName := strings.TrimSpace(installation.AppName)
 	return idb.Record{
 		"id":                        appName,
-		"app_name":                  appName,
 		"version_constraint":        strings.TrimSpace(installation.VersionConstraint),
 		"resolved_version":          strings.TrimSpace(installation.ResolvedVersion),
 		"source_ref":                strings.TrimSpace(installation.SourceRef),
