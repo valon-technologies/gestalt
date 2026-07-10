@@ -452,6 +452,63 @@ func TestProviderReleaseMetadataRejectsMCPAppWithoutStaticCatalog(t *testing.T) 
 	}
 }
 
+func TestProviderReleaseMetadataSnapshotsManifestContract(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/release-test
+version: 1.0.0
+displayName: Contract App
+dependencies:
+  apps:
+    github.com/acme/apps/base:
+      version: 1.2.3
+      operations:
+        listItems:
+          inputSchemaHash: abc123
+compatibility:
+  minGestaltdVersion: 0.5.0
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    rest:
+      connection: default
+      baseUrl: https://api.example.test
+      operations:
+        - name: createThing
+          method: POST
+          path: /things
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"provider": "",
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Requires == nil {
+		t.Fatalf("requires metadata missing: %#v", metadata.StaticValidation)
+	}
+	app := metadata.StaticValidation.Requires.Apps["github.com/acme/apps/base"]
+	if app.Version != "1.2.3" {
+		t.Fatalf("requires app version = %q", app.Version)
+	}
+	if app.Operations["listItems"].InputSchemaHash != "abc123" {
+		t.Fatalf("requires operations = %#v", app.Operations)
+	}
+	if metadata.StaticValidation.Compatibility == nil || metadata.StaticValidation.Compatibility.MinGestaltdVersion != "0.5.0" {
+		t.Fatalf("compatibility metadata missing: %#v", metadata.StaticValidation.Compatibility)
+	}
+}
+
 func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, error) {
 	t.Helper()
 

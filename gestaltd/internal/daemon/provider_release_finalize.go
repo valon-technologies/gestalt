@@ -249,7 +249,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	if err != nil {
 		return nil, err
 	}
-	requires, compatibility, err := providerrelease.ParseContractFromManifestRaw(contractRaw)
+	requires, compatibility, err := providerrelease.ParseContract(manifest, contractRaw)
 	if err != nil {
 		return nil, fmt.Errorf("parse release contract from manifest: %w", err)
 	}
