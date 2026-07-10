@@ -24,22 +24,22 @@ type ManagedSubject struct {
 }
 
 const (
-	AppInstallationDesiredStatePending = "pending"
-	AppInstallationDesiredStateActive  = "active"
-	AppInstallationDesiredStateFailed  = "failed"
+	AppInstallationRolloutStatusPending  = "pending"
+	AppInstallationRolloutStatusPromoted = "promoted"
+	AppInstallationRolloutStatusFailed   = "failed"
 )
 
-// AppInstallation records the shared desired and active version for a
-// registry-installed app. app_name is the primary key.
+// AppInstallation records the shared fleet-wide rollout for a registry-installed
+// app. app_name is the primary key.
 type AppInstallation struct {
-	AppName                  string
-	DesiredVersionConstraint string
-	ResolvedVersion          string
-	SourceRef                string
-	Registry                 string
-	ProviderReleaseURL       string
-	ArtifactChecksums        map[string]string
-	DesiredState             string
+	AppName             string
+	VersionConstraint   string
+	ResolvedVersion     string
+	SourceRef           string
+	Registry            string
+	ProviderReleaseURL  string
+	ArtifactChecksums   map[string]string
+	RolloutStatus       string
 	ActiveSince              *time.Time
 	PreviousResolvedVersion  string
 	InstalledBy              string

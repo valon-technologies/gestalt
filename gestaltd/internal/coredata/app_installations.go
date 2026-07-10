@@ -36,16 +36,16 @@ func (s *AppInstallationService) GetInstallation(ctx context.Context, appName st
 	return recordToAppInstallation(rec), nil
 }
 
-func (s *AppInstallationService) ListInstallations(ctx context.Context, desiredState string) ([]*core.AppInstallation, error) {
-	desiredState = strings.TrimSpace(desiredState)
+func (s *AppInstallationService) ListInstallations(ctx context.Context, rolloutStatus string) ([]*core.AppInstallation, error) {
+	rolloutStatus = strings.TrimSpace(rolloutStatus)
 	var (
 		recs []idb.Record
 		err  error
 	)
-	if desiredState == "" {
+	if rolloutStatus == "" {
 		recs, err = s.store.GetAll(ctx, nil)
 	} else {
-		recs, err = s.store.Index("by_desired_state").GetAll(ctx, desiredState)
+		recs, err = s.store.Index("by_rollout_status").GetAll(ctx, rolloutStatus)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("list app installations: %w", err)
@@ -65,11 +65,11 @@ func (s *AppInstallationService) PutInstallation(ctx context.Context, installati
 	if appName == "" {
 		return nil, fmt.Errorf("put app installation: app_name is required")
 	}
-	desiredState := strings.TrimSpace(installation.DesiredState)
-	if desiredState == "" {
-		return nil, fmt.Errorf("put app installation: desired_state is required")
+	rolloutStatus := strings.TrimSpace(installation.RolloutStatus)
+	if rolloutStatus == "" {
+		return nil, fmt.Errorf("put app installation: rollout_status is required")
 	}
-	if err := validateAppInstallationDesiredState(desiredState); err != nil {
+	if err := validateAppInstallationRolloutStatus(rolloutStatus); err != nil {
 		return nil, err
 	}
 
@@ -77,7 +77,7 @@ func (s *AppInstallationService) PutInstallation(ctx context.Context, installati
 	rec := appInstallationToRecord(installation)
 	rec["id"] = appName
 	rec["app_name"] = appName
-	rec["desired_state"] = desiredState
+	rec["rollout_status"] = rolloutStatus
 	if recTime(rec, "installed_at").IsZero() {
 		rec["installed_at"] = now
 	}
@@ -103,18 +103,18 @@ func (s *AppInstallationService) UpdateInstallation(ctx context.Context, appName
 	if err := update(installation); err != nil {
 		return nil, err
 	}
-	desiredState := strings.TrimSpace(installation.DesiredState)
-	if desiredState == "" {
-		return nil, fmt.Errorf("update app installation: desired_state is required")
+	rolloutStatus := strings.TrimSpace(installation.RolloutStatus)
+	if rolloutStatus == "" {
+		return nil, fmt.Errorf("update app installation: rollout_status is required")
 	}
-	if err := validateAppInstallationDesiredState(desiredState); err != nil {
+	if err := validateAppInstallationRolloutStatus(rolloutStatus); err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	rec := appInstallationToRecord(installation)
 	rec["id"] = appName
 	rec["app_name"] = appName
-	rec["desired_state"] = desiredState
+	rec["rollout_status"] = rolloutStatus
 	rec["updated_at"] = now
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("update app installation: %w", err)
@@ -133,14 +133,14 @@ func (s *AppInstallationService) DeleteInstallation(ctx context.Context, appName
 	return nil
 }
 
-func validateAppInstallationDesiredState(desiredState string) error {
-	switch desiredState {
-	case core.AppInstallationDesiredStatePending,
-		core.AppInstallationDesiredStateActive,
-		core.AppInstallationDesiredStateFailed:
+func validateAppInstallationRolloutStatus(rolloutStatus string) error {
+	switch rolloutStatus {
+	case core.AppInstallationRolloutStatusPending,
+		core.AppInstallationRolloutStatusPromoted,
+		core.AppInstallationRolloutStatusFailed:
 		return nil
 	default:
-		return fmt.Errorf("put app installation: unsupported desired_state %q", desiredState)
+		return fmt.Errorf("put app installation: unsupported rollout_status %q", rolloutStatus)
 	}
 }
 
@@ -150,38 +150,38 @@ func recordToAppInstallation(rec idb.Record) *core.AppInstallation {
 		appName = recString(rec, "id")
 	}
 	return &core.AppInstallation{
-		AppName:                  appName,
-		DesiredVersionConstraint: recString(rec, "desired_version_constraint"),
-		ResolvedVersion:          recString(rec, "resolved_version"),
-		SourceRef:                recString(rec, "source_ref"),
-		Registry:                 recString(rec, "registry"),
-		ProviderReleaseURL:       recString(rec, "provider_release_url"),
-		ArtifactChecksums:        recStringMap(rec, "artifact_checksums_json"),
-		DesiredState:             recString(rec, "desired_state"),
-		ActiveSince:              recTimePtr(rec, "active_since"),
-		PreviousResolvedVersion:  recString(rec, "previous_resolved_version"),
-		InstalledBy:              recString(rec, "installed_by"),
-		InstalledAt:              recTime(rec, "installed_at"),
-		UpdatedAt:                recTime(rec, "updated_at"),
+		AppName:                 appName,
+		VersionConstraint:       recString(rec, "version_constraint"),
+		ResolvedVersion:         recString(rec, "resolved_version"),
+		SourceRef:               recString(rec, "source_ref"),
+		Registry:                recString(rec, "registry"),
+		ProviderReleaseURL:      recString(rec, "provider_release_url"),
+		ArtifactChecksums:       recStringMap(rec, "artifact_checksums_json"),
+		RolloutStatus:           recString(rec, "rollout_status"),
+		ActiveSince:             recTimePtr(rec, "active_since"),
+		PreviousResolvedVersion: recString(rec, "previous_resolved_version"),
+		InstalledBy:             recString(rec, "installed_by"),
+		InstalledAt:             recTime(rec, "installed_at"),
+		UpdatedAt:               recTime(rec, "updated_at"),
 	}
 }
 
 func appInstallationToRecord(installation *core.AppInstallation) idb.Record {
 	appName := strings.TrimSpace(installation.AppName)
 	return idb.Record{
-		"id":                         appName,
-		"app_name":                   appName,
-		"desired_version_constraint": strings.TrimSpace(installation.DesiredVersionConstraint),
-		"resolved_version":           strings.TrimSpace(installation.ResolvedVersion),
-		"source_ref":                 strings.TrimSpace(installation.SourceRef),
-		"registry":                   strings.TrimSpace(installation.Registry),
-		"provider_release_url":       strings.TrimSpace(installation.ProviderReleaseURL),
-		"artifact_checksums_json":    jsonValue(installation.ArtifactChecksums),
-		"desired_state":              strings.TrimSpace(installation.DesiredState),
-		"active_since":               installation.ActiveSince,
-		"previous_resolved_version":  strings.TrimSpace(installation.PreviousResolvedVersion),
-		"installed_by":               strings.TrimSpace(installation.InstalledBy),
-		"installed_at":               installation.InstalledAt,
-		"updated_at":                 installation.UpdatedAt,
+		"id":                          appName,
+		"app_name":                    appName,
+		"version_constraint":          strings.TrimSpace(installation.VersionConstraint),
+		"resolved_version":            strings.TrimSpace(installation.ResolvedVersion),
+		"source_ref":                  strings.TrimSpace(installation.SourceRef),
+		"registry":                    strings.TrimSpace(installation.Registry),
+		"provider_release_url":        strings.TrimSpace(installation.ProviderReleaseURL),
+		"artifact_checksums_json":     jsonValue(installation.ArtifactChecksums),
+		"rollout_status":              strings.TrimSpace(installation.RolloutStatus),
+		"active_since":                installation.ActiveSince,
+		"previous_resolved_version":   strings.TrimSpace(installation.PreviousResolvedVersion),
+		"installed_by":                strings.TrimSpace(installation.InstalledBy),
+		"installed_at":                installation.InstalledAt,
+		"updated_at":                  installation.UpdatedAt,
 	}
 }

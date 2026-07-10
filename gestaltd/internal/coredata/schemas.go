@@ -57,20 +57,20 @@ var ManagedSubjectsSchema = idb.ObjectStoreOptions{
 
 var AppInstallationsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
-		{Name: "by_desired_state", KeyPath: []string{"desired_state"}},
+		{Name: "by_rollout_status", KeyPath: []string{"rollout_status"}},
 		{Name: "by_registry", KeyPath: []string{"registry"}},
 		{Name: "by_resolved_version", KeyPath: []string{"resolved_version"}},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "app_name", Type: idb.TypeString, NotNull: true, Unique: true},
-		{Name: "desired_version_constraint", Type: idb.TypeString},
+		{Name: "version_constraint", Type: idb.TypeString},
 		{Name: "resolved_version", Type: idb.TypeString},
 		{Name: "source_ref", Type: idb.TypeString},
 		{Name: "registry", Type: idb.TypeString},
 		{Name: "provider_release_url", Type: idb.TypeString},
 		{Name: "artifact_checksums_json", Type: idb.TypeJSON},
-		{Name: "desired_state", Type: idb.TypeString, NotNull: true},
+		{Name: "rollout_status", Type: idb.TypeString, NotNull: true},
 		{Name: "active_since", Type: idb.TypeTime},
 		{Name: "previous_resolved_version", Type: idb.TypeString},
 		{Name: "installed_by", Type: idb.TypeString},

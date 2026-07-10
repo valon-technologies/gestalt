@@ -23,16 +23,16 @@ func TestAppInstallationService(t *testing.T) {
 		activeSince := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 
 		got, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
-			AppName:                  "g-issues",
-			DesiredVersionConstraint: "0.0.0-snapshot.gabc123",
-			ResolvedVersion:          "0.0.0-snapshot.gabc123",
-			SourceRef:                "abc123def456abc123def456abc123def456abcd",
-			Registry:                 "toolshed",
-			ProviderReleaseURL:         "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry/apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.gabc123",
+			ResolvedVersion:   "0.0.0-snapshot.gabc123",
+			SourceRef:         "abc123def456abc123def456abc123def456abcd",
+			Registry:          "toolshed",
+			ProviderReleaseURL: "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry/apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
 			ArtifactChecksums: map[string]string{
 				"linux/amd64": "sha256:deadbeef",
 			},
-			DesiredState:            core.AppInstallationDesiredStateActive,
+			RolloutStatus:           core.AppInstallationRolloutStatusPromoted,
 			ActiveSince:             &activeSince,
 			PreviousResolvedVersion: "",
 			InstalledBy:             "user:alice",
@@ -57,8 +57,8 @@ func TestAppInstallationService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetInstallation: %v", err)
 		}
-		if stored.DesiredState != core.AppInstallationDesiredStateActive {
-			t.Fatalf("DesiredState = %q, want active", stored.DesiredState)
+		if stored.RolloutStatus != core.AppInstallationRolloutStatusPromoted {
+			t.Fatalf("RolloutStatus = %q, want promoted", stored.RolloutStatus)
 		}
 		if stored.ActiveSince == nil || !stored.ActiveSince.Equal(activeSince) {
 			t.Fatalf("ActiveSince = %v, want %v", stored.ActiveSince, activeSince)
@@ -77,22 +77,22 @@ func TestAppInstallationService(t *testing.T) {
 		}
 	})
 
-	t.Run("PutInstallation_rejects_unknown_desired_state", func(t *testing.T) {
+	t.Run("PutInstallation_rejects_unknown_rollout_status", func(t *testing.T) {
 		t.Parallel()
 		svc, err := coredata.New(&coretesting.StubIndexedDB{})
 		if err != nil {
 			t.Fatalf("coredata.New: %v", err)
 		}
 		_, err = svc.AppInstallations.PutInstallation(context.Background(), &core.AppInstallation{
-			AppName:      "g-issues",
-			DesiredState: "installing",
+			AppName:       "g-issues",
+			RolloutStatus: "installing",
 		})
 		if err == nil {
-			t.Fatal("expected unsupported desired_state error")
+			t.Fatal("expected unsupported rollout_status error")
 		}
 	})
 
-	t.Run("ListInstallations_filters_by_desired_state", func(t *testing.T) {
+	t.Run("ListInstallations_filters_by_rollout_status", func(t *testing.T) {
 		t.Parallel()
 		svc, err := coredata.New(&coretesting.StubIndexedDB{})
 		if err != nil {
@@ -100,20 +100,20 @@ func TestAppInstallationService(t *testing.T) {
 		}
 		ctx := context.Background()
 		for _, installation := range []*core.AppInstallation{
-			{AppName: "g-issues", DesiredState: core.AppInstallationDesiredStateActive, ResolvedVersion: "v1"},
-			{AppName: "dealHub", DesiredState: core.AppInstallationDesiredStatePending, ResolvedVersion: "v2"},
+			{AppName: "g-issues", RolloutStatus: core.AppInstallationRolloutStatusPromoted, ResolvedVersion: "v1"},
+			{AppName: "dealHub", RolloutStatus: core.AppInstallationRolloutStatusPending, ResolvedVersion: "v2"},
 		} {
 			if _, err := svc.AppInstallations.PutInstallation(ctx, installation); err != nil {
 				t.Fatalf("PutInstallation(%s): %v", installation.AppName, err)
 			}
 		}
 
-		active, err := svc.AppInstallations.ListInstallations(ctx, core.AppInstallationDesiredStateActive)
+		promoted, err := svc.AppInstallations.ListInstallations(ctx, core.AppInstallationRolloutStatusPromoted)
 		if err != nil {
-			t.Fatalf("ListInstallations(active): %v", err)
+			t.Fatalf("ListInstallations(promoted): %v", err)
 		}
-		if len(active) != 1 || active[0].AppName != "g-issues" {
-			t.Fatalf("active installations = %#v, want g-issues only", active)
+		if len(promoted) != 1 || promoted[0].AppName != "g-issues" {
+			t.Fatalf("promoted installations = %#v, want g-issues only", promoted)
 		}
 
 		all, err := svc.AppInstallations.ListInstallations(ctx, "")
@@ -134,7 +134,7 @@ func TestAppInstallationService(t *testing.T) {
 		ctx := context.Background()
 		if _, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
 			AppName:         "g-issues",
-			DesiredState:    core.AppInstallationDesiredStatePending,
+			RolloutStatus:   core.AppInstallationRolloutStatusPending,
 			ResolvedVersion: "v1",
 		}); err != nil {
 			t.Fatalf("PutInstallation: %v", err)
@@ -143,7 +143,7 @@ func TestAppInstallationService(t *testing.T) {
 		updated, err := svc.AppInstallations.UpdateInstallation(ctx, "g-issues", func(installation *core.AppInstallation) error {
 			installation.PreviousResolvedVersion = installation.ResolvedVersion
 			installation.ResolvedVersion = "v2"
-			installation.DesiredState = core.AppInstallationDesiredStateActive
+			installation.RolloutStatus = core.AppInstallationRolloutStatusPromoted
 			now := time.Now().UTC().Truncate(time.Millisecond)
 			installation.ActiveSince = &now
 			return nil
@@ -157,8 +157,8 @@ func TestAppInstallationService(t *testing.T) {
 		if updated.PreviousResolvedVersion != "v1" {
 			t.Fatalf("PreviousResolvedVersion = %q, want v1", updated.PreviousResolvedVersion)
 		}
-		if updated.DesiredState != core.AppInstallationDesiredStateActive {
-			t.Fatalf("DesiredState = %q, want active", updated.DesiredState)
+		if updated.RolloutStatus != core.AppInstallationRolloutStatusPromoted {
+			t.Fatalf("RolloutStatus = %q, want promoted", updated.RolloutStatus)
 		}
 	})
 }
@@ -193,7 +193,7 @@ func TestAppInstallationEventService(t *testing.T) {
 			AppName:     "g-issues",
 			FromVersion: "v1",
 			ToVersion:   "v2",
-			EventType:   "activated",
+			EventType:   "promoted",
 			Actor:       "user:alice",
 		})
 		if err != nil {
