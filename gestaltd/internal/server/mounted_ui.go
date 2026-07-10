@@ -217,10 +217,7 @@ func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Pri
 		return invocation.AccessContext{}, true, nil
 	}
 	if s.authorization == nil {
-		if s.noAuth {
-			return invocation.AccessContext{}, true, nil
-		}
-		return invocation.AccessContext{}, false, nil
+		return invocation.AccessContext{}, true, nil
 	}
 	resourceName, subjectID, ok := mountedUIAuthorizationSubject(p, mounted)
 	if !ok {

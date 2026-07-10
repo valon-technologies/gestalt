@@ -2523,131 +2523,134 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	t.Parallel()
 
+	const sessionToken = "session-token"
+	sessionAuth := &coretesting.StubAuthProvider{
+		N: "test",
+		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != sessionToken {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ui-user@example.test"}, nil
+		},
+	}
+	shell := func(name string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(name + "-shell"))
+		}
+	}
+
 	svc := testutil.NewStubServices(t)
 	user := seedUserRecord(t, svc, "ui-user", "ui-user@example.test", time.Now())
+
+	noAuthzTS := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = sessionAuth
+		cfg.Services = svc
+		cfg.Authorization = nil
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:         "sample-ui",
+			Path:         "/sample",
+			AppName:      "sampleApp",
+			AppLevelAuth: true,
+			Handler:      shell("sample"),
+		}}
+	})
+	testutil.CloseOnCleanup(t, noAuthzTS)
+
+	req, _ := http.NewRequest(http.MethodGet, noAuthzTS.URL+"/sample/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: sessionToken})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET mounted UI without authorization provider: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("mounted UI without authorization provider status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if !bytes.Contains(body, []byte("sample-shell")) {
+		t.Fatalf("mounted UI without authorization provider body = %q, want sample-shell", body)
+	}
+
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{
-			{
-				Name: "dealHub",
-			},
-			{
-				Name:        "brainPolicy",
-				DefaultRole: "viewer",
-			},
-			{
-				Name:        "readerPolicy",
-				DefaultRole: "reader",
-			},
-			{
-				Name: "gestaltAdmin",
-			},
+			{Name: "sampleApp"},
+			{Name: "viewerPolicy", DefaultRole: "viewer"},
+			{Name: "defaultRolePolicy", DefaultRole: "reader"},
+			{Name: "adminPolicy"},
 		},
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(
 				principal.UserSubjectID(user.ID),
 				"admin",
-				"dealHub",
-				"dealHub",
+				"sampleApp",
+				"sampleApp",
 			),
 			testAuthorizationRelationship(
 				principal.UserSubjectID(user.ID),
 				"admin",
-				"gestaltAdmin",
-				"gestaltAdmin",
+				"adminPolicy",
+				"adminPolicy",
 			),
 		},
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ui-user@example.test"}, nil
-			},
-		}
+		cfg.Auth = sessionAuth
 		cfg.Services = svc
 		cfg.Authorization = authz
 		cfg.MountedUIs = []server.MountedUI{
 			{
-				Name:         "deal-hub-ui",
-				Path:         "/deal-hub",
-				AppName:      "dealHub",
+				Name:         "sample-ui",
+				Path:         "/sample",
+				AppName:      "sampleApp",
 				AppLevelAuth: true,
-				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					_, _ = w.Write([]byte("deal-hub-shell"))
-				}),
+				Handler:      shell("sample"),
 			},
 			{
-				Name:                "brain-ui",
-				Path:                "/brain",
-				AppName:             "brain",
+				Name:                "viewer-ui",
+				Path:                "/viewer",
+				AppName:             "viewerApp",
 				AppLevelAuth:        true,
-				AuthorizationPolicy: "brainPolicy",
-				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					_, _ = w.Write([]byte("brain-shell"))
-				}),
+				AuthorizationPolicy: "viewerPolicy",
+				Handler:             shell("viewer"),
 			},
 			{
-				Name:                "reader-ui",
-				Path:                "/reader",
-				AppName:             "reader",
+				Name:                "default-role-ui",
+				Path:                "/default-role",
+				AppName:             "defaultRoleApp",
 				AppLevelAuth:        true,
-				AuthorizationPolicy: "readerPolicy",
-				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					_, _ = w.Write([]byte("reader-shell"))
-				}),
+				AuthorizationPolicy: "defaultRolePolicy",
+				Handler:             shell("default-role"),
 			},
 		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin-shell"))
-		})
+		cfg.Admin = server.AdminRouteConfig{AuthorizationPolicy: "adminPolicy"}
+		cfg.AdminUI = shell("admin")
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/deal-hub/", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET protected mounted UI: %v", err)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("protected mounted UI status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	if !bytes.Contains(body, []byte("deal-hub-shell")) {
-		t.Fatalf("protected mounted UI body = %q, want shell", body)
-	}
-	if len(authz.listRelationshipRequests) == 0 {
-		t.Fatal("authorization ListRelationships was not called")
-	}
-	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "dealHub" {
-		t.Fatalf("relationship resource type = %q, want app resource type dealHub", got)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/sample/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: sessionToken})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET viewer mounted UI: %v", err)
+		t.Fatalf("GET relationship-gated mounted UI: %v", err)
 	}
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("viewer mounted UI status = %d, want 200: %s", resp.StatusCode, body)
+		t.Fatalf("relationship-gated mounted UI status = %d, want 200: %s", resp.StatusCode, body)
 	}
-	if !bytes.Contains(body, []byte("brain-shell")) {
-		t.Fatalf("viewer mounted UI body = %q, want shell", body)
+	if !bytes.Contains(body, []byte("sample-shell")) {
+		t.Fatalf("relationship-gated mounted UI body = %q, want sample-shell", body)
 	}
-	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "brainPolicy" {
-		t.Fatalf("relationship resource type = %q, want explicit AuthorizationPolicy brainPolicy", got)
+	if len(authz.listRelationshipRequests) == 0 {
+		t.Fatal("authorization ListRelationships was not called")
+	}
+	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "sampleApp" {
+		t.Fatalf("relationship resource type = %q, want sampleApp", got)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/reader/", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/viewer/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: sessionToken})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET default-role mounted UI: %v", err)
@@ -2657,12 +2660,30 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("default-role mounted UI status = %d, want 200: %s", resp.StatusCode, body)
 	}
-	if !bytes.Contains(body, []byte("reader-shell")) {
-		t.Fatalf("default-role mounted UI body = %q, want shell", body)
+	if !bytes.Contains(body, []byte("viewer-shell")) {
+		t.Fatalf("default-role mounted UI body = %q, want viewer-shell", body)
+	}
+	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "viewerPolicy" {
+		t.Fatalf("relationship resource type = %q, want viewerPolicy", got)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/default-role/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: sessionToken})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET explicit default-role mounted UI: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("explicit default-role mounted UI status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if !bytes.Contains(body, []byte("default-role-shell")) {
+		t.Fatalf("explicit default-role mounted UI body = %q, want default-role-shell", body)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: sessionToken})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET admin UI: %v", err)
@@ -2673,13 +2694,13 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 		t.Fatalf("admin UI status = %d, want 200: %s", resp.StatusCode, body)
 	}
 	if !bytes.Contains(body, []byte("admin-shell")) {
-		t.Fatalf("admin UI body = %q, want shell", body)
+		t.Fatalf("admin UI body = %q, want admin-shell", body)
 	}
 	if len(authz.listRelationshipRequests) < 2 {
 		t.Fatalf("authorization ListRelationships calls = %d, want at least 2", len(authz.listRelationshipRequests))
 	}
-	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "gestaltAdmin" {
-		t.Fatalf("relationship resource type = %q, want gestaltAdmin", got)
+	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "adminPolicy" {
+		t.Fatalf("relationship resource type = %q, want adminPolicy", got)
 	}
 }
 
