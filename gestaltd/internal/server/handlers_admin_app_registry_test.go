@@ -87,7 +87,7 @@ func TestAdminAppRegistryEndpointsListConfiguredRegistriesAndVersions(t *testing
 	if err != nil {
 		t.Fatalf("GET app registries: %v", err)
 	}
-	defer listResp.Body.Close()
+	defer func() { _ = listResp.Body.Close() }()
 	if listResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(listResp.Body)
 		t.Fatalf("app registries status = %d: %s", listResp.StatusCode, body)
@@ -104,7 +104,7 @@ func TestAdminAppRegistryEndpointsListConfiguredRegistriesAndVersions(t *testing
 	if err != nil {
 		t.Fatalf("GET app registry versions: %v", err)
 	}
-	defer versionsResp.Body.Close()
+	defer func() { _ = versionsResp.Body.Close() }()
 	if versionsResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(versionsResp.Body)
 		t.Fatalf("versions status = %d: %s", versionsResp.StatusCode, body)
@@ -165,7 +165,7 @@ func TestAdminAppRegistryVersionsReturnsEmptyForUnknownApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET versions: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d: %s", resp.StatusCode, body)

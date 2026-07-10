@@ -19,8 +19,8 @@ type adminAppRegistryInfo struct {
 }
 
 type adminAppRegistryVersionsResponse struct {
-	Registry string                      `json:"registry"`
-	App      string                      `json:"app"`
+	Registry string                       `json:"registry"`
+	App      string                       `json:"app"`
 	Versions []appregistry.VersionSummary `json:"versions"`
 }
 

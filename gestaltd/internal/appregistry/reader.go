@@ -42,7 +42,7 @@ func (r *RegistryReader) FetchAppIndex(ctx context.Context, publicRoot, appName 
 	if err != nil {
 		return nil, fmt.Errorf("fetch app registry index %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
 		return NewEmptyIndex(), nil
 	}
@@ -67,11 +67,11 @@ type VersionSummary struct {
 // VersionsFromIndex returns version summaries for appName, newest first.
 func VersionsFromIndex(index *Index, appName string) []VersionSummary {
 	if index == nil || len(index.Apps) == 0 {
-		return nil
+		return []VersionSummary{}
 	}
 	appVersions, ok := index.Apps[appName]
 	if !ok || len(appVersions.Versions) == 0 {
-		return nil
+		return []VersionSummary{}
 	}
 	out := make([]VersionSummary, 0, len(appVersions.Versions))
 	for version, summary := range appVersions.Versions {
