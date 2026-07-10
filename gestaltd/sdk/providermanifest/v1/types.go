@@ -31,15 +31,15 @@ func NormalizeKind(kind string) string {
 }
 
 type Manifest struct {
-	Kind        string         `json:"kind,omitempty" yaml:"kind,omitempty"`
-	Source      string         `json:"source,omitempty" yaml:"source,omitempty"`
-	Version     string         `json:"version" yaml:"version"`
-	DisplayName string         `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string         `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
-	Install     *SourceInstall `json:"install,omitempty" yaml:"install,omitempty"`
-	Build       *SourceBuild   `json:"build,omitempty" yaml:"build,omitempty"`
-	Run         *SourceRun     `json:"run,omitempty" yaml:"run,omitempty"`
+	Kind          string                 `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Source        string                 `json:"source,omitempty" yaml:"source,omitempty"`
+	Version       string                 `json:"version" yaml:"version"`
+	DisplayName   string                 `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	Description   string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	IconFile      string                 `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
+	Install       *SourceInstall         `json:"install,omitempty" yaml:"install,omitempty"`
+	Build         *SourceBuild           `json:"build,omitempty" yaml:"build,omitempty"`
+	Run           *SourceRun             `json:"run,omitempty" yaml:"run,omitempty"`
 	Artifacts     []Artifact             `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoint    *Entrypoint            `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
 	Spec          *Spec                  `json:"spec,omitempty" yaml:"spec,omitempty"`
@@ -53,8 +53,8 @@ type ManifestDependencies struct {
 }
 
 type ManifestAppDependency struct {
-	Version    string                                    `json:"version,omitempty" yaml:"version,omitempty"`
-	Operations map[string]ManifestOperationDependency    `json:"operations,omitempty" yaml:"operations,omitempty"`
+	Version    string                                 `json:"version,omitempty" yaml:"version,omitempty"`
+	Operations map[string]ManifestOperationDependency `json:"operations,omitempty" yaml:"operations,omitempty"`
 }
 
 type ManifestOperationDependency struct {
