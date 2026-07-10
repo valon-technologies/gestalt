@@ -207,28 +207,28 @@ func TestAppInstallationEventService(t *testing.T) {
 			AppName:     "g-issues",
 			FromVersion: "",
 			ToVersion:   "v1",
-			EventType:   core.AppInstallationEventTypeInstallRequested,
+			Type:        core.AppInstallationEventTypeInstallRequested,
 			Actor:       "user:alice",
 			Metadata:    map[string]any{"registry": "toolshed"},
 		})
 		if err != nil {
 			t.Fatalf("AppendEvent(first): %v", err)
 		}
-		if first.EventID == "" {
-			t.Fatal("EventID should be generated")
+		if first.ID == "" {
+			t.Fatal("ID should be generated")
 		}
 
 		second, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
 			AppName:     "g-issues",
 			FromVersion: "v1",
 			ToVersion:   "v2",
-			EventType:   core.AppInstallationEventTypePromoted,
+			Type:        core.AppInstallationEventTypePromoted,
 			Actor:       "user:alice",
 		})
 		if err != nil {
 			t.Fatalf("AppendEvent(second): %v", err)
 		}
-		if second.EventID == first.EventID {
+		if second.ID == first.ID {
 			t.Fatal("expected distinct event IDs")
 		}
 
@@ -251,7 +251,7 @@ func TestAppInstallationEventService(t *testing.T) {
 		}
 	})
 
-	t.Run("ListEventsByApp_returns_event_timestamp_order", func(t *testing.T) {
+	t.Run("ListEventsByApp_returns_timestamp_order", func(t *testing.T) {
 		t.Parallel()
 		svc, err := coredata.New(&coretesting.StubIndexedDB{})
 		if err != nil {
@@ -261,16 +261,16 @@ func TestAppInstallationEventService(t *testing.T) {
 		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
 		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:        "g-issues",
-			EventType:      core.AppInstallationEventTypeInstallRequested,
-			EventTimestamp: secondAt,
+			AppName:   "g-issues",
+			Type:      core.AppInstallationEventTypeInstallRequested,
+			Timestamp: secondAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent(first): %v", err)
 		}
 		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:        "g-issues",
-			EventType:      core.AppInstallationEventTypePromoted,
-			EventTimestamp: firstAt,
+			AppName:   "g-issues",
+			Type:      core.AppInstallationEventTypePromoted,
+			Timestamp: firstAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent(second): %v", err)
 		}
@@ -282,26 +282,26 @@ func TestAppInstallationEventService(t *testing.T) {
 		if len(events) != 2 {
 			t.Fatalf("events = %d, want 2", len(events))
 		}
-		if !events[0].EventTimestamp.Equal(firstAt) || events[1].EventTimestamp.Equal(secondAt) == false {
-			t.Fatalf("event order = [%v, %v], want [%v, %v]", events[0].EventTimestamp, events[1].EventTimestamp, firstAt, secondAt)
+		if !events[0].Timestamp.Equal(firstAt) || events[1].Timestamp.Equal(secondAt) == false {
+			t.Fatalf("event order = [%v, %v], want [%v, %v]", events[0].Timestamp, events[1].Timestamp, firstAt, secondAt)
 		}
-		if events[0].EventType != core.AppInstallationEventTypePromoted {
-			t.Fatalf("first event type = %q, want promoted", events[0].EventType)
+		if events[0].Type != core.AppInstallationEventTypePromoted {
+			t.Fatalf("first event type = %q, want promoted", events[0].Type)
 		}
 	})
 
-	t.Run("AppendEvent_rejects_unknown_event_type", func(t *testing.T) {
+	t.Run("AppendEvent_rejects_unknown_type", func(t *testing.T) {
 		t.Parallel()
 		svc, err := coredata.New(&coretesting.StubIndexedDB{})
 		if err != nil {
 			t.Fatalf("coredata.New: %v", err)
 		}
 		_, err = svc.AppInstallationEvents.AppendEvent(context.Background(), &core.AppInstallationEvent{
-			AppName:   "g-issues",
-			EventType: "activated",
+			AppName: "g-issues",
+			Type:    "activated",
 		})
 		if err == nil {
-			t.Fatal("expected unsupported event_type error")
+			t.Fatal("expected unsupported type error")
 		}
 	})
 }

@@ -81,17 +81,16 @@ var AppInstallationsSchema = idb.ObjectStoreOptions{
 var AppInstallationEventsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_app_name", KeyPath: []string{"app_name"}},
-		{Name: "by_app_name_event_timestamp", KeyPath: []string{"app_name", "event_timestamp"}},
+		{Name: "by_app_name_timestamp", KeyPath: []string{"app_name", "timestamp"}},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "event_id", Type: idb.TypeString, NotNull: true, Unique: true},
 		{Name: "app_name", Type: idb.TypeString, NotNull: true},
 		{Name: "from_version", Type: idb.TypeString},
 		{Name: "to_version", Type: idb.TypeString},
-		{Name: "event_type", Type: idb.TypeString, NotNull: true},
+		{Name: "type", Type: idb.TypeString, NotNull: true},
 		{Name: "actor", Type: idb.TypeString},
-		{Name: "event_timestamp", Type: idb.TypeTime, NotNull: true},
+		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},
 		{Name: "metadata_json", Type: idb.TypeJSON},
 	},
 }
