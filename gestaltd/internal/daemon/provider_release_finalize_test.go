@@ -486,6 +486,7 @@ func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providerman
 		manifest,
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
+		nil,
 	)
 }
 
@@ -523,6 +524,7 @@ func buildProviderReleaseMetadataForRawManifest(t *testing.T, rawManifest string
 		manifest,
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
+		[]byte(rawManifest),
 	)
 }
 

@@ -52,6 +52,8 @@ func run(args []string, version string) error {
 			return nil
 		case "provider":
 			return runProvider(args[1:])
+		case "app":
+			return runApp(args[1:])
 		case "agent":
 			return runAgent(args[1:])
 		case "serve":
@@ -460,11 +462,13 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
+	writeUsageLine(w, "  gestaltd app <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  agent       Launch or inspect local agent harnesses")
+	writeUsageLine(w, "  app         Publish installable apps to configured app registries")
 	writeUsageLine(w, "  lock        Resolve provider metadata and write lock state")
 	writeUsageLine(w, "  sync        Materialize prepared artifacts from lock state")
 	writeUsageLine(w, "  provider    Develop, validate, or build provider release archives")

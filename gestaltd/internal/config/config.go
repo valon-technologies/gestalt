@@ -51,6 +51,7 @@ type Config struct {
 	APIVersion                   string                                      `yaml:"apiVersion,omitempty"`
 	ProviderRepositories         map[string]ProviderRepositoryConfig         `yaml:"providerRepositories,omitempty"`
 	ProviderSnapshotRepositories map[string]ProviderSnapshotRepositoryConfig `yaml:"providerSnapshotRepositories,omitempty"`
+	AppRegistries                map[string]AppRegistryConfig                `yaml:"appRegistries,omitempty"`
 	Server                       ServerConfig                                `yaml:"server"`
 	Authorization                AuthorizationConfig                         `yaml:"authorization,omitempty"`
 	Connections                  map[string]*ConnectionDef                   `yaml:"connections,omitempty"`

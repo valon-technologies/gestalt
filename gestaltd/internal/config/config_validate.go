@@ -80,6 +80,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateProviderSnapshotRepositories(cfg); err != nil {
 		return err
 	}
+	if err := validateAppRegistries(cfg); err != nil {
+		return err
+	}
 
 	for _, collection := range []struct {
 		kind    HostProviderKind
@@ -188,6 +191,37 @@ func validateProviderSnapshotRepositories(cfg *Config) error {
 		if err := validateProviderSnapshotRepositoryPublish(name, repo.Publish); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateAppRegistries(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for name, registry := range cfg.AppRegistries {
+		if err := providerregistry.ValidateRepositoryName(name); err != nil {
+			return fmt.Errorf("config validation: appRegistries.%s: %w", name, err)
+		}
+		if err := validateAppRegistryLocation("appRegistries", name, registry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAppRegistryLocation(prefix, name string, registry AppRegistryConfig) error {
+	if strings.TrimSpace(registry.Kind) != AppRegistryKindGCS {
+		return fmt.Errorf("config validation: %s.%s.kind must be gcs", prefix, name)
+	}
+	if registry.GCS == nil {
+		return fmt.Errorf("config validation: %s.%s.gcs is required", prefix, name)
+	}
+	if _, err := registry.StorageURL(); err != nil {
+		return fmt.Errorf("config validation: %s.%s: %w", prefix, name, err)
+	}
+	if _, err := registry.PublicURL(); err != nil {
+		return fmt.Errorf("config validation: %s.%s: %w", prefix, name, err)
 	}
 	return nil
 }

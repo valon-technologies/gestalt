@@ -47,12 +47,16 @@ type StaticValidation struct {
 	Manifest           *providermanifestv1.Manifest `yaml:"manifest,omitempty"`
 	Catalog            *catalog.Catalog             `yaml:"catalog,omitempty"`
 	CatalogSessionOnly bool                         `yaml:"catalogSessionOnly,omitempty"`
+	Requires           *Requires                    `yaml:"requires,omitempty"`
+	Compatibility      *Compatibility               `yaml:"compatibility,omitempty"`
 }
 
 type staticValidationYAML struct {
 	Manifest           *staticValidationManifestYAML `yaml:"manifest,omitempty"`
 	Catalog            *catalog.Catalog              `yaml:"catalog,omitempty"`
 	CatalogSessionOnly bool                          `yaml:"catalogSessionOnly,omitempty"`
+	Requires           *Requires                     `yaml:"requires,omitempty"`
+	Compatibility      *Compatibility                `yaml:"compatibility,omitempty"`
 }
 
 type staticValidationManifestYAML struct {
@@ -84,6 +88,8 @@ func (s StaticValidation) MarshalYAML() (any, error) {
 		Manifest:           staticValidationManifestForYAML(s.Manifest),
 		Catalog:            s.Catalog,
 		CatalogSessionOnly: s.CatalogSessionOnly,
+		Requires:           s.Requires,
+		Compatibility:      s.Compatibility,
 	}, nil
 }
 
