@@ -9,12 +9,12 @@ import (
 )
 
 type Services struct {
-	Users                   *UserService
-	ExternalCredentials     core.ExternalCredentialProvider
-	ManagedSubjects         *ManagedSubjectService
-	AppInstallations        *AppInstallationService
-	AppInstallationEvents   *AppInstallationEventService
-	DB                      indexeddb.IndexedDB
+	Users                 *UserService
+	ExternalCredentials   core.ExternalCredentialProvider
+	ManagedSubjects       *ManagedSubjectService
+	AppInstallations      *AppInstallationService
+	AppInstallationEvents *AppInstallationEventService
+	DB                    indexeddb.IndexedDB
 }
 
 // NewOptions configures coredata bootstrap behavior.
