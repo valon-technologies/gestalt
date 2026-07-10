@@ -8,7 +8,6 @@ import {
   type ObjectStoreSchema,
   type Record as DBRecord,
   type Revision,
-  prefixMigrationRevisions,
   runMigrations,
 } from "../src/index.ts";
 
@@ -445,32 +444,5 @@ describe("runMigrations", () => {
       },
     };
     await expect(runMigrations(db, { revisions: [gIssues] })).resolves.toBeDefined();
-  });
-});
-
-describe("prefixMigrationRevisions", () => {
-  const flat: Revision = {
-    id: "0001_init",
-    schema: { stores: [{ name: "issues", columns: [{ name: "id", primaryKey: true }] }] },
-  };
-
-  test("prefixes flat revision ids with the provider name", () => {
-    expect(prefixMigrationRevisions("gIssues", [flat])).toEqual([
-      { ...flat, id: "gIssues/0001_init" },
-    ]);
-  });
-
-  test("does not double-prefix ids that already include the provider namespace", () => {
-    const namespaced = { ...flat, id: "gIssues/0001_init" };
-    expect(prefixMigrationRevisions("gIssues", [namespaced])).toEqual([namespaced]);
-  });
-
-  test("leaves path-prefixed revision ids unchanged", () => {
-    const auth = { ...flat, id: "auth/oidc/0001_init" };
-    expect(prefixMigrationRevisions("gIssues", [auth])).toEqual([auth]);
-  });
-
-  test("returns revisions unchanged when the provider name is empty", () => {
-    expect(prefixMigrationRevisions("", [flat])).toEqual([flat]);
   });
 });

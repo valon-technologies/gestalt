@@ -3,7 +3,6 @@ import { IndexedDB } from "./providers/indexeddb.ts";
 import {
   type MigrationRunOptions,
   type Revision,
-  prefixMigrationRevisions,
   resolveMigrationDbBinding,
   runMigrations,
 } from "./providers/migrations.ts";
@@ -245,28 +244,16 @@ function resolveMigrations(
   }
   if (typeof source === "function") {
     const resolved = source(name, config);
-    return resolved === undefined
-      ? undefined
-      : normalizeMigrationRunOptions(resolved, name);
+    return resolved === undefined ? undefined : normalizeMigrationRunOptions(resolved);
   }
-  return normalizeMigrationRunOptions(source, name);
+  return normalizeMigrationRunOptions(source);
 }
 
 function normalizeMigrationRunOptions(
   input: Revision[] | MigrationRunOptions,
-  providerName: string,
 ): MigrationRunOptions | undefined {
   if (Array.isArray(input)) {
-    if (input.length === 0) {
-      return undefined;
-    }
-    return { revisions: prefixMigrationRevisions(providerName, input) };
+    return input.length > 0 ? { revisions: input } : undefined;
   }
-  if (input.revisions.length === 0) {
-    return undefined;
-  }
-  return {
-    ...input,
-    revisions: prefixMigrationRevisions(providerName, input.revisions),
-  };
+  return input.revisions.length > 0 ? input : undefined;
 }

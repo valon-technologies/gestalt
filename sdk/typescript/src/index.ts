@@ -223,7 +223,6 @@ export {
 } from "./providers/app.ts";
 export {
   MigrationError,
-  prefixMigrationRevisions,
   runMigrations,
   type AddIndexDeclaration,
   type BackfillRevision,
