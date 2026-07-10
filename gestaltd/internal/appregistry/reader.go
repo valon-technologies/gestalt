@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 )
 
 // RegistryReader fetches registry documents over HTTP from a registry public root.
@@ -27,6 +29,9 @@ func (r *RegistryReader) FetchAppIndex(ctx context.Context, publicRoot, appName 
 	appName = strings.TrimSpace(appName)
 	if appName == "" {
 		return nil, fmt.Errorf("app name is required")
+	}
+	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+		return nil, err
 	}
 	publicRoot = strings.TrimRight(strings.TrimSpace(publicRoot), "/")
 	if publicRoot == "" {

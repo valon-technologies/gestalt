@@ -91,6 +91,16 @@ func TestRegistryReader_FetchAppIndex_NotFoundReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestRegistryReader_FetchAppIndex_RejectsInvalidAppName(t *testing.T) {
+	t.Parallel()
+
+	reader := &RegistryReader{}
+	_, err := reader.FetchAppIndex(t.Context(), "https://example.com", "..")
+	if err == nil {
+		t.Fatal("expected invalid app name error")
+	}
+}
+
 func TestRegistryReader_FetchAppIndex_RejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 

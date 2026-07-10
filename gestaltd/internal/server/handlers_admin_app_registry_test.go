@@ -180,3 +180,29 @@ func TestAdminAppRegistryVersionsReturnsEmptyForUnknownApp(t *testing.T) {
 		t.Fatalf("versions = %#v, want empty", payload.Versions)
 	}
 }
+
+func TestAdminAppRegistryVersionsRejectsInvalidAppName(t *testing.T) {
+	t.Parallel()
+
+	registry, err := config.NewGCSAppRegistry("gitlab-peach-street-gestalt-app-registry")
+	if err != nil {
+		t.Fatalf("NewGCSAppRegistry: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{
+			"toolshed": registry,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/app-registries/toolshed/apps/..%2f../versions")
+	if err != nil {
+		t.Fatalf("GET versions: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d: %s, want 400", resp.StatusCode, body)
+	}
+}

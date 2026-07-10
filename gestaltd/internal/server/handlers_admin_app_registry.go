@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 )
 
 type adminAppRegistryInfo struct {
@@ -68,6 +69,10 @@ func (s *Server) listAdminAppRegistryAppVersions(w http.ResponseWriter, r *http.
 	}
 	if appName == "" {
 		writeError(w, http.StatusBadRequest, "app is required")
+		return
+	}
+	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}
 	if len(s.appRegistries) == 0 {
