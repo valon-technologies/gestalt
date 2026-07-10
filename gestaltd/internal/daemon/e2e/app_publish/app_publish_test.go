@@ -22,7 +22,6 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 
 	out, err := runAppCommandResult(rootDir,
 		"publish",
-		"--registry", "toolshed",
 		"--bucket", "gs://gestalt-app-registry",
 		"--app", releaseTestAppName,
 		"--version", version,
