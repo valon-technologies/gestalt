@@ -173,6 +173,18 @@ func dialTarget(ctx context.Context, serviceName, target string, extraOpts ...gr
 // Target reads the host service endpoint and relay token the daemon
 // advertised through the environment.
 func Target(serviceName string) (string, string, error) {
+	if raw, ok := os.LookupEnv(EnvHostServices); ok && raw != "" {
+		found := false
+		for _, name := range strings.Split(raw, ",") {
+			if strings.TrimSpace(name) == serviceName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", "", fmt.Errorf("%s: host service is not configured (%s=%q)", serviceName, EnvHostServices, raw)
+		}
+	}
 	target := strings.TrimSpace(os.Getenv(EnvHostServiceSocket))
 	if target == "" {
 		return "", "", fmt.Errorf("%s: %s is not set", serviceName, EnvHostServiceSocket)

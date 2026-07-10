@@ -159,6 +159,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 	proc := &providerProcess{dir: dir}
 	proc.cleanup = cfg.Cleanup
 	activeHostServices := activeHostServices(cfg.HostServices)
+	ApplyProviderHostServiceEnv(env, cfg.HostServices)
 	if len(activeHostServices) > 0 {
 		hostSocket := filepath.Join(dir, "host.sock")
 		lis, err := net.Listen("unix", hostSocket)

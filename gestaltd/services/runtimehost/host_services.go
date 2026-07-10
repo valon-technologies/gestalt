@@ -6,12 +6,20 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+)
+
+const (
+	HostServiceSocketEnv      = "GESTALT_HOST_SERVICE_SOCKET"
+	HostServiceTokenEnv       = "GESTALT_HOST_SERVICE_TOKEN"
+	HostServiceBindingHeader  = "x-gestalt-host-binding"
+	HostServicesConfiguredEnv = "GESTALT_HOST_SERVICES"
 )
 
 type StartedHostService struct {
@@ -101,6 +109,32 @@ func activeHostServices(services []HostService) []HostService {
 		active = append(active, service)
 	}
 	return active
+}
+
+// HostServicesEnvValue returns the comma-separated binding names for active
+// host services registered for a provider process.
+func HostServicesEnvValue(services []HostService) string {
+	active := activeHostServices(services)
+	names := make([]string, 0, len(active))
+	for _, service := range active {
+		if name := strings.TrimSpace(service.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return strings.Join(names, ",")
+}
+
+// ApplyProviderHostServiceEnv writes the configured host-service allowlist.
+func ApplyProviderHostServiceEnv(env map[string]string, services []HostService) {
+	if env == nil {
+		return
+	}
+	if value := HostServicesEnvValue(services); value != "" {
+		env[HostServicesConfiguredEnv] = value
+	} else {
+		delete(env, HostServicesConfiguredEnv)
+	}
 }
 
 func unifiedHostService() HostService {

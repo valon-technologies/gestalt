@@ -57,6 +57,7 @@ func PrepareExternalProviderSockets(cfg ProcessConfig) (*PreparedProviderSockets
 		Env:          maps.Clone(execEnv),
 	}
 	activeHostServices := activeHostServices(cfg.HostServices)
+	ApplyProviderHostServiceEnv(prepared.Env, cfg.HostServices)
 	if len(activeHostServices) == 0 {
 		prepared.cleanup = func() {
 			if cfg.SocketDir == "" {

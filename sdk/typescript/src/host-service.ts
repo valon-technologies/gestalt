@@ -5,6 +5,7 @@ import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-no
 
 export const ENV_HOST_SERVICE_SOCKET = "GESTALT_HOST_SERVICE_SOCKET";
 export const ENV_HOST_SERVICE_TOKEN = "GESTALT_HOST_SERVICE_TOKEN";
+export const ENV_HOST_SERVICES = "GESTALT_HOST_SERVICES";
 export const HOST_SERVICE_RELAY_TOKEN_HEADER =
   "x-gestalt-host-service-relay-token";
 export const HOST_SERVICE_BINDING_HEADER = "x-gestalt-host-binding";
@@ -112,6 +113,18 @@ export function createHostServiceGrpcTransport(
 export function requireHostServiceTarget(
   serviceName: string,
 ): { target: string; token: string } {
+  const configured = process.env[ENV_HOST_SERVICES];
+  if (configured) {
+    const allowed = configured
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+    if (!allowed.includes(serviceName)) {
+      throw new Error(
+        `${serviceName}: host service is not configured (${ENV_HOST_SERVICES}=${configured})`,
+      );
+    }
+  }
   const target = process.env[ENV_HOST_SERVICE_SOCKET];
   if (!target) {
     throw new Error(`${serviceName}: ${ENV_HOST_SERVICE_SOCKET} is not set`);

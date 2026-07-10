@@ -2025,8 +2025,8 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 		seenMu.Lock()
 		seen[runtime.Name] = struct{}{}
 		seenMu.Unlock()
-		if requireHostService(t, hostServices, "agent_provider").Register == nil {
-			return nil, fmt.Errorf("workflow provider missing agent_provider host service")
+		if requireHostService(t, hostServices, "agent").Register == nil {
+			return nil, fmt.Errorf("workflow provider missing agent host service")
 		}
 		return &stubWorkflowProvider{}, nil
 	}
@@ -3322,7 +3322,7 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	<-result.ProvidersReady
 
 	got := hostEnvs["basic"]
-	for _, want := range []string{"agent_provider", "identity", "indexeddb", "app", "workflow_provider"} {
+	for _, want := range []string{"agent", "identity", "indexeddb", "app", "workflow"} {
 		if !slices.Contains(got, want) {
 			t.Fatalf("workflow provider host services = %v, want %q", got, want)
 		}

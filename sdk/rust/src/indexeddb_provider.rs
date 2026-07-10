@@ -12,7 +12,10 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
-use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, HOST_SERVICE_BINDING_HEADER};
+use crate::env::{
+    ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, HOST_SERVICE_BINDING_HEADER,
+    host_service_configured,
+};
 use crate::generated::v1::{self as pb, indexed_db_client::IndexedDbClient};
 
 type IndexedDbTransport = InterceptedService<Channel, RelayTokenInterceptor>;
@@ -1405,6 +1408,7 @@ impl IndexedDB {
 
     /// Connects to a named IndexedDB transport socket.
     pub async fn connect_named(name: &str) -> Result<Self, IndexedDBError> {
+        host_service_configured("indexeddb").map_err(IndexedDBError::Env)?;
         let target = std::env::var(ENV_HOST_SERVICE_SOCKET)
             .map_err(|_| IndexedDBError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
         let token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();

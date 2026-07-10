@@ -10,7 +10,10 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
-use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, HOST_SERVICE_BINDING_HEADER};
+use crate::env::{
+    ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, HOST_SERVICE_BINDING_HEADER,
+    host_service_configured,
+};
 use crate::rpc_support::{GestaltError, gestalt_error_code};
 
 /// gRPC metadata header carrying the host-service relay token.
@@ -58,6 +61,9 @@ pub(crate) async fn connect_host_service(
     service: &str,
     name: &str,
 ) -> Result<HostServiceChannel, GestaltError> {
+    if let Err(message) = host_service_configured(service) {
+        return Err(env_error(message));
+    }
     let target = std::env::var(ENV_HOST_SERVICE_SOCKET).map_err(|_| {
         env_error(format!("{service}: {ENV_HOST_SERVICE_SOCKET} is not set"))
     })?;
