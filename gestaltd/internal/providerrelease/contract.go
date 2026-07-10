@@ -27,8 +27,9 @@ type Compatibility struct {
 	MinGestaltdVersion string `yaml:"minGestaltdVersion,omitempty" json:"minGestaltdVersion,omitempty"`
 }
 
-// ParseContract prefers contract fields decoded on the manifest struct and falls back
-// to parsing raw manifest bytes for older packages that only embed contract metadata.
+// ParseContract prefers contract fields decoded on the release archive manifest struct
+// and falls back to parsing raw manifest bytes for older packages that only embed
+// contract metadata in the archive file.
 func ParseContract(manifest *providermanifestv1.Manifest, raw []byte) (Requires, Compatibility, error) {
 	requires, compatibility := ContractFromManifest(manifest)
 	if len(requires.Apps) > 0 || compatibility.MinGestaltdVersion != "" {

@@ -249,7 +249,15 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	if err != nil {
 		return nil, err
 	}
-	requires, compatibility, err := providerrelease.ParseContract(manifest, contractRaw)
+	var requires providerrelease.Requires
+	var compatibility providerrelease.Compatibility
+	if len(rawManifest) > 0 {
+		// Provider publish passes authoritative source --manifest bytes separately from
+		// the built archive manifest struct; contract metadata must follow the source file.
+		requires, compatibility, err = providerrelease.ParseContractFromManifestRaw(contractRaw)
+	} else {
+		requires, compatibility, err = providerrelease.ParseContract(manifest, contractRaw)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("parse release contract from manifest: %w", err)
 	}
