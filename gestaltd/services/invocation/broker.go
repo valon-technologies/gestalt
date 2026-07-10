@@ -114,16 +114,16 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 }
 
 type Broker struct {
-	providers         *registry.ProviderMap[core.Provider]
-	users             UserStore
-	externalCreds     core.ExternalCredentialProvider
-	connMapper        ConnectionMapper
-	mcpMapper         ConnectionMapper
-	connectionRuntime ConnectionRuntimeResolver
-	authorization        core.AuthorizationProvider
-	authzResourceTypes   map[string]struct{}
-	logger               *slog.Logger
-	tracerProvider    trace.TracerProvider
+	providers          *registry.ProviderMap[core.Provider]
+	users              UserStore
+	externalCreds      core.ExternalCredentialProvider
+	connMapper         ConnectionMapper
+	mcpMapper          ConnectionMapper
+	connectionRuntime  ConnectionRuntimeResolver
+	authorization      core.AuthorizationProvider
+	authzResourceTypes map[string]struct{}
+	logger             *slog.Logger
+	tracerProvider     trace.TracerProvider
 }
 
 type BrokerOption func(*Broker)
