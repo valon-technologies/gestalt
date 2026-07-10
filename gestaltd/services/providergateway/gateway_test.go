@@ -458,6 +458,7 @@ func TestPreparePublicRequest(t *testing.T) {
 			fullMethod: proto.App_Invoke_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
+			authAllow:  &denied,
 			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
 			checkAdapted: func(t *testing.T, adapted gproto.Message) {
 				t.Helper()
@@ -470,15 +471,6 @@ func TestPreparePublicRequest(t *testing.T) {
 				}
 				if out.GetRunAs() != nil {
 					t.Fatal("run_as should remain unset")
-				}
-			},
-			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {
-				t.Helper()
-				if got := auth.request.GetResource().GetId(); got != "roadmap" {
-					t.Fatalf("Resource.Id = %q, want %q", got, "roadmap")
-				}
-				if got := auth.request.GetAction().GetName(); got != proto.App_Invoke_FullMethodName {
-					t.Fatalf("Action.Name = %q, want %q", got, proto.App_Invoke_FullMethodName)
 				}
 			},
 		},
@@ -556,31 +548,22 @@ func TestPreparePublicRequest(t *testing.T) {
 		},
 		{
 			name:       "requires authorization provider",
-			fullMethod: proto.App_Invoke_FullMethodName,
+			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
-			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			req:        &proto.DeliverWorkflowProviderEventRequest{AppName: "roadmap", Event: &proto.WorkflowEvent{}},
 			wantCode:   codes.PermissionDenied,
 			setup: func(transport *ProviderGatewayTransport) {
 				transport.SetAuthorizationProvider(nil)
 			},
 		},
 		{
-			name:       "authorization denied",
-			fullMethod: proto.App_Invoke_FullMethodName,
+			name:       "workflow authorization denied",
+			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
 			authAllow:  &denied,
-			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
-			wantCode:   codes.PermissionDenied,
-		},
-		{
-			name:       "app named identity still requires authorization",
-			fullMethod: proto.App_Invoke_FullMethodName,
-			withOrigin: true,
-			introspect: activeAlice,
-			authAllow:  &denied,
-			req:        &proto.AppInvokeRequest{App: "identity", Operation: "sync"},
+			req:        &proto.DeliverWorkflowProviderEventRequest{AppName: "roadmap", Event: &proto.WorkflowEvent{}},
 			wantCode:   codes.PermissionDenied,
 		},
 		{
