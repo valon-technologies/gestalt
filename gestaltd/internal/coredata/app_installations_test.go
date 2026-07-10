@@ -178,7 +178,7 @@ func TestAppInstallationEventService(t *testing.T) {
 			AppName:     "g-issues",
 			FromVersion: "",
 			ToVersion:   "v1",
-			EventType:   "install_requested",
+			EventType:   core.AppInstallationEventTypeInstallRequested,
 			Actor:       "user:alice",
 			Metadata:    map[string]any{"registry": "toolshed"},
 		})
@@ -193,7 +193,7 @@ func TestAppInstallationEventService(t *testing.T) {
 			AppName:     "g-issues",
 			FromVersion: "v1",
 			ToVersion:   "v2",
-			EventType:   "promoted",
+			EventType:   core.AppInstallationEventTypePromoted,
 			Actor:       "user:alice",
 		})
 		if err != nil {
@@ -219,6 +219,21 @@ func TestAppInstallationEventService(t *testing.T) {
 		}
 		if !foundMetadata {
 			t.Fatalf("expected install_requested metadata on one event, got %#v", events)
+		}
+	})
+
+	t.Run("AppendEvent_rejects_unknown_event_type", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		_, err = svc.AppInstallationEvents.AppendEvent(context.Background(), &core.AppInstallationEvent{
+			AppName:   "g-issues",
+			EventType: "activated",
+		})
+		if err == nil {
+			t.Fatal("expected unsupported event_type error")
 		}
 	})
 }

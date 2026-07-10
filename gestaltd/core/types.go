@@ -29,6 +29,14 @@ const (
 	AppInstallationRolloutStatusFailed   = "failed"
 )
 
+const (
+	AppInstallationEventTypeInstallRequested  = "install_requested"
+	AppInstallationEventTypePromoted          = "promoted"
+	AppInstallationEventTypeFailed            = "failed"
+	AppInstallationEventTypeRollback          = "rollback"
+	AppInstallationEventTypeUninstallRequested = "uninstall_requested"
+)
+
 // AppInstallation records the shared fleet-wide rollout for a registry-installed
 // app. app_name is the primary key.
 type AppInstallation struct {

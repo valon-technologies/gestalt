@@ -33,6 +33,9 @@ func (s *AppInstallationEventService) AppendEvent(ctx context.Context, event *co
 	if eventType == "" {
 		return nil, fmt.Errorf("append app installation event: event_type is required")
 	}
+	if err := validateAppInstallationEventType(eventType); err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	eventID := strings.TrimSpace(event.EventID)
@@ -73,6 +76,19 @@ func (s *AppInstallationEventService) ListEventsByApp(ctx context.Context, appNa
 		out = append(out, recordToAppInstallationEvent(rec))
 	}
 	return out, nil
+}
+
+func validateAppInstallationEventType(eventType string) error {
+	switch eventType {
+	case core.AppInstallationEventTypeInstallRequested,
+		core.AppInstallationEventTypePromoted,
+		core.AppInstallationEventTypeFailed,
+		core.AppInstallationEventTypeRollback,
+		core.AppInstallationEventTypeUninstallRequested:
+		return nil
+	default:
+		return fmt.Errorf("append app installation event: unsupported event_type %q", eventType)
+	}
 }
 
 func recordToAppInstallationEvent(rec idb.Record) *core.AppInstallationEvent {
