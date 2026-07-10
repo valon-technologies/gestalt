@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -141,6 +142,8 @@ type Server struct {
 	mountedUIs             []MountedUI
 	adminRoute             AdminRouteConfig
 	adminUI                http.Handler
+	appRegistries          map[string]config.AppRegistryConfig
+	appRegistryReader      *appregistry.RegistryReader
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
 }
@@ -194,6 +197,8 @@ type Config struct {
 	Admin                  AdminRouteConfig
 	AdminUI                http.Handler
 	BuiltinAdminUI         *BuiltinAdminUIOptions
+	AppRegistries          map[string]config.AppRegistryConfig
+	AppRegistryReader      *appregistry.RegistryReader
 	RouteProfile           RouteProfile
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
@@ -385,6 +390,8 @@ func New(cfg Config) (*Server, error) {
 		mountedUIs:             mountedUIs,
 		adminRoute:             adminRoute,
 		adminUI:                adminUI,
+		appRegistries:          cloneAppRegistryConfig(cfg.AppRegistries),
+		appRegistryReader:      cfg.AppRegistryReader,
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,
 	}
