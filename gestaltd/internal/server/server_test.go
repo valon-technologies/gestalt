@@ -41,6 +41,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/authzappresource"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -123,6 +124,9 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	}
 	if cfg.TracerProvider != nil {
 		brokerOpts = append(brokerOpts, invocation.WithTracerProvider(cfg.TracerProvider))
+	}
+	if cfg.AppResourceResolver != nil {
+		brokerOpts = append(brokerOpts, invocation.WithAppResourceResolver(cfg.AppResourceResolver))
 	}
 	if cfg.Invoker == nil {
 		externalCredentials := cfg.Services.ExternalCredentials
@@ -2571,9 +2575,14 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 		t.Fatalf("mounted UI without authorization provider body = %q, want sample-shell", body)
 	}
 
+	appResourceResolver := authzappresource.NewResolver(map[string]struct{}{
+		"viewerPolicy":      {},
+		"defaultRolePolicy": {},
+		"adminPolicy":       {},
+	}, nil)
+
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{
-			{Name: "sampleApp"},
 			{Name: "viewerPolicy", DefaultRole: "viewer"},
 			{Name: "defaultRolePolicy", DefaultRole: "reader"},
 			{Name: "adminPolicy"},
@@ -2582,7 +2591,7 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 			testAuthorizationRelationship(
 				principal.UserSubjectID(user.ID),
 				"admin",
-				"sampleApp",
+				authzappresource.TypeApp,
 				"sampleApp",
 			),
 			testAuthorizationRelationship(
@@ -2598,6 +2607,7 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 		cfg.Auth = sessionAuth
 		cfg.Services = svc
 		cfg.Authorization = authz
+		cfg.AppResourceResolver = appResourceResolver
 		cfg.MountedUIs = []server.MountedUI{
 			{
 				Name:         "sample-ui",
@@ -2645,8 +2655,11 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	if len(authz.listRelationshipRequests) == 0 {
 		t.Fatal("authorization ListRelationships was not called")
 	}
-	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "sampleApp" {
-		t.Fatalf("relationship resource type = %q, want sampleApp", got)
+	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != authzappresource.TypeApp {
+		t.Fatalf("relationship resource type = %q, want app", got)
+	}
+	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetId(); got != "sampleApp" {
+		t.Fatalf("relationship resource id = %q, want sampleApp", got)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/viewer/", nil)

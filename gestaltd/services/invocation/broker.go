@@ -13,8 +13,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/authzappresource"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -115,16 +115,16 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 }
 
 type Broker struct {
-	providers            *registry.ProviderMap[core.Provider]
-	users                UserStore
-	externalCreds        core.ExternalCredentialProvider
-	connMapper           ConnectionMapper
-	mcpMapper            ConnectionMapper
-	connectionRuntime    ConnectionRuntimeResolver
-	authorization        core.AuthorizationProvider
-	appResourceResolver  *authzappresource.Resolver
-	logger               *slog.Logger
-	tracerProvider       trace.TracerProvider
+	providers           *registry.ProviderMap[core.Provider]
+	users               UserStore
+	externalCreds       core.ExternalCredentialProvider
+	connMapper          ConnectionMapper
+	mcpMapper           ConnectionMapper
+	connectionRuntime   ConnectionRuntimeResolver
+	authorization       core.AuthorizationProvider
+	appResourceResolver *authzappresource.Resolver
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
 }
 
 type BrokerOption func(*Broker)
