@@ -23,6 +23,51 @@ type ManagedSubject struct {
 	DeletedAt          *time.Time
 }
 
+const (
+	AppInstallationRolloutStatusPending  = "pending"
+	AppInstallationRolloutStatusPromoted = "promoted"
+	AppInstallationRolloutStatusFailed   = "failed"
+)
+
+const (
+	AppInstallationEventTypeInstallRequested   = "install_requested"
+	AppInstallationEventTypePromoted           = "promoted"
+	AppInstallationEventTypeFailed             = "failed"
+	AppInstallationEventTypeRollback           = "rollback"
+	AppInstallationEventTypeUninstallRequested = "uninstall_requested"
+)
+
+// AppInstallation records the shared fleet-wide rollout for a registry-installed
+// app. The IndexedDB primary key id holds the app name (for example g-issues).
+type AppInstallation struct {
+	AppName                 string
+	VersionConstraint       string
+	ResolvedVersion         string
+	SourceRef               string
+	Registry                string
+	ProviderReleaseURL      string
+	ArtifactChecksums       map[string]string
+	RolloutStatus           string
+	ActiveSince             *time.Time
+	PreviousResolvedVersion string
+	InstalledBy             string
+	InstalledAt             time.Time
+	UpdatedAt               time.Time
+}
+
+// AppInstallationEvent is an append-only audit record for install lifecycle
+// changes on one app. InstallationID matches app_installations.id.
+type AppInstallationEvent struct {
+	ID             string
+	InstallationID string
+	FromVersion    string
+	ToVersion      string
+	Type           string
+	Actor          string
+	Timestamp      time.Time
+	Metadata       map[string]any
+}
+
 type ExternalCredentialGrant struct {
 	AccessToken       string
 	RefreshToken      string

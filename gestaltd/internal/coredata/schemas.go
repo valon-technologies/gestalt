@@ -9,6 +9,8 @@ const (
 	StoreManagedSubjects               = "managed_subjects"
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
 	StoreAppSHAs                       = "app_shas"
+	StoreAppInstallations              = "app_installations"
+	StoreAppInstallationEvents         = "app_installation_events"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -50,6 +52,45 @@ var ManagedSubjectsSchema = idb.ObjectStoreOptions{
 		{Name: "created_at", Type: idb.TypeTime},
 		{Name: "updated_at", Type: idb.TypeTime},
 		{Name: "deleted_at", Type: idb.TypeTime},
+	},
+}
+
+var AppInstallationsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_rollout_status", KeyPath: []string{"rollout_status"}},
+		{Name: "by_registry", KeyPath: []string{"registry"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "version_constraint", Type: idb.TypeString},
+		{Name: "resolved_version", Type: idb.TypeString},
+		{Name: "source_ref", Type: idb.TypeString},
+		{Name: "registry", Type: idb.TypeString},
+		{Name: "provider_release_url", Type: idb.TypeString},
+		{Name: "artifact_checksums_json", Type: idb.TypeJSON},
+		{Name: "rollout_status", Type: idb.TypeString, NotNull: true},
+		{Name: "active_since", Type: idb.TypeTime},
+		{Name: "previous_resolved_version", Type: idb.TypeString},
+		{Name: "installed_by", Type: idb.TypeString},
+		{Name: "installed_at", Type: idb.TypeTime},
+		{Name: "updated_at", Type: idb.TypeTime},
+	},
+}
+
+var AppInstallationEventsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_installation_id", KeyPath: []string{"installation_id"}},
+		{Name: "by_installation_id_timestamp", KeyPath: []string{"installation_id", "timestamp"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "installation_id", Type: idb.TypeString, NotNull: true},
+		{Name: "from_version", Type: idb.TypeString},
+		{Name: "to_version", Type: idb.TypeString},
+		{Name: "type", Type: idb.TypeString, NotNull: true},
+		{Name: "actor", Type: idb.TypeString},
+		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},
+		{Name: "metadata_json", Type: idb.TypeJSON},
 	},
 }
 
