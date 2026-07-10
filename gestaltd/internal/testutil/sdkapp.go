@@ -1067,17 +1067,27 @@ func externalCredentialHostClient(ctx context.Context) (*sdkclient.ExternalCrede
 	}
 	hostClient, err := sdkclient.ConnectExternalCredentials(ctx, "")
 	if err != nil {
+		if externalCredentialHostServiceMissing(err) {
+			return nil, false, nil
+		}
 		return nil, false, err
 	}
 	return hostClient, true, nil
 }
 
 func externalCredentialHostServiceMissing(err error) bool {
-	var gestaltErr *sdkclient.GestaltError
-	if !errors.As(err, &gestaltErr) || gestaltErr.Code != sdkclient.GestaltErrorCodeUnimplemented {
+	if err == nil {
 		return false
 	}
-	return strings.Contains(gestaltErr.Message, "unknown service gestalt.provider.v1.ExternalCredentials")
+	if strings.Contains(err.Error(), "host service is not configured") {
+		return true
+	}
+	var gestaltErr *sdkclient.GestaltError
+	if !errors.As(err, &gestaltErr) {
+		return false
+	}
+	return gestaltErr.Code == sdkclient.GestaltErrorCodeUnimplemented &&
+		strings.Contains(gestaltErr.Message, "unknown service gestalt.provider.v1.ExternalCredentials")
 }
 
 func externalCredentialToClient(value *gestalt.ExternalCredential) *sdkclient.ExternalCredential {

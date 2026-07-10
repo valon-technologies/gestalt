@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, cast
 from urllib import parse as _urlparse
 
@@ -21,6 +22,7 @@ _INTERNAL_CHANNEL_OPTIONS = (
 _HOST_SERVICE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 ENV_HOST_SERVICE_SOCKET = "GESTALT_HOST_SERVICE_SOCKET"
 ENV_HOST_SERVICE_TOKEN = "GESTALT_HOST_SERVICE_TOKEN"
+ENV_HOST_SERVICES = "GESTALT_HOST_SERVICES"
 HOST_SERVICE_BINDING_HEADER = "x-gestalt-host-binding"
 
 
@@ -127,6 +129,14 @@ def secure_internal_channel(
 def host_service_channel(
     service_name: str, target: str, *, token: str = "", binding: str = ""
 ) -> grpc.Channel:
+    configured = os.environ.get(ENV_HOST_SERVICES)
+    if configured:
+        allowed = {name.strip() for name in configured.split(",") if name.strip()}
+        if service_name not in allowed:
+            raise RuntimeError(
+                f"{service_name}: host service is not configured "
+                f"({ENV_HOST_SERVICES}={configured!r})"
+            )
     scheme, address = parse_host_service_target(service_name, target)
     if scheme == "unix":
         channel = insecure_internal_channel(internal_channel_target("unix", address))

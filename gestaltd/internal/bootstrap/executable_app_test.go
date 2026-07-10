@@ -3857,7 +3857,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	defer func() { _ = CloseProviders(providers) }()
-	assertPublicHostServicesVerified(t, publicHostServices, "agent_provider")
+	assertPublicHostServicesVerified(t, publicHostServices, "agent")
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -6963,7 +6963,7 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	assertPublicHostServicesVerified(t, publicHostServices, "workflow_provider")
+	assertPublicHostServicesVerified(t, publicHostServices, "workflow")
 
 	prov, err := providers.Get("echoext")
 	if err != nil {

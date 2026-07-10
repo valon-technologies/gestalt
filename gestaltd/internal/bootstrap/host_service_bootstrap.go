@@ -188,6 +188,10 @@ func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 }
 
 func applyHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostServices []runtimehost.HostService, runtimePlan RuntimePlacementPlan, deps Deps, env map[string]string, allowedHosts []string) (map[string]string, []string, error) {
+	if env == nil {
+		env = map[string]string{}
+	}
+	runtimehost.ApplyProviderHostServiceEnv(env, hostServices)
 	bindingEnv, relayHost, err := mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID, hostServices, deps)
 	if err != nil {
 		return nil, nil, err
@@ -441,7 +445,7 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 		manager = unavailableWorkflowManager{}
 	}
 	return runtimehost.HostService{
-		Name:           "workflow_provider",
+		Name:           "workflow",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Workflow_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterWorkflowServer(srv, workflowservice.NewProviderServer(
@@ -460,7 +464,7 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps) runtimeho
 		manager = unavailableAgentManager{}
 	}
 	return runtimehost.HostService{
-		Name:           "agent_provider",
+		Name:           "agent",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Agent_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAgentServer(srv, agentservice.NewProviderServer(

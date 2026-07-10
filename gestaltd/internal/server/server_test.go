@@ -1184,7 +1184,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 	}{
 		{
 			name:         "workflow provider",
-			service:      "workflow_provider",
+			service:      "workflow",
 			methodPrefix: "/" + proto.Workflow_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
 				proto.RegisterWorkflowServer(srv, relayTestWorkflowProviderServer{calls: calls})
@@ -1202,7 +1202,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		},
 		{
 			name:         "agent provider",
-			service:      "agent_provider",
+			service:      "agent",
 			methodPrefix: "/" + proto.Agent_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
 				proto.RegisterAgentServer(srv, relayTestAgentProviderServer{calls: calls})
@@ -1276,9 +1276,9 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			defer staleCancel()
 			staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 			switch tc.service {
-			case "workflow_provider":
+			case "workflow":
 				_, err = proto.NewWorkflowClient(conn).GetDefinition(staleCtx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
-			case "agent_provider":
+			case "agent":
 				_, err = proto.NewAgentClient(conn).GetSession(staleCtx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 			}
 			if grpcstatus.Code(err) != codes.Unauthenticated {
