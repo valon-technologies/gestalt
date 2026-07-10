@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/internal/authzappresource"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -290,6 +291,7 @@ func mountedUIRequiresAuthorization(mounted MountedUI) bool {
 
 func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, resourceName string) (map[string]struct{}, error) {
 	roles := map[string]struct{}{}
+	resource := s.singletonAuthorizationResource(resourceName)
 	pageToken := ""
 	for {
 		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
@@ -300,10 +302,7 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 						Id:   strings.TrimSpace(subjectID),
 					}},
 				},
-				Resource: &proto.Resource{
-					Type: strings.TrimSpace(resourceName),
-					Id:   strings.TrimSpace(resourceName),
-				},
+				Resource: resource,
 			},
 			PageSize:  500,
 			PageToken: pageToken,
@@ -325,19 +324,31 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 }
 
 func (s *Server) mountedUIResourceDefaultRole(ctx context.Context, resourceName string) (string, error) {
+	typeName := authzappresource.TypeApp
+	if s.appResourceResolver != nil {
+		typeName = s.appResourceResolver.DefaultRoleResourceTypeName(resourceName)
+	}
 	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
-		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(resourceName)},
+		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(typeName)},
 		PageSize: 1,
 	})
 	if err != nil {
 		return "", err
 	}
 	for _, resourceType := range resp.GetResourceTypes() {
-		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(resourceName) {
+		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(typeName) {
 			return strings.TrimSpace(resourceType.GetDefaultRole()), nil
 		}
 	}
 	return "", nil
+}
+
+func (s *Server) singletonAuthorizationResource(resourceID string) *proto.Resource {
+	if s.appResourceResolver != nil {
+		return s.appResourceResolver.SingletonResourceByID(resourceID)
+	}
+	resourceID = strings.TrimSpace(resourceID)
+	return &proto.Resource{Type: resourceID, Id: resourceID}
 }
 
 func (s *Server) resolveMountedUIPrincipal(r *http.Request, mounted MountedUI) (*principal.Principal, bool, error) {

@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/internal/authzappresource"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -114,15 +115,16 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 }
 
 type Broker struct {
-	providers         *registry.ProviderMap[core.Provider]
-	users             UserStore
-	externalCreds     core.ExternalCredentialProvider
-	connMapper        ConnectionMapper
-	mcpMapper         ConnectionMapper
-	connectionRuntime ConnectionRuntimeResolver
-	authorization     core.AuthorizationProvider
-	logger            *slog.Logger
-	tracerProvider    trace.TracerProvider
+	providers            *registry.ProviderMap[core.Provider]
+	users                UserStore
+	externalCreds        core.ExternalCredentialProvider
+	connMapper           ConnectionMapper
+	mcpMapper            ConnectionMapper
+	connectionRuntime    ConnectionRuntimeResolver
+	authorization        core.AuthorizationProvider
+	appResourceResolver  *authzappresource.Resolver
+	logger               *slog.Logger
+	tracerProvider       trace.TracerProvider
 }
 
 type BrokerOption func(*Broker)
@@ -141,6 +143,10 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
 	return func(b *Broker) { b.authorization = provider }
+}
+
+func WithAppResourceResolver(resolver *authzappresource.Resolver) BrokerOption {
+	return func(b *Broker) { b.appResourceResolver = resolver }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -547,7 +553,7 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	req := authorizationAccessRequest(p, providerName, operationID)
+	req := authorizationAccessRequest(b.appResourceResolver, p, providerName, operationID)
 	resp, err := b.authorization.CheckAccess(ctx, req)
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
@@ -558,7 +564,7 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	return nil
 }
 
-func authorizationAccessRequest(p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
+func authorizationAccessRequest(resolver *authzappresource.Resolver, p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
 	subjectID := principal.EffectiveCredentialSubjectID(p)
 	providerName = strings.TrimSpace(providerName)
@@ -567,17 +573,20 @@ func authorizationAccessRequest(p *principal.Principal, providerName, operationI
 		"client_id": strings.TrimSpace(p.ClientID),
 		"audience":  append([]string(nil), p.Audience...),
 	})
+	var resource *proto.Resource
+	if resolver != nil {
+		resource = resolver.SingletonResource(providerName)
+	} else {
+		resource = &proto.Resource{Type: providerName, Id: providerName}
+	}
 	return &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
 			Type:       "subject",
 			Id:         subjectID,
 			Properties: properties,
 		},
-		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
-		Resource: &proto.Resource{
-			Type: providerName,
-			Id:   providerName,
-		},
+		Action:   &proto.Action{Name: strings.TrimSpace(operationID)},
+		Resource: resource,
 	}
 }
 

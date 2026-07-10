@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/authzappresource"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
@@ -260,6 +261,7 @@ type Result struct {
 	ManualConnectionAuth   func() map[string]map[string]ManualTokenExchanger
 	Invoker                invocation.Invoker
 	AppInvocation          invocation.Invoker
+	AppResourceResolver    *authzappresource.Resolver
 	CapabilityLister       invocation.CapabilityLister
 	AuditSink              core.AuditSink
 	SecretManager          core.SecretManager
@@ -1222,11 +1224,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
+	appResourceResolver := appResourceResolverFromConfig(cfg)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithAuthorizationProvider(authorizationProvider),
+		invocation.WithAppResourceResolver(appResourceResolver),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -1404,6 +1408,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ManualConnectionAuth:         manualConnAuthResolver,
 		Invoker:                      sharedInvoker,
 		AppInvocation:                pluginInvoker,
+		AppResourceResolver:          appResourceResolver,
 		CapabilityLister:             sharedInvoker,
 		AuditSink:                    audit,
 		SecretManager:                prepared.SecretManager,

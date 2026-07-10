@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/authzappresource"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -519,4 +520,101 @@ func (p *brokerOperationConnectionProvider) ResolveConnectionForOperation(operat
 
 func (p *brokerOperationConnectionProvider) OperationConnectionOverrideAllowed(string, map[string]any) bool {
 	return p.allowOverride
+}
+
+func TestBrokerInvokeUsesAppResourceTypeForCategoryA(t *testing.T) {
+	t.Parallel()
+
+	provider := &coretesting.StubIntegration{
+		N:        "dataSchemaExplorer",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "dataSchemaExplorer",
+			Operations: []catalog.CatalogOperation{{
+				ID:     "get_schema",
+				Method: "GET",
+			}},
+		},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: 200, Body: []byte("ok")}, nil
+		},
+	}
+	authz := &recordingAuthorizationProvider{allowed: true}
+	resolver := authzappresource.NewResolver(map[string]struct{}{"dealHub": {}}, nil)
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithAppResourceResolver(resolver),
+	)
+
+	_, err := broker.Invoke(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", UserID: "u-123", Kind: principal.KindUser},
+		"dataSchemaExplorer",
+		"",
+		"get_schema",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	req := authz.lastCheckAccess
+	if req == nil {
+		t.Fatal("CheckAccess was not called")
+	}
+	if got := req.GetResource().GetType(); got != authzappresource.TypeApp {
+		t.Fatalf("resource type = %q, want app", got)
+	}
+	if got := req.GetResource().GetId(); got != "dataSchemaExplorer" {
+		t.Fatalf("resource id = %q, want dataSchemaExplorer", got)
+	}
+}
+
+func TestBrokerInvokeKeepsDedicatedResourceTypeForCategoryB(t *testing.T) {
+	t.Parallel()
+
+	provider := &coretesting.StubIntegration{
+		N:        "dealHub",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "dealHub",
+			Operations: []catalog.CatalogOperation{{
+				ID:     "dealHub.addClients",
+				Method: "POST",
+			}},
+		},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: 200, Body: []byte("ok")}, nil
+		},
+	}
+	authz := &recordingAuthorizationProvider{allowed: true}
+	resolver := authzappresource.NewResolver(map[string]struct{}{"dealHub": {}}, nil)
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+		WithAppResourceResolver(resolver),
+	)
+
+	_, err := broker.Invoke(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", UserID: "u-123", Kind: principal.KindUser},
+		"dealHub",
+		"",
+		"dealHub.addClients",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	req := authz.lastCheckAccess
+	if got := req.GetResource().GetType(); got != "dealHub" {
+		t.Fatalf("resource type = %q, want dealHub", got)
+	}
+	if got := req.GetResource().GetId(); got != "dealHub" {
+		t.Fatalf("resource id = %q, want dealHub", got)
+	}
 }

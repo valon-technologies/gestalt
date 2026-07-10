@@ -20,6 +20,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	"github.com/valon-technologies/gestalt/server/internal/authzappresource"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -93,6 +94,7 @@ type Server struct {
 	authProviders          map[string]core.IdentityProvider
 	serverAuthProvider     string
 	authorization          core.AuthorizationProvider
+	appResourceResolver    *authzappresource.Resolver
 	auditSink              core.AuditSink
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
@@ -162,6 +164,7 @@ type Config struct {
 	SelectedAuthProvider   string
 	AuthProviders          map[string]core.IdentityProvider
 	Authorization          core.AuthorizationProvider
+	AppResourceResolver    *authzappresource.Resolver
 	AuditSink              core.AuditSink
 	Services               *coredata.Services
 	Providers              *registry.ProviderMap[core.Provider]
@@ -346,6 +349,7 @@ func New(cfg Config) (*Server, error) {
 		authProviders:          authProviders,
 		serverAuthProvider:     serverAuthProvider,
 		authorization:          cfg.Authorization,
+		appResourceResolver:    cfg.AppResourceResolver,
 		auditSink:              cfg.AuditSink,
 		users:                  users,
 		externalCredentials:    externalCredentials,
