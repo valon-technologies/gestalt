@@ -77,6 +77,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		SelectedAuthProvider: result.SelectedAuthProvider,
 		AuthProviders:        result.AuthProviders,
 		Authorization:        authorizationProvider,
+		AuthzResourceTypeNames: bootstrap.AuthorizationResourceTypeNames(cfg),
 		AuditSink:            result.AuditSink,
 		Services:             result.Services,
 		Providers:            result.Providers,

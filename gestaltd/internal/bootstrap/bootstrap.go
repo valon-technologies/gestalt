@@ -1222,11 +1222,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
+	authzResourceTypeNames := AuthorizationResourceTypeNames(cfg)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithAuthorizationProvider(authorizationProvider),
+		invocation.WithAuthorizationResourceTypeNames(authzResourceTypeNames),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {

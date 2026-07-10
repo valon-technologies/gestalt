@@ -927,7 +927,7 @@ Mounted app static assets support three access tiers:
 | --- | --- | --- |
 | Public | `static.public: true` | No login required to load HTML, CSS, JS, or theme assets. API calls still require a session. |
 | Authenticated | Default (`static.public` omitted or `false`) | Browser login required before any bytes are served from the mount. |
-| Authorized | `authorizationPolicy` set (or app name as resource type) | After login, Gestalt checks relationships before serving bytes. Unauthorized requests receive a login redirect or `403` without leaking asset contents. |
+| Authorized | `authorizationPolicy` set (or app name as resource id) | After login, Gestalt checks relationships before serving bytes. Unauthorized requests receive a login redirect or `403` without leaking asset contents. |
 
 When `static.public: true`, authorization policy and relationships do not gate static serving. They still apply to `/api/v1/{app}/{operation}` routes.
 
@@ -948,7 +948,7 @@ authorization:
   models:
     default:
       resourceTypes:
-        workspace_review:
+        app:
           defaultRole: viewer
           relations:
             viewer:
@@ -961,7 +961,7 @@ authorization:
         id: user:alice
       relation: viewer
       resource:
-        type: workspace_review
+        type: app
         id: workspace_review
 ```
 

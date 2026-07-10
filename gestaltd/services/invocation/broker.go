@@ -120,8 +120,9 @@ type Broker struct {
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
-	authorization     core.AuthorizationProvider
-	logger            *slog.Logger
+	authorization        core.AuthorizationProvider
+	authzResourceTypes   map[string]struct{}
+	logger               *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
 
@@ -141,6 +142,10 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
 	return func(b *Broker) { b.authorization = provider }
+}
+
+func WithAuthorizationResourceTypeNames(typeNames map[string]struct{}) BrokerOption {
+	return func(b *Broker) { b.authzResourceTypes = typeNames }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -547,7 +552,7 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	req := authorizationAccessRequest(p, providerName, operationID)
+	req := authorizationAccessRequest(b.authzResourceTypes, p, providerName, operationID)
 	resp, err := b.authorization.CheckAccess(ctx, req)
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
@@ -558,7 +563,23 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	return nil
 }
 
-func authorizationAccessRequest(p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
+const appAuthorizationResourceType = "app"
+
+// SingletonAuthorizationResource maps a singleton authorization resource id to the
+// configured model resource type. Apps without a dedicated resource type use app:id.
+func SingletonAuthorizationResource(typeNames map[string]struct{}, resourceID string) *proto.Resource {
+	resourceID = strings.TrimSpace(resourceID)
+	if typeNames == nil {
+		return &proto.Resource{Type: resourceID, Id: resourceID}
+	}
+	typeName := appAuthorizationResourceType
+	if _, ok := typeNames[resourceID]; ok {
+		typeName = resourceID
+	}
+	return &proto.Resource{Type: typeName, Id: resourceID}
+}
+
+func authorizationAccessRequest(typeNames map[string]struct{}, p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
 	subjectID := principal.EffectiveCredentialSubjectID(p)
 	providerName = strings.TrimSpace(providerName)
@@ -573,11 +594,8 @@ func authorizationAccessRequest(p *principal.Principal, providerName, operationI
 			Id:         subjectID,
 			Properties: properties,
 		},
-		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
-		Resource: &proto.Resource{
-			Type: providerName,
-			Id:   providerName,
-		},
+		Action:   &proto.Action{Name: strings.TrimSpace(operationID)},
+		Resource: SingletonAuthorizationResource(typeNames, providerName),
 	}
 }
 

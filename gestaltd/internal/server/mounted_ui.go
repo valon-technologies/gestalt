@@ -300,10 +300,7 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 						Id:   strings.TrimSpace(subjectID),
 					}},
 				},
-				Resource: &proto.Resource{
-					Type: strings.TrimSpace(resourceName),
-					Id:   strings.TrimSpace(resourceName),
-				},
+				Resource: invocation.SingletonAuthorizationResource(s.authzResourceTypeNames, resourceName),
 			},
 			PageSize:  500,
 			PageToken: pageToken,
@@ -325,15 +322,16 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 }
 
 func (s *Server) mountedUIResourceDefaultRole(ctx context.Context, resourceName string) (string, error) {
+	typeName := invocation.SingletonAuthorizationResource(s.authzResourceTypeNames, resourceName).GetType()
 	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
-		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(resourceName)},
+		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(typeName)},
 		PageSize: 1,
 	})
 	if err != nil {
 		return "", err
 	}
 	for _, resourceType := range resp.GetResourceTypes() {
-		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(resourceName) {
+		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(typeName) {
 			return strings.TrimSpace(resourceType.GetDefaultRole()), nil
 		}
 	}
