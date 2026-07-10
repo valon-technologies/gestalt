@@ -87,6 +87,32 @@ export interface MigrationRunOptions {
   ledgerStore?: string;
 }
 
+/**
+ * Prefix flat revision ids with the provider name so co-tenants on a shared
+ * IndexedDB ledger do not collide (e.g. `0001_init` → `gIssues/0001_init`).
+ * Revisions that already contain `/` are left unchanged.
+ */
+export function prefixMigrationRevisions(
+  providerName: string,
+  revisions: Revision[],
+): Revision[] {
+  const name = providerName.trim();
+  if (!name) {
+    return revisions;
+  }
+  const prefix = `${name}/`;
+  return revisions.map((revision) => {
+    const id = revision.id.trim();
+    if (id.includes("/")) {
+      return revision;
+    }
+    if (id.startsWith(prefix)) {
+      return revision;
+    }
+    return { ...revision, id: `${prefix}${id}` };
+  });
+}
+
 /** Resolve the IndexedDB binding for migration runs. */
 export function resolveMigrationDbBinding(
   options: MigrationRunOptions,
