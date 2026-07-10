@@ -1,6 +1,7 @@
 package coredata
 
 import (
+	"encoding/json"
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
@@ -42,6 +43,77 @@ func recTime(rec idb.Record, key string) time.Time {
 		return parsed
 	default:
 		return time.Time{}
+	}
+}
+
+func recStringMap(rec idb.Record, key string) map[string]string {
+	raw := recJSON(rec, key)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]string)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+func recAnyMap(rec idb.Record, key string) map[string]any {
+	raw := recJSON(rec, key)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]any)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+func recJSON(rec idb.Record, key string) []byte {
+	v, ok := rec[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch raw := v.(type) {
+	case []byte:
+		return raw
+	case string:
+		return []byte(raw)
+	case json.RawMessage:
+		return raw
+	case map[string]any:
+		encoded, err := json.Marshal(raw)
+		if err != nil {
+			return nil
+		}
+		return encoded
+	default:
+		encoded, err := json.Marshal(raw)
+		if err != nil {
+			return nil
+		}
+		return encoded
+	}
+}
+
+func jsonValue(v any) any {
+	if v == nil {
+		return nil
+	}
+	switch value := v.(type) {
+	case map[string]string:
+		if len(value) == 0 {
+			return nil
+		}
+		return value
+	case map[string]any:
+		if len(value) == 0 {
+			return nil
+		}
+		return value
+	default:
+		return v
 	}
 }
 

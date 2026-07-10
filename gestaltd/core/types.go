@@ -23,6 +23,43 @@ type ManagedSubject struct {
 	DeletedAt          *time.Time
 }
 
+const (
+	AppInstallationDesiredStatePending = "pending"
+	AppInstallationDesiredStateActive  = "active"
+	AppInstallationDesiredStateFailed  = "failed"
+)
+
+// AppInstallation records the shared desired and active version for a
+// registry-installed app. app_name is the primary key.
+type AppInstallation struct {
+	AppName                  string
+	DesiredVersionConstraint string
+	ResolvedVersion          string
+	SourceRef                string
+	Registry                 string
+	ProviderReleaseURL       string
+	ArtifactChecksums        map[string]string
+	DesiredState             string
+	ActiveSince              *time.Time
+	PreviousResolvedVersion  string
+	InstalledBy              string
+	InstalledAt              time.Time
+	UpdatedAt                time.Time
+}
+
+// AppInstallationEvent is an append-only audit record for install lifecycle
+// changes on one app.
+type AppInstallationEvent struct {
+	EventID     string
+	AppName     string
+	FromVersion string
+	ToVersion   string
+	EventType   string
+	Actor       string
+	CreatedAt   time.Time
+	Metadata    map[string]any
+}
+
 type ExternalCredentialGrant struct {
 	AccessToken       string
 	RefreshToken      string
