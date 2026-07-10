@@ -38,6 +38,11 @@ func (s *AppInstallationService) GetInstallation(ctx context.Context, appName st
 
 func (s *AppInstallationService) ListInstallations(ctx context.Context, rolloutStatus string) ([]*core.AppInstallation, error) {
 	rolloutStatus = strings.TrimSpace(rolloutStatus)
+	if rolloutStatus != "" {
+		if err := validateAppInstallationRolloutStatus(rolloutStatus); err != nil {
+			return nil, fmt.Errorf("list app installations: %w", err)
+		}
+	}
 	var (
 		recs []idb.Record
 		err  error
@@ -74,19 +79,22 @@ func (s *AppInstallationService) PutInstallation(ctx context.Context, installati
 	}
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	rec := appInstallationToRecord(installation)
+	existingRec, err := s.store.Get(ctx, appName)
+	if err != nil && !errors.Is(err, idb.ErrNotFound) {
+		return nil, fmt.Errorf("put app installation: %w", err)
+	}
+	var existing *core.AppInstallation
+	if err == nil {
+		existing = recordToAppInstallation(existingRec)
+	}
+	toStore := mergeAppInstallation(existing, installation)
+	if toStore.InstalledAt.IsZero() {
+		toStore.InstalledAt = now
+	}
+	rec := appInstallationToRecord(toStore)
 	rec["id"] = appName
 	rec["rollout_status"] = rolloutStatus
-	installedAt := installation.InstalledAt
-	if installedAt.IsZero() {
-		if existing, err := s.store.Get(ctx, appName); err == nil {
-			installedAt = recTime(existing, "installed_at")
-		}
-	}
-	if installedAt.IsZero() {
-		installedAt = now
-	}
-	rec["installed_at"] = installedAt
+	rec["installed_at"] = toStore.InstalledAt
 	rec["updated_at"] = now
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("put app installation: %w", err)
@@ -145,8 +153,48 @@ func validateAppInstallationRolloutStatus(rolloutStatus string) error {
 		core.AppInstallationRolloutStatusFailed:
 		return nil
 	default:
-		return fmt.Errorf("put app installation: unsupported rollout_status %q", rolloutStatus)
+		return fmt.Errorf("unsupported rollout_status %q", rolloutStatus)
 	}
+}
+
+func mergeAppInstallation(existing *core.AppInstallation, incoming *core.AppInstallation) *core.AppInstallation {
+	if existing == nil {
+		out := *incoming
+		return &out
+	}
+	out := *existing
+	out.RolloutStatus = incoming.RolloutStatus
+	if v := strings.TrimSpace(incoming.VersionConstraint); v != "" {
+		out.VersionConstraint = v
+	}
+	if v := strings.TrimSpace(incoming.ResolvedVersion); v != "" {
+		out.ResolvedVersion = v
+	}
+	if v := strings.TrimSpace(incoming.SourceRef); v != "" {
+		out.SourceRef = v
+	}
+	if v := strings.TrimSpace(incoming.Registry); v != "" {
+		out.Registry = v
+	}
+	if v := strings.TrimSpace(incoming.ProviderReleaseURL); v != "" {
+		out.ProviderReleaseURL = v
+	}
+	if v := strings.TrimSpace(incoming.PreviousResolvedVersion); v != "" {
+		out.PreviousResolvedVersion = v
+	}
+	if v := strings.TrimSpace(incoming.InstalledBy); v != "" {
+		out.InstalledBy = v
+	}
+	if len(incoming.ArtifactChecksums) > 0 {
+		out.ArtifactChecksums = incoming.ArtifactChecksums
+	}
+	if incoming.ActiveSince != nil {
+		out.ActiveSince = incoming.ActiveSince
+	}
+	if !incoming.InstalledAt.IsZero() {
+		out.InstalledAt = incoming.InstalledAt
+	}
+	return &out
 }
 
 func recordToAppInstallation(rec idb.Record) *core.AppInstallation {

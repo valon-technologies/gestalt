@@ -190,6 +190,51 @@ func TestAppInstallationService(t *testing.T) {
 			t.Fatalf("InstalledAt = %v, want %v", got.InstalledAt, installedAt)
 		}
 	})
+
+	t.Run("PutInstallation_preserves_fields_on_partial_reupsert", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		if _, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
+			AppName:           "g-issues",
+			RolloutStatus:     core.AppInstallationRolloutStatusPending,
+			Registry:          "toolshed",
+			ResolvedVersion:   "v1",
+			ArtifactChecksums: map[string]string{"linux/amd64": "sha256:deadbeef"},
+		}); err != nil {
+			t.Fatalf("PutInstallation: %v", err)
+		}
+
+		got, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
+			AppName:         "g-issues",
+			RolloutStatus:   core.AppInstallationRolloutStatusPromoted,
+			ResolvedVersion: "v2",
+		})
+		if err != nil {
+			t.Fatalf("PutInstallation reupsert: %v", err)
+		}
+		if got.Registry != "toolshed" {
+			t.Fatalf("Registry = %q, want toolshed", got.Registry)
+		}
+		if got.ArtifactChecksums["linux/amd64"] != "sha256:deadbeef" {
+			t.Fatalf("ArtifactChecksums = %#v", got.ArtifactChecksums)
+		}
+	})
+
+	t.Run("ListInstallations_rejects_unknown_rollout_status", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		_, err = svc.AppInstallations.ListInstallations(context.Background(), "installing")
+		if err == nil {
+			t.Fatal("expected unsupported rollout_status error")
+		}
+	})
 }
 
 func TestAppInstallationEventService(t *testing.T) {
