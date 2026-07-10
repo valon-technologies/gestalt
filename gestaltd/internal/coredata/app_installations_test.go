@@ -23,11 +23,11 @@ func TestAppInstallationService(t *testing.T) {
 		activeSince := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 
 		got, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
-			AppName:           "g-issues",
-			VersionConstraint: "0.0.0-snapshot.gabc123",
-			ResolvedVersion:   "0.0.0-snapshot.gabc123",
-			SourceRef:         "abc123def456abc123def456abc123def456abcd",
-			Registry:          "toolshed",
+			AppName:            "g-issues",
+			VersionConstraint:  "0.0.0-snapshot.gabc123",
+			ResolvedVersion:    "0.0.0-snapshot.gabc123",
+			SourceRef:          "abc123def456abc123def456abc123def456abcd",
+			Registry:           "toolshed",
 			ProviderReleaseURL: "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry/apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
 			ArtifactChecksums: map[string]string{
 				"linux/amd64": "sha256:deadbeef",
@@ -161,6 +161,35 @@ func TestAppInstallationService(t *testing.T) {
 			t.Fatalf("RolloutStatus = %q, want promoted", updated.RolloutStatus)
 		}
 	})
+
+	t.Run("PutInstallation_preserves_installed_at_on_reupsert", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		installedAt := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+		if _, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
+			AppName:       "g-issues",
+			RolloutStatus: core.AppInstallationRolloutStatusPending,
+			InstalledAt:   installedAt,
+		}); err != nil {
+			t.Fatalf("PutInstallation: %v", err)
+		}
+
+		got, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
+			AppName:         "g-issues",
+			RolloutStatus:   core.AppInstallationRolloutStatusPromoted,
+			ResolvedVersion: "v2",
+		})
+		if err != nil {
+			t.Fatalf("PutInstallation reupsert: %v", err)
+		}
+		if !got.InstalledAt.Equal(installedAt) {
+			t.Fatalf("InstalledAt = %v, want %v", got.InstalledAt, installedAt)
+		}
+	})
 }
 
 func TestAppInstallationEventService(t *testing.T) {
@@ -219,6 +248,45 @@ func TestAppInstallationEventService(t *testing.T) {
 		}
 		if !foundMetadata {
 			t.Fatalf("expected install_requested metadata on one event, got %#v", events)
+		}
+	})
+
+	t.Run("ListEventsByApp_returns_created_at_order", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			AppName:   "g-issues",
+			EventType: core.AppInstallationEventTypeInstallRequested,
+			CreatedAt: secondAt,
+		}); err != nil {
+			t.Fatalf("AppendEvent(first): %v", err)
+		}
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			AppName:   "g-issues",
+			EventType: core.AppInstallationEventTypePromoted,
+			CreatedAt: firstAt,
+		}); err != nil {
+			t.Fatalf("AppendEvent(second): %v", err)
+		}
+
+		events, err := svc.AppInstallationEvents.ListEventsByApp(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("ListEventsByApp: %v", err)
+		}
+		if len(events) != 2 {
+			t.Fatalf("events = %d, want 2", len(events))
+		}
+		if !events[0].CreatedAt.Equal(firstAt) || events[1].CreatedAt.Equal(secondAt) == false {
+			t.Fatalf("event order = [%v, %v], want [%v, %v]", events[0].CreatedAt, events[1].CreatedAt, firstAt, secondAt)
+		}
+		if events[0].EventType != core.AppInstallationEventTypePromoted {
+			t.Fatalf("first event type = %q, want promoted", events[0].EventType)
 		}
 	})
 

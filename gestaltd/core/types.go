@@ -30,29 +30,29 @@ const (
 )
 
 const (
-	AppInstallationEventTypeInstallRequested  = "install_requested"
-	AppInstallationEventTypePromoted          = "promoted"
-	AppInstallationEventTypeFailed            = "failed"
-	AppInstallationEventTypeRollback          = "rollback"
+	AppInstallationEventTypeInstallRequested   = "install_requested"
+	AppInstallationEventTypePromoted           = "promoted"
+	AppInstallationEventTypeFailed             = "failed"
+	AppInstallationEventTypeRollback           = "rollback"
 	AppInstallationEventTypeUninstallRequested = "uninstall_requested"
 )
 
 // AppInstallation records the shared fleet-wide rollout for a registry-installed
 // app. app_name is the primary key.
 type AppInstallation struct {
-	AppName             string
-	VersionConstraint   string
-	ResolvedVersion     string
-	SourceRef           string
-	Registry            string
-	ProviderReleaseURL  string
-	ArtifactChecksums   map[string]string
-	RolloutStatus       string
-	ActiveSince              *time.Time
-	PreviousResolvedVersion  string
-	InstalledBy              string
-	InstalledAt              time.Time
-	UpdatedAt                time.Time
+	AppName                 string
+	VersionConstraint       string
+	ResolvedVersion         string
+	SourceRef               string
+	Registry                string
+	ProviderReleaseURL      string
+	ArtifactChecksums       map[string]string
+	RolloutStatus           string
+	ActiveSince             *time.Time
+	PreviousResolvedVersion string
+	InstalledBy             string
+	InstalledAt             time.Time
+	UpdatedAt               time.Time
 }
 
 // AppInstallationEvent is an append-only audit record for install lifecycle

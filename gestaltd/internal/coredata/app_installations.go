@@ -78,9 +78,16 @@ func (s *AppInstallationService) PutInstallation(ctx context.Context, installati
 	rec["id"] = appName
 	rec["app_name"] = appName
 	rec["rollout_status"] = rolloutStatus
-	if recTime(rec, "installed_at").IsZero() {
-		rec["installed_at"] = now
+	installedAt := installation.InstalledAt
+	if installedAt.IsZero() {
+		if existing, err := s.store.Get(ctx, appName); err == nil {
+			installedAt = recTime(existing, "installed_at")
+		}
 	}
+	if installedAt.IsZero() {
+		installedAt = now
+	}
+	rec["installed_at"] = installedAt
 	rec["updated_at"] = now
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("put app installation: %w", err)
@@ -169,19 +176,19 @@ func recordToAppInstallation(rec idb.Record) *core.AppInstallation {
 func appInstallationToRecord(installation *core.AppInstallation) idb.Record {
 	appName := strings.TrimSpace(installation.AppName)
 	return idb.Record{
-		"id":                          appName,
-		"app_name":                    appName,
-		"version_constraint":          strings.TrimSpace(installation.VersionConstraint),
-		"resolved_version":            strings.TrimSpace(installation.ResolvedVersion),
-		"source_ref":                  strings.TrimSpace(installation.SourceRef),
-		"registry":                    strings.TrimSpace(installation.Registry),
-		"provider_release_url":        strings.TrimSpace(installation.ProviderReleaseURL),
-		"artifact_checksums_json":     jsonValue(installation.ArtifactChecksums),
-		"rollout_status":              strings.TrimSpace(installation.RolloutStatus),
-		"active_since":                installation.ActiveSince,
-		"previous_resolved_version":   strings.TrimSpace(installation.PreviousResolvedVersion),
-		"installed_by":                strings.TrimSpace(installation.InstalledBy),
-		"installed_at":                installation.InstalledAt,
-		"updated_at":                  installation.UpdatedAt,
+		"id":                        appName,
+		"app_name":                  appName,
+		"version_constraint":        strings.TrimSpace(installation.VersionConstraint),
+		"resolved_version":          strings.TrimSpace(installation.ResolvedVersion),
+		"source_ref":                strings.TrimSpace(installation.SourceRef),
+		"registry":                  strings.TrimSpace(installation.Registry),
+		"provider_release_url":      strings.TrimSpace(installation.ProviderReleaseURL),
+		"artifact_checksums_json":   jsonValue(installation.ArtifactChecksums),
+		"rollout_status":            strings.TrimSpace(installation.RolloutStatus),
+		"active_since":              installation.ActiveSince,
+		"previous_resolved_version": strings.TrimSpace(installation.PreviousResolvedVersion),
+		"installed_by":              strings.TrimSpace(installation.InstalledBy),
+		"installed_at":              installation.InstalledAt,
+		"updated_at":                installation.UpdatedAt,
 	}
 }
