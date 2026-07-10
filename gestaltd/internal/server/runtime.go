@@ -111,6 +111,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
+		AppRegistries: cfg.AppRegistries,
 	}
 
 	if err := result.Start(ctx); err != nil {
