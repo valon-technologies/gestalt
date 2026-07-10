@@ -103,6 +103,10 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	if publicIdentityServiceMethod(fullMethod) {
 		return nil
 	}
+	service, method := splitFullMethod(fullMethod)
+	if service == proto.App_ServiceDesc.ServiceName && (method == "Invoke" || method == "InvokeGraphQL") {
+		return nil
+	}
 	if t == nil || t.authorization == nil {
 		return status.Error(codes.PermissionDenied, "authorization provider is not configured")
 	}
