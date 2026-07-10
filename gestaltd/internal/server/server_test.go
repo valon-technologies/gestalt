@@ -88,6 +88,17 @@ func mustStruct(t *testing.T, fields map[string]any) *structpb.Struct {
 	return out
 }
 
+func testProviderKindsFromAppDefs(apps map[string]*config.ProviderEntry) map[string]invocation.ProviderKind {
+	if len(apps) == 0 {
+		return nil
+	}
+	kinds := make(map[string]invocation.ProviderKind, len(apps))
+	for name := range apps {
+		kinds[name] = invocation.ProviderKindApp
+	}
+	return kinds
+}
+
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
 	t.Helper()
 	return newTestHTTPServer(t, httptest.NewServer, opts...)
@@ -110,6 +121,9 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	}
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+	if cfg.ProviderKinds == nil && len(cfg.AppDefs) > 0 {
+		cfg.ProviderKinds = testProviderKindsFromAppDefs(cfg.AppDefs)
 	}
 	installTestExternalCredentialResolver(&cfg)
 	brokerOpts := []invocation.BrokerOption{}
@@ -2573,7 +2587,7 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 
 	authz := &serverTestAuthorizationProvider{
 		resourceTypes: []*proto.AuthorizationModelResourceType{
-			{Name: "sampleApp"},
+			{Name: "app"},
 			{Name: "viewerPolicy", DefaultRole: "viewer"},
 			{Name: "defaultRolePolicy", DefaultRole: "reader"},
 			{Name: "adminPolicy"},
@@ -2582,7 +2596,7 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 			testAuthorizationRelationship(
 				principal.UserSubjectID(user.ID),
 				"admin",
-				"sampleApp",
+				"app",
 				"sampleApp",
 			),
 			testAuthorizationRelationship(
@@ -2598,6 +2612,7 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 		cfg.Auth = sessionAuth
 		cfg.Services = svc
 		cfg.Authorization = authz
+		cfg.AppDefs = map[string]*config.ProviderEntry{"sampleApp": {}}
 		cfg.MountedUIs = []server.MountedUI{
 			{
 				Name:         "sample-ui",
@@ -2645,8 +2660,8 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	if len(authz.listRelationshipRequests) == 0 {
 		t.Fatal("authorization ListRelationships was not called")
 	}
-	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "sampleApp" {
-		t.Fatalf("relationship resource type = %q, want sampleApp", got)
+	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "app" {
+		t.Fatalf("relationship resource type = %q, want app", got)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/viewer/", nil)
@@ -2903,9 +2918,9 @@ func TestMountedAppStaticAuthorizationRelationshipAllow(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	user := seedUserRecord(t, svc, "alpha-user", "alpha-user@example.test", time.Now())
 	authz := &serverTestAuthorizationProvider{
-		resourceTypes: []*proto.AuthorizationModelResourceType{{Name: "alpha"}},
+		resourceTypes: []*proto.AuthorizationModelResourceType{{Name: "app"}},
 		relationships: []*proto.Relationship{
-			testAuthorizationRelationship(principal.UserSubjectID(user.ID), "viewer", "alpha", "alpha"),
+			testAuthorizationRelationship(principal.UserSubjectID(user.ID), "viewer", "app", "alpha"),
 		},
 	}
 

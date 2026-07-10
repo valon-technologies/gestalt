@@ -16,6 +16,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -644,4 +645,42 @@ func testProviderGatewayCallerTokenKeyPair(t testing.TB) (string, string) {
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
 	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
 	return string(privateKeyPEM), string(publicKeyPEM)
+}
+
+func TestProviderAuthorizationKindsSkipsDedicatedAppResourceTypes(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"workspace_review": {},
+			"legacy_app":       {},
+		},
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{"nightly": {}},
+			Agent:    map[string]*config.ProviderEntry{"assistant": {}},
+		},
+		Authorization: config.AuthorizationConfig{
+			Models: map[string]config.AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
+						"legacy_app": {},
+					},
+				},
+			},
+		},
+	}
+
+	got := ProviderAuthorizationKinds(cfg)
+	if _, ok := got["workspace_review"]; !ok || got["workspace_review"] != invocation.ProviderKindApp {
+		t.Fatalf("workspace_review kind = %v, want app", got["workspace_review"])
+	}
+	if _, ok := got["legacy_app"]; ok {
+		t.Fatalf("legacy_app should be excluded from provider kinds, got %v", got["legacy_app"])
+	}
+	if got["nightly"] != invocation.ProviderKindWorkflow {
+		t.Fatalf("nightly kind = %v, want workflow", got["nightly"])
+	}
+	if got["assistant"] != invocation.ProviderKindAgent {
+		t.Fatalf("assistant kind = %v, want agent", got["assistant"])
+	}
 }

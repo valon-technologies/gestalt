@@ -1222,11 +1222,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
+	kinds := ProviderAuthorizationKinds(cfg)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithAuthorizationProvider(authorizationProvider),
+		invocation.WithProviderKinds(kinds),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -2309,4 +2311,25 @@ func buildPublicGatewayTransport(
 		transport.SetPublicBaseURL(cfg.Server.BaseURL)
 	}
 	return transport, nil
+}
+
+func ProviderAuthorizationKinds(cfg *config.Config) map[string]invocation.ProviderKind {
+	kinds := map[string]invocation.ProviderKind{}
+	if cfg == nil {
+		return kinds
+	}
+	dedicatedResourceTypes := AuthorizationResourceTypeNames(cfg)
+	for name := range cfg.Apps {
+		if _, hasDedicatedResourceType := dedicatedResourceTypes[name]; hasDedicatedResourceType {
+			continue
+		}
+		kinds[name] = invocation.ProviderKindApp
+	}
+	for name := range cfg.Providers.Workflow {
+		kinds[name] = invocation.ProviderKindWorkflow
+	}
+	for name := range cfg.Providers.Agent {
+		kinds[name] = invocation.ProviderKindAgent
+	}
+	return kinds
 }

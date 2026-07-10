@@ -93,6 +93,7 @@ type Server struct {
 	authProviders          map[string]core.IdentityProvider
 	serverAuthProvider     string
 	authorization          core.AuthorizationProvider
+	providerKinds          map[string]invocation.ProviderKind
 	auditSink              core.AuditSink
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
@@ -162,6 +163,7 @@ type Config struct {
 	SelectedAuthProvider   string
 	AuthProviders          map[string]core.IdentityProvider
 	Authorization          core.AuthorizationProvider
+	ProviderKinds          map[string]invocation.ProviderKind
 	AuditSink              core.AuditSink
 	Services               *coredata.Services
 	Providers              *registry.ProviderMap[core.Provider]
@@ -346,6 +348,7 @@ func New(cfg Config) (*Server, error) {
 		authProviders:          authProviders,
 		serverAuthProvider:     serverAuthProvider,
 		authorization:          cfg.Authorization,
+		providerKinds:          cfg.ProviderKinds,
 		auditSink:              cfg.AuditSink,
 		users:                  users,
 		externalCredentials:    externalCredentials,
