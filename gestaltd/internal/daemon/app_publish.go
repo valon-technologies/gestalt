@@ -41,7 +41,6 @@ func (d *appPublishDistDirs) Set(value string) error {
 
 type appPublishPlan struct {
 	Schema          string             `json:"schema"`
-	RegistryName    string             `json:"registryName"`
 	AppName         string             `json:"appName"`
 	DisplayName     string             `json:"displayName,omitempty"`
 	Description     string             `json:"description,omitempty"`
@@ -66,7 +65,6 @@ type appPublishObject struct {
 func runAppPublish(args []string) (err error) {
 	fs := flag.NewFlagSet("gestaltd app publish", flag.ContinueOnError)
 	fs.Usage = func() { printAppPublishUsage(fs.Output()) }
-	registryName := fs.String("registry", "", "logical registry name recorded in publish output")
 	bucket := fs.String("bucket", "", "GCS bucket name for registry uploads")
 	appName := fs.String("app", "", "app name under apps/{app}/manifest.yaml")
 	version := fs.String("version", "", "semantic version guard")
@@ -79,9 +77,6 @@ func runAppPublish(args []string) (err error) {
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-	if strings.TrimSpace(*registryName) == "" {
-		return fmt.Errorf("--registry is required")
 	}
 	if strings.TrimSpace(*bucket) == "" {
 		return fmt.Errorf("--bucket is required")
@@ -157,7 +152,6 @@ func runAppPublish(args []string) (err error) {
 	}
 
 	plan, err := buildAppPublishPlan(appPublishPlanInput{
-		RegistryName: *registryName,
 		Registry:     registry,
 		DisplayName:  sourceManifest.DisplayName,
 		Description:  sourceManifest.Description,
@@ -314,7 +308,6 @@ func gitRootFromWorkingDirectory() (string, error) {
 }
 
 type appPublishPlanInput struct {
-	RegistryName string
 	Registry     config.AppRegistryConfig
 	DisplayName  string
 	Description  string
@@ -406,7 +399,6 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 	indexRel := layout.IndexPath
 	return appPublishPlan{
 		Schema:       appPublishPlanSchema,
-		RegistryName: input.RegistryName,
 		AppName:      entry.App,
 		DisplayName:  input.DisplayName,
 		Description:  input.Description,
@@ -705,7 +697,7 @@ func printAppPublishPlanJSON(plan appPublishPlan) error {
 
 func printAppPublishUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd app publish --registry NAME --bucket BUCKET --app APP --version VERSION --ref SHA --dist-dir DIR [--dist-dir DIR...]")
+	writeUsageLine(w, "  gestaltd app publish --bucket BUCKET --app APP --version VERSION --ref SHA --dist-dir DIR [--dist-dir DIR...]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Publish an installable app version to a GCS app registry bucket.")
 	writeUsageLine(w, "Resolves the source manifest at apps/{app}/manifest.yaml under the git root.")
@@ -717,6 +709,5 @@ func printAppPublishUsage(w io.Writer) {
 	writeUsageLine(w, "  --dist-dir   Directory containing release archives (repeatable)")
 	writeUsageLine(w, "  --dry-run    Print the upload plan as JSON without writing")
 	writeUsageLine(w, "  --ref        Full source commit SHA")
-	writeUsageLine(w, "  --registry   Logical registry name recorded in publish output")
 	writeUsageLine(w, "  --version    Semantic version guard")
 }
