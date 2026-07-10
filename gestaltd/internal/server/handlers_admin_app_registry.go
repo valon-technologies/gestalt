@@ -13,10 +13,9 @@ import (
 )
 
 type adminAppRegistryInfo struct {
-	Name       string `json:"name"`
-	Kind       string `json:"kind"`
-	PublicURL  string `json:"publicUrl,omitempty"`
-	StorageURL string `json:"storageUrl,omitempty"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	PublicURL string `json:"publicUrl,omitempty"`
 }
 
 type adminAppRegistryVersionsResponse struct {
@@ -51,9 +50,6 @@ func (s *Server) listAdminAppRegistries(w http.ResponseWriter, r *http.Request) 
 		}
 		if publicURL, err := registry.PublicURL(); err == nil {
 			info.PublicURL = publicURL
-		}
-		if storageURL, err := registry.StorageURL(); err == nil {
-			info.StorageURL = storageURL
 		}
 		out = append(out, info)
 	}

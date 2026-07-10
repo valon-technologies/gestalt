@@ -99,6 +99,12 @@ func TestAdminAppRegistryEndpointsListConfiguredRegistriesAndVersions(t *testing
 	if len(registries) != 1 || registries[0]["name"] != "toolshed" {
 		t.Fatalf("registries = %#v", registries)
 	}
+	if registries[0]["publicUrl"] != "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry" {
+		t.Fatalf("publicUrl = %#v", registries[0]["publicUrl"])
+	}
+	if _, ok := registries[0]["storageUrl"]; ok {
+		t.Fatalf("storageUrl should be omitted, got %#v", registries[0]["storageUrl"])
+	}
 
 	versionsResp, err := http.Get(ts.URL + "/admin/api/v1/app-registries/toolshed/apps/g-issues/versions")
 	if err != nil {
