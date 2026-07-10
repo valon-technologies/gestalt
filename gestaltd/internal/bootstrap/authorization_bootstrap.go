@@ -287,6 +287,20 @@ func staticAuthorizationResource(def config.AuthorizationResourceDef) *proto.Res
 	}
 }
 
+// AuthorizationResourceTypeNames returns configured authorization model resource type names.
+func AuthorizationResourceTypeNames(cfg *config.Config) map[string]struct{} {
+	names := map[string]struct{}{}
+	if cfg == nil {
+		return names
+	}
+	for _, model := range cfg.Authorization.Models {
+		for name := range model.ResourceTypes {
+			names[name] = struct{}{}
+		}
+	}
+	return names
+}
+
 func stringPropertiesStruct(properties map[string]string) (*structpb.Struct, error) {
 	if len(properties) == 0 {
 		return nil, nil

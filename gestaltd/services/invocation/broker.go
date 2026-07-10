@@ -121,6 +121,7 @@ type Broker struct {
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
 	authorization     core.AuthorizationProvider
+	providerKinds     map[string]ProviderKind
 	logger            *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
@@ -141,6 +142,10 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
 	return func(b *Broker) { b.authorization = provider }
+}
+
+func WithProviderKinds(kinds map[string]ProviderKind) BrokerOption {
+	return func(b *Broker) { b.providerKinds = kinds }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -547,7 +552,7 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	req := authorizationAccessRequest(p, providerName, operationID)
+	req := authorizationAccessRequest(b.providerKinds, p, providerName, operationID)
 	resp, err := b.authorization.CheckAccess(ctx, req)
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
@@ -558,7 +563,7 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	return nil
 }
 
-func authorizationAccessRequest(p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
+func authorizationAccessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
 	subjectID := principal.EffectiveCredentialSubjectID(p)
 	providerName = strings.TrimSpace(providerName)
@@ -573,11 +578,8 @@ func authorizationAccessRequest(p *principal.Principal, providerName, operationI
 			Id:         subjectID,
 			Properties: properties,
 		},
-		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
-		Resource: &proto.Resource{
-			Type: providerName,
-			Id:   providerName,
-		},
+		Action:   &proto.Action{Name: strings.TrimSpace(operationID)},
+		Resource: AuthorizationResource(providerName, kinds),
 	}
 }
 
