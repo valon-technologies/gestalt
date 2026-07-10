@@ -398,12 +398,12 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 
 	indexRel := layout.IndexPath
 	return appPublishPlan{
-		Schema:       appPublishPlanSchema,
-		AppName:      entry.App,
-		DisplayName:  input.DisplayName,
-		Description:  input.Description,
-		Version:      input.Version,
-		Entry:        entry,
+		Schema:      appPublishPlanSchema,
+		AppName:     entry.App,
+		DisplayName: input.DisplayName,
+		Description: input.Description,
+		Version:     input.Version,
+		Entry:       entry,
 		EntryObject: appPublishObject{
 			Kind:       "entry",
 			LocalPath:  entryPath,

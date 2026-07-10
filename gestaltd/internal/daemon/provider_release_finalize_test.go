@@ -452,6 +452,140 @@ func TestProviderReleaseMetadataRejectsMCPAppWithoutStaticCatalog(t *testing.T) 
 	}
 }
 
+func TestProviderReleaseMetadataSnapshotsManifestContract(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/release-test
+version: 1.0.0
+displayName: Contract App
+dependencies:
+  apps:
+    github.com/acme/apps/base:
+      version: 1.2.3
+      operations:
+        listItems:
+          inputSchemaHash: abc123
+compatibility:
+  minGestaltdVersion: 0.5.0
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    rest:
+      connection: default
+      baseUrl: https://api.example.test
+      operations:
+        - name: createThing
+          method: POST
+          path: /things
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"provider": "",
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Requires == nil {
+		t.Fatalf("requires metadata missing: %#v", metadata.StaticValidation)
+	}
+	app := metadata.StaticValidation.Requires.Apps["github.com/acme/apps/base"]
+	if app.Version != "1.2.3" {
+		t.Fatalf("requires app version = %q", app.Version)
+	}
+	if app.Operations["listItems"].InputSchemaHash != "abc123" {
+		t.Fatalf("requires operations = %#v", app.Operations)
+	}
+	if metadata.StaticValidation.Compatibility == nil || metadata.StaticValidation.Compatibility.MinGestaltdVersion != "0.5.0" {
+		t.Fatalf("compatibility metadata missing: %#v", metadata.StaticValidation.Compatibility)
+	}
+}
+
+func TestProviderReleaseMetadataUsesExplicitSourceContractBytes(t *testing.T) {
+	t.Parallel()
+
+	archiveManifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      releaseTestSource,
+		Version:     "1.0.0",
+		DisplayName: "Contract App",
+		Dependencies: &providermanifestv1.ManifestDependencies{
+			Apps: map[string]providermanifestv1.ManifestAppDependency{
+				"github.com/acme/apps/base": {Version: "1.0.0"},
+			},
+		},
+		Compatibility: &providermanifestv1.ManifestCompatibility{
+			MinGestaltdVersion: "0.4.0",
+		},
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					Connection: "default",
+					BaseURL:    "https://api.example.test",
+					Operations: []providermanifestv1.ProviderOperation{{Name: "createThing", Method: "POST", Path: "/things"}},
+				},
+			},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone}},
+			},
+		},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     "test",
+			Arch:   "test",
+			Path:   "provider",
+			SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+	}
+	sourceManifest := `kind: app
+source: github.com/testowner/apps/catalog/release-test
+version: 1.0.0
+displayName: Contract App
+compatibility:
+  minGestaltdVersion: 0.5.0
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    rest:
+      connection: default
+      baseUrl: https://api.example.test
+      operations:
+        - name: createThing
+          method: POST
+          path: /things
+  connections:
+    default:
+      auth:
+        type: none
+`
+	metadata, err := buildProviderReleaseMetadataForManifestWithExplicitSource(t, archiveManifest, sourceManifest, map[string]string{
+		"provider": "",
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.StaticValidation != nil && metadata.StaticValidation.Requires != nil {
+		t.Fatalf("requires metadata = %#v, want source manifest without dependencies", metadata.StaticValidation.Requires)
+	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Compatibility == nil || metadata.StaticValidation.Compatibility.MinGestaltdVersion != "0.5.0" {
+		t.Fatalf("compatibility metadata = %#v, want minGestaltdVersion from source manifest", metadata.StaticValidation)
+	}
+}
+
 func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, error) {
 	t.Helper()
 
@@ -487,6 +621,44 @@ func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providerman
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
 		nil,
+	)
+}
+
+func buildProviderReleaseMetadataForManifestWithExplicitSource(t *testing.T, manifest *providermanifestv1.Manifest, sourceManifest string, files map[string]string) (*providerrelease.Metadata, error) {
+	t.Helper()
+
+	packageDir := t.TempDir()
+	data, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatJSON)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, providerpkg.ManifestFile), data, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	for name, contents := range files {
+		path := filepath.Join(packageDir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	outputDir := t.TempDir()
+	archive := filepath.Join(outputDir, "gestalt-app-release-test_v1.0.0.tar.gz")
+	if err := providerpkg.CreatePackageFromDir(packageDir, archive); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	archiveSHA, err := providerpkg.ArchiveDigest(archive)
+	if err != nil {
+		t.Fatalf("ArchiveDigest: %v", err)
+	}
+
+	return buildProviderReleaseMetadata(
+		manifest,
+		"1.0.0",
+		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
+		[]byte(sourceManifest),
 	)
 }
 

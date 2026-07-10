@@ -31,18 +31,39 @@ func NormalizeKind(kind string) string {
 }
 
 type Manifest struct {
-	Kind        string         `json:"kind,omitempty" yaml:"kind,omitempty"`
-	Source      string         `json:"source,omitempty" yaml:"source,omitempty"`
-	Version     string         `json:"version" yaml:"version"`
-	DisplayName string         `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string         `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
-	Install     *SourceInstall `json:"install,omitempty" yaml:"install,omitempty"`
-	Build       *SourceBuild   `json:"build,omitempty" yaml:"build,omitempty"`
-	Run         *SourceRun     `json:"run,omitempty" yaml:"run,omitempty"`
-	Artifacts   []Artifact     `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
-	Entrypoint  *Entrypoint    `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
-	Spec        *Spec          `json:"spec,omitempty" yaml:"spec,omitempty"`
+	Kind          string                 `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Source        string                 `json:"source,omitempty" yaml:"source,omitempty"`
+	Version       string                 `json:"version" yaml:"version"`
+	DisplayName   string                 `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	Description   string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	IconFile      string                 `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
+	Install       *SourceInstall         `json:"install,omitempty" yaml:"install,omitempty"`
+	Build         *SourceBuild           `json:"build,omitempty" yaml:"build,omitempty"`
+	Run           *SourceRun             `json:"run,omitempty" yaml:"run,omitempty"`
+	Artifacts     []Artifact             `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Entrypoint    *Entrypoint            `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
+	Spec          *Spec                  `json:"spec,omitempty" yaml:"spec,omitempty"`
+	Dependencies  *ManifestDependencies  `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
+	Compatibility *ManifestCompatibility `json:"compatibility,omitempty" yaml:"compatibility,omitempty"`
+}
+
+// ManifestDependencies declares app registry contract requirements for a provider package.
+type ManifestDependencies struct {
+	Apps map[string]ManifestAppDependency `json:"apps,omitempty" yaml:"apps,omitempty"`
+}
+
+type ManifestAppDependency struct {
+	Version    string                                 `json:"version,omitempty" yaml:"version,omitempty"`
+	Operations map[string]ManifestOperationDependency `json:"operations,omitempty" yaml:"operations,omitempty"`
+}
+
+type ManifestOperationDependency struct {
+	InputSchemaHash string `json:"inputSchemaHash,omitempty" yaml:"inputSchemaHash,omitempty"`
+}
+
+// ManifestCompatibility declares runtime compatibility constraints for a provider package.
+type ManifestCompatibility struct {
+	MinGestaltdVersion string `json:"minGestaltdVersion,omitempty" yaml:"minGestaltdVersion,omitempty"`
 }
 
 type SourceBuild struct {
