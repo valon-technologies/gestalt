@@ -59,7 +59,6 @@ var AppInstallationsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_rollout_status", KeyPath: []string{"rollout_status"}},
 		{Name: "by_registry", KeyPath: []string{"registry"}},
-		{Name: "by_resolved_version", KeyPath: []string{"resolved_version"}},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
@@ -82,7 +81,7 @@ var AppInstallationsSchema = idb.ObjectStoreOptions{
 var AppInstallationEventsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_app_name", KeyPath: []string{"app_name"}},
-		{Name: "by_app_created", KeyPath: []string{"app_name", "created_at"}},
+		{Name: "by_app_name_event_timestamp", KeyPath: []string{"app_name", "event_timestamp"}},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
@@ -92,7 +91,7 @@ var AppInstallationEventsSchema = idb.ObjectStoreOptions{
 		{Name: "to_version", Type: idb.TypeString},
 		{Name: "event_type", Type: idb.TypeString, NotNull: true},
 		{Name: "actor", Type: idb.TypeString},
-		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "event_timestamp", Type: idb.TypeTime, NotNull: true},
 		{Name: "metadata_json", Type: idb.TypeJSON},
 	},
 }

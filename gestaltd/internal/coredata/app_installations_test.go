@@ -251,7 +251,7 @@ func TestAppInstallationEventService(t *testing.T) {
 		}
 	})
 
-	t.Run("ListEventsByApp_returns_created_at_order", func(t *testing.T) {
+	t.Run("ListEventsByApp_returns_event_timestamp_order", func(t *testing.T) {
 		t.Parallel()
 		svc, err := coredata.New(&coretesting.StubIndexedDB{})
 		if err != nil {
@@ -261,16 +261,16 @@ func TestAppInstallationEventService(t *testing.T) {
 		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
 		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:   "g-issues",
-			EventType: core.AppInstallationEventTypeInstallRequested,
-			CreatedAt: secondAt,
+			AppName:        "g-issues",
+			EventType:      core.AppInstallationEventTypeInstallRequested,
+			EventTimestamp: secondAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent(first): %v", err)
 		}
 		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
-			AppName:   "g-issues",
-			EventType: core.AppInstallationEventTypePromoted,
-			CreatedAt: firstAt,
+			AppName:        "g-issues",
+			EventType:      core.AppInstallationEventTypePromoted,
+			EventTimestamp: firstAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent(second): %v", err)
 		}
@@ -282,8 +282,8 @@ func TestAppInstallationEventService(t *testing.T) {
 		if len(events) != 2 {
 			t.Fatalf("events = %d, want 2", len(events))
 		}
-		if !events[0].CreatedAt.Equal(firstAt) || events[1].CreatedAt.Equal(secondAt) == false {
-			t.Fatalf("event order = [%v, %v], want [%v, %v]", events[0].CreatedAt, events[1].CreatedAt, firstAt, secondAt)
+		if !events[0].EventTimestamp.Equal(firstAt) || events[1].EventTimestamp.Equal(secondAt) == false {
+			t.Fatalf("event order = [%v, %v], want [%v, %v]", events[0].EventTimestamp, events[1].EventTimestamp, firstAt, secondAt)
 		}
 		if events[0].EventType != core.AppInstallationEventTypePromoted {
 			t.Fatalf("first event type = %q, want promoted", events[0].EventType)

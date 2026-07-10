@@ -58,14 +58,14 @@ type AppInstallation struct {
 // AppInstallationEvent is an append-only audit record for install lifecycle
 // changes on one app.
 type AppInstallationEvent struct {
-	EventID     string
-	AppName     string
-	FromVersion string
-	ToVersion   string
-	EventType   string
-	Actor       string
-	CreatedAt   time.Time
-	Metadata    map[string]any
+	EventID        string
+	AppName        string
+	FromVersion    string
+	ToVersion      string
+	EventType      string
+	Actor          string
+	EventTimestamp time.Time
+	Metadata       map[string]any
 }
 
 type ExternalCredentialGrant struct {
