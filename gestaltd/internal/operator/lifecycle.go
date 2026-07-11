@@ -975,6 +975,7 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, 
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
+	cfg.Server.ArtifactsDir = paths.artifactsDir
 	if l.devServeEligible || len(l.forcedDevAppKeys) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 			entry := cfg.Apps[name]
