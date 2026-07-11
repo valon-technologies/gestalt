@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -63,7 +64,7 @@ func TestInstallPackageAsPreservesEntrypointArgsWhenRenamingExecutable(t *testin
 	}
 
 	installRoot := filepath.Join(root, "install")
-	installed, err := installPackageAs(packagePath, installRoot, "configuredName")
+	installed, err := installPackageAs(context.Background(), packagePath, installRoot, "configuredName")
 	if err != nil {
 		t.Fatalf("installPackageAs: %v", err)
 	}

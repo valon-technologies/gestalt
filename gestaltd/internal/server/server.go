@@ -145,6 +145,7 @@ type Server struct {
 	adminUI                http.Handler
 	appRegistries          map[string]config.AppRegistryConfig
 	appRegistryReader      *appregistry.RegistryReader
+	appRegistryInstaller   *appregistry.Installer
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
 }
@@ -201,6 +202,7 @@ type Config struct {
 	BuiltinAdminUI         *BuiltinAdminUIOptions
 	AppRegistries          map[string]config.AppRegistryConfig
 	AppRegistryReader      *appregistry.RegistryReader
+	ArtifactsDir           string
 	RouteProfile           RouteProfile
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
@@ -395,6 +397,7 @@ func New(cfg Config) (*Server, error) {
 		adminUI:                adminUI,
 		appRegistries:          cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:      cfg.AppRegistryReader,
+		appRegistryInstaller:   newAppRegistryInstaller(cfg),
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,
 	}

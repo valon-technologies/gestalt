@@ -9,8 +9,8 @@ const (
 	StoreManagedSubjects               = "managed_subjects"
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
 	StoreAppSHAs                       = "app_shas"
-	StoreAppInstallations              = "app_installations"
-	StoreAppInstallationEvents         = "app_installation_events"
+	StoreAppVersionCatalog             = "app_version_catalog"
+	StoreAppVersionInstallLocks        = "app_version_install_locks"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -55,42 +55,35 @@ var ManagedSubjectsSchema = idb.ObjectStoreOptions{
 	},
 }
 
-var AppInstallationsSchema = idb.ObjectStoreOptions{
+var AppVersionCatalogSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
-		{Name: "by_rollout_status", KeyPath: []string{"rollout_status"}},
-		{Name: "by_registry", KeyPath: []string{"registry"}},
+		{Name: "by_app", KeyPath: []string{"app"}},
+		{Name: "by_app_timestamp", KeyPath: []string{"app", "timestamp"}},
+		{Name: "by_app_version", KeyPath: []string{"app", "version"}},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "version_constraint", Type: idb.TypeString},
-		{Name: "resolved_version", Type: idb.TypeString},
-		{Name: "source_ref", Type: idb.TypeString},
-		{Name: "registry", Type: idb.TypeString},
-		{Name: "provider_release_url", Type: idb.TypeString},
-		{Name: "artifact_checksums_json", Type: idb.TypeJSON},
-		{Name: "rollout_status", Type: idb.TypeString, NotNull: true},
-		{Name: "active_since", Type: idb.TypeTime},
-		{Name: "previous_resolved_version", Type: idb.TypeString},
-		{Name: "installed_by", Type: idb.TypeString},
-		{Name: "installed_at", Type: idb.TypeTime},
-		{Name: "updated_at", Type: idb.TypeTime},
-	},
-}
-
-var AppInstallationEventsSchema = idb.ObjectStoreOptions{
-	Indexes: []idb.IndexSchema{
-		{Name: "by_installation_id", KeyPath: []string{"installation_id"}},
-		{Name: "by_installation_id_timestamp", KeyPath: []string{"installation_id", "timestamp"}},
-	},
-	Columns: []idb.ColumnDef{
-		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "installation_id", Type: idb.TypeString, NotNull: true},
-		{Name: "from_version", Type: idb.TypeString},
-		{Name: "to_version", Type: idb.TypeString},
+		{Name: "app", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeString, NotNull: true},
 		{Name: "type", Type: idb.TypeString, NotNull: true},
 		{Name: "actor", Type: idb.TypeString},
 		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},
 		{Name: "metadata_json", Type: idb.TypeJSON},
+	},
+}
+
+var AppVersionInstallLocksSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_app_version", KeyPath: []string{"app", "version"}, Unique: true},
+		{Name: "by_expires_at", KeyPath: []string{"expires_at"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeString, NotNull: true},
+		{Name: "holder", Type: idb.TypeString, NotNull: true},
+		{Name: "acquired_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "expires_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
 

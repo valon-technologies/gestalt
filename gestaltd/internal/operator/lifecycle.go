@@ -3254,7 +3254,7 @@ func installLockedPackageAtomic(packagePath, destDir string) (*installedPackage,
 		return nil, nil, nil, fmt.Errorf("create temp install directory: %w", err)
 	}
 	cleanupDir := tempDir
-	installed, err := installPackageAs(packagePath, tempDir, filepath.Base(destDir))
+	installed, err := installPackageAs(context.Background(), packagePath, tempDir, filepath.Base(destDir))
 	if err != nil {
 		_ = os.RemoveAll(cleanupDir)
 		return nil, nil, nil, err

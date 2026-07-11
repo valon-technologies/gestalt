@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,37 @@ type installedPackage struct {
 	ExecutablePath string
 	AssetRoot      string
 	Manifest       *providermanifestv1.Manifest
+}
+
+// InstalledPackage is the on-disk layout after extracting a published app archive.
+type InstalledPackage struct {
+	Root           string
+	ManifestPath   string
+	ExecutablePath string
+	AssetRoot      string
+	Manifest       *providermanifestv1.Manifest
+}
+
+func installedPackageView(pkg *installedPackage) *InstalledPackage {
+	if pkg == nil {
+		return nil
+	}
+	return &InstalledPackage{
+		Root:           pkg.Root,
+		ManifestPath:   pkg.ManifestPath,
+		ExecutablePath: pkg.ExecutablePath,
+		AssetRoot:      pkg.AssetRoot,
+		Manifest:       pkg.Manifest,
+	}
+}
+
+// InstallPublishedPackage extracts a published app archive into destDir.
+func InstallPublishedPackage(ctx context.Context, packagePath, destDir, configuredName string) (*InstalledPackage, error) {
+	pkg, err := installPackageAs(ctx, packagePath, destDir, configuredName)
+	if err != nil {
+		return nil, err
+	}
+	return installedPackageView(pkg), nil
 }
 
 func isAssetOnly(manifest *providermanifestv1.Manifest) bool {
@@ -39,10 +71,13 @@ func manifestNeedsExecutableArtifact(manifest *providermanifestv1.Manifest) bool
 }
 
 func installPackage(packagePath, destDir string) (*installedPackage, error) {
-	return installPackageAs(packagePath, destDir, "")
+	return installPackageAs(context.Background(), packagePath, destDir, "")
 }
 
-func installPackageAs(packagePath, destDir, configuredName string) (*installedPackage, error) {
+func installPackageAs(ctx context.Context, packagePath, destDir, configuredName string) (*installedPackage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	_, manifest, err := packageio.ReadPackageManifest(packagePath)
 	if err != nil {
 		return nil, err
@@ -52,7 +87,7 @@ func installPackageAs(packagePath, destDir, configuredName string) (*installedPa
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			return nil, fmt.Errorf("create app directory: %w", err)
 		}
-		if err := packageio.ExtractPackage(packagePath, destDir); err != nil {
+		if err := packageio.ExtractPackageContext(ctx, packagePath, destDir); err != nil {
 			return nil, err
 		}
 		manifestPath, _ := packageio.FindManifestFile(destDir)
@@ -79,11 +114,14 @@ func installPackageAs(packagePath, destDir, configuredName string) (*installedPa
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create app directory: %w", err)
 	}
-	if err := packageio.ExtractPackage(packagePath, destDir); err != nil {
+	if err := packageio.ExtractPackageContext(ctx, packagePath, destDir); err != nil {
 		return nil, err
 	}
 
 	if artifact != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		// Verify the artifact digest against the extracted file rather than
 		// decompressing the whole archive a second time to read it. The package
 		// is never executed before this check succeeds.
@@ -103,6 +141,9 @@ func installPackageAs(packagePath, destDir, configuredName string) (*installedPa
 	manifest = packageio.ResolveManifestLocalReferences(manifest, manifestPath)
 	if configuredName == "" {
 		configuredName = filepath.Base(destDir)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if err := normalizeInstalledExecutable(destDir, manifest, configuredName); err != nil {
 		return nil, err

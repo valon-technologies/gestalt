@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -313,13 +314,23 @@ func isPathWithinDir(root, target string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func ExtractPackage(packagePath, destDir string) (err error) {
+func ExtractPackage(packagePath, destDir string) error {
+	return ExtractPackageContext(context.Background(), packagePath, destDir)
+}
+
+func ExtractPackageContext(ctx context.Context, packagePath, destDir string) (err error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("create destination dir: %w", err)
 	}
 
 	rootManifests := make(map[string]struct{})
 	if err := walkPackageArchive(packagePath, func(entry packageArchiveEntry) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if entry.Header.Typeflag == tar.TypeReg && !strings.Contains(entry.Path, "/") && IsManifestFileIn(entry.Path, ManifestFiles) {
 			rootManifests[entry.Path] = struct{}{}
 		}
