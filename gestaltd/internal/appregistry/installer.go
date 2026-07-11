@@ -144,12 +144,9 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		PreviousResolvedVersion: previousVersion,
 		InstalledBy:             strings.TrimSpace(input.Actor),
 	}
-	if err := i.writePendingInstall(ctx, appName, installBaseline, pending); err != nil {
-		return nil, err
-	}
-	pendingBaseline, err := i.Installations.GetInstallation(ctx, appName)
+	pendingBaseline, err := i.writePendingInstall(ctx, appName, installBaseline, pending)
 	if err != nil {
-		return nil, fmt.Errorf("load pending app installation: %w", err)
+		return nil, err
 	}
 	if _, err := i.Events.AppendEvent(ctx, &core.AppInstallationEvent{
 		InstallationID: appName,
@@ -392,8 +389,8 @@ func restoredInstallationAfterFailure(prior *core.AppInstallation, attemptedVers
 	}
 }
 
-func (i *Installer) writePendingInstall(ctx context.Context, appName string, baseline *core.AppInstallation, pending *core.AppInstallation) error {
-	_, err := i.Installations.CompareAndSwapInstallation(ctx, appName, baseline, func(installation *core.AppInstallation) error {
+func (i *Installer) writePendingInstall(ctx context.Context, appName string, baseline *core.AppInstallation, pending *core.AppInstallation) (*core.AppInstallation, error) {
+	stored, err := i.Installations.CompareAndSwapInstallation(ctx, appName, baseline, func(installation *core.AppInstallation) error {
 		if baseline == nil {
 			*installation = *pending
 			installation.AppName = appName
@@ -404,11 +401,11 @@ func (i *Installer) writePendingInstall(ctx context.Context, appName string, bas
 	})
 	if err != nil {
 		if errors.Is(err, coredata.ErrInstallationStateConflict) {
-			return fmt.Errorf("%w: install baseline no longer current", ErrInstallFleetStateAdvanced)
+			return nil, fmt.Errorf("%w: install baseline no longer current", ErrInstallFleetStateAdvanced)
 		}
-		return fmt.Errorf("write pending app installation: %w", err)
+		return nil, fmt.Errorf("write pending app installation: %w", err)
 	}
-	return nil
+	return stored, nil
 }
 
 func applyPendingInstall(dst *core.AppInstallation, pending *core.AppInstallation, baseline *core.AppInstallation) {

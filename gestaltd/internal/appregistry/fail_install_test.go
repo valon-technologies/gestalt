@@ -155,7 +155,7 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 			Installations: services.AppInstallations,
 			Events:        services.AppInstallationEvents,
 		}
-		if err := installer.writePendingInstall(context.Background(), "g-issues", baseline, &core.AppInstallation{
+		if _, err := installer.writePendingInstall(context.Background(), "g-issues", baseline, &core.AppInstallation{
 			AppName:           "g-issues",
 			VersionConstraint: "0.0.0-snapshot.v2",
 			ResolvedVersion:   "0.0.0-snapshot.v2",
@@ -217,7 +217,7 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 			Events:        services.AppInstallationEvents,
 		}
 
-		err := installer.writePendingInstall(context.Background(), "g-issues", staleBaseline, &core.AppInstallation{
+		_, err := installer.writePendingInstall(context.Background(), "g-issues", staleBaseline, &core.AppInstallation{
 			AppName:           "g-issues",
 			VersionConstraint: "0.0.0-snapshot.v2",
 			ResolvedVersion:   "0.0.0-snapshot.v2",
