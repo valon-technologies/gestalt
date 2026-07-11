@@ -9,11 +9,11 @@ import (
 )
 
 type Services struct {
-	Users                 *UserService
-	ExternalCredentials   core.ExternalCredentialProvider
-	ManagedSubjects       *ManagedSubjectService
-	AppInstallationEvents *AppInstallationEventService
-	DB                    indexeddb.IndexedDB
+	Users               *UserService
+	ExternalCredentials core.ExternalCredentialProvider
+	ManagedSubjects     *ManagedSubjectService
+	AppVersionCatalog   *AppVersionCatalogService
+	DB                  indexeddb.IndexedDB
 }
 
 // NewOptions configures coredata bootstrap behavior.
@@ -45,19 +45,19 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppSHAs, AppSHAsSchema); err != nil {
 			return nil, fmt.Errorf("create app_shas store: %w", err)
 		}
-		if _, err := ds.CreateObjectStore(ctx, StoreAppInstallationEvents, AppInstallationEventsSchema); err != nil {
-			return nil, fmt.Errorf("create app_installation_events store: %w", err)
+		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionCatalog, AppVersionCatalogSchema); err != nil {
+			return nil, fmt.Errorf("create app_version_catalog store: %w", err)
 		}
 	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
-	appInstallationEvents := NewAppInstallationEventService(ds)
+	appVersionCatalog := NewAppVersionCatalogService(ds)
 	return &Services{
-		ExternalCredentials:   nil,
-		Users:                 users,
-		ManagedSubjects:       managedSubjects,
-		AppInstallationEvents: appInstallationEvents,
-		DB:                    ds,
+		ExternalCredentials: nil,
+		Users:               users,
+		ManagedSubjects:     managedSubjects,
+		AppVersionCatalog:   appVersionCatalog,
+		DB:                  ds,
 	}, nil
 }
 

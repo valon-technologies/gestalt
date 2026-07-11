@@ -16,19 +16,15 @@ import (
 )
 
 type adminAppInstallationInfo struct {
-	AppName                 string            `json:"app"`
-	VersionConstraint       string            `json:"versionConstraint,omitempty"`
-	ResolvedVersion         string            `json:"resolvedVersion,omitempty"`
-	SourceRef               string            `json:"sourceRef,omitempty"`
-	Registry                string            `json:"registry,omitempty"`
-	ProviderReleaseURL      string            `json:"providerReleaseUrl,omitempty"`
-	ArtifactChecksums       map[string]string `json:"artifactChecksums,omitempty"`
-	RolloutStatus           string            `json:"rolloutStatus"`
-	ActiveSince             *string           `json:"activeSince,omitempty"`
-	PreviousResolvedVersion string            `json:"previousResolvedVersion,omitempty"`
-	InstalledBy             string            `json:"installedBy,omitempty"`
-	InstalledAt             string            `json:"installedAt,omitempty"`
-	UpdatedAt               string            `json:"updatedAt,omitempty"`
+	AppName            string            `json:"app"`
+	Version            string            `json:"version"`
+	SourceRef          string            `json:"sourceRef,omitempty"`
+	Registry           string            `json:"registry,omitempty"`
+	ProviderReleaseURL string            `json:"providerReleaseUrl,omitempty"`
+	ArtifactChecksums  map[string]string `json:"artifactChecksums,omitempty"`
+	InstalledBy        string            `json:"installedBy,omitempty"`
+	InstalledAt        string            `json:"installedAt,omitempty"`
+	UpdatedAt          string            `json:"updatedAt,omitempty"`
 }
 
 type adminAppRegistryInstallRequest struct {
@@ -53,35 +49,24 @@ func (s *Server) mountAdminAppInstallWriteRoutes(r chi.Router) {
 }
 
 func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Request) {
-	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Events == nil {
+	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Catalog == nil {
 		writeError(w, http.StatusServiceUnavailable, "app installation service is unavailable")
 		return
 	}
-	rolloutStatus := strings.TrimSpace(r.URL.Query().Get("rolloutStatus"))
-	switch rolloutStatus {
-	case "", core.AppInstallationRolloutStatusPromoted:
-		// projected heads are always promoted
-	case core.AppInstallationRolloutStatusPending, core.AppInstallationRolloutStatusFailed:
-		writeJSON(w, http.StatusOK, []adminAppInstallationInfo{})
-		return
-	default:
-		writeError(w, http.StatusBadRequest, "failed to list app installations")
-		return
-	}
-	installations, err := s.appRegistryInstaller.Events.ListHeadInstallations(r.Context())
+	versions, err := s.appRegistryInstaller.Catalog.ListAllKnownVersions(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list app installations")
 		return
 	}
-	out := make([]adminAppInstallationInfo, 0, len(installations))
-	for _, installation := range installations {
+	out := make([]adminAppInstallationInfo, 0, len(versions))
+	for _, installation := range versions {
 		out = append(out, adminAppInstallationFromCore(installation))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request) {
-	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Events == nil {
+	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Catalog == nil {
 		writeError(w, http.StatusServiceUnavailable, "app installation service is unavailable")
 		return
 	}
@@ -94,16 +79,20 @@ func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}
-	installation, err := s.appRegistryInstaller.Events.HeadInstallation(r.Context(), appName)
+	versions, err := s.appRegistryInstaller.Catalog.ListKnownVersionsByApp(r.Context(), appName)
 	if err != nil {
-		if err == core.ErrNotFound {
-			writeError(w, http.StatusNotFound, "app installation not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to load app installation")
+		writeError(w, http.StatusInternalServerError, "failed to load app installations")
 		return
 	}
-	writeJSON(w, http.StatusOK, adminAppInstallationFromCore(installation))
+	if len(versions) == 0 {
+		writeError(w, http.StatusNotFound, "app installation not found")
+		return
+	}
+	out := make([]adminAppInstallationInfo, 0, len(versions))
+	for _, installation := range versions {
+		out = append(out, adminAppInstallationFromCore(installation))
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Request) {
@@ -184,20 +173,13 @@ func adminAppInstallationFromCore(installation *core.AppInstallation) adminAppIn
 		return adminAppInstallationInfo{}
 	}
 	info := adminAppInstallationInfo{
-		AppName:                 installation.AppName,
-		VersionConstraint:       installation.VersionConstraint,
-		ResolvedVersion:         installation.ResolvedVersion,
-		SourceRef:               installation.SourceRef,
-		Registry:                installation.Registry,
-		ProviderReleaseURL:      installation.ProviderReleaseURL,
-		ArtifactChecksums:       installation.ArtifactChecksums,
-		RolloutStatus:           installation.RolloutStatus,
-		PreviousResolvedVersion: installation.PreviousResolvedVersion,
-		InstalledBy:             installation.InstalledBy,
-	}
-	if installation.ActiveSince != nil {
-		formatted := installation.ActiveSince.UTC().Format(time.RFC3339)
-		info.ActiveSince = &formatted
+		AppName:            installation.AppName,
+		Version:            installation.Version,
+		SourceRef:          installation.SourceRef,
+		Registry:           installation.Registry,
+		ProviderReleaseURL: installation.ProviderReleaseURL,
+		ArtifactChecksums:  installation.ArtifactChecksums,
+		InstalledBy:        installation.InstalledBy,
 	}
 	if !installation.InstalledAt.IsZero() {
 		info.InstalledAt = installation.InstalledAt.UTC().Format(time.RFC3339)
@@ -209,7 +191,7 @@ func adminAppInstallationFromCore(installation *core.AppInstallation) adminAppIn
 }
 
 func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
-	if cfg.Services == nil || cfg.Services.AppInstallationEvents == nil {
+	if cfg.Services == nil || cfg.Services.AppVersionCatalog == nil {
 		return nil
 	}
 	reader := cfg.AppRegistryReader
@@ -219,7 +201,7 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 	return &appregistry.Installer{
 		Registries:   cloneAppRegistryConfig(cfg.AppRegistries),
 		Reader:       reader,
-		Events:       cfg.Services.AppInstallationEvents,
+		Catalog:      cfg.Services.AppVersionCatalog,
 		ArtifactsDir: strings.TrimSpace(cfg.ArtifactsDir),
 	}
 }

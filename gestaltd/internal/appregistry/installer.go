@@ -2,7 +2,6 @@ package appregistry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,11 +21,11 @@ import (
 const RegistryInstallSubdir = "registry-installed"
 
 // Installer materializes registry apps on the handling instance and records
-// install lifecycle in app_installation_events.
+// known versions in app_version_catalog.
 type Installer struct {
 	Registries   map[string]config.AppRegistryConfig
 	Reader       *RegistryReader
-	Events       *coredata.AppInstallationEventService
+	Catalog      *coredata.AppVersionCatalogService
 	ArtifactsDir string
 	Now          func() time.Time
 	installLocks sync.Map // app name -> *sync.Mutex
@@ -68,8 +67,8 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	unlock := i.lockInstall(appName)
 	defer unlock()
 
-	if i.Events == nil {
-		return nil, fmt.Errorf("app installation event service is not configured")
+	if i.Catalog == nil {
+		return nil, fmt.Errorf("app version catalog service is not configured")
 	}
 	artifactsDir := strings.TrimSpace(i.ArtifactsDir)
 	if artifactsDir == "" {
@@ -119,45 +118,13 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return nil, fmt.Errorf("registry entry artifact for platform %q is missing sha256", platform)
 	}
 
-	previousVersion := ""
-	installedAt := i.now()
-	supersedesEventID := ""
-	head, headErr := i.Events.HeadInstallation(ctx, appName)
-	if headErr == nil {
-		previousVersion = strings.TrimSpace(head.ResolvedVersion)
-		if !head.InstalledAt.IsZero() {
-			installedAt = head.InstalledAt
-		}
-	} else if !errors.Is(headErr, core.ErrNotFound) {
-		return nil, fmt.Errorf("load existing app installation: %w", headErr)
-	}
-	if headEvent, headEventErr := i.Events.HeadEvent(ctx, appName); headEventErr == nil {
-		supersedesEventID = strings.TrimSpace(headEvent.ID)
-	} else if !errors.Is(headEventErr, core.ErrNotFound) {
-		return nil, fmt.Errorf("load existing head event: %w", headEventErr)
-	}
-
 	entryURL := PublicURL(publicRoot, AppVersionEntryPath(appName, version))
 	checksums := map[string]string{platform: expectedSHA}
-
-	if _, err := i.Events.AppendEvent(ctx, &core.AppInstallationEvent{
-		InstallationID: appName,
-		FromVersion:    previousVersion,
-		ToVersion:      version,
-		Type:           core.AppInstallationEventTypeInstallRequested,
-		Actor:          actor,
-		Metadata: map[string]any{
-			"registry": registryName,
-		},
-	}); err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, "", fmt.Errorf("append install_requested event: %w", err))
-	}
-
 	materializedPath := filepath.Join(artifactsDir, RegistryInstallSubdir, appName, version)
 
 	download, err := downloadRegistryArtifact(ctx, reader.client(), artifactURL)
 	if err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, "", err)
+		return i.failInstall(ctx, appName, version, actor, registryName, "", err)
 	}
 	defer func() {
 		if download.Cleanup != nil {
@@ -165,62 +132,62 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		}
 	}()
 	if !strings.EqualFold(strings.TrimSpace(download.SHA256Hex), expectedSHA) {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, "", fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
+		return i.failInstall(ctx, appName, version, actor, registryName, "", fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
 	}
 
 	if _, err := operator.InstallPublishedPackage(download.LocalPath, materializedPath, appName); err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, materializedPath, fmt.Errorf("materialize app artifact: %w", err))
+		return i.failInstall(ctx, appName, version, actor, registryName, materializedPath, fmt.Errorf("materialize app artifact: %w", err))
 	}
 
-	activeSince := i.now()
-	promoted := &core.AppInstallation{
-		AppName:                 appName,
-		VersionConstraint:       version,
-		ResolvedVersion:         version,
-		SourceRef:               entry.SourceRef,
-		Registry:                registryName,
-		ProviderReleaseURL:      entryURL,
-		ArtifactChecksums:       checksums,
-		RolloutStatus:           core.AppInstallationRolloutStatusPromoted,
-		ActiveSince:             &activeSince,
-		PreviousResolvedVersion: previousVersion,
-		InstalledBy:             actor,
-		InstalledAt:             installedAt,
-		UpdatedAt:               activeSince,
+	addedAt := i.now()
+	known := &core.AppInstallation{
+		AppName:            appName,
+		Version:            version,
+		SourceRef:          entry.SourceRef,
+		Registry:           registryName,
+		ProviderReleaseURL: entryURL,
+		ArtifactChecksums:  checksums,
+		InstalledBy:        actor,
+		InstalledAt:        addedAt,
+		UpdatedAt:          addedAt,
 	}
 
-	promotedEvent, err := i.Events.AppendEvent(ctx, &core.AppInstallationEvent{
-		InstallationID:    appName,
-		FromVersion:       previousVersion,
-		ToVersion:         version,
-		Type:              core.AppInstallationEventTypePromoted,
-		Actor:             actor,
-		Timestamp:         activeSince,
-		SupersedesEventID: supersedesEventID,
-		Metadata:          coredata.PromotedInstallationMetadata(promoted, materializedPath),
-	})
+	alreadyKnown, err := i.Catalog.HasKnownVersion(ctx, appName, version)
 	if err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, materializedPath, fmt.Errorf("append promoted event: %w", err))
+		return i.failInstall(ctx, appName, version, actor, registryName, materializedPath, fmt.Errorf("check known app version: %w", err))
+	}
+	if !alreadyKnown {
+		addedRecord, err := i.Catalog.AppendRecord(ctx, &core.AppVersionCatalogRecord{
+			App:       appName,
+			Version:   version,
+			Type:      core.AppVersionCatalogRecordTypeVersionAdded,
+			Actor:     actor,
+			Timestamp: addedAt,
+			Metadata:  coredata.VersionAddedMetadata(known, materializedPath),
+		})
+		if err != nil {
+			return i.failInstall(ctx, appName, version, actor, registryName, materializedPath, fmt.Errorf("append version_added record: %w", err))
+		}
+		known = coredata.InstallationFromVersionAddedRecord(addedRecord)
 	}
 
 	return &InstallOutput{
-		Installation:     coredata.InstallationFromPromotedEvent(promotedEvent),
+		Installation:     known,
 		MaterializedPath: materializedPath,
 	}, nil
 }
 
-func (i *Installer) failInstall(ctx context.Context, appName, previousVersion, version, actor, registryName, materializedPath string, cause error) (*InstallOutput, error) {
+func (i *Installer) failInstall(ctx context.Context, appName, version, actor, registryName, materializedPath string, cause error) (*InstallOutput, error) {
 	if materializedPath != "" {
 		if err := os.RemoveAll(materializedPath); err != nil {
 			return nil, fmt.Errorf("%w; also failed to remove materialized artifacts: %v", cause, err)
 		}
 	}
-	i.appendInstallEventBestEffort(context.WithoutCancel(ctx), &core.AppInstallationEvent{
-		InstallationID: appName,
-		FromVersion:    previousVersion,
-		ToVersion:      version,
-		Type:           core.AppInstallationEventTypeFailed,
-		Actor:          actor,
+	i.appendCatalogRecordBestEffort(context.WithoutCancel(ctx), &core.AppVersionCatalogRecord{
+		App:     appName,
+		Version: version,
+		Type:    core.AppVersionCatalogRecordTypeInstallFailed,
+		Actor:   actor,
 		Metadata: map[string]any{
 			"registry": registryName,
 			"error":    cause.Error(),
@@ -239,11 +206,11 @@ func (i *Installer) lockInstall(appName string) func() {
 	return mu.Unlock
 }
 
-func (i *Installer) appendInstallEventBestEffort(ctx context.Context, event *core.AppInstallationEvent) {
-	if i == nil || i.Events == nil || event == nil {
+func (i *Installer) appendCatalogRecordBestEffort(ctx context.Context, record *core.AppVersionCatalogRecord) {
+	if i == nil || i.Catalog == nil || record == nil {
 		return
 	}
-	_, _ = i.Events.AppendEvent(context.WithoutCancel(ctx), event)
+	_, _ = i.Catalog.AppendRecord(context.WithoutCancel(ctx), record)
 }
 
 func (i *Installer) now() time.Time {

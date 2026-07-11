@@ -24,52 +24,33 @@ type ManagedSubject struct {
 }
 
 const (
-	AppInstallationRolloutStatusPending  = "pending"
-	AppInstallationRolloutStatusPromoted = "promoted"
-	AppInstallationRolloutStatusFailed   = "failed"
+	AppVersionCatalogRecordTypeVersionAdded  = "version_added"
+	AppVersionCatalogRecordTypeInstallFailed = "install_failed"
 )
 
-const (
-	AppInstallationEventTypeInstallRequested   = "install_requested"
-	AppInstallationEventTypePromoted           = "promoted"
-	AppInstallationEventTypeFailed             = "failed"
-	AppInstallationEventTypeRollback           = "rollback"
-	AppInstallationEventTypeUninstallRequested = "uninstall_requested"
-)
-
-// AppInstallation is a projection of promoted app_installation_events. Install
-// state is append-only in events; helpers materialize head and history views.
+// AppInstallation is a projection of version_added app_version_catalog records.
 type AppInstallation struct {
-	AppName                 string
-	VersionConstraint       string
-	ResolvedVersion         string
-	SourceRef               string
-	Registry                string
-	ProviderReleaseURL      string
-	ArtifactChecksums       map[string]string
-	RolloutStatus           string
-	ActiveSince             *time.Time
-	PreviousResolvedVersion string
-	InstalledBy             string
-	InstalledAt             time.Time
-	UpdatedAt               time.Time
+	AppName            string
+	Version            string
+	SourceRef          string
+	Registry           string
+	ProviderReleaseURL string
+	ArtifactChecksums  map[string]string
+	InstalledBy        string
+	InstalledAt        time.Time
+	UpdatedAt          time.Time
 }
 
-// AppInstallationEvent is the append-only source of truth for install lifecycle
-// changes on one app. InstallationID is the app name (for example g-issues).
-//
-// Head-changing events (promoted, rollback) form a linked list via
-// SupersedesEventID, which points at the prior head event they replace.
-type AppInstallationEvent struct {
-	ID                string
-	InstallationID    string
-	FromVersion       string
-	ToVersion         string
-	Type              string
-	Actor             string
-	Timestamp         time.Time
-	SupersedesEventID string
-	Metadata          map[string]any
+// AppVersionCatalogRecord is an append-only catalog entry for one app version.
+// App is the app name (for example g-issues).
+type AppVersionCatalogRecord struct {
+	ID        string
+	App       string
+	Version   string
+	Type      string
+	Actor     string
+	Timestamp time.Time
+	Metadata  map[string]any
 }
 
 type ExternalCredentialGrant struct {

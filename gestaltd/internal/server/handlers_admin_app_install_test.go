@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -18,7 +17,7 @@ import (
 func TestAdminAppRegistryInstall(t *testing.T) {
 	t.Parallel()
 
-	t.Run("promotes_and_lists_installation", func(t *testing.T) {
+	t.Run("installs_and_lists_known_version", func(t *testing.T) {
 		t.Parallel()
 
 		fixture := registrytest.NewInstallFixture(t)
@@ -48,8 +47,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			App              string `json:"app"`
 			MaterializedPath string `json:"materializedPath"`
 			Installation     struct {
-				RolloutStatus   string `json:"rolloutStatus"`
-				ResolvedVersion string `json:"resolvedVersion"`
+				Version string `json:"version"`
 			} `json:"installation"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -58,11 +56,8 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		if payload.Registry != "toolshed" || payload.App != "g-issues" {
 			t.Fatalf("payload = %#v", payload)
 		}
-		if payload.Installation.RolloutStatus != core.AppInstallationRolloutStatusPromoted {
-			t.Fatalf("installation.rolloutStatus = %q", payload.Installation.RolloutStatus)
-		}
-		if payload.Installation.ResolvedVersion != fixture.Version {
-			t.Fatalf("installation.resolvedVersion = %q", payload.Installation.ResolvedVersion)
+		if payload.Installation.Version != fixture.Version {
+			t.Fatalf("installation.version = %q", payload.Installation.Version)
 		}
 		if payload.MaterializedPath == "" {
 			t.Fatal("materializedPath is empty")
@@ -121,7 +116,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		}
 	})
 
-	t.Run("get_installation_by_app", func(t *testing.T) {
+	t.Run("get_versions_by_app", func(t *testing.T) {
 		t.Parallel()
 
 		fixture := registrytest.NewInstallFixture(t)
@@ -154,12 +149,15 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			raw, _ := io.ReadAll(getResp.Body)
 			t.Fatalf("get status = %d: %s", getResp.StatusCode, raw)
 		}
-		var installation map[string]any
-		if err := json.NewDecoder(getResp.Body).Decode(&installation); err != nil {
+		var installations []map[string]any
+		if err := json.NewDecoder(getResp.Body).Decode(&installations); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if installation["app"] != "g-issues" {
-			t.Fatalf("installation = %#v", installation)
+		if len(installations) != 1 {
+			t.Fatalf("installations = %#v", installations)
+		}
+		if installations[0]["app"] != "g-issues" {
+			t.Fatalf("installation = %#v", installations[0])
 		}
 	})
 }

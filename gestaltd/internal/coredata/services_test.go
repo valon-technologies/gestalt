@@ -245,7 +245,7 @@ func TestNew(t *testing.T) {
 		}
 		for _, store := range []string{
 			coredata.StoreUsers,
-			coredata.StoreAppInstallationEvents,
+			coredata.StoreAppVersionCatalog,
 		} {
 			if _, ok := contexts[store]; !ok {
 				t.Fatalf("NewWithContext did not create store %q", store)
