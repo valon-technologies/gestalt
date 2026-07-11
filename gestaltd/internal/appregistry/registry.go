@@ -21,7 +21,7 @@ import (
 
 const (
 	IndexSchemaVersion  = 1
-	EntrySchemaVersion  = 1
+	PublishedVersionSchemaVersion = 1
 	IndexFileName       = "index.json"
 	appSourcePathPrefix = "apps/"
 )
@@ -43,7 +43,7 @@ type IndexVersion struct {
 	PublishedAt time.Time `json:"publishedAt"`
 }
 
-type Entry struct {
+type PublishedVersion struct {
 	SchemaVersion int                 `json:"schemaVersion"`
 	App           string              `json:"app"`
 	Version       string              `json:"version"`
@@ -102,10 +102,10 @@ type PublishPlan struct {
 	RegistryName string
 	AppName      string
 	Version      string
-	Entry        Entry
-	EntryPath    string
-	EntryURL     string
-	EntryPublic  string
+	PublishedVersion PublishedVersion
+	PublishedVersionPath    string
+	PublishedVersionURL     string
+	PublishedVersionPublic  string
 	IndexPath    string
 	IndexURL     string
 	IndexPublic  string
@@ -159,20 +159,20 @@ func ValidatePublishInput(manifest *providermanifestv1.Manifest, version, source
 	return nil
 }
 
-func BuildEntry(input BuildEntryInput) (Entry, error) {
+func BuildPublishedVersion(input BuildPublishedVersionInput) (PublishedVersion, error) {
 	if err := ValidatePublishInput(input.Manifest, input.Version, input.SourceRef); err != nil {
-		return Entry{}, err
+		return PublishedVersion{}, err
 	}
 	if input.Release == nil {
-		return Entry{}, fmt.Errorf("provider release metadata is required")
+		return PublishedVersion{}, fmt.Errorf("provider release metadata is required")
 	}
 	appName, repository, err := parseAppSource(input.Manifest.Source)
 	if err != nil {
-		return Entry{}, err
+		return PublishedVersion{}, err
 	}
 	artifacts, err := buildArtifacts(input.Artifacts)
 	if err != nil {
-		return Entry{}, err
+		return PublishedVersion{}, err
 	}
 	requires := RequiresFromRelease(input.Release)
 	compatibility := CompatibilityFromRelease(input.Release)
@@ -180,8 +180,8 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 	if publishedAt.IsZero() {
 		publishedAt = time.Now().UTC()
 	}
-	entry := Entry{
-		SchemaVersion: EntrySchemaVersion,
+	publishedVersion := PublishedVersion{
+		SchemaVersion: PublishedVersionSchemaVersion,
 		App:           appName,
 		Version:       strings.TrimSpace(input.Version),
 		SourceRef:     strings.ToLower(strings.TrimSpace(input.SourceRef)),
@@ -193,13 +193,13 @@ func BuildEntry(input BuildEntryInput) (Entry, error) {
 		Compatibility: compatibility,
 		PublishedAt:   publishedAt.UTC(),
 	}
-	if err := validateEntry(&entry); err != nil {
-		return Entry{}, err
+	if err := validatePublishedVersion(&publishedVersion); err != nil {
+		return PublishedVersion{}, err
 	}
-	return entry, nil
+	return publishedVersion, nil
 }
 
-type BuildEntryInput struct {
+type BuildPublishedVersionInput struct {
 	Manifest     *providermanifestv1.Manifest
 	Version      string
 	SourceRef    string
@@ -302,9 +302,9 @@ func requiresFromProviderRelease(requires providerrelease.Requires) Requires {
 	return Requires{Apps: apps}
 }
 
-// EntriesEqualIgnoringPublishedAt reports whether two entries are identical except
-// for publishedAt, which is ignored for idempotent republish checks.
-func EntriesEqualIgnoringPublishedAt(a, b Entry) bool {
+// PublishedVersionsEqualIgnoringPublishedAt reports whether two published versions are
+// identical except for publishedAt, which is ignored for idempotent republish checks.
+func PublishedVersionsEqualIgnoringPublishedAt(a, b PublishedVersion) bool {
 	a.PublishedAt = time.Time{}
 	b.PublishedAt = time.Time{}
 	aData, err := json.Marshal(a)
@@ -318,58 +318,58 @@ func EntriesEqualIgnoringPublishedAt(a, b Entry) bool {
 	return bytes.Equal(aData, bData)
 }
 
-// EntryFileEquivalentIgnoringPublishedAt compares a local entry JSON file with
-// existing registry bytes, ignoring publishedAt differences.
-func EntryFileEquivalentIgnoringPublishedAt(localPath string, existing []byte) (bool, error) {
+// PublishedVersionFileEquivalentIgnoringPublishedAt compares a local published-version
+// JSON file with existing registry bytes, ignoring publishedAt differences.
+func PublishedVersionFileEquivalentIgnoringPublishedAt(localPath string, existing []byte) (bool, error) {
 	localData, err := os.ReadFile(localPath)
 	if err != nil {
-		return false, fmt.Errorf("read local entry %s: %w", localPath, err)
+		return false, fmt.Errorf("read local published version %s: %w", localPath, err)
 	}
-	localEntry, err := DecodeEntry(localData)
+	localPublishedVersion, err := DecodePublishedVersion(localData)
 	if err != nil {
-		return false, fmt.Errorf("decode local entry: %w", err)
+		return false, fmt.Errorf("decode local published version: %w", err)
 	}
-	existingEntry, err := DecodeEntry(existing)
+	existingPublishedVersion, err := DecodePublishedVersion(existing)
 	if err != nil {
-		return false, fmt.Errorf("decode existing entry: %w", err)
+		return false, fmt.Errorf("decode existing published version: %w", err)
 	}
-	return EntriesEqualIgnoringPublishedAt(*localEntry, *existingEntry), nil
+	return PublishedVersionsEqualIgnoringPublishedAt(*localPublishedVersion, *existingPublishedVersion), nil
 }
 
-func validateEntry(entry *Entry) error {
-	if entry == nil {
-		return fmt.Errorf("registry entry is required")
+func validatePublishedVersion(publishedVersion *PublishedVersion) error {
+	if publishedVersion == nil {
+		return fmt.Errorf("registry published version is required")
 	}
-	if entry.SchemaVersion != EntrySchemaVersion {
-		return fmt.Errorf("unsupported registry entry schema version %d", entry.SchemaVersion)
+	if publishedVersion.SchemaVersion != PublishedVersionSchemaVersion {
+		return fmt.Errorf("unsupported registry published version schema version %d", publishedVersion.SchemaVersion)
 	}
-	if strings.TrimSpace(entry.App) == "" {
-		return fmt.Errorf("registry entry app is required")
+	if strings.TrimSpace(publishedVersion.App) == "" {
+		return fmt.Errorf("registry published version app is required")
 	}
-	if err := source.ValidateVersion(strings.TrimSpace(entry.Version)); err != nil {
-		return fmt.Errorf("registry entry version: %w", err)
+	if err := source.ValidateVersion(strings.TrimSpace(publishedVersion.Version)); err != nil {
+		return fmt.Errorf("registry published version version: %w", err)
 	}
-	if err := validateSourceRef(entry.SourceRef); err != nil {
-		return fmt.Errorf("registry entry sourceRef: %w", err)
+	if err := validateSourceRef(publishedVersion.SourceRef); err != nil {
+		return fmt.Errorf("registry published version sourceRef: %w", err)
 	}
-	if strings.TrimSpace(entry.ManifestPath) == "" {
-		return fmt.Errorf("registry entry manifestPath is required")
+	if strings.TrimSpace(publishedVersion.ManifestPath) == "" {
+		return fmt.Errorf("registry published version manifestPath is required")
 	}
-	if err := validateEntryRepository(entry.Repository, entry.App); err != nil {
-		return fmt.Errorf("registry entry repository: %w", err)
+	if err := validatePublishedVersionRepository(publishedVersion.Repository, publishedVersion.App); err != nil {
+		return fmt.Errorf("registry published version repository: %w", err)
 	}
-	if len(entry.Artifacts) == 0 {
-		return fmt.Errorf("registry entry artifacts are required")
+	if len(publishedVersion.Artifacts) == 0 {
+		return fmt.Errorf("registry published version artifacts are required")
 	}
-	for target, artifact := range entry.Artifacts {
+	for target, artifact := range publishedVersion.Artifacts {
 		if err := validateArtifactPlatform(target); err != nil {
-			return fmt.Errorf("registry entry artifact: %w", err)
+			return fmt.Errorf("registry published version artifact: %w", err)
 		}
 		if strings.TrimSpace(artifact.URL) == "" || strings.TrimSpace(artifact.PublicURL) == "" {
-			return fmt.Errorf("registry entry artifact %q URLs are required", target)
+			return fmt.Errorf("registry published version artifact %q URLs are required", target)
 		}
 		if strings.TrimSpace(artifact.SHA256) == "" {
-			return fmt.Errorf("registry entry artifact %q sha256 is required", target)
+			return fmt.Errorf("registry published version artifact %q sha256 is required", target)
 		}
 	}
 	return nil
@@ -418,15 +418,15 @@ func DecodeIndex(data []byte) (*Index, error) {
 	return &index, nil
 }
 
-func DecodeEntry(data []byte) (*Entry, error) {
-	var entry Entry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		return nil, fmt.Errorf("decode app registry entry: %w", err)
+func DecodePublishedVersion(data []byte) (*PublishedVersion, error) {
+	var publishedVersion PublishedVersion
+	if err := json.Unmarshal(data, &publishedVersion); err != nil {
+		return nil, fmt.Errorf("decode app registry published version: %w", err)
 	}
-	if err := validateEntry(&entry); err != nil {
+	if err := validatePublishedVersion(&publishedVersion); err != nil {
 		return nil, err
 	}
-	return &entry, nil
+	return &publishedVersion, nil
 }
 
 func NewEmptyIndex() *Index {
@@ -459,7 +459,7 @@ func applyAppIndexAppMetadata(app *AppVersions, displayName, description string)
 
 // UpsertAppIndex updates the per-app index for a published version. The second
 // return value reports whether the index was modified.
-func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName, description string) (*Index, bool, error) {
+func UpsertAppIndex(index *Index, publishedVersion PublishedVersion, metadataPath string, displayName, description string) (*Index, bool, error) {
 	if index == nil {
 		index = &Index{
 			SchemaVersion: IndexSchemaVersion,
@@ -472,14 +472,14 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 	if index.Apps == nil {
 		index.Apps = map[string]AppVersions{}
 	}
-	appName := strings.TrimSpace(entry.App)
+	appName := strings.TrimSpace(publishedVersion.App)
 	app := index.Apps[appName]
 	if app.Versions == nil {
 		app.Versions = map[string]IndexVersion{}
 	}
-	if existing, ok := app.Versions[entry.Version]; ok {
+	if existing, ok := app.Versions[publishedVersion.Version]; ok {
 		if strings.TrimSpace(existing.Metadata) != strings.TrimSpace(metadataPath) {
-			return nil, false, fmt.Errorf("app %q version %q is already indexed", appName, entry.Version)
+			return nil, false, fmt.Errorf("app %q version %q is already indexed", appName, publishedVersion.Version)
 		}
 		changed := applyAppIndexAppMetadata(&app, displayName, description)
 		if !changed {
@@ -492,12 +492,12 @@ func UpsertAppIndex(index *Index, entry Entry, metadataPath string, displayName,
 		return index, true, nil
 	}
 	applyAppIndexAppMetadata(&app, displayName, description)
-	platforms := artifactPlatforms(entry.Artifacts)
+	platforms := artifactPlatforms(publishedVersion.Artifacts)
 	sort.Strings(platforms)
-	app.Versions[entry.Version] = IndexVersion{
+	app.Versions[publishedVersion.Version] = IndexVersion{
 		Metadata:    strings.TrimSpace(metadataPath),
 		Platforms:   platforms,
-		PublishedAt: entry.PublishedAt.UTC(),
+		PublishedAt: publishedVersion.PublishedAt.UTC(),
 	}
 	index.Apps[appName] = app
 	if err := validateIndex(index); err != nil {
@@ -513,7 +513,7 @@ func AppArtifactPrefix(appName, version string) string {
 type PublishLayout struct {
 	AppName        string
 	ArtifactPrefix string
-	EntryPath      string
+	PublishedVersionPath string
 	IndexPath      string
 }
 
@@ -525,12 +525,12 @@ func ResolvePublishLayout(source, version string) (PublishLayout, error) {
 	return PublishLayout{
 		AppName:        appName,
 		ArtifactPrefix: AppArtifactPrefix(appName, version),
-		EntryPath:      AppVersionEntryPath(appName, version),
+		PublishedVersionPath: PublishedVersionPath(appName, version),
 		IndexPath:      AppIndexPath(appName),
 	}, nil
 }
 
-func AppVersionEntryPath(appName, version string) string {
+func PublishedVersionPath(appName, version string) string {
 	return path.Join("apps", appName, "versions", version+".json")
 }
 
@@ -550,7 +550,7 @@ func StorageURL(storageRoot, rel string) string {
 	return strings.TrimRight(strings.TrimSpace(storageRoot), "/") + "/" + strings.TrimLeft(rel, "/")
 }
 
-func validateEntryRepository(repository, appName string) error {
+func validatePublishedVersionRepository(repository, appName string) error {
 	repository = strings.TrimSpace(repository)
 	appName = strings.TrimSpace(appName)
 	if repository == "" {

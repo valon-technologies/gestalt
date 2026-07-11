@@ -45,8 +45,8 @@ type appPublishPlan struct {
 	DisplayName     string             `json:"displayName,omitempty"`
 	Description     string             `json:"description,omitempty"`
 	Version         string             `json:"version"`
-	Entry           appregistry.Entry  `json:"entry"`
-	EntryObject     appPublishObject   `json:"entryObject"`
+	PublishedVersion           appregistry.PublishedVersion `json:"publishedVersion"`
+	PublishedVersionObject     appPublishObject             `json:"publishedVersionObject"`
 	IndexObject     appPublishObject   `json:"indexObject"`
 	ArtifactObjects []appPublishObject `json:"artifactObjects"`
 }
@@ -166,7 +166,7 @@ func runAppPublish(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.Remove(plan.EntryObject.LocalPath) }()
+	defer func() { _ = os.Remove(plan.PublishedVersionObject.LocalPath) }()
 
 	if *dryRun {
 		return printAppPublishPlanJSON(plan)
@@ -370,7 +370,7 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 		})
 	}
 
-	entry, err := appregistry.BuildEntry(appregistry.BuildEntryInput{
+	publishedVersion, err := appregistry.BuildPublishedVersion(appregistry.BuildPublishedVersionInput{
 		Manifest:     input.Manifest,
 		Version:      input.Version,
 		SourceRef:    input.SourceRef,
@@ -382,16 +382,16 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 		return appPublishPlan{}, err
 	}
 
-	entryRel := layout.EntryPath
-	entryData, err := json.MarshalIndent(entry, "", "  ")
+	publishedVersionRel := layout.PublishedVersionPath
+	publishedVersionData, err := json.MarshalIndent(publishedVersion, "", "  ")
 	if err != nil {
 		return appPublishPlan{}, err
 	}
-	entryPath, err := writeTempJSON("gestalt-app-entry-*", entryData)
+	publishedVersionPath, err := writeTempJSON("gestalt-app-published-version-*", publishedVersionData)
 	if err != nil {
 		return appPublishPlan{}, err
 	}
-	entryDigest, err := sha256File(entryPath)
+	publishedVersionDigest, err := sha256File(publishedVersionPath)
 	if err != nil {
 		return appPublishPlan{}, err
 	}
@@ -399,17 +399,17 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 	indexRel := layout.IndexPath
 	return appPublishPlan{
 		Schema:      appPublishPlanSchema,
-		AppName:     entry.App,
+		AppName:     publishedVersion.App,
 		DisplayName: input.DisplayName,
 		Description: input.Description,
 		Version:     input.Version,
-		Entry:       entry,
-		EntryObject: appPublishObject{
-			Kind:       "entry",
-			LocalPath:  entryPath,
-			StorageURL: appregistry.StorageURL(storageRoot, entryRel),
-			PublicURL:  appregistry.PublicURL(publicRoot, entryRel),
-			SHA256:     entryDigest,
+		PublishedVersion:       publishedVersion,
+		PublishedVersionObject: appPublishObject{
+			Kind:       "publishedVersion",
+			LocalPath:  publishedVersionPath,
+			StorageURL: appregistry.StorageURL(storageRoot, publishedVersionRel),
+			PublicURL:  appregistry.PublicURL(publicRoot, publishedVersionRel),
+			SHA256:     publishedVersionDigest,
 		},
 		IndexObject: appPublishObject{
 			Kind:       "index",
@@ -442,7 +442,7 @@ func preflightAppPublishPlan(plan appPublishPlan) error {
 	if err := preflightAppRegistryIndex(plan); err != nil {
 		return err
 	}
-	for _, object := range append([]appPublishObject{plan.EntryObject}, plan.ArtifactObjects...) {
+	for _, object := range append([]appPublishObject{plan.PublishedVersionObject}, plan.ArtifactObjects...) {
 		if err := preflightAppPublishObject(object); err != nil {
 			return err
 		}
@@ -464,8 +464,8 @@ func preflightAppRegistryIndex(plan appPublishPlan) error {
 			return fmt.Errorf("decode existing app index: %w", err)
 		}
 	}
-	metadataPath := appregistry.AppVersionEntryPath(plan.AppName, plan.Version)
-	_, _, err = appregistry.UpsertAppIndex(index, plan.Entry, metadataPath, plan.DisplayName, plan.Description)
+	metadataPath := appregistry.PublishedVersionPath(plan.AppName, plan.Version)
+	_, _, err = appregistry.UpsertAppIndex(index, plan.PublishedVersion, metadataPath, plan.DisplayName, plan.Description)
 	return err
 }
 
@@ -500,7 +500,7 @@ func uploadAppPublishImmutableObjects(plan appPublishPlan, sourceRef string) err
 			return err
 		}
 	}
-	return uploadAppPublishObjectIfNeeded(plan.EntryObject, sourceRef)
+	return uploadAppPublishObjectIfNeeded(plan.PublishedVersionObject, sourceRef)
 }
 
 func uploadAppPublishObjectIfNeeded(object appPublishObject, sourceRef string) error {
@@ -526,12 +526,12 @@ func appPublishObjectMatchesExisting(object appPublishObject) (bool, error) {
 	if object.SHA256 != "" && existingSHA == object.SHA256 {
 		return true, nil
 	}
-	if object.Kind == "entry" && object.LocalPath != "" {
+	if object.Kind == "publishedVersion" && object.LocalPath != "" {
 		_, existing, err := downloadAppRegistryObject(object.StorageURL)
 		if err != nil {
 			return false, err
 		}
-		return appregistry.EntryFileEquivalentIgnoringPublishedAt(object.LocalPath, existing)
+		return appregistry.PublishedVersionFileEquivalentIgnoringPublishedAt(object.LocalPath, existing)
 	}
 	return false, nil
 }
@@ -564,8 +564,8 @@ func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 				return fmt.Errorf("decode existing app index: %w", err)
 			}
 		}
-		metadataPath := appregistry.AppVersionEntryPath(plan.AppName, plan.Version)
-		updated, changed, err := appregistry.UpsertAppIndex(index, plan.Entry, metadataPath, plan.DisplayName, plan.Description)
+		metadataPath := appregistry.PublishedVersionPath(plan.AppName, plan.Version)
+		updated, changed, err := appregistry.UpsertAppIndex(index, plan.PublishedVersion, metadataPath, plan.DisplayName, plan.Description)
 		if err != nil {
 			return err
 		}

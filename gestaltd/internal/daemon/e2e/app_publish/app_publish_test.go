@@ -36,9 +36,9 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 		Schema      string `json:"schema"`
 		AppName     string `json:"appName"`
 		Version     string `json:"version"`
-		EntryObject struct {
+		PublishedVersionObject struct {
 			PublicURL string `json:"publicUrl"`
-		} `json:"entryObject"`
+		} `json:"publishedVersionObject"`
 		ArtifactObjects []struct {
 			StorageURL string `json:"storageUrl"`
 		} `json:"artifactObjects"`
@@ -58,9 +58,9 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 	if plan.Version != version {
 		t.Fatalf("version = %q", plan.Version)
 	}
-	wantEntry := "https://storage.googleapis.com/gestalt-app-registry/apps/" + releaseTestAppName + "/versions/" + version + ".json"
-	if plan.EntryObject.PublicURL != wantEntry {
-		t.Fatalf("entry publicUrl = %q, want %q", plan.EntryObject.PublicURL, wantEntry)
+	wantPublishedVersion := "https://storage.googleapis.com/gestalt-app-registry/apps/" + releaseTestAppName + "/versions/" + version + ".json"
+	if plan.PublishedVersionObject.PublicURL != wantPublishedVersion {
+		t.Fatalf("publishedVersion publicUrl = %q, want %q", plan.PublishedVersionObject.PublicURL, wantPublishedVersion)
 	}
 	archiveName := platformArchiveNameForTest(releaseTestAppName, version, runtime.GOOS, runtime.GOARCH)
 	wantArtifact := "gs://gestalt-app-registry/apps/" + releaseTestAppName + "/artifacts/" + version + "/" + archiveName

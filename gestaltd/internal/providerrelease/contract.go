@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Requires and Compatibility mirror app registry entry contract fields. They are
+// Requires and Compatibility mirror app registry published-version contract fields. They are
 // snapshotted into provider-release.yaml at release finalization time.
 type Requires struct {
 	Apps map[string]AppRequirement `yaml:"apps,omitempty" json:"apps,omitempty"`
