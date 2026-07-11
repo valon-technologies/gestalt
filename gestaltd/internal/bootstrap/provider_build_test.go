@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -900,5 +901,148 @@ func TestProviderBuildsLocal(t *testing.T) {
 	}
 	if providerBuildsLocal(cfg, nil) {
 		t.Fatal("nil entry should not build local")
+	}
+}
+
+type recordingRemoteAgentClient struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (c *recordingRemoteAgentClient) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest, _ ...grpc.CallOption) (*proto.AgentSession, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, "CreateSession:"+req.GetProviderName())
+	return &proto.AgentSession{Id: "remote-session"}, nil
+}
+
+func (c *recordingRemoteAgentClient) GetSession(context.Context, *proto.GetAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest, ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) UpdateSession(context.Context, *proto.UpdateAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) CreateTurn(context.Context, *proto.CreateAgentProviderTurnRequest, ...grpc.CallOption) (*proto.AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) GetTurn(context.Context, *proto.GetAgentProviderTurnRequest, ...grpc.CallOption) (*proto.AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) ListTurns(context.Context, *proto.ListAgentProviderTurnsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) CancelTurn(context.Context, *proto.CancelAgentProviderTurnRequest, ...grpc.CallOption) (*proto.AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) ListTurnEvents(context.Context, *proto.ListAgentProviderTurnEventsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) GetInteraction(context.Context, *proto.GetAgentProviderInteractionRequest, ...grpc.CallOption) (*proto.AgentInteraction, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) ListInteractions(context.Context, *proto.ListAgentProviderInteractionsRequest, ...grpc.CallOption) (*proto.ListAgentProviderInteractionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) ResolveInteraction(context.Context, *proto.ResolveAgentProviderInteractionRequest, ...grpc.CallOption) (*proto.AgentInteraction, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest, ...grpc.CallOption) (*proto.AgentProviderCapabilities, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
+func (c *recordingRemoteAgentClient) snapshot() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, len(c.calls))
+	copy(out, c.calls)
+	return out
+}
+
+func remoteAgentRoutingConfig(localDevActive bool) *config.Config {
+	entry := &config.ProviderEntry{Source: config.ProviderSource{Path: "stub"}}
+	if localDevActive {
+		entry.DevActive = true
+	}
+	return &config.Config{
+		Server: config.ServerConfig{Remote: "https://remote.test", RemoteToken: "secret-token"},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"managed": entry,
+			},
+		},
+	}
+}
+
+func TestRemoteAgentRoutingLifecycles(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+	}{
+		{name: "nothing local"},
+		{name: "ci-cd local app does not change agent routing"},
+		{name: "ci-cd and valon-profile local apps do not change agent routing"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			remoteClient := &recordingRemoteAgentClient{}
+			cfg := remoteAgentRoutingConfig(false)
+			deps := Deps{RemoteClients: &remote.ClientSet{Agent: remoteClient}}
+
+			provider, err := buildAgent(context.Background(), cfg, "managed", cfg.Providers.Agent["managed"], &FactoryRegistry{}, deps)
+			if err != nil {
+				t.Fatalf("buildAgent: %v", err)
+			}
+			t.Cleanup(func() { _ = provider.Close() })
+
+			_, err = provider.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+				ProviderName: "managed",
+				Model:        "gpt-test",
+			})
+			if err != nil {
+				t.Fatalf("CreateSession: %v", err)
+			}
+			if calls := remoteClient.snapshot(); len(calls) != 1 || calls[0] != "CreateSession:managed" {
+				t.Fatalf("remote agent calls = %#v, want CreateSession:managed", calls)
+			}
+		})
+	}
+}
+
+func TestRemoteAgentRoutingStartupFailureDoesNotFallback(t *testing.T) {
+	t.Parallel()
+
+	cfg := remoteAgentRoutingConfig(true)
+	cfg.Providers.Agent["managed"].DevActive = true
+	remoteClient := &recordingRemoteAgentClient{}
+	deps := Deps{RemoteClients: &remote.ClientSet{Agent: remoteClient}}
+	factories := &FactoryRegistry{
+		Agent: func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreagent.Provider, error) {
+			return nil, errors.New("local agent startup failed")
+		},
+	}
+
+	_, err := buildAgent(context.Background(), cfg, "managed", cfg.Providers.Agent["managed"], factories, deps)
+	if err == nil || !strings.Contains(err.Error(), "local agent startup failed") {
+		t.Fatalf("buildAgent err = %v, want local startup failure", err)
+	}
+	if calls := remoteClient.snapshot(); len(calls) != 0 {
+		t.Fatalf("remote agent calls = %#v, want no remote fallback after local startup failure", calls)
 	}
 }
