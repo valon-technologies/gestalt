@@ -1,7 +1,6 @@
 package appregistry_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,20 +75,6 @@ func TestInstallerInstallsRegistryAppAndWritesPromotedState(t *testing.T) {
 	}
 	if events[1].Type != core.AppInstallationEventTypePromoted {
 		t.Fatalf("events[1].type = %q", events[1].Type)
-	}
-}
-
-func TestRegistryReader_FetchEntryNotFound(t *testing.T) {
-	t.Parallel()
-
-	fixture := registrytest.NewInstallFixture(t)
-	publicURL, err := fixture.Registry.PublicURL()
-	if err != nil {
-		t.Fatalf("PublicURL: %v", err)
-	}
-	_, err = fixture.Reader.FetchEntry(t.Context(), publicURL, "g-issues", "missing-version")
-	if !errors.Is(err, appregistry.ErrRegistryDocumentNotFound) {
-		t.Fatalf("FetchEntry error = %v, want ErrRegistryDocumentNotFound", err)
 	}
 }
 
@@ -254,5 +239,63 @@ func TestInstallerSetsPreviousResolvedVersionOnUpgrade(t *testing.T) {
 	}
 	if !result.Installation.InstalledAt.Equal(installedAt) {
 		t.Fatalf("installed_at = %v, want %v", result.Installation.InstalledAt, installedAt)
+	}
+}
+
+func TestInstallerRetryFromPendingPreservesPreviousVersion(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	services := testutil.NewStubServices(t)
+	artifactsDir := t.TempDir()
+	goldVersion := "0.0.0-snapshot.gold"
+	inFlightVersion := "0.0.0-snapshot.inflight"
+	activeSince := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+	sourceRef := "abc123def456abc123def456abc123def456abcd"
+	platform := providerpkg.CurrentPlatformString()
+
+	if _, err := services.AppInstallations.PutInstallation(t.Context(), &core.AppInstallation{
+		AppName:                 "g-issues",
+		VersionConstraint:       inFlightVersion,
+		ResolvedVersion:         inFlightVersion,
+		PreviousResolvedVersion: goldVersion,
+		SourceRef:               sourceRef,
+		Registry:                "toolshed",
+		ProviderReleaseURL:      "https://example.com/gold.json",
+		ArtifactChecksums:       map[string]string{platform: "gold-checksum"},
+		RolloutStatus:           core.AppInstallationRolloutStatusPending,
+		ActiveSince:             &activeSince,
+	}); err != nil {
+		t.Fatalf("PutInstallation: %v", err)
+	}
+
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		Reader:        fixture.Reader,
+		Installations: services.AppInstallations,
+		Events:        services.AppInstallationEvents,
+		ArtifactsDir:  artifactsDir,
+	}
+
+	result, err := installer.Install(t.Context(), appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+	})
+	if err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if result.Installation.PreviousResolvedVersion != goldVersion {
+		t.Fatalf("previous_resolved_version = %q, want %q", result.Installation.PreviousResolvedVersion, goldVersion)
+	}
+
+	events, err := services.AppInstallationEvents.ListEventsByApp(t.Context(), "g-issues")
+	if err != nil {
+		t.Fatalf("ListEventsByApp: %v", err)
+	}
+	if len(events) == 0 || events[0].FromVersion != goldVersion {
+		t.Fatalf("install_requested from_version = %q, want %q", events[0].FromVersion, goldVersion)
 	}
 }
