@@ -1,0 +1,122 @@
+package appregistry
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+)
+
+func TestInstallerFleetRaceGuards(t *testing.T) {
+	t.Parallel()
+
+	t.Run("fail_install_skips_restore_when_fleet_advanced", func(t *testing.T) {
+		t.Parallel()
+
+		services := testutil.NewStubServices(t)
+		activeSince := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		if _, err := services.AppInstallations.PutInstallation(context.Background(), &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v3",
+			ResolvedVersion:   "0.0.0-snapshot.v3",
+			Registry:          "toolshed",
+			SourceRef:         "newer-source-ref",
+			RolloutStatus:     core.AppInstallationRolloutStatusPromoted,
+			ActiveSince:       &activeSince,
+		}); err != nil {
+			t.Fatalf("PutInstallation: %v", err)
+		}
+
+		priorV1 := &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v1",
+			ResolvedVersion:   "0.0.0-snapshot.v1",
+			Registry:          "toolshed",
+			SourceRef:         "stale-source-ref",
+			RolloutStatus:     core.AppInstallationRolloutStatusPromoted,
+		}
+		installer := &Installer{
+			Installations: services.AppInstallations,
+			Events:        services.AppInstallationEvents,
+		}
+
+		_, err := installer.failInstall(context.Background(), "g-issues", priorV1, "0.0.0-snapshot.v1", "0.0.0-snapshot.v2", "user:test", "toolshed", fmt.Errorf("download failed"))
+		if err == nil {
+			t.Fatal("expected failure")
+		}
+
+		stored, err := services.AppInstallations.GetInstallation(context.Background(), "g-issues")
+		if err != nil {
+			t.Fatalf("GetInstallation: %v", err)
+		}
+		if stored.RolloutStatus != core.AppInstallationRolloutStatusPromoted {
+			t.Fatalf("rollout_status = %q, want promoted", stored.RolloutStatus)
+		}
+		if stored.ResolvedVersion != "0.0.0-snapshot.v3" {
+			t.Fatalf("resolved_version = %q, want newer promoted version preserved", stored.ResolvedVersion)
+		}
+		if stored.SourceRef != "newer-source-ref" {
+			t.Fatalf("source_ref = %q, want newer promoted metadata preserved", stored.SourceRef)
+		}
+	})
+
+	t.Run("write_pending_rejects_advanced_fleet_state", func(t *testing.T) {
+		t.Parallel()
+
+		services := testutil.NewStubServices(t)
+		activeSince := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		updatedAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
+		if _, err := services.AppInstallations.PutInstallation(context.Background(), &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v3",
+			ResolvedVersion:   "0.0.0-snapshot.v3",
+			Registry:          "toolshed",
+			SourceRef:         "newer-source-ref",
+			RolloutStatus:     core.AppInstallationRolloutStatusPromoted,
+			ActiveSince:       &activeSince,
+			UpdatedAt:         updatedAt,
+		}); err != nil {
+			t.Fatalf("PutInstallation: %v", err)
+		}
+
+		staleBaseline := &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v1",
+			ResolvedVersion:   "0.0.0-snapshot.v1",
+			Registry:          "toolshed",
+			SourceRef:         "stale-source-ref",
+			RolloutStatus:     core.AppInstallationRolloutStatusPromoted,
+			UpdatedAt:         time.Date(2026, 7, 10, 11, 0, 0, 0, time.UTC),
+		}
+		installer := &Installer{
+			Installations: services.AppInstallations,
+			Events:        services.AppInstallationEvents,
+		}
+
+		err := installer.writePendingInstall(context.Background(), "g-issues", staleBaseline, &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v2",
+			ResolvedVersion:   "0.0.0-snapshot.v2",
+			Registry:          "toolshed",
+			RolloutStatus:     core.AppInstallationRolloutStatusPending,
+		})
+		if !errors.Is(err, ErrInstallFleetStateAdvanced) {
+			t.Fatalf("writePendingInstall error = %v, want ErrInstallFleetStateAdvanced", err)
+		}
+
+		stored, err := services.AppInstallations.GetInstallation(context.Background(), "g-issues")
+		if err != nil {
+			t.Fatalf("GetInstallation: %v", err)
+		}
+		if stored.RolloutStatus != core.AppInstallationRolloutStatusPromoted {
+			t.Fatalf("rollout_status = %q, want promoted preserved", stored.RolloutStatus)
+		}
+		if stored.ResolvedVersion != "0.0.0-snapshot.v3" {
+			t.Fatalf("resolved_version = %q, want newer promoted version preserved", stored.ResolvedVersion)
+		}
+	})
+}
