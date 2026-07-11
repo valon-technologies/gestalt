@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -159,6 +160,8 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
 			status = http.StatusBadRequest
+		case errors.Is(err, context.DeadlineExceeded), errors.Is(err, appregistry.ErrInstallTimedOut):
+			status = http.StatusGatewayTimeout
 		}
 		writeError(w, status, err.Error())
 		return
