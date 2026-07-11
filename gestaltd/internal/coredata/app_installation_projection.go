@@ -116,7 +116,7 @@ func headInstallationFromEvents(events []*core.AppInstallationEvent) *core.AppIn
 		switch strings.TrimSpace(event.Type) {
 		case core.AppInstallationEventTypePromoted:
 			candidate := installationFromPromotedEvent(event)
-			if head == nil || !promotionTime(head).Before(promotionTime(candidate)) {
+			if head == nil || promotionTime(head).Before(promotionTime(candidate)) {
 				head = candidate
 			}
 		case core.AppInstallationEventTypeRollback:
