@@ -163,7 +163,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 
 	alreadyKnown, err := i.Catalog.HasKnownVersion(ctx, appName, version)
 	if err != nil {
-		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("check known app version: %w", err))
+		return nil, fmt.Errorf("check known app version: %w", err)
 	}
 	if !alreadyKnown {
 		addedRecord, err := i.Catalog.AppendRecord(ctx, &core.AppVersionCatalogRecord{
@@ -175,7 +175,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 			Metadata:  coredata.VersionAddedMetadata(known, materializedPath),
 		})
 		if err != nil {
-			return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("append version_added record: %w", err))
+			return nil, fmt.Errorf("append version_added record: %w", err)
 		}
 		known = coredata.InstallationFromVersionAddedRecord(addedRecord)
 	}
