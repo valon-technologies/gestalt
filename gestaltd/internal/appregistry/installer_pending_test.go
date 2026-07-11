@@ -23,7 +23,7 @@ func TestApplyPendingInstallPreservesPromotedMetadata(t *testing.T) {
 		ActiveSince:        &activeSince,
 		InstalledAt:        installedAt,
 	}
-	dst := cloneInstallation(baseline)
+	dst := cloneAppInstallation(baseline)
 	pending := &core.AppInstallation{
 		VersionConstraint:       "0.0.0-snapshot.new",
 		ResolvedVersion:         "0.0.0-snapshot.new",
@@ -51,22 +51,4 @@ func TestApplyPendingInstallPreservesPromotedMetadata(t *testing.T) {
 	if !dst.InstalledAt.Equal(installedAt) {
 		t.Fatalf("installed_at = %v, want preserved", dst.InstalledAt)
 	}
-}
-
-func cloneInstallation(installation *core.AppInstallation) *core.AppInstallation {
-	if installation == nil {
-		return nil
-	}
-	cloned := *installation
-	if installation.ActiveSince != nil {
-		activeSince := *installation.ActiveSince
-		cloned.ActiveSince = &activeSince
-	}
-	if len(installation.ArtifactChecksums) > 0 {
-		cloned.ArtifactChecksums = make(map[string]string, len(installation.ArtifactChecksums))
-		for platform, digest := range installation.ArtifactChecksums {
-			cloned.ArtifactChecksums[platform] = digest
-		}
-	}
-	return &cloned
 }

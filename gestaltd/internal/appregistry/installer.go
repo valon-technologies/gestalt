@@ -121,8 +121,10 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 
 	previousVersion := ""
+	var restoreBaseline *core.AppInstallation
 	existing, existingErr := i.Installations.GetInstallation(ctx, appName)
 	if existingErr == nil {
+		restoreBaseline = restoreBaselineForInstall(existing)
 		if existing.RolloutStatus == core.AppInstallationRolloutStatusPromoted {
 			previousVersion = strings.TrimSpace(existing.ResolvedVersion)
 		}
@@ -169,7 +171,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 			"registry": registryName,
 		},
 	}); err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("append install_requested event: %w", err))
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("append install_requested event: %w", err))
 	}
 
 	materializedPath := filepath.Join(artifactsDir, RegistryInstallSubdir, appName, version)
@@ -177,7 +179,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 
 	download, err := downloadRegistryArtifact(ctx, reader.client(), artifactURL)
 	if err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, err)
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, err)
 	}
 	defer func() {
 		if download.Cleanup != nil {
@@ -185,15 +187,34 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		}
 	}()
 	if !strings.EqualFold(strings.TrimSpace(download.SHA256Hex), expectedSHA) {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
 	}
 
 	if err := os.RemoveAll(stagingPath); err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("reset staging directory: %w", err))
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("reset staging directory: %w", err))
 	}
 	if _, err := operator.InstallPublishedPackage(download.LocalPath, stagingPath, appName); err != nil {
 		_ = os.RemoveAll(stagingPath)
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("materialize app artifact: %w", err))
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("materialize app artifact: %w", err))
+	}
+
+	backupPath := materializedPath + ".backup"
+	if err := os.RemoveAll(backupPath); err != nil {
+		_ = os.RemoveAll(stagingPath)
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("reset materialization backup directory: %w", err))
+	}
+	if _, err := os.Stat(materializedPath); err == nil {
+		if err := os.Rename(materializedPath, backupPath); err != nil {
+			_ = os.RemoveAll(stagingPath)
+			return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("backup current materialization directory: %w", err))
+		}
+	} else if !os.IsNotExist(err) {
+		_ = os.RemoveAll(stagingPath)
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("stat materialization directory: %w", err))
+	}
+	if err := os.Rename(stagingPath, materializedPath); err != nil {
+		restoreMaterializationBackup(materializedPath, backupPath)
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("promote staged app artifact: %w", err))
 	}
 
 	activeSince := i.now()
@@ -211,17 +232,10 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return nil
 	})
 	if err != nil {
-		_ = os.RemoveAll(stagingPath)
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("write promoted app installation: %w", err))
+		restoreMaterializationBackup(materializedPath, backupPath)
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, fmt.Errorf("write promoted app installation: %w", err))
 	}
-	if err := os.RemoveAll(materializedPath); err != nil {
-		_ = os.RemoveAll(stagingPath)
-		return nil, fmt.Errorf("reset materialization directory after promote: %w", err)
-	}
-	if err := os.Rename(stagingPath, materializedPath); err != nil {
-		_ = os.RemoveAll(stagingPath)
-		return nil, fmt.Errorf("promote staged app artifact after promote: %w", err)
-	}
+	_ = os.RemoveAll(backupPath)
 
 	i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
 		InstallationID: appName,
@@ -241,9 +255,15 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}, nil
 }
 
-func (i *Installer) failInstall(ctx context.Context, appName, previousVersion, version, actor, registryName string, cause error) (*InstallOutput, error) {
+func (i *Installer) failInstall(ctx context.Context, appName string, restoreBaseline *core.AppInstallation, previousVersion, version, actor, registryName string, cause error) (*InstallOutput, error) {
 	cleanupCtx := context.WithoutCancel(ctx)
 	_, updateErr := i.Installations.UpdateInstallation(cleanupCtx, appName, func(installation *core.AppInstallation) error {
+		if restored := restoredInstallationAfterFailure(restoreBaseline, actor, registryName); restored != nil {
+			*installation = *restored
+			installation.AppName = appName
+			installation.RolloutStatus = core.AppInstallationRolloutStatusFailed
+			return nil
+		}
 		installation.RolloutStatus = core.AppInstallationRolloutStatusFailed
 		installation.VersionConstraint = version
 		installation.ResolvedVersion = version
@@ -316,6 +336,8 @@ func shouldPreservePriorMetadata(baseline *core.AppInstallation) bool {
 		previous := strings.TrimSpace(baseline.PreviousResolvedVersion)
 		resolved := strings.TrimSpace(baseline.ResolvedVersion)
 		return previous != "" && previous != resolved
+	case core.AppInstallationRolloutStatusFailed:
+		return strings.TrimSpace(baseline.ResolvedVersion) != ""
 	default:
 		return false
 	}
@@ -326,6 +348,88 @@ func (i *Installer) appendInstallEventBestEffort(ctx context.Context, event *cor
 		return
 	}
 	_, _ = i.Events.AppendEvent(context.WithoutCancel(ctx), event)
+}
+
+func restoreBaselineForInstall(existing *core.AppInstallation) *core.AppInstallation {
+	if existing == nil {
+		return nil
+	}
+	switch strings.TrimSpace(existing.RolloutStatus) {
+	case core.AppInstallationRolloutStatusPending:
+		previous := strings.TrimSpace(existing.PreviousResolvedVersion)
+		resolved := strings.TrimSpace(existing.ResolvedVersion)
+		if previous == "" || previous == resolved {
+			return nil
+		}
+		restored := cloneAppInstallation(existing)
+		restored.RolloutStatus = core.AppInstallationRolloutStatusPromoted
+		restored.VersionConstraint = previous
+		restored.ResolvedVersion = previous
+		return restored
+	default:
+		return cloneAppInstallation(existing)
+	}
+}
+
+func restoredInstallationAfterFailure(prior *core.AppInstallation, actor, registryName string) *core.AppInstallation {
+	if prior == nil {
+		return nil
+	}
+	switch strings.TrimSpace(prior.RolloutStatus) {
+	case core.AppInstallationRolloutStatusPromoted:
+		restored := cloneAppInstallation(prior)
+		if strings.TrimSpace(actor) != "" {
+			restored.InstalledBy = strings.TrimSpace(actor)
+		}
+		if strings.TrimSpace(registryName) != "" && strings.TrimSpace(restored.Registry) == "" {
+			restored.Registry = registryName
+		}
+		return restored
+	case core.AppInstallationRolloutStatusFailed:
+		if strings.TrimSpace(prior.ResolvedVersion) == "" {
+			return nil
+		}
+		restored := cloneAppInstallation(prior)
+		if strings.TrimSpace(actor) != "" {
+			restored.InstalledBy = strings.TrimSpace(actor)
+		}
+		if strings.TrimSpace(registryName) != "" && strings.TrimSpace(restored.Registry) == "" {
+			restored.Registry = registryName
+		}
+		return restored
+	default:
+		return nil
+	}
+}
+
+func restoreMaterializationBackup(materializedPath, backupPath string) {
+	_, err := os.Stat(backupPath)
+	if err == nil {
+		_ = os.RemoveAll(materializedPath)
+		_ = os.Rename(backupPath, materializedPath)
+		return
+	}
+	if os.IsNotExist(err) {
+		_ = os.RemoveAll(materializedPath)
+	}
+}
+
+func cloneAppInstallation(installation *core.AppInstallation) *core.AppInstallation {
+	if installation == nil {
+		return nil
+	}
+	cloned := *installation
+	if installation.ActiveSince != nil {
+		activeSince := *installation.ActiveSince
+		cloned.ActiveSince = &activeSince
+	}
+	if len(installation.ArtifactChecksums) > 0 {
+		cloned.ArtifactChecksums = make(map[string]string, len(installation.ArtifactChecksums))
+		for platform, digest := range installation.ArtifactChecksums {
+			cloned.ArtifactChecksums[platform] = digest
+		}
+	}
+	return &cloned
 }
 
 func (i *Installer) now() time.Time {

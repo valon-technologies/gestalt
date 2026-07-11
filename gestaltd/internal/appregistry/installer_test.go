@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 func TestInstallerInstallsRegistryAppAndWritesPromotedState(t *testing.T) {
@@ -89,6 +90,69 @@ func TestRegistryReader_FetchEntryNotFound(t *testing.T) {
 	_, err = fixture.Reader.FetchEntry(t.Context(), publicURL, "g-issues", "missing-version")
 	if !errors.Is(err, appregistry.ErrRegistryDocumentNotFound) {
 		t.Fatalf("FetchEntry error = %v, want ErrRegistryDocumentNotFound", err)
+	}
+}
+
+func TestInstallerFailedUpgradePreservesPromotedMetadata(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	badVersion := "0.0.0-snapshot.bad"
+	services := testutil.NewStubServices(t)
+	artifactsDir := t.TempDir()
+	goldVersion := "0.0.0-snapshot.gold"
+	sourceRef := "abc123def456abc123def456abc123def456abcd"
+	activeSince := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+	platform := providerpkg.CurrentPlatformString()
+
+	if _, err := services.AppInstallations.PutInstallation(t.Context(), &core.AppInstallation{
+		AppName:            "g-issues",
+		VersionConstraint:  goldVersion,
+		ResolvedVersion:    goldVersion,
+		SourceRef:          sourceRef,
+		Registry:           "toolshed",
+		ProviderReleaseURL: "https://example.com/gold.json",
+		ArtifactChecksums:  map[string]string{platform: "gold-checksum"},
+		RolloutStatus:      core.AppInstallationRolloutStatusPromoted,
+		ActiveSince:        &activeSince,
+	}); err != nil {
+		t.Fatalf("PutInstallation: %v", err)
+	}
+
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		Reader:        fixture.NewDigestMismatchReader(t, badVersion),
+		Installations: services.AppInstallations,
+		Events:        services.AppInstallationEvents,
+		ArtifactsDir:  artifactsDir,
+	}
+
+	_, err := installer.Install(t.Context(), appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  badVersion,
+	})
+	if err == nil {
+		t.Fatal("expected install failure")
+	}
+
+	stored, err := services.AppInstallations.GetInstallation(t.Context(), "g-issues")
+	if err != nil {
+		t.Fatalf("GetInstallation: %v", err)
+	}
+	if stored.RolloutStatus != core.AppInstallationRolloutStatusFailed {
+		t.Fatalf("rollout_status = %q, want failed", stored.RolloutStatus)
+	}
+	if stored.ResolvedVersion != goldVersion {
+		t.Fatalf("resolved_version = %q, want gold version preserved", stored.ResolvedVersion)
+	}
+	if stored.SourceRef != sourceRef {
+		t.Fatalf("source_ref = %q, want gold metadata preserved", stored.SourceRef)
+	}
+	if stored.ActiveSince == nil || !stored.ActiveSince.Equal(activeSince) {
+		t.Fatalf("active_since = %v, want gold metadata preserved", stored.ActiveSince)
 	}
 }
 
