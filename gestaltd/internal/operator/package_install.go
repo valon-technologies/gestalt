@@ -19,6 +19,37 @@ type installedPackage struct {
 	Manifest       *providermanifestv1.Manifest
 }
 
+// InstalledPackage is the on-disk layout after extracting a published app archive.
+type InstalledPackage struct {
+	Root           string
+	ManifestPath   string
+	ExecutablePath string
+	AssetRoot      string
+	Manifest       *providermanifestv1.Manifest
+}
+
+func installedPackageView(pkg *installedPackage) *InstalledPackage {
+	if pkg == nil {
+		return nil
+	}
+	return &InstalledPackage{
+		Root:           pkg.Root,
+		ManifestPath:   pkg.ManifestPath,
+		ExecutablePath: pkg.ExecutablePath,
+		AssetRoot:      pkg.AssetRoot,
+		Manifest:       pkg.Manifest,
+	}
+}
+
+// InstallPublishedPackage extracts a published app archive into destDir.
+func InstallPublishedPackage(packagePath, destDir, configuredName string) (*InstalledPackage, error) {
+	pkg, err := installPackageAs(packagePath, destDir, configuredName)
+	if err != nil {
+		return nil, err
+	}
+	return installedPackageView(pkg), nil
+}
+
 func isAssetOnly(manifest *providermanifestv1.Manifest) bool {
 	if manifest == nil || manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {
 		return false
