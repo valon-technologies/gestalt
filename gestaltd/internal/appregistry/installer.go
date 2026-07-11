@@ -226,6 +226,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	})
 	if err != nil {
 		if errors.Is(err, coredata.ErrInstallationStateConflict) {
+			restoreMaterializationBackup(materializedPath, backupPath)
 			i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
 				InstallationID: appName,
 				FromVersion:    previousVersion,
