@@ -458,6 +458,9 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
+	if loaded.Server.ArtifactsDir != artifactsDir {
+		t.Fatalf("Server.ArtifactsDir = %q, want %q", loaded.Server.ArtifactsDir, artifactsDir)
+	}
 
 	intg := loaded.Apps["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
