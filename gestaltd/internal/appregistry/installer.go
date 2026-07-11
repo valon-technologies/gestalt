@@ -145,7 +145,6 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 
 	materializedPath := filepath.Join(artifactsDir, RegistryInstallSubdir, appName, version)
-	stagingPath := materializedPath + ".staging"
 
 	download, err := downloadRegistryArtifact(ctx, reader.client(), artifactURL)
 	if err != nil {
@@ -160,17 +159,8 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, "", fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
 	}
 
-	if err := os.RemoveAll(stagingPath); err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, "", fmt.Errorf("reset staging directory: %w", err))
-	}
-	if _, err := operator.InstallPublishedPackage(download.LocalPath, stagingPath, appName); err != nil {
-		_ = os.RemoveAll(stagingPath)
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, "", fmt.Errorf("materialize app artifact: %w", err))
-	}
-
-	if err := promoteStagedArtifact(stagingPath, materializedPath); err != nil {
-		_ = os.RemoveAll(stagingPath)
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, "", err)
+	if _, err := operator.InstallPublishedPackage(download.LocalPath, materializedPath, appName); err != nil {
+		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, materializedPath, fmt.Errorf("materialize app artifact: %w", err))
 	}
 
 	activeSince := i.now()
@@ -246,18 +236,6 @@ func (i *Installer) failInstall(ctx context.Context, appName, previousVersion, v
 		},
 	})
 	return nil, cause
-}
-
-func promoteStagedArtifact(stagingPath, materializedPath string) error {
-	// materializedPath is always {artifactsDir}/registry-installed/{app}/{newVersion}/.
-	// Prior promoted versions live under sibling directories and are never moved.
-	if err := os.RemoveAll(materializedPath); err != nil {
-		return fmt.Errorf("reset materialization directory: %w", err)
-	}
-	if err := os.Rename(stagingPath, materializedPath); err != nil {
-		return fmt.Errorf("promote staged app artifact: %w", err)
-	}
-	return nil
 }
 
 func previousVersionForInstall(existing *core.AppInstallation) string {
