@@ -273,9 +273,12 @@ func TestInstallerInstallFailureHandling(t *testing.T) {
 					AppName:                 "g-issues",
 					VersionConstraint:       fixture.Version,
 					ResolvedVersion:         fixture.Version,
+					SourceRef:               sourceRef,
 					Registry:                "toolshed",
+					ArtifactChecksums:       checksums,
 					RolloutStatus:           core.AppInstallationRolloutStatusPending,
 					PreviousResolvedVersion: goldVersion,
+					ActiveSince:             &activeSince,
 				}); err != nil {
 					t.Fatalf("PutInstallation: %v", err)
 				}
@@ -301,6 +304,12 @@ func TestInstallerInstallFailureHandling(t *testing.T) {
 				}
 				if stored.PreviousResolvedVersion != goldVersion {
 					t.Fatalf("previous_resolved_version = %q, want %q", stored.PreviousResolvedVersion, goldVersion)
+				}
+				if stored.SourceRef != sourceRef {
+					t.Fatalf("source_ref = %q, want preserved gold metadata", stored.SourceRef)
+				}
+				if stored.ActiveSince == nil || !stored.ActiveSince.Equal(activeSince) {
+					t.Fatalf("active_since = %v, want preserved gold metadata", stored.ActiveSince)
 				}
 			},
 		},

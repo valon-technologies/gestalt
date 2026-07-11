@@ -201,14 +201,10 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, input.Actor, registryName, fmt.Errorf("stat materialization directory: %w", err))
 	}
 	if err := os.Rename(stagingPath, materializedPath); err != nil {
-		if _, statErr := os.Stat(backupPath); statErr == nil {
-			_ = os.RemoveAll(materializedPath)
-			_ = os.Rename(backupPath, materializedPath)
-		}
+		restoreMaterializationBackup(materializedPath, backupPath)
 		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, input.Actor, registryName, fmt.Errorf("promote staged app artifact: %w", err))
 	}
 	stagingCleanup = false
-	_ = os.RemoveAll(backupPath)
 
 	activeSince := i.now()
 	stored, err := i.Installations.UpdateInstallation(ctx, appName, func(installation *core.AppInstallation) error {
@@ -243,8 +239,10 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 			})
 			return nil, err
 		}
+		restoreMaterializationBackup(materializedPath, backupPath)
 		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, input.Actor, registryName, fmt.Errorf("write promoted app installation: %w", err))
 	}
+	_ = os.RemoveAll(backupPath)
 	i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
 		InstallationID: appName,
 		FromVersion:    previousVersion,
@@ -398,7 +396,7 @@ func (i *Installer) writePendingInstall(ctx context.Context, appName string, bas
 		if !installationMatchesInstallBaseline(installation, baseline) {
 			return fmt.Errorf("%w: install baseline no longer current", ErrInstallFleetStateAdvanced)
 		}
-		applyPendingInstall(installation, pending)
+		applyPendingInstall(installation, pending, baseline)
 		return nil
 	})
 	if err != nil {
@@ -407,17 +405,46 @@ func (i *Installer) writePendingInstall(ctx context.Context, appName string, bas
 	return nil
 }
 
-func applyPendingInstall(dst *core.AppInstallation, pending *core.AppInstallation) {
+func applyPendingInstall(dst *core.AppInstallation, pending *core.AppInstallation, baseline *core.AppInstallation) {
 	dst.RolloutStatus = pending.RolloutStatus
 	dst.VersionConstraint = pending.VersionConstraint
 	dst.ResolvedVersion = pending.ResolvedVersion
-	dst.SourceRef = pending.SourceRef
-	dst.Registry = pending.Registry
-	dst.ProviderReleaseURL = pending.ProviderReleaseURL
-	dst.ArtifactChecksums = pending.ArtifactChecksums
 	dst.PreviousResolvedVersion = pending.PreviousResolvedVersion
 	dst.InstalledBy = pending.InstalledBy
+	if strings.TrimSpace(pending.Registry) != "" {
+		dst.Registry = pending.Registry
+	}
+	if shouldPreservePriorMetadata(baseline) {
+		return
+	}
+	dst.SourceRef = pending.SourceRef
+	dst.ProviderReleaseURL = pending.ProviderReleaseURL
+	dst.ArtifactChecksums = pending.ArtifactChecksums
 	dst.ActiveSince = nil
+}
+
+func shouldPreservePriorMetadata(baseline *core.AppInstallation) bool {
+	if baseline == nil {
+		return false
+	}
+	switch strings.TrimSpace(baseline.RolloutStatus) {
+	case core.AppInstallationRolloutStatusPromoted:
+		return true
+	case core.AppInstallationRolloutStatusPending:
+		previous := strings.TrimSpace(baseline.PreviousResolvedVersion)
+		resolved := strings.TrimSpace(baseline.ResolvedVersion)
+		return previous != "" && previous != resolved
+	default:
+		return false
+	}
+}
+
+func restoreMaterializationBackup(materializedPath, backupPath string) {
+	if _, err := os.Stat(backupPath); err != nil {
+		return
+	}
+	_ = os.RemoveAll(materializedPath)
+	_ = os.Rename(backupPath, materializedPath)
 }
 
 func installationMatchesInstallBaseline(current, baseline *core.AppInstallation) bool {

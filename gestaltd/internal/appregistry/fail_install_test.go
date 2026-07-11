@@ -64,7 +64,7 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 		}
 	})
 
-	t.Run("write_pending_clears_active_since", func(t *testing.T) {
+	t.Run("write_pending_preserves_promoted_metadata", func(t *testing.T) {
 		t.Parallel()
 
 		services := testutil.NewStubServices(t)
@@ -74,6 +74,7 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 			VersionConstraint: "0.0.0-snapshot.v1",
 			ResolvedVersion:   "0.0.0-snapshot.v1",
 			Registry:          "toolshed",
+			SourceRef:         "gold-source-ref",
 			RolloutStatus:     core.AppInstallationRolloutStatusPromoted,
 			ActiveSince:       &activeSince,
 		}); err != nil {
@@ -94,6 +95,7 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 			VersionConstraint: "0.0.0-snapshot.v2",
 			ResolvedVersion:   "0.0.0-snapshot.v2",
 			Registry:          "toolshed",
+			SourceRef:         "pending-source-ref",
 			RolloutStatus:     core.AppInstallationRolloutStatusPending,
 		}); err != nil {
 			t.Fatalf("writePendingInstall: %v", err)
@@ -106,8 +108,14 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 		if stored.RolloutStatus != core.AppInstallationRolloutStatusPending {
 			t.Fatalf("rollout_status = %q, want pending", stored.RolloutStatus)
 		}
-		if stored.ActiveSince != nil {
-			t.Fatalf("active_since = %v, want nil while pending", stored.ActiveSince)
+		if stored.ResolvedVersion != "0.0.0-snapshot.v2" {
+			t.Fatalf("resolved_version = %q, want pending target", stored.ResolvedVersion)
+		}
+		if stored.SourceRef != "gold-source-ref" {
+			t.Fatalf("source_ref = %q, want promoted metadata preserved", stored.SourceRef)
+		}
+		if stored.ActiveSince == nil || !stored.ActiveSince.Equal(activeSince) {
+			t.Fatalf("active_since = %v, want promoted metadata preserved", stored.ActiveSince)
 		}
 	})
 
