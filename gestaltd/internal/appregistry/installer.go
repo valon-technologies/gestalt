@@ -21,16 +21,15 @@ import (
 
 const RegistryInstallSubdir = "registry-installed"
 
-// Installer writes shared install state and materializes registry apps on the
-// handling instance.
+// Installer materializes registry apps on the handling instance and records
+// install lifecycle in app_installation_events.
 type Installer struct {
-	Registries    map[string]config.AppRegistryConfig
-	Reader        *RegistryReader
-	Installations *coredata.AppInstallationService
-	Events        *coredata.AppInstallationEventService
-	ArtifactsDir  string
-	Now           func() time.Time
-	installLocks  sync.Map // app name -> *sync.Mutex
+	Registries   map[string]config.AppRegistryConfig
+	Reader       *RegistryReader
+	Events       *coredata.AppInstallationEventService
+	ArtifactsDir string
+	Now          func() time.Time
+	installLocks sync.Map // app name -> *sync.Mutex
 }
 
 type InstallInput struct {
@@ -69,8 +68,8 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	unlock := i.lockInstall(appName)
 	defer unlock()
 
-	if i.Installations == nil || i.Events == nil {
-		return nil, fmt.Errorf("app installation services are not configured")
+	if i.Events == nil {
+		return nil, fmt.Errorf("app installation event service is not configured")
 	}
 	artifactsDir := strings.TrimSpace(i.ArtifactsDir)
 	if artifactsDir == "" {
@@ -121,11 +120,15 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 
 	previousVersion := ""
-	existing, existingErr := i.Installations.GetInstallation(ctx, appName)
-	if existingErr == nil {
-		previousVersion = previousVersionForInstall(existing)
-	} else if !errors.Is(existingErr, core.ErrNotFound) {
-		return nil, fmt.Errorf("load existing app installation: %w", existingErr)
+	installedAt := i.now()
+	head, headErr := i.Events.HeadInstallation(ctx, appName)
+	if headErr == nil {
+		previousVersion = strings.TrimSpace(head.ResolvedVersion)
+		if !head.InstalledAt.IsZero() {
+			installedAt = head.InstalledAt
+		}
+	} else if !errors.Is(headErr, core.ErrNotFound) {
+		return nil, fmt.Errorf("load existing app installation: %w", headErr)
 	}
 
 	entryURL := PublicURL(publicRoot, AppVersionEntryPath(appName, version))
@@ -176,44 +179,25 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		ActiveSince:             &activeSince,
 		PreviousResolvedVersion: previousVersion,
 		InstalledBy:             actor,
+		InstalledAt:             installedAt,
+		UpdatedAt:               activeSince,
 	}
 
-	var stored *core.AppInstallation
-	if existingErr == core.ErrNotFound {
-		stored, err = i.Installations.PutInstallation(ctx, promoted)
-	} else {
-		stored, err = i.Installations.UpdateInstallation(ctx, appName, func(installation *core.AppInstallation) error {
-			installation.VersionConstraint = promoted.VersionConstraint
-			installation.ResolvedVersion = promoted.ResolvedVersion
-			installation.SourceRef = promoted.SourceRef
-			installation.Registry = promoted.Registry
-			installation.ProviderReleaseURL = promoted.ProviderReleaseURL
-			installation.ArtifactChecksums = promoted.ArtifactChecksums
-			installation.RolloutStatus = promoted.RolloutStatus
-			installation.ActiveSince = promoted.ActiveSince
-			installation.PreviousResolvedVersion = promoted.PreviousResolvedVersion
-			installation.InstalledBy = promoted.InstalledBy
-			return nil
-		})
-	}
-	if err != nil {
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, materializedPath, fmt.Errorf("write promoted app installation: %w", err))
-	}
-
-	i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
+	promotedEvent, err := i.Events.AppendEvent(ctx, &core.AppInstallationEvent{
 		InstallationID: appName,
 		FromVersion:    previousVersion,
 		ToVersion:      version,
 		Type:           core.AppInstallationEventTypePromoted,
 		Actor:          actor,
-		Metadata: map[string]any{
-			"registry":          registryName,
-			"materialized_path": materializedPath,
-		},
+		Timestamp:      activeSince,
+		Metadata:       coredata.PromotedInstallationMetadata(promoted, materializedPath),
 	})
+	if err != nil {
+		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, materializedPath, fmt.Errorf("append promoted event: %w", err))
+	}
 
 	return &InstallOutput{
-		Installation:     stored,
+		Installation:     coredata.InstallationFromPromotedEvent(promotedEvent),
 		MaterializedPath: materializedPath,
 	}, nil
 }
@@ -236,20 +220,6 @@ func (i *Installer) failInstall(ctx context.Context, appName, previousVersion, v
 		},
 	})
 	return nil, cause
-}
-
-func previousVersionForInstall(existing *core.AppInstallation) string {
-	if existing == nil {
-		return ""
-	}
-	switch strings.TrimSpace(existing.RolloutStatus) {
-	case core.AppInstallationRolloutStatusPending:
-		return strings.TrimSpace(existing.PreviousResolvedVersion)
-	case core.AppInstallationRolloutStatusPromoted, core.AppInstallationRolloutStatusFailed:
-		return strings.TrimSpace(existing.ResolvedVersion)
-	default:
-		return ""
-	}
 }
 
 func (i *Installer) lockInstall(appName string) func() {

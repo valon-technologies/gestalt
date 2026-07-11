@@ -350,3 +350,151 @@ func TestAppInstallationEventService(t *testing.T) {
 		}
 	})
 }
+
+func TestAppInstallationEventProjection(t *testing.T) {
+	t.Parallel()
+
+	t.Run("HeadInstallation_from_promoted_events", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
+
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID: "g-issues",
+			FromVersion:    "",
+			ToVersion:      "v1",
+			Type:           core.AppInstallationEventTypePromoted,
+			Actor:          "user:alice",
+			Timestamp:      firstAt,
+			Metadata: coredata.PromotedInstallationMetadata(&core.AppInstallation{
+				AppName:           "g-issues",
+				VersionConstraint: "v1",
+				ResolvedVersion:   "v1",
+				Registry:          "toolshed",
+				SourceRef:         "abc123",
+				InstalledAt:       firstAt,
+			}, "/tmp/g-issues/v1"),
+		}); err != nil {
+			t.Fatalf("AppendEvent(v1): %v", err)
+		}
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID: "g-issues",
+			FromVersion:    "v1",
+			ToVersion:      "v2",
+			Type:           core.AppInstallationEventTypePromoted,
+			Actor:          "user:bob",
+			Timestamp:      secondAt,
+			Metadata: coredata.PromotedInstallationMetadata(&core.AppInstallation{
+				AppName:           "g-issues",
+				VersionConstraint: "v2",
+				ResolvedVersion:   "v2",
+				Registry:          "toolshed",
+				SourceRef:         "def456",
+				InstalledAt:       firstAt,
+			}, "/tmp/g-issues/v2"),
+		}); err != nil {
+			t.Fatalf("AppendEvent(v2): %v", err)
+		}
+
+		head, err := svc.AppInstallationEvents.HeadInstallation(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("HeadInstallation: %v", err)
+		}
+		if head.ResolvedVersion != "v2" {
+			t.Fatalf("ResolvedVersion = %q, want v2", head.ResolvedVersion)
+		}
+		if head.PreviousResolvedVersion != "v1" {
+			t.Fatalf("PreviousResolvedVersion = %q, want v1", head.PreviousResolvedVersion)
+		}
+		if head.SourceRef != "def456" {
+			t.Fatalf("SourceRef = %q", head.SourceRef)
+		}
+		if !head.InstalledAt.Equal(firstAt) {
+			t.Fatalf("InstalledAt = %v, want %v", head.InstalledAt, firstAt)
+		}
+	})
+
+	t.Run("ListPromotionHistory_returns_promoted_records", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID: "g-issues",
+			ToVersion:      "v1",
+			Type:           core.AppInstallationEventTypePromoted,
+		}); err != nil {
+			t.Fatalf("AppendEvent: %v", err)
+		}
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID: "g-issues",
+			ToVersion:      "v2",
+			Type:           core.AppInstallationEventTypeFailed,
+		}); err != nil {
+			t.Fatalf("AppendEvent failed: %v", err)
+		}
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID: "g-issues",
+			ToVersion:      "v2",
+			Type:           core.AppInstallationEventTypePromoted,
+		}); err != nil {
+			t.Fatalf("AppendEvent v2: %v", err)
+		}
+
+		history, err := svc.AppInstallationEvents.ListPromotionHistory(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("ListPromotionHistory: %v", err)
+		}
+		if len(history) != 2 || history[0].ResolvedVersion != "v1" || history[1].ResolvedVersion != "v2" {
+			t.Fatalf("history = %#v", history)
+		}
+	})
+
+	t.Run("ListHeadInstallations_returns_latest_per_app", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		for _, spec := range []struct {
+			app, version string
+			at           time.Time
+		}{
+			{"g-issues", "v1", time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)},
+			{"dealHub", "v3", time.Date(2026, 7, 10, 12, 30, 0, 0, time.UTC)},
+			{"g-issues", "v2", time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)},
+		} {
+			if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+				InstallationID: spec.app,
+				ToVersion:      spec.version,
+				Type:           core.AppInstallationEventTypePromoted,
+				Timestamp:      spec.at,
+			}); err != nil {
+				t.Fatalf("AppendEvent(%s): %v", spec.app, err)
+			}
+		}
+
+		heads, err := svc.AppInstallationEvents.ListHeadInstallations(ctx)
+		if err != nil {
+			t.Fatalf("ListHeadInstallations: %v", err)
+		}
+		if len(heads) != 2 {
+			t.Fatalf("heads = %d, want 2", len(heads))
+		}
+		byApp := make(map[string]string, len(heads))
+		for _, head := range heads {
+			byApp[head.AppName] = head.ResolvedVersion
+		}
+		if byApp["g-issues"] != "v2" || byApp["dealHub"] != "v3" {
+			t.Fatalf("heads = %#v", byApp)
+		}
+	})
+}

@@ -53,18 +53,24 @@ func (s *Server) mountAdminAppInstallWriteRoutes(r chi.Router) {
 }
 
 func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Request) {
-	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Installations == nil {
+	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Events == nil {
 		writeError(w, http.StatusServiceUnavailable, "app installation service is unavailable")
 		return
 	}
 	rolloutStatus := strings.TrimSpace(r.URL.Query().Get("rolloutStatus"))
-	installations, err := s.appRegistryInstaller.Installations.ListInstallations(r.Context(), rolloutStatus)
+	switch rolloutStatus {
+	case "", core.AppInstallationRolloutStatusPromoted:
+		// projected heads are always promoted
+	case core.AppInstallationRolloutStatusPending, core.AppInstallationRolloutStatusFailed:
+		writeJSON(w, http.StatusOK, []adminAppInstallationInfo{})
+		return
+	default:
+		writeError(w, http.StatusBadRequest, "failed to list app installations")
+		return
+	}
+	installations, err := s.appRegistryInstaller.Events.ListHeadInstallations(r.Context())
 	if err != nil {
-		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "unsupported rollout_status") {
-			status = http.StatusBadRequest
-		}
-		writeError(w, status, "failed to list app installations")
+		writeError(w, http.StatusInternalServerError, "failed to list app installations")
 		return
 	}
 	out := make([]adminAppInstallationInfo, 0, len(installations))
@@ -75,7 +81,7 @@ func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request) {
-	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Installations == nil {
+	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Events == nil {
 		writeError(w, http.StatusServiceUnavailable, "app installation service is unavailable")
 		return
 	}
@@ -88,7 +94,7 @@ func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}
-	installation, err := s.appRegistryInstaller.Installations.GetInstallation(r.Context(), appName)
+	installation, err := s.appRegistryInstaller.Events.HeadInstallation(r.Context(), appName)
 	if err != nil {
 		if err == core.ErrNotFound {
 			writeError(w, http.StatusNotFound, "app installation not found")
@@ -203,7 +209,7 @@ func adminAppInstallationFromCore(installation *core.AppInstallation) adminAppIn
 }
 
 func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
-	if cfg.Services == nil || cfg.Services.AppInstallations == nil || cfg.Services.AppInstallationEvents == nil {
+	if cfg.Services == nil || cfg.Services.AppInstallationEvents == nil {
 		return nil
 	}
 	reader := cfg.AppRegistryReader
@@ -211,10 +217,9 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		reader = &appregistry.RegistryReader{}
 	}
 	return &appregistry.Installer{
-		Registries:    cloneAppRegistryConfig(cfg.AppRegistries),
-		Reader:        reader,
-		Installations: cfg.Services.AppInstallations,
-		Events:        cfg.Services.AppInstallationEvents,
-		ArtifactsDir:  strings.TrimSpace(cfg.ArtifactsDir),
+		Registries:   cloneAppRegistryConfig(cfg.AppRegistries),
+		Reader:       reader,
+		Events:       cfg.Services.AppInstallationEvents,
+		ArtifactsDir: strings.TrimSpace(cfg.ArtifactsDir),
 	}
 }

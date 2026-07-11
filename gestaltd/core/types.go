@@ -37,8 +37,8 @@ const (
 	AppInstallationEventTypeUninstallRequested = "uninstall_requested"
 )
 
-// AppInstallation records the shared fleet-wide rollout for a registry-installed
-// app. The IndexedDB primary key id holds the app name (for example g-issues).
+// AppInstallation is a projection of promoted app_installation_events. Install
+// state is append-only in events; helpers materialize head and history views.
 type AppInstallation struct {
 	AppName                 string
 	VersionConstraint       string
@@ -55,8 +55,8 @@ type AppInstallation struct {
 	UpdatedAt               time.Time
 }
 
-// AppInstallationEvent is an append-only audit record for install lifecycle
-// changes on one app. InstallationID matches app_installations.id.
+// AppInstallationEvent is the append-only source of truth for install lifecycle
+// changes on one app. InstallationID is the app name (for example g-issues).
 type AppInstallationEvent struct {
 	ID             string
 	InstallationID string
