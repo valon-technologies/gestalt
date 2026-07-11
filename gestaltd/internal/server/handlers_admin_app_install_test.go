@@ -120,4 +120,30 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			t.Fatalf("install status = %d, want 404: %s", resp.StatusCode, raw)
 		}
 	})
+
+	t.Run("invalid_rollout_status_returns_bad_request", func(t *testing.T) {
+		t.Parallel()
+
+		registry, err := config.NewGCSAppRegistry(registrytest.Bucket)
+		if err != nil {
+			t.Fatalf("NewGCSAppRegistry: %v", err)
+		}
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.AppRegistries = map[string]config.AppRegistryConfig{
+				"toolshed": registry,
+			}
+			cfg.ArtifactsDir = t.TempDir()
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/admin/api/v1/app-installations?rolloutStatus=invalid")
+		if err != nil {
+			t.Fatalf("GET app-installations: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("list status = %d, want 400: %s", resp.StatusCode, raw)
+		}
+	})
 }

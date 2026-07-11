@@ -60,7 +60,11 @@ func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Reques
 	rolloutStatus := strings.TrimSpace(r.URL.Query().Get("rolloutStatus"))
 	installations, err := s.appRegistryInstaller.Installations.ListInstallations(r.Context(), rolloutStatus)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "failed to list app installations")
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "unsupported rollout_status") {
+			status = http.StatusBadRequest
+		}
+		writeError(w, status, "failed to list app installations")
 		return
 	}
 	out := make([]adminAppInstallationInfo, 0, len(installations))
