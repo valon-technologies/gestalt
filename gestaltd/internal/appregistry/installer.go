@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -134,7 +133,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 
 	download, err := downloadRegistryArtifact(ctx, reader.client(), artifactURL)
 	if err != nil {
-		return i.failInstall(ctx, appName, version, actor, registryName, "", err)
+		return i.failInstall(ctx, appName, version, actor, registryName, err)
 	}
 	defer func() {
 		if download.Cleanup != nil {
@@ -142,11 +141,11 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		}
 	}()
 	if !strings.EqualFold(strings.TrimSpace(download.SHA256Hex), expectedSHA) {
-		return i.failInstall(ctx, appName, version, actor, registryName, "", fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
 	}
 
 	if _, err := operator.InstallPublishedPackage(download.LocalPath, materializedPath, appName); err != nil {
-		return i.failInstall(ctx, appName, version, actor, registryName, materializedPath, fmt.Errorf("materialize app artifact: %w", err))
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("materialize app artifact: %w", err))
 	}
 
 	addedAt := i.now()
@@ -164,7 +163,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 
 	alreadyKnown, err := i.Catalog.HasKnownVersion(ctx, appName, version)
 	if err != nil {
-		return i.failInstall(ctx, appName, version, actor, registryName, materializedPath, fmt.Errorf("check known app version: %w", err))
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("check known app version: %w", err))
 	}
 	if !alreadyKnown {
 		addedRecord, err := i.Catalog.AppendRecord(ctx, &core.AppVersionCatalogRecord{
@@ -176,7 +175,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 			Metadata:  coredata.VersionAddedMetadata(known, materializedPath),
 		})
 		if err != nil {
-			return i.failInstall(ctx, appName, version, actor, registryName, materializedPath, fmt.Errorf("append version_added record: %w", err))
+			return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("append version_added record: %w", err))
 		}
 		known = coredata.InstallationFromVersionAddedRecord(addedRecord)
 	}
@@ -187,12 +186,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}, nil
 }
 
-func (i *Installer) failInstall(ctx context.Context, appName, version, actor, registryName, materializedPath string, cause error) (*InstallOutput, error) {
-	if materializedPath != "" {
-		if err := os.RemoveAll(materializedPath); err != nil {
-			return nil, fmt.Errorf("%w; also failed to remove materialized artifacts: %v", cause, err)
-		}
-	}
+func (i *Installer) failInstall(ctx context.Context, appName, version, actor, registryName string, cause error) (*InstallOutput, error) {
 	i.appendCatalogRecordBestEffort(context.WithoutCancel(ctx), &core.AppVersionCatalogRecord{
 		App:     appName,
 		Version: version,
