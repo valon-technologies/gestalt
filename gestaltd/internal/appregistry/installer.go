@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -33,6 +34,7 @@ type Installer struct {
 	Events        *coredata.AppInstallationEventService
 	ArtifactsDir  string
 	Now           func() time.Time
+	installLocks  sync.Map // app name -> *sync.Mutex
 }
 
 type InstallInput struct {
@@ -66,6 +68,8 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
 		return nil, fmt.Errorf("invalid app name: %w", err)
 	}
+	unlock := i.lockInstall(appName)
+	defer unlock()
 	if i.Installations == nil || i.Events == nil {
 		return nil, fmt.Errorf("app installation services are not configured")
 	}
@@ -349,6 +353,16 @@ func (i *Installer) failInstall(ctx context.Context, appName string, restoreBase
 		return nil, fmt.Errorf("%w; also failed to append failed event: %v", cause, eventErr)
 	}
 	return nil, cause
+}
+
+func (i *Installer) lockInstall(appName string) func() {
+	if i == nil {
+		return func() {}
+	}
+	value, _ := i.installLocks.LoadOrStore(appName, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
 
 func (i *Installer) appendInstallEventBestEffort(ctx context.Context, event *core.AppInstallationEvent) {
