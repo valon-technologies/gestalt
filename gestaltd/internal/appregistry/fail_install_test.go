@@ -44,7 +44,12 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 			Events:        services.AppInstallationEvents,
 		}
 
-		_, err := installer.failInstall(context.Background(), "g-issues", priorV1, "0.0.0-snapshot.v1", "0.0.0-snapshot.v2", "user:test", "toolshed", fmt.Errorf("download failed"))
+		_, err := installer.failInstall(context.Background(), "g-issues", priorV1, &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v2",
+			ResolvedVersion:   "0.0.0-snapshot.v2",
+			RolloutStatus:     core.AppInstallationRolloutStatusPending,
+		}, "0.0.0-snapshot.v1", "0.0.0-snapshot.v2", "user:test", "toolshed", fmt.Errorf("download failed"))
 		if err == nil {
 			t.Fatal("expected failure")
 		}

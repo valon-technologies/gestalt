@@ -2,6 +2,7 @@ package coredata_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -159,6 +160,37 @@ func TestAppInstallationService(t *testing.T) {
 		}
 		if updated.RolloutStatus != core.AppInstallationRolloutStatusPromoted {
 			t.Fatalf("RolloutStatus = %q, want promoted", updated.RolloutStatus)
+		}
+	})
+
+	t.Run("CompareAndSwapInstallation_rejects_stale_baseline", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		stored, err := svc.AppInstallations.PutInstallation(ctx, &core.AppInstallation{
+			AppName:         "g-issues",
+			RolloutStatus:   core.AppInstallationRolloutStatusPromoted,
+			ResolvedVersion: "v1",
+		})
+		if err != nil {
+			t.Fatalf("PutInstallation: %v", err)
+		}
+
+		staleBaseline := &core.AppInstallation{
+			AppName:         stored.AppName,
+			RolloutStatus:   stored.RolloutStatus,
+			ResolvedVersion: stored.ResolvedVersion,
+			UpdatedAt:       stored.UpdatedAt.Add(-time.Second),
+		}
+		_, err = svc.AppInstallations.CompareAndSwapInstallation(ctx, "g-issues", staleBaseline, func(installation *core.AppInstallation) error {
+			installation.RolloutStatus = core.AppInstallationRolloutStatusPending
+			return nil
+		})
+		if !errors.Is(err, coredata.ErrInstallationStateConflict) {
+			t.Fatalf("CompareAndSwapInstallation error = %v, want ErrInstallationStateConflict", err)
 		}
 	})
 

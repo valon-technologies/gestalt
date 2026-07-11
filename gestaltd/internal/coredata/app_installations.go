@@ -13,12 +13,20 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
+// ErrInstallationStateConflict indicates the stored installation row changed
+// before a compare-and-swap update could commit.
+var ErrInstallationStateConflict = errors.New("app installation state conflict")
+
 type AppInstallationService struct {
+	db    indexeddb.IndexedDB
 	store idb.ObjectStore
 }
 
 func NewAppInstallationService(ds indexeddb.IndexedDB) *AppInstallationService {
-	return &AppInstallationService{store: ds.ObjectStore(StoreAppInstallations)}
+	return &AppInstallationService{
+		db:    ds,
+		store: ds.ObjectStore(StoreAppInstallations),
+	}
 }
 
 func (s *AppInstallationService) GetInstallation(ctx context.Context, appName string) (*core.AppInstallation, error) {
@@ -135,6 +143,80 @@ func (s *AppInstallationService) UpdateInstallation(ctx context.Context, appName
 	return recordToAppInstallation(rec), nil
 }
 
+func (s *AppInstallationService) CompareAndSwapInstallation(ctx context.Context, appName string, baseline *core.AppInstallation, update func(*core.AppInstallation) error) (*core.AppInstallation, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return nil, fmt.Errorf("compare and swap app installation: app_name is required")
+	}
+	if update == nil {
+		return nil, fmt.Errorf("compare and swap app installation: update is required")
+	}
+
+	tx, err := s.db.Transaction(ctx, []string{StoreAppInstallations}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("compare and swap app installation: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(ctx)
+		}
+	}()
+
+	store := tx.ObjectStore(StoreAppInstallations)
+	rec, getErr := store.Get(ctx, appName)
+	var current *core.AppInstallation
+	if getErr != nil {
+		if !errors.Is(getErr, idb.ErrNotFound) {
+			return nil, fmt.Errorf("compare and swap app installation: %w", getErr)
+		}
+		if baseline != nil {
+			return nil, ErrInstallationStateConflict
+		}
+	} else {
+		current = recordToAppInstallation(rec)
+		if !appInstallationMatchesBaseline(current, baseline) {
+			return nil, ErrInstallationStateConflict
+		}
+	}
+
+	installation := &core.AppInstallation{AppName: appName}
+	if current != nil {
+		*installation = *current
+	}
+	if err := update(installation); err != nil {
+		return nil, err
+	}
+
+	rolloutStatus := strings.TrimSpace(installation.RolloutStatus)
+	if rolloutStatus == "" {
+		return nil, fmt.Errorf("compare and swap app installation: rollout_status is required")
+	}
+	if err := validateAppInstallationRolloutStatus(rolloutStatus); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	if installation.InstalledAt.IsZero() {
+		installation.InstalledAt = now
+	}
+	installation.UpdatedAt = now
+
+	outRec := appInstallationToRecord(installation)
+	outRec["id"] = appName
+	outRec["rollout_status"] = rolloutStatus
+	outRec["installed_at"] = installation.InstalledAt
+	outRec["updated_at"] = now
+	if err := store.Put(ctx, outRec); err != nil {
+		return nil, fmt.Errorf("compare and swap app installation: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("compare and swap app installation: %w", err)
+	}
+	committed = true
+	return recordToAppInstallation(outRec), nil
+}
+
 func (s *AppInstallationService) DeleteInstallation(ctx context.Context, appName string) error {
 	appName = strings.TrimSpace(appName)
 	if appName == "" {
@@ -144,6 +226,18 @@ func (s *AppInstallationService) DeleteInstallation(ctx context.Context, appName
 		return fmt.Errorf("delete app installation: %w", err)
 	}
 	return nil
+}
+
+func appInstallationMatchesBaseline(current, baseline *core.AppInstallation) bool {
+	if baseline == nil {
+		return current == nil
+	}
+	if current == nil {
+		return false
+	}
+	return strings.TrimSpace(current.RolloutStatus) == strings.TrimSpace(baseline.RolloutStatus) &&
+		strings.TrimSpace(current.ResolvedVersion) == strings.TrimSpace(baseline.ResolvedVersion) &&
+		current.UpdatedAt.Equal(baseline.UpdatedAt)
 }
 
 func validateAppInstallationRolloutStatus(rolloutStatus string) error {

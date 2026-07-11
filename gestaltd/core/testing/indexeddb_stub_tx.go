@@ -2,6 +2,7 @@ package coretesting
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
@@ -137,6 +138,9 @@ func (s *stubTransactionObjectStore) Get(ctx context.Context, id string) (idb.Re
 	}
 	record, err := s.store.Get(ctx, id)
 	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return nil, err
+		}
 		return nil, s.tx.abortWithError(err)
 	}
 	return record, nil
@@ -148,6 +152,9 @@ func (s *stubTransactionObjectStore) GetKey(ctx context.Context, id string) (str
 	}
 	key, err := s.store.GetKey(ctx, id)
 	if err != nil {
+		if errors.Is(err, idb.ErrNotFound) {
+			return "", err
+		}
 		return "", s.tx.abortWithError(err)
 	}
 	return key, nil
