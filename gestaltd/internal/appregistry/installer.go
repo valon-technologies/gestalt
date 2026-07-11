@@ -248,7 +248,7 @@ func (i *Installer) failInstall(ctx context.Context, appName string, restoreBase
 		if restored := restoredInstallationAfterFailure(restoreBaseline, actor, registryName); restored != nil {
 			*installation = *restored
 			installation.AppName = appName
-			installation.RolloutStatus = core.AppInstallationRolloutStatusFailed
+			// Keep promoted gold rows active; record the failed attempt in events only.
 			return nil
 		}
 		installation.RolloutStatus = core.AppInstallationRolloutStatusFailed
