@@ -64,6 +64,53 @@ func TestInstallerFleetRaceGuards(t *testing.T) {
 		}
 	})
 
+	t.Run("write_pending_clears_active_since", func(t *testing.T) {
+		t.Parallel()
+
+		services := testutil.NewStubServices(t)
+		activeSince := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		if _, err := services.AppInstallations.PutInstallation(context.Background(), &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v1",
+			ResolvedVersion:   "0.0.0-snapshot.v1",
+			Registry:          "toolshed",
+			RolloutStatus:     core.AppInstallationRolloutStatusPromoted,
+			ActiveSince:       &activeSince,
+		}); err != nil {
+			t.Fatalf("PutInstallation: %v", err)
+		}
+
+		baseline, err := services.AppInstallations.GetInstallation(context.Background(), "g-issues")
+		if err != nil {
+			t.Fatalf("GetInstallation: %v", err)
+		}
+
+		installer := &Installer{
+			Installations: services.AppInstallations,
+			Events:        services.AppInstallationEvents,
+		}
+		if err := installer.writePendingInstall(context.Background(), "g-issues", baseline, &core.AppInstallation{
+			AppName:           "g-issues",
+			VersionConstraint: "0.0.0-snapshot.v2",
+			ResolvedVersion:   "0.0.0-snapshot.v2",
+			Registry:          "toolshed",
+			RolloutStatus:     core.AppInstallationRolloutStatusPending,
+		}); err != nil {
+			t.Fatalf("writePendingInstall: %v", err)
+		}
+
+		stored, err := services.AppInstallations.GetInstallation(context.Background(), "g-issues")
+		if err != nil {
+			t.Fatalf("GetInstallation: %v", err)
+		}
+		if stored.RolloutStatus != core.AppInstallationRolloutStatusPending {
+			t.Fatalf("rollout_status = %q, want pending", stored.RolloutStatus)
+		}
+		if stored.ActiveSince != nil {
+			t.Fatalf("active_since = %v, want nil while pending", stored.ActiveSince)
+		}
+	})
+
 	t.Run("write_pending_rejects_advanced_fleet_state", func(t *testing.T) {
 		t.Parallel()
 

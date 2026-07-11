@@ -33,9 +33,9 @@ func TestRun_AppPublishDryRunPlansVersionedRegistryUploads(t *testing.T) {
 		t.Fatalf("app publish failed: %v\n%s", err, out)
 	}
 	var plan struct {
-		Schema      string `json:"schema"`
-		AppName     string `json:"appName"`
-		Version     string `json:"version"`
+		Schema                 string `json:"schema"`
+		AppName                string `json:"appName"`
+		Version                string `json:"version"`
 		PublishedVersionObject struct {
 			PublicURL string `json:"publicUrl"`
 		} `json:"publishedVersionObject"`

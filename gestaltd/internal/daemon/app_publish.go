@@ -40,15 +40,15 @@ func (d *appPublishDistDirs) Set(value string) error {
 }
 
 type appPublishPlan struct {
-	Schema          string             `json:"schema"`
-	AppName         string             `json:"appName"`
-	DisplayName     string             `json:"displayName,omitempty"`
-	Description     string             `json:"description,omitempty"`
-	Version         string             `json:"version"`
-	PublishedVersion           appregistry.PublishedVersion `json:"publishedVersion"`
-	PublishedVersionObject     appPublishObject             `json:"publishedVersionObject"`
-	IndexObject     appPublishObject   `json:"indexObject"`
-	ArtifactObjects []appPublishObject `json:"artifactObjects"`
+	Schema                 string                       `json:"schema"`
+	AppName                string                       `json:"appName"`
+	DisplayName            string                       `json:"displayName,omitempty"`
+	Description            string                       `json:"description,omitempty"`
+	Version                string                       `json:"version"`
+	PublishedVersion       appregistry.PublishedVersion `json:"publishedVersion"`
+	PublishedVersionObject appPublishObject             `json:"publishedVersionObject"`
+	IndexObject            appPublishObject             `json:"indexObject"`
+	ArtifactObjects        []appPublishObject           `json:"artifactObjects"`
 }
 
 const appPublishIndexUpdateAttempts = 5
@@ -398,12 +398,12 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 
 	indexRel := layout.IndexPath
 	return appPublishPlan{
-		Schema:      appPublishPlanSchema,
-		AppName:     publishedVersion.App,
-		DisplayName: input.DisplayName,
-		Description: input.Description,
-		Version:     input.Version,
-		PublishedVersion:       publishedVersion,
+		Schema:           appPublishPlanSchema,
+		AppName:          publishedVersion.App,
+		DisplayName:      input.DisplayName,
+		Description:      input.Description,
+		Version:          input.Version,
+		PublishedVersion: publishedVersion,
 		PublishedVersionObject: appPublishObject{
 			Kind:       "publishedVersion",
 			LocalPath:  publishedVersionPath,

@@ -187,49 +187,60 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if _, err := operator.InstallPublishedPackage(download.LocalPath, stagingPath, appName); err != nil {
 		return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("materialize app artifact: %w", err))
 	}
-	if err := os.RemoveAll(materializedPath); err != nil {
-		return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("reset materialization directory: %w", err))
+	backupPath := materializedPath + ".backup"
+	if err := os.RemoveAll(backupPath); err != nil {
+		return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("reset materialization backup directory: %w", err))
+	}
+	if _, err := os.Stat(materializedPath); err == nil {
+		if err := os.Rename(materializedPath, backupPath); err != nil {
+			return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("backup current materialization directory: %w", err))
+		}
+	} else if !os.IsNotExist(err) {
+		return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("stat materialization directory: %w", err))
 	}
 	if err := os.Rename(stagingPath, materializedPath); err != nil {
+		if _, statErr := os.Stat(backupPath); statErr == nil {
+			_ = os.RemoveAll(materializedPath)
+			_ = os.Rename(backupPath, materializedPath)
+		}
 		return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("promote staged app artifact: %w", err))
 	}
 	stagingCleanup = false
+	_ = os.RemoveAll(backupPath)
 
 	activeSince := i.now()
-	promoted := &core.AppInstallation{
-		AppName:                 appName,
-		VersionConstraint:       version,
-		ResolvedVersion:         version,
-		SourceRef:               publishedVersion.SourceRef,
-		Registry:                registryName,
-		ProviderReleaseURL:      publishedVersionPublicURL,
-		ArtifactChecksums:       checksums,
-		RolloutStatus:           core.AppInstallationRolloutStatusPromoted,
-		ActiveSince:             &activeSince,
-		PreviousResolvedVersion: previousVersion,
-		InstalledBy:             strings.TrimSpace(input.Actor),
-	}
-	current, err := i.Installations.GetInstallation(ctx, appName)
+	stored, err := i.Installations.UpdateInstallation(ctx, appName, func(installation *core.AppInstallation) error {
+		if !installationMatchesFailedAttempt(installation, version) {
+			return fmt.Errorf("%w: pending install for version %q no longer active", ErrInstallFleetStateAdvanced, version)
+		}
+		installation.VersionConstraint = version
+		installation.ResolvedVersion = version
+		installation.SourceRef = publishedVersion.SourceRef
+		installation.Registry = registryName
+		installation.ProviderReleaseURL = publishedVersionPublicURL
+		installation.ArtifactChecksums = checksums
+		installation.RolloutStatus = core.AppInstallationRolloutStatusPromoted
+		installation.ActiveSince = &activeSince
+		installation.PreviousResolvedVersion = previousVersion
+		installation.InstalledBy = strings.TrimSpace(input.Actor)
+		return nil
+	})
 	if err != nil {
-		return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("load current app installation: %w", err))
-	}
-	if !installationMatchesFailedAttempt(current, version) {
-		i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
-			InstallationID: appName,
-			FromVersion:    previousVersion,
-			ToVersion:      version,
-			Type:           core.AppInstallationEventTypeFailed,
-			Actor:          strings.TrimSpace(input.Actor),
-			Metadata: map[string]any{
-				"registry": registryName,
-				"error":    "fleet state advanced past pending install",
-				"skipped":  "fleet state advanced past this install attempt",
-			},
-		})
-		return nil, fmt.Errorf("%w: pending install for version %q no longer active", ErrInstallFleetStateAdvanced, version)
-	}
-	stored, err := i.Installations.PutInstallation(ctx, promoted)
-	if err != nil {
+		if errors.Is(err, ErrInstallFleetStateAdvanced) {
+			i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
+				InstallationID: appName,
+				FromVersion:    previousVersion,
+				ToVersion:      version,
+				Type:           core.AppInstallationEventTypeFailed,
+				Actor:          strings.TrimSpace(input.Actor),
+				Metadata: map[string]any{
+					"registry": registryName,
+					"error":    "fleet state advanced past pending install",
+					"skipped":  "fleet state advanced past this install attempt",
+				},
+			})
+			return nil, err
+		}
 		return i.failInstall(ctx, appName, priorInstallation, previousVersion, version, input.Actor, registryName, fmt.Errorf("write promoted app installation: %w", err))
 	}
 	i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
@@ -273,6 +284,9 @@ func (i *Installer) failInstall(ctx context.Context, appName string, priorInstal
 	}
 
 	_, putErr := i.Installations.UpdateInstallation(cleanupCtx, appName, func(installation *core.AppInstallation) error {
+		if !installationMatchesFailedAttempt(installation, version) {
+			return fmt.Errorf("%w: pending install for version %q no longer active during failure handling", ErrInstallFleetStateAdvanced, version)
+		}
 		if restored := restoredInstallationAfterFailure(priorInstallation, version, actor, registryName); restored != nil {
 			*installation = *restored
 			installation.AppName = appName
@@ -292,6 +306,21 @@ func (i *Installer) failInstall(ctx context.Context, appName string, priorInstal
 		return nil
 	})
 	if putErr != nil {
+		if errors.Is(putErr, ErrInstallFleetStateAdvanced) {
+			i.appendInstallEventBestEffort(cleanupCtx, &core.AppInstallationEvent{
+				InstallationID: appName,
+				FromVersion:    previousVersion,
+				ToVersion:      version,
+				Type:           core.AppInstallationEventTypeFailed,
+				Actor:          strings.TrimSpace(actor),
+				Metadata: map[string]any{
+					"registry": registryName,
+					"error":    cause.Error(),
+					"skipped":  "fleet state advanced past this install attempt",
+				},
+			})
+			return nil, cause
+		}
 		return nil, fmt.Errorf("%w; also failed to mark installation failed: %v", cause, putErr)
 	}
 	if _, eventErr := i.Events.AppendEvent(cleanupCtx, &core.AppInstallationEvent{
@@ -332,8 +361,7 @@ func restoredInstallationAfterFailure(prior *core.AppInstallation, attemptedVers
 		}
 		return restored
 	case core.AppInstallationRolloutStatusFailed:
-		resolved := strings.TrimSpace(prior.ResolvedVersion)
-		if resolved == "" || resolved == attemptedVersion {
+		if strings.TrimSpace(prior.ResolvedVersion) == "" {
 			return nil
 		}
 		restored := cloneAppInstallation(prior)
@@ -350,17 +378,44 @@ func restoredInstallationAfterFailure(prior *core.AppInstallation, attemptedVers
 }
 
 func (i *Installer) writePendingInstall(ctx context.Context, appName string, baseline *core.AppInstallation, pending *core.AppInstallation) error {
-	current, err := i.Installations.GetInstallation(ctx, appName)
-	if err != nil && err != core.ErrNotFound {
-		return fmt.Errorf("load current app installation: %w", err)
+	if baseline == nil {
+		current, err := i.Installations.GetInstallation(ctx, appName)
+		if err != nil && err != core.ErrNotFound {
+			return fmt.Errorf("load current app installation: %w", err)
+		}
+		if current != nil {
+			return fmt.Errorf("%w: install baseline no longer current", ErrInstallFleetStateAdvanced)
+		}
+		if _, err := i.Installations.PutInstallation(ctx, pending); err != nil {
+			return fmt.Errorf("write pending app installation: %w", err)
+		}
+		return nil
 	}
-	if !installationMatchesInstallBaseline(current, baseline) {
-		return fmt.Errorf("%w: install baseline no longer current", ErrInstallFleetStateAdvanced)
-	}
-	if _, err := i.Installations.PutInstallation(ctx, pending); err != nil {
+
+	_, err := i.Installations.UpdateInstallation(ctx, appName, func(installation *core.AppInstallation) error {
+		if !installationMatchesInstallBaseline(installation, baseline) {
+			return fmt.Errorf("%w: install baseline no longer current", ErrInstallFleetStateAdvanced)
+		}
+		applyPendingInstall(installation, pending)
+		return nil
+	})
+	if err != nil {
 		return fmt.Errorf("write pending app installation: %w", err)
 	}
 	return nil
+}
+
+func applyPendingInstall(dst *core.AppInstallation, pending *core.AppInstallation) {
+	dst.RolloutStatus = pending.RolloutStatus
+	dst.VersionConstraint = pending.VersionConstraint
+	dst.ResolvedVersion = pending.ResolvedVersion
+	dst.SourceRef = pending.SourceRef
+	dst.Registry = pending.Registry
+	dst.ProviderReleaseURL = pending.ProviderReleaseURL
+	dst.ArtifactChecksums = pending.ArtifactChecksums
+	dst.PreviousResolvedVersion = pending.PreviousResolvedVersion
+	dst.InstalledBy = pending.InstalledBy
+	dst.ActiveSince = nil
 }
 
 func installationMatchesInstallBaseline(current, baseline *core.AppInstallation) bool {

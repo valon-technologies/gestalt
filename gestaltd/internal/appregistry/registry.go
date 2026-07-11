@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	IndexSchemaVersion  = 1
+	IndexSchemaVersion            = 1
 	PublishedVersionSchemaVersion = 1
-	IndexFileName       = "index.json"
-	appSourcePathPrefix = "apps/"
+	IndexFileName                 = "index.json"
+	appSourcePathPrefix           = "apps/"
 )
 
 type Index struct {
@@ -99,17 +99,17 @@ type PublishArtifact struct {
 }
 
 type PublishPlan struct {
-	RegistryName string
-	AppName      string
-	Version      string
-	PublishedVersion PublishedVersion
-	PublishedVersionPath    string
-	PublishedVersionURL     string
-	PublishedVersionPublic  string
-	IndexPath    string
-	IndexURL     string
-	IndexPublic  string
-	Artifacts    []PublishArtifact
+	RegistryName           string
+	AppName                string
+	Version                string
+	PublishedVersion       PublishedVersion
+	PublishedVersionPath   string
+	PublishedVersionURL    string
+	PublishedVersionPublic string
+	IndexPath              string
+	IndexURL               string
+	IndexPublic            string
+	Artifacts              []PublishArtifact
 }
 
 func parseAppSource(raw string) (appName, repository string, err error) {
@@ -511,10 +511,10 @@ func AppArtifactPrefix(appName, version string) string {
 }
 
 type PublishLayout struct {
-	AppName        string
-	ArtifactPrefix string
+	AppName              string
+	ArtifactPrefix       string
 	PublishedVersionPath string
-	IndexPath      string
+	IndexPath            string
 }
 
 func ResolvePublishLayout(source, version string) (PublishLayout, error) {
@@ -523,10 +523,10 @@ func ResolvePublishLayout(source, version string) (PublishLayout, error) {
 		return PublishLayout{}, err
 	}
 	return PublishLayout{
-		AppName:        appName,
-		ArtifactPrefix: AppArtifactPrefix(appName, version),
+		AppName:              appName,
+		ArtifactPrefix:       AppArtifactPrefix(appName, version),
 		PublishedVersionPath: PublishedVersionPath(appName, version),
-		IndexPath:      AppIndexPath(appName),
+		IndexPath:            AppIndexPath(appName),
 	}, nil
 }
 
