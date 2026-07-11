@@ -448,11 +448,15 @@ func shouldPreservePriorMetadata(baseline *core.AppInstallation) bool {
 }
 
 func restoreMaterializationBackup(materializedPath, backupPath string) {
-	if _, err := os.Stat(backupPath); err != nil {
+	_, err := os.Stat(backupPath)
+	if err == nil {
+		_ = os.RemoveAll(materializedPath)
+		_ = os.Rename(backupPath, materializedPath)
 		return
 	}
-	_ = os.RemoveAll(materializedPath)
-	_ = os.Rename(backupPath, materializedPath)
+	if os.IsNotExist(err) {
+		_ = os.RemoveAll(materializedPath)
+	}
 }
 
 func installationMatchesFailedAttempt(current *core.AppInstallation, attemptedVersion string) bool {
