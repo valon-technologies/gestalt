@@ -136,6 +136,7 @@ func TestInstallerSetsPreviousResolvedVersionOnUpgrade(t *testing.T) {
 	artifactsDir := t.TempDir()
 	goldVersion := "0.0.0-snapshot.gold"
 	activeSince := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+	installedAt := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
 
 	if _, err := services.AppInstallations.PutInstallation(t.Context(), &core.AppInstallation{
 		AppName:           "g-issues",
@@ -144,6 +145,7 @@ func TestInstallerSetsPreviousResolvedVersionOnUpgrade(t *testing.T) {
 		Registry:          "toolshed",
 		RolloutStatus:     core.AppInstallationRolloutStatusPromoted,
 		ActiveSince:       &activeSince,
+		InstalledAt:       installedAt,
 	}); err != nil {
 		t.Fatalf("PutInstallation: %v", err)
 	}
@@ -168,5 +170,8 @@ func TestInstallerSetsPreviousResolvedVersionOnUpgrade(t *testing.T) {
 	}
 	if result.Installation.PreviousResolvedVersion != goldVersion {
 		t.Fatalf("previous_resolved_version = %q, want %q", result.Installation.PreviousResolvedVersion, goldVersion)
+	}
+	if !result.Installation.InstalledAt.Equal(installedAt) {
+		t.Fatalf("installed_at = %v, want %v", result.Installation.InstalledAt, installedAt)
 	}
 }

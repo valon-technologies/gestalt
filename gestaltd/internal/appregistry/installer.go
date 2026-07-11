@@ -150,8 +150,9 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 			return nil, fmt.Errorf("write pending app installation: %w", err)
 		}
 	} else {
+		baseline := existing
 		if _, err := i.Installations.UpdateInstallation(ctx, appName, func(installation *core.AppInstallation) error {
-			*installation = *pending
+			applyPendingInstall(installation, pending, baseline)
 			installation.AppName = appName
 			return nil
 		}); err != nil {
@@ -194,14 +195,6 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		_ = os.RemoveAll(stagingPath)
 		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("materialize app artifact: %w", err))
 	}
-	if err := os.RemoveAll(materializedPath); err != nil {
-		_ = os.RemoveAll(stagingPath)
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("reset materialization directory: %w", err))
-	}
-	if err := os.Rename(stagingPath, materializedPath); err != nil {
-		_ = os.RemoveAll(stagingPath)
-		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("promote staged app artifact: %w", err))
-	}
 
 	activeSince := i.now()
 	stored, err := i.Installations.UpdateInstallation(ctx, appName, func(installation *core.AppInstallation) error {
@@ -218,9 +211,19 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return nil
 	})
 	if err != nil {
+		_ = os.RemoveAll(stagingPath)
 		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, fmt.Errorf("write promoted app installation: %w", err))
 	}
-	if _, err := i.Events.AppendEvent(ctx, &core.AppInstallationEvent{
+	if err := os.RemoveAll(materializedPath); err != nil {
+		_ = os.RemoveAll(stagingPath)
+		return nil, fmt.Errorf("reset materialization directory after promote: %w", err)
+	}
+	if err := os.Rename(stagingPath, materializedPath); err != nil {
+		_ = os.RemoveAll(stagingPath)
+		return nil, fmt.Errorf("promote staged app artifact after promote: %w", err)
+	}
+
+	i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
 		InstallationID: appName,
 		FromVersion:    previousVersion,
 		ToVersion:      version,
@@ -230,9 +233,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 			"registry":          registryName,
 			"materialized_path": materializedPath,
 		},
-	}); err != nil {
-		return nil, fmt.Errorf("append promoted event after successful install: %w", err)
-	}
+	})
 
 	return &InstallOutput{
 		Installation:     stored,
@@ -282,6 +283,49 @@ func (i *Installer) lockInstall(appName string) func() {
 	mu := value.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock
+}
+
+func applyPendingInstall(dst, pending, baseline *core.AppInstallation) {
+	dst.RolloutStatus = pending.RolloutStatus
+	dst.VersionConstraint = pending.VersionConstraint
+	dst.ResolvedVersion = pending.ResolvedVersion
+	dst.PreviousResolvedVersion = pending.PreviousResolvedVersion
+	if strings.TrimSpace(pending.InstalledBy) != "" {
+		dst.InstalledBy = pending.InstalledBy
+	}
+	if strings.TrimSpace(pending.Registry) != "" {
+		dst.Registry = pending.Registry
+	}
+	if shouldPreservePriorMetadata(baseline) {
+		return
+	}
+	dst.SourceRef = pending.SourceRef
+	dst.ProviderReleaseURL = pending.ProviderReleaseURL
+	dst.ArtifactChecksums = pending.ArtifactChecksums
+	dst.ActiveSince = nil
+}
+
+func shouldPreservePriorMetadata(baseline *core.AppInstallation) bool {
+	if baseline == nil {
+		return false
+	}
+	switch strings.TrimSpace(baseline.RolloutStatus) {
+	case core.AppInstallationRolloutStatusPromoted:
+		return true
+	case core.AppInstallationRolloutStatusPending:
+		previous := strings.TrimSpace(baseline.PreviousResolvedVersion)
+		resolved := strings.TrimSpace(baseline.ResolvedVersion)
+		return previous != "" && previous != resolved
+	default:
+		return false
+	}
+}
+
+func (i *Installer) appendInstallEventBestEffort(ctx context.Context, event *core.AppInstallationEvent) {
+	if i == nil || i.Events == nil || event == nil {
+		return
+	}
+	_, _ = i.Events.AppendEvent(context.WithoutCancel(ctx), event)
 }
 
 func (i *Installer) now() time.Time {
