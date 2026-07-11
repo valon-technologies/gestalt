@@ -58,6 +58,22 @@ func (s *AppInstallationEventService) HeadInstallation(ctx context.Context, appN
 	return head, nil
 }
 
+// HeadEvent returns the latest head-changing event for an app.
+func (s *AppInstallationEventService) HeadEvent(ctx context.Context, appName string) (*core.AppInstallationEvent, error) {
+	if s == nil {
+		return nil, fmt.Errorf("head app installation event: event service is not configured")
+	}
+	events, err := s.ListEventsByApp(ctx, appName)
+	if err != nil {
+		return nil, err
+	}
+	head := headEventFromEvents(events)
+	if head == nil {
+		return nil, core.ErrNotFound
+	}
+	return head, nil
+}
+
 // ListPromotionHistory returns promoted install records for an app in timestamp order.
 func (s *AppInstallationEventService) ListPromotionHistory(ctx context.Context, appName string) ([]*core.AppInstallation, error) {
 	if s == nil {
@@ -108,32 +124,22 @@ func (s *AppInstallationEventService) ListHeadInstallations(ctx context.Context)
 }
 
 func headInstallationFromEvents(events []*core.AppInstallationEvent) *core.AppInstallation {
-	var head *core.AppInstallation
+	headEvent := headEventFromEvents(events)
+	if headEvent == nil {
+		return nil
+	}
+	return installationFromHeadEvent(eventsByID(events), headEvent)
+}
+
+func headEventFromEvents(events []*core.AppInstallationEvent) *core.AppInstallationEvent {
+	var head *core.AppInstallationEvent
 	for _, event := range events {
 		if event == nil {
 			continue
 		}
 		switch strings.TrimSpace(event.Type) {
-		case core.AppInstallationEventTypePromoted:
-			candidate := installationFromPromotedEvent(event)
-			if head == nil || promotionTime(head).Before(promotionTime(candidate)) {
-				head = candidate
-			}
-		case core.AppInstallationEventTypeRollback:
-			if head == nil {
-				continue
-			}
-			fromVersion := strings.TrimSpace(event.FromVersion)
-			if fromVersion == "" {
-				head = nil
-				continue
-			}
-			head.ResolvedVersion = fromVersion
-			head.VersionConstraint = fromVersion
-			head.PreviousResolvedVersion = strings.TrimSpace(event.ToVersion)
-			activeSince := event.Timestamp.UTC().Truncate(time.Millisecond)
-			head.ActiveSince = &activeSince
-			head.UpdatedAt = activeSince
+		case core.AppInstallationEventTypePromoted, core.AppInstallationEventTypeRollback:
+			head = event
 		case core.AppInstallationEventTypeUninstallRequested:
 			head = nil
 		}
@@ -141,14 +147,58 @@ func headInstallationFromEvents(events []*core.AppInstallationEvent) *core.AppIn
 	return head
 }
 
-func promotionTime(installation *core.AppInstallation) time.Time {
-	if installation == nil {
-		return time.Time{}
+func eventsByID(events []*core.AppInstallationEvent) map[string]*core.AppInstallationEvent {
+	byID := make(map[string]*core.AppInstallationEvent, len(events))
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+		id := strings.TrimSpace(event.ID)
+		if id == "" {
+			continue
+		}
+		byID[id] = event
 	}
-	if installation.ActiveSince != nil {
-		return installation.ActiveSince.UTC()
+	return byID
+}
+
+func installationFromHeadEvent(eventsByID map[string]*core.AppInstallationEvent, headEvent *core.AppInstallationEvent) *core.AppInstallation {
+	if headEvent == nil {
+		return nil
 	}
-	return installation.UpdatedAt.UTC()
+	switch strings.TrimSpace(headEvent.Type) {
+	case core.AppInstallationEventTypePromoted:
+		return installationFromPromotedEvent(headEvent)
+	case core.AppInstallationEventTypeRollback:
+		return installationFromRollbackEvent(eventsByID, headEvent)
+	default:
+		return nil
+	}
+}
+
+func installationFromRollbackEvent(eventsByID map[string]*core.AppInstallationEvent, rollback *core.AppInstallationEvent) *core.AppInstallation {
+	if rollback == nil {
+		return nil
+	}
+	targetVersion := strings.TrimSpace(rollback.FromVersion)
+	for current := eventsByID[strings.TrimSpace(rollback.SupersedesEventID)]; current != nil; current = eventsByID[strings.TrimSpace(current.SupersedesEventID)] {
+		if strings.TrimSpace(current.Type) != core.AppInstallationEventTypePromoted {
+			continue
+		}
+		if strings.TrimSpace(current.ToVersion) != targetVersion {
+			continue
+		}
+		installation := installationFromPromotedEvent(current)
+		if installation == nil {
+			return nil
+		}
+		installation.PreviousResolvedVersion = strings.TrimSpace(rollback.ToVersion)
+		activeSince := rollback.Timestamp.UTC().Truncate(time.Millisecond)
+		installation.ActiveSince = &activeSince
+		installation.UpdatedAt = activeSince
+		return installation
+	}
+	return nil
 }
 
 func installationFromPromotedEvent(event *core.AppInstallationEvent) *core.AppInstallation {

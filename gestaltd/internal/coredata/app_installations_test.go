@@ -502,4 +502,123 @@ func TestAppInstallationEventProjection(t *testing.T) {
 			t.Fatalf("heads = %#v", byApp)
 		}
 	})
+
+	t.Run("HeadInstallation_promote_links_supersedes_event_id", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
+
+		v1, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID: "g-issues",
+			ToVersion:      "v1",
+			Type:           core.AppInstallationEventTypePromoted,
+			Timestamp:      firstAt,
+		})
+		if err != nil {
+			t.Fatalf("AppendEvent(v1): %v", err)
+		}
+		v2, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID:    "g-issues",
+			FromVersion:       "v1",
+			ToVersion:         "v2",
+			Type:              core.AppInstallationEventTypePromoted,
+			Timestamp:         secondAt,
+			SupersedesEventID: v1.ID,
+		})
+		if err != nil {
+			t.Fatalf("AppendEvent(v2): %v", err)
+		}
+		if v2.SupersedesEventID != v1.ID {
+			t.Fatalf("SupersedesEventID = %q, want %q", v2.SupersedesEventID, v1.ID)
+		}
+
+		headEvent, err := svc.AppInstallationEvents.HeadEvent(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("HeadEvent: %v", err)
+		}
+		if headEvent.ID != v2.ID {
+			t.Fatalf("HeadEvent ID = %q, want %q", headEvent.ID, v2.ID)
+		}
+	})
+
+	t.Run("HeadInstallation_rollback_restores_linked_promoted_metadata", func(t *testing.T) {
+		t.Parallel()
+		svc, err := coredata.New(&coretesting.StubIndexedDB{})
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+		ctx := context.Background()
+		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
+		rollbackAt := time.Date(2026, 7, 10, 14, 0, 0, 0, time.UTC)
+
+		v1, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID: "g-issues",
+			ToVersion:      "v1",
+			Type:           core.AppInstallationEventTypePromoted,
+			Timestamp:      firstAt,
+			Metadata: coredata.PromotedInstallationMetadata(&core.AppInstallation{
+				AppName:           "g-issues",
+				VersionConstraint: "v1",
+				ResolvedVersion:   "v1",
+				Registry:          "toolshed",
+				SourceRef:         "abc123",
+				InstalledAt:       firstAt,
+			}, "/tmp/g-issues/v1"),
+		})
+		if err != nil {
+			t.Fatalf("AppendEvent(v1): %v", err)
+		}
+		v2, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID:    "g-issues",
+			FromVersion:       "v1",
+			ToVersion:         "v2",
+			Type:              core.AppInstallationEventTypePromoted,
+			Timestamp:         secondAt,
+			SupersedesEventID: v1.ID,
+			Metadata: coredata.PromotedInstallationMetadata(&core.AppInstallation{
+				AppName:           "g-issues",
+				VersionConstraint: "v2",
+				ResolvedVersion:   "v2",
+				Registry:          "toolshed",
+				SourceRef:         "def456",
+				InstalledAt:       firstAt,
+			}, "/tmp/g-issues/v2"),
+		})
+		if err != nil {
+			t.Fatalf("AppendEvent(v2): %v", err)
+		}
+		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
+			InstallationID:    "g-issues",
+			FromVersion:       "v1",
+			ToVersion:         "v2",
+			Type:              core.AppInstallationEventTypeRollback,
+			Timestamp:         rollbackAt,
+			SupersedesEventID: v2.ID,
+		}); err != nil {
+			t.Fatalf("AppendEvent(rollback): %v", err)
+		}
+
+		head, err := svc.AppInstallationEvents.HeadInstallation(ctx, "g-issues")
+		if err != nil {
+			t.Fatalf("HeadInstallation: %v", err)
+		}
+		if head.ResolvedVersion != "v1" {
+			t.Fatalf("ResolvedVersion = %q, want v1", head.ResolvedVersion)
+		}
+		if head.SourceRef != "abc123" {
+			t.Fatalf("SourceRef = %q, want abc123", head.SourceRef)
+		}
+		if head.PreviousResolvedVersion != "v2" {
+			t.Fatalf("PreviousResolvedVersion = %q, want v2", head.PreviousResolvedVersion)
+		}
+		if head.ActiveSince == nil || !head.ActiveSince.Equal(rollbackAt) {
+			t.Fatalf("ActiveSince = %v, want %v", head.ActiveSince, rollbackAt)
+		}
+	})
 }

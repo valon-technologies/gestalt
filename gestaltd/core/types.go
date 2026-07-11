@@ -57,15 +57,19 @@ type AppInstallation struct {
 
 // AppInstallationEvent is the append-only source of truth for install lifecycle
 // changes on one app. InstallationID is the app name (for example g-issues).
+//
+// Head-changing events (promoted, rollback) form a linked list via
+// SupersedesEventID, which points at the prior head event they replace.
 type AppInstallationEvent struct {
-	ID             string
-	InstallationID string
-	FromVersion    string
-	ToVersion      string
-	Type           string
-	Actor          string
-	Timestamp      time.Time
-	Metadata       map[string]any
+	ID                string
+	InstallationID    string
+	FromVersion       string
+	ToVersion         string
+	Type              string
+	Actor             string
+	Timestamp         time.Time
+	SupersedesEventID string
+	Metadata          map[string]any
 }
 
 type ExternalCredentialGrant struct {

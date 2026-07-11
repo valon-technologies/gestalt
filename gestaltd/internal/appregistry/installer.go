@@ -121,6 +121,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 
 	previousVersion := ""
 	installedAt := i.now()
+	supersedesEventID := ""
 	head, headErr := i.Events.HeadInstallation(ctx, appName)
 	if headErr == nil {
 		previousVersion = strings.TrimSpace(head.ResolvedVersion)
@@ -129,6 +130,11 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		}
 	} else if !errors.Is(headErr, core.ErrNotFound) {
 		return nil, fmt.Errorf("load existing app installation: %w", headErr)
+	}
+	if headEvent, headEventErr := i.Events.HeadEvent(ctx, appName); headEventErr == nil {
+		supersedesEventID = strings.TrimSpace(headEvent.ID)
+	} else if !errors.Is(headEventErr, core.ErrNotFound) {
+		return nil, fmt.Errorf("load existing head event: %w", headEventErr)
 	}
 
 	entryURL := PublicURL(publicRoot, AppVersionEntryPath(appName, version))
@@ -184,13 +190,14 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 
 	promotedEvent, err := i.Events.AppendEvent(ctx, &core.AppInstallationEvent{
-		InstallationID: appName,
-		FromVersion:    previousVersion,
-		ToVersion:      version,
-		Type:           core.AppInstallationEventTypePromoted,
-		Actor:          actor,
-		Timestamp:      activeSince,
-		Metadata:       coredata.PromotedInstallationMetadata(promoted, materializedPath),
+		InstallationID:    appName,
+		FromVersion:       previousVersion,
+		ToVersion:         version,
+		Type:              core.AppInstallationEventTypePromoted,
+		Actor:             actor,
+		Timestamp:         activeSince,
+		SupersedesEventID: supersedesEventID,
+		Metadata:          coredata.PromotedInstallationMetadata(promoted, materializedPath),
 	})
 	if err != nil {
 		return i.failInstall(ctx, appName, previousVersion, version, actor, registryName, materializedPath, fmt.Errorf("append promoted event: %w", err))

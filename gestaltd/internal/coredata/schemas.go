@@ -90,6 +90,7 @@ var AppInstallationEventsSchema = idb.ObjectStoreOptions{
 		{Name: "type", Type: idb.TypeString, NotNull: true},
 		{Name: "actor", Type: idb.TypeString},
 		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},
+		{Name: "supersedes_event_id", Type: idb.TypeString},
 		{Name: "metadata_json", Type: idb.TypeJSON},
 	},
 }
