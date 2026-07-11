@@ -101,6 +101,45 @@ func TestRegistryReader_FetchAppIndex_RejectsInvalidAppName(t *testing.T) {
 	}
 }
 
+func TestRegistryReader_FetchEntry(t *testing.T) {
+	t.Parallel()
+
+	entryJSON := `{
+  "schemaVersion": 1,
+  "app": "g-issues",
+  "version": "0.0.1",
+  "sourceRef": "abc123def456abc123def456abc123def456abcd",
+  "manifestPath": "valon-tools/apps/g-issues/manifest.yaml",
+  "repository": "github.com/valon-technologies/valon-tools",
+  "artifacts": {
+    "linux/amd64": {
+      "url": "gs://bucket/apps/g-issues/artifacts/0.0.1/pkg.tar.gz",
+      "publicUrl": "https://storage.googleapis.com/bucket/apps/g-issues/artifacts/0.0.1/pkg.tar.gz",
+      "sha256": "abc"
+    }
+  },
+  "publishedAt": "2026-07-10T02:00:00Z"
+}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/apps/g-issues/versions/0.0.1.json" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(entryJSON))
+	}))
+	defer srv.Close()
+
+	reader := &RegistryReader{HTTPClient: srv.Client()}
+	entry, err := reader.FetchEntry(t.Context(), srv.URL, "g-issues", "0.0.1")
+	if err != nil {
+		t.Fatalf("FetchEntry: %v", err)
+	}
+	if entry.App != "g-issues" || entry.Version != "0.0.1" {
+		t.Fatalf("entry = %#v", entry)
+	}
+}
+
 func TestRegistryReader_FetchAppIndex_RejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
