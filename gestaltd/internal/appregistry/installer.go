@@ -434,6 +434,8 @@ func shouldPreservePriorMetadata(baseline *core.AppInstallation) bool {
 		previous := strings.TrimSpace(baseline.PreviousResolvedVersion)
 		resolved := strings.TrimSpace(baseline.ResolvedVersion)
 		return previous != "" && previous != resolved
+	case core.AppInstallationRolloutStatusFailed:
+		return strings.TrimSpace(baseline.ResolvedVersion) != ""
 	default:
 		return false
 	}
