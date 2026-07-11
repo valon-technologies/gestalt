@@ -157,6 +157,8 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 			status = http.StatusNotFound
 		case errors.Is(err, appregistry.ErrInstallVersionLocked):
 			status = http.StatusConflict
+		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
+			status = http.StatusBadRequest
 		}
 		writeError(w, status, err.Error())
 		return

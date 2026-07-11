@@ -2,6 +2,7 @@ package appregistry_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,5 +61,41 @@ func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
 	}
 	if records[0].Version != "missing-version" {
 		t.Fatalf("record version = %q", records[0].Version)
+	}
+}
+
+func TestInstaller_rejects_already_installed_version(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		Reader:       fixture.Reader,
+		Catalog:      svc.AppVersionCatalog,
+		Locks:        svc.AppVersionInstallLocks,
+		ArtifactsDir: t.TempDir(),
+	}
+
+	input := appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+		Actor:    "user:alice",
+	}
+	if _, err := installer.Install(ctx, input); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+
+	_, err := installer.Install(ctx, input)
+	if err == nil {
+		t.Fatal("expected error for already installed version")
+	}
+	if !errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled) {
+		t.Fatalf("install error = %v, want %v", err, appregistry.ErrAppVersionAlreadyInstalled)
 	}
 }

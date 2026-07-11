@@ -116,6 +116,41 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		}
 	})
 
+	t.Run("already_installed_returns_bad_request", func(t *testing.T) {
+		t.Parallel()
+
+		fixture := registrytest.NewInstallFixture(t)
+		artifactsDir := t.TempDir()
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.AppRegistries = map[string]config.AppRegistryConfig{
+				"toolshed": fixture.Registry,
+			}
+			cfg.AppRegistryReader = fixture.Reader
+			cfg.ArtifactsDir = artifactsDir
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := []byte(`{"version":"` + fixture.Version + `"}`)
+		first, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST first install: %v", err)
+		}
+		_ = first.Body.Close()
+		if first.StatusCode != http.StatusOK {
+			t.Fatalf("first install status = %d", first.StatusCode)
+		}
+
+		second, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST second install: %v", err)
+		}
+		defer func() { _ = second.Body.Close() }()
+		if second.StatusCode != http.StatusBadRequest {
+			raw, _ := io.ReadAll(second.Body)
+			t.Fatalf("second install status = %d, want 400: %s", second.StatusCode, raw)
+		}
+	})
+
 	t.Run("get_versions_by_app", func(t *testing.T) {
 		t.Parallel()
 

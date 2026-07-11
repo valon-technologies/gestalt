@@ -80,6 +80,13 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if i.Catalog == nil {
 		return nil, fmt.Errorf("app version catalog service is not configured")
 	}
+	alreadyKnown, err := i.Catalog.HasKnownVersion(ctx, appName, version)
+	if err != nil {
+		return nil, fmt.Errorf("check known app version: %w", err)
+	}
+	if alreadyKnown {
+		return nil, ErrAppVersionAlreadyInstalled
+	}
 	artifactsDir := strings.TrimSpace(i.ArtifactsDir)
 	if artifactsDir == "" {
 		return nil, fmt.Errorf("artifacts directory is not configured")
@@ -162,27 +169,20 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		UpdatedAt:          addedAt,
 	}
 
-	alreadyKnown, err := i.Catalog.HasKnownVersion(ctx, appName, version)
+	addedRecord, err := i.Catalog.AppendRecord(ctx, &core.AppVersionCatalogRecord{
+		App:       appName,
+		Version:   version,
+		Type:      core.AppVersionCatalogRecordTypeVersionAdded,
+		Actor:     actor,
+		Timestamp: addedAt,
+		Metadata:  coredata.VersionAddedMetadata(known, materializedPath),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("check known app version: %w", err)
-	}
-	if !alreadyKnown {
-		addedRecord, err := i.Catalog.AppendRecord(ctx, &core.AppVersionCatalogRecord{
-			App:       appName,
-			Version:   version,
-			Type:      core.AppVersionCatalogRecordTypeVersionAdded,
-			Actor:     actor,
-			Timestamp: addedAt,
-			Metadata:  coredata.VersionAddedMetadata(known, materializedPath),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("append version_added record: %w", err)
-		}
-		known = coredata.InstallationFromVersionAddedRecord(addedRecord)
+		return nil, fmt.Errorf("append version_added record: %w", err)
 	}
 
 	return &InstallOutput{
-		Installation:     known,
+		Installation:     coredata.InstallationFromVersionAddedRecord(addedRecord),
 		MaterializedPath: materializedPath,
 	}, nil
 }
