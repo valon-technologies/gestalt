@@ -35,7 +35,6 @@ func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
 		Reader:       registrytest.NewReaderForServer(t, registrySrv.URL),
 		Catalog:      svc.AppVersionCatalog,
 		Locks:        svc.AppVersionInstallLocks,
-		HolderID:     "test-holder",
 		ArtifactsDir: t.TempDir(),
 	}
 

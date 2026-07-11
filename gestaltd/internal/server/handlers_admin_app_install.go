@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
@@ -206,7 +205,6 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		Reader:       reader,
 		Catalog:      cfg.Services.AppVersionCatalog,
 		Locks:        cfg.Services.AppVersionInstallLocks,
-		HolderID:     uuid.NewString(),
 		ArtifactsDir: strings.TrimSpace(cfg.ArtifactsDir),
 	}
 }

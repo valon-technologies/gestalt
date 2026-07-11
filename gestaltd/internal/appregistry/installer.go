@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -26,7 +27,6 @@ type Installer struct {
 	Reader       *RegistryReader
 	Catalog      *coredata.AppVersionCatalogService
 	Locks        *coredata.AppVersionInstallLockService
-	HolderID     string
 	ArtifactsDir string
 	Now          func() time.Time
 }
@@ -65,14 +65,15 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 
 	if i.Locks != nil {
-		if err := i.Locks.Acquire(ctx, appName, version, i.holderID(), coredata.DefaultAppVersionInstallLockTTL); err != nil {
+		lockHolder := uuid.NewString()
+		if err := i.Locks.Acquire(ctx, appName, version, lockHolder, coredata.DefaultAppVersionInstallLockTTL); err != nil {
 			if errors.Is(err, coredata.ErrAppVersionInstallLockHeld) {
 				return nil, ErrInstallVersionLocked
 			}
 			return nil, fmt.Errorf("claim app version install lock: %w", err)
 		}
 		defer func() {
-			_ = i.Locks.Release(context.WithoutCancel(ctx), appName, version, i.holderID())
+			_ = i.Locks.Release(context.WithoutCancel(ctx), appName, version, lockHolder)
 		}()
 	}
 
@@ -205,13 +206,6 @@ func (i *Installer) appendCatalogRecordBestEffort(ctx context.Context, record *c
 		return
 	}
 	_, _ = i.Catalog.AppendRecord(context.WithoutCancel(ctx), record)
-}
-
-func (i *Installer) holderID() string {
-	if i == nil {
-		return ""
-	}
-	return strings.TrimSpace(i.HolderID)
 }
 
 func (i *Installer) now() time.Time {
