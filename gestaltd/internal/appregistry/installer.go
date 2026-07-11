@@ -85,14 +85,14 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 	registry, ok := i.Registries[registryName]
 	if !ok {
-		return nil, fmt.Errorf("app registry not found")
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("app registry not found"))
 	}
 	if strings.TrimSpace(registry.Kind) != config.AppRegistryKindGCS {
-		return nil, fmt.Errorf("unsupported app registry kind")
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("unsupported app registry kind"))
 	}
 	publicRoot, err := registry.PublicURL()
 	if err != nil {
-		return nil, fmt.Errorf("app registry public URL is invalid: %w", err)
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("app registry public URL is invalid: %w", err))
 	}
 
 	reader := i.Reader
@@ -101,30 +101,30 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 	entry, err := reader.FetchEntry(ctx, publicRoot, appName, version)
 	if err != nil {
-		return nil, fmt.Errorf("fetch app registry entry: %w", err)
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("fetch app registry entry: %w", err))
 	}
 	if entry.App != appName {
-		return nil, fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName)
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName))
 	}
 	if entry.Version != version {
-		return nil, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version)
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version))
 	}
 
 	platform := providerpkg.CurrentPlatformString()
 	artifact, ok := entry.Artifacts[platform]
 	if !ok {
-		return nil, fmt.Errorf("registry entry has no artifact for platform %q", platform)
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("registry entry has no artifact for platform %q", platform))
 	}
 	artifactURL := strings.TrimSpace(artifact.PublicURL)
 	if artifactURL == "" {
 		artifactURL = strings.TrimSpace(artifact.URL)
 	}
 	if artifactURL == "" {
-		return nil, fmt.Errorf("registry entry artifact for platform %q has no download URL", platform)
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("registry entry artifact for platform %q has no download URL", platform))
 	}
 	expectedSHA := strings.TrimSpace(artifact.SHA256)
 	if expectedSHA == "" {
-		return nil, fmt.Errorf("registry entry artifact for platform %q is missing sha256", platform)
+		return i.failInstall(ctx, appName, version, actor, registryName, fmt.Errorf("registry entry artifact for platform %q is missing sha256", platform))
 	}
 
 	entryURL := PublicURL(publicRoot, AppVersionEntryPath(appName, version))
