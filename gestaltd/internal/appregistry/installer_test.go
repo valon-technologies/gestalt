@@ -265,6 +265,45 @@ func TestInstallerInstallFailureHandling(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "pending_retry_preserves_gold",
+			seed: func(t *testing.T, services *testutil.Services) {
+				t.Helper()
+				if _, err := services.AppInstallations.PutInstallation(t.Context(), &core.AppInstallation{
+					AppName:                 "g-issues",
+					VersionConstraint:       fixture.Version,
+					ResolvedVersion:         fixture.Version,
+					Registry:                "toolshed",
+					RolloutStatus:           core.AppInstallationRolloutStatusPending,
+					PreviousResolvedVersion: goldVersion,
+				}); err != nil {
+					t.Fatalf("PutInstallation: %v", err)
+				}
+			},
+			run: func(t *testing.T, installer *appregistry.Installer) {
+				t.Helper()
+				_, err := installer.Install(t.Context(), appregistry.InstallInput{
+					Registry: "toolshed",
+					App:      "g-issues",
+					Version:  fixture.Version,
+				})
+				if err == nil {
+					t.Fatal("expected install failure")
+				}
+			},
+			want: func(t *testing.T, stored *core.AppInstallation) {
+				t.Helper()
+				if stored.RolloutStatus != core.AppInstallationRolloutStatusFailed {
+					t.Fatalf("rollout_status = %q, want failed", stored.RolloutStatus)
+				}
+				if stored.ResolvedVersion != goldVersion {
+					t.Fatalf("resolved_version = %q, want %q", stored.ResolvedVersion, goldVersion)
+				}
+				if stored.PreviousResolvedVersion != goldVersion {
+					t.Fatalf("previous_resolved_version = %q, want %q", stored.PreviousResolvedVersion, goldVersion)
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
