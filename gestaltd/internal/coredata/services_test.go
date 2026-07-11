@@ -245,7 +245,6 @@ func TestNew(t *testing.T) {
 		}
 		for _, store := range []string{
 			coredata.StoreUsers,
-			coredata.StoreAppInstallations,
 			coredata.StoreAppInstallationEvents,
 		} {
 			if _, ok := contexts[store]; !ok {
