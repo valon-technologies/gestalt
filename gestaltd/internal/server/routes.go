@@ -93,10 +93,17 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 
 func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 	r.Route("/admin/api/v1", func(r chi.Router) {
-		r.Use(middleware.Timeout(60 * time.Second))
 		r.Use(s.adminAPIAuthMiddleware)
-		s.mountAdminRuntimeRoutes(r)
-		s.mountAdminAppRegistryRoutes(r)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(60 * time.Second))
+			s.mountAdminRuntimeRoutes(r)
+			s.mountAdminAppRegistryRoutes(r)
+			s.mountAdminAppInstallReadRoutes(r)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(10 * time.Minute))
+			s.mountAdminAppInstallWriteRoutes(r)
+		})
 	})
 }
 
