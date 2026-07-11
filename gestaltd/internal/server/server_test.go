@@ -2740,18 +2740,6 @@ func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, r
 	return &proto.ListRelationshipsResponse{Relationships: out}, nil
 }
 
-type serviceAccountCredentialAuthorizationProvider struct {
-	core.AuthorizationProvider
-
-	allowed  bool
-	requests []*proto.CheckAccessRequest
-}
-
-func (p *serviceAccountCredentialAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	p.requests = append(p.requests, req)
-	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
-}
-
 func (p *serverTestAuthorizationProvider) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
 	name := strings.TrimSpace(req.GetFilter().GetName())
 	out := []*proto.AuthorizationModelResourceType{}
@@ -8906,7 +8894,7 @@ func TestStartIntegrationOAuth_ServiceAccountIDStoresCredentialForServiceAccount
 	const serviceAccountSubjectID = "service_account:oauth-bot"
 
 	svc := testutil.NewStubServices(t)
-	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+	authz := coretesting.NewStubAuthorizationProvider()
 
 	handler := &testOAuthHandler{
 		authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
@@ -8980,10 +8968,10 @@ func TestStartIntegrationOAuth_ServiceAccountIDStoresCredentialForServiceAccount
 	if tokens[0].Grant == nil || tokens[0].Grant.AccessToken != "service-account-oauth-token" {
 		t.Fatalf("stored grant = %+v, want access token service-account-oauth-token", tokens[0].Grant)
 	}
-	if len(authz.requests) != 1 {
-		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	if len(authz.Requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.Requests))
 	}
-	authReq := authz.requests[0]
+	authReq := authz.Requests[0]
 	if authReq.GetSubject().GetType() != "subject" || !strings.HasPrefix(authReq.GetSubject().GetId(), "user:") {
 		t.Fatalf("authorization subject = %+v, want user subject", authReq.GetSubject())
 	}
@@ -14392,7 +14380,7 @@ func TestConnectManual_ServiceAccountIDStoresCredentialForServiceAccount(t *test
 	const serviceAccountSubjectID = "service_account:manual-bot"
 
 	svc := testutil.NewStubServices(t)
-	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+	authz := coretesting.NewStubAuthorizationProvider()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
@@ -14431,10 +14419,10 @@ func TestConnectManual_ServiceAccountIDStoresCredentialForServiceAccount(t *test
 	if tokens[0].Grant == nil || tokens[0].Grant.AccessToken != "manual-service-account-token" {
 		t.Fatalf("stored grant = %+v, want access token manual-service-account-token", tokens[0].Grant)
 	}
-	if len(authz.requests) != 1 {
-		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	if len(authz.Requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.Requests))
 	}
-	authReq := authz.requests[0]
+	authReq := authz.Requests[0]
 	if authReq.GetSubject().GetType() != "subject" || !strings.HasPrefix(authReq.GetSubject().GetId(), "user:") {
 		t.Fatalf("authorization subject = %+v, want user subject", authReq.GetSubject())
 	}
@@ -14459,7 +14447,7 @@ func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSub
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
 	apiToken := scopedTestBearerToken(user.ID, "")
-	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+	authz := coretesting.NewStubAuthorizationProvider()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = testAuthStubForScopedBearer()
@@ -14489,10 +14477,10 @@ func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSub
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
 	}
-	if len(authz.requests) != 1 {
-		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	if len(authz.Requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.Requests))
 	}
-	authReq := authz.requests[0]
+	authReq := authz.Requests[0]
 	if got, want := authReq.GetSubject().GetId(), principal.UserSubjectID(user.ID); got != want {
 		t.Fatalf("authorization subject id = %q, want invoking subject %q", got, want)
 	}
@@ -14510,7 +14498,7 @@ func TestConnectManual_ServiceAccountIDRequiresManagesAuthorization(t *testing.T
 	const serviceAccountSubjectID = "service_account:manual-bot"
 
 	svc := testutil.NewStubServices(t)
-	authz := &serviceAccountCredentialAuthorizationProvider{allowed: false}
+	authz := &coretesting.StubAuthorizationProvider{Allowed: coretesting.BoolPtr(false)}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
@@ -14538,10 +14526,10 @@ func TestConnectManual_ServiceAccountIDRequiresManagesAuthorization(t *testing.T
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, want 403: %s", resp.StatusCode, body)
 	}
-	if len(authz.requests) != 1 {
-		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	if len(authz.Requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.Requests))
 	}
-	authReq := authz.requests[0]
+	authReq := authz.Requests[0]
 	if got := authReq.GetAction().GetName(); got != "manages" {
 		t.Fatalf("authorization action = %q, want manages", got)
 	}
@@ -14569,7 +14557,7 @@ func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t 
 	testutil.CloseOnCleanup(t, discoverySrv)
 
 	svc := testutil.NewStubServices(t)
-	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+	authz := coretesting.NewStubAuthorizationProvider()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -14629,7 +14617,7 @@ func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t 
 		t.Fatalf("connect response = %+v, want selection_required with pending token", connectResp)
 	}
 
-	authz.allowed = false
+	authz.Allowed = coretesting.BoolPtr(false)
 	form := url.Values{
 		"pending_token":   {connectResp.PendingToken},
 		"candidate_index": {"0"},
@@ -14646,10 +14634,10 @@ func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t 
 		body, _ := io.ReadAll(selectResp.Body)
 		t.Fatalf("select status = %d, want 403: %s", selectResp.StatusCode, body)
 	}
-	if len(authz.requests) != 2 {
-		t.Fatalf("authorization requests = %d, want 2", len(authz.requests))
+	if len(authz.Requests) != 2 {
+		t.Fatalf("authorization requests = %d, want 2", len(authz.Requests))
 	}
-	for idx, authReq := range authz.requests {
+	for idx, authReq := range authz.Requests {
 		if got := authReq.GetAction().GetName(); got != "manages" {
 			t.Fatalf("authorization request %d action = %q, want manages", idx, got)
 		}

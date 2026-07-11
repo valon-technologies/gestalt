@@ -55,7 +55,7 @@ func TestAuthorizeUsesAuthorizationProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
-	authorization := &stubAuthorizationProvider{}
+	authorization := &coretesting.StubAuthorizationProvider{}
 	transport := NewProviderGatewayTransport()
 	transport.SetAuthorizationProvider(authorization)
 	transport.SetCallerTokenPublicKey(publicKeyPEM)
@@ -71,22 +71,22 @@ func TestAuthorizeUsesAuthorizationProvider(t *testing.T) {
 	if !allowed {
 		t.Fatal("Authorize allowed = false, want true")
 	}
-	if !authorization.called {
+	if !authorization.Called {
 		t.Fatal("authorization provider was not called")
 	}
-	if got := authorization.request.GetSubject().GetType(); got != "subject" {
+	if got := authorization.Request.GetSubject().GetType(); got != "subject" {
 		t.Fatalf("Subject.Type = %q, want %q", got, "subject")
 	}
-	if got := authorization.request.GetSubject().GetId(); got != "user:alice" {
+	if got := authorization.Request.GetSubject().GetId(); got != "user:alice" {
 		t.Fatalf("Subject.Id = %q, want %q", got, "user:alice")
 	}
-	if got := authorization.request.GetAction().GetName(); got != "CheckAccess" {
+	if got := authorization.Request.GetAction().GetName(); got != "CheckAccess" {
 		t.Fatalf("Action.Name = %q, want %q", got, "CheckAccess")
 	}
-	if got := authorization.request.GetResource().GetType(); got != "provider" {
+	if got := authorization.Request.GetResource().GetType(); got != "provider" {
 		t.Fatalf("Resource.Type = %q, want %q", got, "provider")
 	}
-	if got := authorization.request.GetResource().GetId(); got != "authz-primary" {
+	if got := authorization.Request.GetResource().GetId(); got != "authz-primary" {
 		t.Fatalf("Resource.Id = %q, want %q", got, "authz-primary")
 	}
 }
@@ -107,7 +107,7 @@ func TestAuthorizeShadowModeAllowsDeniedRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
-	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
+	authorization := &coretesting.StubAuthorizationProvider{Allowed: coretesting.BoolPtr(false)}
 	transport := NewProviderGatewayTransport()
 	transport.SetAuthorizationProvider(authorization)
 	transport.SetCallerTokenPublicKey(publicKeyPEM)
@@ -123,7 +123,7 @@ func TestAuthorizeShadowModeAllowsDeniedRequests(t *testing.T) {
 	if !allowed {
 		t.Fatal("Authorize allowed = false, want true in shadow mode")
 	}
-	if !authorization.called {
+	if !authorization.Called {
 		t.Fatal("authorization provider was not called")
 	}
 }
@@ -147,7 +147,7 @@ func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
-	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
+	authorization := &coretesting.StubAuthorizationProvider{Allowed: coretesting.BoolPtr(false)}
 	transport := NewProviderGatewayTransport()
 	transport.SetAuthorizationProvider(authorization)
 	transport.SetCallerTokenPublicKey(publicKeyPEM)
@@ -200,7 +200,7 @@ func TestProviderGatewayTransportAuthorizesThenInvokesNext(t *testing.T) {
 func TestProviderGatewayTransportStoresAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
-	authorization := &stubAuthorizationProvider{}
+	authorization := &coretesting.StubAuthorizationProvider{}
 	transport := NewProviderGatewayTransport()
 
 	transport.SetAuthorizationProvider(authorization)
@@ -229,64 +229,6 @@ func TestDirectTransportInvokesNext(t *testing.T) {
 		t.Fatal("next was not called")
 	}
 }
-
-type stubAuthorizationProvider struct {
-	called        bool
-	allowedResult *bool
-	ctx           context.Context
-	request       *proto.CheckAccessRequest
-}
-
-func (p *stubAuthorizationProvider) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	p.called = true
-	p.ctx = ctx
-	p.request = req
-	allowed := true
-	if p.allowedResult != nil {
-		allowed = *p.allowedResult
-	}
-	return &proto.CheckAccessResponse{Allowed: allowed}, nil
-}
-
-func boolPtr(value bool) *bool {
-	return &value
-}
-
-func (p *stubAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
-	return &proto.CheckAccessManyResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return &proto.ListRelationshipsResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	return &proto.AddRelationshipResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
-	return &proto.DeleteRelationshipResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
-	return &proto.SetAuthorizationStateResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
-	return &proto.GetActiveModelRefResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
-	return &proto.SetActiveModelResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	return &proto.ListActiveModelResourceTypesResponse{}, nil
-}
-
-func (p *stubAuthorizationProvider) Ping(context.Context) error { return nil }
-
-func (p *stubAuthorizationProvider) Close() error { return nil }
 
 func TestDirectTransportInvokeRecordsMetrics(t *testing.T) {
 	t.Parallel()
@@ -451,7 +393,7 @@ func TestPreparePublicRequest(t *testing.T) {
 		wantSubject  string
 		setup        func(*ProviderGatewayTransport)
 		checkAdapted func(t *testing.T, adapted gproto.Message)
-		checkAuth    func(t *testing.T, auth *stubAuthorizationProvider)
+		checkAuth    func(t *testing.T, auth *coretesting.StubAuthorizationProvider)
 	}{
 		{
 			name:       "app invoke fills context",
@@ -531,9 +473,9 @@ func TestPreparePublicRequest(t *testing.T) {
 					t.Fatalf("context.subject.id = %q, want %q", out.GetContext().GetSubject().GetId(), "user:alice")
 				}
 			},
-			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {
+			checkAuth: func(t *testing.T, auth *coretesting.StubAuthorizationProvider) {
 				t.Helper()
-				if got := auth.request.GetResource().GetId(); got != "roadmap" {
+				if got := auth.Request.GetResource().GetId(); got != "roadmap" {
 					t.Fatalf("Resource.Id = %q, want %q", got, "roadmap")
 				}
 			},
@@ -655,7 +597,7 @@ func TestPreparePublicRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			authorization := &stubAuthorizationProvider{allowedResult: tc.authAllow}
+			authorization := &coretesting.StubAuthorizationProvider{Allowed: tc.authAllow}
 			identity := &coretesting.StubAuthProvider{
 				IntrospectFn: func(context.Context, *core.IntrospectRequest) (*core.IntrospectResponse, error) {
 					return tc.introspect, nil
@@ -698,7 +640,7 @@ func TestPreparePublicRequest(t *testing.T) {
 				tc.checkAdapted(t, adapted)
 			}
 			if tc.checkAuth != nil {
-				if !authorization.called {
+				if !authorization.Called {
 					t.Fatal("authorization provider was not called")
 				}
 				tc.checkAuth(t, authorization)

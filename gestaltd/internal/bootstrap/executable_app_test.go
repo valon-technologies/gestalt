@@ -101,52 +101,6 @@ type nestedInvokeHarness struct {
 	services *coredata.Services
 }
 
-type allowAllAuthorizationProvider struct{}
-
-func newAllowAllAuthorizationProvider() core.AuthorizationProvider {
-	return &allowAllAuthorizationProvider{}
-}
-
-func (p *allowAllAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	return &proto.CheckAccessResponse{Allowed: true}, nil
-}
-
-func (p *allowAllAuthorizationProvider) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
-	resp := &proto.CheckAccessManyResponse{Decisions: make([]*proto.CheckAccessResponse, 0, len(req.GetRequests()))}
-	for range req.GetRequests() {
-		decision, err := p.CheckAccess(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-		resp.Decisions = append(resp.Decisions, decision)
-	}
-	return resp, nil
-}
-
-func (p *allowAllAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return &proto.ListRelationshipsResponse{}, nil
-}
-func (p *allowAllAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	return &proto.AddRelationshipResponse{}, nil
-}
-func (p *allowAllAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
-	return &proto.DeleteRelationshipResponse{}, nil
-}
-func (p *allowAllAuthorizationProvider) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
-	return &proto.SetAuthorizationStateResponse{}, nil
-}
-func (p *allowAllAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
-	return &proto.GetActiveModelRefResponse{}, nil
-}
-func (p *allowAllAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
-	return &proto.SetActiveModelResponse{}, nil
-}
-func (p *allowAllAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	return &proto.ListActiveModelResourceTypesResponse{}, nil
-}
-func (p *allowAllAuthorizationProvider) Ping(context.Context) error { return nil }
-func (p *allowAllAuthorizationProvider) Close() error               { return nil }
-
 type workflowCapabilitiesAuthorizationProvider struct {
 	allowed map[string]map[string]struct{}
 }
@@ -2886,7 +2840,7 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
 		AppInvocation: bridge,
-		Authorization: newAllowAllAuthorizationProvider(),
+		Authorization: coretesting.NewStubAuthorizationProvider(),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -3006,7 +2960,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
 		AppInvocation: bridge,
-		Authorization: newAllowAllAuthorizationProvider(),
+		Authorization: coretesting.NewStubAuthorizationProvider(),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -3993,7 +3947,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey:   secret,
 		WorkflowManager: manager,
-		Authorization:   newAllowAllAuthorizationProvider(),
+		Authorization:   coretesting.NewStubAuthorizationProvider(),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -6193,7 +6147,7 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 		EncryptionKey:      secret,
 		AppInvocation:      bridge,
 		PublicHostServices: publicHostServices,
-		Authorization:      newAllowAllAuthorizationProvider(),
+		Authorization:      coretesting.NewStubAuthorizationProvider(),
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -6954,7 +6908,7 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 		EncryptionKey:      secret,
 		WorkflowManager:    manager,
 		PublicHostServices: publicHostServices,
-		Authorization:      newAllowAllAuthorizationProvider(),
+		Authorization:      coretesting.NewStubAuthorizationProvider(),
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 

@@ -34,7 +34,7 @@ func configurePublicGRPCTestServer(t *testing.T, cfg *server.Config, invoker *re
 		t.Fatalf("NewGeneratedRegistry: %v", err)
 	}
 	transport := providergateway.NewProviderGatewayTransport()
-	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+	authz := coretesting.NewStubAuthorizationProvider()
 	transport.SetIdentityProvider(testAuthStubForScopedBearer())
 	transport.SetPublicMethods(registry)
 	transport.SetAuthorizationProvider(authz)
@@ -96,16 +96,6 @@ func publicGRPCRemoteClientSet(t *testing.T, ts *httptest.Server, scope string) 
 	return clients
 }
 
-func remoteRoutingAppStub(name, operation string) *coretesting.StubIntegration {
-	return &coretesting.StubIntegration{
-		N:        name,
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{
-			Operations: []catalog.CatalogOperation{{ID: operation}},
-		},
-	}
-}
-
 // TestPublicGRPCRouting verifies public gRPC wiring end-to-end: bearer-authenticated
 // gRPC is handled by the public gateway surface, while host-service relay traffic
 // continues through the trusted relay path. Individual RPC policy and per-service
@@ -119,8 +109,8 @@ func TestPublicGRPCRouting(t *testing.T) {
 		stubDB := &coretesting.StubIndexedDB{}
 		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t,
-				remoteRoutingAppStub("linear", "issues.list"),
-				remoteRoutingAppStub("valon-profile", "issues.list"),
+				coretesting.AppRoutingStub("linear", "issues.list"),
+				coretesting.AppRoutingStub("valon-profile", "issues.list"),
 			)
 			cfg.IndexedDB = stubDB
 		})
@@ -194,9 +184,9 @@ func TestPublicGRPCRouting(t *testing.T) {
 	t.Run("app invoke skips gateway authorization", func(t *testing.T) {
 		t.Parallel()
 
-		deniedAuthz := &serviceAccountCredentialAuthorizationProvider{allowed: false}
+		deniedAuthz := &coretesting.StubAuthorizationProvider{Allowed: coretesting.BoolPtr(false)}
 		ts, invoker := startPublicGRPCServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, remoteRoutingAppStub("linear", "issues.list"))
+			cfg.Providers = testutil.NewProviderRegistry(t, coretesting.AppRoutingStub("linear", "issues.list"))
 			cfg.Authorization = deniedAuthz
 			cfg.PublicGatewayTransport.SetAuthorizationProvider(deniedAuthz)
 		})
@@ -224,8 +214,8 @@ func TestPublicGRPCRouting(t *testing.T) {
 		if !introspect.GetActive() {
 			t.Fatal("Introspect active = false, want true")
 		}
-		if len(deniedAuthz.requests) != 0 {
-			t.Fatalf("authorization requests = %d, want 0 at gateway", len(deniedAuthz.requests))
+		if len(deniedAuthz.Requests) != 0 {
+			t.Fatalf("authorization requests = %d, want 0 at gateway", len(deniedAuthz.Requests))
 		}
 	})
 
