@@ -196,8 +196,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, "", fmt.Errorf("materialize app artifact: %w", err))
 	}
 
-	backupPath, err := swapMaterializedArtifact(stagingPath, materializedPath)
-	if err != nil {
+	if err := promoteStagedArtifact(stagingPath, materializedPath); err != nil {
 		_ = os.RemoveAll(stagingPath)
 		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, "", err)
 	}
@@ -217,9 +216,8 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return nil
 	})
 	if err != nil {
-		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, backupPath, fmt.Errorf("write promoted app installation: %w", err))
+		return i.failInstall(ctx, appName, restoreBaseline, previousVersion, version, actor, registryName, materializedPath, fmt.Errorf("write promoted app installation: %w", err))
 	}
-	_ = os.RemoveAll(backupPath)
 
 	i.appendInstallEventBestEffort(ctx, &core.AppInstallationEvent{
 		InstallationID: appName,
@@ -239,10 +237,11 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}, nil
 }
 
-func (i *Installer) failInstall(ctx context.Context, appName string, restoreBaseline *core.AppInstallation, previousVersion, version, actor, registryName, backupPath string, cause error) (*InstallOutput, error) {
-	if backupPath != "" {
-		materializedPath := strings.TrimSuffix(backupPath, ".backup")
-		restoreMaterializationBackup(materializedPath, backupPath)
+func (i *Installer) failInstall(ctx context.Context, appName string, restoreBaseline *core.AppInstallation, previousVersion, version, actor, registryName, materializedPath string, cause error) (*InstallOutput, error) {
+	if materializedPath != "" {
+		if err := os.RemoveAll(materializedPath); err != nil {
+			return nil, fmt.Errorf("%w; also failed to remove materialized artifacts: %v", cause, err)
+		}
 	}
 	cleanupCtx := context.WithoutCancel(ctx)
 	_, updateErr := i.Installations.UpdateInstallation(cleanupCtx, appName, func(installation *core.AppInstallation) error {
@@ -281,23 +280,16 @@ func (i *Installer) failInstall(ctx context.Context, appName string, restoreBase
 	return nil, cause
 }
 
-func swapMaterializedArtifact(stagingPath, materializedPath string) (backupPath string, err error) {
-	backupPath = materializedPath + ".backup"
-	if err := os.RemoveAll(backupPath); err != nil {
-		return "", fmt.Errorf("reset materialization backup directory: %w", err)
-	}
-	if _, err := os.Stat(materializedPath); err == nil {
-		if err := os.Rename(materializedPath, backupPath); err != nil {
-			return "", fmt.Errorf("backup current materialization directory: %w", err)
-		}
-	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("stat materialization directory: %w", err)
+func promoteStagedArtifact(stagingPath, materializedPath string) error {
+	// materializedPath is always {artifactsDir}/registry-installed/{app}/{newVersion}/.
+	// Prior promoted versions live under sibling directories and are never moved.
+	if err := os.RemoveAll(materializedPath); err != nil {
+		return fmt.Errorf("reset materialization directory: %w", err)
 	}
 	if err := os.Rename(stagingPath, materializedPath); err != nil {
-		restoreMaterializationBackup(materializedPath, backupPath)
-		return backupPath, fmt.Errorf("promote staged app artifact: %w", err)
+		return fmt.Errorf("promote staged app artifact: %w", err)
 	}
-	return backupPath, nil
+	return nil
 }
 
 func previousVersionForInstall(existing *core.AppInstallation) string {
@@ -401,18 +393,6 @@ func restoredInstallationAfterFailure(prior *core.AppInstallation, actor, regist
 		return restored
 	default:
 		return nil
-	}
-}
-
-func restoreMaterializationBackup(materializedPath, backupPath string) {
-	_, err := os.Stat(backupPath)
-	if err == nil {
-		_ = os.RemoveAll(materializedPath)
-		_ = os.Rename(backupPath, materializedPath)
-		return
-	}
-	if os.IsNotExist(err) {
-		_ = os.RemoveAll(materializedPath)
 	}
 }
 
