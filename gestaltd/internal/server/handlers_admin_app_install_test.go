@@ -146,4 +146,41 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			t.Fatalf("list status = %d, want 400: %s", resp.StatusCode, raw)
 		}
 	})
+
+	t.Run("list_works_without_app_registries", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t)
+		testutil.CloseOnCleanup(t, ts)
+
+		listResp, err := http.Get(ts.URL + "/admin/api/v1/app-installations")
+		if err != nil {
+			t.Fatalf("GET app-installations: %v", err)
+		}
+		defer func() { _ = listResp.Body.Close() }()
+		if listResp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(listResp.Body)
+			t.Fatalf("list status = %d, want 200: %s", listResp.StatusCode, raw)
+		}
+	})
+
+	t.Run("install_without_app_registries_returns_not_found", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.ArtifactsDir = t.TempDir()
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := []byte(`{"version":"0.0.0-snapshot.v1"}`)
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST install: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusNotFound {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("install status = %d, want 404: %s", resp.StatusCode, raw)
+		}
+	})
 }

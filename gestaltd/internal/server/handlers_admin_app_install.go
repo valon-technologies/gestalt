@@ -208,9 +208,6 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 	if cfg.Services == nil || cfg.Services.AppInstallations == nil || cfg.Services.AppInstallationEvents == nil {
 		return nil
 	}
-	if len(cfg.AppRegistries) == 0 {
-		return nil
-	}
 	reader := cfg.AppRegistryReader
 	if reader == nil {
 		reader = &appregistry.RegistryReader{}
