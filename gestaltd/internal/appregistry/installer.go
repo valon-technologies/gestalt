@@ -249,21 +249,12 @@ func installWorkTimeout(lockTTL time.Duration) time.Duration {
 }
 
 func (i *Installer) materializePublishedPackage(ctx context.Context, packagePath, destDir, appName string) error {
-	if err := ctx.Err(); err != nil {
+	_, err := operator.InstallPublishedPackage(ctx, packagePath, destDir, appName)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return fmt.Errorf("%w: %w", ErrInstallTimedOut, err)
+		}
 		return err
 	}
-	type materializeResult struct {
-		err error
-	}
-	done := make(chan materializeResult, 1)
-	go func() {
-		_, err := operator.InstallPublishedPackage(packagePath, destDir, appName)
-		done <- materializeResult{err: err}
-	}()
-	select {
-	case res := <-done:
-		return res.err
-	case <-ctx.Done():
-		return fmt.Errorf("%w: %w", ErrInstallTimedOut, ctx.Err())
-	}
+	return nil
 }
