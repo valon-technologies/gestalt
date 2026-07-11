@@ -46,18 +46,6 @@ func recTime(rec idb.Record, key string) time.Time {
 	}
 }
 
-func recStringMap(rec idb.Record, key string) map[string]string {
-	raw := recJSON(rec, key)
-	if len(raw) == 0 {
-		return nil
-	}
-	out := make(map[string]string)
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil
-	}
-	return out
-}
-
 func recAnyMap(rec idb.Record, key string) map[string]any {
 	raw := recJSON(rec, key)
 	if len(raw) == 0 {
