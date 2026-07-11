@@ -10,6 +10,7 @@ const (
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
 	StoreAppSHAs                       = "app_shas"
 	StoreAppVersionCatalog             = "app_version_catalog"
+	StoreAppVersionInstallLocks        = "app_version_install_locks"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -68,6 +69,21 @@ var AppVersionCatalogSchema = idb.ObjectStoreOptions{
 		{Name: "actor", Type: idb.TypeString},
 		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},
 		{Name: "metadata_json", Type: idb.TypeJSON},
+	},
+}
+
+var AppVersionInstallLocksSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_app_version", KeyPath: []string{"app", "version"}, Unique: true},
+		{Name: "by_expires_at", KeyPath: []string{"expires_at"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeString, NotNull: true},
+		{Name: "holder", Type: idb.TypeString, NotNull: true},
+		{Name: "acquired_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "expires_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
 

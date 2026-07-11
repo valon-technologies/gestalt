@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
@@ -155,6 +156,8 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 			status = http.StatusBadRequest
 		case errors.Is(err, appregistry.ErrRegistryDocumentNotFound):
 			status = http.StatusNotFound
+		case errors.Is(err, appregistry.ErrInstallVersionLocked):
+			status = http.StatusConflict
 		}
 		writeError(w, status, err.Error())
 		return
@@ -191,7 +194,7 @@ func adminAppInstallationFromCore(installation *core.AppInstallation) adminAppIn
 }
 
 func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
-	if cfg.Services == nil || cfg.Services.AppVersionCatalog == nil {
+	if cfg.Services == nil || cfg.Services.AppVersionCatalog == nil || cfg.Services.AppVersionInstallLocks == nil {
 		return nil
 	}
 	reader := cfg.AppRegistryReader
@@ -202,6 +205,8 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		Registries:   cloneAppRegistryConfig(cfg.AppRegistries),
 		Reader:       reader,
 		Catalog:      cfg.Services.AppVersionCatalog,
+		Locks:        cfg.Services.AppVersionInstallLocks,
+		HolderID:     uuid.NewString(),
 		ArtifactsDir: strings.TrimSpace(cfg.ArtifactsDir),
 	}
 }

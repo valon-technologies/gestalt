@@ -2,12 +2,12 @@ package appregistry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -26,9 +26,10 @@ type Installer struct {
 	Registries   map[string]config.AppRegistryConfig
 	Reader       *RegistryReader
 	Catalog      *coredata.AppVersionCatalogService
+	Locks        *coredata.AppVersionInstallLockService
+	HolderID     string
 	ArtifactsDir string
 	Now          func() time.Time
-	installLocks sync.Map // app name -> *sync.Mutex
 }
 
 type InstallInput struct {
@@ -64,8 +65,17 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return nil, fmt.Errorf("invalid app name: %w", err)
 	}
 
-	unlock := i.lockInstall(appName)
-	defer unlock()
+	if i.Locks != nil {
+		if err := i.Locks.Acquire(ctx, appName, version, i.holderID(), coredata.DefaultAppVersionInstallLockTTL); err != nil {
+			if errors.Is(err, coredata.ErrAppVersionInstallLockHeld) {
+				return nil, ErrInstallVersionLocked
+			}
+			return nil, fmt.Errorf("claim app version install lock: %w", err)
+		}
+		defer func() {
+			_ = i.Locks.Release(context.WithoutCancel(ctx), appName, version, i.holderID())
+		}()
+	}
 
 	if i.Catalog == nil {
 		return nil, fmt.Errorf("app version catalog service is not configured")
@@ -196,21 +206,18 @@ func (i *Installer) failInstall(ctx context.Context, appName, version, actor, re
 	return nil, cause
 }
 
-func (i *Installer) lockInstall(appName string) func() {
-	if i == nil {
-		return func() {}
-	}
-	value, _ := i.installLocks.LoadOrStore(appName, &sync.Mutex{})
-	mu := value.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
-}
-
 func (i *Installer) appendCatalogRecordBestEffort(ctx context.Context, record *core.AppVersionCatalogRecord) {
 	if i == nil || i.Catalog == nil || record == nil {
 		return
 	}
 	_, _ = i.Catalog.AppendRecord(context.WithoutCancel(ctx), record)
+}
+
+func (i *Installer) holderID() string {
+	if i == nil {
+		return ""
+	}
+	return strings.TrimSpace(i.HolderID)
 }
 
 func (i *Installer) now() time.Time {

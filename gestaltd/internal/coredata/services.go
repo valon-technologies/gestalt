@@ -9,11 +9,12 @@ import (
 )
 
 type Services struct {
-	Users               *UserService
-	ExternalCredentials core.ExternalCredentialProvider
-	ManagedSubjects     *ManagedSubjectService
-	AppVersionCatalog   *AppVersionCatalogService
-	DB                  indexeddb.IndexedDB
+	Users                  *UserService
+	ExternalCredentials    core.ExternalCredentialProvider
+	ManagedSubjects        *ManagedSubjectService
+	AppVersionCatalog      *AppVersionCatalogService
+	AppVersionInstallLocks *AppVersionInstallLockService
+	DB                     indexeddb.IndexedDB
 }
 
 // NewOptions configures coredata bootstrap behavior.
@@ -48,16 +49,21 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionCatalog, AppVersionCatalogSchema); err != nil {
 			return nil, fmt.Errorf("create app_version_catalog store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionInstallLocks, AppVersionInstallLocksSchema); err != nil {
+			return nil, fmt.Errorf("create app_version_install_locks store: %w", err)
+		}
 	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
 	appVersionCatalog := NewAppVersionCatalogService(ds)
+	appVersionInstallLocks := NewAppVersionInstallLockService(ds)
 	return &Services{
-		ExternalCredentials: nil,
-		Users:               users,
-		ManagedSubjects:     managedSubjects,
-		AppVersionCatalog:   appVersionCatalog,
-		DB:                  ds,
+		ExternalCredentials:    nil,
+		Users:                  users,
+		ManagedSubjects:        managedSubjects,
+		AppVersionCatalog:      appVersionCatalog,
+		AppVersionInstallLocks: appVersionInstallLocks,
+		DB:                     ds,
 	}, nil
 }
 
