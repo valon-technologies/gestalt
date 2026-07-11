@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	appInstallEventMetaRegistry            = "registry"
-	appInstallEventMetaMaterializedPath    = "materialized_path"
-	appInstallEventMetaVersionConstraint   = "version_constraint"
-	appInstallEventMetaSourceRef           = "source_ref"
-	appInstallEventMetaProviderReleaseURL  = "provider_release_url"
-	appInstallEventMetaArtifactChecksums   = "artifact_checksums"
-	appInstallEventMetaInstalledAt         = "installed_at"
+	appInstallEventMetaRegistry           = "registry"
+	appInstallEventMetaMaterializedPath   = "materialized_path"
+	appInstallEventMetaVersionConstraint  = "version_constraint"
+	appInstallEventMetaSourceRef          = "source_ref"
+	appInstallEventMetaProviderReleaseURL = "provider_release_url"
+	appInstallEventMetaArtifactChecksums  = "artifact_checksums"
+	appInstallEventMetaInstalledAt        = "installed_at"
 )
 
 // PromotedInstallationMetadata builds the metadata payload for a promoted event.

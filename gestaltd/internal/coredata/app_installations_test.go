@@ -426,10 +426,13 @@ func TestAppInstallationEventProjection(t *testing.T) {
 			t.Fatalf("coredata.New: %v", err)
 		}
 		ctx := context.Background()
+		firstAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+		secondAt := time.Date(2026, 7, 10, 13, 0, 0, 0, time.UTC)
 		if _, err := svc.AppInstallationEvents.AppendEvent(ctx, &core.AppInstallationEvent{
 			InstallationID: "g-issues",
 			ToVersion:      "v1",
 			Type:           core.AppInstallationEventTypePromoted,
+			Timestamp:      firstAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent: %v", err)
 		}
@@ -437,6 +440,7 @@ func TestAppInstallationEventProjection(t *testing.T) {
 			InstallationID: "g-issues",
 			ToVersion:      "v2",
 			Type:           core.AppInstallationEventTypeFailed,
+			Timestamp:      time.Date(2026, 7, 10, 12, 30, 0, 0, time.UTC),
 		}); err != nil {
 			t.Fatalf("AppendEvent failed: %v", err)
 		}
@@ -444,6 +448,7 @@ func TestAppInstallationEventProjection(t *testing.T) {
 			InstallationID: "g-issues",
 			ToVersion:      "v2",
 			Type:           core.AppInstallationEventTypePromoted,
+			Timestamp:      secondAt,
 		}); err != nil {
 			t.Fatalf("AppendEvent v2: %v", err)
 		}
