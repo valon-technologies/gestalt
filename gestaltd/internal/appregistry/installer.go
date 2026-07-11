@@ -269,7 +269,7 @@ func (i *Installer) failInstall(ctx context.Context, appName string, restoreBase
 		return nil, fmt.Errorf("%w; also failed to load current installation: %v", cause, getErr)
 	}
 	if pendingBaseline != nil {
-		if getErr == core.ErrNotFound || !installationMatchesInstallBaseline(current, pendingBaseline) {
+		if getErr == core.ErrNotFound || !coredata.InstallationMatchesBaseline(current, pendingBaseline) {
 			i.appendInstallEventBestEffort(cleanupCtx, &core.AppInstallationEvent{
 				InstallationID: appName,
 				FromVersion:    previousVersion,
@@ -452,18 +452,6 @@ func restoreMaterializationBackup(materializedPath, backupPath string) {
 	}
 	_ = os.RemoveAll(materializedPath)
 	_ = os.Rename(backupPath, materializedPath)
-}
-
-func installationMatchesInstallBaseline(current, baseline *core.AppInstallation) bool {
-	if baseline == nil {
-		return current == nil
-	}
-	if current == nil {
-		return false
-	}
-	return strings.TrimSpace(current.RolloutStatus) == strings.TrimSpace(baseline.RolloutStatus) &&
-		strings.TrimSpace(current.ResolvedVersion) == strings.TrimSpace(baseline.ResolvedVersion) &&
-		current.UpdatedAt.Equal(baseline.UpdatedAt)
 }
 
 func installationMatchesFailedAttempt(current *core.AppInstallation, attemptedVersion string) bool {

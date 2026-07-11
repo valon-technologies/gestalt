@@ -152,14 +152,15 @@ func (s *AppInstallationService) CompareAndSwapInstallation(ctx context.Context,
 		return nil, fmt.Errorf("compare and swap app installation: update is required")
 	}
 
-	tx, err := s.db.Transaction(ctx, []string{StoreAppInstallations}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	cleanupCtx := context.WithoutCancel(ctx)
+	tx, err := s.db.Transaction(cleanupCtx, []string{StoreAppInstallations}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("compare and swap app installation: %w", err)
 	}
 	committed := false
 	defer func() {
 		if !committed {
-			_ = tx.Abort(ctx)
+			_ = tx.Abort(cleanupCtx)
 		}
 	}()
 
@@ -175,7 +176,7 @@ func (s *AppInstallationService) CompareAndSwapInstallation(ctx context.Context,
 		}
 	} else {
 		current = recordToAppInstallation(rec)
-		if !appInstallationMatchesBaseline(current, baseline) {
+		if !InstallationMatchesBaseline(current, baseline) {
 			return nil, ErrInstallationStateConflict
 		}
 	}
@@ -228,7 +229,7 @@ func (s *AppInstallationService) DeleteInstallation(ctx context.Context, appName
 	return nil
 }
 
-func appInstallationMatchesBaseline(current, baseline *core.AppInstallation) bool {
+func InstallationMatchesBaseline(current, baseline *core.AppInstallation) bool {
 	if baseline == nil {
 		return current == nil
 	}
