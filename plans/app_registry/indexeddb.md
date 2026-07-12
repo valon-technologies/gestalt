@@ -72,6 +72,8 @@ Bootstrap does **not** write catalog records. After deploy the store is empty un
 
 Contrast with `app_shas`: bootstrap **does** read and update that store during artifact sync (`gestaltd/internal/bootstrap/app_shas.go`).
 
+Bootstrap starts background catalog convergence when `appRegistries` and IndexedDB catalog services are configured. See `appregistry.Converger` in `gestaltd/internal/appregistry/converger.go`, started from `gestaltd/internal/server/runtime.go` on `gestaltd serve`.
+
 Access install services after bootstrap via `Result.Services` / `prepared.Services`:
 
 ```text

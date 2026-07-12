@@ -213,3 +213,11 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		ArtifactsDir: strings.TrimSpace(cfg.ArtifactsDir),
 	}
 }
+
+func newAppRegistryConverger(cfg Config) *appregistry.Converger {
+	installer := newAppRegistryInstaller(cfg)
+	if installer == nil || cfg.Services == nil || cfg.Services.AppVersionCatalog == nil {
+		return nil
+	}
+	return appregistry.NewConverger(installer, cfg.Services.AppVersionCatalog)
+}

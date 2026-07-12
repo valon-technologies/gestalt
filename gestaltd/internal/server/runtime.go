@@ -146,6 +146,10 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		return fmt.Errorf("creating public server: %w", err)
 	}
 
+	if converger := newAppRegistryConverger(publicConfig); converger != nil {
+		converger.StartBackground(ctx)
+	}
+
 	servers := []namedHTTPServer{{
 		name:   "public",
 		server: newHTTPServer(cfg.Server.PublicAddr(), publicHandler),

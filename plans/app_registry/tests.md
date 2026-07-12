@@ -19,6 +19,7 @@ Related docs:
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/coredata` | `app_version_catalog_test.go` | 5 | Unit (projection) | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
+| `internal/appregistry` | `converger_test.go` | 2 | Unit (convergence) | step 7 |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -110,6 +111,23 @@ go test ./internal/coredata/... -run TestAppVersionCatalog -count=1
 
 ---
 
+## Step 7: lazy local materialization
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry/... -run TestConverger -count=1
+```
+
+### `converger_test.go`
+
+- **`TestConverger_materializes_catalog_known_version_locally`** — catalog `version_added` without local artifacts; `ConvergeOnce` downloads and extracts to this instance's artifacts dir.
+
+- **`TestConverger_skips_already_materialized_version`** — after a successful install, convergence is a no-op.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:
@@ -117,6 +135,7 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Real GCS upload integration
 - Failed install `install_failed` record assertions
 - Re-install idempotency (no duplicate `version_added`)
-- Lazy per-instance materialization on other instances
+- Lazy per-instance materialization on other instances (startup convergence — see step 7 tests below)
+- First-request convergence and `app_instance_materializations` IndexedDB store
 
 See [plan.md](./plan.md) steps 7–8 for planned follow-up coverage.

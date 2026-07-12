@@ -236,7 +236,7 @@ The install request should not directly command every instance. Instead, the han
 
 **Step 6 (implemented):** only the handling instance materializes artifacts and appends catalog records. Other instances do not read install state yet.
 
-**Step 7 (planned):** each instance reads known versions from `app_version_catalog`, then lazily materializes missing versions locally.
+**Step 7 (implemented):** each instance reads known versions from `app_version_catalog` on startup and lazily materializes missing versions locally in a background convergence loop (`appregistry.Converger`). Per-instance `app_instance_materializations` IndexedDB tracking, first-request convergence, and dynamic runtime binding remain planned follow-ups.
 
 The expected flow is:
 
@@ -333,5 +333,5 @@ Core recovery paths must not depend on dynamically installed apps.
 4. Prototype a Gestalt endpoint that lists available versions in configured registries. See [api.md](./api.md).
 5. Add IndexedDB version catalog store and projection helpers (`app_version_catalog` + known-version views). See [indexeddb.md](./indexeddb.md).
 6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog-only writes; `app_installations` store removed. See [api.md](./api.md), [tests.md](./tests.md).
-7. Add lazy per-instance materialization on startup or first request — each instance reads known versions from the catalog and materializes locally.
+7. Add lazy per-instance materialization on startup or first request — each instance reads known versions from the catalog and materializes locally. **Done (startup):** background `Converger` on `gestaltd serve`. **Planned:** first-request convergence, `app_instance_materializations` store, runtime app binding, 503 until ready.
 8. Add install-time validation, fleet activation/rollback, and concurrency guards.

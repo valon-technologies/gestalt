@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -99,79 +98,24 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if artifactsDir == "" {
 		return nil, fmt.Errorf("artifacts directory is not configured")
 	}
-	registry, ok := i.Registries[registryName]
-	if !ok {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("app registry not found"))
-	}
-	if strings.TrimSpace(registry.Kind) != config.AppRegistryKindGCS {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("unsupported app registry kind"))
-	}
-	publicRoot, err := registry.PublicURL()
-	if err != nil {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("app registry public URL is invalid: %w", err))
-	}
 
-	reader := i.Reader
-	if reader == nil {
-		reader = &RegistryReader{}
-	}
-	entry, err := reader.FetchEntry(installCtx, publicRoot, appName, version)
-	if err != nil {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("fetch app registry entry: %w", err))
-	}
-	if entry.App != appName {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName))
-	}
-	if entry.Version != version {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version))
-	}
-
-	platform := providerpkg.CurrentPlatformString()
-	artifact, ok := entry.Artifacts[platform]
-	if !ok {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("registry entry has no artifact for platform %q", platform))
-	}
-	artifactURL := strings.TrimSpace(artifact.PublicURL)
-	if artifactURL == "" {
-		artifactURL = strings.TrimSpace(artifact.URL)
-	}
-	if artifactURL == "" {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("registry entry artifact for platform %q has no download URL", platform))
-	}
-	expectedSHA := strings.TrimSpace(artifact.SHA256)
-	if expectedSHA == "" {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("registry entry artifact for platform %q is missing sha256", platform))
-	}
-
-	entryURL := PublicURL(publicRoot, AppVersionEntryPath(appName, version))
-	checksums := map[string]string{platform: expectedSHA}
-	materializedPath := filepath.Join(artifactsDir, RegistryInstallSubdir, appName, version)
-
-	download, err := downloadRegistryArtifact(installCtx, reader.client(), artifactURL)
+	materialized, err := i.materializeRegistryVersion(installCtx, materializeRegistryVersionInput{
+		registryName: registryName,
+		appName:      appName,
+		version:      version,
+	})
 	if err != nil {
 		return i.failInstall(installCtx, appName, version, actor, registryName, err)
-	}
-	defer func() {
-		if download.Cleanup != nil {
-			download.Cleanup()
-		}
-	}()
-	if !strings.EqualFold(strings.TrimSpace(download.SHA256Hex), expectedSHA) {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA))
-	}
-
-	if err := i.materializePublishedPackage(installCtx, download.LocalPath, materializedPath, appName); err != nil {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("materialize app artifact: %w", err))
 	}
 
 	addedAt := i.now()
 	known := &core.AppInstallation{
 		AppName:            appName,
 		Version:            version,
-		SourceRef:          entry.SourceRef,
+		SourceRef:          materialized.entry.SourceRef,
 		Registry:           registryName,
-		ProviderReleaseURL: entryURL,
-		ArtifactChecksums:  checksums,
+		ProviderReleaseURL: materialized.entryURL,
+		ArtifactChecksums:  materialized.checksums,
 		InstalledBy:        actor,
 		InstalledAt:        addedAt,
 		UpdatedAt:          addedAt,
@@ -183,7 +127,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		Type:      core.AppVersionCatalogRecordTypeVersionAdded,
 		Actor:     actor,
 		Timestamp: addedAt,
-		Metadata:  coredata.VersionAddedMetadata(known, materializedPath),
+		Metadata:  coredata.VersionAddedMetadata(known, materialized.materializedPath),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("append version_added record: %w", err)
@@ -191,7 +135,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 
 	return &InstallOutput{
 		Installation:     coredata.InstallationFromVersionAddedRecord(addedRecord),
-		MaterializedPath: materializedPath,
+		MaterializedPath: materialized.materializedPath,
 	}, nil
 }
 
