@@ -1050,7 +1050,7 @@ func fakeHostedWorkflowManagerRoundTrip(reqCtx *proto.RequestContext, env map[st
 		Context:        reqCtx,
 		IdempotencyKey: "workflow-manager-roundtrip",
 		Spec: &proto.WorkflowDefinitionSpec{
-			Id: "workflow-manager-roundtrip",
+			Id:    "workflow-manager-roundtrip",
 			RunAs: "service_account:echoext-workflow",
 			Target: &proto.BoundWorkflowTarget{
 				Steps: []*proto.WorkflowStep{{

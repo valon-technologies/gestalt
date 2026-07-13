@@ -313,22 +313,6 @@ func (m *Manager) allowStoredTarget(ctx context.Context, p *principal.Principal,
 	return m.checkTargetAuthorization(ctx, p, target).allowed
 }
 
-func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
-	for stepIndex := range target.Steps {
-		step := target.Steps[stepIndex]
-		if step.Agent == nil {
-			continue
-		}
-		hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
-		for i := range step.Agent.ToolRefs {
-			if denied := m.checkWorkflowAgentToolAuthorization(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i); !denied.allowed {
-				return denied
-			}
-		}
-	}
-	return targetAuthorizationAllowed()
-}
-
 func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
 	if len(target.Steps) == 0 {
 		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingAppStep, "", "", -1)

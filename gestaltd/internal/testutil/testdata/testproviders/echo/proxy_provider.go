@@ -314,7 +314,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if runAs == "" {
 			runAs = "service_account:echo-workflow"
 		}
-		result, err := workflow.ApplyDefinition(ctx, gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
+		result, err := workflow.ApplyDefinition(ctx, "default", gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
 			Id:          input.DefinitionID,
 			Target:      target,
 			Activations: activations,
@@ -399,7 +399,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
 		result, err := workflow.DeliverEventRaw(ctx, &client.DeliverWorkflowProviderEventRequest{
-			Event: event,
+			ProviderName: "default",
+			Event:        event,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
