@@ -142,7 +142,7 @@ func (t *ProviderGatewayTransport) runAuthorizationCheck(
 	if t == nil || t.authorization == nil {
 		return true, nil, nil
 	}
-	resource, err := authorizationResource(providerID)
+	resource, err := authorizationResource(providerID, operation)
 	if err != nil {
 		return false, nil, err
 	}
@@ -176,13 +176,17 @@ func (t *ProviderGatewayTransport) authorizationSubject(callerToken string) (*pr
 	}, nil
 }
 
-func authorizationResource(providerID string) (*proto.Resource, error) {
+func authorizationResource(providerID, operation string) (*proto.Resource, error) {
 	providerID = strings.TrimSpace(providerID)
 	if providerID == "" {
 		return nil, fmt.Errorf("provider gateway: provider id is required")
 	}
+	resourceType := "provider"
+	if service, _ := splitFullMethod(operation); service == proto.Workflow_ServiceDesc.ServiceName {
+		resourceType = "workflow"
+	}
 	return &proto.Resource{
-		Type: "provider",
+		Type: resourceType,
 		Id:   providerID,
 	}, nil
 }
@@ -191,6 +195,9 @@ func authorizationAction(operation string) (*proto.Action, error) {
 	operation = strings.TrimSpace(operation)
 	if operation == "" {
 		return nil, fmt.Errorf("provider gateway: operation is required")
+	}
+	if service, method := splitFullMethod(operation); service == proto.Workflow_ServiceDesc.ServiceName {
+		return &proto.Action{Name: method}, nil
 	}
 	return &proto.Action{Name: operation}, nil
 }

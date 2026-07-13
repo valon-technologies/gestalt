@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -80,6 +81,29 @@ func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T)
 	runtime.PublishProvider("temporal", startupTestWorkflowProvider{})
 	if _, _, err := runtime.ResolveProvider(context.Background(), "temporal"); err == nil {
 		t.Fatal("configured provider was published after startup failure")
+	}
+}
+
+func TestWorkflowRuntimeConfiguredProviderNamesIncludesNonDefaultProviders(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newWorkflowRuntime(&config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"temporal": {},
+				"local":    {},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	runtime.InitProviderPlaceholders(map[string]*config.ProviderEntry{
+		"temporal": {},
+		"local":    {},
+	})
+	if got, want := runtime.ConfiguredProviderNames(), []string{"local", "temporal"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("ConfiguredProviderNames = %v, want %v", got, want)
 	}
 }
 

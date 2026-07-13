@@ -44,6 +44,14 @@ func (c *stubWorkflowControl) ResolveProvider(_ context.Context, name string) (s
 	return "", nil, core.ErrNotFound
 }
 
+func (c *stubWorkflowControl) DefaultProviderName() string {
+	name := strings.TrimSpace(c.defaultProviderName)
+	if name == "" {
+		name = "default"
+	}
+	return name
+}
+
 func (c *stubWorkflowControl) ProviderNames() []string {
 	if c.providers != nil {
 		out := make([]string, 0, len(c.providers))
@@ -175,10 +183,8 @@ func (p *memoryWorkflowProvider) DeliverEvent(_ context.Context, req *proto.Deli
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.deliveredEvents = append(p.deliveredEvents, &proto.DeliverWorkflowProviderEventRequest{
-		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      strings.TrimSpace(req.GetAppName()),
-		Event:        req.GetEvent(),
-		Context:      req.GetContext(),
+		Event:   req.GetEvent(),
+		Context: req.GetContext(),
 	})
 	return req.GetEvent(), nil
 }

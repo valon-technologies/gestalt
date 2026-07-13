@@ -26,10 +26,6 @@ function appStepTarget(appName: string, operation: string): BoundWorkflowTarget 
   });
 }
 
-function workflowSubjectFromContext(context: { subject?: { id?: string } | undefined } | undefined): string {
-  return context?.subject?.id ?? "";
-}
-
 export const provider = defineWorkflowProvider({
   displayName: "Fixture Workflow",
   description: "Workflow provider fixture used by SDK tests",
@@ -50,7 +46,6 @@ export const provider = defineWorkflowProvider({
       target: spec.target,
       activations: spec.activations,
       paused: spec.paused,
-      createdBySubjectId: workflowSubjectFromContext(request.context),
       updatedAt: new Date("2026-05-08T12:00:00.000Z"),
     });
     definitions.set(id, definition);
@@ -92,7 +87,6 @@ export const provider = defineWorkflowProvider({
       request.definitionId,
       request.workflowKey ?? "",
       request.input,
-      workflowSubjectFromContext(request.context),
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
     );
     runs.set(run.id ?? "", run);
@@ -147,7 +141,6 @@ export const provider = defineWorkflowProvider({
       request.definitionId,
       request.workflowKey,
       request.input,
-      workflowSubjectFromContext(request.context),
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
     );
     runs.set(run.id ?? "", run);
@@ -163,7 +156,7 @@ export const provider = defineWorkflowProvider({
     return workflowEvent({
       id: `delivered:${deliverCount}`,
       type: request.event?.type ?? "",
-      source: request.event?.source ?? request.appName ?? "",
+      source: request.event?.source ?? "",
     });
   },
   warnings() {
@@ -198,7 +191,6 @@ function createRun(
   definitionId: string | undefined,
   workflowKey: string | undefined,
   input: WorkflowRun["input"],
-  createdBySubjectId: WorkflowRun["createdBySubjectId"],
   statusMessage: string,
 ) {
   const definition = definitionId ? definitions.get(definitionId) : undefined;
@@ -209,7 +201,6 @@ function createRun(
     status: WorkflowRunStatus.PENDING,
     statusMessage,
     target,
-    createdBySubjectId,
     workflowKey,
     definitionId,
     definitionGeneration: definition?.generation,

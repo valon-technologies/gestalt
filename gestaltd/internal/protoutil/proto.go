@@ -72,21 +72,25 @@ func ValueFromAny(value any) (*structpb.Value, error) {
 	return structpb.NewValue(normalized)
 }
 
-// SetProviderNameIfEmpty sets provider_name on a protobuf request when absent.
+// SetProviderNameIfEmpty sets a provider field on a protobuf request when
+// absent. It also supports legacy provider_name requests used by other APIs.
 func SetProviderNameIfEmpty(req gproto.Message, name string) {
 	name = strings.TrimSpace(name)
 	if req == nil || name == "" {
 		return
 	}
 	msg := req.ProtoReflect()
-	field := msg.Descriptor().Fields().ByName("provider_name")
-	if field == nil || field.Kind() != protoreflect.StringKind {
+	for _, fieldName := range []protoreflect.Name{"provider", "provider_name"} {
+		field := msg.Descriptor().Fields().ByName(fieldName)
+		if field == nil || field.Kind() != protoreflect.StringKind {
+			continue
+		}
+		if strings.TrimSpace(msg.Get(field).String()) != "" {
+			return
+		}
+		msg.Set(field, protoreflect.ValueOfString(name))
 		return
 	}
-	if strings.TrimSpace(msg.Get(field).String()) != "" {
-		return
-	}
-	msg.Set(field, protoreflect.ValueOfString(name))
 }
 
 func normalizeStructMap(values map[string]any) (map[string]any, error) {

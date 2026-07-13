@@ -12,7 +12,7 @@ import {
 test("workflow execution helpers evaluate templates and paths", () => {
   const ctx: WorkflowEvalContext = {
     request: {
-      providerName: "indexeddb",
+      provider: "indexeddb",
       runId: "run-1",
       input: { customer: { id: "cust_1" } },
       signals: [{ id: "sig-1", payload: { thread: { ts: "123.456" } } }],
@@ -41,7 +41,7 @@ test("workflow execution helpers evaluate templates and paths", () => {
 test("workflow run context matches runtime shape", () => {
   const createdAt = new Date("2026-05-08T12:00:00.000Z");
   const ctx = workflowRunContext({
-    providerName: "indexeddb",
+    provider: "indexeddb",
     runId: "run-1",
     target: {
       steps: [{
@@ -54,7 +54,7 @@ test("workflow run context matches runtime shape", () => {
       }],
     },
     trigger: { manual: true },
-    createdBySubjectId: "user-1",
+    createdBy: "user-1",
     signals: [{
       id: "sig-1",
       name: "ready",
@@ -78,7 +78,7 @@ test("workflow run context matches runtime shape", () => {
     }],
   });
   expect(ctx.trigger.kind).toBe("manual");
-  expect(ctx.createdBySubjectId).toBe("user-1");
+  expect(ctx.createdBy).toBe("user-1");
   expect(ctx.signals[0]?.id).toBe("sig-1");
   expect(ctx.signals[0]?.name).toBe("ready");
   expect(ctx.signals[0]?.payload).toEqual({
@@ -103,7 +103,7 @@ test("workflow run context parses request workflow metadata", () => {
       },
       input: { repository: "valon/app" },
       metadata: { definitionId: "def-1" },
-      createdBySubjectId: "user-1",
+      createdBy: "user-1",
       signals: [
         "ignored",
         { id: "sig-1", name: "queued", payload: { state: "queued" } },
@@ -116,7 +116,7 @@ test("workflow run context parses request workflow metadata", () => {
             payloadOmitted: true,
           },
           metadata: { source: "webhook" },
-          createdBySubjectId: "bot-1",
+          createdBy: "bot-1",
           createdAt: "2026-05-08T12:01:00Z",
           idempotencyKey: "idem-1",
           sequence: 2,
@@ -133,12 +133,12 @@ test("workflow run context parses request workflow metadata", () => {
   expect(ctx.trigger.scheduledFor).toBe("2026-05-08T12:00:00Z");
   expect(ctx.input).toEqual({ repository: "valon/app" });
   expect(ctx.metadata).toEqual({ definitionId: "def-1" });
-  expect(ctx.createdBySubjectId).toBe("user-1");
+  expect(ctx.createdBy).toBe("user-1");
   expect(ctx.signals).toHaveLength(2);
   expect(ctx.latestSignal?.id).toBe("sig-2");
   expect(ctx.latestSignal?.payload.github_event).toBe("pull_request");
   expect(ctx.latestSignal?.metadata).toEqual({ source: "webhook" });
-  expect(ctx.latestSignal?.createdBySubjectId).toBe("bot-1");
+  expect(ctx.latestSignal?.createdBy).toBe("bot-1");
   expect(ctx.latestSignal?.sequence).toBe(2);
 });
 
@@ -157,7 +157,7 @@ test("workflow run context parser tolerates malformed values", () => {
     },
     input: "bad",
     metadata: ["bad"],
-    createdBySubjectId: {},
+    createdBy: {},
     signals: [
       { sequence: true, payload: "bad", metadata: { ok: true } },
       null,
@@ -175,7 +175,7 @@ test("workflow run context parser tolerates malformed values", () => {
   });
   expect(ctx.input).toEqual({});
   expect(ctx.metadata).toEqual({});
-  expect(ctx.createdBySubjectId).toBe("");
+  expect(ctx.createdBy).toBe("");
   expect(ctx.signals).toHaveLength(1);
   expect(ctx.signals[0]?.payload).toEqual({});
   expect(ctx.signals[0]?.metadata).toEqual({ ok: true });

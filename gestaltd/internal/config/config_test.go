@@ -3498,6 +3498,41 @@ server:
 		}
 	})
 
+	t.Run("empty scalar runAs is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+workflows:
+  definitions:
+    nightly:
+      provider: temporal
+      runAs: "  "
+      steps:
+        - id: main
+          app:
+            name: roadmap
+            operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load succeeded, want error")
+		}
+		if !strings.Contains(err.Error(), "workflows.definitions.nightly.runAs.subject.id is required") {
+			t.Fatalf("Load error = %v", err)
+		}
+	})
+
 	t.Run("workflow binding can select an explicit provider when multiple workflow providers exist", func(t *testing.T) {
 		t.Parallel()
 

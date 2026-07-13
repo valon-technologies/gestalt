@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -60,6 +59,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		return nil, err
 	}
 	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
+		Provider:                     providerName,
 		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
 		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
 		Input:                        inputProto,
@@ -77,12 +77,12 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	return &ManagedRun{ProviderName: providerName, Run: run, provider: provider}, nil
 }
 
-func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error) {
-	return m.requireOwnedRun(ctx, p, runID, "")
+func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, providerName, runID string) (*ManagedRun, error) {
+	return m.requireOwnedRun(ctx, p, runID, providerName)
 }
 
-func (m *Manager) GetRunEvents(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
-	value, err := m.requireOwnedRun(ctx, p, runID, "")
+func (m *Manager) GetRunEvents(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	value, err := m.requireOwnedRun(ctx, p, runID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +91,14 @@ func (m *Manager) GetRunEvents(ctx context.Context, p *principal.Principal, runI
 		return nil, err
 	}
 	return value.provider.GetRunEvents(ctx, &proto.GetWorkflowProviderRunEventsRequest{
-		RunId:   strings.TrimSpace(runID),
-		Context: reqContext,
+		Provider: strings.TrimSpace(value.ProviderName),
+		RunId:    strings.TrimSpace(runID),
+		Context:  reqContext,
 	})
 }
 
-func (m *Manager) GetRunOutput(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
-	value, err := m.requireOwnedRun(ctx, p, runID, "")
+func (m *Manager) GetRunOutput(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+	value, err := m.requireOwnedRun(ctx, p, runID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -106,12 +107,13 @@ func (m *Manager) GetRunOutput(ctx context.Context, p *principal.Principal, runI
 		return nil, err
 	}
 	return value.provider.GetRunOutput(ctx, &proto.GetWorkflowProviderRunOutputRequest{
-		RunId:   strings.TrimSpace(runID),
-		Context: reqContext,
+		Provider: strings.TrimSpace(value.ProviderName),
+		RunId:    strings.TrimSpace(runID),
+		Context:  reqContext,
 	})
 }
 
-func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (out *ManagedRun, err error) {
+func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, providerName, runID, reason string) (out *ManagedRun, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationRunCancel)
 	audit.setObjectTarget(workflowAuditTargetRun, runID, "")
@@ -125,7 +127,7 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 		}
 		audit.finish(ctx, err)
 	}()
-	value, err := m.requireOwnedRun(ctx, p, runID, "")
+	value, err := m.requireOwnedRun(ctx, p, runID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +140,10 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 		return nil, err
 	}
 	runProto, err := value.provider.CancelRun(ctx, &proto.CancelWorkflowProviderRunRequest{
-		RunId:   strings.TrimSpace(runID),
-		Reason:  strings.TrimSpace(reason),
-		Context: reqContext,
+		Provider: strings.TrimSpace(value.ProviderName),
+		RunId:    strings.TrimSpace(runID),
+		Reason:   strings.TrimSpace(reason),
+		Context:  reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -168,7 +171,7 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 		}
 		audit.finish(ctx, err)
 	}()
-	value, err := m.requireOwnedRun(ctx, p, req.RunID, "")
+	value, err := m.requireOwnedRun(ctx, p, req.RunID, req.ProviderName)
 	if err != nil {
 		return nil, err
 	}
@@ -189,9 +192,10 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 		return nil, err
 	}
 	respProto, err := value.provider.SignalRun(ctx, &proto.SignalWorkflowProviderRunRequest{
-		RunId:   strings.TrimSpace(req.RunID),
-		Signal:  signalProto,
-		Context: reqContext,
+		Provider: strings.TrimSpace(value.ProviderName),
+		RunId:    strings.TrimSpace(req.RunID),
+		Signal:   signalProto,
+		Context:  reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -275,6 +279,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
+		Provider:                     providerName,
 		WorkflowKey:                  workflowKey,
 		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
 		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
@@ -363,8 +368,6 @@ func workflowManagerErrorType(err error) string {
 		return "workflow_not_configured"
 	case errors.Is(err, ErrWorkflowSubjectRequired):
 		return "workflow_subject_required"
-	case errors.Is(err, ErrDuplicateWorkflowObjects):
-		return "duplicate_workflow_objects"
 	case errors.Is(err, ErrWorkflowEventMatchRequired):
 		return "workflow_event_match_required"
 	case errors.Is(err, ErrWorkflowEventSourceRequired):
@@ -399,60 +402,23 @@ func (m *Manager) findRun(ctx context.Context, p *principal.Principal, runID, pr
 	if err != nil {
 		return nil, err
 	}
-	if providerSelection = strings.TrimSpace(providerSelection); providerSelection != "" {
-		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
-		if err != nil {
-			return nil, err
-		}
-		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{
-			RunId:   runID,
-			Context: reqContext,
-		})
-		if err != nil {
-			return nil, err
-		}
-		run, err := workflowwire.RunFromProto(runProto)
-		if err != nil {
-			return nil, err
-		}
-		return &ManagedRun{ProviderName: providerName, Run: run, provider: provider}, nil
+	providerName, provider, err := m.resolveProvider(ctx, providerSelection)
+	if err != nil {
+		return nil, err
 	}
-	var match *ManagedRun
-	var firstErr error
-	for _, providerName := range m.providerNames() {
-		_, provider, err := m.resolveProvider(ctx, providerName)
-		if err != nil {
-			return nil, err
-		}
-		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{
-			RunId:   runID,
-			Context: reqContext,
-		})
-		if err != nil {
-			if isWorkflowProviderNotFound(err) {
-				continue
-			}
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		run, err := workflowwire.RunFromProto(runProto)
-		if err != nil {
-			return nil, err
-		}
-		if match != nil {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateWorkflowObjects, runID)
-		}
-		match = &ManagedRun{ProviderName: strings.TrimSpace(providerName), Run: run, provider: provider}
+	runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{
+		Provider: providerName,
+		RunId:    runID,
+		Context:  reqContext,
+	})
+	if err != nil {
+		return nil, err
 	}
-	if match != nil {
-		return match, nil
+	run, err := workflowwire.RunFromProto(runProto)
+	if err != nil {
+		return nil, err
 	}
-	if firstErr != nil {
-		return nil, firstErr
-	}
-	return nil, core.ErrNotFound
+	return &ManagedRun{ProviderName: strings.TrimSpace(providerName), Run: run, provider: provider}, nil
 }
 
 func (m *Manager) requireOwnedRun(ctx context.Context, p *principal.Principal, runID, providerSelection string) (*ManagedRun, error) {
@@ -460,17 +426,17 @@ func (m *Manager) requireOwnedRun(ctx context.Context, p *principal.Principal, r
 	if err != nil {
 		return nil, err
 	}
-	if !m.runAccessible(ctx, p, run) {
+	if !runAccessible(run) {
 		return nil, core.ErrNotFound
 	}
 	return run, nil
 }
 
-func (m *Manager) runAccessible(ctx context.Context, p *principal.Principal, run *ManagedRun) bool {
+func runAccessible(run *ManagedRun) bool {
 	if run == nil || run.Run == nil {
 		return false
 	}
-	return workflowSubjectOwnedBy(run.Run.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, run.Run.Target)
+	return true
 }
 
 func managedSignalResponse(providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse) (*ManagedRunSignal, error) {

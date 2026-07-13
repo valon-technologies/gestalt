@@ -17,6 +17,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
@@ -57,7 +59,6 @@ type workflowRunInfo struct {
 	CurrentStepID        string                      `json:"currentStepId,omitempty"`
 	Steps                []workflowStepExecutionInfo `json:"steps,omitempty"`
 	Trigger              *workflowRunTriggerInfo     `json:"trigger,omitempty"`
-	CreatedBy            *workflowActorInfo          `json:"createdBy,omitempty"`
 	CreatedAt            *time.Time                  `json:"createdAt,omitempty"`
 	StartedAt            *time.Time                  `json:"startedAt,omitempty"`
 	CompletedAt          *time.Time                  `json:"completedAt,omitempty"`
@@ -102,11 +103,14 @@ func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	if !s.requireGlobalWorkflowRunAccess(w, r, p, "ListRuns") {
+		return
+	}
 	listReq, ok := workflowRunListRequestFromQuery(w, r)
 	if !ok {
 		return
 	}
-	resp, err := s.workflowSchedules.ListRuns(r.Context(), p, listReq)
+	resp, err := s.workflowSchedules.ListRuns(r.Context(), p, s.workflowProviderName, listReq)
 	if err != nil {
 		s.writeWorkflowRunManagerError(w, r, "", err)
 		return
@@ -192,7 +196,10 @@ func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	managed, err := s.workflowSchedules.GetRun(r.Context(), p, chi.URLParam(r, "runID"))
+	if !s.requireGlobalWorkflowRunAccess(w, r, p, "GetRun") {
+		return
+	}
+	managed, err := s.workflowSchedules.GetRun(r.Context(), p, s.workflowProviderName, chi.URLParam(r, "runID"))
 	if err != nil {
 		s.writeWorkflowRunManagerError(w, r, chi.URLParam(r, "runID"), err)
 		return
@@ -205,6 +212,9 @@ func (s *Server) cancelGlobalWorkflowRun(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	if !s.requireGlobalWorkflowRunAccess(w, r, p, "CancelRun") {
+		return
+	}
 	var req workflowRunCancelRequest
 	if r.Body != nil {
 		defer func() { _ = r.Body.Close() }()
@@ -213,12 +223,45 @@ func (s *Server) cancelGlobalWorkflowRun(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	managed, err := s.workflowSchedules.CancelRun(r.Context(), p, chi.URLParam(r, "runID"), req.Reason)
+	managed, err := s.workflowSchedules.CancelRun(r.Context(), p, s.workflowProviderName, chi.URLParam(r, "runID"), req.Reason)
 	if err != nil {
 		s.writeWorkflowRunManagerError(w, r, chi.URLParam(r, "runID"), err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflowRunInfoFromManaged(managed))
+}
+
+func (s *Server) requireGlobalWorkflowRunAccess(w http.ResponseWriter, r *http.Request, p *principal.Principal, action string) bool {
+	if !s.requireAuthorizationProvider(w) {
+		return false
+	}
+	subjectID := invokingPrincipalSubjectID(p)
+	if subjectID == "" {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return false
+	}
+	ctx, ok := s.authorizationHTTPContext(w, r)
+	if !ok {
+		return false
+	}
+	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+		Subject: &proto.Subject{Type: "subject", Id: subjectID},
+		Action:  &proto.Action{Name: strings.TrimSpace(action)},
+		Resource: &proto.Resource{
+			Type: "workflow",
+			Id:   strings.TrimSpace(s.workflowProviderName),
+		},
+	})
+	if err != nil {
+		slog.ErrorContext(r.Context(), "workflow REST authorization check failed", "action", action, "error", err)
+		writeError(w, http.StatusForbidden, invocation.ErrAuthorizationDenied.Error())
+		return false
+	}
+	if resp == nil || !resp.GetAllowed() {
+		writeError(w, http.StatusForbidden, invocation.ErrAuthorizationDenied.Error())
+		return false
+	}
+	return true
 }
 
 func workflowRunInfoFromManaged(managed *workflowmanager.ManagedRun) workflowRunInfo {
@@ -247,7 +290,6 @@ func workflowRunInfoFromCore(run *coreworkflow.Run, providerName string) workflo
 	info.CurrentStepID = strings.TrimSpace(run.CurrentStepID)
 	info.Steps = workflowStepExecutionsInfoFromCore(run.Steps)
 	info.Trigger = workflowRunTriggerInfoFromCore(run.Trigger)
-	info.CreatedBy = workflowActorInfoFromSubjectID(run.CreatedBySubjectID)
 	return info
 }
 

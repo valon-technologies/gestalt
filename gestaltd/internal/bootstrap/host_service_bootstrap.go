@@ -448,11 +448,14 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 		Name:           "workflow",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Workflow_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
+			opts := []workflowservice.ProviderServerOption{
+				workflowservice.WithAgentWorkflowInvocationAuthorizer(deps.AgentManager),
+			}
 			proto.RegisterWorkflowServer(srv, workflowservice.NewProviderServer(
 				appName,
 				manager,
 				deps.Authorization,
-				workflowservice.WithAgentWorkflowInvocationAuthorizer(deps.AgentManager),
+				opts...,
 			))
 		},
 	}

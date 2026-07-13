@@ -202,7 +202,7 @@ type Run struct {
 	CurrentStepID        string
 	Steps                []StepExecution
 	Trigger              RunTrigger
-	CreatedBySubjectID   string
+	CreatedBy            string
 	RunAs                *core.RunAsSubject
 	CreatedAt            *time.Time
 	StartedAt            *time.Time
@@ -235,42 +235,42 @@ type StepExecution struct {
 }
 
 type Schedule struct {
-	ID                 string
-	Cron               string
-	Timezone           string
-	Target             Target
-	DefinitionID       string
-	Paused             bool
-	CreatedBySubjectID string
-	RunAs              *core.RunAsSubject
-	CreatedAt          *time.Time
-	UpdatedAt          *time.Time
-	NextRunAt          *time.Time
+	ID           string
+	Cron         string
+	Timezone     string
+	Target       Target
+	DefinitionID string
+	Paused       bool
+	CreatedBy    string
+	RunAs        *core.RunAsSubject
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
+	NextRunAt    *time.Time
 }
 
 type EventTrigger struct {
-	ID                 string
-	Match              EventMatch
-	Target             Target
-	DefinitionID       string
-	Paused             bool
-	CreatedBySubjectID string
-	RunAs              *core.RunAsSubject
-	CreatedAt          *time.Time
-	UpdatedAt          *time.Time
+	ID           string
+	Match        EventMatch
+	Target       Target
+	DefinitionID string
+	Paused       bool
+	CreatedBy    string
+	RunAs        *core.RunAsSubject
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
 }
 
 type Definition struct {
-	ID                 string
-	Generation         int64
-	Target             Target
-	Activations        []Activation
-	Paused             bool
-	CreatedBySubjectID string
-	CreatedAt          *time.Time
-	UpdatedAt          *time.Time
-	ProviderName       string
-	RunAs              *core.RunAsSubject
+	ID           string
+	Generation   int64
+	Target       Target
+	Activations  []Activation
+	Paused       bool
+	CreatedBy    string
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
+	ProviderName string
+	RunAs        *core.RunAsSubject
 }
 
 type DefinitionSpec struct {
@@ -311,14 +311,14 @@ type ListRunsResponse struct {
 }
 
 type Signal struct {
-	ID                 string
-	Name               string
-	Payload            map[string]any
-	Metadata           map[string]any
-	CreatedBySubjectID string
-	CreatedAt          *time.Time
-	IdempotencyKey     string
-	Sequence           int64
+	ID             string
+	Name           string
+	Payload        map[string]any
+	Metadata       map[string]any
+	CreatedBy      string
+	CreatedAt      *time.Time
+	IdempotencyKey string
+	Sequence       int64
 }
 
 type SignalRunResponse struct {

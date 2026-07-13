@@ -81,15 +81,17 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-page"] = &coreworkflow.Run{
-		ID:                 "run-page",
-		Status:             coreworkflow.RunStatusRunning,
-		Target:             workflowAppStepTarget("roadmap", "sync"),
-		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt:          &now,
+		ID:        "run-page",
+		Status:    coreworkflow.RunStatusRunning,
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: principal.UserSubjectID(user.ID),
+		CreatedAt: &now,
 	}
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("ada-session", principal.UserSubjectID(user.ID), "")
+		cfg.Authorization = authz
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -150,7 +152,7 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 	}
 }
 
-func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T) {
+func TestGlobalWorkflowRunInspectionRequiresWorkflowResourceAccess(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -160,22 +162,24 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-sync"] = &coreworkflow.Run{
-		ID:                 "run-sync",
-		Status:             coreworkflow.RunStatusSucceeded,
-		Target:             workflowAppStepTarget("roadmap", "sync"),
-		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt:          &now,
+		ID:        "run-sync",
+		Status:    coreworkflow.RunStatusSucceeded,
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: principal.UserSubjectID(user.ID),
+		CreatedAt: &now,
 	}
 	provider.runs["run-export"] = &coreworkflow.Run{
-		ID:                 "run-export",
-		Status:             coreworkflow.RunStatusFailed,
-		Target:             workflowAppStepTarget("roadmap", "export"),
-		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt:          &now,
+		ID:        "run-export",
+		Status:    coreworkflow.RunStatusFailed,
+		Target:    workflowAppStepTarget("roadmap", "export"),
+		CreatedBy: principal.UserSubjectID(user.ID),
+		CreatedAt: &now,
 	}
+	authz := &serviceAccountCredentialAuthorizationProvider{}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = testAuthStubForScopedBearer()
+		cfg.Authorization = authz
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -202,27 +206,15 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 		t.Fatalf("list request: %v", err)
 	}
 	defer func() { _ = listResp.Body.Close() }()
-	if listResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	if listResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", listResp.StatusCode)
 	}
-	var listedResp workflowRunListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&listedResp); err != nil {
-		t.Fatalf("decode list response: %v", err)
+	if len(authz.requests) != 1 {
+		t.Fatalf("authorization requests = %#v, want one request", authz.requests)
 	}
-	listed := listedResp.Runs
-	if len(listed) != 1 || listed[0].ID != "run-sync" {
-		t.Fatalf("listed runs = %#v", listed)
-	}
-
-	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/runs/run-export", nil)
-	getReq.Header.Set("Authorization", "Bearer "+plaintext)
-	getResp, err := http.DefaultClient.Do(getReq)
-	if err != nil {
-		t.Fatalf("get request: %v", err)
-	}
-	defer func() { _ = getResp.Body.Close() }()
-	if getResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", getResp.StatusCode)
+	request := authz.requests[0]
+	if request.GetSubject().GetId() != principal.UserSubjectID(user.ID) || request.GetAction().GetName() != "ListRuns" || request.GetResource().GetType() != "workflow" || request.GetResource().GetId() != "basic" {
+		t.Fatalf("authorization request = %#v", request)
 	}
 }
 
@@ -260,13 +252,15 @@ func TestGlobalWorkflowRunInspectionIncludesDurableStepState(t *testing.T) {
 			StepID: "sync",
 			Status: coreworkflow.StepStatusRunning,
 		}},
-		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt:          &now,
-		StartedAt:          &now,
+		CreatedBy: principal.UserSubjectID(user.ID),
+		CreatedAt: &now,
+		StartedAt: &now,
 	}
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("ada-session", principal.UserSubjectID(user.ID), "")
+		cfg.Authorization = authz
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -320,17 +314,19 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	run := &coreworkflow.Run{
-		ID:                 "run-cancel",
-		Status:             coreworkflow.RunStatusRunning,
-		Target:             workflowAppStepTarget("roadmap", "sync"),
-		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt:          &now,
-		StartedAt:          &now,
+		ID:        "run-cancel",
+		Status:    coreworkflow.RunStatusRunning,
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: principal.UserSubjectID(user.ID),
+		CreatedAt: &now,
+		StartedAt: &now,
 	}
 	provider.runs[run.ID] = run
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionTokenIntrospect("ada-session", principal.UserSubjectID(user.ID), "")
+		cfg.Authorization = authz
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",

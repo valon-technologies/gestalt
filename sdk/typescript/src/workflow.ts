@@ -19,11 +19,7 @@ import {
 
 import * as wire from "./internal/gen/v1/workflow_pb.ts";
 import { type AgentOutput } from "./agent.ts";
-import {
-  type AgentToolRef,
-  type RequestContext,
-  type SubjectContext,
-} from "./app.ts";
+import { type AgentToolRef, type RequestContext } from "./app.ts";
 import {
   fromWireGetWorkflowProviderRunEventsResponse,
   fromWireGetWorkflowProviderRunOutputResponse,
@@ -76,7 +72,7 @@ export const WorkflowStepStatus = {
 export type WorkflowStepStatus = number;
 
 export interface ApplyWorkflowProviderDefinitionRequest {
-  providerName: string;
+  provider: string;
   spec?: WorkflowDefinitionSpec;
   idempotencyKey: string;
   context?: RequestContext;
@@ -90,28 +86,31 @@ export interface CancelWorkflowProviderRunRequest {
   runId: string;
   reason: string;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface DeleteWorkflowProviderDefinitionRequest {
   definitionId: string;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface DeliverWorkflowProviderEventRequest {
-  appName: string;
+  provider: string;
   event?: WorkflowEvent;
-  providerName: string;
   context?: RequestContext;
 }
 
 export interface GetWorkflowProviderDefinitionRequest {
   definitionId: string;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface GetWorkflowProviderRunEventsRequest {
   runId: string;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface GetWorkflowProviderRunEventsResponse {
@@ -121,6 +120,7 @@ export interface GetWorkflowProviderRunEventsResponse {
 export interface GetWorkflowProviderRunOutputRequest {
   runId: string;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface GetWorkflowProviderRunOutputResponse {
@@ -130,10 +130,12 @@ export interface GetWorkflowProviderRunOutputResponse {
 export interface GetWorkflowProviderRunRequest {
   runId: string;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface ListWorkflowProviderDefinitionsRequest {
   context?: RequestContext;
+  provider: string;
 }
 
 export interface ListWorkflowProviderDefinitionsResponse {
@@ -146,6 +148,7 @@ export interface ListWorkflowProviderRunsRequest {
   status: WorkflowRunStatus;
   targetApp: string;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface ListWorkflowProviderRunsResponse {
@@ -158,19 +161,21 @@ export interface SetWorkflowProviderActivationPausedRequest {
   activationId: string;
   paused: boolean;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface SetWorkflowProviderDefinitionPausedRequest {
   definitionId: string;
   paused: boolean;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface SignalOrStartWorkflowProviderRunRequest {
   workflowKey: string;
   idempotencyKey: string;
   signal?: WorkflowSignal;
-  providerName: string;
+  provider: string;
   definitionId: string;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
@@ -181,6 +186,7 @@ export interface SignalWorkflowProviderRunRequest {
   runId: string;
   signal?: WorkflowSignal;
   context?: RequestContext;
+  provider: string;
 }
 
 export interface SignalWorkflowRunResponse {
@@ -193,7 +199,7 @@ export interface SignalWorkflowRunResponse {
 export interface StartWorkflowProviderRunRequest {
   idempotencyKey: string;
   workflowKey: string;
-  providerName: string;
+  provider: string;
   definitionId: string;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
@@ -240,11 +246,10 @@ export interface WorkflowDefinition {
   target?: BoundWorkflowTarget;
   activations: WorkflowActivation[];
   paused: boolean;
-  createdBySubjectId: string;
   createdAt?: Date;
   updatedAt?: Date;
-  providerName: string;
-  runAs?: SubjectContext;
+  provider: string;
+  runAs: string;
 }
 
 export interface WorkflowDefinitionSpec {
@@ -252,7 +257,7 @@ export interface WorkflowDefinitionSpec {
   target?: BoundWorkflowTarget;
   activations: WorkflowActivation[];
   paused: boolean;
-  runAs?: SubjectContext;
+  runAs: string;
 }
 
 export interface WorkflowEvent {
@@ -302,11 +307,10 @@ export interface WorkflowRun {
   completedAt?: Date;
   statusMessage: string;
   output?: JsonValue;
-  createdBySubjectId: string;
   workflowKey: string;
-  providerName: string;
+  provider: string;
   definitionId: string;
-  runAs?: SubjectContext;
+  runAs: string;
   input?: JsonObject;
   definitionGeneration: bigint;
   currentStepId: string;
@@ -365,7 +369,6 @@ export interface WorkflowSignal {
   name: string;
   payload?: JsonObject;
   metadata?: JsonObject;
-  createdBySubjectId: string;
   createdAt?: Date;
   idempotencyKey: string;
   sequence: bigint;
@@ -551,12 +554,12 @@ export class Workflow {
   }
 
   async applyDefinition(
-    providerName: string,
+    provider: string,
     idempotencyKey: string,
     spec?: Init<WorkflowDefinitionSpec>,
   ): Promise<WorkflowDefinition> {
     const request = {
-      providerName,
+      provider,
       idempotencyKey,
       ...(spec !== undefined ? { spec } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -592,8 +595,12 @@ export class Workflow {
     return fromWireWorkflowDefinition(response);
   }
 
-  async getDefinition(definitionId: string): Promise<WorkflowDefinition> {
+  async getDefinition(
+    provider: string,
+    definitionId: string,
+  ): Promise<WorkflowDefinition> {
     const request = {
+      provider,
       definitionId,
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<GetWorkflowProviderDefinitionRequest>;
@@ -628,9 +635,11 @@ export class Workflow {
     return fromWireWorkflowDefinition(response);
   }
 
-  async listDefinitions(
-    request: Init<ListWorkflowProviderDefinitionsRequest>,
-  ): Promise<WorkflowDefinition[]> {
+  async listDefinitions(provider: string): Promise<WorkflowDefinition[]> {
+    const request = {
+      provider,
+      ...(this.context !== undefined ? { context: this.context } : {}),
+    } satisfies Init<ListWorkflowProviderDefinitionsRequest>;
     const response = fromWireListWorkflowProviderDefinitionsResponse(
       await callUnary(() =>
         this.client.listDefinitions(
@@ -665,10 +674,12 @@ export class Workflow {
   }
 
   async setDefinitionPaused(
+    provider: string,
     definitionId: string,
     paused: boolean,
   ): Promise<WorkflowDefinition> {
     const request = {
+      provider,
       definitionId,
       paused,
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -705,11 +716,13 @@ export class Workflow {
   }
 
   async setActivationPaused(
+    provider: string,
     definitionId: string,
     activationId: string,
     paused: boolean,
   ): Promise<WorkflowDefinition> {
     const request = {
+      provider,
       definitionId,
       activationId,
       paused,
@@ -746,8 +759,12 @@ export class Workflow {
     return fromWireWorkflowDefinition(response);
   }
 
-  async deleteDefinition(definitionId: string): Promise<void> {
+  async deleteDefinition(
+    provider: string,
+    definitionId: string,
+  ): Promise<void> {
     const request = {
+      provider,
       definitionId,
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<DeleteWorkflowProviderDefinitionRequest>;
@@ -783,7 +800,7 @@ export class Workflow {
   async startRun(
     idempotencyKey: string,
     workflowKey: string,
-    providerName: string,
+    provider: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     input?: JsonObject,
@@ -791,7 +808,7 @@ export class Workflow {
     const request = {
       idempotencyKey,
       workflowKey,
-      providerName,
+      provider,
       definitionId,
       expectedDefinitionGeneration,
       ...(input !== undefined ? { input } : {}),
@@ -829,12 +846,14 @@ export class Workflow {
   }
 
   async listRuns(
+    provider: string,
     pageSize: number,
     pageToken: string,
     status: WorkflowRunStatus,
     targetApp: string,
   ): Promise<ListWorkflowProviderRunsResponse> {
     const request = {
+      provider,
       pageSize,
       pageToken,
       status,
@@ -872,8 +891,9 @@ export class Workflow {
     return fromWireListWorkflowProviderRunsResponse(response);
   }
 
-  async getRun(runId: string): Promise<WorkflowRun> {
+  async getRun(provider: string, runId: string): Promise<WorkflowRun> {
     const request = {
+      provider,
       runId,
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<GetWorkflowProviderRunRequest>;
@@ -908,8 +928,12 @@ export class Workflow {
     return fromWireWorkflowRun(response);
   }
 
-  async getRunEvents(runId: string): Promise<WorkflowRunEvent[]> {
+  async getRunEvents(
+    provider: string,
+    runId: string,
+  ): Promise<WorkflowRunEvent[]> {
     const request = {
+      provider,
       runId,
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<GetWorkflowProviderRunEventsRequest>;
@@ -946,8 +970,12 @@ export class Workflow {
     return fromWireGetWorkflowProviderRunEventsResponse(response);
   }
 
-  async getRunOutput(runId: string): Promise<JsonValue | undefined> {
+  async getRunOutput(
+    provider: string,
+    runId: string,
+  ): Promise<JsonValue | undefined> {
     const request = {
+      provider,
       runId,
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<GetWorkflowProviderRunOutputRequest>;
@@ -984,8 +1012,13 @@ export class Workflow {
     return fromWireGetWorkflowProviderRunOutputResponse(response);
   }
 
-  async cancelRun(runId: string, reason: string): Promise<WorkflowRun> {
+  async cancelRun(
+    provider: string,
+    runId: string,
+    reason: string,
+  ): Promise<WorkflowRun> {
     const request = {
+      provider,
       runId,
       reason,
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -1022,10 +1055,12 @@ export class Workflow {
   }
 
   async signalRun(
+    provider: string,
     runId: string,
     signal?: Init<WorkflowSignal>,
   ): Promise<SignalWorkflowRunResponse> {
     const request = {
+      provider,
       runId,
       ...(signal !== undefined ? { signal } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -1064,7 +1099,7 @@ export class Workflow {
   async signalOrStartRun(
     workflowKey: string,
     idempotencyKey: string,
-    providerName: string,
+    provider: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     signal?: Init<WorkflowSignal>,
@@ -1073,7 +1108,7 @@ export class Workflow {
     const request = {
       workflowKey,
       idempotencyKey,
-      providerName,
+      provider,
       definitionId,
       expectedDefinitionGeneration,
       ...(signal !== undefined ? { signal } : {}),
@@ -1112,15 +1147,11 @@ export class Workflow {
   }
 
   async deliverEvent(
+    provider: string,
     event?: Init<WorkflowEvent>,
-    options?: {
-      appName?: string | undefined;
-      providerName?: string | undefined;
-    },
   ): Promise<WorkflowEvent> {
     const request = {
-      appName: options?.appName ?? "",
-      providerName: options?.providerName ?? "",
+      provider,
       ...(event !== undefined ? { event } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<DeliverWorkflowProviderEventRequest>;
