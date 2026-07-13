@@ -1130,13 +1130,6 @@
         "connectionSelector": {
           "$ref": "#/$defs/operationConnectionSelector"
         },
-        "allowedRoles": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
         "tags": {
           "type": "array",
           "items": {
@@ -1313,13 +1306,6 @@
         },
         "description": {
           "type": "string"
-        },
-        "allowedRoles": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
         },
         "tags": {
           "type": "array",

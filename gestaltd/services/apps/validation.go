@@ -345,8 +345,23 @@ func effectiveAllowedOperations(entry *ValidationApp, spec *providermanifestv1.S
 	if entry != nil && entry.AllowedOperations != nil {
 		return entry.AllowedOperations
 	}
-	if spec == nil {
+	if spec == nil || spec.AllowedOperations == nil {
 		return nil
 	}
-	return spec.AllowedOperations
+	out := make(map[string]*OperationOverride, len(spec.AllowedOperations))
+	for name, override := range spec.AllowedOperations {
+		if override == nil {
+			out[name] = nil
+			continue
+		}
+		out[name] = &OperationOverride{
+			Alias:       override.Alias,
+			Description: override.Description,
+			Tags:        override.Tags,
+			Paginate:    override.Paginate,
+			Pagination:  override.Pagination,
+			GraphQL:     override.GraphQL,
+		}
+	}
+	return out
 }

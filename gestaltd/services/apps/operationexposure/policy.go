@@ -10,7 +10,15 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-type OperationOverride = providermanifestv1.ManifestOperationOverride
+type OperationOverride struct {
+	Alias        string                                       `yaml:"alias,omitempty" json:"alias,omitempty"`
+	Description  string                                       `yaml:"description,omitempty" json:"description,omitempty"`
+	AllowedRoles []string                                     `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
+	Tags         []string                                     `yaml:"tags,omitempty" json:"tags,omitempty"`
+	Paginate     bool                                         `yaml:"paginate,omitempty" json:"paginate,omitempty"`
+	Pagination   *providermanifestv1.ManifestPaginationConfig `yaml:"pagination,omitempty" json:"pagination,omitempty"`
+	GraphQL      *providermanifestv1.ManifestGraphQLOperation `yaml:"graphql,omitempty" json:"graphql,omitempty"`
+}
 
 // Policy normalizes allowed_operations handling so every provider type uses the
 // same validation, aliasing, and description override behavior.
