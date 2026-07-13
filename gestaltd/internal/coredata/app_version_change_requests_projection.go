@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 const (
@@ -128,26 +127,6 @@ func installationFromChangeRequest(request *core.AppVersionChangeRequest) *core.
 
 func InstallationFromChangeRequest(request *core.AppVersionChangeRequest) *core.AppInstallation {
 	return installationFromChangeRequest(request)
-}
-
-func ConfigPinnedAppVersion(entry *config.ProviderEntry) string {
-	if entry == nil {
-		return ""
-	}
-	if version := entry.Source.ResolvedPackageVersion(); version != "" {
-		return version
-	}
-	if entry.ResolvedManifest != nil {
-		return strings.TrimSpace(entry.ResolvedManifest.Version)
-	}
-	return ""
-}
-
-func ResolveFromVersion(known []*core.AppInstallation, configEntry *config.ProviderEntry) string {
-	if version := LatestKnownVersion(known); version != "" {
-		return version
-	}
-	return ConfigPinnedAppVersion(configEntry)
 }
 
 func LatestKnownVersion(installations []*core.AppInstallation) string {

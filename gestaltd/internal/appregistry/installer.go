@@ -97,7 +97,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if i.ConfigApps != nil {
 		configEntry = i.ConfigApps[appName]
 	}
-	fromVersion := coredata.ResolveFromVersion(knownVersions, configEntry)
+	fromVersion := resolveFromVersion(knownVersions, configEntry)
 	if fromVersion == "" {
 		return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
 	}
