@@ -35,7 +35,7 @@ func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": registry,
 		},
-		Reader:       registrytest.NewReaderForServer(t, registrySrv.URL),
+		Reader:  registrytest.NewReaderForServer(t, registrySrv.URL),
 		Catalog: svc.AppVersionCatalog,
 		Locks:   svc.AppVersionInstallLocks,
 	}
@@ -111,7 +111,7 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": fixture.Registry,
 		},
-		Reader:       fixture.Reader,
+		Reader:  fixture.Reader,
 		Catalog: svc.AppVersionCatalog,
 		Locks:   svc.AppVersionInstallLocks,
 	}

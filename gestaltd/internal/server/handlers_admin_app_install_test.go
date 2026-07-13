@@ -43,9 +43,9 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		}
 
 		var payload struct {
-			Registry string `json:"registry"`
-			App      string `json:"app"`
-			Installation     struct {
+			Registry     string `json:"registry"`
+			App          string `json:"app"`
+			Installation struct {
 				Version string `json:"version"`
 			} `json:"installation"`
 		}
