@@ -32,6 +32,22 @@ func TestPolicyNewRejectsAliasCollisions(t *testing.T) {
 	}
 }
 
+func TestMatchingAllowedOperationsPreservesEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	cat := &catalog.Catalog{
+		Name:       "example",
+		Operations: []catalog.CatalogOperation{{ID: "op"}},
+	}
+	out := MatchingAllowedOperations(map[string]*OperationOverride{}, cat)
+	if out == nil {
+		t.Fatal("expected non-nil empty map")
+	}
+	if len(out) != 0 {
+		t.Fatalf("got %d entries, want 0", len(out))
+	}
+}
+
 func TestPolicyValidateAndApply(t *testing.T) {
 	t.Parallel()
 

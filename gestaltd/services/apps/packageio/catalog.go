@@ -40,8 +40,17 @@ func ReadStaticCatalog(rootDir, name string) (*catalog.Catalog, error) {
 	if cat.Name == "" && name != "" {
 		cat.Name = name
 	}
-	if err := cat.Validate(); err != nil {
+	if err := validateStaticCatalog(&cat); err != nil {
 		return nil, fmt.Errorf("validate static catalog %q: %w", catalogPath, err)
 	}
 	return &cat, nil
+}
+
+func validateStaticCatalog(cat *catalog.Catalog) error {
+	for i := range cat.Operations {
+		if len(cat.Operations[i].AllowedRoles) > 0 {
+			return fmt.Errorf("catalog %q operation %q: provider-owned allowedRoles are not supported; move roles to apps.<name>.allowedOperations in config.yaml", cat.Name, cat.Operations[i].ID)
+		}
+	}
+	return cat.Validate()
 }

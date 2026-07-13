@@ -10,7 +10,37 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-type OperationOverride = providermanifestv1.ManifestOperationOverride
+type OperationOverride struct {
+	Alias        string                                       `yaml:"alias,omitempty" json:"alias,omitempty"`
+	Description  string                                       `yaml:"description,omitempty" json:"description,omitempty"`
+	AllowedRoles []string                                     `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
+	Tags         []string                                     `yaml:"tags,omitempty" json:"tags,omitempty"`
+	Paginate     bool                                         `yaml:"paginate,omitempty" json:"paginate,omitempty"`
+	Pagination   *providermanifestv1.ManifestPaginationConfig `yaml:"pagination,omitempty" json:"pagination,omitempty"`
+	GraphQL      *providermanifestv1.ManifestGraphQLOperation `yaml:"graphql,omitempty" json:"graphql,omitempty"`
+}
+
+func FromManifestAllowed(allowed map[string]*providermanifestv1.ManifestOperationOverride) map[string]*OperationOverride {
+	if allowed == nil {
+		return nil
+	}
+	out := make(map[string]*OperationOverride, len(allowed))
+	for name, override := range allowed {
+		if override == nil {
+			out[name] = nil
+			continue
+		}
+		out[name] = &OperationOverride{
+			Alias:       override.Alias,
+			Description: override.Description,
+			Tags:        override.Tags,
+			Paginate:    override.Paginate,
+			Pagination:  override.Pagination,
+			GraphQL:     override.GraphQL,
+		}
+	}
+	return out
+}
 
 // Policy normalizes allowed_operations handling so every provider type uses the
 // same validation, aliasing, and description override behavior.
@@ -251,8 +281,11 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 // present in the provided catalog. It returns nil when either input is empty or
 // when no allowed operations match the catalog.
 func MatchingAllowedOperations(allowed map[string]*OperationOverride, cat *catalog.Catalog) map[string]*OperationOverride {
-	if len(allowed) == 0 || cat == nil || len(cat.Operations) == 0 {
+	if allowed == nil || cat == nil || len(cat.Operations) == 0 {
 		return nil
+	}
+	if len(allowed) == 0 {
+		return allowed
 	}
 	available := make(map[string]struct{}, len(cat.Operations))
 	for i := range cat.Operations {

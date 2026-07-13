@@ -156,9 +156,8 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 
 	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*operationexposure.OperationOverride{
 		"teams": {
-			Description:  "My custom description",
-			AllowedRoles: []string{"workspace-admin"},
-			Tags:         []string{"workspace"},
+			Description: "My custom description",
+			Tags:        []string{"workspace"},
 		},
 	})
 	if err != nil {
@@ -174,9 +173,6 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	}
 	if got, want := teams.Tags, []string{"workspace"}; !slices.Equal(got, want) {
 		t.Errorf("teams.Tags: got %#v, want %#v", got, want)
-	}
-	if got, want := teams.AllowedRoles, []string{"workspace-admin"}; !slices.Equal(got, want) {
-		t.Errorf("teams.AllowedRoles: got %#v, want %#v", got, want)
 	}
 	if got := teams.Parameters; len(got) != 1 || got[0].Name != "first" || got[0].Type != "integer" {
 		t.Fatalf("teams.Parameters = %#v, want first integer param", got)
