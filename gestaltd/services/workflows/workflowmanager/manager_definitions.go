@@ -56,6 +56,7 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 		return nil, err
 	}
 	definitionProto, err := provider.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
+		ProviderName:   providerName,
 		Spec:           specProto,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
 		Context:        reqContext,

@@ -60,6 +60,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		return nil, err
 	}
 	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
+		ProviderName:                 providerName,
 		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
 		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
 		Input:                        inputProto,
@@ -275,6 +276,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
+		ProviderName:                 providerName,
 		WorkflowKey:                  workflowKey,
 		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
 		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),

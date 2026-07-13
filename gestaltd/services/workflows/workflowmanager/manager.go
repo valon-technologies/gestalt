@@ -894,8 +894,9 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 		return coreworkflow.Event{}, err
 	}
 	deliveredProto, err := provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
-		Event:   eventProto,
-		Context: reqContext,
+		ProviderName: providerName,
+		Event:        eventProto,
+		Context:      reqContext,
 	})
 	if err != nil {
 		return coreworkflow.Event{}, err
