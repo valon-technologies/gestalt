@@ -57,8 +57,9 @@ When `SkipSchemaBootstrap` is false (default for a **local** main-db provider), 
 App registry stores:
 
 ```text
-app_version_change_requests    ← source of truth (append-only)
-app_version_install_locks      ← fleet install lock per (app, version)
+app_version_change_requests      ← source of truth (append-only)
+app_version_install_locks        ← fleet install lock per (app, version)
+app_instance_materializations    ← per-replica ack of fleet-known versions
 ```
 
 Other host stores created at bootstrap include `users`, `managed_subjects`, `app_shas`, etc.
@@ -188,4 +189,35 @@ Primary key: `id` = `app` + `\x00` + `version`.
 | `Acquire(ctx, app, version, holder, ttl)` | Claim lock; returns `ErrAppVersionInstallLockHeld` if another holder owns a non-expired lock |
 | `Release(ctx, app, version, holder)` | Drop lock when this holder still owns it |
 
-Used by `POST …/install` before download; released on success or failure.
+Used by `POST …/install` before change request write; released on success or failure.
+
+---
+
+## Store: `app_instance_materializations` (per-replica ack)
+
+Records that one gestaltd replica observed a fleet-known `(app, version)` from `app_version_change_requests`.
+
+Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforced by the `by_instance_app_version` index.
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "instance_id": "cloud-run-revision-pod",
+  "app": "g-issues",
+  "version": "0.0.0-snapshot.gabc123",
+  "acknowledged_at": "2026-07-13T21:00:00Z"
+}
+```
+
+`instance_id` defaults to the process hostname (`os.Hostname()`).
+
+### Service API
+
+`AppInstanceMaterializationService` (`gestaltd/internal/coredata/app_instance_materializations.go`):
+
+| Method | Description |
+|--------|-------------|
+| `HasAcknowledged(ctx, instanceID, app, version)` | Whether this replica already acked the pair. |
+| `Acknowledge(ctx, materialization)` | Insert ack row; idempotent if already present. |
+
+Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).

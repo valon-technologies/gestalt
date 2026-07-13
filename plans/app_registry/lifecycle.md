@@ -7,7 +7,7 @@ Install is change-request-only; per-replica convergence (ack → download → re
 Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
-- [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, install locks, planned `app_instance_materializations`
+- [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
 - [service.md](./service.md) — Go publish/read helpers behind the registry bucket
@@ -19,6 +19,7 @@ Implementation:
 - Install handlers — `gestaltd/internal/server/handlers_admin_app_install.go`
 - Registry fetcher — `gestaltd/internal/appregistry/reader.go`
 - Registry installer — `gestaltd/internal/appregistry/installer.go`
+- Catalog poller — `gestaltd/internal/appregistry/poller.go`
 - Change request projections — `gestaltd/internal/coredata/app_version_change_requests_projection.go`
 
 ## Startup
@@ -36,19 +37,15 @@ Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not b
 
 ## Polling
 
-**Planned.** Every replica will run a background catalog controller after `gestaltd serve` is up: one reconcile pass at startup, then every **1 minute** in a goroutine.
+Every replica runs one background catalog controller after `gestaltd serve` is up: one reconcile pass at startup, then every **1 minute** on a single loop goroutine.
 
 The controller is **pull-based** and **local**: each replica reads `app_version_change_requests` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
-Each pass, for every known `(app, version)` this replica has not yet converged:
+Each pass, for every known `(app, version)` this replica has not yet acknowledged, write a per-instance row in `app_instance_materializations`.
 
-1. Acknowledge the catalog row in per-instance IndexedDB state (planned `app_instance_materializations`) and emit a metric.
-2. Download the registry artifact and materialize under `registry-installed/{app}/{version}/` before stopping the running app.
-3. Stop the app and start again from the newly materialized binary (bind the provider graph to the new path instead of the old one).
+Later steps add download, restart, and binary mount. See [plan.md](./plan.md) steps 9–11.
 
-Skip pairs already at the target version. Use per-`(app, version)` inflight guards so overlapping ticks do not double-download or double-restart.
-
-Rollout phasing for these behaviors is in [plan.md](./plan.md) steps 8–11.
+Skip pairs already acknowledged on this replica. If a reconcile pass is still running when the next tick fires, skip the tick. Use per-`(app, version)` inflight guards within a pass.
 
 ## Runtime
 

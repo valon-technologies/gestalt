@@ -260,7 +260,7 @@ Core recovery paths must not depend on dynamically installed apps.
 5. Add IndexedDB change request store and projection helpers (`app_version_change_requests` + known-version views). See [indexeddb.md](./indexeddb.md).
 6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog writes; `app_installations` store removed. See [lifecycle.md](./lifecycle.md), [tests.md](./tests.md).
 7. Split install from local materialization — `POST …/install` writes `app_version_change_requests` only. See [lifecycle.md](./lifecycle.md).
-8. Per-replica catalog polling: acknowledge each new `change request` row in IndexedDB and emit a metric. See [lifecycle.md](./lifecycle.md#polling).
+8. Per-replica catalog polling: acknowledge each new fleet-known `(app, version)` in IndexedDB. **Done:** `app_instance_materializations` + background poller. See [lifecycle.md](./lifecycle.md#polling).
 9. Stop the running app and start the same app back up (restart machinery only; no binary change yet). Use a **1 minute** delay between stop and start during early rollout testing so operators can observe that the process started; production restart has no intentional wait.
 10. Download and materialize the new version artifact **before** bringing the app down.
 11. Mount the newly materialized binary instead of the old one when restarting.

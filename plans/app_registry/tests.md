@@ -17,15 +17,16 @@ Related docs:
 | Package | File | Tests | Layer | PR |
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
+| `internal/appregistry` | `poller_test.go` | 2 | Unit (poller) | [gestalt#2750](https://github.com/valon-technologies/gestalt/pull/2750) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
 ---
 
-## Step 1: publish dry-run E2E
+## Publish dry-run E2E
 
-Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (step 1: GCS app registry + `gestaltd app publish`).
+Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (GCS app registry + `gestaltd app publish`).
 
 Run:
 
@@ -61,7 +62,7 @@ Expected plan fields:
 
 ---
 
-## Step 6: install HTTP integration
+## Install HTTP integration
 
 Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (registry app install via `app_version_change_requests`).
 
@@ -84,10 +85,29 @@ All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `tes
 
 ---
 
+## Catalog poller unit tests
+
+Added in [gestalt#2750](https://github.com/valon-technologies/gestalt/pull/2750). Exercise `CatalogPoller.ReconcileOnce` and `Start` against stub change requests + materialization services — no `gestaltd serve`, no real ticker timing.
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry/... -run TestCatalogPoller -count=1
+```
+
+### `poller_test.go`
+
+- **`TestCatalogPoller_ReconcileOnce_acknowledges_known_versions`** — After a change request exists, reconcile writes an ack row for the poller `instance_id`; a second reconcile is a no-op.
+
+- **`TestCatalogPoller_Start_is_idempotent`** — Calling `Start` twice does not panic when the loop context is already cancelled.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
-- Controller tick / convergence tests
+- Catalog poller integration test against real `gestaltd serve` startup
