@@ -472,8 +472,8 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
 
     let definition = workflow
         .apply_definition(
-            "default-key".to_string(),
             "default".to_string(),
+            "default-key".to_string(),
             Some(NativeWorkflowDefinitionSpec {
                 id: "definition-42".to_string(),
                 target: Some(app_target_native()),
