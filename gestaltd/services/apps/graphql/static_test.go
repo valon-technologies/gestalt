@@ -38,10 +38,9 @@ fragment TeamFields on Team {
 `
 	def, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"listTeams": {
-			Alias:        "teams",
-			Description:  "List Linear teams",
-			AllowedRoles: []string{"workspace-admin"},
-			Tags:         []string{"workspace"},
+			Alias:       "teams",
+			Description: "List Linear teams",
+			Tags:        []string{"workspace"},
 			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
 				Document:      document,
 				OperationName: "ListTeams",

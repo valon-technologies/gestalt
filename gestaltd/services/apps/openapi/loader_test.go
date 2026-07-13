@@ -83,7 +83,7 @@ func TestLoadDefinition(t *testing.T) {
 	testutil.CloseOnCleanup(t, srv)
 
 	allowed := map[string]*operationexposure.OperationOverride{
-		"list_items": {Description: "List items with pagination", AllowedRoles: []string{"reader"}, Tags: []string{"pagination"}},
+		"list_items": {Description: "List items with pagination", Tags: []string{"pagination"}},
 		"get_item":   nil,
 	}
 
@@ -117,9 +117,6 @@ func TestLoadDefinition(t *testing.T) {
 	}
 	if got, want := listOp.Tags, []string{"inventory", "pagination"}; !slices.Equal(got, want) {
 		t.Errorf("list_items tags = %#v, want %#v", got, want)
-	}
-	if got, want := listOp.AllowedRoles, []string{"reader"}; !slices.Equal(got, want) {
-		t.Errorf("list_items allowed roles = %#v, want %#v", got, want)
 	}
 	if len(listOp.Parameters) != 1 {
 		t.Fatalf("list_items params = %d, want 1", len(listOp.Parameters))

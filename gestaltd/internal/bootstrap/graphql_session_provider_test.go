@@ -211,10 +211,9 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 					},
 				},
 				"searchRecords": {
-					Alias:        "records.search",
-					Description:  "Search record metadata.",
-					AllowedRoles: []string{"viewer"},
-					Tags:         []string{"records"},
+					Alias:       "records.search",
+					Description: "Search record metadata.",
+					Tags:        []string{"records"},
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
 						Document:      searchRecordsDocument,
 						OperationName: "SearchRecords",
@@ -236,9 +235,6 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 	searchOp, ok := graphQLCatalogOperation(prov.Catalog(), "records.search")
 	if !ok {
 		t.Fatalf("catalog operations = %#v, want records.search", prov.Catalog().Operations)
-	}
-	if got, want := searchOp.AllowedRoles, []string{"viewer"}; !slices.Equal(got, want) {
-		t.Fatalf("records.search roles = %#v, want %#v", got, want)
 	}
 	if got, want := searchOp.Tags, []string{"records"}; !slices.Equal(got, want) {
 		t.Fatalf("records.search tags = %#v, want %#v", got, want)
