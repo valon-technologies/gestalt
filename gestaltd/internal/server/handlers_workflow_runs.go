@@ -106,7 +106,7 @@ func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	resp, err := s.workflowSchedules.ListRuns(r.Context(), p, listReq)
+	resp, err := s.workflowSchedules.ListRuns(r.Context(), p, s.workflowProviderName, listReq)
 	if err != nil {
 		s.writeWorkflowRunManagerError(w, r, "", err)
 		return
@@ -192,7 +192,7 @@ func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	managed, err := s.workflowSchedules.GetRun(r.Context(), p, chi.URLParam(r, "runID"))
+	managed, err := s.workflowSchedules.GetRun(r.Context(), p, s.workflowProviderName, chi.URLParam(r, "runID"))
 	if err != nil {
 		s.writeWorkflowRunManagerError(w, r, chi.URLParam(r, "runID"), err)
 		return
@@ -213,7 +213,7 @@ func (s *Server) cancelGlobalWorkflowRun(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	managed, err := s.workflowSchedules.CancelRun(r.Context(), p, chi.URLParam(r, "runID"), req.Reason)
+	managed, err := s.workflowSchedules.CancelRun(r.Context(), p, s.workflowProviderName, chi.URLParam(r, "runID"), req.Reason)
 	if err != nil {
 		s.writeWorkflowRunManagerError(w, r, chi.URLParam(r, "runID"), err)
 		return

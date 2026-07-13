@@ -66,7 +66,6 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         generation: 7n,
         target: request.spec?.target,
         activations: request.spec?.activations,
-        createdBySubjectId: subjectId,
       });
     },
     async getDefinition(request) {
@@ -95,7 +94,6 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         definitionGeneration: request.expectedDefinitionGeneration,
         workflowKey: request.workflowKey,
         input: request.input,
-        createdBySubjectId: request.context?.subject?.id ?? "",
         currentStepId: "sync",
         steps: [{
           stepId: "sync",
@@ -152,7 +150,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     },
     async deliverEvent(request) {
       calls.push({ method: "deliver-event", detail: request.event?.type ?? "" });
-      return workflowEvent({ id: "delivered-ts", type: request.event?.type ?? "", source: request.appName });
+      return workflowEvent({ id: "delivered-ts", type: request.event?.type ?? "", source: request.event?.source ?? "" });
     },
   });
 
@@ -180,6 +178,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       createGrpcTransport({ baseUrl: `http://${address}` }),
     );
     const definition = await client.applyDefinition(create(ApplyWorkflowProviderDefinitionRequestSchema, {
+      providerName: "local",
       idempotencyKey: "definition-native-ts",
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, { id: "user:ada" }),
@@ -198,9 +197,9 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       },
     }));
     expect(definition.id).toBe("definition-native-ts");
-    expect(definition.createdBySubjectId).toBe("user:ada");
 
     const run = await client.startRun(create(StartWorkflowProviderRunRequestSchema, {
+      providerName: "local",
       idempotencyKey: "run-native-ts",
       definitionId: "definition-native-ts",
       expectedDefinitionGeneration: 7n,
@@ -213,18 +212,20 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     expect(run.steps[0]?.stepId).toBe("sync");
 
     const events = await client.getRunEvents(create(GetWorkflowProviderRunEventsRequestSchema, {
+      providerName: "local",
       runId: "run-native-ts",
     }));
     expect(events.events[0]?.type).toBe("run.started");
 
     const output = await client.getRunOutput(create(GetWorkflowProviderRunOutputRequestSchema, {
+      providerName: "local",
       runId: "run-native-ts",
     }));
     expect(output.output?.kind.case).toBe("structValue");
 
     const delivered = await client.deliverEvent(create(DeliverWorkflowProviderEventRequestSchema, {
-      appName: "demo",
-      event: { type: "demo.synced" },
+      providerName: "local",
+      event: { type: "demo.synced", source: "demo" },
     }));
     expect(delivered.id).toBe("delivered-ts");
     expect(calls).toEqual([

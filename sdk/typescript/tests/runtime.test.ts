@@ -1560,6 +1560,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
 
   const definition = await (workflow.applyDefinition as any)(
     create(ApplyWorkflowProviderDefinitionRequestSchema, {
+      providerName: "fixture-workflow",
       idempotencyKey: "def-1",
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, { id: "service_account:planner" }),
@@ -1580,10 +1581,10 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     }),
   );
   expect(definition.id).toBe("roadmap_sync");
-  expect(definition.createdBySubjectId).toBe("service_account:planner");
 
   const run = await (workflow.startRun as any)(
     create(StartWorkflowProviderRunRequestSchema, {
+      providerName: "fixture-workflow",
       idempotencyKey: "req-1",
       definitionId: "roadmap_sync",
       context: create(RequestContextSchema, {
@@ -1600,7 +1601,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(runApp.name).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
-  expect(run.createdBySubjectId).toBe("user:user-123");
 
   const pausedDefinition = await (workflow.setActivationPaused as any)({
     definitionId: "roadmap_sync",
@@ -1611,7 +1611,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
 
   await (workflow.deliverEvent as any)(
     create(DeliverWorkflowProviderEventRequestSchema, {
-      appName: "roadmap",
+      providerName: "fixture-workflow",
       event: {
         id: "evt-1",
         source: "tests",

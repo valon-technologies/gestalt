@@ -121,6 +121,9 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 	if len(provider.applyRequests) != 1 {
 		t.Fatalf("apply requests = %#v", provider.applyRequests)
 	}
+	if got := provider.applyRequests[0].GetProviderName(); got != "local" {
+		t.Fatalf("apply provider name = %q, want local", got)
+	}
 	requireWorkflowManagerRequestContext(t, provider.applyRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 
 	run, err := manager.StartRun(context.Background(), caller, RunStart{
@@ -149,6 +152,9 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 	}
 	if len(provider.startRunRequests) != 1 || provider.startRunRequests[0].GetExpectedDefinitionGeneration() != 1 {
 		t.Fatalf("start requests = %#v", provider.startRunRequests)
+	}
+	if got := provider.startRunRequests[0].GetProviderName(); got != "local" {
+		t.Fatalf("start provider name = %q, want local", got)
 	}
 	requireWorkflowManagerRequestContext(t, provider.startRunRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 }
@@ -198,6 +204,9 @@ func TestSignalOrStartRunRequiresDefinitionAndCarriesInput(t *testing.T) {
 	if len(provider.signalOrStartRequests) != 1 || provider.signalOrStartRequests[0].GetDefinitionId() != "definition-1" {
 		t.Fatalf("signal requests = %#v", provider.signalOrStartRequests)
 	}
+	if got := provider.signalOrStartRequests[0].GetProviderName(); got != "local" {
+		t.Fatalf("signal provider name = %q, want local", got)
+	}
 	requireWorkflowManagerRequestContext(t, provider.signalOrStartRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 }
 
@@ -220,8 +229,9 @@ func TestDeliverEventPreservesCallerApp(t *testing.T) {
 		t.Fatalf("DeliverEvent selected provider: %v", err)
 	}
 	if _, err := manager.DeliverEvent(context.Background(), caller, EventDeliver{
-		AppName: " github ",
-		Event:   coreworkflow.Event{Type: "issue.updated"},
+		ProviderName: "local",
+		AppName:      " github ",
+		Event:        coreworkflow.Event{Type: "issue.updated"},
 	}); err != nil {
 		t.Fatalf("DeliverEvent fan-out: %v", err)
 	}
@@ -229,8 +239,8 @@ func TestDeliverEventPreservesCallerApp(t *testing.T) {
 		t.Fatalf("delivered events = %d, want 2", len(provider.deliveredEvents))
 	}
 	for i, req := range provider.deliveredEvents {
-		if req.GetAppName() != "github" {
-			t.Fatalf("deliveredEvents[%d].AppName = %q, want github", i, req.GetAppName())
+		if got := req.GetProviderName(); got != "local" {
+			t.Fatalf("deliveredEvents[%d].ProviderName = %q, want local", i, got)
 		}
 		if req.GetEvent().GetSource() != "github" {
 			t.Fatalf("deliveredEvents[%d].Event.Source = %q, want github", i, req.GetEvent().GetSource())
@@ -255,10 +265,6 @@ func (c testWorkflowControl) ResolveProvider(_ context.Context, name string) (st
 		name = "local"
 	}
 	return name, c.provider, nil
-}
-
-func (c testWorkflowControl) ProviderNames() []string {
-	return []string{"local"}
 }
 
 type testWorkflowProvider struct {

@@ -23,10 +23,8 @@ from ._agent import (
     agent_tool_ref_from_dict,
     agent_tool_ref_from_proto,
     agent_tool_ref_to_proto,
-    subject_from_proto,
-    subject_to_proto,
 )
-from ._api import Request, Subject
+from ._api import Request
 from ._gen.v1 import agent_pb2 as _agent_pb
 from ._gen.v1 import app_pb2 as _app_pb
 from ._gen.v1 import workflow_pb2 as _pb
@@ -285,7 +283,7 @@ class WorkflowDefinitionSpec:
         default_factory=list
     )
     paused: bool = False
-    run_as: Subject | Mapping[str, Any] | None = None
+    run_as: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -298,7 +296,6 @@ class WorkflowSignal:
     name: str = ""
     payload: WorkflowJsonObject | None = None
     metadata: WorkflowJsonObject | None = None
-    created_by_subject_id: str = ""
     created_at: _dt.datetime | Any | None = None
     idempotency_key: str = ""
     sequence: int = 0
@@ -383,11 +380,10 @@ class WorkflowRun:
     completed_at: _dt.datetime | Any | None = None
     status_message: str = ""
     output: WorkflowJsonValue | None = None
-    created_by_subject_id: str = ""
     workflow_key: str = ""
     provider_name: str = ""
     definition_id: str = ""
-    run_as: Subject | Mapping[str, Any] | None = None
+    run_as: str = ""
     input: WorkflowJsonObject | None = None
     definition_generation: int = 0
     current_step_id: str = ""
@@ -405,11 +401,10 @@ class WorkflowDefinition:
     target: BoundWorkflowTarget | None = None
     activations: Sequence[WorkflowActivation] = _dataclasses.field(default_factory=list)
     paused: bool = False
-    created_by_subject_id: str = ""
     created_at: _dt.datetime | Any | None = None
     updated_at: _dt.datetime | Any | None = None
     provider_name: str = ""
-    run_as: Subject | Mapping[str, Any] | None = None
+    run_as: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -420,7 +415,6 @@ class WorkflowStartRun:
     workflow_key: str = ""
     definition_id: str = ""
     input: WorkflowJsonObject | None = None
-    run_as: Subject | Mapping[str, Any] | None = None
     expected_definition_generation: int = 0
 
 
@@ -440,7 +434,6 @@ class WorkflowSignalOrStartRun:
     signal: WorkflowSignal | None = None
     definition_id: str = ""
     input: WorkflowJsonObject | None = None
-    run_as: Subject | Mapping[str, Any] | None = None
     expected_definition_generation: int = 0
 
 
@@ -500,7 +493,6 @@ class WorkflowGetRunOutput:
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowDeliverEvent:
     __hash__ = None
-    app_name: str = ""
     provider_name: str = ""
     event: WorkflowEvent | None = None
 
@@ -700,7 +692,7 @@ def workflow_definition_spec(value: Any | None = None, **kwargs: Any) -> Any:
         target=bound_workflow_target(target) if target is not None else None,
         activations=[workflow_activation(item) for item in data.get("activations", [])],
         paused=data.get("paused", False),
-        run_as=subject_to_proto(data.get("run_as")),
+        run_as=data.get("run_as", ""),
     )
 
 
@@ -721,7 +713,7 @@ def workflow_definition_spec_input_from_spec(
             for item in value.activations
         ],
         paused=value.paused,
-        run_as=subject_from_proto(value.run_as) if has_field(value, "run_as") else None,
+        run_as=value.run_as,
     )
 
 
@@ -1231,7 +1223,6 @@ def workflow_signal(value: Any | None = None, **kwargs: Any) -> Any:
         name=data.get("name", ""),
         payload=_optional_struct(data.get("payload")),
         metadata=_optional_struct(data.get("metadata")),
-        created_by_subject_id=data.get("created_by_subject_id", ""),
         created_at=_optional_timestamp(data.get("created_at")),
         idempotency_key=data.get("idempotency_key", ""),
         sequence=data.get("sequence", 0),
@@ -1252,7 +1243,6 @@ def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignal | Non
         metadata=cast(WorkflowJsonObject, struct_to_dict(value.metadata))
         if has_field(value, "metadata")
         else None,
-        created_by_subject_id=value.created_by_subject_id,
         created_at=_timestamp_to_datetime(value, "created_at"),
         idempotency_key=value.idempotency_key,
         sequence=value.sequence,
@@ -1414,7 +1404,8 @@ def _workflow_get_definition_request(value: Any | None = None, **kwargs: Any) ->
         return _copy(value)
     data = _data(value, kwargs)
     return pb.GetWorkflowProviderDefinitionRequest(
-        definition_id=data.get("definition_id", "")
+        definition_id=data.get("definition_id", ""),
+        provider_name=data.get("provider_name", ""),
     )
 
 
@@ -1423,7 +1414,8 @@ def _workflow_delete_definition_request(value: Any | None = None, **kwargs: Any)
         return _copy(value)
     data = _data(value, kwargs)
     return pb.DeleteWorkflowProviderDefinitionRequest(
-        definition_id=data.get("definition_id", "")
+        definition_id=data.get("definition_id", ""),
+        provider_name=data.get("provider_name", ""),
     )
 
 
@@ -1436,6 +1428,7 @@ def _workflow_set_definition_paused_request(
     return pb.SetWorkflowProviderDefinitionPausedRequest(
         definition_id=data.get("definition_id", ""),
         paused=data.get("paused", False),
+        provider_name=data.get("provider_name", ""),
     )
 
 
@@ -1449,6 +1442,7 @@ def _workflow_set_activation_paused_request(
         definition_id=data.get("definition_id", ""),
         activation_id=data.get("activation_id", ""),
         paused=data.get("paused", False),
+        provider_name=data.get("provider_name", ""),
     )
 
 
@@ -1456,14 +1450,20 @@ def _workflow_get_run_events_request(value: Any | None = None, **kwargs: Any) ->
     if isinstance(value, pb.GetWorkflowProviderRunEventsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.GetWorkflowProviderRunEventsRequest(run_id=data.get("run_id", ""))
+    return pb.GetWorkflowProviderRunEventsRequest(
+        run_id=data.get("run_id", ""),
+        provider_name=data.get("provider_name", ""),
+    )
 
 
 def _workflow_get_run_output_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.GetWorkflowProviderRunOutputRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.GetWorkflowProviderRunOutputRequest(run_id=data.get("run_id", ""))
+    return pb.GetWorkflowProviderRunOutputRequest(
+        run_id=data.get("run_id", ""),
+        provider_name=data.get("provider_name", ""),
+    )
 
 
 def _workflow_deliver_event_request(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1472,7 +1472,6 @@ def _workflow_deliver_event_request(value: Any | None = None, **kwargs: Any) -> 
     data = _data(value, kwargs)
     event = data.get("event")
     return pb.DeliverWorkflowProviderEventRequest(
-        app_name=data.get("app_name", ""),
         provider_name=data.get("provider_name", ""),
         event=workflow_event(event) if event is not None else None,
     )
@@ -1583,11 +1582,10 @@ def workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
         completed_at=_optional_timestamp(data.get("completed_at")),
         status_message=data.get("status_message", ""),
         output=_optional_value(data.get("output")),
-        created_by_subject_id=data.get("created_by_subject_id", ""),
         workflow_key=data.get("workflow_key", ""),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
-        run_as=subject_to_proto(data.get("run_as")),
+        run_as=data.get("run_as", ""),
         input=_optional_struct(data.get("input")),
         definition_generation=data.get("definition_generation", 0),
         current_step_id=data.get("current_step_id", ""),
@@ -1618,11 +1616,10 @@ def workflow_run_input_from_run(
         output=cast(WorkflowJsonValue, value_to_json(value.output))
         if has_field(value, "output")
         else None,
-        created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
-        run_as=subject_from_proto(value.run_as) if has_field(value, "run_as") else None,
+        run_as=value.run_as,
         input=cast(WorkflowJsonObject, struct_to_dict(value.input))
         if has_field(value, "input")
         else None,
@@ -1658,11 +1655,10 @@ def workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
         target=bound_workflow_target(target) if target is not None else None,
         activations=[workflow_activation(item) for item in data.get("activations", [])],
         paused=data.get("paused", False),
-        created_by_subject_id=data.get("created_by_subject_id", ""),
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
         provider_name=data.get("provider_name", ""),
-        run_as=subject_to_proto(data.get("run_as")),
+        run_as=data.get("run_as", ""),
     )
 
 
@@ -1684,11 +1680,10 @@ def workflow_definition_input_from_definition(
             for item in value.activations
         ],
         paused=value.paused,
-        created_by_subject_id=value.created_by_subject_id,
         created_at=_timestamp_to_datetime(value, "created_at"),
         updated_at=_timestamp_to_datetime(value, "updated_at"),
         provider_name=value.provider_name,
-        run_as=subject_from_proto(value.run_as) if has_field(value, "run_as") else None,
+        run_as=value.run_as,
     )
 
 
@@ -1726,6 +1721,7 @@ class StartWorkflowProviderRunRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     idempotency_key: str = ""
     workflow_key: str = ""
     definition_id: str = ""
@@ -1740,6 +1736,7 @@ class GetWorkflowProviderRunRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     run_id: str = ""
     context: Any | None = None
 
@@ -1750,6 +1747,7 @@ class ListWorkflowProviderRunsRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     page_size: int = 0
     page_token: str = ""
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
@@ -1787,6 +1785,7 @@ class GetWorkflowProviderRunEventsRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     run_id: str = ""
     context: Any | None = None
 
@@ -1806,6 +1805,7 @@ class GetWorkflowProviderRunOutputRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     run_id: str = ""
     context: Any | None = None
 
@@ -1825,6 +1825,7 @@ class CancelWorkflowProviderRunRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     run_id: str = ""
     reason: str = ""
     context: Any | None = None
@@ -1836,6 +1837,7 @@ class SignalWorkflowProviderRunRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     run_id: str = ""
     signal: WorkflowSignal | None = None
     context: Any | None = None
@@ -1847,6 +1849,7 @@ class SignalOrStartWorkflowProviderRunRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     workflow_key: str = ""
     idempotency_key: str = ""
     signal: WorkflowSignal | None = None
@@ -1874,6 +1877,7 @@ class ApplyWorkflowProviderDefinitionRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     spec: WorkflowDefinitionSpec | None = None
     idempotency_key: str = ""
     context: Any | None = None
@@ -1885,6 +1889,7 @@ class GetWorkflowProviderDefinitionRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     definition_id: str = ""
     context: Any | None = None
 
@@ -1895,6 +1900,7 @@ class ListWorkflowProviderDefinitionsRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     context: Any | None = None
 
 
@@ -1913,6 +1919,7 @@ class SetWorkflowProviderDefinitionPausedRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     definition_id: str = ""
     paused: bool = False
     context: Any | None = None
@@ -1924,6 +1931,7 @@ class SetWorkflowProviderActivationPausedRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     definition_id: str = ""
     activation_id: str = ""
     paused: bool = False
@@ -1936,6 +1944,7 @@ class DeleteWorkflowProviderDefinitionRequest:
 
     __hash__ = None
 
+    provider_name: str = ""
     definition_id: str = ""
     context: Any | None = None
 
@@ -1946,7 +1955,7 @@ class DeliverWorkflowProviderEventRequest:
 
     __hash__ = None
 
-    app_name: str = ""
+    provider_name: str = ""
     event: WorkflowEvent | None = None
     context: Any | None = None
 
@@ -1955,6 +1964,7 @@ def start_workflow_provider_run_request_from_proto(
     value: Any,
 ) -> StartWorkflowProviderRunRequest:
     return StartWorkflowProviderRunRequest(
+        provider_name=value.provider_name,
         idempotency_key=value.idempotency_key,
         workflow_key=value.workflow_key,
         definition_id=value.definition_id,
@@ -1970,6 +1980,7 @@ def get_workflow_provider_run_request_from_proto(
     value: Any,
 ) -> GetWorkflowProviderRunRequest:
     return GetWorkflowProviderRunRequest(
+        provider_name=value.provider_name,
         run_id=value.run_id,
         context=getattr(value, "context", None),
     )
@@ -1979,6 +1990,7 @@ def list_workflow_provider_runs_request_from_proto(
     value: Any,
 ) -> ListWorkflowProviderRunsRequest:
     return ListWorkflowProviderRunsRequest(
+        provider_name=value.provider_name,
         page_size=int(value.page_size),
         page_token=value.page_token,
         status=value.status,
@@ -2005,6 +2017,7 @@ def cancel_workflow_provider_run_request_from_proto(
     value: Any,
 ) -> CancelWorkflowProviderRunRequest:
     return CancelWorkflowProviderRunRequest(
+        provider_name=value.provider_name,
         run_id=value.run_id,
         reason=value.reason,
         context=getattr(value, "context", None),
@@ -2015,6 +2028,7 @@ def signal_workflow_provider_run_request_from_proto(
     value: Any,
 ) -> SignalWorkflowProviderRunRequest:
     return SignalWorkflowProviderRunRequest(
+        provider_name=value.provider_name,
         run_id=value.run_id,
         signal=workflow_signal_input_from_signal(value.signal)
         if has_field(value, "signal")
@@ -2027,6 +2041,7 @@ def signal_or_start_workflow_provider_run_request_from_proto(
     value: Any,
 ) -> SignalOrStartWorkflowProviderRunRequest:
     return SignalOrStartWorkflowProviderRunRequest(
+        provider_name=value.provider_name,
         workflow_key=value.workflow_key,
         idempotency_key=value.idempotency_key,
         signal=workflow_signal_input_from_signal(value.signal)
@@ -2060,6 +2075,7 @@ def apply_workflow_provider_definition_request_from_proto(
     value: Any,
 ) -> ApplyWorkflowProviderDefinitionRequest:
     return ApplyWorkflowProviderDefinitionRequest(
+        provider_name=value.provider_name,
         spec=workflow_definition_spec_input_from_spec(value.spec)
         if has_field(value, "spec")
         else None,
@@ -2072,6 +2088,7 @@ def get_workflow_provider_definition_request_from_proto(
     value: Any,
 ) -> GetWorkflowProviderDefinitionRequest:
     return GetWorkflowProviderDefinitionRequest(
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         context=getattr(value, "context", None),
     )
@@ -2081,6 +2098,7 @@ def list_workflow_provider_definitions_request_from_proto(
     value: Any,
 ) -> ListWorkflowProviderDefinitionsRequest:
     return ListWorkflowProviderDefinitionsRequest(
+        provider_name=value.provider_name,
         context=getattr(value, "context", None),
     )
 
@@ -2102,6 +2120,7 @@ def set_workflow_provider_definition_paused_request_from_proto(
     value: Any,
 ) -> SetWorkflowProviderDefinitionPausedRequest:
     return SetWorkflowProviderDefinitionPausedRequest(
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         paused=value.paused,
         context=getattr(value, "context", None),
@@ -2112,6 +2131,7 @@ def set_workflow_provider_activation_paused_request_from_proto(
     value: Any,
 ) -> SetWorkflowProviderActivationPausedRequest:
     return SetWorkflowProviderActivationPausedRequest(
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         activation_id=value.activation_id,
         paused=value.paused,
@@ -2123,6 +2143,7 @@ def delete_workflow_provider_definition_request_from_proto(
     value: Any,
 ) -> DeleteWorkflowProviderDefinitionRequest:
     return DeleteWorkflowProviderDefinitionRequest(
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         context=getattr(value, "context", None),
     )
@@ -2161,6 +2182,7 @@ def get_workflow_provider_run_events_request_from_proto(
     value: Any,
 ) -> GetWorkflowProviderRunEventsRequest:
     return GetWorkflowProviderRunEventsRequest(
+        provider_name=value.provider_name,
         run_id=value.run_id,
         context=getattr(value, "context", None),
     )
@@ -2183,6 +2205,7 @@ def get_workflow_provider_run_output_request_from_proto(
     value: Any,
 ) -> GetWorkflowProviderRunOutputRequest:
     return GetWorkflowProviderRunOutputRequest(
+        provider_name=value.provider_name,
         run_id=value.run_id,
         context=getattr(value, "context", None),
     )
@@ -2205,7 +2228,7 @@ def deliver_workflow_provider_event_request_from_proto(
     value: Any,
 ) -> DeliverWorkflowProviderEventRequest:
     return DeliverWorkflowProviderEventRequest(
-        app_name=value.app_name,
+        provider_name=value.provider_name,
         event=workflow_event_input_from_event(value.event)
         if has_field(value, "event")
         else None,
@@ -2911,8 +2934,6 @@ def workflow_signals_context(
                 item["payload"] = payload
         if signal.metadata is not None:
             item["metadata"] = _compact_json_value(signal.metadata, 4)
-        if signal.created_by_subject_id.strip():
-            item["createdBySubjectId"] = signal.created_by_subject_id.strip()
         created_at = _format_workflow_time(signal.created_at)
         if created_at:
             item["createdAt"] = created_at

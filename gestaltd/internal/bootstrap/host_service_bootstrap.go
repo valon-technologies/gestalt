@@ -444,15 +444,25 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
 	}
+	workflowProviderName := ""
+	if deps.WorkflowRuntime != nil {
+		workflowProviderName = deps.WorkflowRuntime.DefaultProviderName()
+	}
 	return runtimehost.HostService{
 		Name:           "workflow",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Workflow_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
+			opts := []workflowservice.ProviderServerOption{
+				workflowservice.WithAgentWorkflowInvocationAuthorizer(deps.AgentManager),
+			}
+			if workflowProviderName != "" {
+				opts = append(opts, workflowservice.WithWorkflowProviderName(workflowProviderName))
+			}
 			proto.RegisterWorkflowServer(srv, workflowservice.NewProviderServer(
 				appName,
 				manager,
 				deps.Authorization,
-				workflowservice.WithAgentWorkflowInvocationAuthorizer(deps.AgentManager),
+				opts...,
 			))
 		},
 	}

@@ -3,7 +3,8 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -200,30 +201,23 @@ func (r *workflowRuntime) ResolveProvider(ctx context.Context, name string) (str
 	return selectedName, provider, nil
 }
 
-func (r *workflowRuntime) ProviderNames() []string {
+func (r *workflowRuntime) DefaultProviderName() string {
+	if r == nil {
+		return ""
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return strings.TrimSpace(r.defaultProviderName)
+}
+
+// ConfiguredProviderNames returns every workflow provider declared in the
+// configuration. Bootstrap reconciliation uses this to visit non-default
+// providers while normal manager operations resolve the selected provider.
+func (r *workflowRuntime) ConfiguredProviderNames() []string {
 	if r == nil {
 		return nil
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	seen := map[string]struct{}{}
-	names := make([]string, 0, len(r.providers)+len(r.pendingProviders))
-	for name := range r.providers {
-		if strings.TrimSpace(name) == "" {
-			continue
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
-	}
-	for name := range r.pendingProviders {
-		if strings.TrimSpace(name) == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(r.configuredProviders))
 }

@@ -30,6 +30,9 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
+	if strings.HasPrefix(strings.TrimSpace(req.Spec.ID), coreworkflow.ConfigManagedDefinitionPrefix) {
+		return nil, fmt.Errorf("workflow definition id %q is reserved for configuration bootstrap", req.Spec.ID)
+	}
 	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
 	if err != nil {
 		return nil, err
@@ -53,6 +56,7 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 		return nil, err
 	}
 	definitionProto, err := provider.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
+		ProviderName:   providerName,
 		Spec:           specProto,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
 		Context:        reqContext,
@@ -67,11 +71,11 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	return &ManagedDefinition{ProviderName: providerName, Definition: definition, provider: provider}, nil
 }
 
-func (m *Manager) GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*ManagedDefinition, error) {
-	return m.requireOwnedDefinition(ctx, p, definitionID, "")
+func (m *Manager) GetDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) (*ManagedDefinition, error) {
+	return m.requireOwnedDefinition(ctx, p, definitionID, providerName)
 }
 
-func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal) (*ListDefinitionsResponse, error) {
+func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal, providerName string) (*ListDefinitionsResponse, error) {
 	if m == nil || m.workflow == nil {
 		return nil, ErrWorkflowNotConfigured
 	}
@@ -84,38 +88,36 @@ func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal) (
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*ManagedDefinition, 0)
-	for _, providerName := range m.providerNames() {
-		_, provider, err := m.resolveProvider(ctx, providerName)
+	providerName, provider, err := m.resolveProvider(ctx, providerName)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := provider.ListDefinitions(ctx, &proto.ListWorkflowProviderDefinitionsRequest{ProviderName: providerName, Context: reqContext})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ManagedDefinition, 0, len(resp.GetDefinitions()))
+	for _, definitionProto := range resp.GetDefinitions() {
+		if definitionProto == nil {
+			continue
+		}
+		definition, err := workflowwire.DefinitionFromProto(definitionProto)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := provider.ListDefinitions(ctx, &proto.ListWorkflowProviderDefinitionsRequest{Context: reqContext})
-		if err != nil {
-			return nil, err
+		managed := &ManagedDefinition{
+			ProviderName: strings.TrimSpace(providerName),
+			Definition:   definition,
+			provider:     provider,
 		}
-		for _, definitionProto := range resp.GetDefinitions() {
-			if definitionProto == nil {
-				continue
-			}
-			definition, err := workflowwire.DefinitionFromProto(definitionProto)
-			if err != nil {
-				return nil, err
-			}
-			managed := &ManagedDefinition{
-				ProviderName: strings.TrimSpace(providerName),
-				Definition:   definition,
-				provider:     provider,
-			}
-			if m.definitionAccessible(ctx, p, managed) {
-				out = append(out, managed)
-			}
+		if m.definitionAccessible(ctx, p, managed) {
+			out = append(out, managed)
 		}
 	}
 	return &ListDefinitionsResponse{Definitions: out}, nil
 }
 
-func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (out *ManagedDefinition, err error) {
+func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, providerName, definitionID string, paused bool) (out *ManagedDefinition, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionPause)
 	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
@@ -127,7 +129,7 @@ func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principa
 		}
 		audit.finish(ctx, err)
 	}()
-	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, "")
+	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +141,7 @@ func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principa
 		return nil, err
 	}
 	definitionProto, err := existing.provider.SetDefinitionPaused(ctx, &proto.SetWorkflowProviderDefinitionPausedRequest{
+		ProviderName: strings.TrimSpace(existing.ProviderName),
 		DefinitionId: strings.TrimSpace(definitionID),
 		Paused:       paused,
 		Context:      reqContext,
@@ -153,7 +156,7 @@ func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principa
 	return &ManagedDefinition{ProviderName: existing.ProviderName, Definition: definition, provider: existing.provider}, nil
 }
 
-func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (out *ManagedDefinition, err error) {
+func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principal, providerName, definitionID, activationID string, paused bool) (out *ManagedDefinition, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationActivationPause)
 	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, activationID)
@@ -165,7 +168,7 @@ func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principa
 		}
 		audit.finish(ctx, err)
 	}()
-	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, "")
+	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +180,7 @@ func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principa
 		return nil, err
 	}
 	definitionProto, err := existing.provider.SetActivationPaused(ctx, &proto.SetWorkflowProviderActivationPausedRequest{
+		ProviderName: strings.TrimSpace(existing.ProviderName),
 		DefinitionId: strings.TrimSpace(definitionID),
 		ActivationId: strings.TrimSpace(activationID),
 		Paused:       paused,
@@ -192,14 +196,14 @@ func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principa
 	return &ManagedDefinition{ProviderName: existing.ProviderName, Definition: definition, provider: existing.provider}, nil
 }
 
-func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) (err error) {
+func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) (err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionDelete)
 	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
 	defer func() {
 		audit.finish(ctx, err)
 	}()
-	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, "")
+	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, providerName)
 	if err != nil {
 		return err
 	}
@@ -212,6 +216,7 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 		return err
 	}
 	return existing.provider.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{
+		ProviderName: strings.TrimSpace(existing.ProviderName),
 		DefinitionId: strings.TrimSpace(definitionID),
 		Context:      reqContext,
 	})
@@ -294,61 +299,23 @@ func (m *Manager) findDefinition(ctx context.Context, p *principal.Principal, de
 	if err != nil {
 		return nil, err
 	}
-	if providerSelection = strings.TrimSpace(providerSelection); providerSelection != "" {
-		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
-		if err != nil {
-			return nil, err
-		}
-		definitionProto, err := provider.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{
-			DefinitionId: definitionID,
-			Context:      reqContext,
-		})
-		if err != nil {
-			return nil, err
-		}
-		definition, err := workflowwire.DefinitionFromProto(definitionProto)
-		if err != nil {
-			return nil, err
-		}
-		return &ManagedDefinition{ProviderName: providerName, Definition: definition, provider: provider}, nil
+	providerName, provider, err := m.resolveProvider(ctx, providerSelection)
+	if err != nil {
+		return nil, err
 	}
-
-	var match *ManagedDefinition
-	var firstErr error
-	for _, providerName := range m.providerNames() {
-		_, provider, err := m.resolveProvider(ctx, providerName)
-		if err != nil {
-			return nil, err
-		}
-		definitionProto, err := provider.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{
-			DefinitionId: definitionID,
-			Context:      reqContext,
-		})
-		if err != nil {
-			if isWorkflowProviderNotFound(err) {
-				continue
-			}
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		definition, err := workflowwire.DefinitionFromProto(definitionProto)
-		if err != nil {
-			return nil, err
-		}
-		if match != nil {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateWorkflowObjects, definitionID)
-		}
-		match = &ManagedDefinition{ProviderName: strings.TrimSpace(providerName), Definition: definition, provider: provider}
+	definitionProto, err := provider.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{
+		ProviderName: providerName,
+		DefinitionId: definitionID,
+		Context:      reqContext,
+	})
+	if err != nil {
+		return nil, err
 	}
-	if match != nil {
-		return match, nil
+	definition, err := workflowwire.DefinitionFromProto(definitionProto)
+	if err != nil {
+		return nil, err
 	}
-	if firstErr != nil {
-		return nil, firstErr
-	}
-	return nil, core.ErrNotFound
+	return &ManagedDefinition{ProviderName: strings.TrimSpace(providerName), Definition: definition, provider: provider}, nil
 }
 
 func (m *Manager) requireOwnedDefinition(ctx context.Context, p *principal.Principal, definitionID, providerSelection string) (*ManagedDefinition, error) {
@@ -366,12 +333,5 @@ func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Princip
 	if definition == nil || definition.Definition == nil {
 		return false
 	}
-	return workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, definition.Definition.Target)
-}
-
-func (m *Manager) providerNames() []string {
-	if m == nil || m.workflow == nil {
-		return nil
-	}
-	return m.workflow.ProviderNames()
+	return true
 }

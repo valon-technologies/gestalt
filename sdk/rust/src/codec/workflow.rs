@@ -4,8 +4,7 @@
 
 use crate::codec::agent::{from_wire_agent_output, to_wire_agent_output};
 use crate::codec::app::{
-    from_wire_agent_tool_ref, from_wire_subject_context, to_wire_agent_tool_ref,
-    to_wire_request_context, to_wire_subject_context,
+    from_wire_agent_tool_ref, to_wire_agent_tool_ref, to_wire_request_context,
 };
 use crate::codec::support::{
     from_wire_struct, from_wire_timestamp, from_wire_value, to_wire_struct, to_wire_timestamp,
@@ -73,6 +72,7 @@ pub(crate) fn to_wire_cancel_workflow_provider_run_request(
         run_id: value.run_id,
         reason: value.reason,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -83,6 +83,7 @@ pub(crate) fn to_wire_delete_workflow_provider_definition_request(
     v1::DeleteWorkflowProviderDefinitionRequest {
         definition_id: value.definition_id,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -91,9 +92,8 @@ pub(crate) fn to_wire_deliver_workflow_provider_event_request(
     value: DeliverWorkflowProviderEventRequest,
 ) -> v1::DeliverWorkflowProviderEventRequest {
     v1::DeliverWorkflowProviderEventRequest {
-        app_name: value.app_name,
-        event: value.event.map(to_wire_workflow_event),
         provider_name: value.provider_name,
+        event: value.event.map(to_wire_workflow_event),
         context: value.context.map(to_wire_request_context),
     }
 }
@@ -105,6 +105,7 @@ pub(crate) fn to_wire_get_workflow_provider_definition_request(
     v1::GetWorkflowProviderDefinitionRequest {
         definition_id: value.definition_id,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -115,6 +116,7 @@ pub(crate) fn to_wire_get_workflow_provider_run_events_request(
     v1::GetWorkflowProviderRunEventsRequest {
         run_id: value.run_id,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -138,6 +140,7 @@ pub(crate) fn to_wire_get_workflow_provider_run_output_request(
     v1::GetWorkflowProviderRunOutputRequest {
         run_id: value.run_id,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -157,6 +160,7 @@ pub(crate) fn to_wire_get_workflow_provider_run_request(
     v1::GetWorkflowProviderRunRequest {
         run_id: value.run_id,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -166,6 +170,7 @@ pub(crate) fn to_wire_list_workflow_provider_definitions_request(
 ) -> v1::ListWorkflowProviderDefinitionsRequest {
     v1::ListWorkflowProviderDefinitionsRequest {
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -192,6 +197,7 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
         status: value.status,
         target_app: value.target_app,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -214,6 +220,7 @@ pub(crate) fn to_wire_set_workflow_provider_activation_paused_request(
         activation_id: value.activation_id,
         paused: value.paused,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -225,6 +232,7 @@ pub(crate) fn to_wire_set_workflow_provider_definition_paused_request(
         definition_id: value.definition_id,
         paused: value.paused,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -252,6 +260,7 @@ pub(crate) fn to_wire_signal_workflow_provider_run_request(
         run_id: value.run_id,
         signal: value.signal.map(to_wire_workflow_signal),
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
     }
 }
 
@@ -384,11 +393,10 @@ pub(crate) fn from_wire_workflow_definition(value: v1::WorkflowDefinition) -> Wo
             .map(from_wire_workflow_activation)
             .collect(),
         paused: value.paused,
-        created_by_subject_id: value.created_by_subject_id,
         created_at: value.created_at.map(from_wire_timestamp),
         updated_at: value.updated_at.map(from_wire_timestamp),
         provider_name: value.provider_name,
-        run_as: value.run_as.map(from_wire_subject_context),
+        run_as: value.run_as,
     }
 }
 
@@ -405,7 +413,7 @@ pub(crate) fn to_wire_workflow_definition_spec(
             .map(to_wire_workflow_activation)
             .collect(),
         paused: value.paused,
-        run_as: value.run_as.map(to_wire_subject_context),
+        run_as: value.run_as,
     }
 }
 
@@ -544,11 +552,10 @@ pub(crate) fn from_wire_workflow_run(value: v1::WorkflowRun) -> WorkflowRun {
         completed_at: value.completed_at.map(from_wire_timestamp),
         status_message: value.status_message,
         output: value.output.map(from_wire_value),
-        created_by_subject_id: value.created_by_subject_id,
         workflow_key: value.workflow_key,
         provider_name: value.provider_name,
         definition_id: value.definition_id,
-        run_as: value.run_as.map(from_wire_subject_context),
+        run_as: value.run_as,
         input: value.input.map(from_wire_struct),
         definition_generation: value.definition_generation,
         current_step_id: value.current_step_id,
@@ -632,7 +639,6 @@ pub(crate) fn to_wire_workflow_signal(value: WorkflowSignal) -> v1::WorkflowSign
         name: value.name,
         payload: value.payload.map(to_wire_struct),
         metadata: value.metadata.map(to_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
         created_at: value.created_at.map(to_wire_timestamp),
         idempotency_key: value.idempotency_key,
         sequence: value.sequence,
@@ -646,7 +652,6 @@ pub(crate) fn from_wire_workflow_signal(value: v1::WorkflowSignal) -> WorkflowSi
         name: value.name,
         payload: value.payload.map(from_wire_struct),
         metadata: value.metadata.map(from_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
         created_at: value.created_at.map(from_wire_timestamp),
         idempotency_key: value.idempotency_key,
         sequence: value.sequence,

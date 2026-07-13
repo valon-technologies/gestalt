@@ -121,12 +121,11 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
         _manager_requests.append(
             {
                 "method": "deliver_event",
+                "provider_name": request.provider_name,
                 "event_id": event.id,
                 "event_type": event.type,
                 "event_source": event.source,
                 "event_subject": event.subject,
-                "app_name": request.app_name,
-                "provider_name": request.provider_name,
             }
         )
         if not event.id:
@@ -203,9 +202,8 @@ class WorkflowTransportTests(unittest.TestCase):
         ) as manager:
             delivered = manager.deliver_event(
                 WorkflowDeliverEvent(
-                    app_name="github",
-                    event=event,
                     provider_name="advanced",
+                    event=event,
                 )
             )
 
@@ -219,12 +217,11 @@ class WorkflowTransportTests(unittest.TestCase):
             [
                 {
                     "method": "deliver_event",
+                    "provider_name": "advanced",
                     "event_id": "delivery-123",
                     "event_type": "github.app.webhook",
                     "event_source": "github",
                     "event_subject": "acme/widgets",
-                    "app_name": "github",
-                    "provider_name": "advanced",
                 }
             ],
         )
@@ -340,12 +337,11 @@ class WorkflowTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "deliver_event",
+                    "provider_name": "managed",
                     "event_id": "",
                     "event_type": "github.app.webhook",
                     "event_source": "github",
                     "event_subject": "installation:99",
-                    "app_name": "",
-                    "provider_name": "managed",
                 },
             ],
         )

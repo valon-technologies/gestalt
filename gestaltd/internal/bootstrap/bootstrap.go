@@ -192,7 +192,6 @@ type Deps struct {
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
 	RemoteClients         *remote.ClientSet
-	RemoteToken           string
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -892,7 +891,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
 	if remoteURL := strings.TrimSpace(cfg.Server.Remote); remoteURL != "" {
-		deps.RemoteToken = cfg.Server.RemoteToken
 		deps.RemoteClients, err = remote.NewClientSet(ctx, remote.Config{
 			URL:   remoteURL,
 			Token: cfg.Server.RemoteToken,
@@ -2307,6 +2305,9 @@ func buildPublicGatewayTransport(
 	transport.SetUserStore(users)
 	transport.SetPublicMethods(registry)
 	if cfg != nil {
+		if name, _, err := cfg.SelectedWorkflowProvider(); err == nil && name != "" {
+			transport.SetWorkflowProviderName(name)
+		}
 		if name, _, err := cfg.SelectedAuthorizationProvider(); err == nil && name != "" && authorization != nil {
 			transport.SetAuthorizationProvider(authorization[name])
 		}

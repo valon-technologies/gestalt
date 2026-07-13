@@ -159,8 +159,7 @@ type SignalWorkflowRunResponse struct {
 // DeliverWorkflowProviderEventRequest requests delivery of a workflow event to
 // provider-owned activation matching.
 type DeliverWorkflowProviderEventRequest struct {
-	AppName string
-	Event   *WorkflowEvent
+	Event *WorkflowEvent
 }
 
 // WorkflowProvider is implemented by providers that serve the workflow base

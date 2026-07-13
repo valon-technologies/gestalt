@@ -29,7 +29,6 @@ import (
 var (
 	ErrWorkflowNotConfigured       = errors.New("workflow is not configured")
 	ErrWorkflowSubjectRequired     = errors.New("workflow subject is required")
-	ErrDuplicateWorkflowObjects    = errors.New("workflow object matched multiple providers")
 	ErrWorkflowEventMatchRequired  = errors.New("workflow trigger match.type is required")
 	ErrWorkflowEventSourceRequired = errors.New("workflow event source is required")
 	ErrWorkflowEventTypeRequired   = errors.New("workflow event type is required")
@@ -79,7 +78,6 @@ func workflowProviderRequestContext(ctx context.Context, p *principal.Principal,
 
 type WorkflowControl interface {
 	ResolveProvider(ctx context.Context, name string) (providerName string, provider coreworkflow.Provider, err error)
-	ProviderNames() []string
 }
 
 type AgentControl interface {
@@ -88,17 +86,17 @@ type AgentControl interface {
 
 type Service interface {
 	ApplyDefinition(ctx context.Context, p *principal.Principal, req DefinitionApply) (*ManagedDefinition, error)
-	GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*ManagedDefinition, error)
-	ListDefinitions(ctx context.Context, p *principal.Principal) (*ListDefinitionsResponse, error)
-	SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (*ManagedDefinition, error)
-	SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*ManagedDefinition, error)
-	DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error
-	ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error)
+	GetDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) (*ManagedDefinition, error)
+	ListDefinitions(ctx context.Context, p *principal.Principal, providerName string) (*ListDefinitionsResponse, error)
+	SetDefinitionPaused(ctx context.Context, p *principal.Principal, providerName, definitionID string, paused bool) (*ManagedDefinition, error)
+	SetActivationPaused(ctx context.Context, p *principal.Principal, providerName, definitionID, activationID string, paused bool) (*ManagedDefinition, error)
+	DeleteDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) error
+	ListRuns(ctx context.Context, p *principal.Principal, providerName string, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error)
 	StartRun(ctx context.Context, p *principal.Principal, req RunStart) (*ManagedRun, error)
-	GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error)
-	GetRunEvents(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error)
-	GetRunOutput(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error)
-	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
+	GetRun(ctx context.Context, p *principal.Principal, providerName, runID string) (*ManagedRun, error)
+	GetRunEvents(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error)
+	GetRunOutput(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error)
+	CancelRun(ctx context.Context, p *principal.Principal, providerName, runID, reason string) (*ManagedRun, error)
 	SignalRun(ctx context.Context, p *principal.Principal, req RunSignal) (*ManagedRunSignal, error)
 	SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error)
 	DeliverEvent(ctx context.Context, p *principal.Principal, req EventDeliver) (coreworkflow.Event, error)
@@ -159,8 +157,9 @@ type RunStart struct {
 }
 
 type RunSignal struct {
-	RunID  string
-	Signal coreworkflow.Signal
+	ProviderName string
+	RunID        string
+	Signal       coreworkflow.Signal
 }
 
 type RunSignalOrStart struct {
@@ -323,14 +322,6 @@ func (a *workflowAuditEvent) setWorkflowTargetAuthorizationFailure(target corewo
 	a.entry.WorkflowTargetOperation = strings.TrimSpace(failure.operation)
 }
 
-func (a *workflowAuditEvent) clone() *workflowAuditEvent {
-	if a == nil {
-		return nil
-	}
-	copied := *a
-	return &copied
-}
-
 func (a *workflowAuditEvent) finish(ctx context.Context, err error) {
 	if a == nil || a.sink == nil {
 		return
@@ -364,7 +355,7 @@ func workflowRunID(run *coreworkflow.Run) string {
 	return strings.TrimSpace(run.ID)
 }
 
-func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error) {
+func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, providerName string, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error) {
 	pageSize, err := effectiveWorkflowRunListPageSize(req.PageSize)
 	if err != nil {
 		return nil, err
@@ -381,7 +372,11 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 	if err != nil {
 		return nil, err
 	}
-	providerNames := m.providerNames()
+	providerName, _, err = m.resolveProvider(ctx, providerName)
+	if err != nil {
+		return nil, err
+	}
+	providerNames := []string{providerName}
 	states, err := decodeWorkflowRunListPageToken(req.PageToken, providerNames, req, pageSize)
 	if err != nil {
 		return nil, err
@@ -421,11 +416,12 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 			}
 			seenProviderTokens[providerPageToken] = struct{}{}
 			resp, err := provider.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
-				PageSize:  int32(pageSize),
-				PageToken: providerPageToken,
-				Status:    workflowwire.RunStatusToProto(req.Status),
-				TargetApp: strings.TrimSpace(req.TargetApp),
-				Context:   reqContext,
+				ProviderName: providerName,
+				PageSize:     int32(pageSize),
+				PageToken:    providerPageToken,
+				Status:       workflowwire.RunStatusToProto(req.Status),
+				TargetApp:    strings.TrimSpace(req.TargetApp),
+				Context:      reqContext,
 			})
 			if err != nil {
 				return nil, err
@@ -890,63 +886,31 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
 		return coreworkflow.Event{}, err
 	}
+	event.Source = appName
 
-	if providerSelection != "" {
-		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
-		if err != nil {
-			return coreworkflow.Event{}, err
-		}
-		audit.setProvider(providerName)
-		eventProto, err := workflowwire.EventToProto(event)
-		if err != nil {
-			return coreworkflow.Event{}, err
-		}
-		deliveredProto, err := provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
-			AppName: appName,
-			Event:   eventProto,
-			Context: reqContext,
-		})
-		if err != nil {
-			return coreworkflow.Event{}, err
-		}
-		if deliveredProto != nil {
-			delivered, err := workflowwire.EventFromProto(deliveredProto)
-			if err != nil {
-				return coreworkflow.Event{}, err
-			}
-			return delivered, nil
-		}
-		return event, nil
+	providerName, provider, err := m.resolveProvider(ctx, providerSelection)
+	if err != nil {
+		return coreworkflow.Event{}, err
 	}
-
-	providerNames := m.workflow.ProviderNames()
-	if len(providerNames) > 0 {
-		finishAudit = false
+	audit.setProvider(providerName)
+	eventProto, err := workflowwire.EventToProto(event)
+	if err != nil {
+		return coreworkflow.Event{}, err
 	}
-	for _, providerName := range providerNames {
-		providerAudit := audit.clone()
-		providerAudit.setProvider(providerName)
-		providerAudit.setObjectTarget(workflowAuditTargetEvent, "", event.Type)
-		_, provider, err := m.resolveProvider(ctx, providerName)
+	deliveredProto, err := provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
+		ProviderName: providerName,
+		Event:        eventProto,
+		Context:      reqContext,
+	})
+	if err != nil {
+		return coreworkflow.Event{}, err
+	}
+	if deliveredProto != nil {
+		delivered, err := workflowwire.EventFromProto(deliveredProto)
 		if err != nil {
-			providerAudit.finish(ctx, err)
 			return coreworkflow.Event{}, err
 		}
-		eventProto, err := workflowwire.EventToProto(event)
-		if err != nil {
-			providerAudit.finish(ctx, err)
-			return coreworkflow.Event{}, err
-		}
-		_, err = provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
-			AppName: appName,
-			Event:   eventProto,
-			Context: reqContext,
-		})
-		if err != nil {
-			providerAudit.finish(ctx, err)
-			return coreworkflow.Event{}, err
-		}
-		providerAudit.finish(ctx, nil)
+		return delivered, nil
 	}
 	return event, nil
 }

@@ -74,7 +74,8 @@ type workflowActivationInput struct {
 
 type applyWorkflowDefinitionInput struct {
 	DefinitionID string                      `json:"definition_id"`
-	ProviderName string                      `json:"provider_name,omitempty"`
+	ProviderName string                      `json:"provider_name" required:"true"`
+	RunAs        string                      `json:"run_as,omitempty"`
 	Target       workflowDefinitionStepInput `json:"target"`
 	Activations  []workflowActivationInput   `json:"activations,omitempty"`
 	Paused       bool                        `json:"paused,omitempty"`
@@ -82,22 +83,25 @@ type applyWorkflowDefinitionInput struct {
 
 type workflowDefinitionIDInput struct {
 	DefinitionID string `json:"definition_id"`
+	ProviderName string `json:"provider_name" required:"true"`
 }
 
 type setWorkflowDefinitionPausedInput struct {
 	DefinitionID string `json:"definition_id"`
+	ProviderName string `json:"provider_name" required:"true"`
 	Paused       bool   `json:"paused"`
 }
 
 type setWorkflowActivationPausedInput struct {
 	DefinitionID string `json:"definition_id"`
 	ActivationID string `json:"activation_id"`
+	ProviderName string `json:"provider_name" required:"true"`
 	Paused       bool   `json:"paused"`
 }
 
 type deliverWorkflowEventInput struct {
 	ID              string         `json:"id,omitempty"`
-	ProviderName    string         `json:"provider_name,omitempty"`
+	ProviderName    string         `json:"provider_name" required:"true"`
 	Source          string         `json:"source,omitempty"`
 	SpecVersion     string         `json:"spec_version,omitempty"`
 	Type            string         `json:"type"`
@@ -309,11 +313,20 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := workflow.ApplyDefinition(ctx, input.ProviderName, gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
+		providerName := strings.TrimSpace(input.ProviderName)
+		if providerName == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "provider_name is required"}), nil
+		}
+		runAs := strings.TrimSpace(input.RunAs)
+		if runAs == "" {
+			runAs = "service_account:echo-workflow"
+		}
+		result, err := workflow.ApplyDefinition(ctx, providerName, gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
 			Id:          input.DefinitionID,
 			Target:      target,
 			Activations: activations,
 			Paused:      input.Paused,
+			RunAs:       runAs,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
@@ -329,7 +342,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := workflow.GetDefinition(ctx, input.DefinitionID)
+		result, err := workflow.GetDefinition(ctx, input.ProviderName, input.DefinitionID)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
@@ -344,7 +357,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := workflow.SetDefinitionPaused(ctx, input.DefinitionID, input.Paused)
+		result, err := workflow.SetDefinitionPaused(ctx, input.ProviderName, input.DefinitionID, input.Paused)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
@@ -359,7 +372,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := workflow.SetActivationPaused(ctx, input.DefinitionID, input.ActivationID, input.Paused)
+		result, err := workflow.SetActivationPaused(ctx, input.ProviderName, input.DefinitionID, input.ActivationID, input.Paused)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
@@ -374,7 +387,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		if err := workflow.DeleteDefinition(ctx, input.DefinitionID); err != nil {
+		if err := workflow.DeleteDefinition(ctx, input.ProviderName, input.DefinitionID); err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
 		return jsonResult(http.StatusOK, map[string]any{"deleted": true, "definition_id": input.DefinitionID}), nil
@@ -392,9 +405,13 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
+		providerName := strings.TrimSpace(input.ProviderName)
+		if providerName == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "provider_name is required"}), nil
+		}
 		result, err := workflow.DeliverEventRaw(ctx, &client.DeliverWorkflowProviderEventRequest{
+			ProviderName: providerName,
 			Event:        event,
-			ProviderName: input.ProviderName,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil

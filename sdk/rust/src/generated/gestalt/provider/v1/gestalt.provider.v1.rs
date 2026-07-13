@@ -3526,8 +3526,8 @@ pub struct WorkflowDefinitionSpec {
     pub activations: ::prost::alloc::vec::Vec<WorkflowActivation>,
     #[prost(bool, tag = "4")]
     pub paused: bool,
-    #[prost(message, optional, tag = "5")]
-    pub run_as: ::core::option::Option<SubjectContext>,
+    #[prost(string, tag = "5")]
+    pub run_as: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowDefinition {
@@ -3541,16 +3541,14 @@ pub struct WorkflowDefinition {
     pub activations: ::prost::alloc::vec::Vec<WorkflowActivation>,
     #[prost(bool, tag = "5")]
     pub paused: bool,
-    #[prost(string, tag = "6")]
-    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "8")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag = "9")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
-    pub run_as: ::core::option::Option<SubjectContext>,
+    #[prost(string, tag = "10")]
+    pub run_as: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManualTrigger {}
@@ -3645,16 +3643,14 @@ pub struct WorkflowRun {
     pub status_message: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "9")]
     pub output: ::core::option::Option<::prost_types::Value>,
-    #[prost(string, tag = "10")]
-    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "12")]
     pub workflow_key: ::prost::alloc::string::String,
     #[prost(string, tag = "13")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "14")]
     pub definition_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "15")]
-    pub run_as: ::core::option::Option<SubjectContext>,
+    #[prost(string, tag = "15")]
+    pub run_as: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "16")]
     pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(int64, tag = "17")]
@@ -3674,8 +3670,6 @@ pub struct WorkflowSignal {
     pub payload: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "4")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "5")]
-    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag = "7")]
@@ -3700,11 +3694,15 @@ pub struct GetWorkflowProviderDefinitionRequest {
     pub definition_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "4")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderDefinitionsRequest {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "3")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderDefinitionsResponse {
@@ -3719,6 +3717,8 @@ pub struct SetWorkflowProviderDefinitionPausedRequest {
     pub paused: bool,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "6")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetWorkflowProviderActivationPausedRequest {
@@ -3730,6 +3730,8 @@ pub struct SetWorkflowProviderActivationPausedRequest {
     pub paused: bool,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "7")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteWorkflowProviderDefinitionRequest {
@@ -3737,6 +3739,8 @@ pub struct DeleteWorkflowProviderDefinitionRequest {
     pub definition_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "4")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {
@@ -3761,6 +3765,8 @@ pub struct GetWorkflowProviderRunRequest {
     pub run_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "5")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsRequest {
@@ -3774,6 +3780,8 @@ pub struct ListWorkflowProviderRunsRequest {
     pub target_app: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "7")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsResponse {
@@ -3790,6 +3798,8 @@ pub struct CancelWorkflowProviderRunRequest {
     pub reason: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "6")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalWorkflowProviderRunRequest {
@@ -3799,6 +3809,8 @@ pub struct SignalWorkflowProviderRunRequest {
     pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(message, optional, tag = "4")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "5")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalOrStartWorkflowProviderRunRequest {
@@ -3832,12 +3844,10 @@ pub struct SignalWorkflowRunResponse {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeliverWorkflowProviderEventRequest {
-    #[prost(string, tag = "1")]
-    pub app_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(string, tag = "5")]
     pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3862,6 +3872,8 @@ pub struct GetWorkflowProviderRunEventsRequest {
     pub run_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "4")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderRunEventsResponse {
@@ -3874,6 +3886,8 @@ pub struct GetWorkflowProviderRunOutputRequest {
     pub run_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(string, tag = "4")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderRunOutputResponse {

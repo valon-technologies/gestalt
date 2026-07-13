@@ -12,15 +12,17 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func (m *Manager) resolveProvider(ctx context.Context, providerName string) (string, coreworkflow.Provider, error) {
 	if m == nil || m.workflow == nil {
 		return "", nil, ErrWorkflowNotConfigured
 	}
-	return m.workflow.ResolveProvider(ctx, strings.TrimSpace(providerName))
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return "", nil, fmt.Errorf("%w: workflow provider_name is required", invocation.ErrInvalidInvocation)
+	}
+	return m.workflow.ResolveProvider(ctx, providerName)
 }
 
 func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, definitionID string, caller invocation.CallerProvider, operation string) (string, coreworkflow.Provider, coreworkflow.Target, int64, error) {
@@ -36,21 +38,13 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
-	authorizedPrincipal, err := m.authorizeAgentWorkflowTarget(ctx, p, operation, definition.Definition.Target, caller)
-	if err != nil {
-		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, err
+	// The caller must still be authorized for every referenced app operation and
+	// agent tool. This is an independent prerequisite; the provider worker then
+	// executes the step as the definition's stored run_as subject.
+	if !m.allowStoredTarget(ctx, p, definition.Definition.Target) {
+		return "", nil, coreworkflow.Target{}, 0, invocation.ErrAuthorizationDenied
 	}
-	resolvedTarget, err := m.resolveTarget(ctx, authorizedPrincipal, definition.Definition.Target)
-	if err != nil {
-		return "", nil, coreworkflow.Target{}, 0, err
-	}
-	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, resolvedTarget, caller); err != nil {
-		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, err
-	}
-	if decision := m.checkResolvedAgentToolAuthorization(ctx, authorizedPrincipal, resolvedTarget); !decision.allowed {
-		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, workflowTargetAuthorizationError{failure: decision.failure}
-	}
-	return definition.ProviderName, definition.provider, resolvedTarget, definition.Definition.Generation, nil
+	return definition.ProviderName, definition.provider, definition.Definition.Target, definition.Definition.Generation, nil
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
@@ -248,10 +242,6 @@ func validateWorkflowAgentOutput(output coreagent.Output) error {
 	return nil
 }
 
-func isWorkflowProviderNotFound(err error) bool {
-	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
-}
-
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
 	return true
 }
@@ -319,22 +309,6 @@ func (m *Manager) allowStoredTarget(ctx context.Context, p *principal.Principal,
 	}
 	p = authorizedPrincipal
 	return m.checkTargetAuthorization(ctx, p, target).allowed
-}
-
-func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
-	for stepIndex := range target.Steps {
-		step := target.Steps[stepIndex]
-		if step.Agent == nil {
-			continue
-		}
-		hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
-		for i := range step.Agent.ToolRefs {
-			if denied := m.checkWorkflowAgentToolAuthorization(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i); !denied.allowed {
-				return denied
-			}
-		}
-	}
-	return targetAuthorizationAllowed()
 }
 
 func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {

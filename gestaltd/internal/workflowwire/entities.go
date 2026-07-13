@@ -2,10 +2,11 @@ package workflowwire
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -184,8 +185,7 @@ func RunFromProto(run *proto.WorkflowRun) (*coreworkflow.Run, error) {
 		CurrentStepID:        run.GetCurrentStepId(),
 		Steps:                steps,
 		Trigger:              trigger,
-		CreatedBySubjectID:   run.GetCreatedBySubjectId(),
-		RunAs:                agentwire.RunAsSubjectFromProto(run.GetRunAs()),
+		RunAs:                runAsSubjectFromString(run.GetRunAs()),
 		CreatedAt:            TimeFromProto(run.GetCreatedAt()),
 		StartedAt:            TimeFromProto(run.GetStartedAt()),
 		CompletedAt:          TimeFromProto(run.GetCompletedAt()),
@@ -228,14 +228,13 @@ func RunToProto(run *coreworkflow.Run) (*proto.WorkflowRun, error) {
 		CompletedAt:          TimeToProto(run.CompletedAt),
 		StatusMessage:        run.StatusMessage,
 		Output:               output,
-		CreatedBySubjectId:   run.CreatedBySubjectID,
 		WorkflowKey:          run.WorkflowKey,
 		DefinitionId:         run.DefinitionID,
 		DefinitionGeneration: run.DefinitionGeneration,
 		Input:                inputStruct,
 		CurrentStepId:        run.CurrentStepID,
 		Steps:                steps,
-		RunAs:                agentwire.RunAsSubjectToProto(run.RunAs),
+		RunAs:                runAsSubjectToString(run.RunAs),
 	}, nil
 }
 
@@ -252,7 +251,7 @@ func DefinitionSpecFromProto(definition *proto.WorkflowDefinitionSpec) (*corewor
 		Target:      TargetFromProto(definition.GetTarget()),
 		Activations: activations,
 		Paused:      definition.GetPaused(),
-		RunAs:       agentwire.RunAsSubjectFromProto(definition.GetRunAs()),
+		RunAs:       runAsSubjectFromString(definition.GetRunAs()),
 	}, nil
 }
 
@@ -273,7 +272,7 @@ func DefinitionSpecToProto(definition *coreworkflow.DefinitionSpec) (*proto.Work
 		Target:      target,
 		Activations: activations,
 		Paused:      definition.Paused,
-		RunAs:       agentwire.RunAsSubjectToProto(definition.RunAs),
+		RunAs:       runAsSubjectToString(definition.RunAs),
 	}, nil
 }
 
@@ -286,16 +285,15 @@ func DefinitionFromProto(definition *proto.WorkflowDefinition) (*coreworkflow.De
 		return nil, err
 	}
 	return &coreworkflow.Definition{
-		ID:                 definition.GetId(),
-		Generation:         definition.GetGeneration(),
-		Target:             TargetFromProto(definition.GetTarget()),
-		Activations:        activations,
-		Paused:             definition.GetPaused(),
-		CreatedBySubjectID: definition.GetCreatedBySubjectId(),
-		CreatedAt:          TimeFromProto(definition.GetCreatedAt()),
-		UpdatedAt:          TimeFromProto(definition.GetUpdatedAt()),
-		ProviderName:       definition.GetProviderName(),
-		RunAs:              agentwire.RunAsSubjectFromProto(definition.GetRunAs()),
+		ID:           definition.GetId(),
+		Generation:   definition.GetGeneration(),
+		Target:       TargetFromProto(definition.GetTarget()),
+		Activations:  activations,
+		Paused:       definition.GetPaused(),
+		CreatedAt:    TimeFromProto(definition.GetCreatedAt()),
+		UpdatedAt:    TimeFromProto(definition.GetUpdatedAt()),
+		ProviderName: definition.GetProviderName(),
+		RunAs:        runAsSubjectFromString(definition.GetRunAs()),
 	}, nil
 }
 
@@ -312,16 +310,15 @@ func DefinitionToProto(definition *coreworkflow.Definition) (*proto.WorkflowDefi
 		return nil, err
 	}
 	return &proto.WorkflowDefinition{
-		Id:                 definition.ID,
-		Generation:         definition.Generation,
-		Target:             target,
-		Activations:        activations,
-		Paused:             definition.Paused,
-		CreatedBySubjectId: definition.CreatedBySubjectID,
-		CreatedAt:          TimeToProto(definition.CreatedAt),
-		UpdatedAt:          TimeToProto(definition.UpdatedAt),
-		ProviderName:       definition.ProviderName,
-		RunAs:              agentwire.RunAsSubjectToProto(definition.RunAs),
+		Id:           definition.ID,
+		Generation:   definition.Generation,
+		Target:       target,
+		Activations:  activations,
+		Paused:       definition.Paused,
+		CreatedAt:    TimeToProto(definition.CreatedAt),
+		UpdatedAt:    TimeToProto(definition.UpdatedAt),
+		ProviderName: definition.ProviderName,
+		RunAs:        runAsSubjectToString(definition.RunAs),
 	}, nil
 }
 
@@ -562,14 +559,13 @@ func SignalToProto(signal coreworkflow.Signal) (*proto.WorkflowSignal, error) {
 		return nil, fmt.Errorf("workflow signal metadata: %w", err)
 	}
 	return &proto.WorkflowSignal{
-		Id:                 signal.ID,
-		Name:               signal.Name,
-		Payload:            payload,
-		Metadata:           metadata,
-		CreatedBySubjectId: signal.CreatedBySubjectID,
-		CreatedAt:          TimeToProto(signal.CreatedAt),
-		IdempotencyKey:     signal.IdempotencyKey,
-		Sequence:           signal.Sequence,
+		Id:             signal.ID,
+		Name:           signal.Name,
+		Payload:        payload,
+		Metadata:       metadata,
+		CreatedAt:      TimeToProto(signal.CreatedAt),
+		IdempotencyKey: signal.IdempotencyKey,
+		Sequence:       signal.Sequence,
 	}, nil
 }
 
@@ -578,14 +574,13 @@ func SignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
 		return coreworkflow.Signal{}
 	}
 	return coreworkflow.Signal{
-		ID:                 signal.GetId(),
-		Name:               signal.GetName(),
-		Payload:            protoutil.MapFromStruct(signal.GetPayload()),
-		Metadata:           protoutil.MapFromStruct(signal.GetMetadata()),
-		CreatedBySubjectID: signal.GetCreatedBySubjectId(),
-		CreatedAt:          TimeFromProto(signal.GetCreatedAt()),
-		IdempotencyKey:     signal.GetIdempotencyKey(),
-		Sequence:           signal.GetSequence(),
+		ID:             signal.GetId(),
+		Name:           signal.GetName(),
+		Payload:        protoutil.MapFromStruct(signal.GetPayload()),
+		Metadata:       protoutil.MapFromStruct(signal.GetMetadata()),
+		CreatedAt:      TimeFromProto(signal.GetCreatedAt()),
+		IdempotencyKey: signal.GetIdempotencyKey(),
+		Sequence:       signal.GetSequence(),
 	}
 }
 
@@ -724,4 +719,20 @@ func TimeFromProto(t *timestamppb.Timestamp) *time.Time {
 	}
 	value := t.AsTime()
 	return &value
+}
+
+func runAsSubjectFromString(value string) *core.RunAsSubject {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: value})
+}
+
+func runAsSubjectToString(value *core.RunAsSubject) string {
+	value = core.NormalizeRunAsSubject(value)
+	if value == nil {
+		return ""
+	}
+	return value.SubjectID
 }

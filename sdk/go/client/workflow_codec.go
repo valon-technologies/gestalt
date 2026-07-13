@@ -60,9 +60,10 @@ func ToWireCancelWorkflowProviderRunRequest(value *CancelWorkflowProviderRunRequ
 		return nil
 	}
 	out := &proto.CancelWorkflowProviderRunRequest{
-		RunId:   value.RunId,
-		Reason:  value.Reason,
-		Context: ToWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Reason:       value.Reason,
+		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -72,9 +73,10 @@ func FromWireCancelWorkflowProviderRunRequest(value *proto.CancelWorkflowProvide
 		return nil
 	}
 	out := &CancelWorkflowProviderRunRequest{
-		RunId:   value.RunId,
-		Reason:  value.Reason,
-		Context: FromWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Reason:       value.Reason,
+		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -86,6 +88,7 @@ func ToWireDeleteWorkflowProviderDefinitionRequest(value *DeleteWorkflowProvider
 	out := &proto.DeleteWorkflowProviderDefinitionRequest{
 		DefinitionId: value.DefinitionId,
 		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -97,6 +100,7 @@ func FromWireDeleteWorkflowProviderDefinitionRequest(value *proto.DeleteWorkflow
 	out := &DeleteWorkflowProviderDefinitionRequest{
 		DefinitionId: value.DefinitionId,
 		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -106,9 +110,8 @@ func ToWireDeliverWorkflowProviderEventRequest(value *DeliverWorkflowProviderEve
 		return nil
 	}
 	out := &proto.DeliverWorkflowProviderEventRequest{
-		AppName:      value.AppName,
-		Event:        ToWireWorkflowEvent(value.Event),
 		ProviderName: value.ProviderName,
+		Event:        ToWireWorkflowEvent(value.Event),
 		Context:      ToWireRequestContext(value.Context),
 	}
 	return out
@@ -119,9 +122,8 @@ func FromWireDeliverWorkflowProviderEventRequest(value *proto.DeliverWorkflowPro
 		return nil
 	}
 	out := &DeliverWorkflowProviderEventRequest{
-		AppName:      value.AppName,
-		Event:        FromWireWorkflowEvent(value.Event),
 		ProviderName: value.ProviderName,
+		Event:        FromWireWorkflowEvent(value.Event),
 		Context:      FromWireRequestContext(value.Context),
 	}
 	return out
@@ -134,6 +136,7 @@ func ToWireGetWorkflowProviderDefinitionRequest(value *GetWorkflowProviderDefini
 	out := &proto.GetWorkflowProviderDefinitionRequest{
 		DefinitionId: value.DefinitionId,
 		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -145,6 +148,7 @@ func FromWireGetWorkflowProviderDefinitionRequest(value *proto.GetWorkflowProvid
 	out := &GetWorkflowProviderDefinitionRequest{
 		DefinitionId: value.DefinitionId,
 		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -154,8 +158,9 @@ func ToWireGetWorkflowProviderRunEventsRequest(value *GetWorkflowProviderRunEven
 		return nil
 	}
 	out := &proto.GetWorkflowProviderRunEventsRequest{
-		RunId:   value.RunId,
-		Context: ToWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -165,8 +170,9 @@ func FromWireGetWorkflowProviderRunEventsRequest(value *proto.GetWorkflowProvide
 		return nil
 	}
 	out := &GetWorkflowProviderRunEventsRequest{
-		RunId:   value.RunId,
-		Context: FromWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -198,8 +204,9 @@ func ToWireGetWorkflowProviderRunOutputRequest(value *GetWorkflowProviderRunOutp
 		return nil
 	}
 	out := &proto.GetWorkflowProviderRunOutputRequest{
-		RunId:   value.RunId,
-		Context: ToWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -209,8 +216,9 @@ func FromWireGetWorkflowProviderRunOutputRequest(value *proto.GetWorkflowProvide
 		return nil
 	}
 	out := &GetWorkflowProviderRunOutputRequest{
-		RunId:   value.RunId,
-		Context: FromWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -240,8 +248,9 @@ func ToWireGetWorkflowProviderRunRequest(value *GetWorkflowProviderRunRequest) *
 		return nil
 	}
 	out := &proto.GetWorkflowProviderRunRequest{
-		RunId:   value.RunId,
-		Context: ToWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -251,8 +260,9 @@ func FromWireGetWorkflowProviderRunRequest(value *proto.GetWorkflowProviderRunRe
 		return nil
 	}
 	out := &GetWorkflowProviderRunRequest{
-		RunId:   value.RunId,
-		Context: FromWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -262,7 +272,8 @@ func ToWireListWorkflowProviderDefinitionsRequest(value *ListWorkflowProviderDef
 		return nil
 	}
 	out := &proto.ListWorkflowProviderDefinitionsRequest{
-		Context: ToWireRequestContext(value.Context),
+		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -272,7 +283,8 @@ func FromWireListWorkflowProviderDefinitionsRequest(value *proto.ListWorkflowPro
 		return nil
 	}
 	out := &ListWorkflowProviderDefinitionsRequest{
-		Context: FromWireRequestContext(value.Context),
+		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -304,11 +316,12 @@ func ToWireListWorkflowProviderRunsRequest(value *ListWorkflowProviderRunsReques
 		return nil
 	}
 	out := &proto.ListWorkflowProviderRunsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-		Status:    proto.WorkflowRunStatus(value.Status),
-		TargetApp: value.TargetApp,
-		Context:   ToWireRequestContext(value.Context),
+		PageSize:     value.PageSize,
+		PageToken:    value.PageToken,
+		Status:       proto.WorkflowRunStatus(value.Status),
+		TargetApp:    value.TargetApp,
+		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -318,11 +331,12 @@ func FromWireListWorkflowProviderRunsRequest(value *proto.ListWorkflowProviderRu
 		return nil
 	}
 	out := &ListWorkflowProviderRunsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-		Status:    WorkflowRunStatus(value.Status),
-		TargetApp: value.TargetApp,
-		Context:   FromWireRequestContext(value.Context),
+		PageSize:     value.PageSize,
+		PageToken:    value.PageToken,
+		Status:       WorkflowRunStatus(value.Status),
+		TargetApp:    value.TargetApp,
+		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -362,6 +376,7 @@ func ToWireSetWorkflowProviderActivationPausedRequest(value *SetWorkflowProvider
 		ActivationId: value.ActivationId,
 		Paused:       value.Paused,
 		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -375,6 +390,7 @@ func FromWireSetWorkflowProviderActivationPausedRequest(value *proto.SetWorkflow
 		ActivationId: value.ActivationId,
 		Paused:       value.Paused,
 		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -387,6 +403,7 @@ func ToWireSetWorkflowProviderDefinitionPausedRequest(value *SetWorkflowProvider
 		DefinitionId: value.DefinitionId,
 		Paused:       value.Paused,
 		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -399,6 +416,7 @@ func FromWireSetWorkflowProviderDefinitionPausedRequest(value *proto.SetWorkflow
 		DefinitionId: value.DefinitionId,
 		Paused:       value.Paused,
 		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -442,9 +460,10 @@ func ToWireSignalWorkflowProviderRunRequest(value *SignalWorkflowProviderRunRequ
 		return nil
 	}
 	out := &proto.SignalWorkflowProviderRunRequest{
-		RunId:   value.RunId,
-		Signal:  ToWireWorkflowSignal(value.Signal),
-		Context: ToWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Signal:       ToWireWorkflowSignal(value.Signal),
+		Context:      ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -454,9 +473,10 @@ func FromWireSignalWorkflowProviderRunRequest(value *proto.SignalWorkflowProvide
 		return nil
 	}
 	out := &SignalWorkflowProviderRunRequest{
-		RunId:   value.RunId,
-		Signal:  FromWireWorkflowSignal(value.Signal),
-		Context: FromWireRequestContext(value.Context),
+		RunId:        value.RunId,
+		Signal:       FromWireWorkflowSignal(value.Signal),
+		Context:      FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
 	}
 	return out
 }
@@ -606,15 +626,14 @@ func ToWireWorkflowDefinition(value *WorkflowDefinition) *proto.WorkflowDefiniti
 		return nil
 	}
 	out := &proto.WorkflowDefinition{
-		Id:                 value.Id,
-		Generation:         value.Generation,
-		Target:             ToWireBoundWorkflowTarget(value.Target),
-		Paused:             value.Paused,
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          toWireTimestamp(value.CreatedAt),
-		UpdatedAt:          toWireTimestamp(value.UpdatedAt),
-		ProviderName:       value.ProviderName,
-		RunAs:              ToWireSubjectContext(value.RunAs),
+		Id:           value.Id,
+		Generation:   value.Generation,
+		Target:       ToWireBoundWorkflowTarget(value.Target),
+		Paused:       value.Paused,
+		CreatedAt:    toWireTimestamp(value.CreatedAt),
+		UpdatedAt:    toWireTimestamp(value.UpdatedAt),
+		ProviderName: value.ProviderName,
+		RunAs:        value.RunAs,
 	}
 	for _, item := range value.Activations {
 		out.Activations = append(out.Activations, ToWireWorkflowActivation(item))
@@ -627,15 +646,14 @@ func FromWireWorkflowDefinition(value *proto.WorkflowDefinition) *WorkflowDefini
 		return nil
 	}
 	out := &WorkflowDefinition{
-		Id:                 value.Id,
-		Generation:         value.Generation,
-		Target:             FromWireBoundWorkflowTarget(value.Target),
-		Paused:             value.Paused,
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          fromWireTimestamp(value.CreatedAt),
-		UpdatedAt:          fromWireTimestamp(value.UpdatedAt),
-		ProviderName:       value.ProviderName,
-		RunAs:              FromWireSubjectContext(value.RunAs),
+		Id:           value.Id,
+		Generation:   value.Generation,
+		Target:       FromWireBoundWorkflowTarget(value.Target),
+		Paused:       value.Paused,
+		CreatedAt:    fromWireTimestamp(value.CreatedAt),
+		UpdatedAt:    fromWireTimestamp(value.UpdatedAt),
+		ProviderName: value.ProviderName,
+		RunAs:        value.RunAs,
 	}
 	for _, item := range value.Activations {
 		out.Activations = append(out.Activations, FromWireWorkflowActivation(item))
@@ -651,7 +669,7 @@ func ToWireWorkflowDefinitionSpec(value *WorkflowDefinitionSpec) *proto.Workflow
 		Id:     value.Id,
 		Target: ToWireBoundWorkflowTarget(value.Target),
 		Paused: value.Paused,
-		RunAs:  ToWireSubjectContext(value.RunAs),
+		RunAs:  value.RunAs,
 	}
 	for _, item := range value.Activations {
 		out.Activations = append(out.Activations, ToWireWorkflowActivation(item))
@@ -667,7 +685,7 @@ func FromWireWorkflowDefinitionSpec(value *proto.WorkflowDefinitionSpec) *Workfl
 		Id:     value.Id,
 		Target: FromWireBoundWorkflowTarget(value.Target),
 		Paused: value.Paused,
-		RunAs:  FromWireSubjectContext(value.RunAs),
+		RunAs:  value.RunAs,
 	}
 	for _, item := range value.Activations {
 		out.Activations = append(out.Activations, FromWireWorkflowActivation(item))
@@ -865,11 +883,10 @@ func ToWireWorkflowRun(value *WorkflowRun) *proto.WorkflowRun {
 		CompletedAt:          toWireTimestamp(value.CompletedAt),
 		StatusMessage:        value.StatusMessage,
 		Output:               toWireValue(value.Output),
-		CreatedBySubjectId:   value.CreatedBySubjectId,
 		WorkflowKey:          value.WorkflowKey,
 		ProviderName:         value.ProviderName,
 		DefinitionId:         value.DefinitionId,
-		RunAs:                ToWireSubjectContext(value.RunAs),
+		RunAs:                value.RunAs,
 		Input:                toWireStruct(value.Input),
 		DefinitionGeneration: value.DefinitionGeneration,
 		CurrentStepId:        value.CurrentStepId,
@@ -894,11 +911,10 @@ func FromWireWorkflowRun(value *proto.WorkflowRun) *WorkflowRun {
 		CompletedAt:          fromWireTimestamp(value.CompletedAt),
 		StatusMessage:        value.StatusMessage,
 		Output:               fromWireValue(value.Output),
-		CreatedBySubjectId:   value.CreatedBySubjectId,
 		WorkflowKey:          value.WorkflowKey,
 		ProviderName:         value.ProviderName,
 		DefinitionId:         value.DefinitionId,
-		RunAs:                FromWireSubjectContext(value.RunAs),
+		RunAs:                value.RunAs,
 		Input:                fromWireStruct(value.Input),
 		DefinitionGeneration: value.DefinitionGeneration,
 		CurrentStepId:        value.CurrentStepId,
@@ -1020,14 +1036,13 @@ func ToWireWorkflowSignal(value *WorkflowSignal) *proto.WorkflowSignal {
 		return nil
 	}
 	out := &proto.WorkflowSignal{
-		Id:                 value.Id,
-		Name:               value.Name,
-		Payload:            toWireStruct(value.Payload),
-		Metadata:           toWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          toWireTimestamp(value.CreatedAt),
-		IdempotencyKey:     value.IdempotencyKey,
-		Sequence:           value.Sequence,
+		Id:             value.Id,
+		Name:           value.Name,
+		Payload:        toWireStruct(value.Payload),
+		Metadata:       toWireStruct(value.Metadata),
+		CreatedAt:      toWireTimestamp(value.CreatedAt),
+		IdempotencyKey: value.IdempotencyKey,
+		Sequence:       value.Sequence,
 	}
 	return out
 }
@@ -1037,14 +1052,13 @@ func FromWireWorkflowSignal(value *proto.WorkflowSignal) *WorkflowSignal {
 		return nil
 	}
 	out := &WorkflowSignal{
-		Id:                 value.Id,
-		Name:               value.Name,
-		Payload:            fromWireStruct(value.Payload),
-		Metadata:           fromWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          fromWireTimestamp(value.CreatedAt),
-		IdempotencyKey:     value.IdempotencyKey,
-		Sequence:           value.Sequence,
+		Id:             value.Id,
+		Name:           value.Name,
+		Payload:        fromWireStruct(value.Payload),
+		Metadata:       fromWireStruct(value.Metadata),
+		CreatedAt:      fromWireTimestamp(value.CreatedAt),
+		IdempotencyKey: value.IdempotencyKey,
+		Sequence:       value.Sequence,
 	}
 	return out
 }

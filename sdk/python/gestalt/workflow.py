@@ -20,7 +20,7 @@ from ._grpc_transport import (
     host_service_channel,
 )
 from .agent import AgentOutput
-from .app import AgentToolRef, RequestContext, SubjectContext
+from .app import AgentToolRef, RequestContext
 from .rpc_support import JsonValue
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -72,19 +72,20 @@ class CancelWorkflowProviderRunRequest:
     run_id: str = ""
     reason: str = ""
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class DeleteWorkflowProviderDefinitionRequest:
     definition_id: str = ""
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class DeliverWorkflowProviderEventRequest:
-    app_name: str = ""
-    event: WorkflowEvent | None = None
     provider_name: str = ""
+    event: WorkflowEvent | None = None
     context: RequestContext | None = None
 
 
@@ -92,12 +93,14 @@ class DeliverWorkflowProviderEventRequest:
 class GetWorkflowProviderDefinitionRequest:
     definition_id: str = ""
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class GetWorkflowProviderRunEventsRequest:
     run_id: str = ""
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +112,7 @@ class GetWorkflowProviderRunEventsResponse:
 class GetWorkflowProviderRunOutputRequest:
     run_id: str = ""
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,11 +124,13 @@ class GetWorkflowProviderRunOutputResponse:
 class GetWorkflowProviderRunRequest:
     run_id: str = ""
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class ListWorkflowProviderDefinitionsRequest:
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +145,7 @@ class ListWorkflowProviderRunsRequest:
     status: WorkflowRunStatus = 0
     target_app: str = ""
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +160,7 @@ class SetWorkflowProviderActivationPausedRequest:
     activation_id: str = ""
     paused: bool = False
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +168,7 @@ class SetWorkflowProviderDefinitionPausedRequest:
     definition_id: str = ""
     paused: bool = False
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,6 +188,7 @@ class SignalWorkflowProviderRunRequest:
     run_id: str = ""
     signal: WorkflowSignal | None = None
     context: RequestContext | None = None
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,11 +250,10 @@ class WorkflowDefinition:
     target: BoundWorkflowTarget | None = None
     activations: list[WorkflowActivation] = field(default_factory=list)
     paused: bool = False
-    created_by_subject_id: str = ""
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     provider_name: str = ""
-    run_as: SubjectContext | None = None
+    run_as: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,7 +262,7 @@ class WorkflowDefinitionSpec:
     target: BoundWorkflowTarget | None = None
     activations: list[WorkflowActivation] = field(default_factory=list)
     paused: bool = False
-    run_as: SubjectContext | None = None
+    run_as: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,11 +322,10 @@ class WorkflowRun:
     completed_at: datetime.datetime | None = None
     status_message: str = ""
     output: JsonValue | None = None
-    created_by_subject_id: str = ""
     workflow_key: str = ""
     provider_name: str = ""
     definition_id: str = ""
-    run_as: SubjectContext | None = None
+    run_as: str = ""
     input: dict[str, JsonValue] | None = None
     definition_generation: int = 0
     current_step_id: str = ""
@@ -380,7 +388,6 @@ class WorkflowSignal:
     name: str = ""
     payload: dict[str, JsonValue] | None = None
     metadata: dict[str, JsonValue] | None = None
-    created_by_subject_id: str = ""
     created_at: datetime.datetime | None = None
     idempotency_key: str = ""
     sequence: int = 0
@@ -636,19 +643,22 @@ class Workflow:
     ) -> WorkflowDefinition: ...
 
     @overload
-    def get_definition(self, *, definition_id: str = ...) -> WorkflowDefinition: ...
+    def get_definition(
+        self, *, provider_name: str = ..., definition_id: str = ...
+    ) -> WorkflowDefinition: ...
 
     def get_definition(
         self,
         request: GetWorkflowProviderDefinitionRequest | None = None,
         *,
+        provider_name: str | None = None,
         definition_id: str | None = None,
     ) -> WorkflowDefinition:
         if request is None:
             request = GetWorkflowProviderDefinitionRequest(
-                definition_id=definition_id or ""
+                provider_name=provider_name or "", definition_id=definition_id or ""
             )
-        elif definition_id is not None:
+        elif provider_name is not None or definition_id is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -660,9 +670,28 @@ class Workflow:
         )
         return _codec.from_wire_workflow_definition(response)
 
+    @overload
     def list_definitions(
         self, request: ListWorkflowProviderDefinitionsRequest
+    ) -> list[WorkflowDefinition]: ...
+
+    @overload
+    def list_definitions(
+        self, *, provider_name: str = ...
+    ) -> list[WorkflowDefinition]: ...
+
+    def list_definitions(
+        self,
+        request: ListWorkflowProviderDefinitionsRequest | None = None,
+        *,
+        provider_name: str | None = None,
     ) -> list[WorkflowDefinition]:
+        if request is None:
+            request = ListWorkflowProviderDefinitionsRequest(
+                provider_name=provider_name or ""
+            )
+        elif provider_name is not None:
+            raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
         response = _codec.from_wire_list_workflow_provider_definitions_response(
@@ -695,21 +724,26 @@ class Workflow:
 
     @overload
     def set_definition_paused(
-        self, *, definition_id: str = ..., paused: bool = ...
+        self, *, provider_name: str = ..., definition_id: str = ..., paused: bool = ...
     ) -> WorkflowDefinition: ...
 
     def set_definition_paused(
         self,
         request: SetWorkflowProviderDefinitionPausedRequest | None = None,
         *,
+        provider_name: str | None = None,
         definition_id: str | None = None,
         paused: bool | None = None,
     ) -> WorkflowDefinition:
         if request is None:
             request = SetWorkflowProviderDefinitionPausedRequest(
-                definition_id=definition_id or "", paused=paused or False
+                provider_name=provider_name or "",
+                definition_id=definition_id or "",
+                paused=paused or False,
             )
-        elif definition_id is not None or paused is not None:
+        elif (
+            provider_name is not None or definition_id is not None or paused is not None
+        ):
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -728,25 +762,35 @@ class Workflow:
 
     @overload
     def set_activation_paused(
-        self, *, definition_id: str = ..., activation_id: str = ..., paused: bool = ...
+        self,
+        *,
+        provider_name: str = ...,
+        definition_id: str = ...,
+        activation_id: str = ...,
+        paused: bool = ...,
     ) -> WorkflowDefinition: ...
 
     def set_activation_paused(
         self,
         request: SetWorkflowProviderActivationPausedRequest | None = None,
         *,
+        provider_name: str | None = None,
         definition_id: str | None = None,
         activation_id: str | None = None,
         paused: bool | None = None,
     ) -> WorkflowDefinition:
         if request is None:
             request = SetWorkflowProviderActivationPausedRequest(
+                provider_name=provider_name or "",
                 definition_id=definition_id or "",
                 activation_id=activation_id or "",
                 paused=paused or False,
             )
         elif (
-            definition_id is not None or activation_id is not None or paused is not None
+            provider_name is not None
+            or definition_id is not None
+            or activation_id is not None
+            or paused is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
@@ -765,19 +809,22 @@ class Workflow:
     ) -> None: ...
 
     @overload
-    def delete_definition(self, *, definition_id: str = ...) -> None: ...
+    def delete_definition(
+        self, *, provider_name: str = ..., definition_id: str = ...
+    ) -> None: ...
 
     def delete_definition(
         self,
         request: DeleteWorkflowProviderDefinitionRequest | None = None,
         *,
+        provider_name: str | None = None,
         definition_id: str | None = None,
     ) -> None:
         if request is None:
             request = DeleteWorkflowProviderDefinitionRequest(
-                definition_id=definition_id or ""
+                provider_name=provider_name or "", definition_id=definition_id or ""
             )
-        elif definition_id is not None:
+        elif provider_name is not None or definition_id is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -851,6 +898,7 @@ class Workflow:
     def list_runs(
         self,
         *,
+        provider_name: str = ...,
         page_size: int = ...,
         page_token: str = ...,
         status: WorkflowRunStatus = ...,
@@ -861,6 +909,7 @@ class Workflow:
         self,
         request: ListWorkflowProviderRunsRequest | None = None,
         *,
+        provider_name: str | None = None,
         page_size: int | None = None,
         page_token: str | None = None,
         status: WorkflowRunStatus | None = None,
@@ -868,13 +917,15 @@ class Workflow:
     ) -> ListWorkflowProviderRunsResponse:
         if request is None:
             request = ListWorkflowProviderRunsRequest(
+                provider_name=provider_name or "",
                 page_size=page_size or 0,
                 page_token=page_token or "",
                 status=status or 0,
                 target_app=target_app or "",
             )
         elif (
-            page_size is not None
+            provider_name is not None
+            or page_size is not None
             or page_token is not None
             or status is not None
             or target_app is not None
@@ -894,17 +945,22 @@ class Workflow:
     def get_run(self, request: GetWorkflowProviderRunRequest) -> WorkflowRun: ...
 
     @overload
-    def get_run(self, *, run_id: str = ...) -> WorkflowRun: ...
+    def get_run(
+        self, *, provider_name: str = ..., run_id: str = ...
+    ) -> WorkflowRun: ...
 
     def get_run(
         self,
         request: GetWorkflowProviderRunRequest | None = None,
         *,
+        provider_name: str | None = None,
         run_id: str | None = None,
     ) -> WorkflowRun:
         if request is None:
-            request = GetWorkflowProviderRunRequest(run_id=run_id or "")
-        elif run_id is not None:
+            request = GetWorkflowProviderRunRequest(
+                provider_name=provider_name or "", run_id=run_id or ""
+            )
+        elif provider_name is not None or run_id is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -922,17 +978,22 @@ class Workflow:
     ) -> list[WorkflowRunEvent]: ...
 
     @overload
-    def get_run_events(self, *, run_id: str = ...) -> list[WorkflowRunEvent]: ...
+    def get_run_events(
+        self, *, provider_name: str = ..., run_id: str = ...
+    ) -> list[WorkflowRunEvent]: ...
 
     def get_run_events(
         self,
         request: GetWorkflowProviderRunEventsRequest | None = None,
         *,
+        provider_name: str | None = None,
         run_id: str | None = None,
     ) -> list[WorkflowRunEvent]:
         if request is None:
-            request = GetWorkflowProviderRunEventsRequest(run_id=run_id or "")
-        elif run_id is not None:
+            request = GetWorkflowProviderRunEventsRequest(
+                provider_name=provider_name or "", run_id=run_id or ""
+            )
+        elif provider_name is not None or run_id is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -965,17 +1026,22 @@ class Workflow:
     ) -> JsonValue | None: ...
 
     @overload
-    def get_run_output(self, *, run_id: str = ...) -> JsonValue | None: ...
+    def get_run_output(
+        self, *, provider_name: str = ..., run_id: str = ...
+    ) -> JsonValue | None: ...
 
     def get_run_output(
         self,
         request: GetWorkflowProviderRunOutputRequest | None = None,
         *,
+        provider_name: str | None = None,
         run_id: str | None = None,
     ) -> JsonValue | None:
         if request is None:
-            request = GetWorkflowProviderRunOutputRequest(run_id=run_id or "")
-        elif run_id is not None:
+            request = GetWorkflowProviderRunOutputRequest(
+                provider_name=provider_name or "", run_id=run_id or ""
+            )
+        elif provider_name is not None or run_id is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -1006,20 +1072,25 @@ class Workflow:
     def cancel_run(self, request: CancelWorkflowProviderRunRequest) -> WorkflowRun: ...
 
     @overload
-    def cancel_run(self, *, run_id: str = ..., reason: str = ...) -> WorkflowRun: ...
+    def cancel_run(
+        self, *, provider_name: str = ..., run_id: str = ..., reason: str = ...
+    ) -> WorkflowRun: ...
 
     def cancel_run(
         self,
         request: CancelWorkflowProviderRunRequest | None = None,
         *,
+        provider_name: str | None = None,
         run_id: str | None = None,
         reason: str | None = None,
     ) -> WorkflowRun:
         if request is None:
             request = CancelWorkflowProviderRunRequest(
-                run_id=run_id or "", reason=reason or ""
+                provider_name=provider_name or "",
+                run_id=run_id or "",
+                reason=reason or "",
             )
-        elif run_id is not None or reason is not None:
+        elif provider_name is not None or run_id is not None or reason is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -1038,21 +1109,26 @@ class Workflow:
 
     @overload
     def signal_run(
-        self, *, run_id: str = ..., signal: WorkflowSignal | None = ...
+        self,
+        *,
+        provider_name: str = ...,
+        run_id: str = ...,
+        signal: WorkflowSignal | None = ...,
     ) -> SignalWorkflowRunResponse: ...
 
     def signal_run(
         self,
         request: SignalWorkflowProviderRunRequest | None = None,
         *,
+        provider_name: str | None = None,
         run_id: str | None = None,
         signal: WorkflowSignal | None = None,
     ) -> SignalWorkflowRunResponse:
         if request is None:
             request = SignalWorkflowProviderRunRequest(
-                run_id=run_id or "", signal=signal
+                provider_name=provider_name or "", run_id=run_id or "", signal=signal
             )
-        elif run_id is not None or signal is not None:
+        elif provider_name is not None or run_id is not None or signal is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -1131,26 +1207,21 @@ class Workflow:
 
     @overload
     def deliver_event(
-        self,
-        *,
-        event: WorkflowEvent | None = ...,
-        app_name: str = ...,
-        provider_name: str = ...,
+        self, *, provider_name: str = ..., event: WorkflowEvent | None = ...
     ) -> WorkflowEvent: ...
 
     def deliver_event(
         self,
         request: DeliverWorkflowProviderEventRequest | None = None,
         *,
-        event: WorkflowEvent | None = None,
-        app_name: str | None = None,
         provider_name: str | None = None,
+        event: WorkflowEvent | None = None,
     ) -> WorkflowEvent:
         if request is None:
             request = DeliverWorkflowProviderEventRequest(
-                event=event, app_name=app_name or "", provider_name=provider_name or ""
+                provider_name=provider_name or "", event=event
             )
-        elif event is not None or app_name is not None or provider_name is not None:
+        elif provider_name is not None or event is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)

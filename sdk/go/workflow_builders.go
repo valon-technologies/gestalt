@@ -590,14 +590,13 @@ func workflowSignalToProto(input WorkflowSignal) (*proto.WorkflowSignal, error) 
 		return nil, err
 	}
 	return &proto.WorkflowSignal{
-		Id:                 input.ID,
-		Name:               input.Name,
-		Payload:            payload,
-		Metadata:           metadata,
-		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
-		CreatedAt:          timestampFromNonZeroTime(input.CreatedAt),
-		IdempotencyKey:     input.IdempotencyKey,
-		Sequence:           input.Sequence,
+		Id:             input.ID,
+		Name:           input.Name,
+		Payload:        payload,
+		Metadata:       metadata,
+		CreatedAt:      timestampFromNonZeroTime(input.CreatedAt),
+		IdempotencyKey: input.IdempotencyKey,
+		Sequence:       input.Sequence,
 	}, nil
 }
 
@@ -607,14 +606,13 @@ func workflowSignalFromProto(value *proto.WorkflowSignal) WorkflowSignal {
 		return WorkflowSignal{}
 	}
 	return WorkflowSignal{
-		ID:                 value.GetId(),
-		Name:               value.GetName(),
-		Payload:            mapFromStruct(value.GetPayload()),
-		Metadata:           mapFromStruct(value.GetMetadata()),
-		CreatedBySubjectID: value.GetCreatedBySubjectId(),
-		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
-		IdempotencyKey:     value.GetIdempotencyKey(),
-		Sequence:           value.GetSequence(),
+		ID:             value.GetId(),
+		Name:           value.GetName(),
+		Payload:        mapFromStruct(value.GetPayload()),
+		Metadata:       mapFromStruct(value.GetMetadata()),
+		CreatedAt:      timeFromTimestamp(value.GetCreatedAt()),
+		IdempotencyKey: value.GetIdempotencyKey(),
+		Sequence:       value.GetSequence(),
 	}
 }
 
@@ -793,7 +791,7 @@ func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.Workflo
 		Target:      target,
 		Activations: activations,
 		Paused:      input.Paused,
-		RunAs:       subjectToProto(input.RunAs),
+		RunAs:       workflowSubjectID(input.RunAs),
 	}, nil
 }
 
@@ -810,7 +808,7 @@ func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) (Workf
 		Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
 		Activations: activations,
 		Paused:      value.GetPaused(),
-		RunAs:       subjectFromProto(value.GetRunAs()),
+		RunAs:       workflowSubjectFromID(value.GetRunAs()),
 	}, nil
 }
 
@@ -824,16 +822,15 @@ func workflowDefinitionToProto(input WorkflowDefinition) (*proto.WorkflowDefinit
 		return nil, err
 	}
 	return &proto.WorkflowDefinition{
-		Id:                 input.ID,
-		Generation:         input.Generation,
-		Target:             target,
-		Activations:        activations,
-		Paused:             input.Paused,
-		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
-		CreatedAt:          timestampFromNonZeroTime(input.CreatedAt),
-		UpdatedAt:          timestampFromNonZeroTime(input.UpdatedAt),
-		ProviderName:       input.ProviderName,
-		RunAs:              subjectToProto(input.RunAs),
+		Id:           input.ID,
+		Generation:   input.Generation,
+		Target:       target,
+		Activations:  activations,
+		Paused:       input.Paused,
+		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
+		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
+		ProviderName: input.ProviderName,
+		RunAs:        workflowSubjectID(input.RunAs),
 	}, nil
 }
 
@@ -983,8 +980,7 @@ func workflowRunToProto(input WorkflowRun) (*proto.WorkflowRun, error) {
 		CompletedAt:          timestampFromOptionalTime(input.CompletedAt),
 		StatusMessage:        input.StatusMessage,
 		Output:               output,
-		CreatedBySubjectId:   strings.TrimSpace(input.CreatedBySubjectID),
-		RunAs:                subjectToProto(input.RunAs),
+		RunAs:                workflowSubjectID(input.RunAs),
 		WorkflowKey:          input.WorkflowKey,
 		ProviderName:         input.ProviderName,
 		DefinitionId:         input.DefinitionID,
@@ -1147,4 +1143,19 @@ func workflowEventMatchInputPtrFromMatch(value *proto.WorkflowEventMatch) *Workf
 		Source:  value.GetSource(),
 		Subject: value.GetSubject(),
 	}
+}
+
+func workflowSubjectID(value *Subject) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(value.ID)
+}
+
+func workflowSubjectFromID(value string) *Subject {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &Subject{ID: value}
 }
