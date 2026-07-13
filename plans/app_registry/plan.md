@@ -192,13 +192,11 @@ Non-core app installation state should live in IndexedDB.
 
 **Materialized views** (computed in Go, not separate stores):
 
-- **Known versions** — projected from `version_added` records, one entry per `(app, version)` pair. Answers “what versions has the fleet installed or discovered?”
+- **Known versions** — projected from `version_added` records via `ListKnownVersionsByApp` and `ListAllKnownVersions`, one entry per `(app, version)` pair. Admin HTTP list/get endpoints read these projections. Install state is catalog-only; there is no separate per-app installation upsert store.
 
-Step 6 implements known-version projection in `AppVersionCatalogService` (`ListKnownVersionsByApp`, `ListAllKnownVersions`). Admin HTTP list/get endpoints read these projections. The step 5 `app_installations` upsert store was removed; install state is catalog-only.
+There is **no fleet head**, **no promotion**, and **no rollback** yet. Those belong to later activation/rollout work.
 
-There is **no fleet head**, **no promotion**, and **no rollback** in step 6. Those belong to later activation/rollout steps.
-
-At runtime (target state after steps 6–7), `gestaltd serve` should:
+At runtime, `gestaltd serve` should:
 
 1. Load the committed core lockfile.
 2. Read known versions per app from `app_version_catalog` (projected).
