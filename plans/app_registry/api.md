@@ -100,7 +100,7 @@ The `app_installations` IndexedDB store was removed. List/get install endpoints 
 |--------|------|-------------|
 | `GET` | `/admin/api/v1/app-registries` | List registries from config |
 | `GET` | `/admin/api/v1/app-registries/{registry}/apps/{app}/versions` | List published versions for one app |
-| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Validate version, record known version in catalog (**step 6:** also materialize on handling instance; **step 7:** catalog only) |
+| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Validate version and record known version in catalog (catalog-only; local materialization via background controller) |
 | `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
 | `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
 
@@ -246,30 +246,22 @@ When the app has no index or no versions yet, `versions` is `[]` (not `null`). A
 |-------|------|-------------|
 | `registry` | string | Registry name from the path |
 | `app` | string | App name from the path |
-| `materializedPath` | string | **Step 6 only.** Absolute path where the handling instance extracted the app archive. Omitted in step 7 (materialization is per-replica via the background controller). |
+| `materializedPath` | string | Omitted — local materialization is per-replica via the background controller (see [lifecycle.md](./lifecycle.md)) |
 | `installation` | object | Known version after a successful install (from the `version_added` record, or existing catalog entry on re-install) |
 
-Re-installing a version that is already in the catalog returns **400 Bad Request** (`app version is already installed`). The handler does not download or materialize again.
+Re-installing a version that is already in the catalog returns **400 Bad Request** (`app version is already installed`).
 
-**Runtime behavior (step 6, implemented today)**
+**Runtime behavior**
 
-Synchronous on the handling instance. The HTTP response is sent after the flow finishes or fails.
+Synchronous on the handling instance. The HTTP response is sent after the catalog write finishes or fails.
 
-1. **Claim fleet install lock** — insert a row into `app_version_install_locks` for `(app, version)` with a unique holder id for this install attempt. If another install attempt already holds a non-expired lock for this pair, return **409 Conflict** immediately (no download). Locks expire after 15 minutes so crashed instances do not block installs forever; expired locks can be taken over.
-2. **Reject known versions** — if `(app, version)` is already in `app_version_catalog`, return **400 Bad Request** without fetching the registry or materializing.
-3. Download the published version document and platform artifact.
-4. Extract the archive in place to `{artifactsDir}/registry-installed/{app}/{version}/`.
-5. On success, append `version_added` to `app_version_catalog`. On failure before materialization completes, append `install_failed` for audit and return an error.
-6. **Release install lock** — delete the lock row when this instance still holds it (always runs on success or failure via defer).
+1. **Claim fleet install lock** — insert a row into `app_version_install_locks` for `(app, version)` with a unique holder id for this install attempt. If another install attempt already holds a non-expired lock for this pair, return **409 Conflict** immediately. Locks expire after 15 minutes so crashed instances do not block installs forever; expired locks can be taken over.
+2. **Reject known versions** — if `(app, version)` is already in `app_version_catalog`, return **400 Bad Request** without fetching the registry.
+3. Fetch the published version document (`versions/{version}.json`) to validate the install candidate. **No artifact download** on the handling instance.
+4. Append `version_added` to `app_version_catalog`. On failure before step 4, append `install_failed` for audit and return an error.
+5. **Release install lock** — delete the lock row when this instance still holds it (always runs on success or failure via defer).
 
-**Runtime behavior (step 7, proposed)** — see [lifecycle.md](./lifecycle.md).
-
-1. **Claim fleet install lock** — same as step 6.
-2. **Reject known versions** — same as step 6.
-3. Fetch the published version document only (`versions/{version}.json`) to validate the install candidate. **No artifact download** on the handling instance.
-4. Append `version_added` to `app_version_catalog`. On failure before step 4, append `install_failed` for audit.
-5. **Release install lock** — same as step 6.
-6. Every replica (including the handler) materializes locally on the background catalog controller (startup + 1 minute tick).
+Every replica (including the handler) materializes locally on the background catalog controller (startup + 1 minute tick). See [lifecycle.md](./lifecycle.md).
 
 Different `(app, version)` pairs use independent locks and can install in parallel across the fleet. The same version cannot be installed concurrently on multiple instances.
 
@@ -327,7 +319,7 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed |
 | `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
 | `409` | Another instance is already installing this `(app, version)` (install lock held and not expired) |
-| `502` | Published version fetch failed; (**step 6**) artifact download failed; digest mismatch; materialization failed; failed to append `version_added` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
+| `502` | Published version fetch failed; failed to append `version_added` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Artifacts directory not configured; registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
 
