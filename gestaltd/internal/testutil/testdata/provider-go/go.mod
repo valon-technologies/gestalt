@@ -1,6 +1,6 @@
 module github.com/valon-technologies/gestalt/testdata/provider-go
 
-go 1.26
+go 1.26.5
 
 require github.com/valon-technologies/gestalt/sdk/go v0.0.0-00010101000000-000000000000
 
