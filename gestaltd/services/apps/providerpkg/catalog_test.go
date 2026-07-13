@@ -73,7 +73,7 @@ operations:
 	}
 }
 
-func TestReadStaticCatalogRejectsBlankAllowedRoles(t *testing.T) {
+func TestReadStaticCatalogRejectsProviderOwnedAllowedRoles(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -83,14 +83,14 @@ operations:
   - id: echo
     method: POST
     allowedRoles:
-      - "   "
+      - admin
 `)
 	if err := os.WriteFile(filepath.Join(root, StaticCatalogFile), data, 0o644); err != nil {
 		t.Fatalf("WriteFile(catalog.yaml): %v", err)
 	}
 
 	_, err := ReadStaticCatalog(root, "")
-	if err == nil || err.Error() == "" || !strings.Contains(err.Error(), "allowedRoles entry with empty value") {
-		t.Fatalf("ReadStaticCatalog error = %v, want blank allowedRoles error", err)
+	if err == nil || err.Error() == "" || !strings.Contains(err.Error(), "allowedRoles") {
+		t.Fatalf("ReadStaticCatalog error = %v, want allowedRoles rejection", err)
 	}
 }

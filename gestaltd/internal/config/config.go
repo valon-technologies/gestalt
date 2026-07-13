@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"gopkg.in/yaml.v3"
 )
@@ -2259,8 +2260,8 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	return dst
 }
 
-// OperationOverride holds optional alias and description for an allowed operation.
-type OperationOverride = providermanifestv1.ManifestOperationOverride
+// OperationOverride holds deployer-owned allowed-operation metadata from config.
+type OperationOverride = operationexposure.OperationOverride
 
 type AppCapabilitiesConfig struct {
 	Workflow *AppWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`

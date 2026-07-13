@@ -478,7 +478,7 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 
 	allowedOperations := entry.AllowedOperations
 	if allowedOperations == nil {
-		allowedOperations = maps.Clone(manifestApp.AllowedOperations)
+		allowedOperations = allowedOperationsFromManifest(manifestApp.AllowedOperations)
 	}
 
 	switch {
@@ -531,7 +531,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 	}
 	allowedOperations := entry.AllowedOperations
 	if allowedOperations == nil && manifestApp != nil {
-		allowedOperations = maps.Clone(manifestApp.AllowedOperations)
+		allowedOperations = allowedOperationsFromManifest(manifestApp.AllowedOperations)
 	}
 	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
@@ -2402,4 +2402,26 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, deps Deps) *
 		ClientID:     conn.Auth.ClientID,
 		ClientSecret: conn.Auth.ClientSecret,
 	})
+}
+
+func allowedOperationsFromManifest(manifest map[string]*providermanifestv1.ManifestOperationOverride) map[string]*operationexposure.OperationOverride {
+	if manifest == nil {
+		return nil
+	}
+	out := make(map[string]*operationexposure.OperationOverride, len(manifest))
+	for name, override := range manifest {
+		if override == nil {
+			out[name] = nil
+			continue
+		}
+		out[name] = &operationexposure.OperationOverride{
+			Alias:       override.Alias,
+			Description: override.Description,
+			Tags:        override.Tags,
+			Paginate:    override.Paginate,
+			Pagination:  override.Pagination,
+			GraphQL:     override.GraphQL,
+		}
+	}
+	return out
 }

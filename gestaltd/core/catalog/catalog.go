@@ -41,7 +41,7 @@ type CatalogOperation struct {
 	InputSchema    json.RawMessage       `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
 	OutputSchema   json.RawMessage       `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
 	Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
-	AllowedRoles   []string              `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
+	AllowedRoles   []string              `json:"allowedRoles,omitempty"`
 	Parameters     []CatalogParameter    `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
 	RequiredScopes []string              `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
 	Tags           []string              `yaml:"tags,omitempty"           json:"tags,omitempty"`
@@ -91,6 +91,14 @@ func MergeTags(groups ...[]string) []string {
 }
 
 func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
+	if value != nil && value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if value.Content[i].Value == "allowedRoles" {
+				return fmt.Errorf("field allowedRoles not found in type catalog.CatalogOperation")
+			}
+		}
+	}
+
 	type catalogOperationYAML struct {
 		ID             string                `yaml:"id"`
 		ProviderID     string                `yaml:"providerId,omitempty"`
@@ -101,7 +109,6 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		InputSchema    any                   `yaml:"inputSchema,omitempty"`
 		OutputSchema   any                   `yaml:"outputSchema,omitempty"`
 		Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"`
-		AllowedRoles   []string              `yaml:"allowedRoles,omitempty"`
 		Parameters     []CatalogParameter    `yaml:"parameters,omitempty"`
 		RequiredScopes []string              `yaml:"requiredScopes,omitempty"`
 		Tags           []string              `yaml:"tags,omitempty"`
@@ -136,7 +143,6 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		InputSchema:    inputSchema,
 		OutputSchema:   outputSchema,
 		Annotations:    aux.Annotations,
-		AllowedRoles:   aux.AllowedRoles,
 		Parameters:     aux.Parameters,
 		RequiredScopes: aux.RequiredScopes,
 		Tags:           aux.Tags,
