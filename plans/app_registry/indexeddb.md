@@ -86,6 +86,17 @@ Services.DB                  ← underlying main-db handle
 
 Append-only catalog of versions Gestalt knows about for each app.
 
+```text
+app_version_catalog              ← source of truth (append-only)
+  - id
+  - app                          # app name, e.g. g-issues
+  - version
+  - type                         # version_added | install_failed
+  - actor
+  - timestamp
+  - metadata                     # on version_added: install contract snapshot
+```
+
 Primary key: `id` (UUID).
 
 `app` is the **app name** (for example `g-issues`), matching `app_shas.id`.
@@ -124,14 +135,14 @@ Primary key: `id` (UUID).
 
 On `version_added` records, `metadata_json` carries the install contract snapshot used to project `AppInstallation` for HTTP responses. `install_failed` records typically carry only `registry` and `error`.
 
-### `type` values
+### Record types
 
-| Value | Constant | When | Effect on known-version projection |
-|-------|----------|------|-------------------------------------|
-| `version_added` | `AppVersionCatalogRecordTypeVersionAdded` | Artifacts on disk + validation OK | Adds `(app, version)` to catalog |
-| `install_failed` | `AppVersionCatalogRecordTypeInstallFailed` | Install error | Audit only; not projected |
+| Type | When | Effect on known versions |
+|------|------|--------------------------|
+| `version_added` | Registry version validated + catalog write OK | Adds `(app, version)` to catalog |
+| `install_failed` | Install error | Audit only; not projected |
 
-`AppendRecord` rejects any other `type` string.
+Constants: `AppVersionCatalogRecordTypeVersionAdded`, `AppVersionCatalogRecordTypeInstallFailed`. `AppendRecord` rejects any other `type` string.
 
 Re-installing an already-known immutable version materializes locally but **does not** append a duplicate `version_added` record (`HasKnownVersion` guard).
 

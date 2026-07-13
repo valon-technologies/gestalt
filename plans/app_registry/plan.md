@@ -207,25 +207,7 @@ At runtime, `gestaltd serve` should:
 
 The deploy image should not need to include every non-core app artifact.
 
-Example store:
-
-```text
-app_version_catalog              ← source of truth (append-only)
-  - id
-  - app                          # app name, e.g. g-issues
-  - version
-  - type                         # version_added | install_failed
-  - actor
-  - timestamp
-  - metadata                     # on version_added: install contract snapshot
-```
-
-Record types in the install prototype:
-
-| Type | When | Effect on known versions |
-|------|------|--------------------------|
-| `version_added` | Registry version validated + catalog write OK | Adds `(app, version)` to catalog |
-| `install_failed` | Install error | Audit only |
+Store schema, record types, and service API: [indexeddb.md](./indexeddb.md#store-app_version_catalog-source-of-truth).
 
 ### Multi-Instance Convergence and Lazy Installation
 
