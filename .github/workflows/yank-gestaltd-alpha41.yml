@@ -37,16 +37,27 @@ jobs:
         run: |
           set -euo pipefail
 
+          restore_immutability() {
+            gcloud artifacts repositories update "${REPOSITORY}" \
+              --location="${REGION}" \
+              --immutable-tags \
+              --quiet
+          }
+          trap restore_immutability EXIT
+
           refs=(
             "${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}/gestaltd-image:${VERSION}-alpine"
             "${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}/gestaltd:${VERSION}"
           )
 
+          gcloud artifacts repositories update "${REPOSITORY}" \
+            --location="${REGION}" \
+            --no-immutable-tags \
+            --quiet
+
           for ref in "${refs[@]}"; do
             echo "Deleting ${ref}"
-            if ! gcloud artifacts docker images delete "${ref}" --delete-tags --quiet; then
-              echo "${ref} was already absent or could not be deleted by tag."
-            fi
+            gcloud artifacts docker images delete "${ref}" --delete-tags --quiet
           done
 
           echo "Remaining alpha.41 tags:"
@@ -54,3 +65,13 @@ jobs:
             --include-tags \
             --filter="tags:${VERSION} OR tags:${VERSION}-alpine" \
             --format="table(package,tags,version)"
+
+          remaining="$(gcloud artifacts docker images list "${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}" \
+            --include-tags \
+            --filter="tags:${VERSION} OR tags:${VERSION}-alpine" \
+            --format="value(package)")"
+          if [ -n "${remaining}" ]; then
+            echo "alpha.41 Artifact Registry tags still exist:" >&2
+            echo "${remaining}" >&2
+            exit 1
+          fi
