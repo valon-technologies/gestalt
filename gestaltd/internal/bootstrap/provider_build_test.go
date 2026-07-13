@@ -26,6 +26,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -900,5 +901,32 @@ func TestProviderBuildsLocal(t *testing.T) {
 	}
 	if providerBuildsLocal(cfg, nil) {
 		t.Fatal("nil entry should not build local")
+	}
+}
+
+func TestAllowedOperationsFromManifestPreservesExplicitEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	allowed := allowedOperationsFromManifest(map[string]*providermanifestv1.ManifestOperationOverride{})
+	if allowed == nil {
+		t.Fatal("expected non-nil empty map for explicit manifest allowedOperations")
+	}
+	if len(allowed) != 0 {
+		t.Fatalf("len(allowed) = %d, want 0", len(allowed))
+	}
+	if _, err := operationexposure.New(allowed); err == nil {
+		t.Fatal("expected error for explicit empty allowedOperations map")
+	}
+}
+
+func TestAllowedOperationsFromManifestNilWhenFieldOmitted(t *testing.T) {
+	t.Parallel()
+
+	allowed := allowedOperationsFromManifest(nil)
+	if allowed != nil {
+		t.Fatalf("allowed = %#v, want nil when manifest field omitted", allowed)
+	}
+	if _, err := operationexposure.New(allowed); err != nil {
+		t.Fatalf("New(nil) = %v, want nil policy without error", err)
 	}
 }
