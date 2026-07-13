@@ -204,7 +204,11 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 }
 
 func TestApplyDevAuthProxyEnv(t *testing.T) {
+	t.Parallel()
+
 	t.Run("adds token without replacing existing environment", func(t *testing.T) {
+		t.Parallel()
+
 		target := providerdev.AppTarget{BaseEnv: map[string]string{"EXISTING": "value"}}
 		applyDevAuthProxyEnv(&target, "token")
 		if got := target.BaseEnv[devAuthProxyTokenEnv]; got != "token" {
@@ -216,6 +220,8 @@ func TestApplyDevAuthProxyEnv(t *testing.T) {
 	})
 
 	t.Run("ignores empty token", func(t *testing.T) {
+		t.Parallel()
+
 		target := providerdev.AppTarget{}
 		applyDevAuthProxyEnv(&target, " ")
 		if target.BaseEnv != nil {
