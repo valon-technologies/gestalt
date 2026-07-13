@@ -221,11 +221,11 @@ Activation should be two-phase:
 1. Validate the candidate version against registry metadata and append `version_added` to `app_version_catalog` (fleet declaration).
 2. Each instance materializes locally via the background catalog controller before serving (per-instance readiness).
 
-Fleet activation, rollback, and head selection are planned for later steps (8+).
+Fleet activation, rollback, and head selection are planned for later steps (9+).
 
 ### Runtime Materialization
 
-Dynamic apps should be materialized at runtime or startup from the **known-version catalog** (and per-instance materialization state in step 7).
+Dynamic apps should be materialized at runtime or startup from the **known-version catalog** (and per-instance materialization state in step 8).
 
 On Cloud Run, local disk is ephemeral, so cold starts may need to re-materialize installed apps. To keep startup fast, Gestalt should reuse a remote materialization cache where possible.
 
@@ -259,5 +259,6 @@ Core recovery paths must not depend on dynamically installed apps.
 4. Prototype a Gestalt endpoint that lists available versions in configured registries. See [lifecycle.md](./lifecycle.md).
 5. Add IndexedDB version catalog store and projection helpers (`app_version_catalog` + known-version views). See [indexeddb.md](./indexeddb.md).
 6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog writes; `app_installations` store removed. See [lifecycle.md](./lifecycle.md), [tests.md](./tests.md).
-7. Split install from local materialization — `POST …/install` writes `app_version_catalog` only; every replica runs a background controller (startup + 1 minute tick) to read the catalog and materialize locally. See [lifecycle.md](./lifecycle.md).
-8. Add install-time validation, fleet activation/rollback, and concurrency guards.
+7. Split install from local materialization — `POST …/install` writes `app_version_catalog` only. See [lifecycle.md](./lifecycle.md).
+8. Every replica runs a background catalog controller (startup + 1 minute tick) to read the catalog and materialize locally. See [lifecycle.md](./lifecycle.md#polling).
+9. Add install-time validation, fleet activation/rollback, and concurrency guards.

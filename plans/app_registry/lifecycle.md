@@ -111,7 +111,6 @@ Install routes additionally require:
 
 - IndexedDB `app_version_catalog` service configured on the server (`AppVersionCatalogService`)
 - IndexedDB `app_version_install_locks` service configured on the server (`AppVersionInstallLockService`)
-- A configured artifacts directory (`cfg.Server.ArtifactsDir`, propagated from the CLI `--artifacts-dir` at load time)
 
 List/get install endpoints project known versions from `app_version_catalog` only.
 
@@ -333,7 +332,7 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
 | `409` | Another instance is already installing this `(app, version)` (install lock held and not expired) |
 | `502` | Published version fetch failed; failed to append `version_added` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
-| `500` | Artifacts directory not configured; registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
+| `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
 
 Example:

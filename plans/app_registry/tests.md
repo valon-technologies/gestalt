@@ -77,7 +77,7 @@ All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `tes
 
 ### `handlers_admin_app_install_test.go`
 
-- **`TestAdminAppRegistryInstall/installs_and_lists_known_version`** — `POST …/install` returns 200 with known version and materialized path; `GET …/app-installations` lists one known version.
+- **`TestAdminAppRegistryInstall/installs_and_lists_known_version`** — `POST …/install` returns 200 with known version; `GET …/app-installations` lists one known version.
 
 - **`TestAdminAppRegistryInstall/missing_version_returns_not_found`** — Unknown version returns HTTP 404.
 
@@ -117,8 +117,7 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Real GCS upload integration
 - Failed install `install_failed` record assertions
 - Re-install idempotency (no duplicate `version_added`)
-- Lazy per-instance materialization via background catalog controller (step 7 — see [lifecycle.md](./lifecycle.md))
-- Install HTTP path that writes catalog only (no handling-instance materialization)
+- Lazy per-instance materialization via background catalog controller (step 8 — see [lifecycle.md](./lifecycle.md#polling))
 - Controller tick / convergence tests
 
-See [plan.md](./plan.md) steps 7–8 for planned follow-up coverage.
+See [plan.md](./plan.md) steps 8–9 for planned follow-up coverage.

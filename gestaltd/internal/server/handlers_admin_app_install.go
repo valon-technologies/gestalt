@@ -34,10 +34,9 @@ type adminAppRegistryInstallRequest struct {
 }
 
 type adminAppRegistryInstallResponse struct {
-	Registry         string                   `json:"registry"`
-	App              string                   `json:"app"`
-	Installation     adminAppInstallationInfo `json:"installation"`
-	MaterializedPath string                   `json:"materializedPath"`
+	Registry     string                   `json:"registry"`
+	App          string                   `json:"app"`
+	Installation adminAppInstallationInfo `json:"installation"`
 }
 
 func (s *Server) mountAdminAppInstallReadRoutes(r chi.Router) {
@@ -146,8 +145,6 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 		switch {
 		case strings.Contains(err.Error(), "app registry not found"):
 			status = http.StatusNotFound
-		case strings.Contains(err.Error(), "artifacts directory is not configured"):
-			status = http.StatusInternalServerError
 		case strings.Contains(err.Error(), "invalid app name"),
 			strings.Contains(err.Error(), "registry is required"),
 			strings.Contains(err.Error(), "app is required"),
@@ -160,7 +157,7 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
 			status = http.StatusBadRequest
-		case errors.Is(err, context.DeadlineExceeded), errors.Is(err, appregistry.ErrInstallTimedOut):
+		case errors.Is(err, context.DeadlineExceeded):
 			status = http.StatusGatewayTimeout
 		}
 		writeError(w, status, err.Error())
@@ -168,10 +165,9 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusOK, adminAppRegistryInstallResponse{
-		Registry:         registryName,
-		App:              appName,
-		Installation:     adminAppInstallationFromCore(result.Installation),
-		MaterializedPath: result.MaterializedPath,
+		Registry:     registryName,
+		App:          appName,
+		Installation: adminAppInstallationFromCore(result.Installation),
 	})
 }
 
@@ -206,10 +202,9 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		reader = &appregistry.RegistryReader{}
 	}
 	return &appregistry.Installer{
-		Registries:   cloneAppRegistryConfig(cfg.AppRegistries),
-		Reader:       reader,
-		Catalog:      cfg.Services.AppVersionCatalog,
-		Locks:        cfg.Services.AppVersionInstallLocks,
-		ArtifactsDir: strings.TrimSpace(cfg.ArtifactsDir),
+		Registries: cloneAppRegistryConfig(cfg.AppRegistries),
+		Reader:     reader,
+		Catalog:    cfg.Services.AppVersionCatalog,
+		Locks:      cfg.Services.AppVersionInstallLocks,
 	}
 }
