@@ -5,7 +5,7 @@ Reference for the admin HTTP API under `/admin/api/v1` for configured app regist
 - [gestalt#2716](https://github.com/valon-technologies/gestalt/pull/2716) — plan step 4: list configured registry versions
 - [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) — plan step 6: install a registry app via catalog + local materialization
 
-Gestalt exposes configured `appRegistries` through list routes that read each registry's public HTTPS root and fetch `apps/{app}/index.json`. Install routes record known versions in `app_version_catalog`. **Step 6 (today):** install also materializes on the handling instance. **Step 7 (proposed):** install is catalog-only; every replica materializes via a background controller — see [lifecycle.md](./lifecycle.md). List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
+Gestalt exposes configured `appRegistries` through list routes that read each registry's public HTTPS root and fetch `apps/{app}/index.json`. Install is catalog-only; every replica materializes via a background controller — see [lifecycle.md](./lifecycle.md). List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
 
 Related docs:
 
@@ -350,10 +350,6 @@ When `gestaltd serve` starts:
 
 Bootstrap does not fetch registry indexes or prefetch version metadata. The source of truth for registry configuration remains the config file on disk; gestaltd does not persist `appRegistries` elsewhere.
 
-Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not read known versions from `app_version_catalog` or bind installed apps into the provider graph.
-
-**Step 6 (today):** materialize only on the handling instance during `POST …/install`.
-
-**Step 7 (proposed):** start a background catalog controller on every replica — one `ConvergeOnce` at startup, then every 1 minute — to read `app_version_catalog` and materialize missing versions locally. See [lifecycle.md](./lifecycle.md).
+Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not bind installed apps into the provider graph. Start a background catalog controller on every replica — one `ConvergeOnce` at startup, then every 1 minute — to read `app_version_catalog` and materialize missing versions locally. See [lifecycle.md](./lifecycle.md).
 
 The admin UI and these routes share the `/admin/api/v1` prefix. In deployments that split public and management listeners, call the management base URL. Protect that listener according to your environment (private networking, reverse proxy, or gestaltd admin authorization policy for the admin UI surface).
