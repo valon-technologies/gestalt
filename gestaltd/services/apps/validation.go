@@ -345,8 +345,8 @@ func effectiveAllowedOperations(entry *ValidationApp, spec *providermanifestv1.S
 	if entry != nil && entry.AllowedOperations != nil {
 		return entry.AllowedOperations
 	}
-	if spec == nil {
+	if spec == nil || spec.AllowedOperations == nil {
 		return nil
 	}
-	return spec.AllowedOperations
+	return operationexposure.OverridesFromManifest(spec.AllowedOperations)
 }

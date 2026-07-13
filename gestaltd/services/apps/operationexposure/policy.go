@@ -7,10 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
-
-type OperationOverride = providermanifestv1.ManifestOperationOverride
 
 // Policy normalizes allowed_operations handling so every provider type uses the
 // same validation, aliasing, and description override behavior.

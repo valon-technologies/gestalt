@@ -478,7 +478,7 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 
 	allowedOperations := entry.AllowedOperations
 	if allowedOperations == nil {
-		allowedOperations = maps.Clone(manifestApp.AllowedOperations)
+		allowedOperations = operationexposure.OverridesFromManifest(manifestApp.AllowedOperations)
 	}
 
 	switch {
@@ -531,7 +531,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 	}
 	allowedOperations := entry.AllowedOperations
 	if allowedOperations == nil && manifestApp != nil {
-		allowedOperations = maps.Clone(manifestApp.AllowedOperations)
+		allowedOperations = operationexposure.OverridesFromManifest(manifestApp.AllowedOperations)
 	}
 	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
