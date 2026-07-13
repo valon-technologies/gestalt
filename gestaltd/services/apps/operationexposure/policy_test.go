@@ -18,6 +18,25 @@ func TestPolicyNewRejectsEmpty(t *testing.T) {
 	}
 }
 
+func TestMatchingAllowedOperationsPreservesExplicitEmpty(t *testing.T) {
+	t.Parallel()
+
+	empty := map[string]*OperationOverride{}
+	if got := MatchingAllowedOperations(empty, &catalog.Catalog{
+		Operations: []catalog.CatalogOperation{{ID: "echo"}},
+	}); got == nil {
+		t.Fatal("expected non-nil empty map for explicit empty allowedOperations")
+	} else if len(got) != 0 {
+		t.Fatalf("got %#v, want empty map", got)
+	}
+
+	if got := MatchingAllowedOperations(nil, &catalog.Catalog{
+		Operations: []catalog.CatalogOperation{{ID: "echo"}},
+	}); got != nil {
+		t.Fatalf("got %#v, want nil for omitted allowedOperations", got)
+	}
+}
+
 func TestPolicyNewRejectsAliasCollisions(t *testing.T) {
 	t.Parallel()
 

@@ -158,8 +158,8 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*operationexposure.OperationOverride{
 		"teams": {
 			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
-				Description:  "My custom description",
-				Tags:         []string{"workspace"},
+				Description: "My custom description",
+				Tags:        []string{"workspace"},
 			},
 			AllowedRoles: []string{"workspace-admin"},
 		},
