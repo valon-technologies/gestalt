@@ -71,7 +71,7 @@ func BuildSDKTestMainBinary(srcDir, output string) error {
 		return err
 	}
 	goMod := "module github.com/valon-technologies/gestalt/testdata/" + filepath.Base(srcDir) + "\n\n" +
-		"go 1.26\n\n" +
+		"go 1.26.5\n\n" +
 		"require github.com/valon-technologies/gestalt/sdk/go v0.0.0\n\n" +
 		"replace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(root, "sdk", "go")) + "\n" +
 		"replace github.com/valon-technologies/gestalt/server/rpc => " + filepath.ToSlash(filepath.Join(root, "gestaltd", "rpc")) + "\n"
