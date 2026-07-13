@@ -89,8 +89,8 @@ func TestPublicRegistrationExcludesInternalMethods(t *testing.T) {
 	if _, err := client.DeliverEvent(context.Background(), &gestaltproto.DeliverWorkflowProviderEventRequest{}); status.Code(err) != codes.Unimplemented {
 		t.Fatalf("DeliverEvent code = %v, want Unimplemented", status.Code(err))
 	}
-	if !tracker.deliverCalled {
-		t.Fatal("DeliverEvent did not reach public handler")
+	if tracker.deliverCalled {
+		t.Fatal("DeliverEvent should not be registered on the public workflow surface")
 	}
 }
 

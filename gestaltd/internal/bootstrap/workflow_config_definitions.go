@@ -81,7 +81,8 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
 		if _, err := provider.ApplyDefinition(providerCtx, &proto.ApplyWorkflowProviderDefinitionRequest{
-			Spec: specProto,
+			ProviderName: desiredEntry.ProviderName,
+			Spec:         specProto,
 			Context: &proto.RequestContext{
 				Subject: &proto.SubjectContext{
 					Id: workflowConfigOwnerSubjectID(),
