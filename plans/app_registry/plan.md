@@ -6,6 +6,7 @@ Related references:
 
 - [config.md](./config.md) — deploy reader config and CI publish flags
 - [api.md](./api.md) — admin HTTP API for listing registry versions
+- [lifecycle.md](./lifecycle.md) — replica lifecycle, convergence triggers, materialization vs runtime binding
 - [models.md](./models.md) — JSON document shapes stored in GCS
 - [service.md](./service.md) — Go package API for publish and validation
 
