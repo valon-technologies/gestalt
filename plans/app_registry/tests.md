@@ -117,6 +117,8 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Real GCS upload integration
 - Failed install `install_failed` record assertions
 - Re-install idempotency (no duplicate `version_added`)
-- Lazy per-instance materialization on other instances
+- Lazy per-instance materialization via background catalog controller (step 7 — see [lifecycle.md](./lifecycle.md))
+- Install HTTP path that writes catalog only (no handling-instance materialization)
+- Controller tick / convergence tests
 
 See [plan.md](./plan.md) steps 7–8 for planned follow-up coverage.

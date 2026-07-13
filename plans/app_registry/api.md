@@ -5,7 +5,7 @@ Reference for the admin HTTP API under `/admin/api/v1` for configured app regist
 - [gestalt#2716](https://github.com/valon-technologies/gestalt/pull/2716) — plan step 4: list configured registry versions
 - [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) — plan step 6: install a registry app via catalog + local materialization
 
-Gestalt exposes configured `appRegistries` through list routes that read each registry's public HTTPS root and fetch `apps/{app}/index.json`. Install routes materialize the selected version on the handling instance and record known versions in `app_version_catalog`. List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
+Gestalt exposes configured `appRegistries` through list routes that read each registry's public HTTPS root and fetch `apps/{app}/index.json`. Install routes record known versions in `app_version_catalog`. **Step 6 (today):** install also materializes on the handling instance. **Step 7 (proposed):** install is catalog-only; every replica materializes via a background controller — see [lifecycle.md](./lifecycle.md). List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
 
 Related docs:
 
@@ -100,7 +100,7 @@ The `app_installations` IndexedDB store was removed. List/get install endpoints 
 |--------|------|-------------|
 | `GET` | `/admin/api/v1/app-registries` | List registries from config |
 | `GET` | `/admin/api/v1/app-registries/{registry}/apps/{app}/versions` | List published versions for one app |
-| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Download, extract, record known version, materialize on this instance (does not start any process) |
+| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Validate version, record known version in catalog (**step 6:** also materialize on handling instance; **step 7:** catalog only) |
 | `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
 | `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
 
@@ -246,12 +246,12 @@ When the app has no index or no versions yet, `versions` is `[]` (not `null`). A
 |-------|------|-------------|
 | `registry` | string | Registry name from the path |
 | `app` | string | App name from the path |
-| `materializedPath` | string | Absolute path where this instance extracted the app archive |
+| `materializedPath` | string | **Step 6 only.** Absolute path where the handling instance extracted the app archive. Omitted in step 7 (materialization is per-replica via the background controller). |
 | `installation` | object | Known version after a successful install (from the `version_added` record, or existing catalog entry on re-install) |
 
 Re-installing a version that is already in the catalog returns **400 Bad Request** (`app version is already installed`). The handler does not download or materialize again.
 
-**Runtime behavior**
+**Runtime behavior (step 6, implemented today)**
 
 Synchronous on the handling instance. The HTTP response is sent after the flow finishes or fails.
 
@@ -261,6 +261,15 @@ Synchronous on the handling instance. The HTTP response is sent after the flow f
 4. Extract the archive in place to `{artifactsDir}/registry-installed/{app}/{version}/`.
 5. On success, append `version_added` to `app_version_catalog`. On failure before materialization completes, append `install_failed` for audit and return an error.
 6. **Release install lock** — delete the lock row when this instance still holds it (always runs on success or failure via defer).
+
+**Runtime behavior (step 7, proposed)** — see [lifecycle.md](./lifecycle.md).
+
+1. **Claim fleet install lock** — same as step 6.
+2. **Reject known versions** — same as step 6.
+3. Fetch the published version document only (`versions/{version}.json`) to validate the install candidate. **No artifact download** on the handling instance.
+4. Append `version_added` to `app_version_catalog`. On failure before step 4, append `install_failed` for audit.
+5. **Release install lock** — same as step 6.
+6. Every replica (including the handler) materializes locally on the background catalog controller (startup + 1 minute tick).
 
 Different `(app, version)` pairs use independent locks and can install in parallel across the fleet. The same version cannot be installed concurrently on multiple instances.
 
@@ -318,7 +327,7 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed |
 | `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
 | `409` | Another instance is already installing this `(app, version)` (install lock held and not expired) |
-| `502` | Published version fetch failed; artifact download failed; digest mismatch; materialization failed; failed to append `version_added` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
+| `502` | Published version fetch failed; (**step 6**) artifact download failed; digest mismatch; materialization failed; failed to append `version_added` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Artifacts directory not configured; registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
 
@@ -341,12 +350,10 @@ When `gestaltd serve` starts:
 
 Bootstrap does not fetch registry indexes or prefetch version metadata. The source of truth for registry configuration remains the config file on disk; gestaltd does not persist `appRegistries` elsewhere.
 
-Install is HTTP-triggered only. On startup, gestaltd does not:
+Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not read known versions from `app_version_catalog` or bind installed apps into the provider graph.
 
-- read known versions from `app_version_catalog`
-- materialize apps from the registry
-- bind installed apps into the provider graph
+**Step 6 (today):** materialize only on the handling instance during `POST …/install`.
 
-Step 6 materializes only on the handling instance during `POST …/install`. Step 7 will add catalog reads + lazy per-instance materialization on startup or first request.
+**Step 7 (proposed):** start a background catalog controller on every replica — one `ConvergeOnce` at startup, then every 1 minute — to read `app_version_catalog` and materialize missing versions locally. See [lifecycle.md](./lifecycle.md).
 
 The admin UI and these routes share the `/admin/api/v1` prefix. In deployments that split public and management listeners, call the management base URL. Protect that listener according to your environment (private networking, reverse proxy, or gestaltd admin authorization policy for the admin UI surface).

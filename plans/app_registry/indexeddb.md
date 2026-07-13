@@ -159,13 +159,21 @@ Projection helpers live in `app_version_catalog_projection.go`.
 
 ---
 
-## Step 6 install write path
+## Step 6 install write path (implemented today)
 
 On `POST …/install`, the installer:
 
 1. Download and extract artifact in place under `registry-installed/{app}/{version}/`.
 2. If `(app, version)` is not already known, `AppendRecord(version_added)` with full contract in `metadata_json`.
 3. On error before success, `AppendRecord(install_failed)` for audit.
+
+## Step 7 catalog reconcile path (proposed)
+
+**Install (`POST …/install`):** validate `versions/{version}.json`, then `AppendRecord(version_added)` only — no artifact download on the handling instance.
+
+**Every replica (background controller):** periodically `ListAllKnownVersions`, then download and extract any catalog-known versions missing from local `registry-installed/{app}/{version}/`. See [lifecycle.md](./lifecycle.md).
+
+`metadata_json.materialized_path` on `version_added` records may be omitted or treated as informational in step 7; per-instance paths are local operational state (planned `app_instance_materializations`).
 
 Admin `GET …/app-installations` calls `ListAllKnownVersions`. `GET …/app-installations/{app}` calls `ListKnownVersionsByApp`.
 

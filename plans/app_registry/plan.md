@@ -226,7 +226,7 @@ Record types in the install prototype:
 
 | Type | When | Effect on known versions |
 |------|------|--------------------------|
-| `version_added` | Artifacts on disk + validation OK | Adds `(app, version)` to catalog |
+| `version_added` | Registry version validated + catalog write OK | Adds `(app, version)` to catalog |
 | `install_failed` | Install error | Audit only |
 
 ### Multi-Instance Convergence and Lazy Installation
@@ -235,23 +235,25 @@ Cloud Run may run many `gestaltd` instances at the same time. If one instance ha
 
 The install request should not directly command every instance. Instead, the handling instance appends a `version_added` record to shared IndexedDB; other instances **read the catalog** and converge independently.
 
-**Step 6 (implemented):** only the handling instance materializes artifacts and appends catalog records. Other instances do not read install state yet.
+**Step 6 (implemented):** `POST …/install` validates the registry entry, materializes on the handling instance, and appends catalog records. Other instances do not read install state yet.
 
-**Step 7 (planned):** each instance reads known versions from `app_version_catalog`, then lazily materializes missing versions locally.
+**Step 7 (proposed):** split **fleet declaration** from **local materialization**:
+
+- `POST …/install` — handling instance validates the registry version document and appends `version_added` only (no artifact download on the handler).
+- **Every** replica — background catalog controller reads `app_version_catalog` on startup and every 1 minute; each materializes missing versions locally.
 
 The expected flow is:
 
 1. One `gestaltd` instance receives the install request.
-2. It validates the selected app version against registry metadata.
-3. It downloads and materializes the app artifact locally (in place under `registry-installed/{app}/{version}/`).
-4. If successful and `(app, version)` is not already known, it appends `version_added` with the full install contract in record metadata. If not, it appends `install_failed` for audit and returns an error.
-5. Other instances (step 7) notice new catalog entries on startup, polling, or first request to that app.
-6. Each other instance lazily materializes missing versions into its own local artifacts directory.
-7. Once local materialization succeeds, that instance starts or binds the app and serves traffic for it.
+2. It validates the selected app version against registry metadata (`versions/{version}.json`).
+3. If `(app, version)` is not already known, it appends `version_added` with the full install contract in record metadata. If validation fails, it appends `install_failed` for audit and returns an error.
+4. **Every** replica (including the handler) runs a background controller that periodically reads the catalog.
+5. Each replica lazily downloads and materializes missing versions into its own local artifacts directory (`registry-installed/{app}/{version}/`).
+6. Once local materialization succeeds, that instance can start or bind the app and serve traffic for it (planned after materialization).
 
-This is similar to app migrations and configure-on-first-request behavior: the catalog records what versions exist, while each instance performs local preparation when it needs to serve that app.
+This is similar to app migrations and configure-on-first-request behavior: the catalog records what versions exist fleet-wide, while each instance performs local preparation on a reconcile loop.
 
-For the first implementation, lazy installation can happen on startup or first request to the app. A later version can add polling or pub/sub notifications so instances converge sooner without waiting for traffic.
+The first controller implementation uses a **1 minute** tick plus one convergence pass at startup. Later versions can add manual converge, first-request convergence, or pub/sub notifications for faster catch-up.
 
 Install state should distinguish global activation from per-instance readiness:
 
@@ -293,10 +295,10 @@ Install-time validation should ensure:
 
 Activation should be two-phase:
 
-1. Materialize and validate the candidate version on the handling instance.
-2. Append `version_added` to `app_version_catalog` only after validation succeeds (and only if the version is not already known).
+1. Validate the candidate version against registry metadata and append `version_added` to `app_version_catalog` (fleet declaration).
+2. Each instance materializes locally via the background catalog controller before serving (per-instance readiness).
 
-Fleet activation, rollback, and head selection are planned for later steps (7–8).
+Fleet activation, rollback, and head selection are planned for later steps (8+).
 
 ### Runtime Materialization
 
@@ -333,6 +335,6 @@ Core recovery paths must not depend on dynamically installed apps.
 3. Start with publishing `g-issues`.
 4. Prototype a Gestalt endpoint that lists available versions in configured registries. See [api.md](./api.md).
 5. Add IndexedDB version catalog store and projection helpers (`app_version_catalog` + known-version views). See [indexeddb.md](./indexeddb.md).
-6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog-only writes; `app_installations` store removed. See [api.md](./api.md), [tests.md](./tests.md).
-7. Add lazy per-instance materialization on startup or first request — each instance reads known versions from the catalog and materializes locally.
+6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog writes; `app_installations` store removed. See [api.md](./api.md), [tests.md](./tests.md).
+7. Split install from local materialization — `POST …/install` writes `app_version_catalog` only; every replica runs a background controller (startup + 1 minute tick) to read the catalog and materialize locally. See [lifecycle.md](./lifecycle.md).
 8. Add install-time validation, fleet activation/rollback, and concurrency guards.
