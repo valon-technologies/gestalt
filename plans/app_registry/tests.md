@@ -17,7 +17,6 @@ Related docs:
 | Package | File | Tests | Layer | PR |
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
-| `internal/coredata` | `app_version_change_requests_test.go` | 4 | Unit (projection) | [gestalt#2751](https://github.com/valon-technologies/gestalt/pull/2751) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
@@ -82,29 +81,6 @@ All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `tes
 - **`TestAdminAppRegistryInstall/missing_version_returns_not_found`** — Unknown version returns HTTP 404.
 
 - **`TestAdminAppRegistryInstall/get_versions_by_app`** — `GET …/app-installations/{app}` returns an array of known versions after a successful install.
-
----
-
-## Change request projection unit tests
-
-Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730), updated in [gestalt#2751](https://github.com/valon-technologies/gestalt/pull/2751). Exercise change request append/list and known-version projections over in-memory stub IndexedDB — no HTTP, no GCS.
-
-Run:
-
-```bash
-cd gestaltd
-go test ./internal/coredata/... -run TestAppVersionChangeRequest -count=1
-```
-
-### `app_version_change_requests_test.go`
-
-- **`TestAppVersionChangeRequestService/append_and_list_requests_by_app`** — Requests append in timestamp order per app.
-
-- **`TestAppVersionChangeRequestService/has_known_version`** — `HasKnownVersion` returns true after a change request for `to_version`.
-
-- **`TestAppVersionChangeRequestProjection/ListKnownVersionsByApp_dedupes_to_version`** — Multiple change requests project to one entry per `to_version`.
-
-- **`TestAppVersionChangeRequestProjection/ListAllKnownVersions_returns_latest_per_app_version`** — Fleet list includes distinct `(app, to_version)` pairs.
 
 ---
 
