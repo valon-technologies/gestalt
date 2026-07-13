@@ -84,7 +84,7 @@ func buildMinimalRuntimeProviderBinary(t *testing.T) string {
 	repoRoot := repoRootForRuntimeTests(t)
 	moduleDir := t.TempDir()
 	goMod := "module minimalruntime\n\n" +
-		"go 1.26\n\n" +
+		"go 1.26.5\n\n" +
 		"require github.com/valon-technologies/gestalt/sdk/go v0.0.0\n\n" +
 		"replace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(repoRoot, "sdk", "go")) + "\n" +
 		"replace github.com/valon-technologies/gestalt/server/rpc => " + filepath.ToSlash(filepath.Join(repoRoot, "gestaltd", "rpc")) + "\n"
