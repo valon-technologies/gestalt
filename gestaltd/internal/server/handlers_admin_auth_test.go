@@ -120,15 +120,12 @@ func newAuthorizedAdminTestServer(t *testing.T, grantAdmin bool) *httptest.Serve
 	}
 
 	return newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: user.Email}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: user.Email}, nil
+		})
 		cfg.Services = svc
 		cfg.Authorization = authz
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

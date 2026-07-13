@@ -843,15 +843,12 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 	seedSubjectToken(t, svc, principal.UserSubjectID(u.ID), providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "user@example.com"}, nil
+		})
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.Services = svc
@@ -903,15 +900,12 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 	seedSubjectToken(t, svc, principal.UserSubjectID(u.ID), providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "user@example.com"}, nil
+		})
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.Services = svc

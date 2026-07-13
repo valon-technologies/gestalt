@@ -55,15 +55,12 @@ func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
@@ -802,15 +799,12 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
@@ -1060,15 +1054,12 @@ func TestAgentHarnessResolveUsesDefaultAndNamedHarness(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-harness" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-harness" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentDefs = map[string]*config.ProviderEntry{
@@ -1165,15 +1156,12 @@ func TestAgentTurnOmittedToolsDefaultToNone(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
@@ -1257,15 +1245,12 @@ func TestAgentCreateTurnUsesNoToolsWithStructuredOutput(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
@@ -1475,15 +1460,12 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "metric-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "metrics@example.com", DisplayName: "Metrics"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "metric-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "metrics@example.com", DisplayName: "Metrics"}, nil
+		})
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
@@ -1596,15 +1578,12 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
@@ -1717,15 +1696,12 @@ func TestAgentTurnEventStreamReportsProviderContextErrorWhileRequestOpen(t *test
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
@@ -1828,15 +1804,12 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := testutil.NewStubServices(t)
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "ada-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+		})
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
