@@ -102,7 +102,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("Workflow: %v", err)
 	}
 
-	applied, err := workflow.ApplyDefinition(context.Background(), "workflow-definition-key-go", "default", &client.WorkflowDefinitionSpec{
+	applied, err := workflow.ApplyDefinition(context.Background(), "default", "workflow-definition-key-go", &client.WorkflowDefinitionSpec{
 		Id: "definition-1",
 		Target: &client.BoundWorkflowTarget{Steps: []*client.WorkflowStep{{
 			Id: "review",
