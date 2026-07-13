@@ -2,7 +2,7 @@
 
 How each `gestaltd` replica observes fleet install state, materializes app artifacts locally, and (eventually) serves dynamic apps.
 
-Install is catalog-only; per-replica convergence (ack → restart → download → mount) is planned in steps 8–11. List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
+Install is catalog-only; per-replica convergence (ack → download → restart → mount) is planned via polling below. List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
 
 Related docs:
 
@@ -36,45 +36,19 @@ Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not b
 
 ## Polling
 
-Every replica runs a background catalog controller after `gestaltd serve` is up. On startup, run one reconcile pass immediately; then every **1 minute** in a goroutine.
+**Planned.** Every replica will run a background catalog controller after `gestaltd serve` is up: one reconcile pass at startup, then every **1 minute** in a goroutine.
 
-The controller is **pull-based** and **local**: each replica reconciles itself against the shared catalog. No replica fans out install RPCs to peers.
+The controller is **pull-based** and **local**: each replica reads `app_version_catalog` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
-Rollout is split into four steps:
+Each pass, for every known `(app, version)` this replica has not yet converged:
 
-### Step 8 — Acknowledge catalog rows
+1. Acknowledge the catalog row in per-instance IndexedDB state (planned `app_instance_materializations`) and emit a metric.
+2. Download the registry artifact and materialize under `registry-installed/{app}/{version}/` before stopping the running app.
+3. Stop the app, wait **1 minute**, then start again from the newly materialized binary (bind the provider graph to the new path instead of the old one).
 
-Each pass:
+Skip pairs already at the target version. Use per-`(app, version)` inflight guards so overlapping ticks do not double-download or double-restart.
 
-1. `ListAllKnownVersions` — read `app_version_catalog`.
-2. For each known `(app, version)` this replica has not yet acknowledged, write a per-instance acknowledgment row in IndexedDB (planned `app_instance_materializations`).
-3. Emit a metric recording that this replica observed the install.
-
-No download, no process stop/start, no provider graph changes.
-
-### Step 9 — Restart same app (no binary change)
-
-For each acknowledged `(app, version)` not yet restarted under this rollout:
-
-1. Stop the running app process.
-2. Wait **1 minute**.
-3. Start the **same** app binary again.
-
-Validates stop/start machinery before swapping artifacts.
-
-### Step 10 — Download before shutdown
-
-For each pending upgrade:
-
-1. Download the registry artifact for the target `(app, version)` and materialize under `registry-installed/{app}/{version}/` while the old app is still running.
-2. Then stop the app (step 9 timing still applies before restart).
-
-### Step 11 — Mount new binary
-
-On restart after step 10:
-
-1. Bind and start the provider from the newly materialized path instead of the old binary.
-2. Skip pairs already running the target version; use per-`(app, version)` inflight guards so overlapping ticks do not double-work.
+Rollout phasing for these behaviors is in [plan.md](./plan.md) steps 8–11.
 
 ## Runtime
 
@@ -147,7 +121,7 @@ List/get install endpoints project known versions from `app_version_catalog` onl
 |--------|------|-------------|
 | `GET` | `/admin/api/v1/app-registries` | List registries from config |
 | `GET` | `/admin/api/v1/app-registries/{registry}/apps/{app}/versions` | List published versions for one app |
-| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Validate version and record known version in catalog (catalog-only; per-replica convergence in steps 8–11) |
+| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Validate version and record known version in catalog (catalog-only; per-replica convergence via polling) |
 | `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
 | `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
 
@@ -299,7 +273,7 @@ Synchronous on the handling instance. The HTTP response is sent after the catalo
    5. Release the install lock (always, via defer). On failure before step 4, append `install_failed` for audit.
 4. Respond `200` with `{ registry, app, installation }`.
 
-Every replica converges locally via the background catalog controller (steps 8–11). IndexedDB write on the handling instance for install; per-replica ack/materialization in later steps.
+Per-replica convergence is planned via the background catalog controller (see Polling). IndexedDB write on the handling instance for install.
 
 #### `GET /admin/api/v1/app-installations`
 
