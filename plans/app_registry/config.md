@@ -10,7 +10,7 @@ This does **not** change the app author's `manifest.yaml`.
 Related docs:
 
 - [plan.md](./plan.md) — product goals
-- [api.md](./api.md) — admin HTTP API for listing registry versions
+- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [models.md](./models.md) — JSON documents stored in the registry bucket
 - [service.md](./service.md) — Go API for building those documents
 
