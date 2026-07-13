@@ -16,8 +16,11 @@ type OperationOverride struct {
 // OverridesFromManifest converts provider-authored operation exposure metadata into
 // deployer override values without roles.
 func OverridesFromManifest(allowed map[string]*providermanifestv1.ManifestOperationOverride) map[string]*OperationOverride {
-	if len(allowed) == 0 {
+	if allowed == nil {
 		return nil
+	}
+	if len(allowed) == 0 {
+		return map[string]*OperationOverride{}
 	}
 	out := make(map[string]*OperationOverride, len(allowed))
 	for name, override := range allowed {
