@@ -72,8 +72,8 @@ func (h *workflowTransportHarness) SignalOrStartRun(ctx context.Context, req *pr
 func workflowTransportRequestContext() *client.RequestContext {
 	return &client.RequestContext{
 		Subject: &client.SubjectContext{
-			Id:                  "user:transport",
-						Email:               "transport@example.test",
+			Id:    "user:transport",
+			Email: "transport@example.test",
 		},
 	}
 }
@@ -102,7 +102,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("Workflow: %v", err)
 	}
 
-	applied, err := workflow.ApplyDefinition(context.Background(), "workflow-definition-key-go", &client.WorkflowDefinitionSpec{
+	applied, err := workflow.ApplyDefinition(context.Background(), "workflow-definition-key-go", "default", &client.WorkflowDefinitionSpec{
 		Id: "definition-1",
 		Target: &client.BoundWorkflowTarget{Steps: []*client.WorkflowStep{{
 			Id: "review",
@@ -171,6 +171,7 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
 	resp, err := workflow.SignalOrStartRunRaw(context.Background(), &client.SignalOrStartWorkflowProviderRunRequest{
+		ProviderName:                 "default",
 		WorkflowKey:                  "slack:T123:C123:1700000000.000001",
 		DefinitionId:                 "definition-1",
 		ExpectedDefinitionGeneration: 9,

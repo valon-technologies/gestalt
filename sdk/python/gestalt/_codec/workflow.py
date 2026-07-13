@@ -24,6 +24,7 @@ def to_wire_apply_workflow_provider_definition_request(
     value: native.ApplyWorkflowProviderDefinitionRequest,
 ) -> Any:
     return _workflow_pb2.ApplyWorkflowProviderDefinitionRequest(
+        provider_name=value.provider_name,
         spec=None
         if value.spec is None
         else to_wire_workflow_definition_spec(value.spec),
@@ -38,6 +39,7 @@ def from_wire_apply_workflow_provider_definition_request(
     value: Any,
 ) -> native.ApplyWorkflowProviderDefinitionRequest:
     return native.ApplyWorkflowProviderDefinitionRequest(
+        provider_name=value.provider_name,
         spec=from_wire_workflow_definition_spec(value.spec)
         if value.HasField("spec")
         else None,
@@ -110,6 +112,7 @@ def to_wire_deliver_workflow_provider_event_request(
     value: native.DeliverWorkflowProviderEventRequest,
 ) -> Any:
     return _workflow_pb2.DeliverWorkflowProviderEventRequest(
+        provider_name=value.provider_name,
         event=None if value.event is None else to_wire_workflow_event(value.event),
         context=None
         if value.context is None
@@ -121,6 +124,7 @@ def from_wire_deliver_workflow_provider_event_request(
     value: Any,
 ) -> native.DeliverWorkflowProviderEventRequest:
     return native.DeliverWorkflowProviderEventRequest(
+        provider_name=value.provider_name,
         event=from_wire_workflow_event(value.event)
         if value.HasField("event")
         else None,
@@ -389,6 +393,7 @@ def to_wire_signal_or_start_workflow_provider_run_request(
         workflow_key=value.workflow_key,
         idempotency_key=value.idempotency_key,
         signal=None if value.signal is None else to_wire_workflow_signal(value.signal),
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         input=None if value.input is None else to_wire_struct(value.input),
         expected_definition_generation=value.expected_definition_generation,
@@ -407,6 +412,7 @@ def from_wire_signal_or_start_workflow_provider_run_request(
         signal=from_wire_workflow_signal(value.signal)
         if value.HasField("signal")
         else None,
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         input=from_wire_struct(value.input) if value.HasField("input") else None,
         expected_definition_generation=value.expected_definition_generation,
@@ -472,6 +478,7 @@ def to_wire_start_workflow_provider_run_request(
     return _workflow_pb2.StartWorkflowProviderRunRequest(
         idempotency_key=value.idempotency_key,
         workflow_key=value.workflow_key,
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         input=None if value.input is None else to_wire_struct(value.input),
         expected_definition_generation=value.expected_definition_generation,
@@ -487,6 +494,7 @@ def from_wire_start_workflow_provider_run_request(
     return native.StartWorkflowProviderRunRequest(
         idempotency_key=value.idempotency_key,
         workflow_key=value.workflow_key,
+        provider_name=value.provider_name,
         definition_id=value.definition_id,
         input=from_wire_struct(value.input) if value.HasField("input") else None,
         expected_definition_generation=value.expected_definition_generation,

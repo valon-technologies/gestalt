@@ -72,6 +72,7 @@ export const WorkflowStepStatus = {
 export type WorkflowStepStatus = number;
 
 export interface ApplyWorkflowProviderDefinitionRequest {
+  providerName: string;
   spec?: WorkflowDefinitionSpec;
   idempotencyKey: string;
   context?: RequestContext;
@@ -93,6 +94,7 @@ export interface DeleteWorkflowProviderDefinitionRequest {
 }
 
 export interface DeliverWorkflowProviderEventRequest {
+  providerName: string;
   event?: WorkflowEvent;
   context?: RequestContext;
 }
@@ -163,6 +165,7 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   workflowKey: string;
   idempotencyKey: string;
   signal?: WorkflowSignal;
+  providerName: string;
   definitionId: string;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
@@ -185,6 +188,7 @@ export interface SignalWorkflowRunResponse {
 export interface StartWorkflowProviderRunRequest {
   idempotencyKey: string;
   workflowKey: string;
+  providerName: string;
   definitionId: string;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
@@ -539,10 +543,12 @@ export class Workflow {
   }
 
   async applyDefinition(
+    providerName: string,
     idempotencyKey: string,
     spec?: Init<WorkflowDefinitionSpec>,
   ): Promise<WorkflowDefinition> {
     const request = {
+      providerName,
       idempotencyKey,
       ...(spec !== undefined ? { spec } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -769,6 +775,7 @@ export class Workflow {
   async startRun(
     idempotencyKey: string,
     workflowKey: string,
+    providerName: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     input?: JsonObject,
@@ -776,6 +783,7 @@ export class Workflow {
     const request = {
       idempotencyKey,
       workflowKey,
+      providerName,
       definitionId,
       expectedDefinitionGeneration,
       ...(input !== undefined ? { input } : {}),
@@ -1048,6 +1056,7 @@ export class Workflow {
   async signalOrStartRun(
     workflowKey: string,
     idempotencyKey: string,
+    providerName: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     signal?: Init<WorkflowSignal>,
@@ -1056,6 +1065,7 @@ export class Workflow {
     const request = {
       workflowKey,
       idempotencyKey,
+      providerName,
       definitionId,
       expectedDefinitionGeneration,
       ...(signal !== undefined ? { signal } : {}),
@@ -1093,8 +1103,12 @@ export class Workflow {
     return fromWireSignalWorkflowRunResponse(response);
   }
 
-  async deliverEvent(event?: Init<WorkflowEvent>): Promise<WorkflowEvent> {
+  async deliverEvent(
+    providerName: string,
+    event?: Init<WorkflowEvent>,
+  ): Promise<WorkflowEvent> {
     const request = {
+      providerName,
       ...(event !== undefined ? { event } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<DeliverWorkflowProviderEventRequest>;

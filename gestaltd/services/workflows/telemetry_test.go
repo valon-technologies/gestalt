@@ -292,12 +292,16 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	client := proto.NewWorkflowClient(conn)
 
 	reqCtx := workflowManagerTelemetryRequestContext()
-	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(reqCtx, "slack:T123:C123:1712161829.000300", "idem-success"))
+	successRequest := workflowManagerTelemetrySignalOrStartRequest(reqCtx, "slack:T123:C123:1712161829.000300", "idem-success")
+	successRequest.ProviderName = "local"
+	_, err = client.SignalOrStartRun(context.Background(), successRequest)
 	if err != nil {
 		t.Fatalf("SignalOrStartRun success: %v", err)
 	}
 	provider.signalOrStartErr = status.Error(codes.FailedPrecondition, "provider rejected run")
-	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(reqCtx, "slack:T123:C123:1712161830.000400", "idem-failure"))
+	failureRequest := workflowManagerTelemetrySignalOrStartRequest(reqCtx, "slack:T123:C123:1712161830.000400", "idem-failure")
+	failureRequest.ProviderName = "local"
+	_, err = client.SignalOrStartRun(context.Background(), failureRequest)
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("SignalOrStartRun failure = %v, want FailedPrecondition", err)
 	}

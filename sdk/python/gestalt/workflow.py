@@ -56,6 +56,7 @@ class WorkflowStepStatusValues:
 
 @dataclass(frozen=True, slots=True)
 class ApplyWorkflowProviderDefinitionRequest:
+    provider_name: str = ""
     spec: WorkflowDefinitionSpec | None = None
     idempotency_key: str = ""
     context: RequestContext | None = None
@@ -81,6 +82,7 @@ class DeleteWorkflowProviderDefinitionRequest:
 
 @dataclass(frozen=True, slots=True)
 class DeliverWorkflowProviderEventRequest:
+    provider_name: str = ""
     event: WorkflowEvent | None = None
     context: RequestContext | None = None
 
@@ -164,6 +166,7 @@ class SignalOrStartWorkflowProviderRunRequest:
     workflow_key: str = ""
     idempotency_key: str = ""
     signal: WorkflowSignal | None = None
+    provider_name: str = ""
     definition_id: str = ""
     input: dict[str, JsonValue] | None = None
     expected_definition_generation: int = 0
@@ -189,6 +192,7 @@ class SignalWorkflowRunResponse:
 class StartWorkflowProviderRunRequest:
     idempotency_key: str = ""
     workflow_key: str = ""
+    provider_name: str = ""
     definition_id: str = ""
     input: dict[str, JsonValue] | None = None
     expected_definition_generation: int = 0
@@ -587,21 +591,30 @@ class Workflow:
 
     @overload
     def apply_definition(
-        self, *, idempotency_key: str = ..., spec: WorkflowDefinitionSpec | None = ...
+        self,
+        *,
+        provider_name: str = ...,
+        idempotency_key: str = ...,
+        spec: WorkflowDefinitionSpec | None = ...,
     ) -> WorkflowDefinition: ...
 
     def apply_definition(
         self,
         request: ApplyWorkflowProviderDefinitionRequest | None = None,
         *,
+        provider_name: str | None = None,
         idempotency_key: str | None = None,
         spec: WorkflowDefinitionSpec | None = None,
     ) -> WorkflowDefinition:
         if request is None:
             request = ApplyWorkflowProviderDefinitionRequest(
-                idempotency_key=idempotency_key or "", spec=spec
+                provider_name=provider_name or "",
+                idempotency_key=idempotency_key or "",
+                spec=spec,
             )
-        elif idempotency_key is not None or spec is not None:
+        elif (
+            provider_name is not None or idempotency_key is not None or spec is not None
+        ):
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)
@@ -780,6 +793,7 @@ class Workflow:
         *,
         idempotency_key: str = ...,
         workflow_key: str = ...,
+        provider_name: str = ...,
         definition_id: str = ...,
         expected_definition_generation: int = ...,
         input: dict[str, JsonValue] | None = ...,
@@ -791,6 +805,7 @@ class Workflow:
         *,
         idempotency_key: str | None = None,
         workflow_key: str | None = None,
+        provider_name: str | None = None,
         definition_id: str | None = None,
         expected_definition_generation: int | None = None,
         input: dict[str, JsonValue] | None = None,
@@ -799,6 +814,7 @@ class Workflow:
             request = StartWorkflowProviderRunRequest(
                 idempotency_key=idempotency_key or "",
                 workflow_key=workflow_key or "",
+                provider_name=provider_name or "",
                 definition_id=definition_id or "",
                 expected_definition_generation=expected_definition_generation or 0,
                 input=input,
@@ -806,6 +822,7 @@ class Workflow:
         elif (
             idempotency_key is not None
             or workflow_key is not None
+            or provider_name is not None
             or definition_id is not None
             or expected_definition_generation is not None
             or input is not None
@@ -1054,6 +1071,7 @@ class Workflow:
         *,
         workflow_key: str = ...,
         idempotency_key: str = ...,
+        provider_name: str = ...,
         definition_id: str = ...,
         expected_definition_generation: int = ...,
         signal: WorkflowSignal | None = ...,
@@ -1066,6 +1084,7 @@ class Workflow:
         *,
         workflow_key: str | None = None,
         idempotency_key: str | None = None,
+        provider_name: str | None = None,
         definition_id: str | None = None,
         expected_definition_generation: int | None = None,
         signal: WorkflowSignal | None = None,
@@ -1075,6 +1094,7 @@ class Workflow:
             request = SignalOrStartWorkflowProviderRunRequest(
                 workflow_key=workflow_key or "",
                 idempotency_key=idempotency_key or "",
+                provider_name=provider_name or "",
                 definition_id=definition_id or "",
                 expected_definition_generation=expected_definition_generation or 0,
                 signal=signal,
@@ -1083,6 +1103,7 @@ class Workflow:
         elif (
             workflow_key is not None
             or idempotency_key is not None
+            or provider_name is not None
             or definition_id is not None
             or expected_definition_generation is not None
             or signal is not None
@@ -1105,17 +1126,22 @@ class Workflow:
     ) -> WorkflowEvent: ...
 
     @overload
-    def deliver_event(self, *, event: WorkflowEvent | None = ...) -> WorkflowEvent: ...
+    def deliver_event(
+        self, *, provider_name: str = ..., event: WorkflowEvent | None = ...
+    ) -> WorkflowEvent: ...
 
     def deliver_event(
         self,
         request: DeliverWorkflowProviderEventRequest | None = None,
         *,
+        provider_name: str | None = None,
         event: WorkflowEvent | None = None,
     ) -> WorkflowEvent:
         if request is None:
-            request = DeliverWorkflowProviderEventRequest(event=event)
-        elif event is not None:
+            request = DeliverWorkflowProviderEventRequest(
+                provider_name=provider_name or "", event=event
+            )
+        elif provider_name is not None or event is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
             request = replace(request, context=self._context)

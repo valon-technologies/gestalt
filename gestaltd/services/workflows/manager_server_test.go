@@ -37,7 +37,8 @@ func TestManagerServerMissingOrDeniedAuthorizationDenyWorkflowManagerMethods(t *
 
 			server := NewProviderServer("caller", nil, tc.auth)
 			_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
-				Context: managerServerRequestContext("caller"),
+				ProviderName: "local",
+				Context:      managerServerRequestContext("caller"),
 			})
 			if status.Code(err) != tc.code {
 				t.Fatalf("ApplyDefinition error = %v, want %s", err, tc.code)
@@ -53,8 +54,9 @@ func TestManagerServerRejectsCallerSuppliedDefinitionRunAs(t *testing.T) {
 	runAs := "service_account:ada"
 
 	_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
-		Context: managerServerRequestContext("caller"),
-		Spec:    &proto.WorkflowDefinitionSpec{RunAs: runAs},
+		ProviderName: "selected",
+		Context:      managerServerRequestContext("caller"),
+		Spec:         &proto.WorkflowDefinitionSpec{RunAs: runAs},
 	})
 	if status.Code(err) != codes.PermissionDenied && status.Code(err) != codes.InvalidArgument && status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("status = %s, want permission denied, invalid argument, or failed precondition (err=%v)", status.Code(err), err)
@@ -82,8 +84,9 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	server := NewProviderServer("sourceApp", manager, authz)
 
 	delivered, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
-		Context: managerServerRequestContext("sourceApp"),
-		Event:   &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
+		ProviderName: "selected",
+		Context:      managerServerRequestContext("sourceApp"),
+		Event:        &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
 	})
 	if err != nil {
 		t.Fatalf("DeliverEvent: %v", err)
@@ -104,8 +107,8 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	if len(authzRequests) != 1 {
 		t.Fatalf("authorization checks = %d, want 1", len(authzRequests))
 	}
-	if got := authzRequests[0].GetResource().GetId(); got != "default" {
-		t.Fatalf("authorization resource = %q, want default workflow resource", got)
+	if got := authzRequests[0].GetResource().GetId(); got != "selected" {
+		t.Fatalf("authorization resource = %q, want selected workflow resource", got)
 	}
 	assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
 		"level":          "INFO",
@@ -138,8 +141,9 @@ func TestManagerServerDeliverEventIgnoresSpoofedAppNameOnInternalPath(t *testing
 	server := NewProviderServer("sourceApp", manager, &managerServerAuthorizationProvider{allowed: true})
 
 	_, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
-		Context: managerServerRequestContext("sourceApp"),
-		Event:   &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
+		ProviderName: "selected",
+		Context:      managerServerRequestContext("sourceApp"),
+		Event:        &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
 	})
 	if err != nil {
 		t.Fatalf("DeliverEvent: %v", err)

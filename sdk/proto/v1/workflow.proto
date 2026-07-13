@@ -257,9 +257,10 @@ message WorkflowSignal {
 }
 
 message ApplyWorkflowProviderDefinitionRequest {
-  reserved 1, 3, 5;
-  reserved "provider_name", "requested_by_subject_id";
+  reserved 3, 5;
+  reserved "requested_by_subject_id";
 
+  string provider_name = 1;
   WorkflowDefinitionSpec spec = 2;
   string idempotency_key = 4;
   RequestContext context = 6;
@@ -311,11 +312,12 @@ message DeleteWorkflowProviderDefinitionRequest {
 }
 
 message StartWorkflowProviderRunRequest {
-  reserved 1, 4, 7, 8, 10;
-  reserved "created_by_subject_id", "run_as", "provider_name";
+  reserved 1, 4, 8, 10;
+  reserved "created_by_subject_id", "run_as";
 
   string idempotency_key = 2;
   string workflow_key = 6;
+  string provider_name = 7;
   string definition_id = 9;
   google.protobuf.Struct input = 11;
   int64 expected_definition_generation = 12;
@@ -361,12 +363,13 @@ message SignalWorkflowProviderRunRequest {
 }
 
 message SignalOrStartWorkflowProviderRunRequest {
-  reserved 2, 4, 7, 8, 10;
-  reserved "created_by_subject_id", "run_as", "provider_name";
+  reserved 2, 4, 8, 10;
+  reserved "created_by_subject_id", "run_as";
 
   string workflow_key = 1;
   string idempotency_key = 3;
   WorkflowSignal signal = 6;
+  string provider_name = 7;
   string definition_id = 9;
   google.protobuf.Struct input = 11;
   int64 expected_definition_generation = 12;
@@ -381,9 +384,10 @@ message SignalWorkflowRunResponse {
 }
 
 message DeliverWorkflowProviderEventRequest {
-  reserved 1, 3, 4, 5;
-  reserved "app_name", "provider_name", "delivered_by_subject_id";
+  reserved 1, 3, 4;
+  reserved "app_name", "delivered_by_subject_id";
 
+  string provider_name = 5;
   WorkflowEvent event = 2;
   RequestContext context = 6;
 }
@@ -433,6 +437,7 @@ service Workflow {
     option (public) = {
       fill: "context"
     };
+    option (signature) = "provider_name";
     option (signature) = "idempotency_key";
     option (signature) = "spec";
   }
@@ -493,6 +498,7 @@ service Workflow {
     };
     option (signature) = "idempotency_key";
     option (signature) = "workflow_key";
+    option (signature) = "provider_name";
     option (signature) = "definition_id";
     option (signature) = "expected_definition_generation";
     option (signature) = "input";
@@ -565,6 +571,7 @@ service Workflow {
     };
     option (signature) = "workflow_key";
     option (signature) = "idempotency_key";
+    option (signature) = "provider_name";
     option (signature) = "definition_id";
     option (signature) = "expected_definition_generation";
     option (signature) = "signal";
@@ -572,6 +579,7 @@ service Workflow {
   }
 
   rpc DeliverEvent(DeliverWorkflowProviderEventRequest) returns (WorkflowEvent) {
+    option (signature) = "provider_name";
     option (signature) = "event";
   }
 }

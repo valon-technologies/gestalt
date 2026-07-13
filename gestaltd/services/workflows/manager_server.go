@@ -74,6 +74,14 @@ type workflowProviderAuthRequest interface {
 	GetContext() *proto.RequestContext
 }
 
+func requiredWorkflowProviderName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", status.Error(codes.InvalidArgument, "provider_name is required")
+	}
+	return name, nil
+}
+
 type workflowManagerAuthContext struct {
 	request appaccessservice.ProviderRequestContext
 	raw     *proto.RequestContext
@@ -115,7 +123,11 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.authorizeWorkflowAccess(ctx, authCtx, workflowauth.OperationDefinitionsApply)
+	providerName, err := requiredWorkflowProviderName(req.GetProviderName())
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.authorizeWorkflowAccessForProvider(ctx, authCtx, workflowauth.OperationDefinitionsApply, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +149,7 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 		return nil, status.Errorf(codes.InvalidArgument, "definition spec: %v", err)
 	}
 	managed, err := s.manager.ApplyDefinition(s.managerContext(ctx, authCtx), p, workflowmanager.DefinitionApply{
+		ProviderName:   providerName,
 		Spec:           *spec,
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		Caller:         workflowManagerCaller(authCtx),
@@ -322,11 +335,16 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.authorizeWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsStart)
+	providerName, err := requiredWorkflowProviderName(req.GetProviderName())
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.authorizeWorkflowAccessForProvider(ctx, authCtx, workflowauth.OperationRunsStart, providerName)
 	if err != nil {
 		return nil, err
 	}
 	managed, err := s.manager.StartRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunStart{
+		ProviderName:                 providerName,
 		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		Input:                        protoutil.MapFromStruct(req.GetInput()),
@@ -532,11 +550,16 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.authorizeWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsSignalOrStart)
+	providerName, err := requiredWorkflowProviderName(req.GetProviderName())
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.authorizeWorkflowAccessForProvider(ctx, authCtx, workflowauth.OperationRunsSignalOrStart, providerName)
 	if err != nil {
 		return nil, err
 	}
 	managed, err = s.manager.SignalOrStartRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunSignalOrStart{
+		ProviderName:                 providerName,
 		WorkflowKey:                  strings.TrimSpace(req.GetWorkflowKey()),
 		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
@@ -564,7 +587,11 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.authorizeWorkflowAccess(ctx, authCtx, workflowauth.OperationEventsDeliver)
+	providerName, err := requiredWorkflowProviderName(req.GetProviderName())
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.authorizeWorkflowAccessForProvider(ctx, authCtx, workflowauth.OperationEventsDeliver, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -574,8 +601,9 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	}
 	appName := authCtx.CallerName()
 	delivered, err := s.manager.DeliverEvent(s.managerContext(ctx, authCtx), p, workflowmanager.EventDeliver{
-		AppName: appName,
-		Event:   event,
+		AppName:      appName,
+		ProviderName: providerName,
+		Event:        event,
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -609,6 +637,10 @@ func (s *ProviderServer) requestContext(req workflowProviderAuthRequest) (workfl
 }
 
 func (s *ProviderServer) authorizeWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, operation string) (*principal.Principal, error) {
+	return s.authorizeWorkflowAccessForProvider(ctx, authCtx, operation, s.workflowProviderName)
+}
+
+func (s *ProviderServer) authorizeWorkflowAccessForProvider(ctx context.Context, authCtx workflowManagerAuthContext, operation, providerName string) (*principal.Principal, error) {
 	if authCtx.Agent() != (invocation.AgentInvocationContext{}) {
 		if s == nil || s.agentAuth == nil {
 			return nil, status.Error(codes.FailedPrecondition, "agent workflow invocation authorizer is required")
@@ -630,13 +662,13 @@ func (s *ProviderServer) authorizeWorkflowAccess(ctx context.Context, authCtx wo
 		}
 		return authCtx.Principal(), nil
 	}
-	if err := s.requireWorkflowAccess(ctx, authCtx, operation); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, operation, providerName); err != nil {
 		return nil, err
 	}
 	return authCtx.Principal(), nil
 }
 
-func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, operation string) error {
+func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, operation, providerName string) error {
 	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok && authCtx.CallerName() == "gestaltd" && origin.FullMethod != "" {
 		return nil
 	}
@@ -659,7 +691,7 @@ func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx work
 		Action: &proto.Action{Name: action},
 		Resource: &proto.Resource{
 			Type: "workflow",
-			Id:   strings.TrimSpace(s.workflowProviderName),
+			Id:   strings.TrimSpace(providerName),
 		},
 	})
 	if err != nil {

@@ -3679,6 +3679,8 @@ pub struct WorkflowSignal {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ApplyWorkflowProviderDefinitionRequest {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub spec: ::core::option::Option<WorkflowDefinitionSpec>,
     #[prost(string, tag = "4")]
@@ -3736,6 +3738,8 @@ pub struct StartWorkflowProviderRunRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub workflow_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub definition_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "11")]
@@ -3798,6 +3802,8 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(string, tag = "7")]
+    pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub definition_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "11")]
@@ -3820,6 +3826,8 @@ pub struct SignalWorkflowRunResponse {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeliverWorkflowProviderEventRequest {
+    #[prost(string, tag = "5")]
+    pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(message, optional, tag = "6")]

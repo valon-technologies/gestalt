@@ -19,6 +19,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOWORK: off
+
 jobs:
   sdkgen:
     name: sdkgen Checks

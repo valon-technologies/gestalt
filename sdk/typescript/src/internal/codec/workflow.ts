@@ -77,6 +77,7 @@ export function toWireApplyWorkflowProviderDefinitionRequest(
   value: Init<ApplyWorkflowProviderDefinitionRequest>,
 ): wire.ApplyWorkflowProviderDefinitionRequest {
   return create(wire.ApplyWorkflowProviderDefinitionRequestSchema, {
+    providerName: value.providerName ?? "",
     ...(value.spec !== undefined
       ? { spec: toWireWorkflowDefinitionSpec(value.spec) }
       : {}),
@@ -91,6 +92,7 @@ export function fromWireApplyWorkflowProviderDefinitionRequest(
   value: wire.ApplyWorkflowProviderDefinitionRequest,
 ): ApplyWorkflowProviderDefinitionRequest {
   return {
+    providerName: value.providerName,
     ...(value.spec !== undefined
       ? { spec: fromWireWorkflowDefinitionSpec(value.spec) }
       : {}),
@@ -167,6 +169,7 @@ export function toWireDeliverWorkflowProviderEventRequest(
   value: Init<DeliverWorkflowProviderEventRequest>,
 ): wire.DeliverWorkflowProviderEventRequest {
   return create(wire.DeliverWorkflowProviderEventRequestSchema, {
+    providerName: value.providerName ?? "",
     ...(value.event !== undefined
       ? { event: toWireWorkflowEvent(value.event) }
       : {}),
@@ -180,6 +183,7 @@ export function fromWireDeliverWorkflowProviderEventRequest(
   value: wire.DeliverWorkflowProviderEventRequest,
 ): DeliverWorkflowProviderEventRequest {
   return {
+    providerName: value.providerName,
     ...(value.event !== undefined
       ? { event: fromWireWorkflowEvent(value.event) }
       : {}),
@@ -454,6 +458,7 @@ export function toWireSignalOrStartWorkflowProviderRunRequest(
     ...(value.signal !== undefined
       ? { signal: toWireWorkflowSignal(value.signal) }
       : {}),
+    providerName: value.providerName ?? "",
     definitionId: value.definitionId ?? "",
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
@@ -472,6 +477,7 @@ export function fromWireSignalOrStartWorkflowProviderRunRequest(
     ...(value.signal !== undefined
       ? { signal: fromWireWorkflowSignal(value.signal) }
       : {}),
+    providerName: value.providerName,
     definitionId: value.definitionId,
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration,
@@ -541,6 +547,7 @@ export function toWireStartWorkflowProviderRunRequest(
   return create(wire.StartWorkflowProviderRunRequestSchema, {
     idempotencyKey: value.idempotencyKey ?? "",
     workflowKey: value.workflowKey ?? "",
+    providerName: value.providerName ?? "",
     definitionId: value.definitionId ?? "",
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
@@ -556,6 +563,7 @@ export function fromWireStartWorkflowProviderRunRequest(
   return {
     idempotencyKey: value.idempotencyKey,
     workflowKey: value.workflowKey,
+    providerName: value.providerName,
     definitionId: value.definitionId,
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration,

@@ -71,6 +71,8 @@ pub mod workflow_step_status {
 /// Native message type for `gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ApplyWorkflowProviderDefinitionRequest {
+    /// The `provider_name` field.
+    pub provider_name: String,
     /// The `spec` field; None when unset.
     pub spec: Option<WorkflowDefinitionSpec>,
     /// The `idempotency_key` field.
@@ -109,6 +111,8 @@ pub struct DeleteWorkflowProviderDefinitionRequest {
 /// Native message type for `gestalt.provider.v1.DeliverWorkflowProviderEventRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DeliverWorkflowProviderEventRequest {
+    /// The `provider_name` field.
+    pub provider_name: String,
     /// The `event` field; None when unset.
     pub event: Option<WorkflowEvent>,
     /// The `context` field; None when unset.
@@ -236,6 +240,8 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub idempotency_key: String,
     /// The `signal` field; None when unset.
     pub signal: Option<WorkflowSignal>,
+    /// The `provider_name` field.
+    pub provider_name: String,
     /// The `definition_id` field.
     pub definition_id: String,
     /// The `input` field; None when unset.
@@ -277,6 +283,8 @@ pub struct StartWorkflowProviderRunRequest {
     pub idempotency_key: String,
     /// The `workflow_key` field.
     pub workflow_key: String,
+    /// The `provider_name` field.
+    pub provider_name: String,
     /// The `definition_id` field.
     pub definition_id: String,
     /// The `input` field; None when unset.
@@ -768,10 +776,12 @@ impl Workflow {
     /// Calls `gestalt.provider.v1.Workflow.ApplyDefinition`.
     pub async fn apply_definition(
         &mut self,
+        provider_name: String,
         idempotency_key: String,
         spec: Option<WorkflowDefinitionSpec>,
     ) -> Result<WorkflowDefinition, GestaltError> {
         let request = ApplyWorkflowProviderDefinitionRequest {
+            provider_name,
             idempotency_key,
             spec,
             context: self.context.clone(),
@@ -1002,6 +1012,7 @@ impl Workflow {
         &mut self,
         idempotency_key: String,
         workflow_key: String,
+        provider_name: String,
         definition_id: String,
         expected_definition_generation: i64,
         input: Option<serde_json::Map<String, serde_json::Value>>,
@@ -1009,6 +1020,7 @@ impl Workflow {
         let request = StartWorkflowProviderRunRequest {
             idempotency_key,
             workflow_key,
+            provider_name,
             definition_id,
             expected_definition_generation,
             input,
@@ -1281,10 +1293,12 @@ impl Workflow {
     }
 
     /// Calls `gestalt.provider.v1.Workflow.SignalOrStartRun`.
+    #[allow(clippy::too_many_arguments)]
     pub async fn signal_or_start_run(
         &mut self,
         workflow_key: String,
         idempotency_key: String,
+        provider_name: String,
         definition_id: String,
         expected_definition_generation: i64,
         signal: Option<WorkflowSignal>,
@@ -1293,6 +1307,7 @@ impl Workflow {
         let request = SignalOrStartWorkflowProviderRunRequest {
             workflow_key,
             idempotency_key,
+            provider_name,
             definition_id,
             expected_definition_generation,
             signal,
@@ -1335,9 +1350,11 @@ impl Workflow {
     /// Calls `gestalt.provider.v1.Workflow.DeliverEvent`.
     pub async fn deliver_event(
         &mut self,
+        provider_name: String,
         event: Option<WorkflowEvent>,
     ) -> Result<WorkflowEvent, GestaltError> {
         let request = DeliverWorkflowProviderEventRequest {
+            provider_name,
             event,
             context: self.context.clone(),
         };

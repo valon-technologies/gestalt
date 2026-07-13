@@ -19,6 +19,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOWORK: off
+
 jobs:
   go-sdk:
     name: Go SDK Checks

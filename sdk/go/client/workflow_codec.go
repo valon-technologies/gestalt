@@ -12,6 +12,7 @@ func ToWireApplyWorkflowProviderDefinitionRequest(value *ApplyWorkflowProviderDe
 		return nil
 	}
 	out := &proto.ApplyWorkflowProviderDefinitionRequest{
+		ProviderName:   value.ProviderName,
 		Spec:           ToWireWorkflowDefinitionSpec(value.Spec),
 		IdempotencyKey: value.IdempotencyKey,
 		Context:        ToWireRequestContext(value.Context),
@@ -24,6 +25,7 @@ func FromWireApplyWorkflowProviderDefinitionRequest(value *proto.ApplyWorkflowPr
 		return nil
 	}
 	out := &ApplyWorkflowProviderDefinitionRequest{
+		ProviderName:   value.ProviderName,
 		Spec:           FromWireWorkflowDefinitionSpec(value.Spec),
 		IdempotencyKey: value.IdempotencyKey,
 		Context:        FromWireRequestContext(value.Context),
@@ -104,8 +106,9 @@ func ToWireDeliverWorkflowProviderEventRequest(value *DeliverWorkflowProviderEve
 		return nil
 	}
 	out := &proto.DeliverWorkflowProviderEventRequest{
-		Event:   ToWireWorkflowEvent(value.Event),
-		Context: ToWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
+		Event:        ToWireWorkflowEvent(value.Event),
+		Context:      ToWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -115,8 +118,9 @@ func FromWireDeliverWorkflowProviderEventRequest(value *proto.DeliverWorkflowPro
 		return nil
 	}
 	out := &DeliverWorkflowProviderEventRequest{
-		Event:   FromWireWorkflowEvent(value.Event),
-		Context: FromWireRequestContext(value.Context),
+		ProviderName: value.ProviderName,
+		Event:        FromWireWorkflowEvent(value.Event),
+		Context:      FromWireRequestContext(value.Context),
 	}
 	return out
 }
@@ -405,6 +409,7 @@ func ToWireSignalOrStartWorkflowProviderRunRequest(value *SignalOrStartWorkflowP
 		WorkflowKey:                  value.WorkflowKey,
 		IdempotencyKey:               value.IdempotencyKey,
 		Signal:                       ToWireWorkflowSignal(value.Signal),
+		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
 		Input:                        toWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
@@ -421,6 +426,7 @@ func FromWireSignalOrStartWorkflowProviderRunRequest(value *proto.SignalOrStartW
 		WorkflowKey:                  value.WorkflowKey,
 		IdempotencyKey:               value.IdempotencyKey,
 		Signal:                       FromWireWorkflowSignal(value.Signal),
+		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
 		Input:                        fromWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
@@ -486,6 +492,7 @@ func ToWireStartWorkflowProviderRunRequest(value *StartWorkflowProviderRunReques
 	out := &proto.StartWorkflowProviderRunRequest{
 		IdempotencyKey:               value.IdempotencyKey,
 		WorkflowKey:                  value.WorkflowKey,
+		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
 		Input:                        toWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
@@ -501,6 +508,7 @@ func FromWireStartWorkflowProviderRunRequest(value *proto.StartWorkflowProviderR
 	out := &StartWorkflowProviderRunRequest{
 		IdempotencyKey:               value.IdempotencyKey,
 		WorkflowKey:                  value.WorkflowKey,
+		ProviderName:                 value.ProviderName,
 		DefinitionId:                 value.DefinitionId,
 		Input:                        fromWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,

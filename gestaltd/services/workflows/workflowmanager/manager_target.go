@@ -36,9 +36,12 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
-	// Workflow execution authorization is evaluated by the provider worker as
-	// the definition's stored run_as subject. The triggering caller must not
-	// contribute scopes, target grants, or agent-tool permissions to execution.
+	// The caller must still be authorized for every referenced app operation and
+	// agent tool. This is an independent prerequisite; the provider worker then
+	// executes the step as the definition's stored run_as subject.
+	if !m.allowStoredTarget(ctx, p, definition.Definition.Target) {
+		return "", nil, coreworkflow.Target{}, 0, invocation.ErrAuthorizationDenied
+	}
 	return definition.ProviderName, definition.provider, definition.Definition.Target, definition.Definition.Generation, nil
 }
 
