@@ -31,7 +31,6 @@ func ReadStaticCatalog(rootDir, name string) (*catalog.Catalog, error) {
 		}
 		return nil, fmt.Errorf("read static catalog %q: %w", catalogPath, err)
 	}
-
 	var cat catalog.Catalog
 	if err := decodeStrict(data, ManifestFormatFromPath(catalogPath), "static catalog", &cat); err != nil {
 		return nil, err

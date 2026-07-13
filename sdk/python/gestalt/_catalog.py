@@ -75,7 +75,6 @@ class CatalogOperation:
     read_only: bool = False
     visible: bool | None = None
     transport: str = ""
-    allowed_roles: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(slots=True)
@@ -172,7 +171,6 @@ def _catalog_operation(operation: OperationDefinition) -> CatalogOperation:
         read_only=operation.read_only,
     )
     op.parameters.extend(_catalog_parameters(operation.input_type))
-    op.allowed_roles.extend(operation.allowed_roles)
     op.tags.extend(operation.tags)
     if operation.visible is not None:
         op.visible = operation.visible
@@ -240,7 +238,6 @@ def _catalog_operation_to_proto(operation: CatalogOperation) -> Any:
     proto_operation.tags.extend(operation.tags)
     if operation.visible is not None:
         proto_operation.visible = operation.visible
-    proto_operation.allowed_roles.extend(operation.allowed_roles)
     return proto_operation
 
 
@@ -327,10 +324,6 @@ def _catalog_operation_to_mapping(
         raw["visible"] = operation.visible
     if operation.transport:
         raw["transport"] = operation.transport
-    if operation.allowed_roles:
-        raw[_field("allowed_roles", "allowedRoles", field_style)] = list(
-            operation.allowed_roles
-        )
     return raw
 
 
@@ -408,9 +401,6 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
         visible = raw_op.get("visible")
         if visible is not None:
             op.visible = visible
-        op.allowed_roles.extend(
-            raw_op.get("allowed_roles", raw_op.get("allowedRoles", []))
-        )
         raw_ann = raw_op.get("annotations") or {}
         if raw_ann:
             op.annotations = OperationAnnotations(

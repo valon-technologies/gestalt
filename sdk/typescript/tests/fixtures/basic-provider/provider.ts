@@ -25,7 +25,6 @@ export const app = defineApp({
         {
           id: "session-hello",
           method: "GET",
-          allowedRoles: ["viewer", "admin"],
           title: scope
             ? `Session Hello ${scope} ${request.subject.id} ${request.credential.mode} ${request.access.role}`.trim()
             : `Session Hello ${request.subject.id} ${request.credential.mode} ${request.access.role}`.trim(),
@@ -40,7 +39,6 @@ export const app = defineApp({
       title: "  Hello  ",
       description: "  Return a greeting  ",
       tags: ["fixture"],
-      allowedRoles: ["viewer", "admin", "viewer"],
       readOnly: true,
       input: s.object({
         name: s.string({

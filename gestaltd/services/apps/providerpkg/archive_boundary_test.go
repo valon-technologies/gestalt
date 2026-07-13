@@ -111,6 +111,7 @@ func TestInspectPackageValidatesArchiveWithoutExtracting(t *testing.T) {
 	if !ManifestEqual(parsed, manifest) {
 		t.Fatalf("unexpected manifest: %+v", parsed)
 	}
+
 }
 
 func TestInspectPackageRejectsMissingProviderSchema(t *testing.T) {
