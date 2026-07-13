@@ -1048,6 +1048,7 @@ func fakeHostedWorkflowManagerRoundTrip(reqCtx *proto.RequestContext, env map[st
 	client := proto.NewWorkflowClient(conn)
 	applied, err := client.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
 		Context:        reqCtx,
+		ProviderName:   "basic",
 		IdempotencyKey: "workflow-manager-roundtrip",
 		Spec: &proto.WorkflowDefinitionSpec{
 			Id:    "workflow-manager-roundtrip",
