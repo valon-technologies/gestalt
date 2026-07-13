@@ -17,7 +17,6 @@ Related docs:
 | Package | File | Tests | Layer | PR |
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
-| `internal/appregistry` | `poller_test.go` | 2 | Unit (poller) | [gestalt#2750](https://github.com/valon-technologies/gestalt/pull/2750) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
@@ -85,22 +84,21 @@ All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `tes
 
 ---
 
-## Catalog poller unit tests
+## [PLANNED] Multi-replica materialization ack E2E
 
-Added in [gestalt#2750](https://github.com/valon-technologies/gestalt/pull/2750). Exercise `CatalogPoller.ReconcileOnce` and `Start` against stub change requests + materialization services — no `gestaltd serve`, no real ticker timing.
+End-to-end test for fleet install convergence across replicas. Replaces isolated catalog poller unit tests.
 
-Run:
+**Goal:** After a new version is installed fleet-wide, every running replica acknowledges the `(app, version)` pair in `app_instance_materializations`.
 
-```bash
-cd gestaltd
-go test ./internal/appregistry/... -run TestCatalogPoller -count=1
-```
+**Flow:**
 
-### `poller_test.go`
+1. Start multiple `gestaltd` replicas against shared IndexedDB (or a test harness that simulates distinct `instance_id` values with the catalog poller enabled).
+2. `POST /admin/api/v1/app-registries/{registry}/apps/{app}/install` with a new version.
+3. Assert `app_version_change_requests` contains the change request.
+4. Poll each replica's `app_instance_materializations` (or a future admin list endpoint) until every replica has an ack row for `(app, version)`.
+5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
 
-- **`TestCatalogPoller_ReconcileOnce_acknowledges_known_versions`** — After a change request exists, reconcile writes an ack row for the poller `instance_id`; a second reconcile is a no-op.
-
-- **`TestCatalogPoller_Start_is_idempotent`** — Calling `Start` twice does not panic when the loop context is already cancelled.
+**Not in scope for the first cut:** artifact download, provider restart, or mount swap — ack-only convergence.
 
 ---
 
@@ -110,4 +108,4 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
-- Catalog poller integration test against real `gestaltd serve` startup
+- Multi-replica materialization ack E2E (see [PLANNED] section above)
