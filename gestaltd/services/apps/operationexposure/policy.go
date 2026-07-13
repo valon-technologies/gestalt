@@ -259,7 +259,14 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 // present in the provided catalog. It returns nil when either input is empty or
 // when no allowed operations match the catalog.
 func MatchingAllowedOperations(allowed map[string]*OperationOverride, cat *catalog.Catalog) map[string]*OperationOverride {
-	if len(allowed) == 0 || cat == nil || len(cat.Operations) == 0 {
+	if allowed == nil {
+		return nil
+	}
+	if len(allowed) == 0 {
+		// Preserve explicit empty allowedOperations so callers fail closed via New.
+		return allowed
+	}
+	if cat == nil || len(cat.Operations) == 0 {
 		return nil
 	}
 	available := make(map[string]struct{}, len(cat.Operations))
