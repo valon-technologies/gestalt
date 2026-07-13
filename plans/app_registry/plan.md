@@ -196,17 +196,6 @@ Non-core app installation state should live in IndexedDB.
 
 There is **no fleet head**, **no promotion**, and **no rollback** yet. Those belong to later activation/rollout work.
 
-At runtime, `gestaltd serve` should:
-
-1. Load the committed core lockfile.
-2. Read known versions per app from `app_version_catalog` (projected).
-3. Resolve those records into lock entries.
-4. Build an effective in-memory runtime graph.
-5. Materialize required app artifacts locally per instance.
-6. Serve core and installed apps together.
-
-The deploy image should not need to include every non-core app artifact.
-
 Store schema, record types, and service API: [indexeddb.md](./indexeddb.md#store-app_version_catalog-source-of-truth).
 
 ### Multi-Instance Convergence and Lazy Installation
