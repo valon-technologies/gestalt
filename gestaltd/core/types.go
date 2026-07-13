@@ -45,6 +45,13 @@ type AppVersionChangeRequest struct {
 	Metadata    map[string]any
 }
 
+type AppInstanceMaterialization struct {
+	InstanceID     string
+	App            string
+	Version        string
+	AcknowledgedAt time.Time
+}
+
 type ExternalCredentialGrant struct {
 	AccessToken       string
 	RefreshToken      string

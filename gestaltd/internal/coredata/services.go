@@ -9,12 +9,13 @@ import (
 )
 
 type Services struct {
-	Users                    *UserService
-	ExternalCredentials      core.ExternalCredentialProvider
-	ManagedSubjects          *ManagedSubjectService
-	AppVersionChangeRequests *AppVersionChangeRequestService
-	AppVersionInstallLocks   *AppVersionInstallLockService
-	DB                       indexeddb.IndexedDB
+	Users                       *UserService
+	ExternalCredentials         core.ExternalCredentialProvider
+	ManagedSubjects             *ManagedSubjectService
+	AppVersionChangeRequests    *AppVersionChangeRequestService
+	AppVersionInstallLocks      *AppVersionInstallLockService
+	AppInstanceMaterializations *AppInstanceMaterializationService
+	DB                          indexeddb.IndexedDB
 }
 
 // NewOptions configures coredata bootstrap behavior.
@@ -52,18 +53,23 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionInstallLocks, AppVersionInstallLocksSchema); err != nil {
 			return nil, fmt.Errorf("create app_version_install_locks store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppInstanceMaterializations, AppInstanceMaterializationsSchema); err != nil {
+			return nil, fmt.Errorf("create app_instance_materializations store: %w", err)
+		}
 	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
 	appVersionChangeRequests := NewAppVersionChangeRequestService(ds)
 	appVersionInstallLocks := NewAppVersionInstallLockService(ds)
+	appInstanceMaterializations := NewAppInstanceMaterializationService(ds)
 	return &Services{
-		ExternalCredentials:      nil,
-		Users:                    users,
-		ManagedSubjects:          managedSubjects,
-		AppVersionChangeRequests: appVersionChangeRequests,
-		AppVersionInstallLocks:   appVersionInstallLocks,
-		DB:                       ds,
+		ExternalCredentials:         nil,
+		Users:                       users,
+		ManagedSubjects:             managedSubjects,
+		AppVersionChangeRequests:    appVersionChangeRequests,
+		AppVersionInstallLocks:      appVersionInstallLocks,
+		AppInstanceMaterializations: appInstanceMaterializations,
+		DB:                          ds,
 	}, nil
 }
 
