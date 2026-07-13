@@ -3,7 +3,7 @@
 //! Generated native types and clients for workflow.proto.
 
 use crate::agent::AgentOutput;
-use crate::app::{AgentToolRef, RequestContext, SubjectContext};
+use crate::app::{AgentToolRef, RequestContext};
 use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::codec::workflow::{
     from_wire_get_workflow_provider_run_events_response,
@@ -71,8 +71,6 @@ pub mod workflow_step_status {
 /// Native message type for `gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ApplyWorkflowProviderDefinitionRequest {
-    /// The `provider_name` field.
-    pub provider_name: String,
     /// The `spec` field; None when unset.
     pub spec: Option<WorkflowDefinitionSpec>,
     /// The `idempotency_key` field.
@@ -111,12 +109,8 @@ pub struct DeleteWorkflowProviderDefinitionRequest {
 /// Native message type for `gestalt.provider.v1.DeliverWorkflowProviderEventRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DeliverWorkflowProviderEventRequest {
-    /// The `app_name` field.
-    pub app_name: String,
     /// The `event` field; None when unset.
     pub event: Option<WorkflowEvent>,
-    /// The `provider_name` field.
-    pub provider_name: String,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
 }
@@ -242,8 +236,6 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub idempotency_key: String,
     /// The `signal` field; None when unset.
     pub signal: Option<WorkflowSignal>,
-    /// The `provider_name` field.
-    pub provider_name: String,
     /// The `definition_id` field.
     pub definition_id: String,
     /// The `input` field; None when unset.
@@ -285,8 +277,6 @@ pub struct StartWorkflowProviderRunRequest {
     pub idempotency_key: String,
     /// The `workflow_key` field.
     pub workflow_key: String,
-    /// The `provider_name` field.
-    pub provider_name: String,
     /// The `definition_id` field.
     pub definition_id: String,
     /// The `input` field; None when unset.
@@ -351,16 +341,14 @@ pub struct WorkflowDefinition {
     pub activations: Vec<WorkflowActivation>,
     /// The `paused` field.
     pub paused: bool,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: String,
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
     /// The `provider_name` field.
     pub provider_name: String,
-    /// The `run_as` field; None when unset.
-    pub run_as: Option<SubjectContext>,
+    /// The `run_as` field.
+    pub run_as: String,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowDefinitionSpec`.
@@ -374,8 +362,8 @@ pub struct WorkflowDefinitionSpec {
     pub activations: Vec<WorkflowActivation>,
     /// The `paused` field.
     pub paused: bool,
-    /// The `run_as` field; None when unset.
-    pub run_as: Option<SubjectContext>,
+    /// The `run_as` field.
+    pub run_as: String,
 }
 
 /// Native message type for `gestalt.provider.v1.WorkflowEvent`.
@@ -467,16 +455,14 @@ pub struct WorkflowRun {
     pub status_message: String,
     /// The `output` field; None when unset.
     pub output: Option<serde_json::Value>,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: String,
     /// The `workflow_key` field.
     pub workflow_key: String,
     /// The `provider_name` field.
     pub provider_name: String,
     /// The `definition_id` field.
     pub definition_id: String,
-    /// The `run_as` field; None when unset.
-    pub run_as: Option<SubjectContext>,
+    /// The `run_as` field.
+    pub run_as: String,
     /// The `input` field; None when unset.
     pub input: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `definition_generation` field.
@@ -552,8 +538,6 @@ pub struct WorkflowSignal {
     pub payload: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `metadata` field; None when unset.
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
-    /// The `created_by_subject_id` field.
-    pub created_by_subject_id: String,
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
     /// The `idempotency_key` field.
@@ -784,12 +768,10 @@ impl Workflow {
     /// Calls `gestalt.provider.v1.Workflow.ApplyDefinition`.
     pub async fn apply_definition(
         &mut self,
-        provider_name: String,
         idempotency_key: String,
         spec: Option<WorkflowDefinitionSpec>,
     ) -> Result<WorkflowDefinition, GestaltError> {
         let request = ApplyWorkflowProviderDefinitionRequest {
-            provider_name,
             idempotency_key,
             spec,
             context: self.context.clone(),
@@ -1020,7 +1002,6 @@ impl Workflow {
         &mut self,
         idempotency_key: String,
         workflow_key: String,
-        provider_name: String,
         definition_id: String,
         expected_definition_generation: i64,
         input: Option<serde_json::Map<String, serde_json::Value>>,
@@ -1028,7 +1009,6 @@ impl Workflow {
         let request = StartWorkflowProviderRunRequest {
             idempotency_key,
             workflow_key,
-            provider_name,
             definition_id,
             expected_definition_generation,
             input,
@@ -1301,12 +1281,10 @@ impl Workflow {
     }
 
     /// Calls `gestalt.provider.v1.Workflow.SignalOrStartRun`.
-    #[allow(clippy::too_many_arguments)]
     pub async fn signal_or_start_run(
         &mut self,
         workflow_key: String,
         idempotency_key: String,
-        provider_name: String,
         definition_id: String,
         expected_definition_generation: i64,
         signal: Option<WorkflowSignal>,
@@ -1315,7 +1293,6 @@ impl Workflow {
         let request = SignalOrStartWorkflowProviderRunRequest {
             workflow_key,
             idempotency_key,
-            provider_name,
             definition_id,
             expected_definition_generation,
             signal,
@@ -1359,12 +1336,9 @@ impl Workflow {
     pub async fn deliver_event(
         &mut self,
         event: Option<WorkflowEvent>,
-        options: WorkflowDeliverEventOptions,
     ) -> Result<WorkflowEvent, GestaltError> {
         let request = DeliverWorkflowProviderEventRequest {
             event,
-            app_name: options.app_name,
-            provider_name: options.provider_name,
             context: self.context.clone(),
         };
         let mut tonic_request =
@@ -1393,14 +1367,4 @@ impl Workflow {
         let response = self.inner.deliver_event(tonic_request).await?;
         Ok(from_wire_workflow_event(response.into_inner()))
     }
-}
-
-/// Optional parameters of [`Workflow::deliver_event`]; the default value leaves every
-/// option unset.
-#[derive(Clone, Debug, Default)]
-pub struct WorkflowDeliverEventOptions {
-    /// The `app_name` field.
-    pub app_name: String,
-    /// The `provider_name` field.
-    pub provider_name: String,
 }

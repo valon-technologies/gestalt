@@ -315,7 +315,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	}
 	failureAttrs := map[string]string{
-		"gestaltd.workflow.provider.name":    "local",
+		"gestaltd.workflow.provider.name":    "default",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
 		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindUnknown,
@@ -369,7 +369,6 @@ func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 
 func workflowManagerTelemetrySignalOrStartRequest(reqCtx *proto.RequestContext, workflowKey, idempotencyKey string) *proto.SignalOrStartWorkflowProviderRunRequest {
 	return &proto.SignalOrStartWorkflowProviderRunRequest{
-		ProviderName:   "local",
 		WorkflowKey:    workflowKey,
 		IdempotencyKey: idempotencyKey,
 		Context:        reqCtx,
@@ -418,10 +417,9 @@ func newWorkflowManagerTelemetryProvider() *workflowManagerTelemetryProvider {
 
 func (p *workflowManagerTelemetryProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	return &proto.WorkflowDefinition{
-		Id:                 "definition-1",
-		Generation:         7,
-		Target:             telemetryProtoAppStepTarget("github", "issues.triage"),
-		CreatedBySubjectId: "user:user-123",
+		Id:         "definition-1",
+		Generation: 7,
+		Target:     telemetryProtoAppStepTarget("github", "issues.triage"),
 	}, nil
 }
 
@@ -463,12 +461,11 @@ func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, r
 
 func telemetryDefinition(id string, target *proto.BoundWorkflowTarget) *proto.WorkflowDefinition {
 	return &proto.WorkflowDefinition{
-		Id:                 id,
-		Generation:         1,
-		Target:             target,
-		CreatedAt:          timestamppb.Now(),
-		UpdatedAt:          timestamppb.Now(),
-		CreatedBySubjectId: "user:user-123",
+		Id:         id,
+		Generation: 1,
+		Target:     target,
+		CreatedAt:  timestamppb.Now(),
+		UpdatedAt:  timestamppb.Now(),
 	}
 }
 

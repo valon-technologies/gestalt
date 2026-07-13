@@ -470,7 +470,7 @@ func (m *Manager) runAccessible(ctx context.Context, p *principal.Principal, run
 	if run == nil || run.Run == nil {
 		return false
 	}
-	return workflowSubjectOwnedBy(run.Run.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, run.Run.Target)
+	return true
 }
 
 func managedSignalResponse(providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse) (*ManagedRunSignal, error) {

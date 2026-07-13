@@ -284,7 +284,6 @@ func deliverWorkflowProviderEventRequestFromProto(req *proto.DeliverWorkflowProv
 		event = &input
 	}
 	return &DeliverWorkflowProviderEventRequest{
-		AppName: req.GetAppName(),
 		Event:   event,
 	}
 }

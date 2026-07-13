@@ -36,21 +36,10 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
-	authorizedPrincipal, err := m.authorizeAgentWorkflowTarget(ctx, p, operation, definition.Definition.Target, caller)
-	if err != nil {
-		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, err
-	}
-	resolvedTarget, err := m.resolveTarget(ctx, authorizedPrincipal, definition.Definition.Target)
-	if err != nil {
-		return "", nil, coreworkflow.Target{}, 0, err
-	}
-	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, resolvedTarget, caller); err != nil {
-		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, err
-	}
-	if decision := m.checkResolvedAgentToolAuthorization(ctx, authorizedPrincipal, resolvedTarget); !decision.allowed {
-		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, workflowTargetAuthorizationError{failure: decision.failure}
-	}
-	return definition.ProviderName, definition.provider, resolvedTarget, definition.Definition.Generation, nil
+	// Workflow execution authorization is evaluated by the provider worker as
+	// the definition's stored run_as subject. The triggering caller must not
+	// contribute scopes, target grants, or agent-tool permissions to execution.
+	return definition.ProviderName, definition.provider, definition.Definition.Target, definition.Definition.Generation, nil
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {

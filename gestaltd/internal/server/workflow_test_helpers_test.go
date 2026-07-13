@@ -175,10 +175,8 @@ func (p *memoryWorkflowProvider) DeliverEvent(_ context.Context, req *proto.Deli
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.deliveredEvents = append(p.deliveredEvents, &proto.DeliverWorkflowProviderEventRequest{
-		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      strings.TrimSpace(req.GetAppName()),
-		Event:        req.GetEvent(),
-		Context:      req.GetContext(),
+		Event:   req.GetEvent(),
+		Context: req.GetContext(),
 	})
 	return req.GetEvent(), nil
 }

@@ -31,7 +31,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
@@ -167,7 +166,7 @@ func (s *stubWorkflowProvider) ApplyDefinition(_ context.Context, req *proto.App
 		Target:       spec.GetTarget(),
 		Activations:  spec.GetActivations(),
 		Paused:       spec.GetPaused(),
-		ProviderName: req.GetProviderName(),
+		ProviderName: "default",
 	}, nil
 }
 func (s *stubWorkflowProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
@@ -1019,7 +1018,7 @@ func (p *recordingWorkflowProvider) ApplyDefinition(_ context.Context, req *prot
 		Activations:        append([]coreworkflow.Activation(nil), spec.Activations...),
 		Paused:             spec.Paused,
 		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
-		ProviderName:       strings.TrimSpace(req.GetProviderName()),
+		ProviderName:       "default",
 		RunAs:              spec.RunAs,
 	}
 	if existing := p.definitions[id]; existing != nil {
@@ -3769,7 +3768,7 @@ func TestBootstrapAppliesConfiguredWorkflowDefinitions(t *testing.T) {
 	if got.GetContext().GetSubject().GetId() != "system:config" {
 		t.Fatalf("context.subject.id = %q", got.GetContext().GetSubject().GetId())
 	}
-	runAs := agentwire.RunAsSubjectFromProto(spec.GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: spec.GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
@@ -3950,7 +3949,7 @@ func TestBootstrapPersistsConfiguredWorkflowDefinitionRunAsUserSubject(t *testin
 	if recorder == nil || len(recorder.appliedDefinitions) != 1 {
 		t.Fatalf("recorded definitions = %#v", recorders)
 	}
-	runAs := agentwire.RunAsSubjectFromProto(recorder.appliedDefinitions[0].GetSpec().GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: recorder.appliedDefinitions[0].GetSpec().GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "user:ada" {
 		t.Fatalf("runAs = %#v, want user:ada", runAs)
 	}
@@ -4609,7 +4608,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventDefinitions(t *testing.T) {
 	if got.GetContext().GetSubject().GetId() != "system:config" {
 		t.Fatalf("context.subject.id = %q", got.GetContext().GetSubject().GetId())
 	}
-	runAs := agentwire.RunAsSubjectFromProto(spec.GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: spec.GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
@@ -4663,7 +4662,7 @@ func TestBootstrapConfiguredWorkflowEventDefinitionRunAsAllowsUserCredentialedTa
 	if got.GetContext().GetSubject().GetId() != "system:config" {
 		t.Fatalf("context.subject.id = %q", got.GetContext().GetSubject().GetId())
 	}
-	runAs := agentwire.RunAsSubjectFromProto(got.GetSpec().GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: got.GetSpec().GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "service_account:roadmap-events" {
 		t.Fatalf("runAs = %#v", runAs)
 	}

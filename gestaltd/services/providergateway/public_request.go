@@ -64,7 +64,7 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	if err != nil {
 		return nil, nil, err
 	}
-	resourceID, err := publicResourceID(req, fullMethod)
+	resourceID, err := t.publicResourceID(req, fullMethod)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -144,7 +144,7 @@ func bearerTokenFromContext(ctx context.Context) string {
 	return ""
 }
 
-func publicResourceID(req gproto.Message, fullMethod string) (string, error) {
+func (t *ProviderGatewayTransport) publicResourceID(req gproto.Message, fullMethod string) (string, error) {
 	msg := req.ProtoReflect()
 	if fd := msg.Descriptor().Fields().ByName("app"); fd != nil {
 		app := strings.TrimSpace(msg.Get(fd).String())
@@ -163,6 +163,12 @@ func publicResourceID(req gproto.Message, fullMethod string) (string, error) {
 		}
 	}
 	service, _ := splitFullMethod(fullMethod)
+	if service == proto.Workflow_ServiceDesc.ServiceName {
+		if name := strings.TrimSpace(t.workflowProviderName); name != "" {
+			return name, nil
+		}
+		return "default", nil
+	}
 	if idx := strings.LastIndex(service, "."); idx >= 0 && idx+1 < len(service) {
 		return strings.ToLower(service[idx+1:]), nil
 	}

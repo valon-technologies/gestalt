@@ -37,7 +37,7 @@ func (h *workflowTransportHarness) ApplyDefinition(ctx context.Context, req *pro
 
 	spec := req.GetSpec()
 	return &proto.WorkflowDefinition{
-		ProviderName: req.GetProviderName(),
+		ProviderName: "default",
 		Id:           spec.GetId(),
 		Generation:   3,
 		Target:       spec.GetTarget(),
@@ -57,7 +57,7 @@ func (h *workflowTransportHarness) SignalOrStartRun(ctx context.Context, req *pr
 
 	return &proto.SignalWorkflowRunResponse{
 		Run: &proto.WorkflowRun{
-			ProviderName:         req.GetProviderName(),
+			ProviderName:         "default",
 			Id:                   "run-1",
 			WorkflowKey:          req.GetWorkflowKey(),
 			DefinitionId:         req.GetDefinitionId(),
@@ -102,7 +102,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("Workflow: %v", err)
 	}
 
-	applied, err := workflow.ApplyDefinition(context.Background(), "managed", "workflow-definition-key-go", &client.WorkflowDefinitionSpec{
+	applied, err := workflow.ApplyDefinition(context.Background(), "workflow-definition-key-go", &client.WorkflowDefinitionSpec{
 		Id: "definition-1",
 		Target: &client.BoundWorkflowTarget{Steps: []*client.WorkflowStep{{
 			Id: "review",
@@ -122,7 +122,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyDefinition: %v", err)
 	}
-	if applied.ProviderName != "managed" || applied.Id != "definition-1" || applied.Generation != 3 {
+	if applied.ProviderName != "default" || applied.Id != "definition-1" || applied.Generation != 3 {
 		t.Fatalf("definition = %#v", applied)
 	}
 
@@ -137,7 +137,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	if got := harness.definitions[0].GetContext().GetSubject().GetId(); got != "user:transport" {
 		t.Fatalf("subject = %q, want user:transport", got)
 	}
-	if harness.definitions[0].GetProviderName() != "managed" || harness.definitions[0].GetSpec().GetId() != "definition-1" {
+	if harness.definitions[0].GetSpec().GetId() != "definition-1" {
 		t.Fatalf("apply definition request = %+v", harness.definitions[0])
 	}
 	if harness.definitions[0].GetIdempotencyKey() != "workflow-definition-key-go" {
@@ -171,7 +171,6 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
 	resp, err := workflow.SignalOrStartRunRaw(context.Background(), &client.SignalOrStartWorkflowProviderRunRequest{
-		ProviderName:                 "local",
 		WorkflowKey:                  "slack:T123:C123:1700000000.000001",
 		DefinitionId:                 "definition-1",
 		ExpectedDefinitionGeneration: 9,
@@ -187,7 +186,7 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if resp.Run == nil || resp.Run.ProviderName != "local" || resp.Run.Id != "run-1" || !resp.StartedRun {
+	if resp.Run == nil || resp.Run.ProviderName != "default" || resp.Run.Id != "run-1" || !resp.StartedRun {
 		t.Fatalf("response = %#v", resp)
 	}
 

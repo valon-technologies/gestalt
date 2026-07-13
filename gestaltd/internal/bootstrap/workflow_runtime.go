@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 
@@ -206,24 +205,9 @@ func (r *workflowRuntime) ProviderNames() []string {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	seen := map[string]struct{}{}
-	names := make([]string, 0, len(r.providers)+len(r.pendingProviders))
-	for name := range r.providers {
-		if strings.TrimSpace(name) == "" {
-			continue
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
+	name := strings.TrimSpace(r.defaultProviderName)
+	if name == "" {
+		return nil
 	}
-	for name := range r.pendingProviders {
-		if strings.TrimSpace(name) == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return []string{name}
 }

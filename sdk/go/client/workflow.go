@@ -53,7 +53,6 @@ const (
 
 // ApplyWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.
 type ApplyWorkflowProviderDefinitionRequest struct {
-	ProviderName   string
 	Spec           *WorkflowDefinitionSpec
 	IdempotencyKey string
 	Context        *RequestContext
@@ -79,10 +78,8 @@ type DeleteWorkflowProviderDefinitionRequest struct {
 
 // DeliverWorkflowProviderEventRequest is the native message type for gestalt.provider.v1.DeliverWorkflowProviderEventRequest.
 type DeliverWorkflowProviderEventRequest struct {
-	AppName      string
-	Event        *WorkflowEvent
-	ProviderName string
-	Context      *RequestContext
+	Event   *WorkflowEvent
+	Context *RequestContext
 }
 
 // GetWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.
@@ -164,7 +161,6 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	WorkflowKey                  string
 	IdempotencyKey               string
 	Signal                       *WorkflowSignal
-	ProviderName                 string
 	DefinitionId                 string
 	Input                        map[string]any
 	ExpectedDefinitionGeneration int64
@@ -190,7 +186,6 @@ type SignalWorkflowRunResponse struct {
 type StartWorkflowProviderRunRequest struct {
 	IdempotencyKey               string
 	WorkflowKey                  string
-	ProviderName                 string
 	DefinitionId                 string
 	Input                        map[string]any
 	ExpectedDefinitionGeneration int64
@@ -239,16 +234,15 @@ type WorkflowArray struct {
 
 // WorkflowDefinition is the native message type for gestalt.provider.v1.WorkflowDefinition.
 type WorkflowDefinition struct {
-	Id                 string
-	Generation         int64
-	Target             *BoundWorkflowTarget
-	Activations        []*WorkflowActivation
-	Paused             bool
-	CreatedBySubjectId string
-	CreatedAt          *time.Time
-	UpdatedAt          *time.Time
-	ProviderName       string
-	RunAs              *SubjectContext
+	Id           string
+	Generation   int64
+	Target       *BoundWorkflowTarget
+	Activations  []*WorkflowActivation
+	Paused       bool
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
+	ProviderName string
+	RunAs        string
 }
 
 // WorkflowDefinitionSpec is the native message type for gestalt.provider.v1.WorkflowDefinitionSpec.
@@ -257,7 +251,7 @@ type WorkflowDefinitionSpec struct {
 	Target      *BoundWorkflowTarget
 	Activations []*WorkflowActivation
 	Paused      bool
-	RunAs       *SubjectContext
+	RunAs       string
 }
 
 // WorkflowEvent is the native message type for gestalt.provider.v1.WorkflowEvent.
@@ -315,11 +309,10 @@ type WorkflowRun struct {
 	CompletedAt          *time.Time
 	StatusMessage        string
 	Output               any
-	CreatedBySubjectId   string
 	WorkflowKey          string
 	ProviderName         string
 	DefinitionId         string
-	RunAs                *SubjectContext
+	RunAs                string
 	Input                map[string]any
 	DefinitionGeneration int64
 	CurrentStepId        string
@@ -382,14 +375,13 @@ type WorkflowScheduleTrigger struct {
 
 // WorkflowSignal is the native message type for gestalt.provider.v1.WorkflowSignal.
 type WorkflowSignal struct {
-	Id                 string
-	Name               string
-	Payload            map[string]any
-	Metadata           map[string]any
-	CreatedBySubjectId string
-	CreatedAt          *time.Time
-	IdempotencyKey     string
-	Sequence           int64
+	Id             string
+	Name           string
+	Payload        map[string]any
+	Metadata       map[string]any
+	CreatedAt      *time.Time
+	IdempotencyKey string
+	Sequence       int64
 }
 
 // WorkflowStepAction selects one variant of the action oneof of WorkflowStep.
@@ -595,8 +587,8 @@ func ConnectWorkflow(ctx context.Context, name string, opts ...ClientOption) (*W
 }
 
 // ApplyDefinition is the ergonomic form of [Workflow.ApplyDefinitionRaw].
-func (c *Workflow) ApplyDefinition(ctx context.Context, providerName string, idempotencyKey string, spec *WorkflowDefinitionSpec) (*WorkflowDefinition, error) {
-	request := &ApplyWorkflowProviderDefinitionRequest{ProviderName: providerName, IdempotencyKey: idempotencyKey, Spec: spec, Context: c.context}
+func (c *Workflow) ApplyDefinition(ctx context.Context, idempotencyKey string, spec *WorkflowDefinitionSpec) (*WorkflowDefinition, error) {
+	request := &ApplyWorkflowProviderDefinitionRequest{IdempotencyKey: idempotencyKey, Spec: spec, Context: c.context}
 	response, err := c.client.ApplyDefinition(ctx, ToWireApplyWorkflowProviderDefinitionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -742,8 +734,8 @@ func (c *Workflow) DeleteDefinitionRaw(ctx context.Context, request *DeleteWorkf
 }
 
 // StartRun is the ergonomic form of [Workflow.StartRunRaw].
-func (c *Workflow) StartRun(ctx context.Context, idempotencyKey string, workflowKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, input map[string]any) (*WorkflowRun, error) {
-	request := &StartWorkflowProviderRunRequest{IdempotencyKey: idempotencyKey, WorkflowKey: workflowKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Input: input, Context: c.context}
+func (c *Workflow) StartRun(ctx context.Context, idempotencyKey string, workflowKey string, definitionId string, expectedDefinitionGeneration int64, input map[string]any) (*WorkflowRun, error) {
+	request := &StartWorkflowProviderRunRequest{IdempotencyKey: idempotencyKey, WorkflowKey: workflowKey, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Input: input, Context: c.context}
 	response, err := c.client.StartRun(ctx, ToWireStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -912,8 +904,8 @@ func (c *Workflow) SignalRunRaw(ctx context.Context, request *SignalWorkflowProv
 }
 
 // SignalOrStartRun is the ergonomic form of [Workflow.SignalOrStartRunRaw].
-func (c *Workflow) SignalOrStartRun(ctx context.Context, workflowKey string, idempotencyKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, signal *WorkflowSignal, input map[string]any) (*SignalWorkflowRunResponse, error) {
-	request := &SignalOrStartWorkflowProviderRunRequest{WorkflowKey: workflowKey, IdempotencyKey: idempotencyKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Signal: signal, Input: input, Context: c.context}
+func (c *Workflow) SignalOrStartRun(ctx context.Context, workflowKey string, idempotencyKey string, definitionId string, expectedDefinitionGeneration int64, signal *WorkflowSignal, input map[string]any) (*SignalWorkflowRunResponse, error) {
+	request := &SignalOrStartWorkflowProviderRunRequest{WorkflowKey: workflowKey, IdempotencyKey: idempotencyKey, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Signal: signal, Input: input, Context: c.context}
 	response, err := c.client.SignalOrStartRun(ctx, ToWireSignalOrStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -935,19 +927,9 @@ func (c *Workflow) SignalOrStartRunRaw(ctx context.Context, request *SignalOrSta
 	return FromWireSignalWorkflowRunResponse(response), nil
 }
 
-// WorkflowDeliverEventOptions carries the optional parameters of [Workflow.DeliverEvent].
-// A nil options value is equivalent to the zero value.
-type WorkflowDeliverEventOptions struct {
-	AppName      string
-	ProviderName string
-}
-
 // DeliverEvent is the ergonomic form of [Workflow.DeliverEventRaw].
-func (c *Workflow) DeliverEvent(ctx context.Context, event *WorkflowEvent, opts *WorkflowDeliverEventOptions) (*WorkflowEvent, error) {
-	if opts == nil {
-		opts = &WorkflowDeliverEventOptions{}
-	}
-	request := &DeliverWorkflowProviderEventRequest{Event: event, AppName: opts.AppName, ProviderName: opts.ProviderName, Context: c.context}
+func (c *Workflow) DeliverEvent(ctx context.Context, event *WorkflowEvent) (*WorkflowEvent, error) {
+	request := &DeliverWorkflowProviderEventRequest{Event: event, Context: c.context}
 	response, err := c.client.DeliverEvent(ctx, ToWireDeliverWorkflowProviderEventRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

@@ -890,63 +890,30 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 	if _, err := workflowCallerSubjectID(ctx, reqContext, p); err != nil {
 		return coreworkflow.Event{}, err
 	}
+	event.Source = appName
 
-	if providerSelection != "" {
-		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
-		if err != nil {
-			return coreworkflow.Event{}, err
-		}
-		audit.setProvider(providerName)
-		eventProto, err := workflowwire.EventToProto(event)
-		if err != nil {
-			return coreworkflow.Event{}, err
-		}
-		deliveredProto, err := provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
-			AppName: appName,
-			Event:   eventProto,
-			Context: reqContext,
-		})
-		if err != nil {
-			return coreworkflow.Event{}, err
-		}
-		if deliveredProto != nil {
-			delivered, err := workflowwire.EventFromProto(deliveredProto)
-			if err != nil {
-				return coreworkflow.Event{}, err
-			}
-			return delivered, nil
-		}
-		return event, nil
+	providerName, provider, err := m.resolveProvider(ctx, providerSelection)
+	if err != nil {
+		return coreworkflow.Event{}, err
 	}
-
-	providerNames := m.workflow.ProviderNames()
-	if len(providerNames) > 0 {
-		finishAudit = false
+	audit.setProvider(providerName)
+	eventProto, err := workflowwire.EventToProto(event)
+	if err != nil {
+		return coreworkflow.Event{}, err
 	}
-	for _, providerName := range providerNames {
-		providerAudit := audit.clone()
-		providerAudit.setProvider(providerName)
-		providerAudit.setObjectTarget(workflowAuditTargetEvent, "", event.Type)
-		_, provider, err := m.resolveProvider(ctx, providerName)
+	deliveredProto, err := provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
+		Event:   eventProto,
+		Context: reqContext,
+	})
+	if err != nil {
+		return coreworkflow.Event{}, err
+	}
+	if deliveredProto != nil {
+		delivered, err := workflowwire.EventFromProto(deliveredProto)
 		if err != nil {
-			providerAudit.finish(ctx, err)
 			return coreworkflow.Event{}, err
 		}
-		eventProto, err := workflowwire.EventToProto(event)
-		if err != nil {
-			providerAudit.finish(ctx, err)
-			return coreworkflow.Event{}, err
-		}
-		_, err = provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
-			AppName: appName,
-			Event:   eventProto,
-			Context: reqContext,
-		})
-		if err != nil {
-			providerAudit.finish(ctx, err)
-			return coreworkflow.Event{}, err
-		}
-		providerAudit.finish(ctx, nil)
+		return delivered, nil
 	}
 	return event, nil
 }

@@ -28,15 +28,24 @@ type ManagerService = workflowmanager.Service
 type ProviderServer struct {
 	proto.UnimplementedWorkflowServer
 
-	appName       string
-	manager       ManagerService
-	authorization core.AuthorizationProvider
-	agentAuth     interface {
+	appName              string
+	workflowProviderName string
+	manager              ManagerService
+	authorization        core.AuthorizationProvider
+	agentAuth            interface {
 		AuthorizeWorkflowInvocation(context.Context, invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error)
 	}
 }
 
 type ProviderServerOption func(*ProviderServer)
+
+func WithWorkflowProviderName(name string) ProviderServerOption {
+	return func(s *ProviderServer) {
+		if name = strings.TrimSpace(name); name != "" {
+			s.workflowProviderName = name
+		}
+	}
+}
 
 func WithAgentWorkflowInvocationAuthorizer(authorizer interface {
 	AuthorizeWorkflowInvocation(context.Context, invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error)
@@ -48,9 +57,10 @@ func WithAgentWorkflowInvocationAuthorizer(authorizer interface {
 
 func NewProviderServer(appName string, manager ManagerService, authorization core.AuthorizationProvider, opts ...ProviderServerOption) *ProviderServer {
 	s := &ProviderServer{
-		appName:       strings.TrimSpace(appName),
-		manager:       manager,
-		authorization: authorization,
+		appName:              strings.TrimSpace(appName),
+		workflowProviderName: "default",
+		manager:              manager,
+		authorization:        authorization,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -109,27 +119,65 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	if err != nil {
 		return nil, err
 	}
-	if req.GetSpec().GetRunAs() != nil {
-		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
+	if strings.TrimSpace(req.GetSpec().GetRunAs()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "workflow run_as is required")
+	}
+	kind, subjectID, ok := core.ParseSubjectID(req.GetSpec().GetRunAs())
+	if !ok || kind != "service_account" || subjectID == "" {
+		return nil, status.Error(codes.InvalidArgument, "workflow run_as must be service_account:<id>")
+	}
+	if err := s.requireServiceAccountManagement(ctx, authCtx, p, req.GetSpec().GetRunAs()); err != nil {
+		return nil, err
+	}
+	if s.manager == nil {
+		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
 	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "definition spec: %v", err)
 	}
 	managed, err := s.manager.ApplyDefinition(s.managerContext(ctx, authCtx), p, workflowmanager.DefinitionApply{
-		ProviderName:   strings.TrimSpace(req.GetProviderName()),
 		Spec:           *spec,
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		Caller:         workflowManagerCaller(authCtx),
 	})
 	if err != nil {
-		return nil, workflowManagerStatusError(err)
+		err = workflowManagerStatusError(err)
+		return nil, err
 	}
 	resp, err := managedWorkflowDefinitionToProto(managed)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode workflow definition: %v", err)
 	}
 	return resp, nil
+}
+
+func (s *ProviderServer) requireServiceAccountManagement(ctx context.Context, authCtx workflowManagerAuthContext, p *principal.Principal, runAs string) error {
+	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok && authCtx.CallerName() == "gestaltd" && origin.FullMethod != "" {
+		return nil
+	}
+	if s == nil || s.authorization == nil {
+		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow run_as management")
+	}
+	subjectID := ""
+	if p != nil {
+		subjectID = strings.TrimSpace(p.SubjectID)
+	}
+	if subjectID == "" {
+		subjectID = strings.TrimSpace(authCtx.CallerName())
+	}
+	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+		Subject:  &proto.Subject{Type: "subject", Id: subjectID},
+		Action:   &proto.Action{Name: "manages"},
+		Resource: &proto.Resource{Type: "service_account", Id: strings.TrimSpace(runAs)},
+	})
+	if err != nil {
+		return status.Errorf(codes.PermissionDenied, "subject %q cannot manage %q: %v", subjectID, runAs, err)
+	}
+	if resp == nil || !resp.GetAllowed() {
+		return status.Errorf(codes.PermissionDenied, "subject %q cannot manage %q", subjectID, runAs)
+	}
+	return nil
 }
 
 func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
@@ -279,7 +327,6 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 		return nil, err
 	}
 	managed, err := s.manager.StartRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunStart{
-		ProviderName:                 strings.TrimSpace(req.GetProviderName()),
 		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		Input:                        protoutil.MapFromStruct(req.GetInput()),
@@ -288,7 +335,8 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 		Caller:                       workflowManagerCaller(authCtx),
 	})
 	if err != nil {
-		return nil, workflowManagerStatusError(err)
+		err = workflowManagerStatusError(err)
+		return nil, err
 	}
 	resp, err := managedWorkflowRunToProto(managed)
 	if err != nil {
@@ -456,7 +504,8 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 		Signal: workflowwire.SignalFromProto(req.GetSignal()),
 	})
 	if err != nil {
-		return nil, workflowManagerStatusError(err)
+		err = workflowManagerStatusError(err)
+		return nil, err
 	}
 	resp, err := managedWorkflowRunSignalToProto(managed)
 	if err != nil {
@@ -468,10 +517,10 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (out *proto.SignalWorkflowRunResponse, err error) {
 	startedAt := time.Now()
 	var managed *workflowmanager.ManagedRunSignal
-	dims := workflowManagerSignalOrStartMetricDims(req, nil)
+	dims := s.workflowManagerSignalOrStartMetricDims(req, nil)
 	ctx, span := observability.StartSpan(ctx, "workflow.manager.operation", observability.WorkflowMetricAttributes(dims)...)
 	defer func() {
-		finalDims := workflowManagerSignalOrStartMetricDims(req, managed)
+		finalDims := s.workflowManagerSignalOrStartMetricDims(req, managed)
 		observability.SetSpanAttributes(ctx, observability.WorkflowMetricAttributes(finalDims)...)
 		observability.EndSpan(span, err)
 		observability.RecordWorkflowManagerOperation(ctx, startedAt, err, finalDims)
@@ -488,7 +537,6 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		return nil, err
 	}
 	managed, err = s.manager.SignalOrStartRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunSignalOrStart{
-		ProviderName:                 strings.TrimSpace(req.GetProviderName()),
 		WorkflowKey:                  strings.TrimSpace(req.GetWorkflowKey()),
 		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
@@ -498,7 +546,8 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		Caller:                       workflowManagerCaller(authCtx),
 	})
 	if err != nil {
-		return nil, workflowManagerStatusError(err)
+		err = workflowManagerStatusError(err)
+		return nil, err
 	}
 	resp, err := managedWorkflowRunSignalToProto(managed)
 	if err != nil {
@@ -524,15 +573,9 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
 	appName := authCtx.CallerName()
-	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok && origin.FullMethod == proto.Workflow_DeliverEvent_FullMethodName {
-		if requested := strings.TrimSpace(req.GetAppName()); requested != "" {
-			appName = requested
-		}
-	}
 	delivered, err := s.manager.DeliverEvent(s.managerContext(ctx, authCtx), p, workflowmanager.EventDeliver{
-		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      appName,
-		Event:        event,
+		AppName: appName,
+		Event:   event,
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -594,35 +637,94 @@ func (s *ProviderServer) authorizeWorkflowAccess(ctx context.Context, authCtx wo
 }
 
 func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, operation string) error {
+	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok && authCtx.CallerName() == "gestaltd" && origin.FullMethod != "" {
+		return nil
+	}
 	if s == nil || s.authorization == nil {
 		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow manager operation")
 	}
+	action := workflowRPCAction(operation)
+	subjectID := ""
+	if p := authCtx.Principal(); p != nil {
+		subjectID = strings.TrimSpace(p.SubjectID)
+	}
+	if subjectID == "" {
+		subjectID = strings.TrimSpace(authCtx.CallerName())
+	}
 	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
-			Type: workflowauth.SubjectTypeApp,
-			Id:   authCtx.CallerName(),
+			Type: "subject",
+			Id:   subjectID,
 		},
-		Action: &proto.Action{Name: workflowauth.ActionInvoke},
+		Action: &proto.Action{Name: action},
 		Resource: &proto.Resource{
-			Type: workflowauth.ResourceTypeOperation,
-			Id:   workflowauth.OperationResourceID(s.appName, operation),
+			Type: "workflow",
+			Id:   strings.TrimSpace(s.workflowProviderName),
 		},
 	})
 	if err != nil {
-		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q: %v", operation, authCtx.CallerName(), err)
+		return status.Errorf(codes.PermissionDenied, "workflow RPC %q is not allowed for subject %q: %v", action, subjectID, err)
 	}
 	if resp == nil || !resp.GetAllowed() {
-		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, authCtx.CallerName())
+		return status.Errorf(codes.PermissionDenied, "workflow RPC %q is not allowed for subject %q", action, subjectID)
 	}
 	return nil
 }
 
-func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
-	providerName := ""
+func workflowRPCAction(operation string) string {
+	if strings.HasSuffix(operation, "definitions.apply") {
+		return "ApplyDefinition"
+	}
+	if strings.HasSuffix(operation, "definitions.get") {
+		return "GetDefinition"
+	}
+	if strings.HasSuffix(operation, "definitions.list") {
+		return "ListDefinitions"
+	}
+	if strings.HasSuffix(operation, "definitions.set_paused") {
+		return "SetDefinitionPaused"
+	}
+	if strings.HasSuffix(operation, "definitions.set_activation_paused") {
+		return "SetActivationPaused"
+	}
+	if strings.HasSuffix(operation, "definitions.delete") {
+		return "DeleteDefinition"
+	}
+	if strings.HasSuffix(operation, "runs.start") {
+		return "StartRun"
+	}
+	if strings.HasSuffix(operation, "runs.list") {
+		return "ListRuns"
+	}
+	if strings.HasSuffix(operation, "runs.get") {
+		return "GetRun"
+	}
+	if strings.HasSuffix(operation, "runs.get_events") {
+		return "GetRunEvents"
+	}
+	if strings.HasSuffix(operation, "runs.get_output") {
+		return "GetRunOutput"
+	}
+	if strings.HasSuffix(operation, "runs.cancel") {
+		return "CancelRun"
+	}
+	if strings.HasSuffix(operation, "runs.signal") {
+		return "SignalRun"
+	}
+	if strings.HasSuffix(operation, "runs.signal_or_start") {
+		return "SignalOrStartRun"
+	}
+	if strings.HasSuffix(operation, "events.deliver") {
+		return "DeliverEvent"
+	}
+	return operation
+}
+
+func (s *ProviderServer) workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
+	providerName := s.workflowProviderName
 	runStatus := observability.WorkflowRunStatusUnknown
 	targetKind := observability.WorkflowTargetKindUnknown
 	if req != nil {
-		providerName = strings.TrimSpace(req.GetProviderName())
 	}
 	if managed != nil {
 		if resolved := strings.TrimSpace(managed.ProviderName); resolved != "" {

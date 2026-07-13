@@ -2,7 +2,6 @@ package gestalt
 
 // WorkflowApplyDefinition carries the inputs of the call that applies a workflow definition for a provider.
 type WorkflowApplyDefinition struct {
-	ProviderName   string
 	Spec           *WorkflowDefinitionSpec
 	IdempotencyKey string
 }
@@ -35,7 +34,6 @@ type WorkflowDeleteDefinition struct {
 
 // WorkflowStartRun carries the inputs of the call that starts a workflow run.
 type WorkflowStartRun struct {
-	ProviderName                 string
 	DefinitionID                 string
 	ExpectedDefinitionGeneration int64
 	Input                        map[string]any
@@ -51,7 +49,6 @@ type WorkflowSignalRun struct {
 
 // WorkflowSignalOrStartRun carries the inputs of the call that signals a run, starting it first when absent.
 type WorkflowSignalOrStartRun struct {
-	ProviderName                 string
 	WorkflowKey                  string
 	DefinitionID                 string
 	ExpectedDefinitionGeneration int64
@@ -77,8 +74,7 @@ type WorkflowGetRunOutput struct {
 
 // WorkflowDeliverEvent carries the inputs of the call that delivers an external event to the workflow engine.
 type WorkflowDeliverEvent struct {
-	ProviderName string
-	Event        *WorkflowEvent
+	Event *WorkflowEvent
 }
 
 // WorkflowRunSignal is one signal delivered to a workflow run.

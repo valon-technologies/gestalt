@@ -229,9 +229,6 @@ func TestDeliverEventPreservesCallerApp(t *testing.T) {
 		t.Fatalf("delivered events = %d, want 2", len(provider.deliveredEvents))
 	}
 	for i, req := range provider.deliveredEvents {
-		if req.GetAppName() != "github" {
-			t.Fatalf("deliveredEvents[%d].AppName = %q, want github", i, req.GetAppName())
-		}
 		if req.GetEvent().GetSource() != "github" {
 			t.Fatalf("deliveredEvents[%d].Event.Source = %q, want github", i, req.GetEvent().GetSource())
 		}

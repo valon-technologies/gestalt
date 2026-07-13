@@ -221,8 +221,7 @@ func isWorkflowConfigOwnedDefinition(existing *coreworkflow.Definition, definiti
 		return false
 	}
 	return existing.ID == definitionID &&
-		strings.HasPrefix(existing.ID, "cfg_") &&
-		strings.TrimSpace(existing.CreatedBySubjectID) == workflowConfigOwnerSubjectID()
+		strings.HasPrefix(existing.ID, "cfg_")
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {

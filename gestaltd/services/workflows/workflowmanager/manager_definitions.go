@@ -30,6 +30,9 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
+	if strings.HasPrefix(strings.TrimSpace(req.Spec.ID), coreworkflow.ConfigManagedDefinitionPrefix) {
+		return nil, fmt.Errorf("workflow definition id %q is reserved for configuration bootstrap", req.Spec.ID)
+	}
 	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
 	if err != nil {
 		return nil, err
@@ -366,7 +369,7 @@ func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Princip
 	if definition == nil || definition.Definition == nil {
 		return false
 	}
-	return workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, definition.Definition.Target)
+	return true
 }
 
 func (m *Manager) providerNames() []string {

@@ -19,11 +19,7 @@ import {
 
 import * as wire from "./internal/gen/v1/workflow_pb.ts";
 import { type AgentOutput } from "./agent.ts";
-import {
-  type AgentToolRef,
-  type RequestContext,
-  type SubjectContext,
-} from "./app.ts";
+import { type AgentToolRef, type RequestContext } from "./app.ts";
 import {
   fromWireGetWorkflowProviderRunEventsResponse,
   fromWireGetWorkflowProviderRunOutputResponse,
@@ -76,7 +72,6 @@ export const WorkflowStepStatus = {
 export type WorkflowStepStatus = number;
 
 export interface ApplyWorkflowProviderDefinitionRequest {
-  providerName: string;
   spec?: WorkflowDefinitionSpec;
   idempotencyKey: string;
   context?: RequestContext;
@@ -98,9 +93,7 @@ export interface DeleteWorkflowProviderDefinitionRequest {
 }
 
 export interface DeliverWorkflowProviderEventRequest {
-  appName: string;
   event?: WorkflowEvent;
-  providerName: string;
   context?: RequestContext;
 }
 
@@ -170,7 +163,6 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   workflowKey: string;
   idempotencyKey: string;
   signal?: WorkflowSignal;
-  providerName: string;
   definitionId: string;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
@@ -193,7 +185,6 @@ export interface SignalWorkflowRunResponse {
 export interface StartWorkflowProviderRunRequest {
   idempotencyKey: string;
   workflowKey: string;
-  providerName: string;
   definitionId: string;
   input?: JsonObject;
   expectedDefinitionGeneration: bigint;
@@ -240,11 +231,10 @@ export interface WorkflowDefinition {
   target?: BoundWorkflowTarget;
   activations: WorkflowActivation[];
   paused: boolean;
-  createdBySubjectId: string;
   createdAt?: Date;
   updatedAt?: Date;
   providerName: string;
-  runAs?: SubjectContext;
+  runAs: string;
 }
 
 export interface WorkflowDefinitionSpec {
@@ -252,7 +242,7 @@ export interface WorkflowDefinitionSpec {
   target?: BoundWorkflowTarget;
   activations: WorkflowActivation[];
   paused: boolean;
-  runAs?: SubjectContext;
+  runAs: string;
 }
 
 export interface WorkflowEvent {
@@ -302,11 +292,10 @@ export interface WorkflowRun {
   completedAt?: Date;
   statusMessage: string;
   output?: JsonValue;
-  createdBySubjectId: string;
   workflowKey: string;
   providerName: string;
   definitionId: string;
-  runAs?: SubjectContext;
+  runAs: string;
   input?: JsonObject;
   definitionGeneration: bigint;
   currentStepId: string;
@@ -365,7 +354,6 @@ export interface WorkflowSignal {
   name: string;
   payload?: JsonObject;
   metadata?: JsonObject;
-  createdBySubjectId: string;
   createdAt?: Date;
   idempotencyKey: string;
   sequence: bigint;
@@ -551,12 +539,10 @@ export class Workflow {
   }
 
   async applyDefinition(
-    providerName: string,
     idempotencyKey: string,
     spec?: Init<WorkflowDefinitionSpec>,
   ): Promise<WorkflowDefinition> {
     const request = {
-      providerName,
       idempotencyKey,
       ...(spec !== undefined ? { spec } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
@@ -783,7 +769,6 @@ export class Workflow {
   async startRun(
     idempotencyKey: string,
     workflowKey: string,
-    providerName: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     input?: JsonObject,
@@ -791,7 +776,6 @@ export class Workflow {
     const request = {
       idempotencyKey,
       workflowKey,
-      providerName,
       definitionId,
       expectedDefinitionGeneration,
       ...(input !== undefined ? { input } : {}),
@@ -1064,7 +1048,6 @@ export class Workflow {
   async signalOrStartRun(
     workflowKey: string,
     idempotencyKey: string,
-    providerName: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     signal?: Init<WorkflowSignal>,
@@ -1073,7 +1056,6 @@ export class Workflow {
     const request = {
       workflowKey,
       idempotencyKey,
-      providerName,
       definitionId,
       expectedDefinitionGeneration,
       ...(signal !== undefined ? { signal } : {}),
@@ -1111,16 +1093,8 @@ export class Workflow {
     return fromWireSignalWorkflowRunResponse(response);
   }
 
-  async deliverEvent(
-    event?: Init<WorkflowEvent>,
-    options?: {
-      appName?: string | undefined;
-      providerName?: string | undefined;
-    },
-  ): Promise<WorkflowEvent> {
+  async deliverEvent(event?: Init<WorkflowEvent>): Promise<WorkflowEvent> {
     const request = {
-      appName: options?.appName ?? "",
-      providerName: options?.providerName ?? "",
       ...(event !== undefined ? { event } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<DeliverWorkflowProviderEventRequest>;
