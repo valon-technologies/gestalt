@@ -64,7 +64,7 @@ var AppVersionChangeRequestsSchema = idb.ObjectStoreOptions{
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "app", Type: idb.TypeString, NotNull: true},
-		{Name: "from_version", Type: idb.TypeString},
+		{Name: "from_version", Type: idb.TypeString, NotNull: true},
 		{Name: "to_version", Type: idb.TypeString, NotNull: true},
 		{Name: "actor", Type: idb.TypeString},
 		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},

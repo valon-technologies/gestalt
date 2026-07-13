@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
@@ -22,7 +23,7 @@ func TestAppVersionChangeRequestService(t *testing.T) {
 
 		first, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
 			App:         "g-issues",
-			FromVersion: "",
+			FromVersion: "0.0.0-config",
 			ToVersion:   "0.0.1",
 			Actor:       "user:alice",
 			Timestamp:   base,
@@ -78,8 +79,9 @@ func TestAppVersionChangeRequestService(t *testing.T) {
 		}
 
 		if _, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
-			App:       "g-issues",
-			ToVersion: "0.0.1",
+			App:         "g-issues",
+			FromVersion: "0.0.0-config",
+			ToVersion:   "0.0.1",
 		}); err != nil {
 			t.Fatalf("AppendRequest: %v", err)
 		}
@@ -90,6 +92,21 @@ func TestAppVersionChangeRequestService(t *testing.T) {
 		}
 		if !known {
 			t.Fatal("expected version to be known")
+		}
+	})
+
+	t.Run("rejects_missing_from_version", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		svc := testutil.NewStubServices(t)
+
+		_, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+			App:       "g-issues",
+			ToVersion: "0.0.1",
+		})
+		if err == nil {
+			t.Fatal("expected error for missing from_version")
 		}
 	})
 }
@@ -106,9 +123,10 @@ func TestAppVersionChangeRequestProjection(t *testing.T) {
 		base := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
 
 		if _, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
-			App:       "g-issues",
-			ToVersion: "0.0.1",
-			Timestamp: base,
+			App:         "g-issues",
+			FromVersion: "0.0.0-config",
+			ToVersion:   "0.0.1",
+			Timestamp:   base,
 			Metadata: coredata.ChangeRequestMetadata(&core.AppInstallation{
 				AppName:   "g-issues",
 				Version:   "0.0.1",
@@ -148,6 +166,28 @@ func TestAppVersionChangeRequestProjection(t *testing.T) {
 		}
 	})
 
+	t.Run("ResolveFromVersion_prefers_fleet_over_config", func(t *testing.T) {
+		t.Parallel()
+
+		configEntry := &config.ProviderEntry{}
+		configEntry.Source.SetResolvedPackage("", "0.0.0-config")
+
+		known := []*core.AppInstallation{{
+			AppName:   "g-issues",
+			Version:   "0.0.2",
+			UpdatedAt: time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC),
+		}}
+		if got := coredata.ResolveFromVersion(known, configEntry); got != "0.0.2" {
+			t.Fatalf("ResolveFromVersion = %q, want 0.0.2", got)
+		}
+		if got := coredata.ResolveFromVersion(nil, configEntry); got != "0.0.0-config" {
+			t.Fatalf("ResolveFromVersion config fallback = %q, want 0.0.0-config", got)
+		}
+		if got := coredata.ResolveFromVersion(nil, nil); got != "" {
+			t.Fatalf("ResolveFromVersion empty = %q, want empty", got)
+		}
+	})
+
 	t.Run("ListAllKnownVersions_returns_latest_per_app_version", func(t *testing.T) {
 		t.Parallel()
 
@@ -156,9 +196,10 @@ func TestAppVersionChangeRequestProjection(t *testing.T) {
 
 		for _, app := range []string{"g-issues", "g-docs"} {
 			if _, err := svc.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
-				App:       app,
-				ToVersion: "0.0.1",
-				Timestamp: base,
+				App:         app,
+				FromVersion: "0.0.0-config",
+				ToVersion:   "0.0.1",
+				Timestamp:   base,
 			}); err != nil {
 				t.Fatalf("AppendRequest %s: %v", app, err)
 			}

@@ -29,6 +29,10 @@ func (s *AppVersionChangeRequestService) AppendRequest(ctx context.Context, requ
 	if appName == "" {
 		return nil, fmt.Errorf("append app version change request: app is required")
 	}
+	fromVersion := strings.TrimSpace(request.FromVersion)
+	if fromVersion == "" {
+		return nil, fmt.Errorf("append app version change request: from_version is required")
+	}
 	toVersion := strings.TrimSpace(request.ToVersion)
 	if toVersion == "" {
 		return nil, fmt.Errorf("append app version change request: to_version is required")
@@ -48,7 +52,7 @@ func (s *AppVersionChangeRequestService) AppendRequest(ctx context.Context, requ
 	rec := idb.Record{
 		"id":            id,
 		"app":           appName,
-		"from_version":  strings.TrimSpace(request.FromVersion),
+		"from_version":  fromVersion,
 		"to_version":    toVersion,
 		"actor":         strings.TrimSpace(request.Actor),
 		"timestamp":     timestamp,

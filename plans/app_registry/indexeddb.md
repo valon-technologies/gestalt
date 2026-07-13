@@ -82,13 +82,13 @@ Services.DB                         ← underlying main-db handle
 
 ## Store: `app_version_change_requests` (source of truth)
 
-Append-only fleet requests to move one app from `from_version` to `to_version`. First install uses an empty `from_version`.
+Append-only fleet requests to move one app from `from_version` to `to_version`. `from_version` is required on every row. The installer resolves it from the latest fleet-known `to_version`, or falls back to the app's pinned version in `config.yaml` / `gestalt.lock.json` when the app has not been installed via the registry yet.
 
 ```text
 app_version_change_requests
   - id
   - app                            # app name, e.g. g-issues
-  - from_version                   # empty on first install
+  - from_version                   # required; fleet-known version or config pin
   - to_version
   - actor
   - timestamp
@@ -105,7 +105,7 @@ Primary key: `id` (UUID).
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "app": "g-issues",
-  "from_version": "",
+  "from_version": "0.0.0-snapshot.gdeadbeef",
   "to_version": "0.0.0-snapshot.gabc123",
   "timestamp": "2026-07-10T02:20:00Z"
 }

@@ -22,6 +22,7 @@ const installWorkTimeoutBuffer = 30 * time.Second
 
 type Installer struct {
 	Registries     map[string]config.AppRegistryConfig
+	ConfigApps     map[string]*config.ProviderEntry
 	Reader         *RegistryReader
 	ChangeRequests *coredata.AppVersionChangeRequestService
 	Locks          *coredata.AppVersionInstallLockService
@@ -92,7 +93,14 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if err != nil {
 		return nil, fmt.Errorf("list known app versions: %w", err)
 	}
-	fromVersion := coredata.LatestKnownVersion(knownVersions)
+	var configEntry *config.ProviderEntry
+	if i.ConfigApps != nil {
+		configEntry = i.ConfigApps[appName]
+	}
+	fromVersion := coredata.ResolveFromVersion(knownVersions, configEntry)
+	if fromVersion == "" {
+		return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
+	}
 
 	registry, ok := i.Registries[registryName]
 	if !ok {

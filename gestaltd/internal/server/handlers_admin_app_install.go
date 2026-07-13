@@ -203,6 +203,7 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 	}
 	return &appregistry.Installer{
 		Registries:     cloneAppRegistryConfig(cfg.AppRegistries),
+		ConfigApps:     cfg.AppDefs,
 		Reader:         reader,
 		ChangeRequests: cfg.Services.AppVersionChangeRequests,
 		Locks:          cfg.Services.AppVersionInstallLocks,

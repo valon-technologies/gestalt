@@ -14,6 +14,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
+func appRegistryTestAppDefs(version string) map[string]*config.ProviderEntry {
+	entry := &config.ProviderEntry{}
+	entry.Source.SetResolvedPackage("", version)
+	return map[string]*config.ProviderEntry{
+		"g-issues": entry,
+	}
+}
+
 func TestAdminAppRegistryInstall(t *testing.T) {
 	t.Parallel()
 
@@ -28,6 +36,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = fixture.Reader
 			cfg.ArtifactsDir = artifactsDir
+			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -97,6 +106,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = reader
 			cfg.ArtifactsDir = t.TempDir()
+			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -123,6 +133,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = fixture.Reader
 			cfg.ArtifactsDir = artifactsDir
+			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -158,6 +169,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = fixture.Reader
 			cfg.ArtifactsDir = artifactsDir
+			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
 		})
 		testutil.CloseOnCleanup(t, ts)
 
