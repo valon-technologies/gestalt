@@ -261,7 +261,7 @@ Core recovery paths must not depend on dynamically installed apps.
 6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog writes; `app_installations` store removed. See [lifecycle.md](./lifecycle.md), [tests.md](./tests.md).
 7. Split install from local materialization — `POST …/install` writes `app_version_catalog` only. See [lifecycle.md](./lifecycle.md).
 8. Per-replica catalog polling: acknowledge each new `version_added` row in IndexedDB and emit a metric. See [lifecycle.md](./lifecycle.md#polling).
-9. Stop the running app and start the same app back up after **1 minute** (restart machinery only; no binary change yet).
+9. Stop the running app and start the same app back up (restart machinery only; no binary change yet). Use a **1 minute** delay between stop and start during early rollout testing so operators can observe that the process started; production restart has no intentional wait.
 10. Download and materialize the new version artifact **before** bringing the app down.
 11. Mount the newly materialized binary instead of the old one when restarting.
 12. Add install-time validation, fleet activation/rollback, and concurrency guards.

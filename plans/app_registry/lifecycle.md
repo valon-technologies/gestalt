@@ -44,7 +44,7 @@ Each pass, for every known `(app, version)` this replica has not yet converged:
 
 1. Acknowledge the catalog row in per-instance IndexedDB state (planned `app_instance_materializations`) and emit a metric.
 2. Download the registry artifact and materialize under `registry-installed/{app}/{version}/` before stopping the running app.
-3. Stop the app, wait **1 minute**, then start again from the newly materialized binary (bind the provider graph to the new path instead of the old one).
+3. Stop the app and start again from the newly materialized binary (bind the provider graph to the new path instead of the old one).
 
 Skip pairs already at the target version. Use per-`(app, version)` inflight guards so overlapping ticks do not double-download or double-restart.
 
