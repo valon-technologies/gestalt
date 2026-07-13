@@ -1,0 +1,56 @@
+name: Yank Gestaltd Alpha 41
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  yank:
+    name: Delete alpha.41 Artifact Registry objects
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      PROJECT_NUMBER: ${{ secrets.GCP_PROJECT_NUMBER }}
+      REGION: us-east1
+      REPOSITORY: gestaltd-charts
+      VERSION: 0.0.2-alpha.41
+      WIF_POOL_ID: ${{ vars.GCP_WIF_POOL_ID }}
+      WIF_PROVIDER_ID: ${{ vars.GCP_WIF_PROVIDER_ID }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ env.WIF_POOL_ID }}/providers/${{ env.WIF_PROVIDER_ID }}
+          service_account: github-actions@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+          token_format: access_token
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+
+      - name: Delete alpha.41 image and chart
+        env:
+          REGISTRY_HOST: ${{ env.REGION }}-docker.pkg.dev
+        run: |
+          set -euo pipefail
+
+          refs=(
+            "${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}/gestaltd-image:${VERSION}-alpine"
+            "${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}/gestaltd:${VERSION}"
+          )
+
+          for ref in "${refs[@]}"; do
+            echo "Deleting ${ref}"
+            if ! gcloud artifacts docker images delete "${ref}" --delete-tags --quiet; then
+              echo "${ref} was already absent or could not be deleted by tag."
+            fi
+          done
+
+          echo "Remaining alpha.41 tags:"
+          gcloud artifacts docker images list "${REGISTRY_HOST}/${PROJECT_ID}/${REPOSITORY}" \
+            --include-tags \
+            --filter="tags:${VERSION} OR tags:${VERSION}-alpine" \
+            --format="table(package,tags,version)"
