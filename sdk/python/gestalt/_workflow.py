@@ -415,12 +415,10 @@ class WorkflowDefinition:
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStartRun:
     __hash__ = None
-    provider_name: str = ""
     idempotency_key: str = ""
     workflow_key: str = ""
     definition_id: str = ""
     input: WorkflowJsonObject | None = None
-    run_as: Subject | Mapping[str, Any] | None = None
     expected_definition_generation: int = 0
 
 
@@ -434,20 +432,17 @@ class WorkflowSignalRun:
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowSignalOrStartRun:
     __hash__ = None
-    provider_name: str = ""
     workflow_key: str = ""
     idempotency_key: str = ""
     signal: WorkflowSignal | None = None
     definition_id: str = ""
     input: WorkflowJsonObject | None = None
-    run_as: Subject | Mapping[str, Any] | None = None
     expected_definition_generation: int = 0
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowApplyDefinition:
     __hash__ = None
-    provider_name: str = ""
     spec: WorkflowDefinitionSpec | None = None
     idempotency_key: str = ""
 
@@ -500,8 +495,6 @@ class WorkflowGetRunOutput:
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowDeliverEvent:
     __hash__ = None
-    app_name: str = ""
-    provider_name: str = ""
     event: WorkflowEvent | None = None
 
 
@@ -1231,7 +1224,6 @@ def workflow_signal(value: Any | None = None, **kwargs: Any) -> Any:
         name=data.get("name", ""),
         payload=_optional_struct(data.get("payload")),
         metadata=_optional_struct(data.get("metadata")),
-        created_by_subject_id=data.get("created_by_subject_id", ""),
         created_at=_optional_timestamp(data.get("created_at")),
         idempotency_key=data.get("idempotency_key", ""),
         sequence=data.get("sequence", 0),
@@ -1252,7 +1244,7 @@ def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignal | Non
         metadata=cast(WorkflowJsonObject, struct_to_dict(value.metadata))
         if has_field(value, "metadata")
         else None,
-        created_by_subject_id=value.created_by_subject_id,
+        created_by_subject_id="",
         created_at=_timestamp_to_datetime(value, "created_at"),
         idempotency_key=value.idempotency_key,
         sequence=value.sequence,
@@ -1359,7 +1351,6 @@ def _workflow_start_run_request(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     return pb.StartWorkflowProviderRunRequest(
-        provider_name=data.get("provider_name", ""),
         idempotency_key=data.get("idempotency_key", ""),
         workflow_key=data.get("workflow_key", ""),
         definition_id=data.get("definition_id", ""),
@@ -1387,7 +1378,6 @@ def _workflow_signal_or_start_run_request(
     data = _data(value, kwargs)
     signal = data.get("signal")
     return pb.SignalOrStartWorkflowProviderRunRequest(
-        provider_name=data.get("provider_name", ""),
         workflow_key=data.get("workflow_key", ""),
         idempotency_key=data.get("idempotency_key", ""),
         signal=workflow_signal(signal) if signal is not None else None,
@@ -1403,7 +1393,6 @@ def _workflow_apply_definition_request(value: Any | None = None, **kwargs: Any) 
     data = _data(value, kwargs)
     spec = data.get("spec")
     return pb.ApplyWorkflowProviderDefinitionRequest(
-        provider_name=data.get("provider_name", ""),
         spec=workflow_definition_spec(spec) if spec is not None else None,
         idempotency_key=data.get("idempotency_key", ""),
     )
@@ -1472,8 +1461,6 @@ def _workflow_deliver_event_request(value: Any | None = None, **kwargs: Any) -> 
     data = _data(value, kwargs)
     event = data.get("event")
     return pb.DeliverWorkflowProviderEventRequest(
-        app_name=data.get("app_name", ""),
-        provider_name=data.get("provider_name", ""),
         event=workflow_event(event) if event is not None else None,
     )
 
@@ -1583,7 +1570,6 @@ def workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
         completed_at=_optional_timestamp(data.get("completed_at")),
         status_message=data.get("status_message", ""),
         output=_optional_value(data.get("output")),
-        created_by_subject_id=data.get("created_by_subject_id", ""),
         workflow_key=data.get("workflow_key", ""),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
@@ -1618,7 +1604,7 @@ def workflow_run_input_from_run(
         output=cast(WorkflowJsonValue, value_to_json(value.output))
         if has_field(value, "output")
         else None,
-        created_by_subject_id=value.created_by_subject_id,
+        created_by_subject_id="",
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
@@ -1658,7 +1644,6 @@ def workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
         target=bound_workflow_target(target) if target is not None else None,
         activations=[workflow_activation(item) for item in data.get("activations", [])],
         paused=data.get("paused", False),
-        created_by_subject_id=data.get("created_by_subject_id", ""),
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
         provider_name=data.get("provider_name", ""),
@@ -1684,7 +1669,7 @@ def workflow_definition_input_from_definition(
             for item in value.activations
         ],
         paused=value.paused,
-        created_by_subject_id=value.created_by_subject_id,
+        created_by_subject_id="",
         created_at=_timestamp_to_datetime(value, "created_at"),
         updated_at=_timestamp_to_datetime(value, "updated_at"),
         provider_name=value.provider_name,
@@ -1946,7 +1931,6 @@ class DeliverWorkflowProviderEventRequest:
 
     __hash__ = None
 
-    app_name: str = ""
     event: WorkflowEvent | None = None
     context: Any | None = None
 
@@ -2205,7 +2189,6 @@ def deliver_workflow_provider_event_request_from_proto(
     value: Any,
 ) -> DeliverWorkflowProviderEventRequest:
     return DeliverWorkflowProviderEventRequest(
-        app_name=value.app_name,
         event=workflow_event_input_from_event(value.event)
         if has_field(value, "event")
         else None,

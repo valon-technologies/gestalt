@@ -152,7 +152,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     },
     async deliverEvent(request) {
       calls.push({ method: "deliver-event", detail: request.event?.type ?? "" });
-      return workflowEvent({ id: "delivered-ts", type: request.event?.type ?? "", source: request.appName });
+      return workflowEvent({ id: "delivered-ts", type: request.event?.type ?? "", source: request.event?.source ?? "" });
     },
   });
 
@@ -198,7 +198,6 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       },
     }));
     expect(definition.id).toBe("definition-native-ts");
-    expect(definition.createdBySubjectId).toBe("user:ada");
 
     const run = await client.startRun(create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "run-native-ts",
@@ -223,8 +222,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     expect(output.output?.kind.case).toBe("structValue");
 
     const delivered = await client.deliverEvent(create(DeliverWorkflowProviderEventRequestSchema, {
-      appName: "demo",
-      event: { type: "demo.synced" },
+      event: { type: "demo.synced", source: "demo" },
     }));
     expect(delivered.id).toBe("delivered-ts");
     expect(calls).toEqual([

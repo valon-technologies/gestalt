@@ -286,7 +286,7 @@ export interface WorkflowDefinitionSpec {
   target?: BoundWorkflowTarget | undefined;
   activations?: readonly WorkflowActivation[] | undefined;
   paused?: boolean | undefined;
-  runAs?: SubjectInput | undefined;
+  runAs?: string | undefined;
 }
 
 export interface WorkflowDefinition {
@@ -299,7 +299,7 @@ export interface WorkflowDefinition {
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   providerName?: string | undefined;
-  runAs?: Subject | undefined;
+  runAs?: string | undefined;
 }
 
 export interface WorkflowSignal {
@@ -373,7 +373,7 @@ export interface WorkflowRun {
   workflowKey?: string | undefined;
   providerName?: string | undefined;
   definitionId?: string | undefined;
-  runAs?: Subject | undefined;
+  runAs?: string | undefined;
   input?: JsonObjectInput | undefined;
   definitionGeneration?: bigint | number | undefined;
   currentStepId?: string | undefined;
@@ -501,7 +501,6 @@ export interface SignalWorkflowRunResponse {
 }
 
 export interface DeliverWorkflowProviderEventRequest {
-  appName?: string | undefined;
   event?: WorkflowEvent | undefined;
   context?: ProtoRequestContext | undefined;
 }
@@ -1287,7 +1286,7 @@ export function workflowDefinitionSpecToProto(input?: WorkflowDefinitionSpec): P
     target: boundWorkflowTargetToProto(spec.target),
     activations: spec.activations?.map(workflowActivationToProto) ?? [],
     paused: spec.paused ?? false,
-    runAs: subjectToProto(spec.runAs),
+    runAs: spec.runAs ?? "",
   });
 }
 
@@ -1299,11 +1298,10 @@ export function workflowDefinitionToProto(input: WorkflowDefinition): ProtoWorkf
     target: boundWorkflowTargetToProto(definition.target),
     activations: definition.activations?.map(workflowActivationToProto) ?? [],
     paused: definition.paused ?? false,
-    createdBySubjectId: definition.createdBySubjectId ?? "",
     createdAt: optionalTimestamp(definition.createdAt),
     updatedAt: optionalTimestamp(definition.updatedAt),
     providerName: definition.providerName ?? "",
-    runAs: subjectToProto(definition.runAs),
+    runAs: definition.runAs ?? "",
   });
 }
 
@@ -1315,11 +1313,10 @@ export function workflowDefinitionFromProto(input?: ProtoWorkflowDefinition): Wo
     target: boundWorkflowTargetFromProto(input.target),
     activations: input.activations.map((activation) => workflowActivationFromProto(activation)!),
     paused: input.paused,
-    createdBySubjectId: input.createdBySubjectId,
     createdAt: optionalDate(input.createdAt),
     updatedAt: optionalDate(input.updatedAt),
     providerName: input.providerName,
-    runAs: subjectFromProto(input.runAs),
+    runAs: input.runAs,
   });
 }
 
@@ -1330,7 +1327,6 @@ export function workflowSignalToProto(input?: WorkflowSignal): ProtoWorkflowSign
     name: input.name ?? "",
     payload: optionalStruct(input.payload),
     metadata: optionalStruct(input.metadata),
-    createdBySubjectId: input.createdBySubjectId ?? "",
     createdAt: optionalTimestamp(input.createdAt),
     idempotencyKey: input.idempotencyKey ?? "",
     sequence: BigInt(input.sequence ?? 0),
@@ -1344,7 +1340,6 @@ export function workflowSignalFromProto(input?: ProtoWorkflowSignal): WorkflowSi
     name: input.name,
     payload: optionalObjectFromStruct(input.payload),
     metadata: optionalObjectFromStruct(input.metadata),
-    createdBySubjectId: input.createdBySubjectId,
     createdAt: optionalDate(input.createdAt),
     idempotencyKey: input.idempotencyKey,
     sequence: input.sequence,
@@ -1502,11 +1497,10 @@ export function workflowRunToProto(input: WorkflowRun): ProtoWorkflowRun {
     completedAt: optionalTimestamp(run.completedAt),
     statusMessage: run.statusMessage ?? "",
     output: run.output === undefined ? undefined : valueFromJson(run.output),
-    createdBySubjectId: run.createdBySubjectId ?? "",
     workflowKey: run.workflowKey ?? "",
     providerName: run.providerName ?? "",
     definitionId: run.definitionId ?? "",
-    runAs: subjectToProto(run.runAs),
+    runAs: run.runAs ?? "",
     input: optionalStruct(run.input),
     definitionGeneration: BigInt(run.definitionGeneration ?? 0),
     currentStepId: run.currentStepId ?? "",
@@ -1526,11 +1520,10 @@ export function workflowRunFromProto(input?: ProtoWorkflowRun): WorkflowRun | un
     completedAt: optionalDate(input.completedAt),
     statusMessage: input.statusMessage,
     output: input.output === undefined ? undefined : jsonFromValue(input.output) as JsonInput,
-    createdBySubjectId: input.createdBySubjectId,
     workflowKey: input.workflowKey,
     providerName: input.providerName,
     definitionId: input.definitionId,
-    runAs: subjectFromProto(input.runAs),
+    runAs: input.runAs,
     input: optionalObjectFromStruct(input.input),
     definitionGeneration: input.definitionGeneration,
     currentStepId: input.currentStepId,
@@ -1663,7 +1656,6 @@ function signalOrStartWorkflowProviderRunRequestFromProto(input: ProtoSignalOrSt
 
 function deliverWorkflowProviderEventRequestFromProto(input: ProtoDeliverWorkflowProviderEventRequest): DeliverWorkflowProviderEventRequest {
   return {
-    appName: input.appName,
     event: workflowEventFromProto(input.event),
     context: input.context,
   };
@@ -1676,7 +1668,7 @@ export function workflowDefinitionSpecFromProto(input?: ProtoWorkflowDefinitionS
     target: boundWorkflowTargetFromProto(input.target),
     activations: input.activations.map((activation) => workflowActivationFromProto(activation)!),
     paused: input.paused,
-    runAs: subjectInputFromProto(input.runAs),
+    runAs: input.runAs,
   });
 }
 

@@ -1580,7 +1580,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     }),
   );
   expect(definition.id).toBe("roadmap_sync");
-  expect(definition.createdBySubjectId).toBe("service_account:planner");
 
   const run = await (workflow.startRun as any)(
     create(StartWorkflowProviderRunRequestSchema, {
@@ -1600,7 +1599,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(runApp.name).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
-  expect(run.createdBySubjectId).toBe("user:user-123");
 
   const pausedDefinition = await (workflow.setActivationPaused as any)({
     definitionId: "roadmap_sync",
@@ -1611,7 +1609,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
 
   await (workflow.deliverEvent as any)(
     create(DeliverWorkflowProviderEventRequestSchema, {
-      appName: "roadmap",
       event: {
         id: "evt-1",
         source: "tests",

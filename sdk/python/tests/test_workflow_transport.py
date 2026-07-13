@@ -51,13 +51,12 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
             {
                 "method": "apply_definition",
                 "idempotency_key": request.idempotency_key,
-                "provider_name": request.provider_name,
                 "definition_id": spec.id,
                 "activation_count": str(len(spec.activations)),
             }
         )
         return workflow_pb2.WorkflowDefinition(
-            provider_name=request.provider_name or "basic",
+            provider_name="basic",
             id=spec.id or "def-1",
             generation=7,
             target=spec.target,
@@ -72,13 +71,12 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
             {
                 "method": "start_run",
                 "idempotency_key": request.idempotency_key,
-                "provider_name": request.provider_name,
                 "definition_id": request.definition_id,
                 "workflow_key": request.workflow_key,
             }
         )
         return workflow_pb2.WorkflowRun(
-            provider_name=request.provider_name or "basic",
+            provider_name="basic",
             id="run-1",
             definition_id=request.definition_id,
             workflow_key=request.workflow_key,
@@ -93,7 +91,6 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
             {
                 "method": "signal_or_start_run",
                 "idempotency_key": request.idempotency_key,
-                "provider_name": request.provider_name,
                 "definition_id": request.definition_id,
                 "workflow_key": request.workflow_key,
                 "signal_name": request.signal.name,
@@ -101,7 +98,7 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
         )
         return workflow_pb2.SignalWorkflowRunResponse(
             run=workflow_pb2.WorkflowRun(
-                provider_name=request.provider_name or "basic",
+                provider_name="basic",
                 id="run-signal",
                 definition_id=request.definition_id,
                 workflow_key=request.workflow_key,
@@ -125,8 +122,6 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
                 "event_type": event.type,
                 "event_source": event.source,
                 "event_subject": event.subject,
-                "app_name": request.app_name,
-                "provider_name": request.provider_name,
             }
         )
         if not event.id:
@@ -203,9 +198,7 @@ class WorkflowTransportTests(unittest.TestCase):
         ) as manager:
             delivered = manager.deliver_event(
                 WorkflowDeliverEvent(
-                    app_name="github",
                     event=event,
-                    provider_name="advanced",
                 )
             )
 
@@ -223,8 +216,6 @@ class WorkflowTransportTests(unittest.TestCase):
                     "event_type": "github.app.webhook",
                     "event_source": "github",
                     "event_subject": "acme/widgets",
-                    "app_name": "github",
-                    "provider_name": "advanced",
                 }
             ],
         )
@@ -240,7 +231,6 @@ class WorkflowTransportTests(unittest.TestCase):
         with request.workflows() as manager:
             definition = manager.apply_definition(
                 WorkflowApplyDefinition(
-                    provider_name="managed",
                     spec=WorkflowDefinitionSpec(
                         id="def-managed",
                         target=BoundWorkflowTarget(
@@ -272,7 +262,6 @@ class WorkflowTransportTests(unittest.TestCase):
             )
             run = manager.start_run(
                 WorkflowStartRun(
-                    provider_name="managed",
                     definition_id="def-managed",
                     workflow_key="repo:valon/app",
                     input={"repository": "valon/app"},
@@ -280,7 +269,6 @@ class WorkflowTransportTests(unittest.TestCase):
             )
             signal = manager.signal_or_start_run(
                 WorkflowSignalOrStartRun(
-                    provider_name="managed",
                     definition_id="def-managed",
                     workflow_key="repo:valon/app",
                     signal=WorkflowSignal(name="github", payload={"state": "opened"}),
@@ -289,7 +277,6 @@ class WorkflowTransportTests(unittest.TestCase):
             )
             delivered = manager.deliver_event(
                 WorkflowDeliverEvent(
-                    provider_name="managed",
                     event=WorkflowEvent(
                         source="github",
                         type="github.app.webhook",
@@ -319,21 +306,18 @@ class WorkflowTransportTests(unittest.TestCase):
                 {
                     "method": "apply_definition",
                     "idempotency_key": "workflow-request-key-py",
-                    "provider_name": "managed",
                     "definition_id": "def-managed",
                     "activation_count": "1",
                 },
                 {
                     "method": "start_run",
                     "idempotency_key": "workflow-request-key-py",
-                    "provider_name": "managed",
                     "definition_id": "def-managed",
                     "workflow_key": "repo:valon/app",
                 },
                 {
                     "method": "signal_or_start_run",
                     "idempotency_key": "workflow-request-key-py",
-                    "provider_name": "managed",
                     "definition_id": "def-managed",
                     "workflow_key": "repo:valon/app",
                     "signal_name": "github",
@@ -344,8 +328,6 @@ class WorkflowTransportTests(unittest.TestCase):
                     "event_type": "github.app.webhook",
                     "event_source": "github",
                     "event_subject": "installation:99",
-                    "app_name": "",
-                    "provider_name": "managed",
                 },
             ],
         )
