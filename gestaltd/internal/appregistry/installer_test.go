@@ -9,14 +9,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
-func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
+func TestInstaller_does_not_record_change_request_on_failure(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -35,9 +34,9 @@ func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": registry,
 		},
-		Reader:  registrytest.NewReaderForServer(t, registrySrv.URL),
-		Catalog: svc.AppVersionCatalog,
-		Locks:   svc.AppVersionInstallLocks,
+		Reader:         registrytest.NewReaderForServer(t, registrySrv.URL),
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
 	}
 
 	_, err = installer.Install(ctx, appregistry.InstallInput{
@@ -50,18 +49,12 @@ func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
 		t.Fatal("expected install error")
 	}
 
-	records, err := svc.AppVersionCatalog.ListRecordsByApp(ctx, "g-issues")
+	requests, err := svc.AppVersionChangeRequests.ListRequestsByApp(ctx, "g-issues")
 	if err != nil {
-		t.Fatalf("ListRecordsByApp: %v", err)
+		t.Fatalf("ListRequestsByApp: %v", err)
 	}
-	if len(records) != 1 {
-		t.Fatalf("records = %#v", records)
-	}
-	if records[0].Type != core.AppVersionCatalogRecordTypeInstallFailed {
-		t.Fatalf("record type = %q", records[0].Type)
-	}
-	if records[0].Version != "missing-version" {
-		t.Fatalf("record version = %q", records[0].Version)
+	if len(requests) != 0 {
+		t.Fatalf("requests = %#v", requests)
 	}
 }
 
@@ -77,9 +70,12 @@ func TestInstaller_does_not_materialize_locally(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": fixture.Registry,
 		},
-		Reader:  fixture.Reader,
-		Catalog: svc.AppVersionCatalog,
-		Locks:   svc.AppVersionInstallLocks,
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
 	}
 
 	_, err := installer.Install(ctx, appregistry.InstallInput{
@@ -111,9 +107,12 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": fixture.Registry,
 		},
-		Reader:  fixture.Reader,
-		Catalog: svc.AppVersionCatalog,
-		Locks:   svc.AppVersionInstallLocks,
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
 	}
 
 	input := appregistry.InstallInput{
@@ -132,5 +131,54 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 	}
 	if !errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled) {
 		t.Fatalf("install error = %v, want %v", err, appregistry.ErrAppVersionAlreadyInstalled)
+	}
+}
+
+func configEntryWithResolvedVersion(version string) *config.ProviderEntry {
+	entry := &config.ProviderEntry{}
+	entry.Source.SetResolvedPackage("", version)
+	return entry
+}
+
+func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+	}
+
+	if _, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+		Actor:    "user:alice",
+	}); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+
+	requests, err := svc.AppVersionChangeRequests.ListRequestsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListRequestsByApp: %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("requests = %#v", requests)
+	}
+	if requests[0].FromVersion != "0.0.0-config" {
+		t.Fatalf("first from_version = %q, want 0.0.0-config", requests[0].FromVersion)
+	}
+	if requests[0].ToVersion != fixture.Version {
+		t.Fatalf("first to_version = %q, want %s", requests[0].ToVersion, fixture.Version)
 	}
 }

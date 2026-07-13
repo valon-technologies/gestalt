@@ -187,15 +187,15 @@ These providers are prerequisites for serving dynamic apps. They should remain p
 
 Non-core app installation state should live in IndexedDB.
 
-**Source of truth:** `app_version_catalog` — an append-only catalog of versions Gestalt knows about per app. Successful installs append a `version_added` record whose metadata carries the install contract (registry, source ref, artifact checksums, release URL, materialized path, `installed_at`, etc.). Failed attempts append `install_failed` records for audit only.
+**Source of truth:** `app_version_change_requests` — an append-only log of fleet version change requests per app (`from_version` → `to_version`). Successful installs append a change request whose metadata carries the install contract (registry, source ref, artifact checksums, release URL, materialized path, `installed_at`, etc.). Failed validation rejects the HTTP request; no row is written.
 
 **Materialized views** (computed in Go, not separate stores):
 
-- **Known versions** — projected from `version_added` records via `ListKnownVersionsByApp` and `ListAllKnownVersions`, one entry per `(app, version)` pair. Admin HTTP list/get endpoints read these projections. Install state is catalog-only; there is no separate per-app installation upsert store.
+- **Known versions** — projected from change requests via `ListKnownVersionsByApp` and `ListAllKnownVersions`, one entry per `(app, to_version)` pair. Admin HTTP list/get endpoints read these projections.
 
 There is **no fleet head**, **no promotion**, and **no rollback** yet. Those belong to later activation/rollout work.
 
-Store schema, record types, and service API: [indexeddb.md](./indexeddb.md#store-app_version_catalog-source-of-truth).
+Store schema and service API: [indexeddb.md](./indexeddb.md#store-app_version_change_requests-source-of-truth).
 
 ### Validation Happens at Publish Time and Install Time
 
@@ -218,7 +218,7 @@ Install-time validation should ensure:
 
 Activation should be phased:
 
-1. Validate the candidate version against registry metadata and append `version_added` to `app_version_catalog` (fleet declaration) — step 7.
+1. Validate the candidate version against registry metadata and append a change request to `app_version_change_requests` (fleet declaration) — step 7.
 2. Each replica acknowledges the catalog row, then progressively downloads, restarts, and mounts the new binary — steps 8–11. See [lifecycle.md](./lifecycle.md#polling).
 
 Fleet activation, rollback, and head selection are planned for later steps (12+).
@@ -257,10 +257,10 @@ Core recovery paths must not depend on dynamically installed apps.
 2. Use a parallel path to `publish-app-snapshot.yml` so normal app publishing is not interrupted.
 3. Start with publishing `g-issues`.
 4. Prototype a Gestalt endpoint that lists available versions in configured registries. See [lifecycle.md](./lifecycle.md).
-5. Add IndexedDB version catalog store and projection helpers (`app_version_catalog` + known-version views). See [indexeddb.md](./indexeddb.md).
+5. Add IndexedDB change request store and projection helpers (`app_version_change_requests` + known-version views). See [indexeddb.md](./indexeddb.md).
 6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog writes; `app_installations` store removed. See [lifecycle.md](./lifecycle.md), [tests.md](./tests.md).
-7. Split install from local materialization — `POST …/install` writes `app_version_catalog` only. See [lifecycle.md](./lifecycle.md).
-8. Per-replica catalog polling: acknowledge each new `version_added` row in IndexedDB and emit a metric. See [lifecycle.md](./lifecycle.md#polling).
+7. Split install from local materialization — `POST …/install` writes `app_version_change_requests` only. See [lifecycle.md](./lifecycle.md).
+8. Per-replica catalog polling: acknowledge each new `change request` row in IndexedDB and emit a metric. See [lifecycle.md](./lifecycle.md#polling).
 9. Stop the running app and start the same app back up (restart machinery only; no binary change yet). Use a **1 minute** delay between stop and start during early rollout testing so operators can observe that the process started; production restart has no intentional wait.
 10. Download and materialize the new version artifact **before** bringing the app down.
 11. Mount the newly materialized binary instead of the old one when restarting.

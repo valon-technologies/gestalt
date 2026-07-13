@@ -9,12 +9,12 @@ import (
 )
 
 type Services struct {
-	Users                  *UserService
-	ExternalCredentials    core.ExternalCredentialProvider
-	ManagedSubjects        *ManagedSubjectService
-	AppVersionCatalog      *AppVersionCatalogService
-	AppVersionInstallLocks *AppVersionInstallLockService
-	DB                     indexeddb.IndexedDB
+	Users                    *UserService
+	ExternalCredentials      core.ExternalCredentialProvider
+	ManagedSubjects          *ManagedSubjectService
+	AppVersionChangeRequests *AppVersionChangeRequestService
+	AppVersionInstallLocks   *AppVersionInstallLockService
+	DB                       indexeddb.IndexedDB
 }
 
 // NewOptions configures coredata bootstrap behavior.
@@ -46,8 +46,8 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppSHAs, AppSHAsSchema); err != nil {
 			return nil, fmt.Errorf("create app_shas store: %w", err)
 		}
-		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionCatalog, AppVersionCatalogSchema); err != nil {
-			return nil, fmt.Errorf("create app_version_catalog store: %w", err)
+		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionChangeRequests, AppVersionChangeRequestsSchema); err != nil {
+			return nil, fmt.Errorf("create app_version_change_requests store: %w", err)
 		}
 		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionInstallLocks, AppVersionInstallLocksSchema); err != nil {
 			return nil, fmt.Errorf("create app_version_install_locks store: %w", err)
@@ -55,15 +55,15 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	}
 	users := NewUserService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
-	appVersionCatalog := NewAppVersionCatalogService(ds)
+	appVersionChangeRequests := NewAppVersionChangeRequestService(ds)
 	appVersionInstallLocks := NewAppVersionInstallLockService(ds)
 	return &Services{
-		ExternalCredentials:    nil,
-		Users:                  users,
-		ManagedSubjects:        managedSubjects,
-		AppVersionCatalog:      appVersionCatalog,
-		AppVersionInstallLocks: appVersionInstallLocks,
-		DB:                     ds,
+		ExternalCredentials:      nil,
+		Users:                    users,
+		ManagedSubjects:          managedSubjects,
+		AppVersionChangeRequests: appVersionChangeRequests,
+		AppVersionInstallLocks:   appVersionInstallLocks,
+		DB:                       ds,
 	}, nil
 }
 
