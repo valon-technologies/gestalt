@@ -31,7 +31,6 @@ use gestalt::workflow::{
     WorkflowActivation as NativeWorkflowActivation,
     WorkflowActivationTrigger as NativeWorkflowActivationTrigger,
     WorkflowDefinitionSpec as NativeWorkflowDefinitionSpec,
-    WorkflowDeliverEventOptions as NativeWorkflowDeliverEventOptions,
     WorkflowEvent as NativeWorkflowEvent,
     WorkflowScheduleActivation as NativeWorkflowScheduleActivation,
     WorkflowSignal as NativeWorkflowSignal, WorkflowStep as NativeWorkflowStep,
@@ -87,7 +86,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             method: "apply-definition".to_string(),
             context_subject_id: context_subject_id(&request.context),
             relay_token,
-            provider_name: request.provider_name.clone(),
+            provider_name: "temporal".to_string(),
             definition_id: spec.id.clone(),
             ..Default::default()
         });
@@ -97,7 +96,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             target: spec.target,
             activations: spec.activations,
             paused: spec.paused,
-            provider_name: request.provider_name,
+            provider_name: "temporal".to_string(),
             ..Default::default()
         }))
     }
@@ -228,14 +227,14 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             method: "start-run".to_string(),
             context_subject_id: context_subject_id(&request.context),
             relay_token,
-            provider_name: request.provider_name.clone(),
+            provider_name: "temporal".to_string(),
             definition_id: request.definition_id.clone(),
             ..Default::default()
         });
         Ok(GrpcResponse::new(WorkflowRun {
             id: "run-1".to_string(),
             status: WorkflowRunStatus::Pending as i32,
-            provider_name: request.provider_name,
+            provider_name: "temporal".to_string(),
             definition_id: request.definition_id,
             workflow_key: request.workflow_key,
             input: request.input,
@@ -407,7 +406,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             method: "signal-or-start-run".to_string(),
             context_subject_id: context_subject_id(&request.context),
             relay_token,
-            provider_name: request.provider_name.clone(),
+            provider_name: "temporal".to_string(),
             definition_id: request.definition_id.clone(),
             event_type: request
                 .signal
@@ -419,7 +418,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         Ok(GrpcResponse::new(SignalWorkflowRunResponse {
             run: Some(WorkflowRun {
                 id: "run-2".to_string(),
-                provider_name: request.provider_name,
+                provider_name: "temporal".to_string(),
                 definition_id: request.definition_id,
                 workflow_key: request.workflow_key.clone(),
                 input: request.input,
@@ -445,7 +444,6 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             method: "deliver-event".to_string(),
             context_subject_id: context_subject_id(&request.context),
             relay_token,
-            provider_name: request.provider_name,
             event_type: event.r#type.clone(),
             ..Default::default()
         });
@@ -475,7 +473,6 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
 
     let definition = workflow
         .apply_definition(
-            "temporal".to_string(),
             "default-key".to_string(),
             Some(NativeWorkflowDefinitionSpec {
                 id: "definition-42".to_string(),
@@ -527,7 +524,6 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
         .start_run(
             "default-key".to_string(),
             "repo:toolshed".to_string(),
-            "temporal".to_string(),
             "definition-42".to_string(),
             7,
             Some(run_input.as_object().expect("run input object").clone()),
@@ -578,7 +574,6 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
         .signal_or_start_run(
             "thread:C123:123".to_string(),
             "default-key".to_string(),
-            "temporal".to_string(),
             "definition-42".to_string(),
             7,
             Some(NativeWorkflowSignal {
@@ -615,19 +610,13 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
     assert_eq!(canceled.status_message, "done testing");
 
     let delivered = workflow
-        .deliver_event(
-            Some(NativeWorkflowEvent {
-                id: "evt_1".to_string(),
-                source: "github".to_string(),
-                spec_version: "1.0".to_string(),
-                r#type: "github.pull_request".to_string(),
-                ..Default::default()
-            }),
-            NativeWorkflowDeliverEventOptions {
-                app_name: "github".to_string(),
-                provider_name: "temporal".to_string(),
-            },
-        )
+        .deliver_event(Some(NativeWorkflowEvent {
+            id: "evt_1".to_string(),
+            source: "github".to_string(),
+            spec_version: "1.0".to_string(),
+            r#type: "github.pull_request".to_string(),
+            ..Default::default()
+        }))
         .await
         .expect("deliver event");
     assert_eq!(delivered.id, "evt_1");
@@ -725,7 +714,6 @@ async fn start_run_raw_injects_default_context_when_unset() {
         .with_context(request_context_native("user:request-workflow"));
     workflow
         .start_run_raw(NativeStartRunRequest {
-            provider_name: "temporal".to_string(),
             workflow_key: "wf-key".to_string(),
             definition_id: "definition-42".to_string(),
             idempotency_key: "request-key".to_string(),

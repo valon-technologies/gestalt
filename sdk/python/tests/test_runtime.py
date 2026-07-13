@@ -1497,7 +1497,6 @@ class WorkflowRuntimeTests(unittest.TestCase):
 
         response = wrapped.DeliverEvent(
             workflow_pb2.DeliverWorkflowProviderEventRequest(
-                app_name="github",
                 event=workflow_pb2.WorkflowEvent(
                     source="github",
                     type="github.app.webhook",
@@ -1507,7 +1506,6 @@ class WorkflowRuntimeTests(unittest.TestCase):
         )
 
         self.assertIsInstance(provider.request, DeliverWorkflowProviderEventRequest)
-        self.assertEqual(provider.request.app_name, "github")
         self.assertEqual(response.id, "published-py")
         self.assertEqual(response.source, "github")
 

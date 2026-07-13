@@ -163,7 +163,7 @@ export const provider = defineWorkflowProvider({
     return workflowEvent({
       id: `delivered:${deliverCount}`,
       type: request.event?.type ?? "",
-      source: request.event?.source ?? request.appName ?? "",
+      source: request.event?.source ?? "",
     });
   },
   warnings() {

@@ -62,11 +62,10 @@ test("Workflow forwards request context to provider calls", async () => {
             method: "apply-definition",
             subjectId: input.context?.subject?.id ?? "",
             idempotencyKey: input.idempotencyKey,
-            providerName: input.providerName,
             ...(input.spec?.id ? { definitionId: input.spec.id } : {}),
           });
           return create(WorkflowDefinitionSchema, {
-            providerName: input.providerName || "basic",
+            providerName: "basic",
             id: input.spec?.id || "def-1",
             generation: 3n,
             target: input.spec?.target,
@@ -87,11 +86,10 @@ test("Workflow forwards request context to provider calls", async () => {
             method: "start-run",
             subjectId: input.context?.subject?.id ?? "",
             idempotencyKey: input.idempotencyKey,
-            providerName: input.providerName,
             definitionId: input.definitionId,
           });
           return create(WorkflowRunSchema, {
-            providerName: input.providerName || "basic",
+            providerName: "basic",
             id: "run-1",
             status: WorkflowRunStatus.PENDING,
             definitionId: input.definitionId,
@@ -148,7 +146,6 @@ test("Workflow forwards request context to provider calls", async () => {
     const workflow = Workflow.connect({ context });
 
     const applied = await workflow.applyDefinition(
-      "basic",
       "workflow-definition-key-ts",
       {
         id: "def-1",
@@ -177,7 +174,6 @@ test("Workflow forwards request context to provider calls", async () => {
     const startedRun = await workflow.startRun(
       "workflow-request-key-ts",
       "roadmap-summary:item-1",
-      "basic",
       "def-1",
       0n,
       { itemId: "item-1" },
@@ -185,7 +181,6 @@ test("Workflow forwards request context to provider calls", async () => {
     const signaledRun = await workflow.signalRun("run-1", {
       id: "",
       name: "roadmap.item.updated",
-      createdBySubjectId: "",
       idempotencyKey: "",
       sequence: 0n,
     });
@@ -200,7 +195,6 @@ test("Workflow forwards request context to provider calls", async () => {
         method: "apply-definition",
         subjectId: "user:user-123",
         idempotencyKey: "workflow-definition-key-ts",
-        providerName: "basic",
         definitionId: "def-1",
       },
       {
@@ -211,7 +205,6 @@ test("Workflow forwards request context to provider calls", async () => {
         method: "start-run",
         subjectId: "user:user-123",
         idempotencyKey: "workflow-request-key-ts",
-        providerName: "basic",
         definitionId: "def-1",
       },
       {
