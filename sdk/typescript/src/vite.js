@@ -44,6 +44,7 @@ function devBinding(port) {
 }
 
 const DEFAULT_DEV_API_PROXY_TARGET = "http://127.0.0.1:8080";
+const DEV_API_PROXY_TOKEN_ENV = "GESTALT_DEV_API_PROXY_TOKEN";
 
 /**
  * @param {string | undefined | null} value
@@ -64,6 +65,20 @@ function normalizeApiProxyTarget(value) {
 function resolveGestaltDevApiProxyTarget(env) {
   return normalizeApiProxyTarget(
     env.GESTALT_API_PROXY_TARGET?.trim() || env.GESTALT_BASE_URL?.trim(),
+  );
+}
+
+function canInjectDevApiToken(req, devPort, apiTarget) {
+  const target = new URL(apiTarget);
+  const host = req.headers.host?.toLowerCase();
+  const origin = req.headers.origin?.toLowerCase();
+  return (
+    ["127.0.0.1", "localhost", "[::1]"].includes(target.hostname) &&
+    ["127.0.0.1", "localhost", "[::1]"].some(
+      (name) => `${name}:${devPort}` === host,
+    ) &&
+    (!origin || origin === `http://${host}`) &&
+    req.headers["sec-fetch-site"] !== "cross-site"
   );
 }
 
@@ -96,7 +111,22 @@ function gestaltConfig(env, command) {
   const base = normalizeBasePath(env.GESTALT_DEV_BASE_PATH);
   const binding = devBinding(port);
   const apiTarget = resolveGestaltDevApiProxyTarget(env);
-  const proxy = { target: apiTarget, changeOrigin: true };
+  const token = env[DEV_API_PROXY_TOKEN_ENV]?.trim();
+  const proxy = {
+    target: apiTarget,
+    changeOrigin: true,
+    configure(proxyServer) {
+      proxyServer.on("proxyReq", (proxyReq, req) => {
+        if (
+          token &&
+          !req.headers.authorization &&
+          canInjectDevApiToken(req, devPort, apiTarget)
+        ) {
+          proxyReq.setHeader("Authorization", `Bearer ${token}`);
+        }
+      });
+    },
+  };
 
   return {
     base,
