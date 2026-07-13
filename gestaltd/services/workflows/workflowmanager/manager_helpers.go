@@ -23,11 +23,6 @@ func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	}
 }
 
-func workflowSubjectOwnedBy(ownerSubjectID string, p *principal.Principal) bool {
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(ownerSubjectID) == subjectID
-}
-
 func workflowCallerSubjectID(_ context.Context, reqCtx *proto.RequestContext, p *principal.Principal) (string, error) {
 	if id := appaccessservice.SubjectIDFromRequestContext(reqCtx); id != "" {
 		return id, nil

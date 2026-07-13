@@ -323,14 +323,6 @@ func (a *workflowAuditEvent) setWorkflowTargetAuthorizationFailure(target corewo
 	a.entry.WorkflowTargetOperation = strings.TrimSpace(failure.operation)
 }
 
-func (a *workflowAuditEvent) clone() *workflowAuditEvent {
-	if a == nil {
-		return nil
-	}
-	copied := *a
-	return &copied
-}
-
 func (a *workflowAuditEvent) finish(ctx context.Context, err error) {
 	if a == nil || a.sink == nil {
 		return

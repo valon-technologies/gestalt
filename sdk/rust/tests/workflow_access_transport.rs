@@ -473,6 +473,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
     let definition = workflow
         .apply_definition(
             "default-key".to_string(),
+            "default".to_string(),
             Some(NativeWorkflowDefinitionSpec {
                 id: "definition-42".to_string(),
                 target: Some(app_target_native()),
@@ -523,6 +524,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
         .start_run(
             "default-key".to_string(),
             "repo:toolshed".to_string(),
+            "default".to_string(),
             "definition-42".to_string(),
             7,
             Some(run_input.as_object().expect("run input object").clone()),
@@ -573,6 +575,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
         .signal_or_start_run(
             "thread:C123:123".to_string(),
             "default-key".to_string(),
+            "default".to_string(),
             "definition-42".to_string(),
             7,
             Some(NativeWorkflowSignal {
@@ -609,13 +612,16 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
     assert_eq!(canceled.status_message, "done testing");
 
     let delivered = workflow
-        .deliver_event(Some(NativeWorkflowEvent {
-            id: "evt_1".to_string(),
-            source: "github".to_string(),
-            spec_version: "1.0".to_string(),
-            r#type: "github.pull_request".to_string(),
-            ..Default::default()
-        }))
+        .deliver_event(
+            "default".to_string(),
+            Some(NativeWorkflowEvent {
+                id: "evt_1".to_string(),
+                source: "github".to_string(),
+                spec_version: "1.0".to_string(),
+                r#type: "github.pull_request".to_string(),
+                ..Default::default()
+            }),
+        )
         .await
         .expect("deliver event");
     assert_eq!(delivered.id, "evt_1");
