@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"gopkg.in/yaml.v3"
 )
@@ -1765,6 +1766,19 @@ func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {
 	return e.ResolvedManifest.Spec
 }
 
+func (e *ProviderEntry) EffectiveAllowedOperations() map[string]*OperationOverride {
+	if e == nil {
+		return nil
+	}
+	if e.AllowedOperations != nil {
+		return e.AllowedOperations
+	}
+	if spec := e.ManifestSpec(); spec != nil {
+		return operationexposure.FromManifestAllowed(spec.AllowedOperations)
+	}
+	return nil
+}
+
 func (e *ProviderEntry) EffectiveHTTPSecuritySchemes() map[string]*HTTPSecurityScheme {
 	var merged map[string]*HTTPSecurityScheme
 	if spec := e.ManifestSpec(); spec != nil && spec.SecuritySchemes != nil {
@@ -2282,8 +2296,8 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	return dst
 }
 
-// OperationOverride holds optional alias and description for an allowed operation.
-type OperationOverride = providermanifestv1.ManifestOperationOverride
+// OperationOverride holds deployer-owned allowed-operation metadata from config.
+type OperationOverride = operationexposure.OperationOverride
 
 type AppCapabilitiesConfig struct {
 	Workflow *AppWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`

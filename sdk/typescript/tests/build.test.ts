@@ -387,7 +387,6 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
         method: "POST",
         title: "Hello",
         description: "Return a greeting",
-        allowedRoles: ["viewer", "admin"],
       });
       expect(
         metadata.staticCatalog?.operations?.find(
@@ -519,7 +518,6 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
       const sessionOperation = sessionCatalog.catalog?.operations?.[0];
       expect(sessionOperation).toBeDefined();
       expect(sessionOperation?.id).toBe("session-hello");
-      expect(sessionOperation?.allowedRoles).toEqual(["viewer", "admin"]);
       expect(sessionOperation?.title).toBe(
         `Session Hello ${label} user:user-123 subject viewer`,
       );

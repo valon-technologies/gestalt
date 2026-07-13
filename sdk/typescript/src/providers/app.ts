@@ -61,7 +61,6 @@ export interface OperationOptions<In, Out> {
   method?: string;
   title?: string;
   description?: string;
-  allowedRoles?: string[];
   tags?: string[];
   readOnly?: boolean;
   visible?: boolean;
@@ -132,7 +131,6 @@ export function operation<In, Out>(
     method: normalizeMethod(options.method),
     title: options.title?.trim() ?? "",
     description: options.description?.trim() ?? "",
-    allowedRoles: normalizeAllowedRoles(options.allowedRoles),
     tags: [...(options.tags ?? [])],
   };
 }
@@ -260,9 +258,6 @@ export class AppProvider extends ProviderBase {
           }
           if (entry.tags && entry.tags.length > 0) {
             operationCatalog.tags = [...entry.tags];
-          }
-          if (entry.allowedRoles && entry.allowedRoles.length > 0) {
-            operationCatalog.allowedRoles = [...entry.allowedRoles];
           }
           if (entry.readOnly !== undefined) {
             operationCatalog.readOnly = entry.readOnly;
@@ -425,19 +420,6 @@ function normalizeMethod(value: string | undefined): string {
   return (value?.trim() || "POST").toUpperCase();
 }
 
-function normalizeAllowedRoles(value: string[] | undefined): string[] {
-  const normalized: string[] = [];
-  const seen = new Set<string>();
-  for (const role of value ?? []) {
-    const trimmed = role.trim();
-    if (!trimmed || seen.has(trimmed)) {
-      continue;
-    }
-    seen.add(trimmed);
-    normalized.push(trimmed);
-  }
-  return normalized;
-}
 
 function normalizeOperationInput(
   schema: Schema<unknown>,

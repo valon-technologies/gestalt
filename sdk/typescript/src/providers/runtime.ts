@@ -1100,7 +1100,6 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
         tags: op.tags ?? [],
         readOnly: op.readOnly ?? false,
         transport: op.transport ?? "",
-        allowedRoles: op.allowedRoles ?? [],
         parameters: (op.parameters ?? []).map((p) =>
           create(ProtoCatalogParameterSchema, {
             name: p.name,

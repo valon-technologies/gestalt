@@ -80,7 +80,6 @@ impl Provider for TestProvider {
                 read_only: false,
                 visible: None,
                 transport: String::new(),
-                allowed_roles: Vec::new(),
             }],
         }))
     }

@@ -29,7 +29,6 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 			Description:    op.GetDescription(),
 			InputSchema:    jsonRawFromString(op.GetInputSchema()),
 			OutputSchema:   jsonRawFromString(op.GetOutputSchema()),
-			AllowedRoles:   op.GetAllowedRoles(),
 			RequiredScopes: op.GetRequiredScopes(),
 			Tags:           op.GetTags(),
 			ReadOnly:       op.GetReadOnly(),

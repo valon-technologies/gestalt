@@ -72,7 +72,6 @@ type CatalogOperation struct {
 	ReadOnly       bool                  `json:"readOnly,omitempty"`
 	Visible        *bool                 `json:"visible,omitempty"`
 	Transport      string                `json:"transport,omitempty"`
-	AllowedRoles   []string              `json:"allowedRoles,omitempty"`
 }
 
 // GetId returns the id field; it is safe to call on a nil receiver.
@@ -177,14 +176,6 @@ func (o *CatalogOperation) GetTransport() string {
 		return ""
 	}
 	return o.Transport
-}
-
-// GetAllowedRoles returns the allowed roles field; it is safe to call on a nil receiver.
-func (o *CatalogOperation) GetAllowedRoles() []string {
-	if o == nil {
-		return nil
-	}
-	return o.AllowedRoles
 }
 
 // CatalogParameter describes one input parameter in an app catalog operation.
@@ -319,7 +310,6 @@ func cloneCatalogOperation(src *CatalogOperation) *CatalogOperation {
 		Tags:           append([]string(nil), src.Tags...),
 		ReadOnly:       src.ReadOnly,
 		Transport:      src.Transport,
-		AllowedRoles:   append([]string(nil), src.AllowedRoles...),
 	}
 	if src.Visible != nil {
 		visible := *src.Visible
@@ -417,7 +407,6 @@ func catalogOperationToProto(op *CatalogOperation) (*proto.CatalogOperation, err
 		ReadOnly:       op.ReadOnly,
 		Visible:        cloneBool(op.Visible),
 		Transport:      op.Transport,
-		AllowedRoles:   append([]string(nil), op.AllowedRoles...),
 	}
 	for i, param := range op.Parameters {
 		pbParam, err := catalogParameterToProto(param)

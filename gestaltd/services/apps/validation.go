@@ -348,5 +348,5 @@ func effectiveAllowedOperations(entry *ValidationApp, spec *providermanifestv1.S
 	if spec == nil {
 		return nil
 	}
-	return spec.AllowedOperations
+	return operationexposure.FromManifestAllowed(spec.AllowedOperations)
 }

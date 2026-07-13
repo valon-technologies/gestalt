@@ -108,7 +108,6 @@ class App:
         method: str = DEFAULT_OPERATION_METHOD,
         title: str = "",
         description: str = "",
-        allowed_roles: list[str] | None = None,
         tags: list[str] | None = None,
         read_only: bool = False,
         visible: bool | None = None,
@@ -128,7 +127,6 @@ class App:
                 method=(method or DEFAULT_OPERATION_METHOD).upper(),
                 title=title.strip(),
                 description=description.strip(),
-                allowed_roles=_normalize_allowed_roles(allowed_roles),
                 tags=list(tags or []),
                 read_only=read_only,
                 visible=visible,
@@ -343,7 +341,6 @@ def operation(
     method: str = DEFAULT_OPERATION_METHOD,
     title: str = "",
     description: str = "",
-    allowed_roles: list[str] | None = None,
     tags: list[str] | None = None,
     read_only: bool = False,
     visible: bool | None = None,
@@ -372,7 +369,6 @@ def operation(
             method=method,
             title=title,
             description=description,
-            allowed_roles=allowed_roles,
             tags=tags,
             read_only=read_only,
             visible=visible,
@@ -409,18 +405,6 @@ def http_subject(func: Any | None = None, /) -> Any:
 
 def _module_app(module: types.ModuleType) -> "App":
     return _MODULE_APPS.for_module(module)
-
-
-def _normalize_allowed_roles(allowed_roles: list[str] | None) -> list[str]:
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for role in allowed_roles or []:
-        trimmed = role.strip()
-        if not trimmed or trimmed in seen:
-            continue
-        seen.add(trimmed)
-        normalized.append(trimmed)
-    return normalized
 
 
 def _inspect_session_catalog_handler(func: Any) -> bool:
@@ -482,8 +466,6 @@ def _catalog_operation_dict(operation: OperationDefinition) -> dict[str, Any]:
     parameters = _catalog_parameters_dict(operation.input_type)
     if parameters:
         payload["parameters"] = parameters
-    if operation.allowed_roles:
-        payload["allowed_roles"] = list(operation.allowed_roles)
     if operation.tags:
         payload["tags"] = list(operation.tags)
     if operation.visible is not None:

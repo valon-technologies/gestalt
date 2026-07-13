@@ -184,7 +184,6 @@ func cloneTestCatalog(src *gestalt.Catalog) *gestalt.Catalog {
 			ReadOnly:       op.ReadOnly,
 			Visible:        cloneTestBool(op.Visible),
 			Transport:      op.Transport,
-			AllowedRoles:   append([]string(nil), op.AllowedRoles...),
 		})
 	}
 	return out
@@ -266,7 +265,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 			sessionCatalog: &gestalt.Catalog{
 				Name: "test-provider",
 				Operations: []*gestalt.CatalogOperation{
-					{Id: "session_op", Method: http.MethodGet, AllowedRoles: []string{"viewer"}},
+					{Id: "session_op", Method: http.MethodGet},
 				},
 			},
 		}, sessionCatalogStubRouter)
@@ -304,7 +303,6 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 							{Name: "count", Type: "integer", Default: float64(5), HasDefault: true},
 							{Name: "optional", Type: "object", HasDefault: true},
 						},
-						AllowedRoles: []string{"viewer"},
 					},
 				},
 			},
@@ -336,9 +334,6 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		}
 		if resp.GetCatalog().GetDisplayName() != "user:user-123|subject|roadmap|viewer|https://gestalt.example.test" {
 			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|subject|roadmap|viewer|https://gestalt.example.test")
-		}
-		if got := resp.GetCatalog().GetOperations()[0].GetAllowedRoles(); len(got) != 1 || got[0] != "viewer" {
-			t.Fatalf("AllowedRoles = %#v, want %#v", got, []string{"viewer"})
 		}
 		op := resp.GetCatalog().GetOperations()[0]
 		if op.GetInputSchema() == "" || op.GetOutputSchema() == "" {
