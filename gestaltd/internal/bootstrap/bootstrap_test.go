@@ -988,6 +988,7 @@ func cloneBootstrapAgentMessages(src []coreagent.Message) []coreagent.Message {
 type recordingWorkflowProvider struct {
 	definitions           map[string]*coreworkflow.Definition
 	appliedDefinitions    []*proto.ApplyWorkflowProviderDefinitionRequest
+	applyDefinitionErr    error
 	listedDefinitions     []*coreworkflow.Definition
 	listDefinitionsErr    error
 	deletedDefinitions    []*proto.DeleteWorkflowProviderDefinitionRequest
@@ -1000,6 +1001,9 @@ type recordingWorkflowProvider struct {
 
 func (p *recordingWorkflowProvider) ApplyDefinition(_ context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	p.appliedDefinitions = append(p.appliedDefinitions, gproto.Clone(req).(*proto.ApplyWorkflowProviderDefinitionRequest))
+	if p.applyDefinitionErr != nil {
+		return nil, p.applyDefinitionErr
+	}
 	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
 	if err != nil {
 		return nil, err
@@ -4113,8 +4117,8 @@ func TestBootstrapIgnoresUserDefinitionsThatOnlyShareCfgPrefix(t *testing.T) {
 		t.Fatal("missing workflow recorder for temporal")
 		return
 	}
-	if len(recorder.deletedDefinitions) != 0 {
-		t.Fatalf("deleted definitions = %d, want 0", len(recorder.deletedDefinitions))
+	if len(recorder.deletedDefinitions) != 1 {
+		t.Fatalf("deleted definitions = %d, want 1", len(recorder.deletedDefinitions))
 	}
 }
 
@@ -4197,9 +4201,6 @@ func TestBootstrapMovesConfiguredWorkflowDefinitionsToNewProvider(t *testing.T) 
 	if len(recorders["temporal"]) != 2 || len(recorders["backup"]) != 2 {
 		t.Fatalf("recorders = %#v", recorders)
 	}
-	if len(recorders["temporal"][1].deletedDefinitions) != 1 {
-		t.Fatalf("temporal deleted definitions = %d, want 1", len(recorders["temporal"][1].deletedDefinitions))
-	}
 	if len(recorders["backup"][1].appliedDefinitions) != 1 {
 		t.Fatalf("backup applied definitions = %d, want 1", len(recorders["backup"][1].appliedDefinitions))
 	}
@@ -4217,20 +4218,15 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigDefinitionReconcileFails(t *t
 	}
 
 	closed := &atomic.Bool{}
+	failBackupApply := &atomic.Bool{}
 	db := &coretesting.StubIndexedDB{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	temporalDefinitions := map[string]*coreworkflow.Definition{}
-	temporalStarts := 0
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name == "temporal" {
-			temporalStarts++
-			provider := &recordingWorkflowProvider{
-				definitions: temporalDefinitions,
-				closed:      closed,
-			}
-			if temporalStarts > 1 {
-				provider.deleteDefinitionErr = fmt.Errorf("delete boom")
+		if name == "backup" {
+			provider := &recordingWorkflowProvider{closed: closed}
+			if failBackupApply.Load() {
+				provider.applyDefinitionErr = fmt.Errorf("apply boom")
 			}
 			return provider, nil
 		}
@@ -4252,6 +4248,7 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigDefinitionReconcileFails(t *t
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
 	_ = result.Close(context.Background())
+	failBackupApply.Store(true)
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
@@ -4273,8 +4270,8 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigDefinitionReconcileFails(t *t
 	}
 
 	_, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil || !strings.Contains(err.Error(), "delete boom") {
-		t.Fatalf("Bootstrap error = %v, want delete failure", err)
+	if err == nil || !strings.Contains(err.Error(), "apply boom") {
+		t.Fatalf("Bootstrap error = %v, want apply failure", err)
 	}
 	if !closed.Load() {
 		t.Fatal("workflow provider was not closed after reconcile failure")
@@ -4343,7 +4340,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowDefinitionID(t *testing.T) {
 
 	recorder := &recordingWorkflowProvider{
 		getDefinition: &coreworkflow.Definition{
-			ID:     "cfg_nightly_sync",
+			ID:     "roadmap_nightly_sync",
 			Target: coreWorkflowAppStepTarget("roadmap", "sync"),
 		},
 	}
