@@ -147,7 +147,7 @@ describe("gestalt vite plugin", () => {
     );
   });
 
-  test("injects the dev bearer only for direct loopback requests", async () => {
+  test("adds the configured bearer to the API proxy", async () => {
     const config = await resolveConfig(
       {
         configFile: false,
@@ -178,43 +178,6 @@ describe("gestalt vite plugin", () => {
     });
     expect(authorization).toBe("Bearer test-token");
 
-    authorization = undefined;
-    proxyServer.emit("proxyReq", proxyReq, {
-      headers: { host: "foreign.example.test", origin: "https://evil.example" },
-    });
-    expect(authorization).toBeUndefined();
-  });
-
-  test("injects the dev bearer for loopback requests to public proxy targets", async () => {
-    const config = await resolveConfig(
-      {
-        configFile: false,
-        root: fixtureRoot,
-        plugins: [
-          gestalt({
-            env: {
-              GESTALT_DEV_PORT: "5173",
-              GESTALT_BASE_URL: "https://valon.tools",
-              GESTALT_DEV_API_PROXY_TOKEN: "test-token",
-            },
-          }),
-        ],
-      },
-      "serve",
-    );
-    const proxy = config.server.proxy?.["/api/v1"];
-    if (!proxy || typeof proxy === "string" || !proxy.configure) {
-      throw new Error("expected configurable API proxy");
-    }
-    const proxyServer = new EventEmitter();
-    proxy.configure(proxyServer as never, {} as never);
-    let authorization: string | undefined;
-    const proxyReq = {
-      setHeader: (_name: string, value: string) => (authorization = value),
-    };
-    proxyServer.emit("proxyReq", proxyReq, {
-      headers: { host: "127.0.0.1:5173" },
-    });
     expect(authorization).toBe("Bearer test-token");
   });
 

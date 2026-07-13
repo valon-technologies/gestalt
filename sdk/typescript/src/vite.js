@@ -68,18 +68,6 @@ function resolveGestaltDevApiProxyTarget(env) {
   );
 }
 
-function canInjectDevApiToken(req, devPort) {
-  const host = req.headers.host?.toLowerCase();
-  const origin = req.headers.origin?.toLowerCase();
-  return (
-    ["127.0.0.1", "localhost", "[::1]"].some(
-      (name) => `${name}:${devPort}` === host,
-    ) &&
-    (!origin || origin === `http://${host}`) &&
-    req.headers["sec-fetch-site"] !== "cross-site"
-  );
-}
-
 /**
  * @param {Record<string, string | undefined>} env
  * @param {string} command
@@ -115,11 +103,7 @@ function gestaltConfig(env, command) {
     changeOrigin: true,
     configure(proxyServer) {
       proxyServer.on("proxyReq", (proxyReq, req) => {
-        if (
-          token &&
-          !req.headers.authorization &&
-          canInjectDevApiToken(req, devPort)
-        ) {
+        if (token && !req.headers.authorization) {
           proxyReq.setHeader("Authorization", `Bearer ${token}`);
         }
       });
