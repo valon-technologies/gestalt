@@ -298,6 +298,24 @@ func TestBuildParsesAnnotations(t *testing.T) {
 	}
 }
 
+func TestBuildParsesProviderKindsAndInputs(t *testing.T) {
+	t.Parallel()
+	schema, diags := build(t, "provider_kinds.proto")
+	if !diags.Empty() {
+		t.Fatalf("unexpected diagnostics:\n%v", diags.Err())
+	}
+	if len(schema.Services) != 1 {
+		t.Fatalf("services = %d, want 1", len(schema.Services))
+	}
+	svc := schema.Services[0]
+	if svc.ProviderKind != model.ProviderKindCache || !svc.Provider {
+		t.Fatalf("provider = (%d, %v), want cache provider", svc.ProviderKind, svc.Provider)
+	}
+	if got := svc.Methods[0].ProviderInput; got != model.ProviderInputClientSignature {
+		t.Errorf("provider input = %d, want client signature", got)
+	}
+}
+
 func TestBuildRejectsBadJsonResult(t *testing.T) {
 	t.Parallel()
 	_, diags := build(t, "rejected_json_result.proto")

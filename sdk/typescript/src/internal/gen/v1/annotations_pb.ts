@@ -2,8 +2,8 @@
 // @generated from file v1/annotations.proto (package gestalt.provider.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { extDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, extDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { MessageOptions, MethodOptions, ServiceOptions } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_descriptor } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/annotations.proto.
  */
 export const file_v1_annotations: GenFile = /*@__PURE__*/
-  fileDesc("ChR2MS9hbm5vdGF0aW9ucy5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSIuCg5PcHRpb25hbFJlc3VsdBINCgVndWFyZBgBIAEoCRINCgV2YWx1ZRgCIAEoCSJFCgVLZXllZBIPCgdlbnRyaWVzGAEgASgJEgsKA2tleRgCIAEoCRIPCgdwcmVzZW50GAMgASgJEg0KBXZhbHVlGAQgASgJIigKB0luaXRpYWwSDgoGaGVhZGVyGAEgASgJEg0KBWNodW5rGAIgASgJIioKCkpzb25SZXN1bHQSDgoGc3RhdHVzGAEgASgJEgwKBGJvZHkYAiABKAkiLAoMUHVibGljUG9saWN5EgwKBGZpbGwYASADKAkSDgoGcmVqZWN0GAIgAygJOj4KCXNpZ25hdHVyZRIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNGGAyADKAlSCXNpZ25hdHVyZTpYCgdpbml0aWFsEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY0oYDIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuSW5pdGlhbFIHaW5pdGlhbDpiCgtqc29uX3Jlc3VsdBIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNOGAyABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkpzb25SZXN1bHRSCmpzb25SZXN1bHQ6TwoSb3B0aW9uYWxfc2lnbmF0dXJlEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY1IYDIAMoCVIRb3B0aW9uYWxTaWduYXR1cmU6WwoGcHVibGljEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMYuY4DIAEoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuUHVibGljUG9saWN5UgZwdWJsaWM6bwoPb3B0aW9uYWxfcmVzdWx0Eh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNGGAyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wdGlvbmFsUmVzdWx0Ug5vcHRpb25hbFJlc3VsdDpTCgVrZXllZBIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxjShgMgASgLMhouZ2VzdGFsdC5wcm92aWRlci52MS5LZXllZFIFa2V5ZWQ6OQoGdW53cmFwEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNOGAyABKAlSBnVud3JhcDpECgxob3N0X2JpbmRpbmcSHy5nb29nbGUucHJvdG9idWYuU2VydmljZU9wdGlvbnMY0YYDIAEoCVILaG9zdEJpbmRpbmdiBnByb3RvMw", [file_google_protobuf_descriptor]);
+  fileDesc("ChR2MS9hbm5vdGF0aW9ucy5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSIuCg5PcHRpb25hbFJlc3VsdBINCgVndWFyZBgBIAEoCRINCgV2YWx1ZRgCIAEoCSJFCgVLZXllZBIPCgdlbnRyaWVzGAEgASgJEgsKA2tleRgCIAEoCRIPCgdwcmVzZW50GAMgASgJEg0KBXZhbHVlGAQgASgJIigKB0luaXRpYWwSDgoGaGVhZGVyGAEgASgJEg0KBWNodW5rGAIgASgJIioKCkpzb25SZXN1bHQSDgoGc3RhdHVzGAEgASgJEgwKBGJvZHkYAiABKAkiLAoMUHVibGljUG9saWN5EgwKBGZpbGwYASADKAkSDgoGcmVqZWN0GAIgAygJKpQDCgxQcm92aWRlcktpbmQSHQoZUFJPVklERVJfS0lORF9VTlNQRUNJRklFRBAAEhUKEVBST1ZJREVSX0tJTkRfQVBQEAESGgoWUFJPVklERVJfS0lORF9JREVOVElUWRACEhsKF1BST1ZJREVSX0tJTkRfSU5ERVhFRERCEAMSGQoVUFJPVklERVJfS0lORF9TRUNSRVRTEAQSGwoXUFJPVklERVJfS0lORF9URUxFTUVUUlkQBRIXChNQUk9WSURFUl9LSU5EX0NBQ0hFEAYSFAoQUFJPVklERVJfS0lORF9TMxAHEhoKFlBST1ZJREVSX0tJTkRfV09SS0ZMT1cQCBIfChtQUk9WSURFUl9LSU5EX0FVVEhPUklaQVRJT04QCRIZChVQUk9WSURFUl9LSU5EX1JVTlRJTUUQChIXChNQUk9WSURFUl9LSU5EX0FHRU5UEAsSJQohUFJPVklERVJfS0lORF9FWFRFUk5BTF9DUkVERU5USUFMEAwSFgoSUFJPVklERVJfS0lORF9URVNUEA0qVQoNUHJvdmlkZXJJbnB1dBIfChtQUk9WSURFUl9JTlBVVF9GVUxMX1JFUVVFU1QQABIjCh9QUk9WSURFUl9JTlBVVF9DTElFTlRfU0lHTkFUVVJFEAE6PgoJc2lnbmF0dXJlEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY0YYDIAMoCVIJc2lnbmF0dXJlOlgKB2luaXRpYWwSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxjShgMgASgLMhwuZ2VzdGFsdC5wcm92aWRlci52MS5Jbml0aWFsUgdpbml0aWFsOmIKC2pzb25fcmVzdWx0Eh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMY04YDIAEoCzIfLmdlc3RhbHQucHJvdmlkZXIudjEuSnNvblJlc3VsdFIKanNvblJlc3VsdDpPChJvcHRpb25hbF9zaWduYXR1cmUSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxjUhgMgAygJUhFvcHRpb25hbFNpZ25hdHVyZTprCg5wcm92aWRlcl9pbnB1dBIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGNWGAyABKA4yIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVySW5wdXRSDXByb3ZpZGVySW5wdXQ6WwoGcHVibGljEh4uZ29vZ2xlLnByb3RvYnVmLk1ldGhvZE9wdGlvbnMYuY4DIAEoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuUHVibGljUG9saWN5UgZwdWJsaWM6bwoPb3B0aW9uYWxfcmVzdWx0Eh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNGGAyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wdGlvbmFsUmVzdWx0Ug5vcHRpb25hbFJlc3VsdDpTCgVrZXllZBIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxjShgMgASgLMhouZ2VzdGFsdC5wcm92aWRlci52MS5LZXllZFIFa2V5ZWQ6OQoGdW53cmFwEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGNOGAyABKAlSBnVud3JhcDpECgxob3N0X2JpbmRpbmcSHy5nb29nbGUucHJvdG9idWYuU2VydmljZU9wdGlvbnMY0YYDIAEoCVILaG9zdEJpbmRpbmc6aQoNcHJvdmlkZXJfa2luZBIfLmdvb2dsZS5wcm90b2J1Zi5TZXJ2aWNlT3B0aW9ucxjShgMgASgOMiEuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlcktpbmRSDHByb3ZpZGVyS2luZGIGcHJvdG8z", [file_google_protobuf_descriptor]);
 
 /**
  * OptionalResult declares that `value` is meaningful only when the bool
@@ -164,6 +164,116 @@ export const PublicPolicySchema: GenMessage<PublicPolicy> = /*@__PURE__*/
   messageDesc(file_v1_annotations, 4);
 
 /**
+ * ProviderKind identifies the RPC-backed provider contract implemented by a
+ * service. The numeric values are part of the wire contract and intentionally
+ * remain identical to the historical runtime.ProviderKind enum.
+ *
+ * @generated from enum gestalt.provider.v1.ProviderKind
+ */
+export enum ProviderKind {
+  /**
+   * @generated from enum value: PROVIDER_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_APP = 1;
+   */
+  APP = 1,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_IDENTITY = 2;
+   */
+  IDENTITY = 2,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_INDEXEDDB = 3;
+   */
+  INDEXEDDB = 3,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_SECRETS = 4;
+   */
+  SECRETS = 4,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_TELEMETRY = 5;
+   */
+  TELEMETRY = 5,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_CACHE = 6;
+   */
+  CACHE = 6,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_S3 = 7;
+   */
+  S3 = 7,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_WORKFLOW = 8;
+   */
+  WORKFLOW = 8,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_AUTHORIZATION = 9;
+   */
+  AUTHORIZATION = 9,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_RUNTIME = 10;
+   */
+  RUNTIME = 10,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_AGENT = 11;
+   */
+  AGENT = 11,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_EXTERNAL_CREDENTIAL = 12;
+   */
+  EXTERNAL_CREDENTIAL = 12,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_TEST = 13;
+   */
+  TEST = 13,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.ProviderKind.
+ */
+export const ProviderKindSchema: GenEnum<ProviderKind> = /*@__PURE__*/
+  enumDesc(file_v1_annotations, 0);
+
+/**
+ * ProviderInput selects the request shape used by generated provider
+ * interfaces. Full requests preserve context and provider-only fields;
+ * CLIENT_SIGNATURE opts into the ergonomic client argument list.
+ *
+ * @generated from enum gestalt.provider.v1.ProviderInput
+ */
+export enum ProviderInput {
+  /**
+   * @generated from enum value: PROVIDER_INPUT_FULL_REQUEST = 0;
+   */
+  FULL_REQUEST = 0,
+
+  /**
+   * @generated from enum value: PROVIDER_INPUT_CLIENT_SIGNATURE = 1;
+   */
+  CLIENT_SIGNATURE = 1,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.ProviderInput.
+ */
+export const ProviderInputSchema: GenEnum<ProviderInput> = /*@__PURE__*/
+  enumDesc(file_v1_annotations, 1);
+
+/**
  * Flattened call signature: the named request fields become parameters,
  * in order. Fields with presence must come last and become optional
  * parameters.
@@ -202,24 +312,30 @@ export const optional_signature: GenExtension<MethodOptions, string[]> = /*@__PU
   extDesc(file_v1_annotations, 3);
 
 /**
+ * @generated from extension: gestalt.provider.v1.ProviderInput provider_input = 50005;
+ */
+export const provider_input: GenExtension<MethodOptions, ProviderInput> = /*@__PURE__*/
+  extDesc(file_v1_annotations, 4);
+
+/**
  * Public request adaptation policy for this method.
  *
  * @generated from extension: gestalt.provider.v1.PublicPolicy public = 51001;
  */
 export const public$: GenExtension<MethodOptions, PublicPolicy> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 4);
+  extDesc(file_v1_annotations, 5);
 
 /**
  * @generated from extension: gestalt.provider.v1.OptionalResult optional_result = 50001;
  */
 export const optional_result: GenExtension<MessageOptions, OptionalResult> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 5);
+  extDesc(file_v1_annotations, 6);
 
 /**
  * @generated from extension: gestalt.provider.v1.Keyed keyed = 50002;
  */
 export const keyed: GenExtension<MessageOptions, Keyed> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 6);
+  extDesc(file_v1_annotations, 7);
 
 /**
  * At API boundaries the message collapses to the named field: a response
@@ -228,7 +344,7 @@ export const keyed: GenExtension<MessageOptions, Keyed> = /*@__PURE__*/
  * @generated from extension: string unwrap = 50003;
  */
 export const unwrap: GenExtension<MessageOptions, string> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 7);
+  extDesc(file_v1_annotations, 8);
 
 /**
  * Host-service binding name, enabling a generated zero-configuration
@@ -237,5 +353,11 @@ export const unwrap: GenExtension<MessageOptions, string> = /*@__PURE__*/
  * @generated from extension: string host_binding = 50001;
  */
 export const host_binding: GenExtension<ServiceOptions, string> = /*@__PURE__*/
-  extDesc(file_v1_annotations, 8);
+  extDesc(file_v1_annotations, 9);
+
+/**
+ * @generated from extension: gestalt.provider.v1.ProviderKind provider_kind = 50002;
+ */
+export const provider_kind: GenExtension<ServiceOptions, ProviderKind> = /*@__PURE__*/
+  extDesc(file_v1_annotations, 10);
 

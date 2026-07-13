@@ -33,7 +33,6 @@ pub enum AgentMessagePartType {
     /// The `ImageRef` variant.
     ImageRef = 5,
 }
-
 impl AgentMessagePartType {
     /// Returns the wire integer for this value.
     pub const fn as_i32(self) -> i32 {

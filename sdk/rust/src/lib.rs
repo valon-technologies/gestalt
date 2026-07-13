@@ -5,6 +5,8 @@
 /// Generated Agent client and native types.
 pub mod agent;
 mod agent_provider;
+/// Generated annotation enums used by provider registration.
+pub mod annotations;
 mod api;
 /// Generated App and AppProvider client and native types.
 pub mod app;
@@ -56,6 +58,7 @@ pub mod s3_provider;
 pub mod secrets;
 mod secrets_provider;
 mod secrets_server;
+mod server_support;
 /// OpenTelemetry helpers for provider-authored GenAI instrumentation.
 pub mod telemetry;
 /// Generated Test client and native types.
@@ -64,6 +67,32 @@ pub mod test;
 pub mod workflow;
 /// Workflow provider contract and native workflow types.
 pub mod workflow_provider;
+
+/// Generated provider contracts and wire adapters, grouped by canonical service.
+pub mod providers {
+    /// Generated Agent provider contract and wire adapter.
+    pub mod agent;
+    /// Generated AppProvider contract and wire adapter.
+    pub mod app;
+    /// Generated Authorization provider contract and wire adapter.
+    pub mod authorization;
+    /// Generated Cache provider contract and wire adapter.
+    pub mod cache;
+    /// Generated ExternalCredentials provider contract and wire adapter.
+    pub mod external_credential;
+    /// Generated Identity provider contract and wire adapter.
+    pub mod identity;
+    /// Generated IndexedDB provider contract and wire adapter.
+    pub mod indexeddb;
+    /// Generated Runtime provider contract and wire adapter.
+    pub mod runtime_provider;
+    /// Generated S3 provider contract and wire adapter.
+    pub mod s3;
+    /// Generated Secrets provider contract and wire adapter.
+    pub mod secrets;
+    /// Generated Workflow provider contract and wire adapter.
+    pub mod workflow;
+}
 
 #[doc(hidden)]
 pub mod proto {

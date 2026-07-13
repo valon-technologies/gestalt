@@ -71,3 +71,14 @@ export class Secrets {
     return fromWireGetSecretResponse(response);
   }
 }
+
+export {
+  SecretsProvider,
+  createSecretsProviderService,
+} from "./generated/providers/secrets.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

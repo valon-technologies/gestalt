@@ -57,6 +57,9 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	services := schema.Services
 	set := fileset.New()
 	if len(services) == 0 {
+		if err := emit.AddModuleInventory(set, emit.TargetPython); err != nil {
+			return nil, err
+		}
 		return set, nil
 	}
 
@@ -76,6 +79,14 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("_codec/support.py", []byte(runtimeFile)); err != nil {
 		return nil, err
 	}
+	if hasProvider(services) {
+		if err := set.Add("providers/__init__.py", []byte(serveInit)); err != nil {
+			return nil, err
+		}
+		if err := set.Add("providers/support.py", []byte(serverSupportFile)); err != nil {
+			return nil, err
+		}
+	}
 	for _, g := range groupFiles(services, messages, enums) {
 		outputBase := g.base
 		public := newRenderer(idx, outputBase, g.base, modulePublic)
@@ -92,6 +103,23 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 			return nil, err
 		}
 
+		var providerServices []*model.Service
+		for _, svc := range g.services {
+			if svc.Provider {
+				providerServices = append(providerServices, svc)
+			}
+		}
+		if len(providerServices) > 0 {
+			server := newServerRenderer(idx, outputBase)
+			for _, svc := range providerServices {
+				server.renderProviderHandler(svc)
+				server.renderProviderServer(svc)
+			}
+			if err := set.Add("providers/"+outputBase+".py", []byte(server.assembleServer(outputBase))); err != nil {
+				return nil, err
+			}
+		}
+
 		if len(g.messages) == 0 {
 			continue
 		}
@@ -103,7 +131,19 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 			return nil, err
 		}
 	}
+	if err := emit.AddModuleInventory(set, emit.TargetPython); err != nil {
+		return nil, err
+	}
 	return set, nil
+}
+
+func hasProvider(services []*model.Service) bool {
+	for _, svc := range services {
+		if svc.Provider {
+			return true
+		}
+	}
+	return false
 }
 
 // hasJsonResult reports whether any method carries the json_result
@@ -174,6 +214,11 @@ func reachable(idx *index, services []*model.Service) ([]*model.Message, []*mode
 			if method.Output != nil {
 				visit(method.Output.FullName)
 			}
+		}
+	}
+	for fullName, enum := range idx.enums {
+		if enum.ProtoFile == "sdk/proto/v1/annotations.proto" {
+			seenEnums[fullName] = true
 		}
 	}
 

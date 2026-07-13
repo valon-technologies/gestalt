@@ -62,6 +62,22 @@ func TestReconcileWritesHeaderedFiles(t *testing.T) {
 	}
 }
 
+func TestReconcileLeavesJSONMachineReadable(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	set := newSet(t, map[string]string{"inventory.json": "{\"modules\":[]}\n"})
+	if _, err := Reconcile(root, set, Slash); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "inventory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "{\"modules\":[]}\n" {
+		t.Fatalf("JSON output = %q", got)
+	}
+}
+
 func TestReconcileRemovesStaleGeneratedOnly(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

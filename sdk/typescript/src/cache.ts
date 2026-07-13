@@ -352,3 +352,14 @@ export class Cache {
     return fromWireCacheTouchResponse(response);
   }
 }
+
+export {
+  CacheProvider,
+  createCacheProviderService,
+} from "./generated/providers/cache.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

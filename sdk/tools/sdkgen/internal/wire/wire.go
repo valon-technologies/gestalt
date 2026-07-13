@@ -40,7 +40,7 @@ var staleSuffixes = map[emit.Target][]string{
 
 // renderedOut pairs one scratch render with the checked-in tree directory it
 // corresponds to.
-type renderedOut struct {
+type RenderedOutput struct {
 	scratchDir string
 	treeDir    string
 	treeRel    string
@@ -49,16 +49,16 @@ type renderedOut struct {
 
 // render renders every selected target's wire stubs into scratch without
 // touching the tree.
-func render(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targets []emit.Target) ([]renderedOut, error) {
+func Render(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targets []emit.Target) ([]RenderedOutput, error) {
 	protoDir := filepath.Join(repoRoot, protoRel)
-	var outs []renderedOut
+	var outs []RenderedOutput
 	for _, target := range targets {
 		if target == emit.TargetPython {
 			scratchDir := filepath.Join(scratch, "wire", string(target))
 			if err := renderPython(bufTool, protoDir, scratchDir); err != nil {
 				return nil, err
 			}
-			outs = append(outs, renderedOut{
+			outs = append(outs, RenderedOutput{
 				scratchDir: scratchDir,
 				treeDir:    filepath.Join(repoRoot, filepath.FromSlash(pyVendorRel)),
 				treeRel:    pyVendorRel,
@@ -88,7 +88,7 @@ func render(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targ
 			if err != nil {
 				return nil, err
 			}
-			outs = append(outs, renderedOut{
+			outs = append(outs, RenderedOutput{
 				scratchDir: scratchDir,
 				treeDir:    treeDir,
 				treeRel:    filepath.ToSlash(treeRel),
@@ -109,10 +109,17 @@ func render(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targ
 // Generate renders the selected targets' wire stubs and syncs them into the
 // tree, writing changed files and removing stale ones.
 func Generate(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targets []emit.Target) error {
-	outs, err := render(bufTool, rustfmtTool, repoRoot, scratch, targets)
+	outs, err := Render(bufTool, rustfmtTool, repoRoot, scratch, targets)
 	if err != nil {
 		return err
 	}
+	return Sync(outs)
+}
+
+// Sync applies previously rendered wire outputs to the checked-in tree. All
+// rendering and formatting should complete before this function is called so
+// a failed target cannot leave a partially regenerated SDK.
+func Sync(outs []RenderedOutput) error {
 	for _, out := range outs {
 		if err := fileset.SyncDirs(out.scratchDir, out.treeDir, out.ignore); err != nil {
 			return err
@@ -124,7 +131,7 @@ func Generate(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, ta
 // Check renders the selected targets' wire stubs and byte-compares them
 // against the tree without mutating it. Drift paths are repo-relative.
 func Check(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targets []emit.Target) (fileset.Drift, error) {
-	outs, err := render(bufTool, rustfmtTool, repoRoot, scratch, targets)
+	outs, err := Render(bufTool, rustfmtTool, repoRoot, scratch, targets)
 	if err != nil {
 		return nil, err
 	}

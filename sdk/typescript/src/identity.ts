@@ -396,3 +396,14 @@ export class Identity {
     return fromWireRevokeGrantResponse(response);
   }
 }
+
+export {
+  IdentityProvider,
+  createIdentityProviderService,
+} from "./generated/providers/identity.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

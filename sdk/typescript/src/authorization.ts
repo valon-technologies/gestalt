@@ -546,3 +546,14 @@ export class Authorization {
     return fromWireListActiveModelResourceTypesResponse(response);
   }
 }
+
+export {
+  AuthorizationProvider,
+  createAuthorizationProviderService,
+} from "./generated/providers/authorization.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

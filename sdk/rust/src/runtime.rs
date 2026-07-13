@@ -2,6 +2,7 @@
 
 //! Generated native types and clients for runtime.proto.
 
+use crate::annotations::ProviderKind;
 use crate::codec::runtime::{
     from_wire_configure_provider_response, from_wire_health_check_response,
     from_wire_provider_identity, from_wire_start_runtime_provider_response,
@@ -9,41 +10,6 @@ use crate::codec::runtime::{
 };
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
-
-/// Open enum for `gestalt.provider.v1.ProviderKind`; unknown numeric values are preserved.
-pub type ProviderKind = i32;
-
-/// Named values of `ProviderKind`.
-pub mod provider_kind {
-    /// PROVIDER_KIND_UNSPECIFIED.
-    pub const PROVIDER_KIND_UNSPECIFIED: i32 = 0;
-    /// PROVIDER_KIND_APP.
-    pub const PROVIDER_KIND_APP: i32 = 1;
-    /// PROVIDER_KIND_IDENTITY.
-    pub const PROVIDER_KIND_IDENTITY: i32 = 2;
-    /// PROVIDER_KIND_INDEXEDDB.
-    pub const PROVIDER_KIND_INDEXEDDB: i32 = 3;
-    /// PROVIDER_KIND_SECRETS.
-    pub const PROVIDER_KIND_SECRETS: i32 = 4;
-    /// PROVIDER_KIND_TELEMETRY.
-    pub const PROVIDER_KIND_TELEMETRY: i32 = 5;
-    /// PROVIDER_KIND_CACHE.
-    pub const PROVIDER_KIND_CACHE: i32 = 6;
-    /// PROVIDER_KIND_S3.
-    pub const PROVIDER_KIND_S3: i32 = 7;
-    /// PROVIDER_KIND_WORKFLOW.
-    pub const PROVIDER_KIND_WORKFLOW: i32 = 8;
-    /// PROVIDER_KIND_AUTHORIZATION.
-    pub const PROVIDER_KIND_AUTHORIZATION: i32 = 9;
-    /// PROVIDER_KIND_RUNTIME.
-    pub const PROVIDER_KIND_RUNTIME: i32 = 10;
-    /// PROVIDER_KIND_AGENT.
-    pub const PROVIDER_KIND_AGENT: i32 = 11;
-    /// PROVIDER_KIND_EXTERNAL_CREDENTIAL.
-    pub const PROVIDER_KIND_EXTERNAL_CREDENTIAL: i32 = 12;
-    /// PROVIDER_KIND_TEST.
-    pub const PROVIDER_KIND_TEST: i32 = 13;
-}
 
 /// ConfigureProviderRequest configures a non-integration provider for one
 /// runtime session.

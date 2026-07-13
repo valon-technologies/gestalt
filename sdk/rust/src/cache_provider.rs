@@ -14,7 +14,6 @@ pub struct CacheEntry {
     /// Cache value bytes.
     pub value: Vec<u8>,
 }
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 /// Options applied to cache writes.
 pub struct CacheSetOptions {

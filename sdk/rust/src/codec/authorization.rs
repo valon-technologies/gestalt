@@ -14,7 +14,9 @@ use crate::authorization::{
     SetActiveModelResponse, SetAuthorizationStateRequest, SetAuthorizationStateResponse, Subject,
     SubjectSet, SubjectSetType,
 };
-use crate::codec::support::{from_wire_struct, from_wire_timestamp, to_wire_struct};
+use crate::codec::support::{
+    from_wire_struct, from_wire_timestamp, to_wire_struct, to_wire_timestamp,
+};
 use crate::generated::v1;
 
 /// Converts a native `Action` to its wire message.
@@ -25,11 +27,37 @@ pub(crate) fn to_wire_action(value: Action) -> v1::Action {
     }
 }
 
+/// Converts a wire `Action` to its native message.
+pub(crate) fn from_wire_action(value: v1::Action) -> Action {
+    Action {
+        name: value.name,
+        properties: value.properties.map(from_wire_struct),
+    }
+}
+
 /// Converts a native `AddRelationshipRequest` to its wire message.
 pub(crate) fn to_wire_add_relationship_request(
     value: AddRelationshipRequest,
 ) -> v1::AddRelationshipRequest {
     v1::AddRelationshipRequest {
+        relationship: value.relationship.map(to_wire_relationship),
+    }
+}
+
+/// Converts a wire `AddRelationshipRequest` to its native message.
+pub(crate) fn from_wire_add_relationship_request(
+    value: v1::AddRelationshipRequest,
+) -> AddRelationshipRequest {
+    AddRelationshipRequest {
+        relationship: value.relationship.map(from_wire_relationship),
+    }
+}
+
+/// Converts a native `AddRelationshipResponse` to its wire message.
+pub(crate) fn to_wire_add_relationship_response(
+    value: AddRelationshipResponse,
+) -> v1::AddRelationshipResponse {
+    v1::AddRelationshipResponse {
         relationship: value.relationship.map(to_wire_relationship),
     }
 }
@@ -53,6 +81,30 @@ pub(crate) fn to_wire_authorization_model(value: AuthorizationModel) -> v1::Auth
             .into_iter()
             .map(to_wire_authorization_model_resource_type)
             .collect(),
+    }
+}
+
+/// Converts a wire `AuthorizationModel` to its native message.
+pub(crate) fn from_wire_authorization_model(value: v1::AuthorizationModel) -> AuthorizationModel {
+    AuthorizationModel {
+        id: value.id,
+        version: value.version,
+        resource_types: value
+            .resource_types
+            .into_iter()
+            .map(from_wire_authorization_model_resource_type)
+            .collect(),
+    }
+}
+
+/// Converts a native `AuthorizationModelRef` to its wire message.
+pub(crate) fn to_wire_authorization_model_ref(
+    value: AuthorizationModelRef,
+) -> v1::AuthorizationModelRef {
+    v1::AuthorizationModelRef {
+        id: value.id,
+        version: value.version,
+        created_at: value.created_at.map(to_wire_timestamp),
     }
 }
 
@@ -119,6 +171,16 @@ pub(crate) fn to_wire_authorization_model_resource_type_filter(
     }
 }
 
+/// Converts a wire `AuthorizationModelResourceTypeFilter` to its native message.
+pub(crate) fn from_wire_authorization_model_resource_type_filter(
+    value: v1::AuthorizationModelResourceTypeFilter,
+) -> AuthorizationModelResourceTypeFilter {
+    AuthorizationModelResourceTypeFilter {
+        name: value.name,
+        source_layer: value.source_layer,
+    }
+}
+
 /// Converts a native `CheckAccessManyRequest` to its wire message.
 pub(crate) fn to_wire_check_access_many_request(
     value: CheckAccessManyRequest,
@@ -128,6 +190,32 @@ pub(crate) fn to_wire_check_access_many_request(
             .requests
             .into_iter()
             .map(to_wire_check_access_request)
+            .collect(),
+    }
+}
+
+/// Converts a wire `CheckAccessManyRequest` to its native message.
+pub(crate) fn from_wire_check_access_many_request(
+    value: v1::CheckAccessManyRequest,
+) -> CheckAccessManyRequest {
+    CheckAccessManyRequest {
+        requests: value
+            .requests
+            .into_iter()
+            .map(from_wire_check_access_request)
+            .collect(),
+    }
+}
+
+/// Converts a native `CheckAccessManyResponse` to its wire message.
+pub(crate) fn to_wire_check_access_many_response(
+    value: CheckAccessManyResponse,
+) -> v1::CheckAccessManyResponse {
+    v1::CheckAccessManyResponse {
+        decisions: value
+            .decisions
+            .into_iter()
+            .map(to_wire_check_access_response)
             .collect(),
     }
 }
@@ -154,6 +242,23 @@ pub(crate) fn to_wire_check_access_request(value: CheckAccessRequest) -> v1::Che
     }
 }
 
+/// Converts a wire `CheckAccessRequest` to its native message.
+pub(crate) fn from_wire_check_access_request(value: v1::CheckAccessRequest) -> CheckAccessRequest {
+    CheckAccessRequest {
+        subject: value.subject.map(from_wire_subject),
+        action: value.action.map(from_wire_action),
+        resource: value.resource.map(from_wire_resource),
+    }
+}
+
+/// Converts a native `CheckAccessResponse` to its wire message.
+pub(crate) fn to_wire_check_access_response(value: CheckAccessResponse) -> v1::CheckAccessResponse {
+    v1::CheckAccessResponse {
+        allowed: value.allowed,
+        model_id: value.model_id,
+    }
+}
+
 /// Converts a wire `CheckAccessResponse` to its native message.
 pub(crate) fn from_wire_check_access_response(
     value: v1::CheckAccessResponse,
@@ -173,11 +278,36 @@ pub(crate) fn to_wire_delete_relationship_request(
     }
 }
 
+/// Converts a wire `DeleteRelationshipRequest` to its native message.
+pub(crate) fn from_wire_delete_relationship_request(
+    value: v1::DeleteRelationshipRequest,
+) -> DeleteRelationshipRequest {
+    DeleteRelationshipRequest {
+        relationship_tuple: value.relationship_tuple.map(from_wire_relationship_tuple),
+    }
+}
+
+/// Converts a native `DeleteRelationshipResponse` to its wire message.
+pub(crate) fn to_wire_delete_relationship_response(
+    _value: DeleteRelationshipResponse,
+) -> v1::DeleteRelationshipResponse {
+    v1::DeleteRelationshipResponse {}
+}
+
 /// Converts a wire `DeleteRelationshipResponse` to its native message.
 pub(crate) fn from_wire_delete_relationship_response(
     _value: v1::DeleteRelationshipResponse,
 ) -> DeleteRelationshipResponse {
     DeleteRelationshipResponse {}
+}
+
+/// Converts a native `GetActiveModelRefResponse` to its wire message.
+pub(crate) fn to_wire_get_active_model_ref_response(
+    value: GetActiveModelRefResponse,
+) -> v1::GetActiveModelRefResponse {
+    v1::GetActiveModelRefResponse {
+        model: value.model.map(to_wire_authorization_model_ref),
+    }
 }
 
 /// Converts a wire `GetActiveModelRefResponse` to its native message.
@@ -199,6 +329,34 @@ pub(crate) fn to_wire_list_active_model_resource_types_request(
             .map(to_wire_authorization_model_resource_type_filter),
         page_size: value.page_size,
         page_token: value.page_token,
+    }
+}
+
+/// Converts a wire `ListActiveModelResourceTypesRequest` to its native message.
+pub(crate) fn from_wire_list_active_model_resource_types_request(
+    value: v1::ListActiveModelResourceTypesRequest,
+) -> ListActiveModelResourceTypesRequest {
+    ListActiveModelResourceTypesRequest {
+        filter: value
+            .filter
+            .map(from_wire_authorization_model_resource_type_filter),
+        page_size: value.page_size,
+        page_token: value.page_token,
+    }
+}
+
+/// Converts a native `ListActiveModelResourceTypesResponse` to its wire message.
+pub(crate) fn to_wire_list_active_model_resource_types_response(
+    value: ListActiveModelResourceTypesResponse,
+) -> v1::ListActiveModelResourceTypesResponse {
+    v1::ListActiveModelResourceTypesResponse {
+        resource_types: value
+            .resource_types
+            .into_iter()
+            .map(to_wire_authorization_model_resource_type)
+            .collect(),
+        next_page_token: value.next_page_token,
+        model_id: value.model_id,
     }
 }
 
@@ -225,6 +383,31 @@ pub(crate) fn to_wire_list_relationships_request(
         filter: value.filter.map(to_wire_relationship_filter),
         page_size: value.page_size,
         page_token: value.page_token,
+    }
+}
+
+/// Converts a wire `ListRelationshipsRequest` to its native message.
+pub(crate) fn from_wire_list_relationships_request(
+    value: v1::ListRelationshipsRequest,
+) -> ListRelationshipsRequest {
+    ListRelationshipsRequest {
+        filter: value.filter.map(from_wire_relationship_filter),
+        page_size: value.page_size,
+        page_token: value.page_token,
+    }
+}
+
+/// Converts a native `ListRelationshipsResponse` to its wire message.
+pub(crate) fn to_wire_list_relationships_response(
+    value: ListRelationshipsResponse,
+) -> v1::ListRelationshipsResponse {
+    v1::ListRelationshipsResponse {
+        relationships: value
+            .relationships
+            .into_iter()
+            .map(to_wire_relationship)
+            .collect(),
+        next_page_token: value.next_page_token,
     }
 }
 
@@ -359,6 +542,19 @@ pub(crate) fn to_wire_relationship_filter(value: RelationshipFilter) -> v1::Rela
     }
 }
 
+/// Converts a wire `RelationshipFilter` to its native message.
+pub(crate) fn from_wire_relationship_filter(value: v1::RelationshipFilter) -> RelationshipFilter {
+    RelationshipFilter {
+        target: value.target.map(from_wire_relationship_target),
+        relation: value.relation,
+        resource: value.resource.map(from_wire_resource),
+        target_type: value.target_type,
+        target_entity_type: value.target_entity_type,
+        resource_type: value.resource_type,
+        source_layer: value.source_layer,
+    }
+}
+
 /// Converts a native `RelationshipTarget` to its wire message.
 pub(crate) fn to_wire_relationship_target(value: RelationshipTarget) -> v1::RelationshipTarget {
     v1::RelationshipTarget {
@@ -450,6 +646,24 @@ pub(crate) fn to_wire_set_active_model_request(
     }
 }
 
+/// Converts a wire `SetActiveModelRequest` to its native message.
+pub(crate) fn from_wire_set_active_model_request(
+    value: v1::SetActiveModelRequest,
+) -> SetActiveModelRequest {
+    SetActiveModelRequest {
+        model: value.model.map(from_wire_authorization_model),
+    }
+}
+
+/// Converts a native `SetActiveModelResponse` to its wire message.
+pub(crate) fn to_wire_set_active_model_response(
+    value: SetActiveModelResponse,
+) -> v1::SetActiveModelResponse {
+    v1::SetActiveModelResponse {
+        model: value.model.map(to_wire_authorization_model_ref),
+    }
+}
+
 /// Converts a wire `SetActiveModelResponse` to its native message.
 pub(crate) fn from_wire_set_active_model_response(
     value: v1::SetActiveModelResponse,
@@ -470,6 +684,29 @@ pub(crate) fn to_wire_set_authorization_state_request(
             .into_iter()
             .map(to_wire_relationship)
             .collect(),
+    }
+}
+
+/// Converts a wire `SetAuthorizationStateRequest` to its native message.
+pub(crate) fn from_wire_set_authorization_state_request(
+    value: v1::SetAuthorizationStateRequest,
+) -> SetAuthorizationStateRequest {
+    SetAuthorizationStateRequest {
+        model: value.model.map(from_wire_authorization_model),
+        relationships: value
+            .relationships
+            .into_iter()
+            .map(from_wire_relationship)
+            .collect(),
+    }
+}
+
+/// Converts a native `SetAuthorizationStateResponse` to its wire message.
+pub(crate) fn to_wire_set_authorization_state_response(
+    value: SetAuthorizationStateResponse,
+) -> v1::SetAuthorizationStateResponse {
+    v1::SetAuthorizationStateResponse {
+        active_model: value.active_model.map(to_wire_authorization_model_ref),
     }
 }
 

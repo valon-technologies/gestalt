@@ -60,6 +60,7 @@ from gestalt import (
     _runtime,
     parse_subject_id,
 )
+from gestalt._gen.v1 import annotations_pb2 as _annotations_pb2
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
@@ -79,6 +80,7 @@ app_pb2_grpc: Any = _app_pb2_grpc
 runtime_provider_pb2: Any = _runtime_provider_pb2
 runtime_provider_pb2_grpc: Any = _runtime_provider_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
+annotations_pb2: Any = _annotations_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
 workflow_pb2: Any = _workflow_pb2
@@ -764,7 +766,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
         self.assertEqual(
             meta.kind,
-            runtime_pb2.ProviderKind.PROVIDER_KIND_IDENTITY,
+            annotations_pb2.ProviderKind.PROVIDER_KIND_IDENTITY,
         )
         self.assertEqual(meta.name, "stub-auth")
         self.assertEqual(list(meta.warnings), ["set AUTH_ENV"])
@@ -1024,7 +1026,7 @@ class CacheRuntimeTests(unittest.TestCase):
             kind=ProviderKind.CACHE,
         )
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE)
+        self.assertEqual(meta.kind, annotations_pb2.ProviderKind.PROVIDER_KIND_CACHE)
         self.assertEqual(meta.name, "stub-cache")
         self.assertEqual(list(meta.warnings), ["set CACHE_ENV"])
 
@@ -1179,7 +1181,7 @@ class S3RuntimeTests(unittest.TestCase):
             provider=provider, kind=ProviderKind.S3
         )
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_S3)
+        self.assertEqual(meta.kind, annotations_pb2.ProviderKind.PROVIDER_KIND_S3)
         self.assertEqual(meta.name, "stub-s3")
         self.assertEqual(list(meta.warnings), ["set S3_ENDPOINT"])
 
@@ -1235,7 +1237,7 @@ class RuntimeRuntimeTests(unittest.TestCase):
             kind=ProviderKind.RUNTIME,
         )
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_RUNTIME)
+        self.assertEqual(meta.kind, annotations_pb2.ProviderKind.PROVIDER_KIND_RUNTIME)
         self.assertEqual(meta.name, "stub-runtime")
         self.assertEqual(list(meta.warnings), ["set RUNTIME_ENDPOINT"])
 
@@ -1325,7 +1327,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
             kind=ProviderKind.WORKFLOW,
         )
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW)
+        self.assertEqual(meta.kind, annotations_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW)
         self.assertEqual(meta.name, "stub-workflow")
         self.assertEqual(list(meta.warnings), ["set WORKFLOW_ENDPOINT"])
 

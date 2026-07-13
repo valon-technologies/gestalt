@@ -132,7 +132,6 @@ pub fn new_bound_workflow_target(
 ) -> ProviderResult<BoundWorkflowTarget> {
     Ok(input)
 }
-
 /// Builds the value from an existing target.
 pub fn new_bound_workflow_target_from_target(
     input: &BoundWorkflowTarget,

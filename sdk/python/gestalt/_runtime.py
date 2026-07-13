@@ -61,6 +61,7 @@ from .s3 import ReadObjectChunk, ReadObjectChunkData, ReadObjectChunkMeta
 json_format: Any = cast(Any, None)
 
 grpc: Any = cast(Any, None)
+annotations_pb2: Any = cast(Any, None)
 empty_pb2: Any = cast(Any, None)
 duration_pb2: Any = cast(Any, None)
 app_pb2: Any = cast(Any, None)
@@ -94,6 +95,7 @@ USAGE: Final[str] = (
 
 def _ensure_grpc_runtime() -> None:
     global json_format
+    global annotations_pb2
     global identity_pb2
     global identity_pb2_grpc
     global authorization_pb2_grpc
@@ -124,6 +126,7 @@ def _ensure_grpc_runtime() -> None:
     from google.protobuf import json_format as _json_format
 
     from ._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
+    from ._gen.v1 import annotations_pb2 as _annotations_pb2
     from ._gen.v1 import app_pb2 as _app_pb2
     from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
     from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
@@ -142,6 +145,7 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
     grpc = _grpc
+    annotations_pb2 = _annotations_pb2
     json_format = _json_format
     duration_pb2 = _duration_pb2
     empty_pb2 = _empty_pb2
@@ -2046,17 +2050,17 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     _ensure_grpc_runtime()
     normalized = _normalized_runtime_kind(kind)
     return {
-        ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_APP,
-        ProviderKind.AUTHORIZATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHORIZATION,
-        ProviderKind.IDENTITY: runtime_pb2.ProviderKind.PROVIDER_KIND_IDENTITY,
-        ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
-        ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
-        ProviderKind.AGENT: runtime_pb2.ProviderKind.PROVIDER_KIND_AGENT,
-        ProviderKind.RUNTIME: runtime_pb2.ProviderKind.PROVIDER_KIND_RUNTIME,
-        ProviderKind.WORKFLOW: runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW,
-        ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
-        ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
-    }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)
+        ProviderKind.INTEGRATION: annotations_pb2.ProviderKind.PROVIDER_KIND_APP,
+        ProviderKind.AUTHORIZATION: annotations_pb2.ProviderKind.PROVIDER_KIND_AUTHORIZATION,
+        ProviderKind.IDENTITY: annotations_pb2.ProviderKind.PROVIDER_KIND_IDENTITY,
+        ProviderKind.CACHE: annotations_pb2.ProviderKind.PROVIDER_KIND_CACHE,
+        ProviderKind.S3: annotations_pb2.ProviderKind.PROVIDER_KIND_S3,
+        ProviderKind.AGENT: annotations_pb2.ProviderKind.PROVIDER_KIND_AGENT,
+        ProviderKind.RUNTIME: annotations_pb2.ProviderKind.PROVIDER_KIND_RUNTIME,
+        ProviderKind.WORKFLOW: annotations_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW,
+        ProviderKind.SECRETS: annotations_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
+        ProviderKind.TELEMETRY: annotations_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
+    }.get(normalized, annotations_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)
 
 
 def _normalized_runtime_kind(kind: object | None) -> ProviderKind:

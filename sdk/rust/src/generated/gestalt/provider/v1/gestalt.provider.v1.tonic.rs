@@ -2851,7 +2851,6 @@ pub mod cache_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "Get"));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn get_many(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheGetManyRequest>,
@@ -2965,7 +2964,6 @@ pub mod cache_server {
             &self,
             request: tonic::Request<super::CacheGetRequest>,
         ) -> std::result::Result<tonic::Response<super::CacheGetResponse>, tonic::Status>;
-        ///
         async fn get_many(
             &self,
             request: tonic::Request<super::CacheGetManyRequest>,
@@ -4857,6 +4855,8 @@ pub mod indexed_db_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        /** Lifecycle
+        */
         pub async fn create_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectStoreRequest>,
@@ -5259,6 +5259,8 @@ pub mod indexed_db_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
+        /** Lifecycle
+        */
         async fn create_object_store(
             &self,
             request: tonic::Request<super::CreateObjectStoreRequest>,
@@ -6914,7 +6916,6 @@ pub mod runtime_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn get_support(
             &mut self,
             request: impl tonic::IntoRequest<()>,
@@ -6930,7 +6931,6 @@ pub mod runtime_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.Runtime", "GetSupport"));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn start_session(
             &mut self,
             request: impl tonic::IntoRequest<super::StartRuntimeSessionRequest>,
@@ -7073,12 +7073,10 @@ pub mod runtime_server {
     /// Generated trait containing gRPC methods that should be implemented for use with RuntimeServer.
     #[async_trait]
     pub trait Runtime: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn get_support(
             &self,
             request: tonic::Request<()>,
         ) -> std::result::Result<tonic::Response<super::RuntimeSupport>, tonic::Status>;
-        ///
         async fn start_session(
             &self,
             request: tonic::Request<super::StartRuntimeSessionRequest>,

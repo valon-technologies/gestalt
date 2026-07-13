@@ -116,6 +116,7 @@ message HostedApp {
 }
 
 service Runtime {
+  option (provider_kind) = PROVIDER_KIND_RUNTIME;
   rpc GetSupport(google.protobuf.Empty) returns (RuntimeSupport);
   rpc StartSession(StartRuntimeSessionRequest) returns (RuntimeSession) {
     option (signature) = "app_name";

@@ -2,10 +2,11 @@
 // @generated from file v1/runtime.proto (package gestalt.provider.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_empty, file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { ProviderKind } from "./annotations_pb";
 import { file_v1_annotations } from "./annotations_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
@@ -13,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/runtime.proto.
  */
 export const file_v1_runtime: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxItsBChBQcm92aWRlcklkZW50aXR5Ei8KBGtpbmQYASABKA4yIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVyS2luZBIMCgRuYW1lGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgd2ZXJzaW9uGAUgASgJEhAKCHdhcm5pbmdzGAYgAygJEhwKFG1pbl9wcm90b2NvbF92ZXJzaW9uGAogASgFEhwKFG1heF9wcm90b2NvbF92ZXJzaW9uGAsgASgFImsKGENvbmZpZ3VyZVByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoBSJLChlDb25maWd1cmVQcm92aWRlclJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAU6FJq1GBBwcm90b2NvbF92ZXJzaW9uIjUKE0hlYWx0aENoZWNrUmVzcG9uc2USDQoFcmVhZHkYASABKAgSDwoHbWVzc2FnZRgCIAEoCSJOChxTdGFydFJ1bnRpbWVQcm92aWRlclJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAU6FJq1GBBwcm90b2NvbF92ZXJzaW9uKpQDCgxQcm92aWRlcktpbmQSHQoZUFJPVklERVJfS0lORF9VTlNQRUNJRklFRBAAEhUKEVBST1ZJREVSX0tJTkRfQVBQEAESGgoWUFJPVklERVJfS0lORF9JREVOVElUWRACEhsKF1BST1ZJREVSX0tJTkRfSU5ERVhFRERCEAMSGQoVUFJPVklERVJfS0lORF9TRUNSRVRTEAQSGwoXUFJPVklERVJfS0lORF9URUxFTUVUUlkQBRIXChNQUk9WSURFUl9LSU5EX0NBQ0hFEAYSFAoQUFJPVklERVJfS0lORF9TMxAHEhoKFlBST1ZJREVSX0tJTkRfV09SS0ZMT1cQCBIfChtQUk9WSURFUl9LSU5EX0FVVEhPUklaQVRJT04QCRIZChVQUk9WSURFUl9LSU5EX1JVTlRJTUUQChIXChNQUk9WSURFUl9LSU5EX0FHRU5UEAsSJQohUFJPVklERVJfS0lORF9FWFRFUk5BTF9DUkVERU5USUFMEAwSFgoSUFJPVklERVJfS0lORF9URVNUEA0yswMKEVByb3ZpZGVyTGlmZWN5Y2xlElQKE0dldFByb3ZpZGVySWRlbnRpdHkSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVySWRlbnRpdHkSmgEKEUNvbmZpZ3VyZVByb3ZpZGVyEi0uZ2VzdGFsdC5wcm92aWRlci52MS5Db25maWd1cmVQcm92aWRlclJlcXVlc3QaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbmZpZ3VyZVByb3ZpZGVyUmVzcG9uc2UiJoq1GARuYW1lirUYEHByb3RvY29sX3ZlcnNpb26KtRgGY29uZmlnEk8KC0hlYWx0aENoZWNrEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiguZ2VzdGFsdC5wcm92aWRlci52MS5IZWFsdGhDaGVja1Jlc3BvbnNlEloKDVN0YXJ0UHJvdmlkZXISFi5nb29nbGUucHJvdG9idWYuRW1wdHkaMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0UnVudGltZVByb3ZpZGVyUmVzcG9uc2ViBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct, file_v1_annotations]);
+  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxItsBChBQcm92aWRlcklkZW50aXR5Ei8KBGtpbmQYASABKA4yIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVyS2luZBIMCgRuYW1lGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgd2ZXJzaW9uGAUgASgJEhAKCHdhcm5pbmdzGAYgAygJEhwKFG1pbl9wcm90b2NvbF92ZXJzaW9uGAogASgFEhwKFG1heF9wcm90b2NvbF92ZXJzaW9uGAsgASgFImsKGENvbmZpZ3VyZVByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoBSJLChlDb25maWd1cmVQcm92aWRlclJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAU6FJq1GBBwcm90b2NvbF92ZXJzaW9uIjUKE0hlYWx0aENoZWNrUmVzcG9uc2USDQoFcmVhZHkYASABKAgSDwoHbWVzc2FnZRgCIAEoCSJOChxTdGFydFJ1bnRpbWVQcm92aWRlclJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAU6FJq1GBBwcm90b2NvbF92ZXJzaW9uMrMDChFQcm92aWRlckxpZmVjeWNsZRJUChNHZXRQcm92aWRlcklkZW50aXR5EhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiUuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlcklkZW50aXR5EpoBChFDb25maWd1cmVQcm92aWRlchItLmdlc3RhbHQucHJvdmlkZXIudjEuQ29uZmlndXJlUHJvdmlkZXJSZXF1ZXN0Gi4uZ2VzdGFsdC5wcm92aWRlci52MS5Db25maWd1cmVQcm92aWRlclJlc3BvbnNlIiaKtRgEbmFtZYq1GBBwcm90b2NvbF92ZXJzaW9uirUYBmNvbmZpZxJPCgtIZWFsdGhDaGVjaxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRooLmdlc3RhbHQucHJvdmlkZXIudjEuSGVhbHRoQ2hlY2tSZXNwb25zZRJaCg1TdGFydFByb3ZpZGVyEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GjEuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFJ1bnRpbWVQcm92aWRlclJlc3BvbnNlYgZwcm90bzM", [file_google_protobuf_empty, file_google_protobuf_struct, file_v1_annotations]);
 
 /**
  * ProviderIdentity describes a provider surface and the protocol versions it
@@ -163,87 +164,6 @@ export type StartRuntimeProviderResponse = Message<"gestalt.provider.v1.StartRun
  */
 export const StartRuntimeProviderResponseSchema: GenMessage<StartRuntimeProviderResponse> = /*@__PURE__*/
   messageDesc(file_v1_runtime, 4);
-
-/**
- * @generated from enum gestalt.provider.v1.ProviderKind
- */
-export enum ProviderKind {
-  /**
-   * @generated from enum value: PROVIDER_KIND_UNSPECIFIED = 0;
-   */
-  UNSPECIFIED = 0,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_APP = 1;
-   */
-  APP = 1,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_IDENTITY = 2;
-   */
-  IDENTITY = 2,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_INDEXEDDB = 3;
-   */
-  INDEXEDDB = 3,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_SECRETS = 4;
-   */
-  SECRETS = 4,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_TELEMETRY = 5;
-   */
-  TELEMETRY = 5,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_CACHE = 6;
-   */
-  CACHE = 6,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_S3 = 7;
-   */
-  S3 = 7,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_WORKFLOW = 8;
-   */
-  WORKFLOW = 8,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_AUTHORIZATION = 9;
-   */
-  AUTHORIZATION = 9,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_RUNTIME = 10;
-   */
-  RUNTIME = 10,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_AGENT = 11;
-   */
-  AGENT = 11,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_EXTERNAL_CREDENTIAL = 12;
-   */
-  EXTERNAL_CREDENTIAL = 12,
-
-  /**
-   * @generated from enum value: PROVIDER_KIND_TEST = 13;
-   */
-  TEST = 13,
-}
-
-/**
- * Describes the enum gestalt.provider.v1.ProviderKind.
- */
-export const ProviderKindSchema: GenEnum<ProviderKind> = /*@__PURE__*/
-  enumDesc(file_v1_runtime, 0);
 
 /**
  * ProviderLifecycle is the common lifecycle protocol shared by every provider

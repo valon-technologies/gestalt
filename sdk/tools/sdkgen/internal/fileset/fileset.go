@@ -81,7 +81,13 @@ func (s *FileSet) Files() []File {
 
 // Rendered returns the on-disk bytes for f: header, then content.
 func Rendered(f File, style CommentStyle) []byte {
-	header := Header(style)
+	// Inventories are consumed as JSON by packaging and documentation checks;
+	// a generated-code comment would make them invalid JSON. They remain owned
+	// by the emitter through the exact expected path and bytes.
+	var header []byte
+	if filepath.Ext(f.Path) != ".json" {
+		header = Header(style)
+	}
 	out := make([]byte, 0, len(header)+len(f.Content))
 	out = append(out, header...)
 	out = append(out, f.Content...)

@@ -38,9 +38,9 @@ import {
 import { S3 as S3Service } from "../src/internal/gen/v1/s3_pb.ts";
 import {
   ConfigureProviderRequestSchema,
-  ProviderKind as ProtoProviderKind,
   ProviderLifecycle,
 } from "../src/internal/gen/v1/runtime_pb.ts";
+import { ProviderKind as ProtoProviderKind } from "../src/internal/gen/v1/annotations_pb.ts";
 import {
   ApplyWorkflowProviderDefinitionRequestSchema,
   StartWorkflowProviderRunRequestSchema,

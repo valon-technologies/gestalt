@@ -2127,7 +2127,7 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\vSourceLayer\x12\x1c\n" +
 	"\x18SOURCE_LAYER_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aSOURCE_LAYER_STATIC_CONFIG\x10\x01\x12\x18\n" +
-	"\x14SOURCE_LAYER_RUNTIME\x10\x022\xf5\n" +
+	"\x14SOURCE_LAYER_RUNTIME\x10\x022\xf9\n" +
 	"\n" +
 	"\rAuthorization\x12\x86\x01\n" +
 	"\vCheckAccess\x12'.gestalt.provider.v1.CheckAccessRequest\x1a(.gestalt.provider.v1.CheckAccessResponse\"$\x8a\xb5\x18\x06action\x8a\xb5\x18\bresource\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x88\x01\n" +
@@ -2140,7 +2140,7 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\x11GetActiveModelRef\x12\x16.google.protobuf.Empty\x1a..gestalt.provider.v1.GetActiveModelRefResponse\"\x0e\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x82\x01\n" +
 	"\x0eSetActiveModel\x12*.gestalt.provider.v1.SetActiveModelRequest\x1a+.gestalt.provider.v1.SetActiveModelResponse\"\x17\x8a\xb5\x18\x05model\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xc8\x01\n" +
 	"\x1cListActiveModelResourceTypes\x128.gestalt.provider.v1.ListActiveModelResourceTypesRequest\x1a9.gestalt.provider.v1.ListActiveModelResourceTypesResponse\"3\x8a\xb5\x18\tpage_size\x8a\xb5\x18\n" +
-	"page_token\x8a\xb5\x18\x06filter\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x1a\x11\x8a\xb5\x18\rauthorizationB\xde\x01\n" +
+	"page_token\x8a\xb5\x18\x06filter\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x1a\x15\x8a\xb5\x18\rauthorization\x90\xb5\x18\tB\xde\x01\n" +
 	"\x17com.gestalt.provider.v1B\x12AuthorizationProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

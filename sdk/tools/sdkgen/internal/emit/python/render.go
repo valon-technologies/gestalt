@@ -1227,7 +1227,8 @@ func (r *renderer) assemble() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(r.localImports())
+	localImports := r.localImports()
+	b.WriteString(localImports)
 
 	// The protobuf wheel ships no stubs for the well-known modules, so their
 	// members are invisible to the type checker and the aliases stay Any. The
@@ -1250,7 +1251,9 @@ func (r *renderer) assemble() string {
 	// following comment, and two before a class or function. The alias block,
 	// when present, ends the import block itself.
 	if len(aliases) == 0 && strings.HasPrefix(r.body.String(), "#") {
-		b.WriteString("\n")
+		if len(stdlib) > 0 || len(thirdParty) > 0 || localImports != "" {
+			b.WriteString("\n")
+		}
 	} else {
 		b.WriteString("\n\n")
 	}

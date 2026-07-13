@@ -10,6 +10,16 @@ pub(crate) fn to_wire_get_secret_request(value: GetSecretRequest) -> v1::GetSecr
     v1::GetSecretRequest { name: value.name }
 }
 
+/// Converts a wire `GetSecretRequest` to its native message.
+pub(crate) fn from_wire_get_secret_request(value: v1::GetSecretRequest) -> GetSecretRequest {
+    GetSecretRequest { name: value.name }
+}
+
+/// Converts a native `GetSecretResponse` to its wire message.
+pub(crate) fn to_wire_get_secret_response(value: GetSecretResponse) -> v1::GetSecretResponse {
+    v1::GetSecretResponse { value: value.value }
+}
+
 /// Converts a wire `GetSecretResponse` to its native message.
 pub(crate) fn from_wire_get_secret_response(value: v1::GetSecretResponse) -> GetSecretResponse {
     GetSecretResponse { value: value.value }

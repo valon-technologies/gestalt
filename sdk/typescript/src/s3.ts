@@ -573,3 +573,14 @@ export class S3ObjectAccess {
     return fromWireCreateObjectAccessURLResponse(response);
   }
 }
+
+export {
+  S3Provider,
+  createS3ProviderService,
+} from "./generated/providers/s3.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

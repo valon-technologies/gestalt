@@ -480,3 +480,14 @@ export class ExternalCredentials {
     return fromWireExchangeExternalCredentialResponse(response);
   }
 }
+
+export {
+  ExternalCredentialsProvider,
+  createExternalCredentialsProviderService,
+} from "./generated/providers/external_credential.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

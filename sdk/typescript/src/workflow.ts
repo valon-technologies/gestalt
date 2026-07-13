@@ -1186,3 +1186,18 @@ export class Workflow {
     return fromWireWorkflowEvent(response);
   }
 }
+
+export {
+  WorkflowProvider,
+  createWorkflowProviderService,
+} from "./generated/providers/workflow.ts";
+
+export { type AgentOutput } from "./agent.ts";
+
+export { type AgentToolRef, type RequestContext } from "./app.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

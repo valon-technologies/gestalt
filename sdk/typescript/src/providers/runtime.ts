@@ -74,11 +74,11 @@ import {
   ConfigureProviderResponseSchema,
   HealthCheckResponseSchema,
   ProviderIdentitySchema,
-  ProviderKind as ProtoProviderKind,
   ProviderLifecycle,
   StartRuntimeProviderResponseSchema,
   type ConfigureProviderRequest,
 } from "../internal/gen/v1/runtime_pb.ts";
+import { ProviderKind as ProtoProviderKind } from "../internal/gen/v1/annotations_pb.ts";
 import { S3 as S3Service } from "../internal/gen/v1/s3_pb.ts";
 import { Workflow as WorkflowProviderService } from "../internal/gen/v1/workflow_pb.ts";
 import {

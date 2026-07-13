@@ -13,32 +13,10 @@ from google.protobuf import empty_pb2 as _empty_pb2
 from ._codec import runtime as _codec
 from ._codec import support as _support
 from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+from .annotations import ProviderKind
 from .rpc_support import JsonValue
 
 _empty: Any = _empty_pb2
-
-
-# Open enum: unknown numeric values are preserved, so the type is int.
-ProviderKind = int
-
-
-class ProviderKindValues:
-    """Named values for the open ProviderKind enum."""
-
-    UNSPECIFIED: ProviderKind = 0
-    APP: ProviderKind = 1
-    IDENTITY: ProviderKind = 2
-    INDEXEDDB: ProviderKind = 3
-    SECRETS: ProviderKind = 4
-    TELEMETRY: ProviderKind = 5
-    CACHE: ProviderKind = 6
-    S3: ProviderKind = 7
-    WORKFLOW: ProviderKind = 8
-    AUTHORIZATION: ProviderKind = 9
-    RUNTIME: ProviderKind = 10
-    AGENT: ProviderKind = 11
-    EXTERNAL_CREDENTIAL: ProviderKind = 12
-    TEST: ProviderKind = 13
 
 
 @dataclass(frozen=True, slots=True)

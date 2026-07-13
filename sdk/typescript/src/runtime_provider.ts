@@ -346,3 +346,16 @@ export class Runtime {
     return fromWireHostedApp(response);
   }
 }
+
+export {
+  RuntimeProvider,
+  createRuntimeProviderService,
+} from "./generated/providers/runtime_provider.ts";
+
+export { type AgentWorkspace, type PreparedAgentWorkspace } from "./agent.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

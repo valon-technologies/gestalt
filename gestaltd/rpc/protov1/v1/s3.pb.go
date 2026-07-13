@@ -1514,20 +1514,21 @@ const file_v1_s3_proto_rawDesc = "" +
 	"\x12PRESIGN_METHOD_GET\x10\x01\x12\x16\n" +
 	"\x12PRESIGN_METHOD_PUT\x10\x02\x12\x19\n" +
 	"\x15PRESIGN_METHOD_DELETE\x10\x03\x12\x17\n" +
-	"\x13PRESIGN_METHOD_HEAD\x10\x042\xb0\a\n" +
-	"\x02S3\x12f\n" +
+	"\x13PRESIGN_METHOD_HEAD\x10\x042\xbc\a\n" +
+	"\x02S3\x12j\n" +
 	"\n" +
-	"HeadObject\x12&.gestalt.provider.v1.HeadObjectRequest\x1a'.gestalt.provider.v1.HeadObjectResponse\"\a\x8a\xb5\x18\x03ref\x12n\n" +
+	"HeadObject\x12&.gestalt.provider.v1.HeadObjectRequest\x1a'.gestalt.provider.v1.HeadObjectResponse\"\v\x8a\xb5\x18\x03ref\xa8\xb5\x18\x01\x12n\n" +
 	"\n" +
 	"ReadObject\x12&.gestalt.provider.v1.ReadObjectRequest\x1a$.gestalt.provider.v1.ReadObjectChunk\"\x10\x92\xb5\x18\f\n" +
 	"\x04meta\x12\x04data0\x01\x12t\n" +
 	"\vWriteObject\x12'.gestalt.provider.v1.WriteObjectRequest\x1a(.gestalt.provider.v1.WriteObjectResponse\"\x10\x92\xb5\x18\f\n" +
-	"\x04open\x12\x04data(\x01\x12Y\n" +
-	"\fDeleteObject\x12(.gestalt.provider.v1.DeleteObjectRequest\x1a\x16.google.protobuf.Empty\"\a\x8a\xb5\x18\x03ref\x12\xaa\x01\n" +
+	"\x04open\x12\x04data(\x01\x12]\n" +
+	"\fDeleteObject\x12(.gestalt.provider.v1.DeleteObjectRequest\x1a\x16.google.protobuf.Empty\"\v\x8a\xb5\x18\x03ref\xa8\xb5\x18\x01\x12\xaa\x01\n" +
 	"\vListObjects\x12'.gestalt.provider.v1.ListObjectsRequest\x1a(.gestalt.provider.v1.ListObjectsResponse\"H\x8a\xb5\x18\x06prefix\x8a\xb5\x18\tdelimiter\x8a\xb5\x18\x12continuation_token\x8a\xb5\x18\vstart_after\x8a\xb5\x18\bmax_keys\x12\x95\x01\n" +
 	"\n" +
 	"CopyObject\x12&.gestalt.provider.v1.CopyObjectRequest\x1a'.gestalt.provider.v1.CopyObjectResponse\"6\x8a\xb5\x18\bif_match\x8a\xb5\x18\rif_none_match\x8a\xb5\x18\x06source\x8a\xb5\x18\vdestination\x12\xb3\x01\n" +
-	"\rPresignObject\x12).gestalt.provider.v1.PresignObjectRequest\x1a*.gestalt.provider.v1.PresignObjectResponse\"K\x8a\xb5\x18\x06method\x8a\xb5\x18\x0fexpires_seconds\x8a\xb5\x18\x03ref\xa2\xb5\x18\fcontent_type\xa2\xb5\x18\x13content_disposition\x1a\x06\x8a\xb5\x18\x02s32\xde\x01\n" +
+	"\rPresignObject\x12).gestalt.provider.v1.PresignObjectRequest\x1a*.gestalt.provider.v1.PresignObjectResponse\"K\x8a\xb5\x18\x06method\x8a\xb5\x18\x0fexpires_seconds\x8a\xb5\x18\x03ref\xa2\xb5\x18\fcontent_type\xa2\xb5\x18\x13content_disposition\x1a\n" +
+	"\x8a\xb5\x18\x02s3\x90\xb5\x18\a2\xde\x01\n" +
 	"\x0eS3ObjectAccess\x12\xcb\x01\n" +
 	"\x15CreateObjectAccessURL\x121.gestalt.provider.v1.CreateObjectAccessURLRequest\x1a2.gestalt.provider.v1.CreateObjectAccessURLResponse\"K\x8a\xb5\x18\x06method\x8a\xb5\x18\x0fexpires_seconds\x8a\xb5\x18\x03ref\xa2\xb5\x18\fcontent_type\xa2\xb5\x18\x13content_dispositionB\xd3\x01\n" +
 	"\x17com.gestalt.provider.v1B\aS3ProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"

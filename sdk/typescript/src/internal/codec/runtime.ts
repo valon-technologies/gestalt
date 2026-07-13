@@ -3,6 +3,7 @@
 import { create } from "@bufbuild/protobuf";
 
 import * as wire from "../gen/v1/runtime_pb.ts";
+import * as annotations from "../gen/v1/annotations_pb.ts";
 import type {
   ConfigureProviderRequest,
   ConfigureProviderResponse,
@@ -70,7 +71,7 @@ export function toWireProviderIdentity(
   value: Init<ProviderIdentity>,
 ): wire.ProviderIdentity {
   return create(wire.ProviderIdentitySchema, {
-    kind: (value.kind ?? 0) as wire.ProviderKind,
+    kind: (value.kind ?? 0) as annotations.ProviderKind,
     name: value.name ?? "",
     displayName: value.displayName ?? "",
     description: value.description ?? "",

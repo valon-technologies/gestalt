@@ -11,6 +11,8 @@ import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
 import * as wire from "./internal/gen/v1/runtime_pb.ts";
+import * as annotations from "./internal/gen/v1/annotations_pb.ts";
+import { ProviderKind } from "./annotations.ts";
 import {
   fromWireConfigureProviderResponse,
   fromWireHealthCheckResponse,
@@ -20,25 +22,6 @@ import {
 } from "./internal/codec/runtime.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
 import type { Init } from "./rpc_support.ts";
-
-export const ProviderKind = {
-  UNSPECIFIED: 0,
-  APP: 1,
-  IDENTITY: 2,
-  INDEXEDDB: 3,
-  SECRETS: 4,
-  TELEMETRY: 5,
-  CACHE: 6,
-  S3: 7,
-  WORKFLOW: 8,
-  AUTHORIZATION: 9,
-  RUNTIME: 10,
-  AGENT: 11,
-  EXTERNAL_CREDENTIAL: 12,
-  TEST: 13,
-} as const;
-
-export type ProviderKind = number;
 
 /**
  * ConfigureProviderRequest configures a non-integration provider for one
@@ -168,3 +151,5 @@ export class ProviderLifecycle {
     return fromWireStartRuntimeProviderResponse(response);
   }
 }
+
+export { ProviderKind } from "./annotations.ts";

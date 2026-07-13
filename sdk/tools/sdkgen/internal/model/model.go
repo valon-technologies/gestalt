@@ -80,12 +80,46 @@ const (
 	ScalarString
 )
 
-// Schema is the root of the normalized model.
-type Schema struct {
+// ProviderKind identifies a service's provider contract. Values mirror the
+// stable enum declared in sdk/proto/v1/annotations.proto.
+type ProviderKind int32
+
+const (
+	ProviderKindUnspecified        ProviderKind = 0
+	ProviderKindApp                ProviderKind = 1
+	ProviderKindIdentity           ProviderKind = 2
+	ProviderKindIndexedDB          ProviderKind = 3
+	ProviderKindSecrets            ProviderKind = 4
+	ProviderKindTelemetry          ProviderKind = 5
+	ProviderKindCache              ProviderKind = 6
+	ProviderKindS3                 ProviderKind = 7
+	ProviderKindWorkflow           ProviderKind = 8
+	ProviderKindAuthorization      ProviderKind = 9
+	ProviderKindRuntime            ProviderKind = 10
+	ProviderKindAgent              ProviderKind = 11
+	ProviderKindExternalCredential ProviderKind = 12
+	ProviderKindTest               ProviderKind = 13
+)
+
+// ProviderInput controls the request shape exposed to provider authors.
+type ProviderInput int32
+
+const (
+	ProviderInputFullRequest     ProviderInput = 0
+	ProviderInputClientSignature ProviderInput = 1
+)
+
+// ApiPlan is the immutable, language-neutral plan consumed by every emitter.
+// Schema is retained as an alias so the internal package remains compatible
+// with existing tests and callers while the pipeline makes the ownership
+// boundary explicit.
+type ApiPlan struct {
 	Services []*Service
 	Messages []*Message // transitive closure of method I/O, sorted by full name
 	Enums    []*Enum    // sorted by full name
 }
+
+type Schema = ApiPlan
 
 type Service struct {
 	// Doc is the leading proto comment, normalized; empty when absent.
@@ -98,6 +132,12 @@ type Service struct {
 	// HostBinding is the host-service binding name from the host_binding
 	// annotation; empty when unannotated.
 	HostBinding string
+
+	// ProviderKind identifies the provider contract. Unspecified means this is
+	// a client-only service. Provider is kept as a derived convenience for
+	// emitters that only need to branch on provider ownership.
+	ProviderKind ProviderKind
+	Provider     bool
 }
 
 type Method struct {
@@ -123,6 +163,11 @@ type Method struct {
 	// JsonResult declares that this method's result carries the standard
 	// JSON operation envelope, from the json_result annotation.
 	JsonResult *JsonResult
+
+	// ProviderInput selects the provider handler's request shape. The default
+	// is the complete native request, preserving context and provider fields.
+	ProviderInput    ProviderInput
+	ProviderInputSet bool
 }
 
 // JsonResult names the output message's status and body fields holding an

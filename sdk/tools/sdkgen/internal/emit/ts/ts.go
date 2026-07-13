@@ -5,7 +5,9 @@
 package ts
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
@@ -14,6 +16,15 @@ import (
 )
 
 type Emitter struct{}
+
+func hasProvider(services []*model.Service) bool {
+	for _, svc := range services {
+		if svc.Provider {
+			return true
+		}
+	}
+	return false
+}
 
 func New() *Emitter { return &Emitter{} }
 
@@ -55,6 +66,9 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	services := schema.Services
 	set := fileset.New()
 	if len(services) == 0 {
+		if err := emit.AddModuleInventory(set, emit.TargetTS); err != nil {
+			return nil, err
+		}
 		return set, nil
 	}
 
@@ -70,6 +84,11 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("internal/codec/support.ts", []byte(runtimeFile)); err != nil {
 		return nil, err
 	}
+	if hasProvider(services) {
+		if err := set.Add("generated/providers/support.ts", []byte(serverSupportFile)); err != nil {
+			return nil, err
+		}
+	}
 	for _, g := range groupFiles(services, messages, enums) {
 		outputBase := g.base
 		public := newRenderer(idx, outputBase, g.base, modulePublic)
@@ -82,8 +101,46 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		for _, svc := range g.services {
 			public.renderClient(svc)
 		}
-		if err := set.Add(outputBase+".ts", []byte(public.assemble())); err != nil {
+		var providerServices []*model.Service
+		for _, svc := range g.services {
+			if svc.Provider {
+				providerServices = append(providerServices, svc)
+			}
+		}
+		var publicSource strings.Builder
+		publicSource.WriteString(public.assemble())
+		for _, svc := range g.services {
+			if !svc.Provider {
+				continue
+			}
+			name := providerName(localName(svc.FullName))
+			fmt.Fprintf(&publicSource, "\nexport { %s, create%sService } from \"./generated/providers/%s.ts\";\n", name, name, outputBase)
+		}
+		for _, base := range sortedKeys(flattenStringBoolMap(public.features.crossPublic)) {
+			if base == outputBase {
+				continue
+			}
+			names := public.features.crossPublic[base]
+			specs := make([]string, 0, len(names))
+			for _, name := range sortedKeys(names) {
+				if names[name] {
+					specs = append(specs, "type "+name)
+				} else {
+					specs = append(specs, name)
+				}
+			}
+			fmt.Fprintf(&publicSource, "\nexport { %s } from \"./%s.ts\";\n", strings.Join(specs, ", "), base)
+		}
+		if len(providerServices) > 0 {
+			publicSource.WriteString("\nexport { type BidiStream, type ClientStream, type ServerStream } from \"./generated/providers/support.ts\";\n")
+		}
+		if err := set.Add(outputBase+".ts", []byte(publicSource.String())); err != nil {
 			return nil, err
+		}
+		if len(providerServices) > 0 {
+			if err := set.Add("generated/providers/"+outputBase+".ts", []byte(renderProviderFile(idx, outputBase, providerServices))); err != nil {
+				return nil, err
+			}
 		}
 
 		if len(g.messages) == 0 {
@@ -96,6 +153,9 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		if err := set.Add("internal/codec/"+outputBase+".ts", []byte(codec.assemble())); err != nil {
 			return nil, err
 		}
+	}
+	if err := emit.AddModuleInventory(set, emit.TargetTS); err != nil {
+		return nil, err
 	}
 	return set, nil
 }
@@ -151,6 +211,11 @@ func reachable(idx *index, services []*model.Service) ([]*model.Message, []*mode
 			if method.Output != nil {
 				visit(method.Output.FullName)
 			}
+		}
+	}
+	for fullName, enum := range idx.enums {
+		if enum.ProtoFile == "sdk/proto/v1/annotations.proto" {
+			seenEnums[fullName] = true
 		}
 	}
 

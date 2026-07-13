@@ -8,6 +8,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::generated::google::rpc::Status;
 use crate::rpc_support::RpcStatus;
 
+/// Converts a native status to its wire message. Detail payloads are not part
+/// of the native model and are left empty.
+pub(crate) fn to_wire_status(value: RpcStatus) -> Status {
+    Status {
+        code: value.code,
+        message: value.message,
+        details: Vec::new(),
+    }
+}
+
 /// Converts a wire status to its native representation, dropping any detail
 /// payloads.
 pub(crate) fn from_wire_status(value: Status) -> RpcStatus {
@@ -63,6 +73,18 @@ pub(crate) fn to_wire_duration(value: Duration) -> prost_types::Duration {
         seconds: i64::try_from(value.as_secs()).unwrap_or(i64::MAX),
         nanos: value.subsec_nanos() as i32,
     }
+}
+
+/// Converts a wire duration to its native duration. Negative wire durations
+/// clamp to zero because std::time::Duration is unsigned.
+pub(crate) fn from_wire_duration(value: prost_types::Duration) -> Duration {
+    if value.seconds < 0 {
+        return Duration::ZERO;
+    }
+    Duration::new(
+        value.seconds as u64,
+        value.nanos.clamp(0, 999_999_999) as u32,
+    )
 }
 
 /// Converts a native JSON object to its wire struct.

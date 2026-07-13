@@ -35,16 +35,31 @@ const (
 // diagnostics (descriptor paths are relative to the proto module root).
 func Build(files *protoregistry.Files, services []protoreflect.ServiceDescriptor, pathPrefix string) (*model.Schema, *diag.List) {
 	b := &builder{
-		pathPrefix: pathPrefix,
-		ann:        newAnnotations(files),
-		diags:      &diag.List{},
-		messages:   map[protoreflect.FullName]*model.Message{},
-		enums:      map[protoreflect.FullName]*model.Enum{},
-		files:      map[string]bool{},
+		pathPrefix:    pathPrefix,
+		ann:           newAnnotations(files),
+		diags:         &diag.List{},
+		messages:      map[protoreflect.FullName]*model.Message{},
+		enums:         map[protoreflect.FullName]*model.Enum{},
+		files:         map[string]bool{},
+		providerKinds: map[model.ProviderKind]protoreflect.FullName{},
 	}
 	schema := &model.Schema{}
 	for _, sd := range services {
 		schema.Services = append(schema.Services, b.service(sd))
+	}
+	// Provider annotations are part of the public SDK contract even though
+	// their enums are referenced only from descriptor options, not message
+	// fields. Keep both enum definitions in the immutable plan so every
+	// language surface exposes the same annotation vocabulary.
+	for _, name := range []protoreflect.FullName{
+		"gestalt.provider.v1.ProviderKind",
+		"gestalt.provider.v1.ProviderInput",
+	} {
+		if descriptor, err := files.FindDescriptorByName(name); err == nil {
+			if enum, ok := descriptor.(protoreflect.EnumDescriptor); ok {
+				b.enum(enum)
+			}
+		}
 	}
 	for _, m := range b.messages {
 		schema.Messages = append(schema.Messages, m)
@@ -58,12 +73,13 @@ func Build(files *protoregistry.Files, services []protoreflect.ServiceDescriptor
 }
 
 type builder struct {
-	pathPrefix string
-	ann        *annotations
-	diags      *diag.List
-	messages   map[protoreflect.FullName]*model.Message
-	enums      map[protoreflect.FullName]*model.Enum
-	files      map[string]bool
+	pathPrefix    string
+	ann           *annotations
+	diags         *diag.List
+	messages      map[protoreflect.FullName]*model.Message
+	enums         map[protoreflect.FullName]*model.Enum
+	files         map[string]bool
+	providerKinds map[model.ProviderKind]protoreflect.FullName
 }
 
 func (b *builder) service(sd protoreflect.ServiceDescriptor) *model.Service {

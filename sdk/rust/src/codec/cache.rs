@@ -7,7 +7,7 @@ use crate::cache::{
     CacheGetManyRequest, CacheGetManyResponse, CacheGetRequest, CacheGetResponse, CacheResult,
     CacheSetEntry, CacheSetManyRequest, CacheSetRequest, CacheTouchRequest, CacheTouchResponse,
 };
-use crate::codec::support::to_wire_duration;
+use crate::codec::support::{from_wire_duration, to_wire_duration};
 use crate::generated::v1;
 
 /// Converts a native `CacheDeleteManyRequest` to its wire message.
@@ -15,6 +15,22 @@ pub(crate) fn to_wire_cache_delete_many_request(
     value: CacheDeleteManyRequest,
 ) -> v1::CacheDeleteManyRequest {
     v1::CacheDeleteManyRequest { keys: value.keys }
+}
+
+/// Converts a wire `CacheDeleteManyRequest` to its native message.
+pub(crate) fn from_wire_cache_delete_many_request(
+    value: v1::CacheDeleteManyRequest,
+) -> CacheDeleteManyRequest {
+    CacheDeleteManyRequest { keys: value.keys }
+}
+
+/// Converts a native `CacheDeleteManyResponse` to its wire message.
+pub(crate) fn to_wire_cache_delete_many_response(
+    value: CacheDeleteManyResponse,
+) -> v1::CacheDeleteManyResponse {
+    v1::CacheDeleteManyResponse {
+        deleted: value.deleted,
+    }
 }
 
 /// Converts a wire `CacheDeleteManyResponse` to its native message.
@@ -31,6 +47,18 @@ pub(crate) fn to_wire_cache_delete_request(value: CacheDeleteRequest) -> v1::Cac
     v1::CacheDeleteRequest { key: value.key }
 }
 
+/// Converts a wire `CacheDeleteRequest` to its native message.
+pub(crate) fn from_wire_cache_delete_request(value: v1::CacheDeleteRequest) -> CacheDeleteRequest {
+    CacheDeleteRequest { key: value.key }
+}
+
+/// Converts a native `CacheDeleteResponse` to its wire message.
+pub(crate) fn to_wire_cache_delete_response(value: CacheDeleteResponse) -> v1::CacheDeleteResponse {
+    v1::CacheDeleteResponse {
+        deleted: value.deleted,
+    }
+}
+
 /// Converts a wire `CacheDeleteResponse` to its native message.
 pub(crate) fn from_wire_cache_delete_response(
     value: v1::CacheDeleteResponse,
@@ -45,6 +73,26 @@ pub(crate) fn to_wire_cache_get_many_request(
     value: CacheGetManyRequest,
 ) -> v1::CacheGetManyRequest {
     v1::CacheGetManyRequest { keys: value.keys }
+}
+
+/// Converts a wire `CacheGetManyRequest` to its native message.
+pub(crate) fn from_wire_cache_get_many_request(
+    value: v1::CacheGetManyRequest,
+) -> CacheGetManyRequest {
+    CacheGetManyRequest { keys: value.keys }
+}
+
+/// Converts a native `CacheGetManyResponse` to its wire message.
+pub(crate) fn to_wire_cache_get_many_response(
+    value: CacheGetManyResponse,
+) -> v1::CacheGetManyResponse {
+    v1::CacheGetManyResponse {
+        entries: value
+            .entries
+            .into_iter()
+            .map(to_wire_cache_result)
+            .collect(),
+    }
 }
 
 /// Converts a wire `CacheGetManyResponse` to its native message.
@@ -65,9 +113,31 @@ pub(crate) fn to_wire_cache_get_request(value: CacheGetRequest) -> v1::CacheGetR
     v1::CacheGetRequest { key: value.key }
 }
 
+/// Converts a wire `CacheGetRequest` to its native message.
+pub(crate) fn from_wire_cache_get_request(value: v1::CacheGetRequest) -> CacheGetRequest {
+    CacheGetRequest { key: value.key }
+}
+
+/// Converts a native `CacheGetResponse` to its wire message.
+pub(crate) fn to_wire_cache_get_response(value: CacheGetResponse) -> v1::CacheGetResponse {
+    v1::CacheGetResponse {
+        found: value.found,
+        value: value.value,
+    }
+}
+
 /// Converts a wire `CacheGetResponse` to its native message.
 pub(crate) fn from_wire_cache_get_response(value: v1::CacheGetResponse) -> CacheGetResponse {
     CacheGetResponse {
+        found: value.found,
+        value: value.value,
+    }
+}
+
+/// Converts a native `CacheResult` to its wire message.
+pub(crate) fn to_wire_cache_result(value: CacheResult) -> v1::CacheResult {
+    v1::CacheResult {
+        key: value.key,
         found: value.found,
         value: value.value,
     }
@@ -90,6 +160,14 @@ pub(crate) fn to_wire_cache_set_entry(value: CacheSetEntry) -> v1::CacheSetEntry
     }
 }
 
+/// Converts a wire `CacheSetEntry` to its native message.
+pub(crate) fn from_wire_cache_set_entry(value: v1::CacheSetEntry) -> CacheSetEntry {
+    CacheSetEntry {
+        key: value.key,
+        value: value.value,
+    }
+}
+
 /// Converts a native `CacheSetManyRequest` to its wire message.
 pub(crate) fn to_wire_cache_set_many_request(
     value: CacheSetManyRequest,
@@ -104,6 +182,20 @@ pub(crate) fn to_wire_cache_set_many_request(
     }
 }
 
+/// Converts a wire `CacheSetManyRequest` to its native message.
+pub(crate) fn from_wire_cache_set_many_request(
+    value: v1::CacheSetManyRequest,
+) -> CacheSetManyRequest {
+    CacheSetManyRequest {
+        entries: value
+            .entries
+            .into_iter()
+            .map(from_wire_cache_set_entry)
+            .collect(),
+        ttl: value.ttl.map(from_wire_duration),
+    }
+}
+
 /// Converts a native `CacheSetRequest` to its wire message.
 pub(crate) fn to_wire_cache_set_request(value: CacheSetRequest) -> v1::CacheSetRequest {
     v1::CacheSetRequest {
@@ -113,11 +205,35 @@ pub(crate) fn to_wire_cache_set_request(value: CacheSetRequest) -> v1::CacheSetR
     }
 }
 
+/// Converts a wire `CacheSetRequest` to its native message.
+pub(crate) fn from_wire_cache_set_request(value: v1::CacheSetRequest) -> CacheSetRequest {
+    CacheSetRequest {
+        key: value.key,
+        value: value.value,
+        ttl: value.ttl.map(from_wire_duration),
+    }
+}
+
 /// Converts a native `CacheTouchRequest` to its wire message.
 pub(crate) fn to_wire_cache_touch_request(value: CacheTouchRequest) -> v1::CacheTouchRequest {
     v1::CacheTouchRequest {
         key: value.key,
         ttl: value.ttl.map(to_wire_duration),
+    }
+}
+
+/// Converts a wire `CacheTouchRequest` to its native message.
+pub(crate) fn from_wire_cache_touch_request(value: v1::CacheTouchRequest) -> CacheTouchRequest {
+    CacheTouchRequest {
+        key: value.key,
+        ttl: value.ttl.map(from_wire_duration),
+    }
+}
+
+/// Converts a native `CacheTouchResponse` to its wire message.
+pub(crate) fn to_wire_cache_touch_response(value: CacheTouchResponse) -> v1::CacheTouchResponse {
+    v1::CacheTouchResponse {
+        touched: value.touched,
     }
 }
 

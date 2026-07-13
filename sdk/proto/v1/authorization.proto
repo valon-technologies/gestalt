@@ -211,6 +211,7 @@ enum SourceLayer {
 
 service Authorization {
   option (host_binding) = "authorization";
+  option (provider_kind) = PROVIDER_KIND_AUTHORIZATION;
 
   rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse) {
     option (google.api.method_visibility) = {

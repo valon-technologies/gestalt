@@ -15,6 +15,95 @@ var supportFile string
 //go:embed support_codec.go.tmpl
 var codecSupportFile string
 
+// serverSupportFile is the provider-side error mapping, emitted as
+// support_server.go when any service carries a provider kind.
+const serverSupportFile = `package client
+
+import (
+	"errors"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+// ServerStream is the transport-neutral provider contract for server-streaming
+// RPCs. The adapter owns conversion to wire frames and status mapping.
+type ServerStream[T any] interface {
+	Send(T) error
+}
+
+// ClientStream is the transport-neutral provider contract for client-streaming
+// RPCs. Recv returns io.EOF when the request stream is complete.
+type ClientStream[T any] interface {
+	Recv() (T, error)
+}
+
+// BidiStream combines the request and response sides of a bidirectional RPC.
+type BidiStream[In, Out any] interface {
+	Recv() (In, error)
+	Send(Out) error
+}
+
+type NativeServerStream[Native, Wire any] struct {
+	SendWire func(*Wire) error
+	ToWire   func(Native) *Wire
+}
+
+func (s NativeServerStream[Native, Wire]) Send(value Native) error {
+	return s.SendWire(s.ToWire(value))
+}
+
+type NativeClientStream[Native, Wire any] struct {
+	RecvWire func() (*Wire, error)
+	FromWire func(*Wire) Native
+}
+
+func (s NativeClientStream[Native, Wire]) Recv() (Native, error) {
+	value, err := s.RecvWire()
+	if err != nil {
+		var zero Native
+		return zero, err
+	}
+	return s.FromWire(value), nil
+}
+
+type NativeBidiStream[In, Out, WireIn, WireOut any] struct {
+	RecvWire func() (*WireIn, error)
+	SendWire func(*WireOut) error
+	FromWire func(*WireIn) In
+	ToWire   func(Out) *WireOut
+}
+
+func (s NativeBidiStream[In, Out, WireIn, WireOut]) Recv() (In, error) {
+	value, err := s.RecvWire()
+	if err != nil {
+		var zero In
+		return zero, err
+	}
+	return s.FromWire(value), nil
+}
+
+func (s NativeBidiStream[In, Out, WireIn, WireOut]) Send(value Out) error {
+	return s.SendWire(s.ToWire(value))
+}
+
+// statusError converts one handler error to the gRPC status returned to the
+// host while preserving recognized Gestalt and gRPC status codes.
+func statusError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var gerr *GestaltError
+	if errors.As(err, &gerr) {
+		return status.Error(codes.Code(gerr.Code), gerr.Message)
+	}
+	if st, ok := status.FromError(err); ok {
+		return st.Err()
+	}
+	return status.Errorf(codes.Unknown, "%s: %v", operation, err)
+}
+`
+
 // invokeSupportFile is the JSON operation-envelope decode runtime, emitted as
 // support_invoke.go when any method carries the json_result annotation.
 const invokeSupportFile = `package client

@@ -1,6 +1,6 @@
 {
   "name": "@valon-technologies/gestalt",
-  "version": "0.0.1-alpha.74",
+  "version": "0.0.1-alpha.75",
   "description": "TypeScript SDK for Gestalt executable providers",
   "type": "module",
   "repository": {
@@ -47,7 +47,7 @@
     "access": "public"
   },
   "scripts": {
-    "build:proto": "buf generate --template ../proto/buf.typescript.gen.yaml ../proto",
+    "build:proto": "go run ../tools/sdkgen --target ts",
     "docs:lint": "eslint --max-warnings=0 \"src/**/*.ts\"",
     "docs:build": "typedoc --options typedoc.json --out \"${TYPEDOC_OUT_DIR:-docs/_build/html}\"",
     "docs:build:deploy": "TYPEDOC_OUT_DIR=../../docs/public/api/typescript bun run docs:build",

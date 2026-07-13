@@ -678,3 +678,14 @@ export class AppProvider {
     return fromWireGetSessionCatalogResponse(response);
   }
 }
+
+export {
+  AppProviderHandler,
+  createAppProviderHandlerService,
+} from "./generated/providers/app.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

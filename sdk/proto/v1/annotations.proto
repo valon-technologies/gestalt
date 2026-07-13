@@ -61,6 +61,34 @@ message PublicPolicy {
   repeated string reject = 2;
 }
 
+// ProviderKind identifies the RPC-backed provider contract implemented by a
+// service. The numeric values are part of the wire contract and intentionally
+// remain identical to the historical runtime.ProviderKind enum.
+enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0;
+  PROVIDER_KIND_APP = 1;
+  PROVIDER_KIND_IDENTITY = 2;
+  PROVIDER_KIND_INDEXEDDB = 3;
+  PROVIDER_KIND_SECRETS = 4;
+  PROVIDER_KIND_TELEMETRY = 5;
+  PROVIDER_KIND_CACHE = 6;
+  PROVIDER_KIND_S3 = 7;
+  PROVIDER_KIND_WORKFLOW = 8;
+  PROVIDER_KIND_AUTHORIZATION = 9;
+  PROVIDER_KIND_RUNTIME = 10;
+  PROVIDER_KIND_AGENT = 11;
+  PROVIDER_KIND_EXTERNAL_CREDENTIAL = 12;
+  PROVIDER_KIND_TEST = 13;
+}
+
+// ProviderInput selects the request shape used by generated provider
+// interfaces. Full requests preserve context and provider-only fields;
+// CLIENT_SIGNATURE opts into the ergonomic client argument list.
+enum ProviderInput {
+  PROVIDER_INPUT_FULL_REQUEST = 0;
+  PROVIDER_INPUT_CLIENT_SIGNATURE = 1;
+}
+
 extend google.protobuf.MethodOptions {
   // Flattened call signature: the named request fields become parameters,
   // in order. Fields with presence must come last and become optional
@@ -80,6 +108,8 @@ extend google.protobuf.MethodOptions {
   // list.
   repeated string optional_signature = 50004;
 
+  ProviderInput provider_input = 50005;
+
   // Public request adaptation policy for this method.
   PublicPolicy public = 51001;
 }
@@ -97,4 +127,6 @@ extend google.protobuf.ServiceOptions {
   // Host-service binding name, enabling a generated zero-configuration
   // constructor for the client.
   string host_binding = 50001;
+
+  ProviderKind provider_kind = 50002;
 }

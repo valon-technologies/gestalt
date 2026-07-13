@@ -22,6 +22,140 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ProviderKind identifies the RPC-backed provider contract implemented by a
+// service. The numeric values are part of the wire contract and intentionally
+// remain identical to the historical runtime.ProviderKind enum.
+type ProviderKind int32
+
+const (
+	ProviderKind_PROVIDER_KIND_UNSPECIFIED         ProviderKind = 0
+	ProviderKind_PROVIDER_KIND_APP                 ProviderKind = 1
+	ProviderKind_PROVIDER_KIND_IDENTITY            ProviderKind = 2
+	ProviderKind_PROVIDER_KIND_INDEXEDDB           ProviderKind = 3
+	ProviderKind_PROVIDER_KIND_SECRETS             ProviderKind = 4
+	ProviderKind_PROVIDER_KIND_TELEMETRY           ProviderKind = 5
+	ProviderKind_PROVIDER_KIND_CACHE               ProviderKind = 6
+	ProviderKind_PROVIDER_KIND_S3                  ProviderKind = 7
+	ProviderKind_PROVIDER_KIND_WORKFLOW            ProviderKind = 8
+	ProviderKind_PROVIDER_KIND_AUTHORIZATION       ProviderKind = 9
+	ProviderKind_PROVIDER_KIND_RUNTIME             ProviderKind = 10
+	ProviderKind_PROVIDER_KIND_AGENT               ProviderKind = 11
+	ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL ProviderKind = 12
+	ProviderKind_PROVIDER_KIND_TEST                ProviderKind = 13
+)
+
+// Enum value maps for ProviderKind.
+var (
+	ProviderKind_name = map[int32]string{
+		0:  "PROVIDER_KIND_UNSPECIFIED",
+		1:  "PROVIDER_KIND_APP",
+		2:  "PROVIDER_KIND_IDENTITY",
+		3:  "PROVIDER_KIND_INDEXEDDB",
+		4:  "PROVIDER_KIND_SECRETS",
+		5:  "PROVIDER_KIND_TELEMETRY",
+		6:  "PROVIDER_KIND_CACHE",
+		7:  "PROVIDER_KIND_S3",
+		8:  "PROVIDER_KIND_WORKFLOW",
+		9:  "PROVIDER_KIND_AUTHORIZATION",
+		10: "PROVIDER_KIND_RUNTIME",
+		11: "PROVIDER_KIND_AGENT",
+		12: "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
+		13: "PROVIDER_KIND_TEST",
+	}
+	ProviderKind_value = map[string]int32{
+		"PROVIDER_KIND_UNSPECIFIED":         0,
+		"PROVIDER_KIND_APP":                 1,
+		"PROVIDER_KIND_IDENTITY":            2,
+		"PROVIDER_KIND_INDEXEDDB":           3,
+		"PROVIDER_KIND_SECRETS":             4,
+		"PROVIDER_KIND_TELEMETRY":           5,
+		"PROVIDER_KIND_CACHE":               6,
+		"PROVIDER_KIND_S3":                  7,
+		"PROVIDER_KIND_WORKFLOW":            8,
+		"PROVIDER_KIND_AUTHORIZATION":       9,
+		"PROVIDER_KIND_RUNTIME":             10,
+		"PROVIDER_KIND_AGENT":               11,
+		"PROVIDER_KIND_EXTERNAL_CREDENTIAL": 12,
+		"PROVIDER_KIND_TEST":                13,
+	}
+)
+
+func (x ProviderKind) Enum() *ProviderKind {
+	p := new(ProviderKind)
+	*p = x
+	return p
+}
+
+func (x ProviderKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProviderKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_annotations_proto_enumTypes[0].Descriptor()
+}
+
+func (ProviderKind) Type() protoreflect.EnumType {
+	return &file_v1_annotations_proto_enumTypes[0]
+}
+
+func (x ProviderKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProviderKind.Descriptor instead.
+func (ProviderKind) EnumDescriptor() ([]byte, []int) {
+	return file_v1_annotations_proto_rawDescGZIP(), []int{0}
+}
+
+// ProviderInput selects the request shape used by generated provider
+// interfaces. Full requests preserve context and provider-only fields;
+// CLIENT_SIGNATURE opts into the ergonomic client argument list.
+type ProviderInput int32
+
+const (
+	ProviderInput_PROVIDER_INPUT_FULL_REQUEST     ProviderInput = 0
+	ProviderInput_PROVIDER_INPUT_CLIENT_SIGNATURE ProviderInput = 1
+)
+
+// Enum value maps for ProviderInput.
+var (
+	ProviderInput_name = map[int32]string{
+		0: "PROVIDER_INPUT_FULL_REQUEST",
+		1: "PROVIDER_INPUT_CLIENT_SIGNATURE",
+	}
+	ProviderInput_value = map[string]int32{
+		"PROVIDER_INPUT_FULL_REQUEST":     0,
+		"PROVIDER_INPUT_CLIENT_SIGNATURE": 1,
+	}
+)
+
+func (x ProviderInput) Enum() *ProviderInput {
+	p := new(ProviderInput)
+	*p = x
+	return p
+}
+
+func (x ProviderInput) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProviderInput) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_annotations_proto_enumTypes[1].Descriptor()
+}
+
+func (ProviderInput) Type() protoreflect.EnumType {
+	return &file_v1_annotations_proto_enumTypes[1]
+}
+
+func (x ProviderInput) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProviderInput.Descriptor instead.
+func (ProviderInput) EnumDescriptor() ([]byte, []int) {
+	return file_v1_annotations_proto_rawDescGZIP(), []int{1}
+}
+
 // OptionalResult declares that `value` is meaningful only when the bool
 // `guard` field is true. At API boundaries the message collapses to an
 // optional value (TypeScript `T | undefined`, Python `T | None`, Go
@@ -357,6 +491,14 @@ var file_v1_annotations_proto_extTypes = []protoimpl.ExtensionInfo{
 	},
 	{
 		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
+		ExtensionType: (*ProviderInput)(nil),
+		Field:         50005,
+		Name:          "gestalt.provider.v1.provider_input",
+		Tag:           "varint,50005,opt,name=provider_input,enum=gestalt.provider.v1.ProviderInput",
+		Filename:      "v1/annotations.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
 		ExtensionType: (*PublicPolicy)(nil),
 		Field:         51001,
 		Name:          "gestalt.provider.v1.public",
@@ -395,6 +537,14 @@ var file_v1_annotations_proto_extTypes = []protoimpl.ExtensionInfo{
 		Tag:           "bytes,50001,opt,name=host_binding",
 		Filename:      "v1/annotations.proto",
 	},
+	{
+		ExtendedType:  (*descriptorpb.ServiceOptions)(nil),
+		ExtensionType: (*ProviderKind)(nil),
+		Field:         50002,
+		Name:          "gestalt.provider.v1.provider_kind",
+		Tag:           "varint,50002,opt,name=provider_kind,enum=gestalt.provider.v1.ProviderKind",
+		Filename:      "v1/annotations.proto",
+	},
 }
 
 // Extension fields to descriptorpb.MethodOptions.
@@ -421,23 +571,25 @@ var (
 	//
 	// repeated string optional_signature = 50004;
 	E_OptionalSignature = &file_v1_annotations_proto_extTypes[3]
+	// optional gestalt.provider.v1.ProviderInput provider_input = 50005;
+	E_ProviderInput = &file_v1_annotations_proto_extTypes[4]
 	// Public request adaptation policy for this method.
 	//
 	// optional gestalt.provider.v1.PublicPolicy public = 51001;
-	E_Public = &file_v1_annotations_proto_extTypes[4]
+	E_Public = &file_v1_annotations_proto_extTypes[5]
 )
 
 // Extension fields to descriptorpb.MessageOptions.
 var (
 	// optional gestalt.provider.v1.OptionalResult optional_result = 50001;
-	E_OptionalResult = &file_v1_annotations_proto_extTypes[5]
+	E_OptionalResult = &file_v1_annotations_proto_extTypes[6]
 	// optional gestalt.provider.v1.Keyed keyed = 50002;
-	E_Keyed = &file_v1_annotations_proto_extTypes[6]
+	E_Keyed = &file_v1_annotations_proto_extTypes[7]
 	// At API boundaries the message collapses to the named field: a response
 	// whose only meaning is one field is returned as that field directly.
 	//
 	// optional string unwrap = 50003;
-	E_Unwrap = &file_v1_annotations_proto_extTypes[7]
+	E_Unwrap = &file_v1_annotations_proto_extTypes[8]
 )
 
 // Extension fields to descriptorpb.ServiceOptions.
@@ -446,7 +598,9 @@ var (
 	// constructor for the client.
 	//
 	// optional string host_binding = 50001;
-	E_HostBinding = &file_v1_annotations_proto_extTypes[8]
+	E_HostBinding = &file_v1_annotations_proto_extTypes[9]
+	// optional gestalt.provider.v1.ProviderKind provider_kind = 50002;
+	E_ProviderKind = &file_v1_annotations_proto_extTypes[10]
 )
 
 var File_v1_annotations_proto protoreflect.FileDescriptor
@@ -471,17 +625,38 @@ const file_v1_annotations_proto_rawDesc = "" +
 	"\x04body\x18\x02 \x01(\tR\x04body\":\n" +
 	"\fPublicPolicy\x12\x12\n" +
 	"\x04fill\x18\x01 \x03(\tR\x04fill\x12\x16\n" +
-	"\x06reject\x18\x02 \x03(\tR\x06reject:>\n" +
+	"\x06reject\x18\x02 \x03(\tR\x06reject*\x94\x03\n" +
+	"\fProviderKind\x12\x1d\n" +
+	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11PROVIDER_KIND_APP\x10\x01\x12\x1a\n" +
+	"\x16PROVIDER_KIND_IDENTITY\x10\x02\x12\x1b\n" +
+	"\x17PROVIDER_KIND_INDEXEDDB\x10\x03\x12\x19\n" +
+	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
+	"\x17PROVIDER_KIND_TELEMETRY\x10\x05\x12\x17\n" +
+	"\x13PROVIDER_KIND_CACHE\x10\x06\x12\x14\n" +
+	"\x10PROVIDER_KIND_S3\x10\a\x12\x1a\n" +
+	"\x16PROVIDER_KIND_WORKFLOW\x10\b\x12\x1f\n" +
+	"\x1bPROVIDER_KIND_AUTHORIZATION\x10\t\x12\x19\n" +
+	"\x15PROVIDER_KIND_RUNTIME\x10\n" +
+	"\x12\x17\n" +
+	"\x13PROVIDER_KIND_AGENT\x10\v\x12%\n" +
+	"!PROVIDER_KIND_EXTERNAL_CREDENTIAL\x10\f\x12\x16\n" +
+	"\x12PROVIDER_KIND_TEST\x10\r*U\n" +
+	"\rProviderInput\x12\x1f\n" +
+	"\x1bPROVIDER_INPUT_FULL_REQUEST\x10\x00\x12#\n" +
+	"\x1fPROVIDER_INPUT_CLIENT_SIGNATURE\x10\x01:>\n" +
 	"\tsignature\x12\x1e.google.protobuf.MethodOptions\x18ц\x03 \x03(\tR\tsignature:X\n" +
 	"\ainitial\x12\x1e.google.protobuf.MethodOptions\x18҆\x03 \x01(\v2\x1c.gestalt.provider.v1.InitialR\ainitial:b\n" +
 	"\vjson_result\x12\x1e.google.protobuf.MethodOptions\x18ӆ\x03 \x01(\v2\x1f.gestalt.provider.v1.JsonResultR\n" +
 	"jsonResult:O\n" +
-	"\x12optional_signature\x12\x1e.google.protobuf.MethodOptions\x18Ԇ\x03 \x03(\tR\x11optionalSignature:[\n" +
+	"\x12optional_signature\x12\x1e.google.protobuf.MethodOptions\x18Ԇ\x03 \x03(\tR\x11optionalSignature:k\n" +
+	"\x0eprovider_input\x12\x1e.google.protobuf.MethodOptions\x18Ն\x03 \x01(\x0e2\".gestalt.provider.v1.ProviderInputR\rproviderInput:[\n" +
 	"\x06public\x12\x1e.google.protobuf.MethodOptions\x18\xb9\x8e\x03 \x01(\v2!.gestalt.provider.v1.PublicPolicyR\x06public:o\n" +
 	"\x0foptional_result\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2#.gestalt.provider.v1.OptionalResultR\x0eoptionalResult:S\n" +
 	"\x05keyed\x12\x1f.google.protobuf.MessageOptions\x18҆\x03 \x01(\v2\x1a.gestalt.provider.v1.KeyedR\x05keyed:9\n" +
 	"\x06unwrap\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\tR\x06unwrap:D\n" +
-	"\fhost_binding\x12\x1f.google.protobuf.ServiceOptions\x18ц\x03 \x01(\tR\vhostBindingB\xdc\x01\n" +
+	"\fhost_binding\x12\x1f.google.protobuf.ServiceOptions\x18ц\x03 \x01(\tR\vhostBinding:i\n" +
+	"\rprovider_kind\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\x0e2!.gestalt.provider.v1.ProviderKindR\fproviderKindB\xdc\x01\n" +
 	"\x17com.gestalt.provider.v1B\x10AnnotationsProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -496,36 +671,43 @@ func file_v1_annotations_proto_rawDescGZIP() []byte {
 	return file_v1_annotations_proto_rawDescData
 }
 
+var file_v1_annotations_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_v1_annotations_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_v1_annotations_proto_goTypes = []any{
-	(*OptionalResult)(nil),              // 0: gestalt.provider.v1.OptionalResult
-	(*Keyed)(nil),                       // 1: gestalt.provider.v1.Keyed
-	(*Initial)(nil),                     // 2: gestalt.provider.v1.Initial
-	(*JsonResult)(nil),                  // 3: gestalt.provider.v1.JsonResult
-	(*PublicPolicy)(nil),                // 4: gestalt.provider.v1.PublicPolicy
-	(*descriptorpb.MethodOptions)(nil),  // 5: google.protobuf.MethodOptions
-	(*descriptorpb.MessageOptions)(nil), // 6: google.protobuf.MessageOptions
-	(*descriptorpb.ServiceOptions)(nil), // 7: google.protobuf.ServiceOptions
+	(ProviderKind)(0),                   // 0: gestalt.provider.v1.ProviderKind
+	(ProviderInput)(0),                  // 1: gestalt.provider.v1.ProviderInput
+	(*OptionalResult)(nil),              // 2: gestalt.provider.v1.OptionalResult
+	(*Keyed)(nil),                       // 3: gestalt.provider.v1.Keyed
+	(*Initial)(nil),                     // 4: gestalt.provider.v1.Initial
+	(*JsonResult)(nil),                  // 5: gestalt.provider.v1.JsonResult
+	(*PublicPolicy)(nil),                // 6: gestalt.provider.v1.PublicPolicy
+	(*descriptorpb.MethodOptions)(nil),  // 7: google.protobuf.MethodOptions
+	(*descriptorpb.MessageOptions)(nil), // 8: google.protobuf.MessageOptions
+	(*descriptorpb.ServiceOptions)(nil), // 9: google.protobuf.ServiceOptions
 }
 var file_v1_annotations_proto_depIdxs = []int32{
-	5,  // 0: gestalt.provider.v1.signature:extendee -> google.protobuf.MethodOptions
-	5,  // 1: gestalt.provider.v1.initial:extendee -> google.protobuf.MethodOptions
-	5,  // 2: gestalt.provider.v1.json_result:extendee -> google.protobuf.MethodOptions
-	5,  // 3: gestalt.provider.v1.optional_signature:extendee -> google.protobuf.MethodOptions
-	5,  // 4: gestalt.provider.v1.public:extendee -> google.protobuf.MethodOptions
-	6,  // 5: gestalt.provider.v1.optional_result:extendee -> google.protobuf.MessageOptions
-	6,  // 6: gestalt.provider.v1.keyed:extendee -> google.protobuf.MessageOptions
-	6,  // 7: gestalt.provider.v1.unwrap:extendee -> google.protobuf.MessageOptions
-	7,  // 8: gestalt.provider.v1.host_binding:extendee -> google.protobuf.ServiceOptions
-	2,  // 9: gestalt.provider.v1.initial:type_name -> gestalt.provider.v1.Initial
-	3,  // 10: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
-	4,  // 11: gestalt.provider.v1.public:type_name -> gestalt.provider.v1.PublicPolicy
-	0,  // 12: gestalt.provider.v1.optional_result:type_name -> gestalt.provider.v1.OptionalResult
-	1,  // 13: gestalt.provider.v1.keyed:type_name -> gestalt.provider.v1.Keyed
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	9,  // [9:14] is the sub-list for extension type_name
-	0,  // [0:9] is the sub-list for extension extendee
+	7,  // 0: gestalt.provider.v1.signature:extendee -> google.protobuf.MethodOptions
+	7,  // 1: gestalt.provider.v1.initial:extendee -> google.protobuf.MethodOptions
+	7,  // 2: gestalt.provider.v1.json_result:extendee -> google.protobuf.MethodOptions
+	7,  // 3: gestalt.provider.v1.optional_signature:extendee -> google.protobuf.MethodOptions
+	7,  // 4: gestalt.provider.v1.provider_input:extendee -> google.protobuf.MethodOptions
+	7,  // 5: gestalt.provider.v1.public:extendee -> google.protobuf.MethodOptions
+	8,  // 6: gestalt.provider.v1.optional_result:extendee -> google.protobuf.MessageOptions
+	8,  // 7: gestalt.provider.v1.keyed:extendee -> google.protobuf.MessageOptions
+	8,  // 8: gestalt.provider.v1.unwrap:extendee -> google.protobuf.MessageOptions
+	9,  // 9: gestalt.provider.v1.host_binding:extendee -> google.protobuf.ServiceOptions
+	9,  // 10: gestalt.provider.v1.provider_kind:extendee -> google.protobuf.ServiceOptions
+	4,  // 11: gestalt.provider.v1.initial:type_name -> gestalt.provider.v1.Initial
+	5,  // 12: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
+	1,  // 13: gestalt.provider.v1.provider_input:type_name -> gestalt.provider.v1.ProviderInput
+	6,  // 14: gestalt.provider.v1.public:type_name -> gestalt.provider.v1.PublicPolicy
+	2,  // 15: gestalt.provider.v1.optional_result:type_name -> gestalt.provider.v1.OptionalResult
+	3,  // 16: gestalt.provider.v1.keyed:type_name -> gestalt.provider.v1.Keyed
+	0,  // 17: gestalt.provider.v1.provider_kind:type_name -> gestalt.provider.v1.ProviderKind
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	11, // [11:18] is the sub-list for extension type_name
+	0,  // [0:11] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
 }
 
@@ -539,13 +721,14 @@ func file_v1_annotations_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_annotations_proto_rawDesc), len(file_v1_annotations_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      2,
 			NumMessages:   5,
-			NumExtensions: 9,
+			NumExtensions: 11,
 			NumServices:   0,
 		},
 		GoTypes:           file_v1_annotations_proto_goTypes,
 		DependencyIndexes: file_v1_annotations_proto_depIdxs,
+		EnumInfos:         file_v1_annotations_proto_enumTypes,
 		MessageInfos:      file_v1_annotations_proto_msgTypes,
 		ExtensionInfos:    file_v1_annotations_proto_extTypes,
 	}.Build()

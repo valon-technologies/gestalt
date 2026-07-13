@@ -52,7 +52,6 @@ pub enum IndexedDBError {
     #[error("{0}")]
     Env(String),
 }
-
 /// JSON-like value stored in an object store row.
 pub type Record = BTreeMap<String, serde_json::Value>;
 

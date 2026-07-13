@@ -23,88 +23,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ProviderKind int32
-
-const (
-	ProviderKind_PROVIDER_KIND_UNSPECIFIED         ProviderKind = 0
-	ProviderKind_PROVIDER_KIND_APP                 ProviderKind = 1
-	ProviderKind_PROVIDER_KIND_IDENTITY            ProviderKind = 2
-	ProviderKind_PROVIDER_KIND_INDEXEDDB           ProviderKind = 3
-	ProviderKind_PROVIDER_KIND_SECRETS             ProviderKind = 4
-	ProviderKind_PROVIDER_KIND_TELEMETRY           ProviderKind = 5
-	ProviderKind_PROVIDER_KIND_CACHE               ProviderKind = 6
-	ProviderKind_PROVIDER_KIND_S3                  ProviderKind = 7
-	ProviderKind_PROVIDER_KIND_WORKFLOW            ProviderKind = 8
-	ProviderKind_PROVIDER_KIND_AUTHORIZATION       ProviderKind = 9
-	ProviderKind_PROVIDER_KIND_RUNTIME             ProviderKind = 10
-	ProviderKind_PROVIDER_KIND_AGENT               ProviderKind = 11
-	ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL ProviderKind = 12
-	ProviderKind_PROVIDER_KIND_TEST                ProviderKind = 13
-)
-
-// Enum value maps for ProviderKind.
-var (
-	ProviderKind_name = map[int32]string{
-		0:  "PROVIDER_KIND_UNSPECIFIED",
-		1:  "PROVIDER_KIND_APP",
-		2:  "PROVIDER_KIND_IDENTITY",
-		3:  "PROVIDER_KIND_INDEXEDDB",
-		4:  "PROVIDER_KIND_SECRETS",
-		5:  "PROVIDER_KIND_TELEMETRY",
-		6:  "PROVIDER_KIND_CACHE",
-		7:  "PROVIDER_KIND_S3",
-		8:  "PROVIDER_KIND_WORKFLOW",
-		9:  "PROVIDER_KIND_AUTHORIZATION",
-		10: "PROVIDER_KIND_RUNTIME",
-		11: "PROVIDER_KIND_AGENT",
-		12: "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
-		13: "PROVIDER_KIND_TEST",
-	}
-	ProviderKind_value = map[string]int32{
-		"PROVIDER_KIND_UNSPECIFIED":         0,
-		"PROVIDER_KIND_APP":                 1,
-		"PROVIDER_KIND_IDENTITY":            2,
-		"PROVIDER_KIND_INDEXEDDB":           3,
-		"PROVIDER_KIND_SECRETS":             4,
-		"PROVIDER_KIND_TELEMETRY":           5,
-		"PROVIDER_KIND_CACHE":               6,
-		"PROVIDER_KIND_S3":                  7,
-		"PROVIDER_KIND_WORKFLOW":            8,
-		"PROVIDER_KIND_AUTHORIZATION":       9,
-		"PROVIDER_KIND_RUNTIME":             10,
-		"PROVIDER_KIND_AGENT":               11,
-		"PROVIDER_KIND_EXTERNAL_CREDENTIAL": 12,
-		"PROVIDER_KIND_TEST":                13,
-	}
-)
-
-func (x ProviderKind) Enum() *ProviderKind {
-	p := new(ProviderKind)
-	*p = x
-	return p
-}
-
-func (x ProviderKind) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ProviderKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_runtime_proto_enumTypes[0].Descriptor()
-}
-
-func (ProviderKind) Type() protoreflect.EnumType {
-	return &file_v1_runtime_proto_enumTypes[0]
-}
-
-func (x ProviderKind) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ProviderKind.Descriptor instead.
-func (ProviderKind) EnumDescriptor() ([]byte, []int) {
-	return file_v1_runtime_proto_rawDescGZIP(), []int{0}
-}
-
 // ProviderIdentity describes a provider surface and the protocol versions it
 // supports.
 type ProviderIdentity struct {
@@ -439,23 +357,7 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"_\n" +
 	"\x1cStartRuntimeProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version*\x94\x03\n" +
-	"\fProviderKind\x12\x1d\n" +
-	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11PROVIDER_KIND_APP\x10\x01\x12\x1a\n" +
-	"\x16PROVIDER_KIND_IDENTITY\x10\x02\x12\x1b\n" +
-	"\x17PROVIDER_KIND_INDEXEDDB\x10\x03\x12\x19\n" +
-	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
-	"\x17PROVIDER_KIND_TELEMETRY\x10\x05\x12\x17\n" +
-	"\x13PROVIDER_KIND_CACHE\x10\x06\x12\x14\n" +
-	"\x10PROVIDER_KIND_S3\x10\a\x12\x1a\n" +
-	"\x16PROVIDER_KIND_WORKFLOW\x10\b\x12\x1f\n" +
-	"\x1bPROVIDER_KIND_AUTHORIZATION\x10\t\x12\x19\n" +
-	"\x15PROVIDER_KIND_RUNTIME\x10\n" +
-	"\x12\x17\n" +
-	"\x13PROVIDER_KIND_AGENT\x10\v\x12%\n" +
-	"!PROVIDER_KIND_EXTERNAL_CREDENTIAL\x10\f\x12\x16\n" +
-	"\x12PROVIDER_KIND_TEST\x10\r2\xb3\x03\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version2\xb3\x03\n" +
 	"\x11ProviderLifecycle\x12T\n" +
 	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12\x9a\x01\n" +
 	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\"&\x8a\xb5\x18\x04name\x8a\xb5\x18\x10protocol_version\x8a\xb5\x18\x06config\x12O\n" +
@@ -475,29 +377,28 @@ func file_v1_runtime_proto_rawDescGZIP() []byte {
 	return file_v1_runtime_proto_rawDescData
 }
 
-var file_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_v1_runtime_proto_goTypes = []any{
-	(ProviderKind)(0),                    // 0: gestalt.provider.v1.ProviderKind
-	(*ProviderIdentity)(nil),             // 1: gestalt.provider.v1.ProviderIdentity
-	(*ConfigureProviderRequest)(nil),     // 2: gestalt.provider.v1.ConfigureProviderRequest
-	(*ConfigureProviderResponse)(nil),    // 3: gestalt.provider.v1.ConfigureProviderResponse
-	(*HealthCheckResponse)(nil),          // 4: gestalt.provider.v1.HealthCheckResponse
-	(*StartRuntimeProviderResponse)(nil), // 5: gestalt.provider.v1.StartRuntimeProviderResponse
+	(*ProviderIdentity)(nil),             // 0: gestalt.provider.v1.ProviderIdentity
+	(*ConfigureProviderRequest)(nil),     // 1: gestalt.provider.v1.ConfigureProviderRequest
+	(*ConfigureProviderResponse)(nil),    // 2: gestalt.provider.v1.ConfigureProviderResponse
+	(*HealthCheckResponse)(nil),          // 3: gestalt.provider.v1.HealthCheckResponse
+	(*StartRuntimeProviderResponse)(nil), // 4: gestalt.provider.v1.StartRuntimeProviderResponse
+	(ProviderKind)(0),                    // 5: gestalt.provider.v1.ProviderKind
 	(*structpb.Struct)(nil),              // 6: google.protobuf.Struct
 	(*emptypb.Empty)(nil),                // 7: google.protobuf.Empty
 }
 var file_v1_runtime_proto_depIdxs = []int32{
-	0, // 0: gestalt.provider.v1.ProviderIdentity.kind:type_name -> gestalt.provider.v1.ProviderKind
+	5, // 0: gestalt.provider.v1.ProviderIdentity.kind:type_name -> gestalt.provider.v1.ProviderKind
 	6, // 1: gestalt.provider.v1.ConfigureProviderRequest.config:type_name -> google.protobuf.Struct
 	7, // 2: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:input_type -> google.protobuf.Empty
-	2, // 3: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:input_type -> gestalt.provider.v1.ConfigureProviderRequest
+	1, // 3: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:input_type -> gestalt.provider.v1.ConfigureProviderRequest
 	7, // 4: gestalt.provider.v1.ProviderLifecycle.HealthCheck:input_type -> google.protobuf.Empty
 	7, // 5: gestalt.provider.v1.ProviderLifecycle.StartProvider:input_type -> google.protobuf.Empty
-	1, // 6: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:output_type -> gestalt.provider.v1.ProviderIdentity
-	3, // 7: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:output_type -> gestalt.provider.v1.ConfigureProviderResponse
-	4, // 8: gestalt.provider.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.provider.v1.HealthCheckResponse
-	5, // 9: gestalt.provider.v1.ProviderLifecycle.StartProvider:output_type -> gestalt.provider.v1.StartRuntimeProviderResponse
+	0, // 6: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:output_type -> gestalt.provider.v1.ProviderIdentity
+	2, // 7: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:output_type -> gestalt.provider.v1.ConfigureProviderResponse
+	3, // 8: gestalt.provider.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.provider.v1.HealthCheckResponse
+	4, // 9: gestalt.provider.v1.ProviderLifecycle.StartProvider:output_type -> gestalt.provider.v1.StartRuntimeProviderResponse
 	6, // [6:10] is the sub-list for method output_type
 	2, // [2:6] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -516,14 +417,13 @@ func file_v1_runtime_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_runtime_proto_rawDesc), len(file_v1_runtime_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      0,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_v1_runtime_proto_goTypes,
 		DependencyIndexes: file_v1_runtime_proto_depIdxs,
-		EnumInfos:         file_v1_runtime_proto_enumTypes,
 		MessageInfos:      file_v1_runtime_proto_msgTypes,
 	}.Build()
 	File_v1_runtime_proto = out.File

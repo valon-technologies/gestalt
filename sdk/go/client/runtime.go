@@ -10,41 +10,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// ProviderKind is the gestalt.provider.v1.ProviderKind enum. It is open:
-// numeric values outside the named constants are preserved.
-type ProviderKind int32
-
-const (
-	// ProviderKindUnspecified is the PROVIDER_KIND_UNSPECIFIED value of ProviderKind.
-	ProviderKindUnspecified ProviderKind = 0
-	// ProviderKindApp is the PROVIDER_KIND_APP value of ProviderKind.
-	ProviderKindApp ProviderKind = 1
-	// ProviderKindIdentity is the PROVIDER_KIND_IDENTITY value of ProviderKind.
-	ProviderKindIdentity ProviderKind = 2
-	// ProviderKindIndexeddb is the PROVIDER_KIND_INDEXEDDB value of ProviderKind.
-	ProviderKindIndexeddb ProviderKind = 3
-	// ProviderKindSecrets is the PROVIDER_KIND_SECRETS value of ProviderKind.
-	ProviderKindSecrets ProviderKind = 4
-	// ProviderKindTelemetry is the PROVIDER_KIND_TELEMETRY value of ProviderKind.
-	ProviderKindTelemetry ProviderKind = 5
-	// ProviderKindCache is the PROVIDER_KIND_CACHE value of ProviderKind.
-	ProviderKindCache ProviderKind = 6
-	// ProviderKindS3 is the PROVIDER_KIND_S3 value of ProviderKind.
-	ProviderKindS3 ProviderKind = 7
-	// ProviderKindWorkflow is the PROVIDER_KIND_WORKFLOW value of ProviderKind.
-	ProviderKindWorkflow ProviderKind = 8
-	// ProviderKindAuthorization is the PROVIDER_KIND_AUTHORIZATION value of ProviderKind.
-	ProviderKindAuthorization ProviderKind = 9
-	// ProviderKindRuntime is the PROVIDER_KIND_RUNTIME value of ProviderKind.
-	ProviderKindRuntime ProviderKind = 10
-	// ProviderKindAgent is the PROVIDER_KIND_AGENT value of ProviderKind.
-	ProviderKindAgent ProviderKind = 11
-	// ProviderKindExternalCredential is the PROVIDER_KIND_EXTERNAL_CREDENTIAL value of ProviderKind.
-	ProviderKindExternalCredential ProviderKind = 12
-	// ProviderKindTest is the PROVIDER_KIND_TEST value of ProviderKind.
-	ProviderKindTest ProviderKind = 13
-)
-
 // ConfigureProviderRequest is the native message type for gestalt.provider.v1.ConfigureProviderRequest.
 //
 // ConfigureProviderRequest configures a non-integration provider for one

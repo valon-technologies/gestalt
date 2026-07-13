@@ -51,9 +51,9 @@ import {
 } from "../src/internal/gen/v1/secrets_pb.ts";
 import {
   ConfigureProviderRequestSchema,
-  ProviderKind as ProtoProviderKind,
   ProviderLifecycle,
 } from "../src/internal/gen/v1/runtime_pb.ts";
+import { ProviderKind as ProtoProviderKind } from "../src/internal/gen/v1/annotations_pb.ts";
 import {
   ApplyWorkflowProviderDefinitionRequestSchema,
   DeliverWorkflowProviderEventRequestSchema,

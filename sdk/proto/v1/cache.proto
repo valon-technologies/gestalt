@@ -106,30 +106,38 @@ message CacheTouchResponse {
 // Cache models the shared Gestalt cache-provider protocol.
 service Cache {
   option (host_binding) = "cache";
+  option (provider_kind) = PROVIDER_KIND_CACHE;
 
   rpc Get(CacheGetRequest) returns (CacheGetResponse) {
     option (signature) = "key";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc GetMany(CacheGetManyRequest) returns (CacheGetManyResponse) {
     option (signature) = "keys";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc Set(CacheSetRequest) returns (google.protobuf.Empty) {
     option (signature) = "key";
     option (signature) = "value";
     option (signature) = "ttl";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc SetMany(CacheSetManyRequest) returns (google.protobuf.Empty) {
     option (signature) = "entries";
     option (signature) = "ttl";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc Delete(CacheDeleteRequest) returns (CacheDeleteResponse) {
     option (signature) = "key";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc DeleteMany(CacheDeleteManyRequest) returns (CacheDeleteManyResponse) {
     option (signature) = "keys";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc Touch(CacheTouchRequest) returns (CacheTouchResponse) {
     option (signature) = "key";
     option (signature) = "ttl";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
 }

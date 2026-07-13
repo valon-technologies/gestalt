@@ -27,7 +27,6 @@ pub enum S3ReadObjectFrame {
     /// The `Data` variant.
     Data(Vec<u8>),
 }
-
 #[derive(Clone, Debug, PartialEq)]
 /// One frame in a provider-backed object write stream.
 pub enum S3WriteObjectFrame {

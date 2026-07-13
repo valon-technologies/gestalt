@@ -69,6 +69,100 @@ pub struct PublicPolicy {
     #[prost(string, repeated, tag = "2")]
     pub reject: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
+/// ProviderKind identifies the RPC-backed provider contract implemented by a
+/// service. The numeric values are part of the wire contract and intentionally
+/// remain identical to the historical runtime.ProviderKind enum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ProviderKind {
+    Unspecified = 0,
+    App = 1,
+    Identity = 2,
+    Indexeddb = 3,
+    Secrets = 4,
+    Telemetry = 5,
+    Cache = 6,
+    S3 = 7,
+    Workflow = 8,
+    Authorization = 9,
+    Runtime = 10,
+    Agent = 11,
+    ExternalCredential = 12,
+    Test = 13,
+}
+impl ProviderKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PROVIDER_KIND_UNSPECIFIED",
+            Self::App => "PROVIDER_KIND_APP",
+            Self::Identity => "PROVIDER_KIND_IDENTITY",
+            Self::Indexeddb => "PROVIDER_KIND_INDEXEDDB",
+            Self::Secrets => "PROVIDER_KIND_SECRETS",
+            Self::Telemetry => "PROVIDER_KIND_TELEMETRY",
+            Self::Cache => "PROVIDER_KIND_CACHE",
+            Self::S3 => "PROVIDER_KIND_S3",
+            Self::Workflow => "PROVIDER_KIND_WORKFLOW",
+            Self::Authorization => "PROVIDER_KIND_AUTHORIZATION",
+            Self::Runtime => "PROVIDER_KIND_RUNTIME",
+            Self::Agent => "PROVIDER_KIND_AGENT",
+            Self::ExternalCredential => "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
+            Self::Test => "PROVIDER_KIND_TEST",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PROVIDER_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "PROVIDER_KIND_APP" => Some(Self::App),
+            "PROVIDER_KIND_IDENTITY" => Some(Self::Identity),
+            "PROVIDER_KIND_INDEXEDDB" => Some(Self::Indexeddb),
+            "PROVIDER_KIND_SECRETS" => Some(Self::Secrets),
+            "PROVIDER_KIND_TELEMETRY" => Some(Self::Telemetry),
+            "PROVIDER_KIND_CACHE" => Some(Self::Cache),
+            "PROVIDER_KIND_S3" => Some(Self::S3),
+            "PROVIDER_KIND_WORKFLOW" => Some(Self::Workflow),
+            "PROVIDER_KIND_AUTHORIZATION" => Some(Self::Authorization),
+            "PROVIDER_KIND_RUNTIME" => Some(Self::Runtime),
+            "PROVIDER_KIND_AGENT" => Some(Self::Agent),
+            "PROVIDER_KIND_EXTERNAL_CREDENTIAL" => Some(Self::ExternalCredential),
+            "PROVIDER_KIND_TEST" => Some(Self::Test),
+            _ => None,
+        }
+    }
+}
+/// ProviderInput selects the request shape used by generated provider
+/// interfaces. Full requests preserve context and provider-only fields;
+/// CLIENT_SIGNATURE opts into the ergonomic client argument list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ProviderInput {
+    FullRequest = 0,
+    ClientSignature = 1,
+}
+impl ProviderInput {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::FullRequest => "PROVIDER_INPUT_FULL_REQUEST",
+            Self::ClientSignature => "PROVIDER_INPUT_CLIENT_SIGNATURE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PROVIDER_INPUT_FULL_REQUEST" => Some(Self::FullRequest),
+            "PROVIDER_INPUT_CLIENT_SIGNATURE" => Some(Self::ClientSignature),
+            _ => None,
+        }
+    }
+}
 /// CatalogParameter describes one input parameter surfaced in the generated
 /// catalog for an operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2760,68 +2854,6 @@ pub struct HealthCheckResponse {
 pub struct StartRuntimeProviderResponse {
     #[prost(int32, tag = "1")]
     pub protocol_version: i32,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum ProviderKind {
-    Unspecified = 0,
-    App = 1,
-    Identity = 2,
-    Indexeddb = 3,
-    Secrets = 4,
-    Telemetry = 5,
-    Cache = 6,
-    S3 = 7,
-    Workflow = 8,
-    Authorization = 9,
-    Runtime = 10,
-    Agent = 11,
-    ExternalCredential = 12,
-    Test = 13,
-}
-impl ProviderKind {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "PROVIDER_KIND_UNSPECIFIED",
-            Self::App => "PROVIDER_KIND_APP",
-            Self::Identity => "PROVIDER_KIND_IDENTITY",
-            Self::Indexeddb => "PROVIDER_KIND_INDEXEDDB",
-            Self::Secrets => "PROVIDER_KIND_SECRETS",
-            Self::Telemetry => "PROVIDER_KIND_TELEMETRY",
-            Self::Cache => "PROVIDER_KIND_CACHE",
-            Self::S3 => "PROVIDER_KIND_S3",
-            Self::Workflow => "PROVIDER_KIND_WORKFLOW",
-            Self::Authorization => "PROVIDER_KIND_AUTHORIZATION",
-            Self::Runtime => "PROVIDER_KIND_RUNTIME",
-            Self::Agent => "PROVIDER_KIND_AGENT",
-            Self::ExternalCredential => "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
-            Self::Test => "PROVIDER_KIND_TEST",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "PROVIDER_KIND_UNSPECIFIED" => Some(Self::Unspecified),
-            "PROVIDER_KIND_APP" => Some(Self::App),
-            "PROVIDER_KIND_IDENTITY" => Some(Self::Identity),
-            "PROVIDER_KIND_INDEXEDDB" => Some(Self::Indexeddb),
-            "PROVIDER_KIND_SECRETS" => Some(Self::Secrets),
-            "PROVIDER_KIND_TELEMETRY" => Some(Self::Telemetry),
-            "PROVIDER_KIND_CACHE" => Some(Self::Cache),
-            "PROVIDER_KIND_S3" => Some(Self::S3),
-            "PROVIDER_KIND_WORKFLOW" => Some(Self::Workflow),
-            "PROVIDER_KIND_AUTHORIZATION" => Some(Self::Authorization),
-            "PROVIDER_KIND_RUNTIME" => Some(Self::Runtime),
-            "PROVIDER_KIND_AGENT" => Some(Self::Agent),
-            "PROVIDER_KIND_EXTERNAL_CREDENTIAL" => Some(Self::ExternalCredential),
-            "PROVIDER_KIND_TEST" => Some(Self::Test),
-            _ => None,
-        }
-    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RuntimeSupport {

@@ -28,11 +28,34 @@ message JsonResult {
   string body = 2;
 }
 
+enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0;
+  PROVIDER_KIND_APP = 1;
+  PROVIDER_KIND_IDENTITY = 2;
+  PROVIDER_KIND_INDEXEDDB = 3;
+  PROVIDER_KIND_SECRETS = 4;
+  PROVIDER_KIND_TELEMETRY = 5;
+  PROVIDER_KIND_CACHE = 6;
+  PROVIDER_KIND_S3 = 7;
+  PROVIDER_KIND_WORKFLOW = 8;
+  PROVIDER_KIND_AUTHORIZATION = 9;
+  PROVIDER_KIND_RUNTIME = 10;
+  PROVIDER_KIND_AGENT = 11;
+  PROVIDER_KIND_EXTERNAL_CREDENTIAL = 12;
+  PROVIDER_KIND_TEST = 13;
+}
+
+enum ProviderInput {
+  PROVIDER_INPUT_FULL_REQUEST = 0;
+  PROVIDER_INPUT_CLIENT_SIGNATURE = 1;
+}
+
 extend google.protobuf.MethodOptions {
   repeated string signature = 50001;
   Initial initial = 50002;
   JsonResult json_result = 50003;
   repeated string optional_signature = 50004;
+  ProviderInput provider_input = 50005;
 }
 
 extend google.protobuf.MessageOptions {
@@ -43,4 +66,5 @@ extend google.protobuf.MessageOptions {
 
 extend google.protobuf.ServiceOptions {
   string host_binding = 50001;
+  ProviderKind provider_kind = 50002;
 }

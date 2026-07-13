@@ -2564,13 +2564,13 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0eConnectionMode\x12\x1f\n" +
 	"\x1bCONNECTION_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_MODE_NONE\x10\x01\x12\x1b\n" +
-	"\x17CONNECTION_MODE_SUBJECT\x10\x022\x91\x05\n" +
+	"\x17CONNECTION_MODE_SUBJECT\x10\x022\x97\x05\n" +
 	"\vAppProvider\x12L\n" +
 	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderMetadata\x12\x8e\x01\n" +
 	"\rStartProvider\x12).gestalt.provider.v1.StartProviderRequest\x1a*.gestalt.provider.v1.StartProviderResponse\"&\x8a\xb5\x18\x04name\x8a\xb5\x18\x10protocol_version\x8a\xb5\x18\x06config\x12\x9a\x01\n" +
 	"\aExecute\x12#.gestalt.provider.v1.ExecuteRequest\x1a$.gestalt.provider.v1.OperationResult\"D\x8a\xb5\x18\toperation\x8a\xb5\x18\x05token\x8a\xb5\x18\rinvocation_id\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x06params\x12u\n" +
 	"\x12ResolveHTTPSubject\x12..gestalt.provider.v1.ResolveHTTPSubjectRequest\x1a/.gestalt.provider.v1.ResolveHTTPSubjectResponse\x12\x8e\x01\n" +
-	"\x11GetSessionCatalog\x12-.gestalt.provider.v1.GetSessionCatalogRequest\x1a..gestalt.provider.v1.GetSessionCatalogResponse\"\x1a\x8a\xb5\x18\x05token\x8a\xb5\x18\rinvocation_id2\xd6\x03\n" +
+	"\x11GetSessionCatalog\x12-.gestalt.provider.v1.GetSessionCatalogRequest\x1a..gestalt.provider.v1.GetSessionCatalogResponse\"\x1a\x8a\xb5\x18\x05token\x8a\xb5\x18\rinvocation_id\x1a\x04\x90\xb5\x18\x012\xd6\x03\n" +
 	"\x03App\x12\xf5\x01\n" +
 	"\x06Invoke\x12%.gestalt.provider.v1.AppInvokeRequest\x1a$.gestalt.provider.v1.OperationResult\"\x9d\x01\x8a\xb5\x18\x03app\x8a\xb5\x18\toperation\x8a\xb5\x18\x06params\x9a\xb5\x18\x0e\n" +
 	"\x06status\x12\x04body\xa2\xb5\x18\n" +

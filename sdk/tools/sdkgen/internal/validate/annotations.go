@@ -25,10 +25,26 @@ const (
 	extJsonResult     = "gestalt.provider.v1.json_result"
 	extOptionalSig    = "gestalt.provider.v1.optional_signature"
 	extHostBinding    = "gestalt.provider.v1.host_binding"
+	extProviderKind   = "gestalt.provider.v1.provider_kind"
+	extProviderInput  = "gestalt.provider.v1.provider_input"
 )
 
 type annotations struct {
 	resolver *dynamicpb.Types
+}
+
+var providerKindServices = map[model.ProviderKind]string{
+	model.ProviderKindApp:                "AppProvider",
+	model.ProviderKindAgent:              "Agent",
+	model.ProviderKindAuthorization:      "Authorization",
+	model.ProviderKindCache:              "Cache",
+	model.ProviderKindExternalCredential: "ExternalCredentials",
+	model.ProviderKindIdentity:           "Identity",
+	model.ProviderKindIndexedDB:          "IndexedDB",
+	model.ProviderKindRuntime:            "Runtime",
+	model.ProviderKindS3:                 "S3",
+	model.ProviderKindSecrets:            "Secrets",
+	model.ProviderKindWorkflow:           "Workflow",
 }
 
 func newAnnotations(files *protoregistry.Files) *annotations {
@@ -78,11 +94,24 @@ func (b *builder) serviceAnnotations(sd protoreflect.ServiceDescriptor, svc *mod
 			b.add(sd, "service", "host_binding annotation must not be empty")
 		}
 	}
+	if v, ok := exts[extProviderKind]; ok {
+		svc.ProviderKind = model.ProviderKind(v.Enum())
+		svc.Provider = svc.ProviderKind != model.ProviderKindUnspecified
+		b.validateProviderKind(sd, svc)
+	}
 }
 
 // methodAnnotations validates and applies method-level annotations.
 func (b *builder) methodAnnotations(md protoreflect.MethodDescriptor, m *model.Method) {
 	exts := b.ann.extensions(md.Options())
+	if v, ok := exts[extProviderInput]; ok {
+		m.ProviderInputSet = true
+		m.ProviderInput = model.ProviderInput(v.Enum())
+		if m.ProviderInput != model.ProviderInputFullRequest && m.ProviderInput != model.ProviderInputClientSignature {
+			b.add(md, "method", fmt.Sprintf("unsupported provider_input value %d", v.Enum()))
+			m.ProviderInput = model.ProviderInputFullRequest
+		}
+	}
 
 	if v, ok := exts[extInitial]; ok {
 		header := subField(v, "header")
@@ -182,6 +211,48 @@ func (b *builder) methodAnnotations(md protoreflect.MethodDescriptor, m *model.M
 					continue
 				}
 				m.OptionalSignature = append(m.OptionalSignature, name)
+			}
+		}
+	}
+}
+
+func (b *builder) validateProviderKind(sd protoreflect.ServiceDescriptor, svc *model.Service) {
+	if svc.ProviderKind == model.ProviderKindUnspecified {
+		b.add(sd, "service", "provider_kind must not be PROVIDER_KIND_UNSPECIFIED")
+		return
+	}
+	wantName, ok := providerKindServices[svc.ProviderKind]
+	if !ok {
+		b.add(sd, "service", fmt.Sprintf("unsupported provider_kind value %d", svc.ProviderKind))
+	} else if string(sd.Name()) != wantName {
+		b.add(sd, "service", fmt.Sprintf("provider_kind %d belongs to service %s, not %s", svc.ProviderKind, wantName, sd.Name()))
+	}
+	if previous, exists := b.providerKinds[svc.ProviderKind]; exists {
+		b.add(sd, "service", fmt.Sprintf("provider_kind %d is already assigned to %s", svc.ProviderKind, previous))
+	} else {
+		b.providerKinds[svc.ProviderKind] = sd.FullName()
+	}
+	for _, method := range svc.Methods {
+		if !method.ProviderInputSet {
+			continue
+		}
+		if !svc.Provider {
+			b.add(sd, "service", fmt.Sprintf("method %s uses provider_input on a client-only service", method.Name))
+			continue
+		}
+		if method.ProviderInput == model.ProviderInputClientSignature {
+			if method.Stream != model.Unary {
+				b.add(sd, "method", fmt.Sprintf("provider_input CLIENT_SIGNATURE requires unary method %s", method.Name))
+			}
+			allowed := svc.ProviderKind == model.ProviderKindCache || svc.ProviderKind == model.ProviderKindSecrets || svc.ProviderKind == model.ProviderKindIndexedDB
+			if svc.ProviderKind == model.ProviderKindS3 {
+				allowed = method.Name == "HeadObject" || method.Name == "DeleteObject"
+			}
+			if !allowed {
+				b.add(sd, "method", fmt.Sprintf("provider_input CLIENT_SIGNATURE is not supported for %s.%s", svc.Name, method.Name))
+			}
+			if !method.InputIsEmpty && len(method.Signature) == 0 && len(method.OptionalSignature) == 0 {
+				b.add(sd, "method", fmt.Sprintf("provider_input CLIENT_SIGNATURE requires signature fields for %s", method.Name))
 			}
 		}
 	}

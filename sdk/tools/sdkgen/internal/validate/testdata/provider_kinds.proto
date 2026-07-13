@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package sdkgen.test.v1;
+
+import "provider_annotations.proto";
+
+message CacheRequest {
+  string key = 1;
+}
+
+message CacheResponse {
+  string value = 1;
+}
+
+service Cache {
+  option (gestalt.provider.v1.provider_kind) = PROVIDER_KIND_CACHE;
+
+  rpc Get(CacheRequest) returns (CacheResponse) {
+    option (gestalt.provider.v1.signature) = "key";
+    option (gestalt.provider.v1.provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
+  }
+}

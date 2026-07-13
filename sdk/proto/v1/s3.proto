@@ -174,9 +174,11 @@ message CreateObjectAccessURLResponse {
 // S3 models the shared Gestalt S3-provider protocol.
 service S3 {
   option (host_binding) = "s3";
+  option (provider_kind) = PROVIDER_KIND_S3;
 
   rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse) {
     option (signature) = "ref";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   // The first response frame carries object metadata. All subsequent frames
   // carry byte chunks. Zero-byte objects therefore emit exactly one frame.
@@ -197,6 +199,7 @@ service S3 {
   }
   rpc DeleteObject(DeleteObjectRequest) returns (google.protobuf.Empty) {
     option (signature) = "ref";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse) {
     option (signature) = "prefix";

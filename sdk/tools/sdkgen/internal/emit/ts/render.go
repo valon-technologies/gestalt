@@ -187,7 +187,11 @@ func (r *renderer) toWireExpr(ref *model.TypeRef, expr string) string {
 	case model.KindScalar, model.KindBytes, model.KindJSONStruct:
 		return expr
 	case model.KindEnum:
-		return expr + " as wire." + r.wireEnum(ref.Enum)
+		enumName := r.wireEnum(ref.Enum)
+		if strings.HasPrefix(enumName, "annotations.") {
+			return expr + " as " + enumName
+		}
+		return expr + " as wire." + enumName
 	case model.KindJSONNull:
 		r.features.nullValue = true
 		return "NullValue.NULL_VALUE"
@@ -219,6 +223,9 @@ func (r *renderer) fromWireExpr(ref *model.TypeRef, expr string) string {
 // declared in the same proto file; cross-file enums resolve through their own
 // wire module, which the spike protos do not require.
 func (r *renderer) wireEnum(fullName string) string {
+	if fullName == "gestalt.provider.v1.ProviderKind" {
+		return "annotations.ProviderKind"
+	}
 	return localName(fullName)
 }
 
@@ -948,6 +955,13 @@ func (r *renderer) assemble() string {
 
 	if r.features.wire {
 		fmt.Fprintf(&b, "\nimport * as wire from \"%s/%s_pb.ts\";\n", r.wireDir(), r.wireBase)
+		if r.base == "runtime" {
+			if r.kind == moduleCodec {
+				b.WriteString("import * as annotations from \"../gen/v1/annotations_pb.ts\";\n")
+			} else {
+				b.WriteString("import * as annotations from \"./internal/gen/v1/annotations_pb.ts\";\n")
+			}
+		}
 	} else {
 		b.WriteString("\n")
 	}

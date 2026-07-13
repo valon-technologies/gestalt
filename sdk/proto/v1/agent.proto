@@ -450,6 +450,7 @@ message ListedAgentTool {
 // pod-level transport, or cached tunnel.
 service Agent {
   option (host_binding) = "agent";
+  option (provider_kind) = PROVIDER_KIND_AGENT;
 
   rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession) {
     option (google.api.method_visibility) = {

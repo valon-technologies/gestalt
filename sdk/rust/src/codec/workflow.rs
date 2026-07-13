@@ -4,7 +4,8 @@
 
 use crate::codec::agent::{from_wire_agent_output, to_wire_agent_output};
 use crate::codec::app::{
-    from_wire_agent_tool_ref, to_wire_agent_tool_ref, to_wire_request_context,
+    from_wire_agent_tool_ref, from_wire_request_context, to_wire_agent_tool_ref,
+    to_wire_request_context,
 };
 use crate::codec::support::{
     from_wire_struct, from_wire_timestamp, from_wire_value, to_wire_struct, to_wire_timestamp,
@@ -44,6 +45,18 @@ pub(crate) fn to_wire_apply_workflow_provider_definition_request(
     }
 }
 
+/// Converts a wire `ApplyWorkflowProviderDefinitionRequest` to its native message.
+pub(crate) fn from_wire_apply_workflow_provider_definition_request(
+    value: v1::ApplyWorkflowProviderDefinitionRequest,
+) -> ApplyWorkflowProviderDefinitionRequest {
+    ApplyWorkflowProviderDefinitionRequest {
+        provider_name: value.provider_name,
+        spec: value.spec.map(from_wire_workflow_definition_spec),
+        idempotency_key: value.idempotency_key,
+        context: value.context.map(from_wire_request_context),
+    }
+}
+
 /// Converts a native `BoundWorkflowTarget` to its wire message.
 pub(crate) fn to_wire_bound_workflow_target(value: BoundWorkflowTarget) -> v1::BoundWorkflowTarget {
     v1::BoundWorkflowTarget {
@@ -76,6 +89,18 @@ pub(crate) fn to_wire_cancel_workflow_provider_run_request(
     }
 }
 
+/// Converts a wire `CancelWorkflowProviderRunRequest` to its native message.
+pub(crate) fn from_wire_cancel_workflow_provider_run_request(
+    value: v1::CancelWorkflowProviderRunRequest,
+) -> CancelWorkflowProviderRunRequest {
+    CancelWorkflowProviderRunRequest {
+        run_id: value.run_id,
+        reason: value.reason,
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
 /// Converts a native `DeleteWorkflowProviderDefinitionRequest` to its wire message.
 pub(crate) fn to_wire_delete_workflow_provider_definition_request(
     value: DeleteWorkflowProviderDefinitionRequest,
@@ -83,6 +108,17 @@ pub(crate) fn to_wire_delete_workflow_provider_definition_request(
     v1::DeleteWorkflowProviderDefinitionRequest {
         definition_id: value.definition_id,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a wire `DeleteWorkflowProviderDefinitionRequest` to its native message.
+pub(crate) fn from_wire_delete_workflow_provider_definition_request(
+    value: v1::DeleteWorkflowProviderDefinitionRequest,
+) -> DeleteWorkflowProviderDefinitionRequest {
+    DeleteWorkflowProviderDefinitionRequest {
+        definition_id: value.definition_id,
+        context: value.context.map(from_wire_request_context),
         provider_name: value.provider_name,
     }
 }
@@ -98,6 +134,17 @@ pub(crate) fn to_wire_deliver_workflow_provider_event_request(
     }
 }
 
+/// Converts a wire `DeliverWorkflowProviderEventRequest` to its native message.
+pub(crate) fn from_wire_deliver_workflow_provider_event_request(
+    value: v1::DeliverWorkflowProviderEventRequest,
+) -> DeliverWorkflowProviderEventRequest {
+    DeliverWorkflowProviderEventRequest {
+        provider_name: value.provider_name,
+        event: value.event.map(from_wire_workflow_event),
+        context: value.context.map(from_wire_request_context),
+    }
+}
+
 /// Converts a native `GetWorkflowProviderDefinitionRequest` to its wire message.
 pub(crate) fn to_wire_get_workflow_provider_definition_request(
     value: GetWorkflowProviderDefinitionRequest,
@@ -105,6 +152,17 @@ pub(crate) fn to_wire_get_workflow_provider_definition_request(
     v1::GetWorkflowProviderDefinitionRequest {
         definition_id: value.definition_id,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a wire `GetWorkflowProviderDefinitionRequest` to its native message.
+pub(crate) fn from_wire_get_workflow_provider_definition_request(
+    value: v1::GetWorkflowProviderDefinitionRequest,
+) -> GetWorkflowProviderDefinitionRequest {
+    GetWorkflowProviderDefinitionRequest {
+        definition_id: value.definition_id,
+        context: value.context.map(from_wire_request_context),
         provider_name: value.provider_name,
     }
 }
@@ -117,6 +175,30 @@ pub(crate) fn to_wire_get_workflow_provider_run_events_request(
         run_id: value.run_id,
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
+    }
+}
+
+/// Converts a wire `GetWorkflowProviderRunEventsRequest` to its native message.
+pub(crate) fn from_wire_get_workflow_provider_run_events_request(
+    value: v1::GetWorkflowProviderRunEventsRequest,
+) -> GetWorkflowProviderRunEventsRequest {
+    GetWorkflowProviderRunEventsRequest {
+        run_id: value.run_id,
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a native `GetWorkflowProviderRunEventsResponse` to its wire message.
+pub(crate) fn to_wire_get_workflow_provider_run_events_response(
+    value: GetWorkflowProviderRunEventsResponse,
+) -> v1::GetWorkflowProviderRunEventsResponse {
+    v1::GetWorkflowProviderRunEventsResponse {
+        events: value
+            .events
+            .into_iter()
+            .map(to_wire_workflow_run_event)
+            .collect(),
     }
 }
 
@@ -144,6 +226,26 @@ pub(crate) fn to_wire_get_workflow_provider_run_output_request(
     }
 }
 
+/// Converts a wire `GetWorkflowProviderRunOutputRequest` to its native message.
+pub(crate) fn from_wire_get_workflow_provider_run_output_request(
+    value: v1::GetWorkflowProviderRunOutputRequest,
+) -> GetWorkflowProviderRunOutputRequest {
+    GetWorkflowProviderRunOutputRequest {
+        run_id: value.run_id,
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a native `GetWorkflowProviderRunOutputResponse` to its wire message.
+pub(crate) fn to_wire_get_workflow_provider_run_output_response(
+    value: GetWorkflowProviderRunOutputResponse,
+) -> v1::GetWorkflowProviderRunOutputResponse {
+    v1::GetWorkflowProviderRunOutputResponse {
+        output: value.output.map(to_wire_value),
+    }
+}
+
 /// Converts a wire `GetWorkflowProviderRunOutputResponse` to its native message.
 pub(crate) fn from_wire_get_workflow_provider_run_output_response(
     value: v1::GetWorkflowProviderRunOutputResponse,
@@ -164,6 +266,17 @@ pub(crate) fn to_wire_get_workflow_provider_run_request(
     }
 }
 
+/// Converts a wire `GetWorkflowProviderRunRequest` to its native message.
+pub(crate) fn from_wire_get_workflow_provider_run_request(
+    value: v1::GetWorkflowProviderRunRequest,
+) -> GetWorkflowProviderRunRequest {
+    GetWorkflowProviderRunRequest {
+        run_id: value.run_id,
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
 /// Converts a native `ListWorkflowProviderDefinitionsRequest` to its wire message.
 pub(crate) fn to_wire_list_workflow_provider_definitions_request(
     value: ListWorkflowProviderDefinitionsRequest,
@@ -171,6 +284,29 @@ pub(crate) fn to_wire_list_workflow_provider_definitions_request(
     v1::ListWorkflowProviderDefinitionsRequest {
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
+    }
+}
+
+/// Converts a wire `ListWorkflowProviderDefinitionsRequest` to its native message.
+pub(crate) fn from_wire_list_workflow_provider_definitions_request(
+    value: v1::ListWorkflowProviderDefinitionsRequest,
+) -> ListWorkflowProviderDefinitionsRequest {
+    ListWorkflowProviderDefinitionsRequest {
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a native `ListWorkflowProviderDefinitionsResponse` to its wire message.
+pub(crate) fn to_wire_list_workflow_provider_definitions_response(
+    value: ListWorkflowProviderDefinitionsResponse,
+) -> v1::ListWorkflowProviderDefinitionsResponse {
+    v1::ListWorkflowProviderDefinitionsResponse {
+        definitions: value
+            .definitions
+            .into_iter()
+            .map(to_wire_workflow_definition)
+            .collect(),
     }
 }
 
@@ -201,6 +337,30 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
     }
 }
 
+/// Converts a wire `ListWorkflowProviderRunsRequest` to its native message.
+pub(crate) fn from_wire_list_workflow_provider_runs_request(
+    value: v1::ListWorkflowProviderRunsRequest,
+) -> ListWorkflowProviderRunsRequest {
+    ListWorkflowProviderRunsRequest {
+        page_size: value.page_size,
+        page_token: value.page_token,
+        status: value.status,
+        target_app: value.target_app,
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a native `ListWorkflowProviderRunsResponse` to its wire message.
+pub(crate) fn to_wire_list_workflow_provider_runs_response(
+    value: ListWorkflowProviderRunsResponse,
+) -> v1::ListWorkflowProviderRunsResponse {
+    v1::ListWorkflowProviderRunsResponse {
+        runs: value.runs.into_iter().map(to_wire_workflow_run).collect(),
+        next_page_token: value.next_page_token,
+    }
+}
+
 /// Converts a wire `ListWorkflowProviderRunsResponse` to its native message.
 pub(crate) fn from_wire_list_workflow_provider_runs_response(
     value: v1::ListWorkflowProviderRunsResponse,
@@ -224,6 +384,19 @@ pub(crate) fn to_wire_set_workflow_provider_activation_paused_request(
     }
 }
 
+/// Converts a wire `SetWorkflowProviderActivationPausedRequest` to its native message.
+pub(crate) fn from_wire_set_workflow_provider_activation_paused_request(
+    value: v1::SetWorkflowProviderActivationPausedRequest,
+) -> SetWorkflowProviderActivationPausedRequest {
+    SetWorkflowProviderActivationPausedRequest {
+        definition_id: value.definition_id,
+        activation_id: value.activation_id,
+        paused: value.paused,
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
 /// Converts a native `SetWorkflowProviderDefinitionPausedRequest` to its wire message.
 pub(crate) fn to_wire_set_workflow_provider_definition_paused_request(
     value: SetWorkflowProviderDefinitionPausedRequest,
@@ -232,6 +405,18 @@ pub(crate) fn to_wire_set_workflow_provider_definition_paused_request(
         definition_id: value.definition_id,
         paused: value.paused,
         context: value.context.map(to_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a wire `SetWorkflowProviderDefinitionPausedRequest` to its native message.
+pub(crate) fn from_wire_set_workflow_provider_definition_paused_request(
+    value: v1::SetWorkflowProviderDefinitionPausedRequest,
+) -> SetWorkflowProviderDefinitionPausedRequest {
+    SetWorkflowProviderDefinitionPausedRequest {
+        definition_id: value.definition_id,
+        paused: value.paused,
+        context: value.context.map(from_wire_request_context),
         provider_name: value.provider_name,
     }
 }
@@ -252,6 +437,22 @@ pub(crate) fn to_wire_signal_or_start_workflow_provider_run_request(
     }
 }
 
+/// Converts a wire `SignalOrStartWorkflowProviderRunRequest` to its native message.
+pub(crate) fn from_wire_signal_or_start_workflow_provider_run_request(
+    value: v1::SignalOrStartWorkflowProviderRunRequest,
+) -> SignalOrStartWorkflowProviderRunRequest {
+    SignalOrStartWorkflowProviderRunRequest {
+        workflow_key: value.workflow_key,
+        idempotency_key: value.idempotency_key,
+        signal: value.signal.map(from_wire_workflow_signal),
+        provider_name: value.provider_name,
+        definition_id: value.definition_id,
+        input: value.input.map(from_wire_struct),
+        expected_definition_generation: value.expected_definition_generation,
+        context: value.context.map(from_wire_request_context),
+    }
+}
+
 /// Converts a native `SignalWorkflowProviderRunRequest` to its wire message.
 pub(crate) fn to_wire_signal_workflow_provider_run_request(
     value: SignalWorkflowProviderRunRequest,
@@ -261,6 +462,30 @@ pub(crate) fn to_wire_signal_workflow_provider_run_request(
         signal: value.signal.map(to_wire_workflow_signal),
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
+    }
+}
+
+/// Converts a wire `SignalWorkflowProviderRunRequest` to its native message.
+pub(crate) fn from_wire_signal_workflow_provider_run_request(
+    value: v1::SignalWorkflowProviderRunRequest,
+) -> SignalWorkflowProviderRunRequest {
+    SignalWorkflowProviderRunRequest {
+        run_id: value.run_id,
+        signal: value.signal.map(from_wire_workflow_signal),
+        context: value.context.map(from_wire_request_context),
+        provider_name: value.provider_name,
+    }
+}
+
+/// Converts a native `SignalWorkflowRunResponse` to its wire message.
+pub(crate) fn to_wire_signal_workflow_run_response(
+    value: SignalWorkflowRunResponse,
+) -> v1::SignalWorkflowRunResponse {
+    v1::SignalWorkflowRunResponse {
+        run: value.run.map(to_wire_workflow_run),
+        signal: value.signal.map(to_wire_workflow_signal),
+        started_run: value.started_run,
+        workflow_key: value.workflow_key,
     }
 }
 
@@ -288,6 +513,21 @@ pub(crate) fn to_wire_start_workflow_provider_run_request(
         input: value.input.map(to_wire_struct),
         expected_definition_generation: value.expected_definition_generation,
         context: value.context.map(to_wire_request_context),
+    }
+}
+
+/// Converts a wire `StartWorkflowProviderRunRequest` to its native message.
+pub(crate) fn from_wire_start_workflow_provider_run_request(
+    value: v1::StartWorkflowProviderRunRequest,
+) -> StartWorkflowProviderRunRequest {
+    StartWorkflowProviderRunRequest {
+        idempotency_key: value.idempotency_key,
+        workflow_key: value.workflow_key,
+        provider_name: value.provider_name,
+        definition_id: value.definition_id,
+        input: value.input.map(from_wire_struct),
+        expected_definition_generation: value.expected_definition_generation,
+        context: value.context.map(from_wire_request_context),
     }
 }
 
@@ -381,6 +621,25 @@ pub(crate) fn from_wire_workflow_array(value: v1::WorkflowArray) -> WorkflowArra
     }
 }
 
+/// Converts a native `WorkflowDefinition` to its wire message.
+pub(crate) fn to_wire_workflow_definition(value: WorkflowDefinition) -> v1::WorkflowDefinition {
+    v1::WorkflowDefinition {
+        id: value.id,
+        generation: value.generation,
+        target: value.target.map(to_wire_bound_workflow_target),
+        activations: value
+            .activations
+            .into_iter()
+            .map(to_wire_workflow_activation)
+            .collect(),
+        paused: value.paused,
+        created_at: value.created_at.map(to_wire_timestamp),
+        updated_at: value.updated_at.map(to_wire_timestamp),
+        provider_name: value.provider_name,
+        run_as: value.run_as,
+    }
+}
+
 /// Converts a wire `WorkflowDefinition` to its native message.
 pub(crate) fn from_wire_workflow_definition(value: v1::WorkflowDefinition) -> WorkflowDefinition {
     WorkflowDefinition {
@@ -411,6 +670,23 @@ pub(crate) fn to_wire_workflow_definition_spec(
             .activations
             .into_iter()
             .map(to_wire_workflow_activation)
+            .collect(),
+        paused: value.paused,
+        run_as: value.run_as,
+    }
+}
+
+/// Converts a wire `WorkflowDefinitionSpec` to its native message.
+pub(crate) fn from_wire_workflow_definition_spec(
+    value: v1::WorkflowDefinitionSpec,
+) -> WorkflowDefinitionSpec {
+    WorkflowDefinitionSpec {
+        id: value.id,
+        target: value.target.map(from_wire_bound_workflow_target),
+        activations: value
+            .activations
+            .into_iter()
+            .map(from_wire_workflow_activation)
             .collect(),
         paused: value.paused,
         run_as: value.run_as,
@@ -491,6 +767,16 @@ pub(crate) fn from_wire_workflow_event_match(value: v1::WorkflowEventMatch) -> W
     }
 }
 
+/// Converts a native `WorkflowEventTriggerInvocation` to its wire message.
+pub(crate) fn to_wire_workflow_event_trigger_invocation(
+    value: WorkflowEventTriggerInvocation,
+) -> v1::WorkflowEventTriggerInvocation {
+    v1::WorkflowEventTriggerInvocation {
+        activation_id: value.activation_id,
+        event: value.event.map(to_wire_workflow_event),
+    }
+}
+
 /// Converts a wire `WorkflowEventTriggerInvocation` to its native message.
 pub(crate) fn from_wire_workflow_event_trigger_invocation(
     value: v1::WorkflowEventTriggerInvocation,
@@ -499,6 +785,13 @@ pub(crate) fn from_wire_workflow_event_trigger_invocation(
         activation_id: value.activation_id,
         event: value.event.map(from_wire_workflow_event),
     }
+}
+
+/// Converts a native `WorkflowManualTrigger` to its wire message.
+pub(crate) fn to_wire_workflow_manual_trigger(
+    _value: WorkflowManualTrigger,
+) -> v1::WorkflowManualTrigger {
+    v1::WorkflowManualTrigger {}
 }
 
 /// Converts a wire `WorkflowManualTrigger` to its native message.
@@ -540,6 +833,33 @@ pub(crate) fn from_wire_workflow_path_source(value: v1::WorkflowPathSource) -> W
     WorkflowPathSource { path: value.path }
 }
 
+/// Converts a native `WorkflowRun` to its wire message.
+pub(crate) fn to_wire_workflow_run(value: WorkflowRun) -> v1::WorkflowRun {
+    v1::WorkflowRun {
+        id: value.id,
+        status: value.status,
+        target: value.target.map(to_wire_bound_workflow_target),
+        trigger: value.trigger.map(to_wire_workflow_run_trigger),
+        created_at: value.created_at.map(to_wire_timestamp),
+        started_at: value.started_at.map(to_wire_timestamp),
+        completed_at: value.completed_at.map(to_wire_timestamp),
+        status_message: value.status_message,
+        output: value.output.map(to_wire_value),
+        workflow_key: value.workflow_key,
+        provider_name: value.provider_name,
+        definition_id: value.definition_id,
+        run_as: value.run_as,
+        input: value.input.map(to_wire_struct),
+        definition_generation: value.definition_generation,
+        current_step_id: value.current_step_id,
+        steps: value
+            .steps
+            .into_iter()
+            .map(to_wire_workflow_step_execution)
+            .collect(),
+    }
+}
+
 /// Converts a wire `WorkflowRun` to its native message.
 pub(crate) fn from_wire_workflow_run(value: v1::WorkflowRun) -> WorkflowRun {
     WorkflowRun {
@@ -567,6 +887,18 @@ pub(crate) fn from_wire_workflow_run(value: v1::WorkflowRun) -> WorkflowRun {
     }
 }
 
+/// Converts a native `WorkflowRunEvent` to its wire message.
+pub(crate) fn to_wire_workflow_run_event(value: WorkflowRunEvent) -> v1::WorkflowRunEvent {
+    v1::WorkflowRunEvent {
+        id: value.id,
+        run_id: value.run_id,
+        step_id: value.step_id,
+        r#type: value.r#type,
+        data: value.data.map(to_wire_struct),
+        created_at: value.created_at.map(to_wire_timestamp),
+    }
+}
+
 /// Converts a wire `WorkflowRunEvent` to its native message.
 pub(crate) fn from_wire_workflow_run_event(value: v1::WorkflowRunEvent) -> WorkflowRunEvent {
     WorkflowRunEvent {
@@ -579,10 +911,33 @@ pub(crate) fn from_wire_workflow_run_event(value: v1::WorkflowRunEvent) -> Workf
     }
 }
 
+/// Converts a native `WorkflowRunTrigger` to its wire message.
+pub(crate) fn to_wire_workflow_run_trigger(value: WorkflowRunTrigger) -> v1::WorkflowRunTrigger {
+    v1::WorkflowRunTrigger {
+        kind: value.kind.map(to_wire_workflow_run_trigger_kind),
+    }
+}
+
 /// Converts a wire `WorkflowRunTrigger` to its native message.
 pub(crate) fn from_wire_workflow_run_trigger(value: v1::WorkflowRunTrigger) -> WorkflowRunTrigger {
     WorkflowRunTrigger {
         kind: value.kind.map(from_wire_workflow_run_trigger_kind),
+    }
+}
+
+pub(crate) fn to_wire_workflow_run_trigger_kind(
+    value: WorkflowRunTriggerKind,
+) -> v1::workflow_run_trigger::Kind {
+    match value {
+        WorkflowRunTriggerKind::Manual(value) => {
+            v1::workflow_run_trigger::Kind::Manual(to_wire_workflow_manual_trigger(value))
+        }
+        WorkflowRunTriggerKind::Schedule(value) => {
+            v1::workflow_run_trigger::Kind::Schedule(to_wire_workflow_schedule_trigger(value))
+        }
+        WorkflowRunTriggerKind::Event(value) => {
+            v1::workflow_run_trigger::Kind::Event(to_wire_workflow_event_trigger_invocation(value))
+        }
     }
 }
 
@@ -619,6 +974,16 @@ pub(crate) fn from_wire_workflow_schedule_activation(
     WorkflowScheduleActivation {
         cron: value.cron,
         timezone: value.timezone,
+    }
+}
+
+/// Converts a native `WorkflowScheduleTrigger` to its wire message.
+pub(crate) fn to_wire_workflow_schedule_trigger(
+    value: WorkflowScheduleTrigger,
+) -> v1::WorkflowScheduleTrigger {
+    v1::WorkflowScheduleTrigger {
+        activation_id: value.activation_id,
+        scheduled_for: value.scheduled_for.map(to_wire_timestamp),
     }
 }
 
@@ -790,6 +1155,20 @@ pub(crate) fn from_wire_workflow_step_app_call(
     }
 }
 
+/// Converts a native `WorkflowStepAttempt` to its wire message.
+pub(crate) fn to_wire_workflow_step_attempt(value: WorkflowStepAttempt) -> v1::WorkflowStepAttempt {
+    v1::WorkflowStepAttempt {
+        id: value.id,
+        status: value.status,
+        idempotency_key: value.idempotency_key,
+        input: value.input.map(to_wire_value),
+        output: value.output.map(to_wire_value),
+        status_message: value.status_message,
+        started_at: value.started_at.map(to_wire_timestamp),
+        completed_at: value.completed_at.map(to_wire_timestamp),
+    }
+}
+
 /// Converts a wire `WorkflowStepAttempt` to its native message.
 pub(crate) fn from_wire_workflow_step_attempt(
     value: v1::WorkflowStepAttempt,
@@ -803,6 +1182,27 @@ pub(crate) fn from_wire_workflow_step_attempt(
         status_message: value.status_message,
         started_at: value.started_at.map(from_wire_timestamp),
         completed_at: value.completed_at.map(from_wire_timestamp),
+    }
+}
+
+/// Converts a native `WorkflowStepExecution` to its wire message.
+pub(crate) fn to_wire_workflow_step_execution(
+    value: WorkflowStepExecution,
+) -> v1::WorkflowStepExecution {
+    v1::WorkflowStepExecution {
+        step_id: value.step_id,
+        status: value.status,
+        attempts: value
+            .attempts
+            .into_iter()
+            .map(to_wire_workflow_step_attempt)
+            .collect(),
+        input: value.input.map(to_wire_value),
+        output: value.output.map(to_wire_value),
+        status_message: value.status_message,
+        skip_reason: value.skip_reason,
+        started_at: value.started_at.map(to_wire_timestamp),
+        completed_at: value.completed_at.map(to_wire_timestamp),
     }
 }
 

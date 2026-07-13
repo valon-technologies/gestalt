@@ -26,6 +26,12 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["identity", "provider"],
     label: "identity provider",
   },
+  indexeddb: {
+    tokens: ["indexeddb"],
+    formatToken: "indexeddb",
+    defaultExportNames: ["indexeddb", "provider"],
+    label: "IndexedDB provider",
+  },
   cache: {
     tokens: ["cache"],
     formatToken: "cache",
@@ -67,6 +73,18 @@ const PROVIDER_KIND_DEFINITIONS = {
     formatToken: "telemetry",
     defaultExportNames: ["telemetry", "provider"],
     label: "telemetry provider",
+  },
+  external_credential: {
+    tokens: ["external_credential"],
+    formatToken: "external_credential",
+    defaultExportNames: ["external_credential", "provider"],
+    label: "external credential provider",
+  },
+  test: {
+    tokens: ["test"],
+    formatToken: "test",
+    defaultExportNames: ["test", "provider"],
+    label: "test provider",
   },
 } satisfies Record<ProviderKind, ProviderKindDefinition>;
 

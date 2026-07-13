@@ -20,6 +20,14 @@ pub(crate) fn to_wire_byte_range(value: ByteRange) -> v1::ByteRange {
     }
 }
 
+/// Converts a wire `ByteRange` to its native message.
+pub(crate) fn from_wire_byte_range(value: v1::ByteRange) -> ByteRange {
+    ByteRange {
+        start: value.start,
+        end: value.end,
+    }
+}
+
 /// Converts a native `CopyObjectRequest` to its wire message.
 pub(crate) fn to_wire_copy_object_request(value: CopyObjectRequest) -> v1::CopyObjectRequest {
     v1::CopyObjectRequest {
@@ -27,6 +35,23 @@ pub(crate) fn to_wire_copy_object_request(value: CopyObjectRequest) -> v1::CopyO
         destination: value.destination.map(to_wire_s3_object_ref),
         if_match: value.if_match,
         if_none_match: value.if_none_match,
+    }
+}
+
+/// Converts a wire `CopyObjectRequest` to its native message.
+pub(crate) fn from_wire_copy_object_request(value: v1::CopyObjectRequest) -> CopyObjectRequest {
+    CopyObjectRequest {
+        source: value.source.map(from_wire_s3_object_ref),
+        destination: value.destination.map(from_wire_s3_object_ref),
+        if_match: value.if_match,
+        if_none_match: value.if_none_match,
+    }
+}
+
+/// Converts a native `CopyObjectResponse` to its wire message.
+pub(crate) fn to_wire_copy_object_response(value: CopyObjectResponse) -> v1::CopyObjectResponse {
+    v1::CopyObjectResponse {
+        meta: value.meta.map(to_wire_s3_object_meta),
     }
 }
 
@@ -70,10 +95,33 @@ pub(crate) fn to_wire_delete_object_request(value: DeleteObjectRequest) -> v1::D
     }
 }
 
+/// Converts a wire `DeleteObjectRequest` to its native message.
+pub(crate) fn from_wire_delete_object_request(
+    value: v1::DeleteObjectRequest,
+) -> DeleteObjectRequest {
+    DeleteObjectRequest {
+        r#ref: value.r#ref.map(from_wire_s3_object_ref),
+    }
+}
+
 /// Converts a native `HeadObjectRequest` to its wire message.
 pub(crate) fn to_wire_head_object_request(value: HeadObjectRequest) -> v1::HeadObjectRequest {
     v1::HeadObjectRequest {
         r#ref: value.r#ref.map(to_wire_s3_object_ref),
+    }
+}
+
+/// Converts a wire `HeadObjectRequest` to its native message.
+pub(crate) fn from_wire_head_object_request(value: v1::HeadObjectRequest) -> HeadObjectRequest {
+    HeadObjectRequest {
+        r#ref: value.r#ref.map(from_wire_s3_object_ref),
+    }
+}
+
+/// Converts a native `HeadObjectResponse` to its wire message.
+pub(crate) fn to_wire_head_object_response(value: HeadObjectResponse) -> v1::HeadObjectResponse {
+    v1::HeadObjectResponse {
+        meta: value.meta.map(to_wire_s3_object_meta),
     }
 }
 
@@ -92,6 +140,31 @@ pub(crate) fn to_wire_list_objects_request(value: ListObjectsRequest) -> v1::Lis
         continuation_token: value.continuation_token,
         start_after: value.start_after,
         max_keys: value.max_keys,
+    }
+}
+
+/// Converts a wire `ListObjectsRequest` to its native message.
+pub(crate) fn from_wire_list_objects_request(value: v1::ListObjectsRequest) -> ListObjectsRequest {
+    ListObjectsRequest {
+        prefix: value.prefix,
+        delimiter: value.delimiter,
+        continuation_token: value.continuation_token,
+        start_after: value.start_after,
+        max_keys: value.max_keys,
+    }
+}
+
+/// Converts a native `ListObjectsResponse` to its wire message.
+pub(crate) fn to_wire_list_objects_response(value: ListObjectsResponse) -> v1::ListObjectsResponse {
+    v1::ListObjectsResponse {
+        objects: value
+            .objects
+            .into_iter()
+            .map(to_wire_s3_object_meta)
+            .collect(),
+        common_prefixes: value.common_prefixes,
+        next_continuation_token: value.next_continuation_token,
+        has_more: value.has_more,
     }
 }
 
@@ -125,6 +198,32 @@ pub(crate) fn to_wire_presign_object_request(
     }
 }
 
+/// Converts a wire `PresignObjectRequest` to its native message.
+pub(crate) fn from_wire_presign_object_request(
+    value: v1::PresignObjectRequest,
+) -> PresignObjectRequest {
+    PresignObjectRequest {
+        r#ref: value.r#ref.map(from_wire_s3_object_ref),
+        method: value.method,
+        expires_seconds: value.expires_seconds,
+        content_type: value.content_type,
+        content_disposition: value.content_disposition,
+        headers: value.headers,
+    }
+}
+
+/// Converts a native `PresignObjectResponse` to its wire message.
+pub(crate) fn to_wire_presign_object_response(
+    value: PresignObjectResponse,
+) -> v1::PresignObjectResponse {
+    v1::PresignObjectResponse {
+        url: value.url,
+        method: value.method,
+        expires_at: value.expires_at.map(to_wire_timestamp),
+        headers: value.headers,
+    }
+}
+
 /// Converts a wire `PresignObjectResponse` to its native message.
 pub(crate) fn from_wire_presign_object_response(
     value: v1::PresignObjectResponse,
@@ -137,10 +236,28 @@ pub(crate) fn from_wire_presign_object_response(
     }
 }
 
+/// Converts a native `ReadObjectChunk` to its wire message.
+pub(crate) fn to_wire_read_object_chunk(value: ReadObjectChunk) -> v1::ReadObjectChunk {
+    v1::ReadObjectChunk {
+        result: value.result.map(to_wire_read_object_chunk_result),
+    }
+}
+
 /// Converts a wire `ReadObjectChunk` to its native message.
 pub(crate) fn from_wire_read_object_chunk(value: v1::ReadObjectChunk) -> ReadObjectChunk {
     ReadObjectChunk {
         result: value.result.map(from_wire_read_object_chunk_result),
+    }
+}
+
+pub(crate) fn to_wire_read_object_chunk_result(
+    value: ReadObjectChunkResult,
+) -> v1::read_object_chunk::Result {
+    match value {
+        ReadObjectChunkResult::Meta(value) => {
+            v1::read_object_chunk::Result::Meta(to_wire_s3_object_meta(value))
+        }
+        ReadObjectChunkResult::Data(value) => v1::read_object_chunk::Result::Data(value),
     }
 }
 
@@ -164,6 +281,31 @@ pub(crate) fn to_wire_read_object_request(value: ReadObjectRequest) -> v1::ReadO
         if_none_match: value.if_none_match,
         if_modified_since: value.if_modified_since.map(to_wire_timestamp),
         if_unmodified_since: value.if_unmodified_since.map(to_wire_timestamp),
+    }
+}
+
+/// Converts a wire `ReadObjectRequest` to its native message.
+pub(crate) fn from_wire_read_object_request(value: v1::ReadObjectRequest) -> ReadObjectRequest {
+    ReadObjectRequest {
+        r#ref: value.r#ref.map(from_wire_s3_object_ref),
+        range: value.range.map(from_wire_byte_range),
+        if_match: value.if_match,
+        if_none_match: value.if_none_match,
+        if_modified_since: value.if_modified_since.map(from_wire_timestamp),
+        if_unmodified_since: value.if_unmodified_since.map(from_wire_timestamp),
+    }
+}
+
+/// Converts a native `S3ObjectMeta` to its wire message.
+pub(crate) fn to_wire_s3_object_meta(value: S3ObjectMeta) -> v1::S3ObjectMeta {
+    v1::S3ObjectMeta {
+        r#ref: value.r#ref.map(to_wire_s3_object_ref),
+        etag: value.etag,
+        size: value.size,
+        content_type: value.content_type,
+        last_modified: value.last_modified.map(to_wire_timestamp),
+        metadata: value.metadata,
+        storage_class: value.storage_class,
     }
 }
 
@@ -211,10 +353,32 @@ pub(crate) fn to_wire_write_object_open(value: WriteObjectOpen) -> v1::WriteObje
     }
 }
 
+/// Converts a wire `WriteObjectOpen` to its native message.
+pub(crate) fn from_wire_write_object_open(value: v1::WriteObjectOpen) -> WriteObjectOpen {
+    WriteObjectOpen {
+        r#ref: value.r#ref.map(from_wire_s3_object_ref),
+        content_type: value.content_type,
+        cache_control: value.cache_control,
+        content_disposition: value.content_disposition,
+        content_encoding: value.content_encoding,
+        content_language: value.content_language,
+        metadata: value.metadata,
+        if_match: value.if_match,
+        if_none_match: value.if_none_match,
+    }
+}
+
 /// Converts a native `WriteObjectRequest` to its wire message.
 pub(crate) fn to_wire_write_object_request(value: WriteObjectRequest) -> v1::WriteObjectRequest {
     v1::WriteObjectRequest {
         msg: value.msg.map(to_wire_write_object_request_msg),
+    }
+}
+
+/// Converts a wire `WriteObjectRequest` to its native message.
+pub(crate) fn from_wire_write_object_request(value: v1::WriteObjectRequest) -> WriteObjectRequest {
+    WriteObjectRequest {
+        msg: value.msg.map(from_wire_write_object_request_msg),
     }
 }
 
@@ -226,6 +390,24 @@ pub(crate) fn to_wire_write_object_request_msg(
             v1::write_object_request::Msg::Open(to_wire_write_object_open(value))
         }
         WriteObjectRequestMsg::Data(value) => v1::write_object_request::Msg::Data(value),
+    }
+}
+
+pub(crate) fn from_wire_write_object_request_msg(
+    value: v1::write_object_request::Msg,
+) -> WriteObjectRequestMsg {
+    match value {
+        v1::write_object_request::Msg::Open(value) => {
+            WriteObjectRequestMsg::Open(from_wire_write_object_open(value))
+        }
+        v1::write_object_request::Msg::Data(value) => WriteObjectRequestMsg::Data(value),
+    }
+}
+
+/// Converts a native `WriteObjectResponse` to its wire message.
+pub(crate) fn to_wire_write_object_response(value: WriteObjectResponse) -> v1::WriteObjectResponse {
+    v1::WriteObjectResponse {
+        meta: value.meta.map(to_wire_s3_object_meta),
     }
 }
 

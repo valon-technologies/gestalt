@@ -440,6 +440,7 @@ message GetWorkflowProviderRunOutputResponse {
 
 service Workflow {
   option (host_binding) = "workflow";
+  option (provider_kind) = PROVIDER_KIND_WORKFLOW;
 
   rpc ApplyDefinition(ApplyWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
     option (google.api.method_visibility) = {

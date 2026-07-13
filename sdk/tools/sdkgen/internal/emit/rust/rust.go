@@ -17,6 +17,15 @@ import (
 
 type Emitter struct{}
 
+func hasProvider(services []*model.Service) bool {
+	for _, svc := range services {
+		if svc.Provider {
+			return true
+		}
+	}
+	return false
+}
+
 func New() *Emitter { return &Emitter{} }
 
 func (*Emitter) Target() emit.Target { return emit.TargetRust }
@@ -64,6 +73,9 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	services := schema.Services
 	set := fileset.New()
 	if len(services) == 0 {
+		if err := emit.AddModuleInventory(set, emit.TargetRust); err != nil {
+			return nil, err
+		}
 		return set, nil
 	}
 
@@ -84,6 +96,17 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		}
 		if err := set.Add(outputBase+".rs", []byte(public.assemble())); err != nil {
 			return nil, err
+		}
+		var providerServices []*model.Service
+		for _, svc := range g.services {
+			if svc.Provider {
+				providerServices = append(providerServices, svc)
+			}
+		}
+		if len(providerServices) > 0 {
+			if err := set.Add("providers/"+outputBase+".rs", []byte(renderProviderFile(idx, outputBase, providerServices))); err != nil {
+				return nil, err
+			}
 		}
 		for name := range public.features.supportFns {
 			supportUses[name] = true
@@ -106,6 +129,11 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 	if err := set.Add("rpc_support.rs", []byte(supportFile)); err != nil {
 		return nil, err
+	}
+	if hasProvider(services) {
+		if err := set.Add("server_support.rs", []byte(serverSupportFile)); err != nil {
+			return nil, err
+		}
 	}
 	for _, svc := range services {
 		emitted := false
@@ -138,6 +166,9 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		return nil, err
 	}
 	if err := set.Add("codec/support.rs", []byte(renderCodecSupport(supportUses))); err != nil {
+		return nil, err
+	}
+	if err := emit.AddModuleInventory(set, emit.TargetRust); err != nil {
 		return nil, err
 	}
 	return set, nil
@@ -193,10 +224,24 @@ func reachable(idx *index, services []*model.Service) ([]*model.Message, []*mode
 		for _, method := range svc.Methods {
 			if method.Input != nil {
 				visit(idx.needToWire, method.Input.FullName)
+				if svc.Provider {
+					// Provider adapters receive native requests from the wire,
+					// so provider-owned inputs need the inverse conversion too.
+					visit(idx.needFromWire, method.Input.FullName)
+				}
 			}
 			if method.Output != nil {
 				visit(idx.needFromWire, method.Output.FullName)
+				if svc.Provider {
+					// Provider adapters send native responses back to the wire.
+					visit(idx.needToWire, method.Output.FullName)
+				}
 			}
+		}
+	}
+	for fullName, enum := range idx.enums {
+		if enum.ProtoFile == "sdk/proto/v1/annotations.proto" {
+			seenEnums[fullName] = true
 		}
 	}
 

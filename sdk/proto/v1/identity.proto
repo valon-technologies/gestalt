@@ -127,6 +127,7 @@ message UserInfoResponse {
 // Identity models the shared Gestalt authentication protocol.
 service Identity {
   option (host_binding) = "identity";
+  option (provider_kind) = PROVIDER_KIND_IDENTITY;
 
   rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
     option (google.api.method_visibility) = {

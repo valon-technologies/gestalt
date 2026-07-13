@@ -338,6 +338,7 @@ message TransactionServerMessage {
 // IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 service IndexedDB {
   option (host_binding) = "indexeddb";
+  option (provider_kind) = PROVIDER_KIND_INDEXEDDB;
 
   // Lifecycle
   rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty) {
@@ -346,12 +347,14 @@ service IndexedDB {
     };
     option (signature) = "name";
     option (signature) = "schema";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty) {
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
     option (signature) = "name";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc CreateIndex(CreateIndexRequest) returns (google.protobuf.Empty) {
     option (google.api.method_visibility) = {
@@ -361,6 +364,7 @@ service IndexedDB {
     option (signature) = "name";
     option (signature) = "key_path";
     option (signature) = "unique";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc DeleteIndex(DeleteIndexRequest) returns (google.protobuf.Empty) {
     option (google.api.method_visibility) = {
@@ -368,6 +372,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "name";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
 
   // Primary key CRUD
@@ -377,6 +382,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "id";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc GetKey(ObjectStoreRequest) returns (KeyResponse) {
     option (google.api.method_visibility) = {
@@ -384,6 +390,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "id";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc Add(RecordRequest) returns (google.protobuf.Empty) {
     option (google.api.method_visibility) = {
@@ -391,6 +398,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "record";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc Put(RecordRequest) returns (google.protobuf.Empty) {
     option (google.api.method_visibility) = {
@@ -398,6 +406,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "record";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc Delete(ObjectStoreRequest) returns (google.protobuf.Empty) {
     option (google.api.method_visibility) = {
@@ -405,6 +414,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "id";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
 
   // Bulk operations (with optional query)
@@ -413,6 +423,7 @@ service IndexedDB {
       restriction: "PUBLIC"
     };
     option (signature) = "store";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc GetAll(ObjectStoreRangeRequest) returns (RecordsResponse) {
     option (google.api.method_visibility) = {
@@ -421,6 +432,7 @@ service IndexedDB {
     option (signature) = "store";
     option (signature) = "query";
     option (optional_signature) = "count";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc GetAllKeys(ObjectStoreRangeRequest) returns (KeysResponse) {
     option (google.api.method_visibility) = {
@@ -429,6 +441,7 @@ service IndexedDB {
     option (signature) = "store";
     option (signature) = "query";
     option (optional_signature) = "count";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc Count(ObjectStoreRangeRequest) returns (CountResponse) {
     option (google.api.method_visibility) = {
@@ -436,6 +449,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "query";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc DeleteRange(ObjectStoreRangeRequest) returns (DeleteResponse) {
     option (google.api.method_visibility) = {
@@ -443,6 +457,7 @@ service IndexedDB {
     };
     option (signature) = "store";
     option (signature) = "query";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
 
   // Index queries
@@ -453,6 +468,7 @@ service IndexedDB {
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc IndexGetKey(IndexQueryRequest) returns (KeyResponse) {
     option (google.api.method_visibility) = {
@@ -461,6 +477,7 @@ service IndexedDB {
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc IndexGetAll(IndexQueryRequest) returns (RecordsResponse) {
     option (google.api.method_visibility) = {
@@ -470,6 +487,7 @@ service IndexedDB {
     option (signature) = "index";
     option (signature) = "query";
     option (optional_signature) = "count";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc IndexGetAllKeys(IndexQueryRequest) returns (KeysResponse) {
     option (google.api.method_visibility) = {
@@ -479,6 +497,7 @@ service IndexedDB {
     option (signature) = "index";
     option (signature) = "query";
     option (optional_signature) = "count";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc IndexCount(IndexQueryRequest) returns (CountResponse) {
     option (google.api.method_visibility) = {
@@ -487,6 +506,7 @@ service IndexedDB {
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
   rpc IndexDelete(IndexQueryRequest) returns (DeleteResponse) {
     option (google.api.method_visibility) = {
@@ -495,6 +515,7 @@ service IndexedDB {
     option (signature) = "store";
     option (signature) = "index";
     option (signature) = "query";
+    option (provider_input) = PROVIDER_INPUT_CLIENT_SIGNATURE;
   }
 
   // Cursor iteration (bidirectional stream)

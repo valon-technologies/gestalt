@@ -1116,3 +1116,20 @@ export class Agent {
     return fromWireAgentProviderCapabilities(response);
   }
 }
+
+export {
+  AgentProvider,
+  createAgentProviderService,
+} from "./generated/providers/agent.ts";
+
+export {
+  type AgentToolRef,
+  type OperationAnnotations,
+  type RequestContext,
+} from "./app.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

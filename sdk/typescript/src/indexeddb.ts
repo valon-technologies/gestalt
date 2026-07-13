@@ -1359,3 +1359,14 @@ export class IndexedDB {
     );
   }
 }
+
+export {
+  IndexedDBProvider,
+  createIndexedDBProviderService,
+} from "./generated/providers/indexeddb.ts";
+
+export {
+  type BidiStream,
+  type ClientStream,
+  type ServerStream,
+} from "./generated/providers/support.ts";

@@ -112,14 +112,37 @@ func buildSchema(bufTool *toolchain.Tool, repoRoot, scratch string, stderr io.Wr
 }
 
 func generate(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.Emitter, schema *model.Schema, scratch string) error {
-	if err := wire.Generate(bufTool, rustfmtTool, opts.RepoRoot, scratch, opts.Targets); err != nil {
+	wireOutputs, err := wire.Render(bufTool, rustfmtTool, opts.RepoRoot, scratch, opts.Targets)
+	if err != nil {
 		return err
 	}
+	type generated struct {
+		emitter emit.Emitter
+		set     *fileset.FileSet
+	}
+	var generatedSets []generated
 	for _, e := range emitters {
 		set, err := EmitFormatted(e, schema, scratch)
 		if err != nil {
 			return err
 		}
+		generatedSets = append(generatedSets, generated{emitter: e, set: set})
+	}
+	// Walk every destination before applying any output. This keeps ordinary
+	// filesystem and ownership failures (for example an unreadable generated
+	// directory) from leaving wire output updated while a later emitter is
+	// still pending.
+	for _, item := range generatedSets {
+		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(item.emitter.OutputRoot()))
+		if _, err := fileset.Check(root, item.set, item.emitter.HeaderStyle()); err != nil {
+			return fmt.Errorf("preflight %s: %w", item.emitter.Target(), err)
+		}
+	}
+	if err := wire.Sync(wireOutputs); err != nil {
+		return err
+	}
+	for _, item := range generatedSets {
+		e, set := item.emitter, item.set
 		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
 		report, err := fileset.Reconcile(root, set, e.HeaderStyle())
 		if err != nil {
@@ -176,6 +199,9 @@ func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*files
 	dir := filepath.Join(scratch, "format", string(e.Target()))
 	args := append([]string{}, tool.FormatArgs...)
 	for _, f := range set.Files() {
+		if path.Ext(f.Path) == ".json" {
+			continue
+		}
 		abs := filepath.Join(dir, filepath.FromSlash(f.Path))
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 			return nil, err
@@ -190,9 +216,13 @@ func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*files
 	}
 	formatted := fileset.New()
 	for _, f := range set.Files() {
-		content, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(f.Path)))
-		if err != nil {
-			return nil, err
+		content := f.Content
+		if path.Ext(f.Path) != ".json" {
+			var err error
+			content, err = os.ReadFile(filepath.Join(dir, filepath.FromSlash(f.Path)))
+			if err != nil {
+				return nil, err
+			}
 		}
 		if err := formatted.Add(f.Path, content); err != nil {
 			return nil, err
