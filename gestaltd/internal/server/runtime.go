@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
@@ -119,6 +120,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
+	startAppRegistryCatalogPoller(ctx, result)
 
 	publicConfig := baseConfig
 	if managementAddr == "" {
@@ -391,4 +393,20 @@ func (h *switchableHandler) Set(handler http.Handler) {
 	h.mu.Lock()
 	h.handler = handler
 	h.mu.Unlock()
+}
+
+func startAppRegistryCatalogPoller(ctx context.Context, result *bootstrap.Result) {
+	if result == nil || result.Services == nil {
+		return
+	}
+	changeRequests := result.Services.AppVersionChangeRequests
+	materializations := result.Services.AppInstanceMaterializations
+	if changeRequests == nil || materializations == nil {
+		return
+	}
+	appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
+		ChangeRequests:   changeRequests,
+		Materializations: materializations,
+		InstanceID:       appregistry.ResolveInstanceID(),
+	}).Start(ctx)
 }
