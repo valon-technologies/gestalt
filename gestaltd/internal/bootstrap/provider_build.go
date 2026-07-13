@@ -1189,6 +1189,9 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 	if baseURL := strings.TrimSpace(deps.BaseURL); baseURL != "" {
 		target.BaseEnv["GESTALT_BASE_URL"] = strings.TrimRight(baseURL, "/")
 	}
+	if strings.TrimSpace(deps.RemoteToken) != "" {
+		target.BaseEnv["GESTALT_DEV_API_PROXY_TOKEN"] = deps.RemoteToken
+	}
 	handle, err := deps.DevSupervisor.StartApp(ctx, target)
 	if err != nil {
 		prepared.Cleanup()

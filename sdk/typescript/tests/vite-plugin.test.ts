@@ -1,4 +1,5 @@
-import { createServer } from "node:net";
+import { EventEmitter } from "node:events";
+import { createServer as createNetServer } from "node:net";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,9 +11,9 @@ import { fixturePath, makeTempDir, removeTempDir } from "./helpers.ts";
 
 const fixtureRoot = fixturePath("vite-app");
 
-function listen(port: number): Promise<ReturnType<typeof createServer>> {
+function listen(port: number): Promise<ReturnType<typeof createNetServer>> {
   return new Promise((resolve, reject) => {
-    const server = createServer();
+    const server = createNetServer();
     server.once("error", reject);
     server.listen(port, "127.0.0.1", () => resolve(server));
   });
@@ -20,7 +21,7 @@ function listen(port: number): Promise<ReturnType<typeof createServer>> {
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
-    const server = createServer();
+    const server = createNetServer();
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
@@ -57,7 +58,7 @@ describe("normalizeBasePath", () => {
 describe("gestalt vite plugin", () => {
   let tempDirs: string[] = [];
   let viteServers: Array<Awaited<ReturnType<typeof createViteServer>>> = [];
-  let occupied: ReturnType<typeof createServer> | undefined;
+  let occupied: ReturnType<typeof createNetServer> | undefined;
 
   afterEach(async () => {
     await Promise.all(viteServers.splice(0).map((server) => server.close()));
@@ -111,10 +112,12 @@ describe("gestalt vite plugin", () => {
     expect(config.preview.port).toBe(5173);
     expect(config.preview.strictPort).toBe(true);
     expect(config.preview.allowedHosts).toBe(true);
-    expect(config.server.proxy?.["/api/v1"]).toEqual({
-      target: "http://127.0.0.1:65003",
-      changeOrigin: true,
-    });
+    expect(config.server.proxy?.["/api/v1"]).toEqual(
+      expect.objectContaining({
+        target: "http://127.0.0.1:65003",
+        changeOrigin: true,
+      }),
+    );
 
     const overridden = await resolveConfig(
       {
@@ -136,15 +139,55 @@ describe("gestalt vite plugin", () => {
       },
       "serve",
     );
-    expect(overridden.server.proxy?.["/api/v1"]).toEqual({
-      target: "http://127.0.0.1:9000",
-      changeOrigin: true,
+    expect(overridden.server.proxy?.["/api/v1"]).toEqual(
+      expect.objectContaining({
+        target: "http://127.0.0.1:9000",
+        changeOrigin: true,
+      }),
+    );
+  });
+
+  test("adds the configured bearer to the API proxy", async () => {
+    const config = await resolveConfig(
+      {
+        configFile: false,
+        root: fixtureRoot,
+        plugins: [
+          gestalt({
+            env: {
+              GESTALT_DEV_PORT: "5173",
+              GESTALT_DEV_API_PROXY_TOKEN: "test-token",
+            },
+          }),
+        ],
+      },
+      "serve",
+    );
+    const proxy = config.server.proxy?.["/api/v1"];
+    if (!proxy || typeof proxy === "string" || !proxy.configure) {
+      throw new Error("expected configurable API proxy");
+    }
+    const proxyServer = new EventEmitter();
+    proxy.configure(proxyServer as never, {} as never);
+    let authorization: string | undefined;
+    const proxyReq = {
+      setHeader: (_name: string, value: string) => (authorization = value),
+    };
+    proxyServer.emit("proxyReq", proxyReq, {
+      headers: { host: "127.0.0.1:5173" },
     });
+    expect(authorization).toBe("Bearer test-token");
+
+    expect(authorization).toBe("Bearer test-token");
   });
 
   test("live dev server serves mount with foreign Host and injected base tag", async () => {
     const cases = [
-      { basePath: "/example", requestPath: "/example/", wantBase: '<base href="/example/">' },
+      {
+        basePath: "/example",
+        requestPath: "/example/",
+        wantBase: '<base href="/example/">',
+      },
       { basePath: "/", requestPath: "/", wantBase: '<base href="/">' },
     ] as const;
 
