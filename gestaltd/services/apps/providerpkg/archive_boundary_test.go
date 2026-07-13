@@ -113,6 +113,28 @@ func TestInspectPackageValidatesArchiveWithoutExtracting(t *testing.T) {
 	}
 }
 
+func TestInspectPackageRejectsProviderOwnedAllowedRoles(t *testing.T) {
+	t.Parallel()
+
+	artifactPath := testArtifactPath("provider")
+	manifest := newProviderManifest("github.com/acme/apps/provider", "0.0.1-alpha.1", artifactPath, sha256Hex("provider"))
+
+	archivePath := filepath.Join(t.TempDir(), "provider-owned-roles.tar.gz")
+	mustCreateArchive(t, archivePath,
+		archiveTestFile{name: ManifestFile, data: mustRawManifestJSON(t, manifest), mode: 0644},
+		archiveTestFile{name: artifactPath, data: []byte("provider"), mode: 0755},
+		archiveTestFile{name: StaticCatalogFile, data: []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n    allowedRoles:\n      - admin\n"), mode: 0644},
+	)
+
+	_, err := InspectPackage(archivePath)
+	if err == nil {
+		t.Fatal("expected provider-owned allowedRoles error")
+	}
+	if !strings.Contains(err.Error(), "provider-owned allowedRoles") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestInspectPackageRejectsMissingProviderSchema(t *testing.T) {
 	t.Parallel()
 
