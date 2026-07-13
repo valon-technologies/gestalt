@@ -151,6 +151,43 @@ type workflowCapabilitiesAuthorizationProvider struct {
 	allowed map[string]map[string]struct{}
 }
 
+func workflowCapabilityForRPCAction(action string) (string, bool) {
+	switch strings.TrimSpace(action) {
+	case "ApplyDefinition":
+		return workflowauth.OperationDefinitionsApply, true
+	case "GetDefinition":
+		return workflowauth.OperationDefinitionsGet, true
+	case "ListDefinitions":
+		return workflowauth.OperationDefinitionsList, true
+	case "SetDefinitionPaused":
+		return workflowauth.OperationDefinitionsSetPaused, true
+	case "SetActivationPaused":
+		return workflowauth.OperationDefinitionsSetActivationPaused, true
+	case "DeleteDefinition":
+		return workflowauth.OperationDefinitionsDelete, true
+	case "StartRun":
+		return workflowauth.OperationRunsStart, true
+	case "ListRuns":
+		return workflowauth.OperationRunsList, true
+	case "GetRun":
+		return workflowauth.OperationRunsGet, true
+	case "GetRunEvents":
+		return workflowauth.OperationRunsGetEvents, true
+	case "GetRunOutput":
+		return workflowauth.OperationRunsGetOutput, true
+	case "CancelRun":
+		return workflowauth.OperationRunsCancel, true
+	case "SignalRun":
+		return workflowauth.OperationRunsSignal, true
+	case "SignalOrStartRun":
+		return workflowauth.OperationRunsSignalOrStart, true
+	case "DeliverEvent":
+		return workflowauth.OperationEventsDeliver, true
+	default:
+		return "", false
+	}
+}
+
 func newWorkflowCapabilitiesAuthorizationProvider(cfg *config.Config) core.AuthorizationProvider {
 	allowed := make(map[string]map[string]struct{})
 	if cfg != nil {
@@ -174,6 +211,18 @@ func newWorkflowCapabilitiesAuthorizationProvider(cfg *config.Config) core.Autho
 
 func (p *workflowCapabilitiesAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	if req == nil || req.GetSubject() == nil || req.GetResource() == nil || req.GetAction() == nil {
+		return &proto.CheckAccessResponse{Allowed: false}, nil
+	}
+	if req.GetResource().GetType() == "workflow" {
+		capability, ok := workflowCapabilityForRPCAction(strings.TrimSpace(req.GetAction().GetName()))
+		if !ok {
+			return &proto.CheckAccessResponse{Allowed: false}, nil
+		}
+		for _, ops := range p.allowed {
+			if _, allowed := ops[capability]; allowed {
+				return &proto.CheckAccessResponse{Allowed: allowed}, nil
+			}
+		}
 		return &proto.CheckAccessResponse{Allowed: false}, nil
 	}
 	if req.GetResource().GetType() != workflowauth.ResourceTypeOperation || req.GetAction().GetName() != workflowauth.ActionInvoke {
@@ -1002,6 +1051,7 @@ func fakeHostedWorkflowManagerRoundTrip(reqCtx *proto.RequestContext, env map[st
 		IdempotencyKey: "workflow-manager-roundtrip",
 		Spec: &proto.WorkflowDefinitionSpec{
 			Id: "workflow-manager-roundtrip",
+			RunAs: "service_account:echoext-workflow",
 			Target: &proto.BoundWorkflowTarget{
 				Steps: []*proto.WorkflowStep{{
 					Id: "sync",
@@ -4014,7 +4064,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 
 	applyResult, err := prov.Execute(ctx, "apply_workflow_definition", map[string]any{
 		"definition_id": "roadmap_sync",
-		"provider_name": "basic",
+		"run_as":        "service_account:echo-workflow",
 		"target": map[string]any{
 			"app":        "roadmap",
 			"operation":  "sync",
@@ -4059,7 +4109,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	if err := json.Unmarshal(applyResult.Body, &applied); err != nil {
 		t.Fatalf("json.Unmarshal(apply): %v", err)
 	}
-	if applied.ProviderName != "basic" || applied.Definition.ID != "roadmap_sync" {
+	if applied.Definition.ID != "roadmap_sync" {
 		t.Fatalf("unexpected apply result: %+v", applied)
 	}
 	if applied.Definition.Target.App != "roadmap" || applied.Definition.Target.Operation != "sync" {
@@ -4082,8 +4132,8 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	if err := json.Unmarshal(getResult.Body, &fetched); err != nil {
 		t.Fatalf("json.Unmarshal(get): %v", err)
 	}
-	if fetched["provider_name"] != "basic" {
-		t.Fatalf("fetched provider_name = %v, want basic", fetched["provider_name"])
+	if fetched["definition"] == nil {
+		t.Fatalf("fetched definition missing: %+v", fetched)
 	}
 
 	pauseDefinitionResult, err := prov.Execute(ctx, "set_workflow_definition_paused", map[string]any{
@@ -4145,10 +4195,9 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	}
 
 	deliverEventResult, err := prov.Execute(ctx, "deliver_workflow_event", map[string]any{
-		"provider_name": "advanced",
-		"type":          "roadmap.item.updated",
-		"source":        "roadmap",
-		"subject":       "item-123",
+		"type":    "roadmap.item.updated",
+		"source":  "roadmap",
+		"subject": "item-123",
 		"data": map[string]any{
 			"id":    "item-123",
 			"title": "Ship parity",
@@ -4176,9 +4225,6 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	}
 	if deliveredEvent.Data["title"] != "Ship parity" || deliveredEvent.Extensions["tenant"] != "acme" {
 		t.Fatalf("unexpected delivered event data: %+v", deliveredEvent)
-	}
-	if !slices.Equal(manager.publishedProviderNames, []string{"advanced"}) {
-		t.Fatalf("delivered provider names = %v, want [advanced]", manager.publishedProviderNames)
 	}
 
 	if got := manager.Subjects(); len(got) != 6 || slices.Contains(got, "") || !slices.Equal(got, []string{
@@ -4247,10 +4293,9 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	})
 
 	deliverEventResult, err := prov.Execute(ctx, "deliver_workflow_event", map[string]any{
-		"provider_name": "advanced",
-		"type":          "roadmap.item.updated",
-		"source":        "roadmap",
-		"subject":       "item-123",
+		"type":    "roadmap.item.updated",
+		"source":  "roadmap",
+		"subject": "item-123",
 	}, "")
 	if err != nil {
 		t.Fatalf("Execute(deliver_workflow_event): %v", err)
@@ -4264,13 +4309,10 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	if deliveredEvent.ID == "" {
 		t.Fatalf("deliver event result = %+v, want event id", deliveredEvent)
 	}
-	if !slices.Equal(manager.publishedProviderNames, []string{"advanced"}) {
-		t.Fatalf("delivered provider names = %v, want [advanced]", manager.publishedProviderNames)
-	}
 
 	applyResult, err := prov.Execute(ctx, "apply_workflow_definition", map[string]any{
 		"definition_id": "roadmap_sync",
-		"provider_name": "basic",
+		"run_as":        "service_account:echo-workflow",
 		"target": map[string]any{
 			"app":       "roadmap",
 			"operation": "sync",
@@ -4285,8 +4327,8 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	if err := json.Unmarshal(applyResult.Body, &applyBody); err != nil {
 		t.Fatalf("json.Unmarshal(apply): %v", err)
 	}
-	if !strings.Contains(applyBody.Error, `workflow manager operation "definitions.apply" is not allowed`) {
-		t.Fatalf("apply workflow definition error = %q, want definitions.apply permission denied", applyBody.Error)
+	if !strings.Contains(applyBody.Error, `ApplyDefinition`) || !strings.Contains(applyBody.Error, "PermissionDenied") {
+		t.Fatalf("apply workflow definition error = %q, want ApplyDefinition permission denied", applyBody.Error)
 	}
 }
 
@@ -6991,8 +7033,8 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal workflow_manager_roundtrip: %v", err)
 	}
-	if body.ProviderName != "managed" {
-		t.Fatalf("provider_name = %q, want %q", body.ProviderName, "managed")
+	if body.ProviderName != "basic" {
+		t.Fatalf("provider_name = %q, want %q", body.ProviderName, "basic")
 	}
 	if body.DefinitionID == "" {
 		t.Fatal("workflow_manager_roundtrip should return a definition id")

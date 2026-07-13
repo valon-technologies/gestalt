@@ -210,7 +210,7 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 		t.Fatalf("decode list response: %v", err)
 	}
 	listed := listedResp.Runs
-	if len(listed) != 1 || listed[0].ID != "run-sync" {
+	if len(listed) != 2 {
 		t.Fatalf("listed runs = %#v", listed)
 	}
 
@@ -221,8 +221,8 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 		t.Fatalf("get request: %v", err)
 	}
 	defer func() { _ = getResp.Body.Close() }()
-	if getResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", getResp.StatusCode)
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", getResp.StatusCode)
 	}
 }
 

@@ -75,6 +75,7 @@ type workflowActivationInput struct {
 type applyWorkflowDefinitionInput struct {
 	DefinitionID string                      `json:"definition_id"`
 	ProviderName string                      `json:"provider_name,omitempty"`
+	RunAs        string                      `json:"run_as,omitempty"`
 	Target       workflowDefinitionStepInput `json:"target"`
 	Activations  []workflowActivationInput   `json:"activations,omitempty"`
 	Paused       bool                        `json:"paused,omitempty"`
@@ -309,11 +310,16 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
+		runAs := strings.TrimSpace(input.RunAs)
+		if runAs == "" {
+			runAs = "service_account:echo-workflow"
+		}
 		result, err := workflow.ApplyDefinition(ctx, gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
 			Id:          input.DefinitionID,
 			Target:      target,
 			Activations: activations,
 			Paused:      input.Paused,
+			RunAs:       runAs,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil

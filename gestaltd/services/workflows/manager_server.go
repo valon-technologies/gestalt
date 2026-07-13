@@ -724,8 +724,6 @@ func (s *ProviderServer) workflowManagerSignalOrStartMetricDims(req *proto.Signa
 	providerName := s.workflowProviderName
 	runStatus := observability.WorkflowRunStatusUnknown
 	targetKind := observability.WorkflowTargetKindUnknown
-	if req != nil {
-	}
 	if managed != nil {
 		if resolved := strings.TrimSpace(managed.ProviderName); resolved != "" {
 			providerName = resolved
