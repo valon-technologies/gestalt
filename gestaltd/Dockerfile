@@ -20,7 +20,7 @@ RUN mkdir -p /out && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} \
     go build -ldflags "-X main.version=${GESTALT_VERSION}" -o /out/gestaltd ./cmd/gestaltd
 
-FROM --platform=$BUILDPLATFORM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS prebuilt-binary
+FROM --platform=$BUILDPLATFORM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS prebuilt-binary
 RUN apk upgrade --no-cache && apk add --no-cache ca-certificates && rm -f /usr/bin/wget
 COPY dist/ /dist/
 ARG TARGETARCH
@@ -79,7 +79,7 @@ ENTRYPOINT ["/gestaltd"]
 CMD ["serve", "--config", "/etc/gestaltd/config.yaml", "--artifacts-dir", "/data"]
 
 # --- Alpine ---
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS alpine
+FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS alpine
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
 ARG GESTALT_CREATED
@@ -102,7 +102,7 @@ EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gestaltd"]
 CMD ["serve", "--config", "/etc/gestaltd/config.yaml", "--artifacts-dir", "/data"]
 
-FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS alpine-prebuilt
+FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS alpine-prebuilt
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
 ARG GESTALT_CREATED
