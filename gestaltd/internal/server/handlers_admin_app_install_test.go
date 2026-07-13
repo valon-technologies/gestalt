@@ -43,10 +43,9 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		}
 
 		var payload struct {
-			Registry         string `json:"registry"`
-			App              string `json:"app"`
-			MaterializedPath string `json:"materializedPath"`
-			Installation     struct {
+			Registry     string `json:"registry"`
+			App          string `json:"app"`
+			Installation struct {
 				Version string `json:"version"`
 			} `json:"installation"`
 		}
@@ -58,9 +57,6 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		}
 		if payload.Installation.Version != fixture.Version {
 			t.Fatalf("installation.version = %q", payload.Installation.Version)
-		}
-		if payload.MaterializedPath == "" {
-			t.Fatal("materializedPath is empty")
 		}
 
 		listResp, err := http.Get(ts.URL + "/admin/api/v1/app-installations")

@@ -7,8 +7,8 @@ Step 5 adds store schemas, bootstrap (`CreateObjectStore`), and Go services. Ste
 Related docs:
 
 - [plan.md](./plan.md) — install flow, multi-instance convergence, planned `app_instance_materializations`
+- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [models.md](./models.md) — GCS registry entry JSON that catalog records reference
-- [api.md](./api.md) — admin HTTP API for registry versions and install
 
 Implementation:
 
@@ -52,15 +52,16 @@ So store creation is an **early bootstrap step**, immediately after the main Ind
 
 ### What `coredata.NewWithOptions` does
 
-When `SkipSchemaBootstrap` is false (default for a **local** main-db provider), `coredata` idempotently calls `CreateObjectStore` for each host store, including:
+When `SkipSchemaBootstrap` is false (default for a **local** main-db provider), `coredata` idempotently calls `CreateObjectStore` for each host store.
+
+App registry stores:
 
 ```text
-users
-managed_subjects
-app_shas
-app_version_catalog    ← step 5 / step 6 source of truth
-app_version_install_locks ← step 6 fleet install lock per (app, version)
+app_version_catalog         ← source of truth (append-only)
+app_version_install_locks   ← fleet install lock per (app, version)
 ```
+
+Other host stores created at bootstrap include `users`, `managed_subjects`, `app_shas`, etc.
 
 If a store already exists with a matching schema, creation is a no-op. A second bootstrap on the same database does not fail.
 
@@ -69,8 +70,6 @@ When `SkipSchemaBootstrap` is true (main-db is **delegated** to a remote gestalt
 ### What bootstrap does *not* do on startup
 
 Bootstrap does **not** write catalog records. After deploy the store is empty until an install request (or tests) append data.
-
-Contrast with `app_shas`: bootstrap **does** read and update that store during artifact sync (`gestaltd/internal/bootstrap/app_shas.go`).
 
 Access install services after bootstrap via `Result.Services` / `prepared.Services`:
 
@@ -84,6 +83,17 @@ Services.DB                  ← underlying main-db handle
 ## Store: `app_version_catalog` (source of truth)
 
 Append-only catalog of versions Gestalt knows about for each app.
+
+```text
+app_version_catalog              ← source of truth (append-only)
+  - id
+  - app                          # app name, e.g. g-issues
+  - version
+  - type                         # version_added | install_failed
+  - actor
+  - timestamp
+  - metadata                     # on version_added: install contract snapshot
+```
 
 Primary key: `id` (UUID).
 
@@ -123,14 +133,14 @@ Primary key: `id` (UUID).
 
 On `version_added` records, `metadata_json` carries the install contract snapshot used to project `AppInstallation` for HTTP responses. `install_failed` records typically carry only `registry` and `error`.
 
-### `type` values
+### Record types
 
-| Value | Constant | When | Effect on known-version projection |
-|-------|----------|------|-------------------------------------|
-| `version_added` | `AppVersionCatalogRecordTypeVersionAdded` | Artifacts on disk + validation OK | Adds `(app, version)` to catalog |
-| `install_failed` | `AppVersionCatalogRecordTypeInstallFailed` | Install error | Audit only; not projected |
+| Type | When | Effect on known versions |
+|------|------|--------------------------|
+| `version_added` | Registry version validated + catalog write OK | Adds `(app, version)` to catalog |
+| `install_failed` | Install error | Audit only; not projected |
 
-`AppendRecord` rejects any other `type` string.
+Constants: `AppVersionCatalogRecordTypeVersionAdded`, `AppVersionCatalogRecordTypeInstallFailed`. `AppendRecord` rejects any other `type` string.
 
 Re-installing an already-known immutable version materializes locally but **does not** append a duplicate `version_added` record (`HasKnownVersion` guard).
 
@@ -155,18 +165,6 @@ Re-installing an already-known immutable version materializes locally but **does
 | `ListAllKnownVersions(ctx)` | Projected known versions across all apps. |
 
 Projection helpers live in `app_version_catalog_projection.go`.
-
----
-
-## Step 6 install write path
-
-On `POST …/install`, the installer:
-
-1. Download and extract artifact in place under `registry-installed/{app}/{version}/`.
-2. If `(app, version)` is not already known, `AppendRecord(version_added)` with full contract in `metadata_json`.
-3. On error before success, `AppendRecord(install_failed)` for audit.
-
-Admin `GET …/app-installations` calls `ListAllKnownVersions`. `GET …/app-installations/{app}` calls `ListKnownVersionsByApp`.
 
 ---
 

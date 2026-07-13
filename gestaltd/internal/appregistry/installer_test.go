@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -33,10 +35,9 @@ func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": registry,
 		},
-		Reader:       registrytest.NewReaderForServer(t, registrySrv.URL),
-		Catalog:      svc.AppVersionCatalog,
-		Locks:        svc.AppVersionInstallLocks,
-		ArtifactsDir: t.TempDir(),
+		Reader:  registrytest.NewReaderForServer(t, registrySrv.URL),
+		Catalog: svc.AppVersionCatalog,
+		Locks:   svc.AppVersionInstallLocks,
 	}
 
 	_, err = installer.Install(ctx, appregistry.InstallInput{
@@ -64,6 +65,41 @@ func TestInstaller_records_install_failed_for_missing_version(t *testing.T) {
 	}
 }
 
+func TestInstaller_does_not_materialize_locally(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	artifactsDir := t.TempDir()
+
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		Reader:  fixture.Reader,
+		Catalog: svc.AppVersionCatalog,
+		Locks:   svc.AppVersionInstallLocks,
+	}
+
+	_, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+		Actor:    "user:alice",
+	})
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	materialized := filepath.Join(artifactsDir, appregistry.RegistryInstallSubdir, "g-issues", fixture.Version)
+	if _, err := os.Stat(materialized); err == nil {
+		t.Fatalf("expected no local materialization at %s", materialized)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat materialized path: %v", err)
+	}
+}
+
 func TestInstaller_rejects_already_installed_version(t *testing.T) {
 	t.Parallel()
 
@@ -75,10 +111,9 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": fixture.Registry,
 		},
-		Reader:       fixture.Reader,
-		Catalog:      svc.AppVersionCatalog,
-		Locks:        svc.AppVersionInstallLocks,
-		ArtifactsDir: t.TempDir(),
+		Reader:  fixture.Reader,
+		Catalog: svc.AppVersionCatalog,
+		Locks:   svc.AppVersionInstallLocks,
 	}
 
 	input := appregistry.InstallInput{

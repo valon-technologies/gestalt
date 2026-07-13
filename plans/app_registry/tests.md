@@ -8,7 +8,7 @@ Related docs:
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
-- [api.md](./api.md) — admin HTTP API for listing registry versions and installing apps
+- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 
 ---
 
@@ -77,7 +77,7 @@ All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `tes
 
 ### `handlers_admin_app_install_test.go`
 
-- **`TestAdminAppRegistryInstall/installs_and_lists_known_version`** — `POST …/install` returns 200 with known version and materialized path; `GET …/app-installations` lists one known version.
+- **`TestAdminAppRegistryInstall/installs_and_lists_known_version`** — `POST …/install` returns 200 with known version; `GET …/app-installations` lists one known version.
 
 - **`TestAdminAppRegistryInstall/missing_version_returns_not_found`** — Unknown version returns HTTP 404.
 
@@ -117,6 +117,4 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Real GCS upload integration
 - Failed install `install_failed` record assertions
 - Re-install idempotency (no duplicate `version_added`)
-- Lazy per-instance materialization on other instances
-
-See [plan.md](./plan.md) steps 7–8 for planned follow-up coverage.
+- Controller tick / convergence tests
