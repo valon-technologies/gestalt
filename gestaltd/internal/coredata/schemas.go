@@ -11,6 +11,7 @@ const (
 	StoreAppSHAs                       = "app_shas"
 	StoreAppVersionChangeRequests      = "app_version_change_requests"
 	StoreAppVersionInstallLocks        = "app_version_install_locks"
+	StoreAppInstanceMaterializations   = "app_instance_materializations"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -84,6 +85,21 @@ var AppVersionInstallLocksSchema = idb.ObjectStoreOptions{
 		{Name: "holder", Type: idb.TypeString, NotNull: true},
 		{Name: "acquired_at", Type: idb.TypeTime, NotNull: true},
 		{Name: "expires_at", Type: idb.TypeTime, NotNull: true},
+	},
+}
+
+var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_instance", KeyPath: []string{"instance_id"}},
+		{Name: "by_instance_app_version", KeyPath: []string{"instance_id", "app", "version"}, Unique: true},
+		{Name: "by_app_version", KeyPath: []string{"app", "version"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "instance_id", Type: idb.TypeString, NotNull: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true},
+		{Name: "version", Type: idb.TypeString, NotNull: true},
+		{Name: "acknowledged_at", Type: idb.TypeTime, NotNull: true},
 	},
 }
 

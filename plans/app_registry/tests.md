@@ -23,9 +23,9 @@ Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.
 
 ---
 
-## Step 1: publish dry-run E2E
+## Publish dry-run E2E
 
-Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (step 1: GCS app registry + `gestaltd app publish`).
+Added in [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) (GCS app registry + `gestaltd app publish`).
 
 Run:
 
@@ -61,7 +61,7 @@ Expected plan fields:
 
 ---
 
-## Step 6: install HTTP integration
+## Install HTTP integration
 
 Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (registry app install via `app_version_change_requests`).
 
@@ -84,10 +84,28 @@ All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `tes
 
 ---
 
+## [PLANNED] Multi-replica materialization ack E2E
+
+End-to-end test for fleet install convergence across replicas. Replaces isolated catalog poller unit tests.
+
+**Goal:** After a new version is installed fleet-wide, every running replica acknowledges the `(app, version)` pair in `app_instance_materializations`.
+
+**Flow:**
+
+1. Start multiple `gestaltd` replicas against shared IndexedDB (or a test harness that simulates distinct `instance_id` values with the catalog poller enabled).
+2. `POST /admin/api/v1/app-registries/{registry}/apps/{app}/install` with a new version.
+3. Assert `app_version_change_requests` contains the change request.
+4. Poll each replica's `app_instance_materializations` (or a future admin list endpoint) until every replica has an ack row for `(app, version)`.
+5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
+
+**Not in scope for the first cut:** artifact download, provider restart, or mount swap — ack-only convergence.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
-- Controller tick / convergence tests
+- Multi-replica materialization ack E2E (see [PLANNED] section above)
