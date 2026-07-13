@@ -111,6 +111,24 @@ func TestInspectPackageValidatesArchiveWithoutExtracting(t *testing.T) {
 	if !ManifestEqual(parsed, manifest) {
 		t.Fatalf("unexpected manifest: %+v", parsed)
 	}
+
+	for _, allowedRoles := range []string{"[admin]", "[]", "null"} {
+		t.Run("rejects provider allowedRoles "+allowedRoles, func(t *testing.T) {
+			roleDir := t.TempDir()
+			_, manifest := mustWriteProviderPackageDir(t, roleDir, "github.com/acme/apps/provider", "0.0.1-alpha.1", "provider")
+			manifestData := mustRawManifestJSON(t, manifest)
+			catalogData := []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n    allowedRoles: " + allowedRoles + "\n")
+			roleArchive := filepath.Join(roleDir, "provider.tar.gz")
+			mustCreateArchive(t, roleArchive,
+				archiveTestFile{name: ManifestFile, data: manifestData, mode: 0o644},
+				archiveTestFile{name: manifest.Artifacts[0].Path, data: []byte("provider"), mode: 0o755},
+				archiveTestFile{name: StaticCatalogFile, data: catalogData, mode: 0o644},
+			)
+			if _, err := InspectPackage(roleArchive); err == nil || !strings.Contains(err.Error(), "provider-owned allowedRoles are not supported") {
+				t.Fatalf("InspectPackage error = %v, want provider-owned allowedRoles error", err)
+			}
+		})
+	}
 }
 
 func TestInspectPackageRejectsMissingProviderSchema(t *testing.T) {

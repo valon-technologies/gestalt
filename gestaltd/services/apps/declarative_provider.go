@@ -318,14 +318,13 @@ func declarativeCatalog(manifest *providermanifestv1.Manifest, opts declarativeO
 	for i := range ops {
 		mop := &ops[i]
 		catOp := catalog.CatalogOperation{
-			ID:           mop.Name,
-			Method:       mop.Method,
-			Path:         mop.Path,
-			Description:  mop.Description,
-			AllowedRoles: mop.AllowedRoles,
-			Tags:         catalog.MergeTags(mop.Tags),
-			Transport:    catalog.TransportREST,
-			Parameters:   make([]catalog.CatalogParameter, 0, len(mop.Parameters)),
+			ID:          mop.Name,
+			Method:      mop.Method,
+			Path:        mop.Path,
+			Description: mop.Description,
+			Tags:        catalog.MergeTags(mop.Tags),
+			Transport:   catalog.TransportREST,
+			Parameters:  make([]catalog.CatalogParameter, 0, len(mop.Parameters)),
 		}
 		for _, mp := range mop.Parameters {
 			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{

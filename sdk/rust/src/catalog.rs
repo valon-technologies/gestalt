@@ -51,8 +51,6 @@ pub struct CatalogOperation {
     pub visible: Option<bool>,
     /// The `transport` field.
     pub transport: String,
-    /// The `allowed_roles` field.
-    pub allowed_roles: Vec<String>,
 }
 
 /// One input parameter surfaced in a generated catalog operation.
@@ -136,7 +134,7 @@ fn operation_to_proto(operation: &CatalogOperation) -> v1::CatalogOperation {
         read_only: operation.read_only,
         visible: operation.visible,
         transport: operation.transport.clone(),
-        allowed_roles: operation.allowed_roles.clone(),
+        allowed_roles: Vec::new(),
     }
 }
 
@@ -214,9 +212,6 @@ fn operation_to_json_value(op: &CatalogOperation) -> JsonValue {
     }
     if !op.transport.is_empty() {
         obj.insert("transport".to_owned(), json!(op.transport));
-    }
-    if !op.allowed_roles.is_empty() {
-        obj.insert("allowedRoles".to_owned(), json!(op.allowed_roles));
     }
     if !op.parameters.is_empty() {
         let params: Vec<JsonValue> = op

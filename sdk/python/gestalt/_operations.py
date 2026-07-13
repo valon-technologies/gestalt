@@ -20,7 +20,6 @@ class OperationDefinition:
     method: str
     title: str
     description: str
-    allowed_roles: list[str]
     tags: list[str]
     read_only: bool
     visible: bool | None

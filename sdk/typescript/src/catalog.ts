@@ -54,7 +54,6 @@ export interface CatalogOperation {
   readOnly?: boolean;
   visible?: boolean;
   transport?: string;
-  allowedRoles?: string[];
 }
 
 /**
@@ -212,9 +211,6 @@ function toCatalogJsonObject(
       }
       if (operation.transport) {
         serialized.transport = operation.transport;
-      }
-      if (operation.allowedRoles && operation.allowedRoles.length > 0) {
-        serialized.allowedRoles = operation.allowedRoles;
       }
       return serialized;
     }),

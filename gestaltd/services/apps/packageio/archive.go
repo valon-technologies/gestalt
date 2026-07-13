@@ -520,6 +520,9 @@ func validatePackageStaticCatalog(manifest *providermanifestv1.Manifest, data []
 	}
 
 	var cat catalog.Catalog
+	if err := rejectProviderAllowedRoles(data, StaticCatalogFile); err != nil {
+		return err
+	}
 	if err := decodeStrict(data, ManifestFormatFromPath(StaticCatalogFile), "static catalog", &cat); err != nil {
 		return err
 	}

@@ -79,6 +79,9 @@ func WithCallerProvider(kind invocation.ProviderKind, name string) RemoteProvide
 }
 
 func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
+	if err := rejectProviderCatalogRoles(spec.Name, spec.Catalog); err != nil {
+		return nil, err
+	}
 	support, err := getAppProviderSupportWithRetry(ctx, client)
 	if err != nil {
 		return nil, err
@@ -227,7 +230,7 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	if err != nil {
 		return nil, err
 	}
-	cat, err := catalogFromProto(resp.GetCatalog())
+	cat, err := catalogFromProto(p.name, resp.GetCatalog())
 	if err != nil {
 		return nil, err
 	}
@@ -257,6 +260,18 @@ func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Cata
 		}
 	}
 	return decorated
+}
+
+func rejectProviderCatalogRoles(providerName string, cat *catalog.Catalog) error {
+	if cat == nil {
+		return nil
+	}
+	for _, op := range cat.Operations {
+		if len(op.AllowedRoles) > 0 {
+			return fmt.Errorf("provider %q operation %q returned provider-owned allowedRoles; move roles to apps.<name>.allowedOperations in config.yaml", providerName, op.ID)
+		}
+	}
+	return nil
 }
 
 func callStartProvider(ctx context.Context, client proto.AppProviderClient, name string, config map[string]any) error {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -22,7 +23,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type roundTripProvider struct{}
+type roundTripProvider struct {
+	legacyRoles bool
+}
 
 func (p *roundTripProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
 	return nil
@@ -76,7 +79,7 @@ func (p *roundTripProvider) Catalog() *catalog.Catalog {
 		DisplayName: "Round Trip",
 		Description: "test provider",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"admin"}},
+			{ID: "echo", Method: http.MethodPost},
 		},
 	}
 }
@@ -99,13 +102,15 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 	credential := invocation.CredentialContextFromContext(ctx)
 	access := invocation.AccessContextFromContext(ctx)
 	host := invocation.HostContextFromContext(ctx)
+	operation := catalog.CatalogOperation{ID: "echo", Method: http.MethodPost, Tags: []string{"roundtrip", "session"}}
+	if p.legacyRoles {
+		operation.AllowedRoles = []string{"viewer"}
+	}
 	return &catalog.Catalog{
 		Name:        "roundtrip-session",
 		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, access.Policy, access.Role, host.PublicBaseURL),
 		Description: "session catalog",
-		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"viewer"}, Tags: []string{"roundtrip", "session"}},
-		},
+		Operations:  []catalog.CatalogOperation{operation},
 	}, nil
 }
 
@@ -128,7 +133,7 @@ func roundTripStaticSpec() StaticProviderSpec {
 			DisplayName: "Round Trip",
 			Description: "test provider",
 			Operations: []catalog.CatalogOperation{
-				{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"admin"}},
+				{ID: "echo", Method: http.MethodPost},
 			},
 		},
 		AuthTypes: []string{"manual"},
@@ -196,6 +201,16 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected Catalog result: %+v", cat)
 	}
 
+	t.Run("rejects startup provider roles", func(t *testing.T) {
+		legacySpec := roundTripStaticSpec()
+		legacySpec.Catalog = legacySpec.Catalog.Clone()
+		legacySpec.Catalog.Operations[0].AllowedRoles = []string{"viewer"}
+		_, err := NewRemote(context.Background(), client, legacySpec, nil)
+		if err == nil || !strings.Contains(err.Error(), "provider-owned allowedRoles") {
+			t.Fatalf("NewRemote error = %v, want provider-owned allowedRoles error", err)
+		}
+	})
+
 	cases := []struct {
 		name               string
 		principal          *principal.Principal
@@ -257,8 +272,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 
 			if cat := prov.Catalog(); cat == nil || cat.Name != "roundtrip" {
 				t.Fatalf("unexpected static catalog: %+v", cat)
-			} else if got := cat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "admin" {
-				t.Fatalf("unexpected static catalog allowedRoles: %#v", got)
 			}
 
 			sessionCat, attempted, err := core.CatalogForRequest(ctx, prov, "token-123")
@@ -270,9 +283,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 			if sessionCat.Name != "roundtrip-session" || sessionCat.DisplayName != tc.wantSessionCatalog {
 				t.Fatalf("unexpected session catalog: %+v", sessionCat)
-			}
-			if got := sessionCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "viewer" {
-				t.Fatalf("unexpected session catalog allowedRoles: %#v", got)
 			}
 			if got := sessionCat.Operations[0].Tags; len(got) != 2 || got[0] != "roundtrip" || got[1] != "session" {
 				t.Fatalf("unexpected session catalog tags: %#v", got)
@@ -319,6 +329,20 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if defs := prov.ConnectionParamDefs(); defs["tenant"].Description != "Tenant slug" || defs["team_id"].Field != "team_id" {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
+
+	t.Run("rejects legacy provider session roles", func(t *testing.T) {
+		legacy, err := NewRemote(context.Background(), newAppProviderClient(t, NewProviderServer(&roundTripProvider{legacyRoles: true})), roundTripStaticSpec(), nil)
+		if err != nil {
+			t.Fatalf("NewRemote: %v", err)
+		}
+		_, attempted, err := core.CatalogForRequest(context.Background(), legacy, "token-123")
+		if !attempted {
+			t.Fatal("expected session catalog request")
+		}
+		if err == nil || !strings.Contains(err.Error(), "provider-owned allowedRoles") {
+			t.Fatalf("CatalogForRequest error = %v, want provider-owned allowedRoles error", err)
+		}
+	})
 }
 
 func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {

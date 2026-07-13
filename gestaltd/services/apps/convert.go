@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
@@ -10,7 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
+func catalogFromProto(providerName string, src *proto.Catalog) (*catalog.Catalog, error) {
 	if src == nil {
 		return nil, nil
 	}
@@ -22,6 +23,9 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 		Operations:  make([]catalog.CatalogOperation, 0, len(src.GetOperations())),
 	}
 	for _, op := range src.GetOperations() {
+		if len(op.GetAllowedRoles()) > 0 {
+			return nil, fmt.Errorf("provider %q operation %q returned provider-owned allowedRoles; move roles to apps.<name>.allowedOperations in config.yaml", providerName, op.GetId())
+		}
 		catOp := catalog.CatalogOperation{
 			ID:             op.GetId(),
 			Method:         op.GetMethod(),
@@ -29,7 +33,6 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 			Description:    op.GetDescription(),
 			InputSchema:    jsonRawFromString(op.GetInputSchema()),
 			OutputSchema:   jsonRawFromString(op.GetOutputSchema()),
-			AllowedRoles:   op.GetAllowedRoles(),
 			RequiredScopes: op.GetRequiredScopes(),
 			Tags:           op.GetTags(),
 			ReadOnly:       op.GetReadOnly(),

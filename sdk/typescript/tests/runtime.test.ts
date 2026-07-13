@@ -481,7 +481,6 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const helloOperation = metadata.staticCatalog?.operations?.find(
     (op: any) => op.id === "hello",
   );
-  expect(helloOperation?.allowedRoles).toEqual(["viewer", "admin"]);
   const inputSchema = JSON.parse(helloOperation?.inputSchema ?? "{}");
   expect(inputSchema.properties.name.default).toBe("World");
   expect(inputSchema.properties.name.description).toBe("Name to greet");
@@ -602,10 +601,6 @@ test("integration provider service exposes metadata, configure, execute, and ses
   expect(sessionCatalog.catalog?.operations).toHaveLength(1);
   expect(sessionCatalog.catalog?.operations[0].id).toBe("session-hello");
   expect(sessionCatalog.catalog?.operations[0].method).toBe("GET");
-  expect(sessionCatalog.catalog?.operations[0].allowedRoles).toEqual([
-    "viewer",
-    "admin",
-  ]);
   expect(sessionCatalog.catalog?.operations[0].title).toBe(
     "Session Hello ops user:user-123 subject viewer",
   );

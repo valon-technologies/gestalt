@@ -405,7 +405,6 @@ class MainEntrypointTests(unittest.TestCase):
                 ),
             )
             cat.operations.append(CatalogOperation(id="private_search", method="POST"))
-            cat.operations[0].allowed_roles.extend(["viewer", "admin"])
             return cat
 
         execute_workflow = struct_pb2.Struct()
@@ -589,7 +588,6 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(len(catalog.operations), 1)
         self.assertEqual(catalog.operations[0].id, "private_search")
         self.assertEqual(catalog.operations[0].method, "POST")
-        self.assertEqual(list(catalog.operations[0].allowed_roles), ["viewer", "admin"])
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
         app = App("source-name")
 

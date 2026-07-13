@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 )
 
 // stubWithOps extends StubIntegration with concrete operations.
@@ -98,7 +99,7 @@ func TestCatalogFiltersCanOverrideAllowedRoles(t *testing.T) {
 	r := coreintegration.NewRestricted(
 		inner,
 		map[string]string{"list_channels": "", "send_message": ""},
-		coreintegration.WithAllowedRoles(map[string][]string{
+		operationexposure.WithAllowedRoles(map[string][]string{
 			"list_channels": {"admin"},
 		}),
 	)
