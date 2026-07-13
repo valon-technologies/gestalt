@@ -1,6 +1,6 @@
 module github.com/valon-technologies/gestalt/sdk/go
 
-go 1.26.5
+go 1.26
 
 require (
 	github.com/valon-technologies/gestalt/server/rpc v0.0.0

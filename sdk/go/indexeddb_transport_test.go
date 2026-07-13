@@ -98,7 +98,6 @@ func buildAndStartHarness(binaryName, socketName string) (string, string, *exec.
 	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "testdata", "cmd", binaryName)
 	bin := filepath.Join(os.TempDir(), binaryName)
 	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	build.Dir = harnessDir
 	if out, err := build.CombinedOutput(); err != nil {
 		panic("build harness: " + string(out))
@@ -125,7 +124,6 @@ func buildAndStartTCPHarness(binaryName, expectToken string) (string, string, *e
 	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "testdata", "cmd", binaryName)
 	bin := filepath.Join(os.TempDir(), binaryName+"-tcp")
 	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	build.Dir = harnessDir
 	if out, err := build.CombinedOutput(); err != nil {
 		panic("build harness: " + string(out))

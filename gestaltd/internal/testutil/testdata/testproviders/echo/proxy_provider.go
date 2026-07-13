@@ -74,7 +74,7 @@ type workflowActivationInput struct {
 
 type applyWorkflowDefinitionInput struct {
 	DefinitionID string                      `json:"definition_id"`
-	ProviderName string                      `json:"provider_name,omitempty"`
+	ProviderName string                      `json:"provider_name" required:"true"`
 	RunAs        string                      `json:"run_as,omitempty"`
 	Target       workflowDefinitionStepInput `json:"target"`
 	Activations  []workflowActivationInput   `json:"activations,omitempty"`
@@ -98,7 +98,7 @@ type setWorkflowActivationPausedInput struct {
 
 type deliverWorkflowEventInput struct {
 	ID              string         `json:"id,omitempty"`
-	ProviderName    string         `json:"provider_name,omitempty"`
+	ProviderName    string         `json:"provider_name" required:"true"`
 	Source          string         `json:"source,omitempty"`
 	SpecVersion     string         `json:"spec_version,omitempty"`
 	Type            string         `json:"type"`
@@ -310,11 +310,15 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
+		providerName := strings.TrimSpace(input.ProviderName)
+		if providerName == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "provider_name is required"}), nil
+		}
 		runAs := strings.TrimSpace(input.RunAs)
 		if runAs == "" {
 			runAs = "service_account:echo-workflow"
 		}
-		result, err := workflow.ApplyDefinition(ctx, "default", gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
+		result, err := workflow.ApplyDefinition(ctx, providerName, gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
 			Id:          input.DefinitionID,
 			Target:      target,
 			Activations: activations,
@@ -398,8 +402,12 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
+		providerName := strings.TrimSpace(input.ProviderName)
+		if providerName == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "provider_name is required"}), nil
+		}
 		result, err := workflow.DeliverEventRaw(ctx, &client.DeliverWorkflowProviderEventRequest{
-			ProviderName: "default",
+			ProviderName: providerName,
 			Event:        event,
 		})
 		if err != nil {

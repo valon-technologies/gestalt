@@ -4065,6 +4065,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 
 	applyResult, err := prov.Execute(ctx, "apply_workflow_definition", map[string]any{
 		"definition_id": "roadmap_sync",
+		"provider_name": "basic",
 		"run_as":        "service_account:echo-workflow",
 		"target": map[string]any{
 			"app":        "roadmap",
@@ -4196,9 +4197,10 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	}
 
 	deliverEventResult, err := prov.Execute(ctx, "deliver_workflow_event", map[string]any{
-		"type":    "roadmap.item.updated",
-		"source":  "roadmap",
-		"subject": "item-123",
+		"provider_name": "basic",
+		"type":          "roadmap.item.updated",
+		"source":        "roadmap",
+		"subject":       "item-123",
 		"data": map[string]any{
 			"id":    "item-123",
 			"title": "Ship parity",
@@ -4294,9 +4296,10 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	})
 
 	deliverEventResult, err := prov.Execute(ctx, "deliver_workflow_event", map[string]any{
-		"type":    "roadmap.item.updated",
-		"source":  "roadmap",
-		"subject": "item-123",
+		"provider_name": "basic",
+		"type":          "roadmap.item.updated",
+		"source":        "roadmap",
+		"subject":       "item-123",
 	}, "")
 	if err != nil {
 		t.Fatalf("Execute(deliver_workflow_event): %v", err)
@@ -4313,6 +4316,7 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 
 	applyResult, err := prov.Execute(ctx, "apply_workflow_definition", map[string]any{
 		"definition_id": "roadmap_sync",
+		"provider_name": "basic",
 		"run_as":        "service_account:echo-workflow",
 		"target": map[string]any{
 			"app":       "roadmap",

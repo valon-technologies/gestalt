@@ -100,6 +100,9 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	if got := selected.deliverReqs[0].GetEvent().GetSource(); got != "sourceApp" {
 		t.Fatalf("selected deliver source = %q, want sourceApp", got)
 	}
+	if got := selected.deliverReqs[0].GetProviderName(); got != "selected" {
+		t.Fatalf("selected deliver provider = %q, want selected", got)
+	}
 	if len(other.deliverReqs) != 0 {
 		t.Fatalf("other deliver requests = %d, want 0", len(other.deliverReqs))
 	}

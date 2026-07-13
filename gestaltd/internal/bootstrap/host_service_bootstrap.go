@@ -452,6 +452,7 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 				appName,
 				manager,
 				deps.Authorization,
+				workflowservice.WithWorkflowProviderName(appName),
 				workflowservice.WithAgentWorkflowInvocationAuthorizer(deps.AgentManager),
 			))
 		},

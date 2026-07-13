@@ -1,6 +1,6 @@
 module github.com/valon-technologies/gestalt/sdk/tools/sdkgen
 
-go 1.26.5
+go 1.26
 
 require (
 	github.com/bufbuild/protocompile v0.14.1
