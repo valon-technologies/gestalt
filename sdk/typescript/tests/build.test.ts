@@ -1003,6 +1003,7 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
 
     await workflow.applyDefinition(
       create(ApplyWorkflowProviderDefinitionRequestSchema, {
+        providerName: "fixture-workflow",
         spec: {
           id: "roadmap_sync",
           target: workflowAppStepTarget("roadmap", "sync"),
@@ -1012,6 +1013,7 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
 
     const run = await workflow.startRun(
       create(StartWorkflowProviderRunRequestSchema, {
+        providerName: "fixture-workflow",
         definitionId: "roadmap_sync",
       }),
     );

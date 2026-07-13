@@ -146,6 +146,7 @@ test("Workflow forwards request context to provider calls", async () => {
     const workflow = Workflow.connect({ context });
 
     const applied = await workflow.applyDefinition(
+      "local",
       "workflow-definition-key-ts",
       {
         id: "def-1",
@@ -174,6 +175,7 @@ test("Workflow forwards request context to provider calls", async () => {
     const startedRun = await workflow.startRun(
       "workflow-request-key-ts",
       "roadmap-summary:item-1",
+      "local",
       "def-1",
       0n,
       { itemId: "item-1" },
