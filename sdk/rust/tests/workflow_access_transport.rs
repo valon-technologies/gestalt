@@ -615,6 +615,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
         .deliver_event(
             "default".to_string(),
             Some(NativeWorkflowEvent {
+<<<<<<< HEAD
                 id: "evt_1".to_string(),
                 source: "github".to_string(),
                 spec_version: "1.0".to_string(),
@@ -622,6 +623,14 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
                 ..Default::default()
             }),
         )
+=======
+            id: "evt_1".to_string(),
+            source: "github".to_string(),
+            spec_version: "1.0".to_string(),
+            r#type: "github.pull_request".to_string(),
+            ..Default::default()
+        }))
+>>>>>>> f596bbb0f (Fix Rust workflow transport tests and remaining Go lint issues)
         .await
         .expect("deliver event");
     assert_eq!(delivered.id, "evt_1");
