@@ -29,6 +29,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -200,6 +201,27 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	if !builderStarted.Load() {
 		t.Fatal("provider builder was not started")
 	}
+}
+
+func TestApplyDevAuthProxyEnv(t *testing.T) {
+	t.Run("adds token without replacing existing environment", func(t *testing.T) {
+		target := providerdev.AppTarget{BaseEnv: map[string]string{"EXISTING": "value"}}
+		applyDevAuthProxyEnv(&target, "token")
+		if got := target.BaseEnv[devAuthProxyTokenEnv]; got != "token" {
+			t.Fatalf("token = %q, want token", got)
+		}
+		if got := target.BaseEnv["EXISTING"]; got != "value" {
+			t.Fatalf("existing env = %q, want value", got)
+		}
+	})
+
+	t.Run("ignores empty token", func(t *testing.T) {
+		target := providerdev.AppTarget{}
+		applyDevAuthProxyEnv(&target, " ")
+		if target.BaseEnv != nil {
+			t.Fatalf("BaseEnv = %#v, want nil", target.BaseEnv)
+		}
+	})
 }
 
 func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing.T) {

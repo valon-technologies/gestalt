@@ -1189,6 +1189,7 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 	if baseURL := strings.TrimSpace(deps.BaseURL); baseURL != "" {
 		target.BaseEnv["GESTALT_BASE_URL"] = strings.TrimRight(baseURL, "/")
 	}
+	applyDevAuthProxyEnv(&target, deps.RemoteToken)
 	handle, err := deps.DevSupervisor.StartApp(ctx, target)
 	if err != nil {
 		prepared.Cleanup()
@@ -1243,6 +1244,18 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 		return nil, err
 	}
 	return prov, nil
+}
+
+const devAuthProxyTokenEnv = "GESTALT_DEV_API_PROXY_TOKEN"
+
+func applyDevAuthProxyEnv(target *providerdev.AppTarget, token string) {
+	if target == nil || strings.TrimSpace(token) == "" {
+		return
+	}
+	if target.BaseEnv == nil {
+		target.BaseEnv = map[string]string{}
+	}
+	target.BaseEnv[devAuthProxyTokenEnv] = token
 }
 
 type closerFunc func() error

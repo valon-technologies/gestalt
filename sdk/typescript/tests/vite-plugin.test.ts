@@ -1,4 +1,5 @@
-import { createServer } from "node:net";
+import { createServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,9 +11,9 @@ import { fixturePath, makeTempDir, removeTempDir } from "./helpers.ts";
 
 const fixtureRoot = fixturePath("vite-app");
 
-function listen(port: number): Promise<ReturnType<typeof createServer>> {
+function listen(port: number): Promise<ReturnType<typeof createNetServer>> {
   return new Promise((resolve, reject) => {
-    const server = createServer();
+    const server = createNetServer();
     server.once("error", reject);
     server.listen(port, "127.0.0.1", () => resolve(server));
   });
@@ -20,7 +21,7 @@ function listen(port: number): Promise<ReturnType<typeof createServer>> {
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
-    const server = createServer();
+    const server = createNetServer();
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
@@ -57,7 +58,7 @@ describe("normalizeBasePath", () => {
 describe("gestalt vite plugin", () => {
   let tempDirs: string[] = [];
   let viteServers: Array<Awaited<ReturnType<typeof createViteServer>>> = [];
-  let occupied: ReturnType<typeof createServer> | undefined;
+  let occupied: ReturnType<typeof createNetServer> | undefined;
 
   afterEach(async () => {
     await Promise.all(viteServers.splice(0).map((server) => server.close()));
@@ -111,10 +112,12 @@ describe("gestalt vite plugin", () => {
     expect(config.preview.port).toBe(5173);
     expect(config.preview.strictPort).toBe(true);
     expect(config.preview.allowedHosts).toBe(true);
-    expect(config.server.proxy?.["/api/v1"]).toEqual({
-      target: "http://127.0.0.1:65003",
-      changeOrigin: true,
-    });
+    expect(config.server.proxy?.["/api/v1"]).toEqual(
+      expect.objectContaining({
+        target: "http://127.0.0.1:65003",
+        changeOrigin: true,
+      }),
+    );
 
     const overridden = await resolveConfig(
       {
@@ -136,10 +139,56 @@ describe("gestalt vite plugin", () => {
       },
       "serve",
     );
-    expect(overridden.server.proxy?.["/api/v1"]).toEqual({
-      target: "http://127.0.0.1:9000",
-      changeOrigin: true,
+    expect(overridden.server.proxy?.["/api/v1"]).toEqual(
+      expect.objectContaining({
+        target: "http://127.0.0.1:9000",
+        changeOrigin: true,
+      }),
+    );
+  });
+
+  test("injects the dev bearer only for direct loopback requests", async () => {
+    let authorization: string | undefined;
+    const upstream = createServer((req, res) => {
+      authorization = req.headers.authorization;
+      res.writeHead(200).end("ok");
     });
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    const upstreamAddress = upstream.address();
+    if (upstreamAddress == null || typeof upstreamAddress === "string") {
+      throw new Error("failed to start upstream");
+    }
+    const port = await freePort();
+    const server = await createViteServer({
+      configFile: false,
+      root: fixtureRoot,
+      plugins: [
+        gestalt({
+          env: {
+            GESTALT_DEV_PORT: String(port),
+            GESTALT_DEV_API_PROXY_TOKEN: "test-token",
+            GESTALT_API_PROXY_TARGET: `http://127.0.0.1:${upstreamAddress.port}`,
+          },
+        }),
+      ],
+    });
+    viteServers.push(server);
+    await server.listen();
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/test`);
+    expect(response.status).toBe(200);
+    expect(authorization).toBe("Bearer test-token");
+
+    authorization = undefined;
+    const foreignResponse = await fetch(`http://127.0.0.1:${port}/api/v1/test`, {
+      headers: { Host: "foreign.example.test", Origin: "https://evil.example" },
+    });
+    expect(foreignResponse.status).toBe(200);
+    expect(authorization).toBeUndefined();
+
+    await server.close();
+    viteServers.pop();
+    await new Promise<void>((resolve, reject) => upstream.close((err) => (err ? reject(err) : resolve())));
   });
 
   test("live dev server serves mount with foreign Host and injected base tag", async () => {

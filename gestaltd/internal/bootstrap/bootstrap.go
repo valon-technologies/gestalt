@@ -192,6 +192,9 @@ type Deps struct {
 	CallerTokenPublicKey  string
 	DevSupervisor         *providerdev.Supervisor
 	RemoteClients         *remote.ClientSet
+	// RemoteToken is passed only to supervised local development processes so
+	// their server-side dev proxy can authenticate requests to local gestaltd.
+	RemoteToken string
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -891,6 +894,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
 	if remoteURL := strings.TrimSpace(cfg.Server.Remote); remoteURL != "" {
+		deps.RemoteToken = cfg.Server.RemoteToken
 		deps.RemoteClients, err = remote.NewClientSet(ctx, remote.Config{
 			URL:   remoteURL,
 			Token: cfg.Server.RemoteToken,

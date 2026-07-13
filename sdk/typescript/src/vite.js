@@ -44,6 +44,7 @@ function devBinding(port) {
 }
 
 const DEFAULT_DEV_API_PROXY_TARGET = "http://127.0.0.1:8080";
+const DEV_API_PROXY_TOKEN_ENV = "GESTALT_DEV_API_PROXY_TOKEN";
 
 /**
  * @param {string | undefined | null} value
@@ -65,6 +66,47 @@ function resolveGestaltDevApiProxyTarget(env) {
   return normalizeApiProxyTarget(
     env.GESTALT_API_PROXY_TARGET?.trim() || env.GESTALT_BASE_URL?.trim(),
   );
+}
+
+/**
+ * Keep the bearer capability behind the loopback dev-server boundary. Mounted
+ * UIs can still be served through gestaltd with a foreign Host header, but
+ * those requests must not activate this credential injection path.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {string} devPort
+ * @param {string} apiTarget
+ * @returns {boolean}
+ */
+function canInjectDevApiToken(req, devPort, apiTarget) {
+  let target;
+  try {
+    target = new URL(apiTarget);
+  } catch {
+    return false;
+  }
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(target.hostname)) {
+    return false;
+  }
+
+  const host = req.headers.host?.toLowerCase();
+  const allowedHosts = new Set([
+    `127.0.0.1:${devPort}`,
+    `localhost:${devPort}`,
+    `[::1]:${devPort}`,
+  ]);
+  if (!host || !allowedHosts.has(host)) {
+    return false;
+  }
+
+  const origin = req.headers.origin?.toLowerCase();
+  if (origin && !allowedHosts.has(origin.replace(/^https?:\/\//, ""))) {
+    return false;
+  }
+  if (req.headers["sec-fetch-site"] === "cross-site") {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -96,7 +138,22 @@ function gestaltConfig(env, command) {
   const base = normalizeBasePath(env.GESTALT_DEV_BASE_PATH);
   const binding = devBinding(port);
   const apiTarget = resolveGestaltDevApiProxyTarget(env);
-  const proxy = { target: apiTarget, changeOrigin: true };
+  const token = env[DEV_API_PROXY_TOKEN_ENV]?.trim();
+  const proxy = {
+    target: apiTarget,
+    changeOrigin: true,
+    configure(proxyServer) {
+      proxyServer.on("proxyReq", (proxyReq, req) => {
+        if (
+          token &&
+          !req.headers.authorization &&
+          canInjectDevApiToken(req, devPort, apiTarget)
+        ) {
+          proxyReq.setHeader("Authorization", `Bearer ${token}`);
+        }
+      });
+    },
+  };
 
   return {
     base,
