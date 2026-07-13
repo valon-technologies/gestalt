@@ -198,51 +198,6 @@ There is **no fleet head**, **no promotion**, and **no rollback** yet. Those bel
 
 Store schema, record types, and service API: [indexeddb.md](./indexeddb.md#store-app_version_catalog-source-of-truth).
 
-### Multi-Instance Convergence and Lazy Installation
-
-Cloud Run may run many `gestaltd` instances at the same time. If one instance handles an install request, the other instances also need to observe and serve the installed app.
-
-The install request should not directly command every instance. Instead, the handling instance appends a `version_added` record to shared IndexedDB; other instances **read the catalog** and converge independently.
-
-**Step 6 (implemented):** `POST …/install` validates the registry entry, materializes on the handling instance, and appends catalog records. Other instances do not read install state yet.
-
-**Step 7 (proposed):** split **fleet declaration** from **local materialization**:
-
-- `POST …/install` — handling instance validates the registry version document and appends `version_added` only (no artifact download on the handler).
-- **Every** replica — background catalog controller reads `app_version_catalog` on startup and every 1 minute; each materializes missing versions locally.
-
-The expected flow is:
-
-1. One `gestaltd` instance receives the install request.
-2. It validates the selected app version against registry metadata (`versions/{version}.json`).
-3. If `(app, version)` is not already known, it appends `version_added` with the full install contract in record metadata. If validation fails, it appends `install_failed` for audit and returns an error.
-4. **Every** replica (including the handler) runs a background controller that periodically reads the catalog.
-5. Each replica lazily downloads and materializes missing versions into its own local artifacts directory (`registry-installed/{app}/{version}/`).
-6. Once local materialization succeeds, that instance can start or bind the app and serve traffic for it (planned after materialization).
-
-This is similar to app migrations and configure-on-first-request behavior: the catalog records what versions exist fleet-wide, while each instance performs local preparation on a reconcile loop.
-
-The first controller implementation uses a **1 minute** tick plus one convergence pass at startup. Later versions can add manual converge, first-request convergence, or pub/sub notifications for faster catch-up.
-
-Install state should distinguish global activation from per-instance readiness:
-
-```
-app_instance_materializations
-  - app_name
-  - resolved_version
-  - instance_id
-  - materialization_state
-  - materialized_at
-  - last_error
-  - updated_at
-```
-
-Per-instance readiness is ephemeral operational state. The **known-version catalog** in `app_version_catalog` records which versions exist fleet-wide.
-
-If an instance receives a request for an active app that has not been materialized locally yet, it should return `503 Service Unavailable`.
-
-Materialization should happen during startup or in a background convergence loop, not synchronously in the request path. Once local materialization succeeds, the instance can start or bind the app and begin serving traffic for it.
-
 ### Validation Happens at Publish Time and Install Time
 
 Validation should happen in two phases.
