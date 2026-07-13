@@ -9,7 +9,7 @@ const (
 	StoreManagedSubjects               = "managed_subjects"
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
 	StoreAppSHAs                       = "app_shas"
-	StoreAppVersionCatalog             = "app_version_catalog"
+	StoreAppVersionChangeRequests      = "app_version_change_requests"
 	StoreAppVersionInstallLocks        = "app_version_install_locks"
 )
 
@@ -55,17 +55,17 @@ var ManagedSubjectsSchema = idb.ObjectStoreOptions{
 	},
 }
 
-var AppVersionCatalogSchema = idb.ObjectStoreOptions{
+var AppVersionChangeRequestsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_app", KeyPath: []string{"app"}},
 		{Name: "by_app_timestamp", KeyPath: []string{"app", "timestamp"}},
-		{Name: "by_app_version", KeyPath: []string{"app", "version"}},
+		{Name: "by_app_to_version", KeyPath: []string{"app", "to_version"}},
 	},
 	Columns: []idb.ColumnDef{
 		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
 		{Name: "app", Type: idb.TypeString, NotNull: true},
-		{Name: "version", Type: idb.TypeString, NotNull: true},
-		{Name: "type", Type: idb.TypeString, NotNull: true},
+		{Name: "from_version", Type: idb.TypeString},
+		{Name: "to_version", Type: idb.TypeString, NotNull: true},
 		{Name: "actor", Type: idb.TypeString},
 		{Name: "timestamp", Type: idb.TypeTime, NotNull: true},
 		{Name: "metadata_json", Type: idb.TypeJSON},

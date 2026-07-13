@@ -23,12 +23,6 @@ type ManagedSubject struct {
 	DeletedAt          *time.Time
 }
 
-const (
-	AppVersionCatalogRecordTypeVersionAdded  = "version_added"
-	AppVersionCatalogRecordTypeInstallFailed = "install_failed"
-)
-
-// AppInstallation is a projection of version_added app_version_catalog records.
 type AppInstallation struct {
 	AppName            string
 	Version            string
@@ -41,16 +35,14 @@ type AppInstallation struct {
 	UpdatedAt          time.Time
 }
 
-// AppVersionCatalogRecord is an append-only catalog entry for one app version.
-// App is the app name (for example g-issues).
-type AppVersionCatalogRecord struct {
-	ID        string
-	App       string
-	Version   string
-	Type      string
-	Actor     string
-	Timestamp time.Time
-	Metadata  map[string]any
+type AppVersionChangeRequest struct {
+	ID          string
+	App         string
+	FromVersion string
+	ToVersion   string
+	Actor       string
+	Timestamp   time.Time
+	Metadata    map[string]any
 }
 
 type ExternalCredentialGrant struct {

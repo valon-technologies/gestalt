@@ -2,12 +2,12 @@
 
 How each `gestaltd` replica observes fleet install state, materializes app artifacts locally, and (eventually) serves dynamic apps.
 
-Install is catalog-only; per-replica convergence (ack → download → restart → mount) is planned via polling below. List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
+Install is change-request-only; per-replica convergence (ack → download → restart → mount) is planned via polling below. List/get install endpoints expose **projected known versions** from change requests.
 
 Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
-- [indexeddb.md](./indexeddb.md) — `app_version_catalog`, install locks, planned `app_instance_materializations`
+- [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, install locks, planned `app_instance_materializations`
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
 - [service.md](./service.md) — Go publish/read helpers behind the registry bucket
@@ -19,11 +19,11 @@ Implementation:
 - Install handlers — `gestaltd/internal/server/handlers_admin_app_install.go`
 - Registry fetcher — `gestaltd/internal/appregistry/reader.go`
 - Registry installer — `gestaltd/internal/appregistry/installer.go`
-- Catalog projections — `gestaltd/internal/coredata/app_version_catalog_projection.go`
+- Change request projections — `gestaltd/internal/coredata/app_version_change_requests_projection.go`
 
 ## Startup
 
-`coredata.NewWithOptions` — idempotently create host stores, including `app_version_catalog` and `app_version_install_locks`. Bootstrap does not write catalog records; the store starts empty until an install.
+`coredata.NewWithOptions` — idempotently create host stores, including `app_version_change_requests` and `app_version_install_locks`. Bootstrap does not write change requests; the store starts empty until an install.
 
 When `gestaltd serve` starts:
 
@@ -38,7 +38,7 @@ Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not b
 
 **Planned.** Every replica will run a background catalog controller after `gestaltd serve` is up: one reconcile pass at startup, then every **1 minute** in a goroutine.
 
-The controller is **pull-based** and **local**: each replica reads `app_version_catalog` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
+The controller is **pull-based** and **local**: each replica reads `app_version_change_requests` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
 Each pass, for every known `(app, version)` this replica has not yet converged:
 
@@ -110,10 +110,10 @@ The versions endpoint fetches `GET {publicUrl}/apps/{app}/index.json` over HTTP.
 
 Install routes additionally require:
 
-- IndexedDB `app_version_catalog` service configured on the server (`AppVersionCatalogService`)
+- IndexedDB `app_version_change_requests` service configured on the server (`AppVersionChangeRequestsService`)
 - IndexedDB `app_version_install_locks` service configured on the server (`AppVersionInstallLockService`)
 
-List/get install endpoints project known versions from `app_version_catalog` only.
+List/get install endpoints project known versions from `app_version_change_requests` only.
 
 ### Endpoints
 
@@ -207,7 +207,7 @@ When the app has no index or no versions yet, `versions` is `[]` (not `null`). A
 3. `RegistryReader.FetchAppIndex` — HTTP `GET` `apps/{app}/index.json` from the configured registry (live fetch on every request).
 4. Respond `200` with `{ registry, app, versions }`.
 
-No IndexedDB read or write. Lists **published** versions in the registry bucket, not fleet-installed versions from `app_version_catalog`.
+No IndexedDB read or write. Lists **published** versions in the registry bucket, not fleet-installed versions from `app_version_change_requests`.
 
 #### `POST /admin/api/v1/app-registries/{registry}/apps/{app}/install`
 
@@ -257,7 +257,7 @@ No IndexedDB read or write. Lists **published** versions in the registry bucket,
 |-------|------|-------------|
 | `registry` | string | Registry name from the path |
 | `app` | string | App name from the path |
-| `installation` | object | Known version after a successful install (from the `version_added` record) |
+| `installation` | object | Known version after a successful install (from the `change request` record) |
 
 Re-installing a version that is already in the catalog returns **400 Bad Request** (`app version is already installed`).
 
@@ -267,17 +267,17 @@ Synchronous on the handling instance. The HTTP response is sent after the catalo
 2. Validate path params and look up `{registry}` in `s.appRegistries`.
 3. `Installer.Install` on the handling instance:
    1. Claim a fleet install lock in `app_version_install_locks` for `(app, version)` (`409` if another holder holds a non-expired lock).
-   2. If `(app, version)` is already known in `app_version_catalog`, return `400`.
+   2. If `(app, version)` is already known in `app_version_change_requests`, return `400`.
    3. `RegistryReader.FetchEntry` — HTTP `GET` the published version document from the configured registry (validate the version exists; **no artifact download**).
-   4. Append `version_added` to `app_version_catalog` with the install contract in record metadata.
-   5. Release the install lock (always, via defer). On failure before step 4, append `install_failed` for audit.
+   4. Append `change request` to `app_version_change_requests` with the install contract in record metadata.
+   5. Release the install lock (always, via defer). On failure before step 4, return an HTTP error; no change request is written.
 4. Respond `200` with `{ registry, app, installation }`.
 
 Per-replica convergence is planned via the background catalog controller (see Polling). IndexedDB write on the handling instance for install.
 
 #### `GET /admin/api/v1/app-installations`
 
-Returns all **known versions** projected from `version_added` catalog records. See [indexeddb.md](./indexeddb.md).
+Returns all **known versions** projected from `change request` catalog records. See [indexeddb.md](./indexeddb.md).
 
 **Response `200`**
 
@@ -300,8 +300,8 @@ Returns all **known versions** projected from `version_added` catalog records. S
 
 When no versions are known yet, the response is `[]` (not `null`).
 
-1. `listAdminAppInstallations` requires `AppVersionCatalog` on the server; otherwise respond `503`.
-2. `Catalog.ListAllKnownVersions` — read `app_version_catalog` and project known `(app, version)` pairs from `version_added` records.
+1. `listAdminAppInstallations` requires `AppVersionChangeRequests` on the server; otherwise respond `503`.
+2. `ChangeRequests.ListAllKnownVersions` — read `app_version_change_requests` and project known `(app, to_version)` pairs.
 3. Map each projection to `{ app, version, sourceRef, registry, providerReleaseUrl, artifactChecksums, installedBy, installedAt, updatedAt }`.
 4. Respond `200` with the JSON array (empty if nothing installed fleet-wide).
 
@@ -313,11 +313,11 @@ Returns **known versions** for one app.
 
 **Response `200`** — array of objects with the same shape as one element of the fleet list response above.
 
-**Response `404`** when the app has no `version_added` records yet.
+**Response `404`** when the app has no `change request` records yet.
 
 1. `getAdminAppInstallation` reads `{app}` from the URL and validates the app name.
-2. Requires `AppVersionCatalog` on the server; otherwise respond `503`.
-3. `Catalog.ListKnownVersionsByApp` — read `app_version_catalog` and project known versions for that app.
+2. Requires `AppVersionChangeRequests` on the server; otherwise respond `503`.
+3. `ChangeRequests.ListKnownVersionsByApp` — read `app_version_change_requests` and project known versions for that app.
 4. If no known versions, respond `404`.
 5. Otherwise map results to the same installation object shape and respond `200` with a JSON array.
 
@@ -332,7 +332,7 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 | `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed |
 | `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
 | `409` | Another instance is already installing this `(app, version)` (install lock held and not expired) |
-| `502` | Published version fetch failed; failed to append `version_added` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
+| `502` | Published version fetch failed; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |
 

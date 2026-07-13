@@ -20,15 +20,12 @@ const RegistryInstallSubdir = "registry-installed"
 // another instance cannot steal an expired lock while this attempt is still running.
 const installWorkTimeoutBuffer = 30 * time.Second
 
-// Installer validates registry versions and records known versions in
-// app_version_catalog. Local materialization is handled separately by the
-// background catalog controller.
 type Installer struct {
-	Registries map[string]config.AppRegistryConfig
-	Reader     *RegistryReader
-	Catalog    *coredata.AppVersionCatalogService
-	Locks      *coredata.AppVersionInstallLockService
-	Now        func() time.Time
+	Registries     map[string]config.AppRegistryConfig
+	Reader         *RegistryReader
+	ChangeRequests *coredata.AppVersionChangeRequestService
+	Locks          *coredata.AppVersionInstallLockService
+	Now            func() time.Time
 }
 
 type InstallInput struct {
@@ -80,26 +77,33 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	installCtx, cancelInstall := context.WithTimeout(ctx, installWorkTimeout(lockTTL))
 	defer cancelInstall()
 
-	if i.Catalog == nil {
-		return nil, fmt.Errorf("app version catalog service is not configured")
+	if i.ChangeRequests == nil {
+		return nil, fmt.Errorf("app version change request service is not configured")
 	}
-	alreadyKnown, err := i.Catalog.HasKnownVersion(installCtx, appName, version)
+	alreadyKnown, err := i.ChangeRequests.HasKnownVersion(installCtx, appName, version)
 	if err != nil {
 		return nil, fmt.Errorf("check known app version: %w", err)
 	}
 	if alreadyKnown {
 		return nil, ErrAppVersionAlreadyInstalled
 	}
+
+	knownVersions, err := i.ChangeRequests.ListKnownVersionsByApp(installCtx, appName)
+	if err != nil {
+		return nil, fmt.Errorf("list known app versions: %w", err)
+	}
+	fromVersion := coredata.LatestKnownVersion(knownVersions)
+
 	registry, ok := i.Registries[registryName]
 	if !ok {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("app registry not found"))
+		return nil, fmt.Errorf("app registry not found")
 	}
 	if strings.TrimSpace(registry.Kind) != config.AppRegistryKindGCS {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("unsupported app registry kind"))
+		return nil, fmt.Errorf("unsupported app registry kind")
 	}
 	publicRoot, err := registry.PublicURL()
 	if err != nil {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("app registry public URL is invalid: %w", err))
+		return nil, fmt.Errorf("app registry public URL is invalid: %w", err)
 	}
 
 	reader := i.Reader
@@ -108,19 +112,19 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 	entry, err := reader.FetchEntry(installCtx, publicRoot, appName, version)
 	if err != nil {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("fetch app registry entry: %w", err))
+		return nil, fmt.Errorf("fetch app registry entry: %w", err)
 	}
 	if entry.App != appName {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName))
+		return nil, fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName)
 	}
 	if entry.Version != version {
-		return i.failInstall(installCtx, appName, version, actor, registryName, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version))
+		return nil, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version)
 	}
 
 	entryURL := PublicURL(publicRoot, AppVersionEntryPath(appName, version))
 	checksums := artifactChecksumsFromEntry(*entry)
 
-	addedAt := i.now()
+	requestedAt := i.now()
 	known := &core.AppInstallation{
 		AppName:            appName,
 		Version:            version,
@@ -129,24 +133,24 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		ProviderReleaseURL: entryURL,
 		ArtifactChecksums:  checksums,
 		InstalledBy:        actor,
-		InstalledAt:        addedAt,
-		UpdatedAt:          addedAt,
+		InstalledAt:        requestedAt,
+		UpdatedAt:          requestedAt,
 	}
 
-	addedRecord, err := i.Catalog.AppendRecord(installCtx, &core.AppVersionCatalogRecord{
-		App:       appName,
-		Version:   version,
-		Type:      core.AppVersionCatalogRecordTypeVersionAdded,
-		Actor:     actor,
-		Timestamp: addedAt,
-		Metadata:  coredata.VersionAddedMetadata(known, ""),
+	addedRequest, err := i.ChangeRequests.AppendRequest(installCtx, &core.AppVersionChangeRequest{
+		App:         appName,
+		FromVersion: fromVersion,
+		ToVersion:   version,
+		Actor:       actor,
+		Timestamp:   requestedAt,
+		Metadata:    coredata.ChangeRequestMetadata(known, ""),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("append version_added record: %w", err)
+		return nil, fmt.Errorf("append change request: %w", err)
 	}
 
 	return &InstallOutput{
-		Installation: coredata.InstallationFromVersionAddedRecord(addedRecord),
+		Installation: coredata.InstallationFromChangeRequest(addedRequest),
 	}, nil
 }
 
@@ -159,27 +163,6 @@ func artifactChecksumsFromEntry(entry Entry) map[string]string {
 		checksums[platform] = strings.TrimSpace(artifact.SHA256)
 	}
 	return checksums
-}
-
-func (i *Installer) failInstall(ctx context.Context, appName, version, actor, registryName string, cause error) (*InstallOutput, error) {
-	i.appendCatalogRecordBestEffort(context.WithoutCancel(ctx), &core.AppVersionCatalogRecord{
-		App:     appName,
-		Version: version,
-		Type:    core.AppVersionCatalogRecordTypeInstallFailed,
-		Actor:   actor,
-		Metadata: map[string]any{
-			"registry": registryName,
-			"error":    cause.Error(),
-		},
-	})
-	return nil, cause
-}
-
-func (i *Installer) appendCatalogRecordBestEffort(ctx context.Context, record *core.AppVersionCatalogRecord) {
-	if i == nil || i.Catalog == nil || record == nil {
-		return
-	}
-	_, _ = i.Catalog.AppendRecord(context.WithoutCancel(ctx), record)
 }
 
 func (i *Installer) now() time.Time {

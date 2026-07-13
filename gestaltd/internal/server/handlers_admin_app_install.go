@@ -49,11 +49,11 @@ func (s *Server) mountAdminAppInstallWriteRoutes(r chi.Router) {
 }
 
 func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Request) {
-	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Catalog == nil {
+	if s.appRegistryInstaller == nil || s.appRegistryInstaller.ChangeRequests == nil {
 		writeError(w, http.StatusServiceUnavailable, "app installation service is unavailable")
 		return
 	}
-	versions, err := s.appRegistryInstaller.Catalog.ListAllKnownVersions(r.Context())
+	versions, err := s.appRegistryInstaller.ChangeRequests.ListAllKnownVersions(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list app installations")
 		return
@@ -66,7 +66,7 @@ func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request) {
-	if s.appRegistryInstaller == nil || s.appRegistryInstaller.Catalog == nil {
+	if s.appRegistryInstaller == nil || s.appRegistryInstaller.ChangeRequests == nil {
 		writeError(w, http.StatusServiceUnavailable, "app installation service is unavailable")
 		return
 	}
@@ -79,7 +79,7 @@ func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid app name")
 		return
 	}
-	versions, err := s.appRegistryInstaller.Catalog.ListKnownVersionsByApp(r.Context(), appName)
+	versions, err := s.appRegistryInstaller.ChangeRequests.ListKnownVersionsByApp(r.Context(), appName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load app installations")
 		return
@@ -194,7 +194,7 @@ func adminAppInstallationFromCore(installation *core.AppInstallation) adminAppIn
 }
 
 func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
-	if cfg.Services == nil || cfg.Services.AppVersionCatalog == nil || cfg.Services.AppVersionInstallLocks == nil {
+	if cfg.Services == nil || cfg.Services.AppVersionChangeRequests == nil || cfg.Services.AppVersionInstallLocks == nil {
 		return nil
 	}
 	reader := cfg.AppRegistryReader
@@ -202,9 +202,9 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		reader = &appregistry.RegistryReader{}
 	}
 	return &appregistry.Installer{
-		Registries: cloneAppRegistryConfig(cfg.AppRegistries),
-		Reader:     reader,
-		Catalog:    cfg.Services.AppVersionCatalog,
-		Locks:      cfg.Services.AppVersionInstallLocks,
+		Registries:     cloneAppRegistryConfig(cfg.AppRegistries),
+		Reader:         reader,
+		ChangeRequests: cfg.Services.AppVersionChangeRequests,
+		Locks:          cfg.Services.AppVersionInstallLocks,
 	}
 }

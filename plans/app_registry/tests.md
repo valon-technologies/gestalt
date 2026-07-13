@@ -17,7 +17,7 @@ Related docs:
 | Package | File | Tests | Layer | PR |
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
-| `internal/coredata` | `app_version_catalog_test.go` | 5 | Unit (projection) | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
+| `internal/coredata` | `app_version_change_requests_test.go` | 4 | Unit (projection) | [gestalt#2751](https://github.com/valon-technologies/gestalt/pull/2751) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
@@ -64,7 +64,7 @@ Expected plan fields:
 
 ## Step 6: install HTTP integration
 
-Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (step 6: registry app install via `app_version_catalog` + local materialization).
+Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (registry app install via `app_version_change_requests`).
 
 Run:
 
@@ -85,28 +85,26 @@ All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `tes
 
 ---
 
-## Step 6: catalog projection unit tests
+## Change request projection unit tests
 
-Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730). Exercise `ListKnownVersionsByApp` and `ListAllKnownVersions` over in-memory stub IndexedDB — no HTTP, no GCS.
+Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730), updated in [gestalt#2751](https://github.com/valon-technologies/gestalt/pull/2751). Exercise change request append/list and known-version projections over in-memory stub IndexedDB — no HTTP, no GCS.
 
 Run:
 
 ```bash
 cd gestaltd
-go test ./internal/coredata/... -run TestAppVersionCatalog -count=1
+go test ./internal/coredata/... -run TestAppVersionChangeRequest -count=1
 ```
 
-### `app_version_catalog_test.go`
+### `app_version_change_requests_test.go`
 
-- **`TestAppVersionCatalogService/append_and_list_records_by_app`** — Records append in timestamp order per app.
+- **`TestAppVersionChangeRequestService/append_and_list_requests_by_app`** — Requests append in timestamp order per app.
 
-- **`TestAppVersionCatalogService/has_known_version`** — `HasKnownVersion` returns true after `version_added`.
+- **`TestAppVersionChangeRequestService/has_known_version`** — `HasKnownVersion` returns true after a change request for `to_version`.
 
-- **`TestAppVersionCatalogProjection/ListKnownVersionsByApp_dedupes_version_added`** — Multiple `version_added` records project to one entry per version.
+- **`TestAppVersionChangeRequestProjection/ListKnownVersionsByApp_dedupes_to_version`** — Multiple change requests project to one entry per `to_version`.
 
-- **`TestAppVersionCatalogProjection/ListKnownVersionsByApp_skips_install_failed`** — Failed records are not projected.
-
-- **`TestAppVersionCatalogProjection/ListAllKnownVersions_returns_latest_per_app_version`** — Fleet list includes distinct `(app, version)` pairs.
+- **`TestAppVersionChangeRequestProjection/ListAllKnownVersions_returns_latest_per_app_version`** — Fleet list includes distinct `(app, to_version)` pairs.
 
 ---
 
@@ -115,6 +113,5 @@ go test ./internal/coredata/... -run TestAppVersionCatalog -count=1
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:
 
 - Real GCS upload integration
-- Failed install `install_failed` record assertions
-- Re-install idempotency (no duplicate `version_added`)
+- Re-install idempotency (no duplicate change request)
 - Controller tick / convergence tests
