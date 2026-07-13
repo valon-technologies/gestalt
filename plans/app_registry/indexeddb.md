@@ -7,6 +7,7 @@ Step 5 adds store schemas, bootstrap (`CreateObjectStore`), and Go services. Ste
 Related docs:
 
 - [plan.md](./plan.md) — install flow, multi-instance convergence, planned `app_instance_materializations`
+- [lifecycle.md](./lifecycle.md) — replica lifecycle, convergence triggers, warm vs cold replicas
 - [models.md](./models.md) — GCS registry entry JSON that catalog records reference
 - [api.md](./api.md) — admin HTTP API for registry versions and install
 
