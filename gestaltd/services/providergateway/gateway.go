@@ -73,6 +73,15 @@ func (t *ProviderGatewayTransport) SetWorkflowProviderName(name string) {
 	t.workflowProviderName = strings.TrimSpace(name)
 }
 
+// WorkflowProviderName returns the configured workflow provider resource used
+// for public Workflow RPC authorization when requests omit provider_name.
+func (t *ProviderGatewayTransport) WorkflowProviderName() string {
+	if t == nil {
+		return ""
+	}
+	return t.workflowProviderName
+}
+
 func NewProviderGatewayTransport() *ProviderGatewayTransport {
 	return &ProviderGatewayTransport{}
 }

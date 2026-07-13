@@ -52,11 +52,19 @@ func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
 		))
 	}
 	if cfg.WorkflowManager != nil {
+		workflowOpts := []workflowservice.ProviderServerOption{
+			workflowservice.WithAgentWorkflowInvocationAuthorizer(cfg.AgentManager),
+		}
+		if cfg.Transport != nil {
+			if name := cfg.Transport.WorkflowProviderName(); name != "" {
+				workflowOpts = append(workflowOpts, workflowservice.WithWorkflowProviderName(name))
+			}
+		}
 		publicrpc.RegisterPublicWorkflowServer(srv, workflowservice.NewProviderServer(
 			"gestaltd",
 			cfg.WorkflowManager,
 			cfg.Authorization,
-			workflowservice.WithAgentWorkflowInvocationAuthorizer(cfg.AgentManager),
+			workflowOpts...,
 		))
 	}
 	if cfg.IndexedDB != nil {

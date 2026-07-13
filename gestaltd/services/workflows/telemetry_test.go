@@ -319,7 +319,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	}
 	failureAttrs := map[string]string{
-		"gestaltd.workflow.provider.name":    "default",
+		"gestaltd.workflow.provider.name":    "local",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
 		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindUnknown,

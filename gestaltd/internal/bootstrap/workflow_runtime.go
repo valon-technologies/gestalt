@@ -199,6 +199,15 @@ func (r *workflowRuntime) ResolveProvider(ctx context.Context, name string) (str
 	return selectedName, provider, nil
 }
 
+func (r *workflowRuntime) DefaultProviderName() string {
+	if r == nil {
+		return ""
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return strings.TrimSpace(r.defaultProviderName)
+}
+
 func (r *workflowRuntime) ProviderNames() []string {
 	if r == nil {
 		return nil

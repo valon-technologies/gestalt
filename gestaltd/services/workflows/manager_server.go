@@ -704,56 +704,49 @@ func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx work
 }
 
 func workflowRPCAction(operation string) string {
-	if strings.HasSuffix(operation, "definitions.apply") {
+	switch strings.TrimSpace(operation) {
+	case workflowauth.OperationDefinitionsApply:
 		return "ApplyDefinition"
-	}
-	if strings.HasSuffix(operation, "definitions.get") {
+	case workflowauth.OperationDefinitionsGet:
 		return "GetDefinition"
-	}
-	if strings.HasSuffix(operation, "definitions.list") {
+	case workflowauth.OperationDefinitionsList:
 		return "ListDefinitions"
-	}
-	if strings.HasSuffix(operation, "definitions.set_paused") {
+	case workflowauth.OperationDefinitionsSetPaused:
 		return "SetDefinitionPaused"
-	}
-	if strings.HasSuffix(operation, "definitions.set_activation_paused") {
+	case workflowauth.OperationDefinitionsSetActivationPaused:
 		return "SetActivationPaused"
-	}
-	if strings.HasSuffix(operation, "definitions.delete") {
+	case workflowauth.OperationDefinitionsDelete:
 		return "DeleteDefinition"
-	}
-	if strings.HasSuffix(operation, "runs.start") {
+	case workflowauth.OperationRunsStart:
 		return "StartRun"
-	}
-	if strings.HasSuffix(operation, "runs.list") {
+	case workflowauth.OperationRunsList:
 		return "ListRuns"
-	}
-	if strings.HasSuffix(operation, "runs.get") {
+	case workflowauth.OperationRunsGet:
 		return "GetRun"
-	}
-	if strings.HasSuffix(operation, "runs.get_events") {
+	case workflowauth.OperationRunsGetEvents:
 		return "GetRunEvents"
-	}
-	if strings.HasSuffix(operation, "runs.get_output") {
+	case workflowauth.OperationRunsGetOutput:
 		return "GetRunOutput"
-	}
-	if strings.HasSuffix(operation, "runs.cancel") {
+	case workflowauth.OperationRunsCancel:
 		return "CancelRun"
-	}
-	if strings.HasSuffix(operation, "runs.signal") {
+	case workflowauth.OperationRunsSignal:
 		return "SignalRun"
-	}
-	if strings.HasSuffix(operation, "runs.signal_or_start") {
+	case workflowauth.OperationRunsSignalOrStart:
 		return "SignalOrStartRun"
-	}
-	if strings.HasSuffix(operation, "events.deliver") {
+	case workflowauth.OperationEventsDeliver:
 		return "DeliverEvent"
+	default:
+		return operation
 	}
-	return operation
 }
 
 func (s *ProviderServer) workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
 	providerName := s.workflowProviderName
+	if req != nil {
+		if name := strings.TrimSpace(req.GetProviderName()); name != "" {
+			providerName = name
+		}
+	}
 	runStatus := observability.WorkflowRunStatusUnknown
 	targetKind := observability.WorkflowTargetKindUnknown
 	if managed != nil {

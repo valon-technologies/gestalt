@@ -2305,6 +2305,9 @@ func buildPublicGatewayTransport(
 	transport.SetUserStore(users)
 	transport.SetPublicMethods(registry)
 	if cfg != nil {
+		if name, _, err := cfg.SelectedWorkflowProvider(); err == nil && strings.TrimSpace(name) != "" {
+			transport.SetWorkflowProviderName(name)
+		}
 		if name, _, err := cfg.SelectedAuthorizationProvider(); err == nil && name != "" && authorization != nil {
 			transport.SetAuthorizationProvider(authorization[name])
 		}
