@@ -10,7 +10,25 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-type OperationOverride = providermanifestv1.ManifestOperationOverride
+type OperationOverride struct {
+	providermanifestv1.ManifestOperationOverride `yaml:",inline" json:",inline"`
+	AllowedRoles                                 []string `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
+}
+
+func FromManifestAllowed(allowed map[string]*providermanifestv1.ManifestOperationOverride) map[string]*OperationOverride {
+	if allowed == nil {
+		return nil
+	}
+	out := make(map[string]*OperationOverride, len(allowed))
+	for name, override := range allowed {
+		if override == nil {
+			out[name] = nil
+			continue
+		}
+		out[name] = &OperationOverride{ManifestOperationOverride: *override}
+	}
+	return out
+}
 
 // Policy normalizes allowed_operations handling so every provider type uses the
 // same validation, aliasing, and description override behavior.

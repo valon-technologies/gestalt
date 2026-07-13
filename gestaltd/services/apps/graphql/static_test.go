@@ -38,14 +38,16 @@ fragment TeamFields on Team {
 `
 	def, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"listTeams": {
-			Alias:        "teams",
-			Description:  "List Linear teams",
-			AllowedRoles: []string{"workspace-admin"},
-			Tags:         []string{"workspace"},
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document:      document,
-				OperationName: "ListTeams",
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Alias:       "teams",
+				Description: "List Linear teams",
+				Tags:        []string{"workspace"},
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document:      document,
+					OperationName: "ListTeams",
+				},
 			},
+			AllowedRoles: []string{"workspace-admin"},
 		},
 	})
 	if err != nil {
@@ -83,11 +85,13 @@ func TestStaticAllowedOperationsDefinitionRequiresOperationNameForMultipleOperat
 
 	_, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"teams": {
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: `
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: `
 query A { viewer { id } }
 query B { teams { nodes { id } } }
 `,
+				},
 			},
 		},
 	})
@@ -101,12 +105,14 @@ func TestStaticAllowedOperationsDefinitionSelectsConfiguredOperation(t *testing.
 
 	def, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"teams": {
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: `
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: `
 query A($id: ID!) { viewer(id: $id) { id } }
 query B($first: Int) { teams(first: $first) { nodes { id } } }
 `,
-				OperationName: "B",
+					OperationName: "B",
+				},
 			},
 		},
 	})
@@ -123,8 +129,10 @@ func TestStaticAllowedOperationsDefinitionRejectsExternalFragments(t *testing.T)
 
 	_, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"teams": {
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: `query Teams { teams { nodes { ...TeamFields } } }`,
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: `query Teams { teams { nodes { ...TeamFields } } }`,
+				},
 			},
 		},
 	})
@@ -138,12 +146,14 @@ func TestStaticAllowedOperationsDefinitionRejectsExternalFragmentsOutsideSelecte
 
 	_, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"teams": {
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				OperationName: "Selected",
-				Document: `
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					OperationName: "Selected",
+					Document: `
 query Selected { teams { nodes { id } } }
 query Other { teams { nodes { ...MissingFields } } }
 `,
+				},
 			},
 		},
 	})
@@ -157,11 +167,13 @@ func TestStaticAllowedOperationsDefinitionRejectsExternalFragmentsFromUnusedFrag
 
 	_, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"teams": {
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: `
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: `
 query Teams { teams { nodes { id } } }
 fragment Unused on Team { ...MissingFields }
 `,
+				},
 			},
 		},
 	})
@@ -175,8 +187,10 @@ func TestStaticAllowedOperationsDefinitionRejectsSubscription(t *testing.T) {
 
 	_, err := StaticAllowedOperationsDefinition("linear", "https://example.com/graphql", map[string]*operationexposure.OperationOverride{
 		"updates": {
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: `subscription Updates { updates { id } }`,
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: `subscription Updates { updates { id } }`,
+				},
 			},
 		},
 	})

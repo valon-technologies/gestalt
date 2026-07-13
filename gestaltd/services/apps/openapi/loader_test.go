@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 )
@@ -83,8 +84,14 @@ func TestLoadDefinition(t *testing.T) {
 	testutil.CloseOnCleanup(t, srv)
 
 	allowed := map[string]*operationexposure.OperationOverride{
-		"list_items": {Description: "List items with pagination", AllowedRoles: []string{"reader"}, Tags: []string{"pagination"}},
-		"get_item":   nil,
+		"list_items": {
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Description: "List items with pagination",
+				Tags:        []string{"pagination"},
+			},
+			AllowedRoles: []string{"reader"},
+		},
+		"get_item": nil,
 	}
 
 	def, err := LoadDefinition(context.Background(), "example", srv.URL, allowed)

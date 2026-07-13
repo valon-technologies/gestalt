@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -236,7 +237,7 @@ func TestUpstream_FilterOperationsWithOverride(t *testing.T) {
 	t.Cleanup(func() { _ = u.Close() })
 
 	err := u.FilterOperations(map[string]*operationexposure.OperationOverride{
-		"run_query":      {Description: "Custom query description"},
+		"run_query":      {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Description: "Custom query description"}},
 		"list_databases": nil,
 	})
 	if err != nil {
@@ -293,7 +294,7 @@ func TestUpstream_DiscoverAfterFilterWithAlias(t *testing.T) {
 	t.Cleanup(func() { _ = u.Close() })
 
 	err := u.FilterOperations(map[string]*operationexposure.OperationOverride{
-		"run_query": {Alias: "query", Tags: []string{"sql"}},
+		"run_query": {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Alias: "query", Tags: []string{"sql"}}},
 	})
 	if err != nil {
 		t.Fatalf("FilterOperations: %v", err)

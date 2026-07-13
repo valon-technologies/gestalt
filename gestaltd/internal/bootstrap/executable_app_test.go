@@ -2365,8 +2365,8 @@ paths:
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
 				AllowedOperations: map[string]*config.OperationOverride{
-					"echo":   {Alias: "renamed_echo", Tags: []string{"static-override"}},
-					"status": {Alias: "renamed_status", Tags: []string{"status-override"}},
+					"echo":   {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Alias: "renamed_echo", Tags: []string{"static-override"}}},
+					"status": {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Alias: "renamed_status", Tags: []string{"status-override"}}},
 				},
 			},
 		},

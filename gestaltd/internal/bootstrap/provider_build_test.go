@@ -511,11 +511,13 @@ func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
 	}
 	allowedOperations := map[string]*config.OperationOverride{
 		"list_notes": {
-			Alias:    "listNotes",
-			Paginate: true,
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Alias:    "listNotes",
+				Paginate: true,
+			},
 		},
 		"mcp_only": {
-			Paginate: true,
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Paginate: true},
 		},
 	}
 
@@ -550,13 +552,15 @@ func TestMCPAllowedOperationsForSpecCompositeFiltersOnlyWhenAPIIsPresent(t *test
 
 	allowedOperations := map[string]*config.OperationOverride{
 		"lookup": {
-			Description: "GraphQL search",
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: "query { lookup { nodes { id } } }",
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Description: "GraphQL search",
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: "query { lookup { nodes { id } } }",
+				},
 			},
 		},
-		"mcp_lookup": {Description: "MCP lookup"},
-		"list_notes": {Alias: "listNotes"},
+		"mcp_lookup": {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Description: "MCP lookup"}},
+		"list_notes": {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Alias: "listNotes"}},
 	}
 	apiCatalog := &catalog.Catalog{Operations: []catalog.CatalogOperation{
 		{ID: "listNotes"},
@@ -591,13 +595,15 @@ func TestMCPAllowedOperationsForSpecCompositePreservesDynamicAllowlist(t *testin
 
 	allowedOperations := map[string]*config.OperationOverride{
 		"searchIssues": {
-			Description: "GraphQL search",
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: "query { searchIssues { nodes { id } } }",
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Description: "GraphQL search",
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: "query { searchIssues { nodes { id } } }",
+				},
 			},
 		},
-		"lookup":     {Description: "MCP lookup"},
-		"list_notes": {Alias: "listNotes"},
+		"lookup":     {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Description: "MCP lookup"}},
+		"list_notes": {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Alias: "listNotes"}},
 	}
 	apiCatalog := &catalog.Catalog{Operations: []catalog.CatalogOperation{
 		{ID: "listNotes"},
@@ -617,9 +623,11 @@ func TestMCPAllowedOperationsForSpecCompositeOmitsMCPWhenNoMCPAllowlistEntries(t
 
 	allowedOperations := map[string]*config.OperationOverride{
 		"searchIssues": {
-			Description: "GraphQL search",
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-				Document: "query { searchIssues { nodes { id } } }",
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Description: "GraphQL search",
+				GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+					Document: "query { searchIssues { nodes { id } } }",
+				},
 			},
 		},
 	}

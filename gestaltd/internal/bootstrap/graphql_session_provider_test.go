@@ -86,7 +86,7 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 
 	wrapped := wrapGraphQLSessionCatalogProvider(base, "linear", srv.URL, map[string]*config.OperationOverride{
 		"viewer": {
-			Tags: []string{"profile"},
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Tags: []string{"profile"}},
 		},
 	})
 	if got := len(wrapped.Catalog().Operations); got != 0 {
@@ -200,25 +200,31 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 		specProviderConfig{
 			allowedOperations: map[string]*config.OperationOverride{
 				"status": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document: statusDocument,
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document: statusDocument,
+						},
 					},
 				},
 				"record": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document:      recordDocument,
-						OperationName: "Record",
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document:      recordDocument,
+							OperationName: "Record",
+						},
 					},
 				},
 				"searchRecords": {
-					Alias:        "records.search",
-					Description:  "Search record metadata.",
-					AllowedRoles: []string{"viewer"},
-					Tags:         []string{"records"},
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document:      searchRecordsDocument,
-						OperationName: "SearchRecords",
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						Alias:       "records.search",
+						Description: "Search record metadata.",
+						Tags:        []string{"records"},
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document:      searchRecordsDocument,
+							OperationName: "SearchRecords",
+						},
 					},
+					AllowedRoles: []string{"viewer"},
 				},
 			},
 		},
@@ -290,13 +296,17 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 		specProviderConfig{
 			allowedOperations: map[string]*config.OperationOverride{
 				"status": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document: statusDocument,
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document: statusDocument,
+						},
 					},
 				},
 				"viewer": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document: viewerDocument,
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document: viewerDocument,
+						},
 					},
 				},
 			},
@@ -373,8 +383,10 @@ func TestConfiguredStaticGraphQLProviderRejectsInvalidStaticConfig(t *testing.T)
 			name: "invalid variable type",
 			operations: map[string]*config.OperationOverride{
 				"searchRecords": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document: `query Search($recordType: RecordType!!) { searchRecords(recordType: $recordType) { records { id } } }`,
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document: `query Search($recordType: RecordType!!) { searchRecords(recordType: $recordType) { records { id } } }`,
+						},
 					},
 				},
 			},
@@ -384,8 +396,10 @@ func TestConfiguredStaticGraphQLProviderRejectsInvalidStaticConfig(t *testing.T)
 			name: "invalid variable name",
 			operations: map[string]*config.OperationOverride{
 				"searchRecords": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document: `query Search($1record: String) { searchRecords(recordType: $1record) { records { id } } }`,
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document: `query Search($1record: String) { searchRecords(recordType: $1record) { records { id } } }`,
+						},
 					},
 				},
 			},
@@ -395,8 +409,10 @@ func TestConfiguredStaticGraphQLProviderRejectsInvalidStaticConfig(t *testing.T)
 			name: "empty nested selection",
 			operations: map[string]*config.OperationOverride{
 				"viewer": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Document: `query Viewer { user { } }`,
+					ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+						GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+							Document: `query Viewer { user { } }`,
+						},
 					},
 				},
 			},

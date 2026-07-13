@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 )
 
@@ -156,9 +157,11 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 
 	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*operationexposure.OperationOverride{
 		"teams": {
-			Description:  "My custom description",
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Description:  "My custom description",
+				Tags:         []string{"workspace"},
+			},
 			AllowedRoles: []string{"workspace-admin"},
-			Tags:         []string{"workspace"},
 		},
 	})
 	if err != nil {

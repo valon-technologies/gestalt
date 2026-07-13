@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func TestPolicyNewRejectsEmpty(t *testing.T) {
@@ -21,8 +22,8 @@ func TestPolicyNewRejectsAliasCollisions(t *testing.T) {
 	t.Parallel()
 
 	_, err := New(map[string]*OperationOverride{
-		"op_a": {Alias: "shared"},
-		"op_b": {Alias: "shared"},
+		"op_a": {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Alias: "shared"}},
+		"op_b": {ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{Alias: "shared"}},
 	})
 	if err == nil {
 		t.Fatal("expected alias collision")
@@ -36,8 +37,14 @@ func TestPolicyValidateAndApply(t *testing.T) {
 	t.Parallel()
 
 	policy, err := New(map[string]*OperationOverride{
-		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}},
-		"get_item":   nil,
+		"list_items": {
+			ManifestOperationOverride: providermanifestv1.ManifestOperationOverride{
+				Alias:       "items",
+				Description: "Custom description",
+			},
+			AllowedRoles: []string{"admin"},
+		},
+		"get_item": nil,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
