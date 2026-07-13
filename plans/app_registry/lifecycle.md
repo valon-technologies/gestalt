@@ -1,25 +1,40 @@
 # App Registry Replica Lifecycle
 
-How each `gestaltd` replica observes fleet install state, materializes app artifacts locally, and (eventually) serves dynamic apps. Complements [plan.md](./plan.md) step 7 and the multi-instance convergence section.
+How each `gestaltd` replica observes fleet install state, materializes app artifacts locally, and (eventually) serves dynamic apps.
 
-**Step 6 (implemented today):** `POST …/install` materializes on the handling instance and writes `app_version_catalog`. Other replicas do not reconcile yet.
-
-**Step 7 (proposed):** `POST …/install` writes the catalog only; **every** replica (including the handler) runs a background controller that periodically reads `app_version_catalog` and materializes missing versions locally.
+Install is catalog-only; every replica materializes via a background controller. List/get install endpoints expose **projected known versions** from `version_added` records. Full published version JSON (`apps/{app}/versions/{version}.json`) is returned only to the install flow, not inlined by the list routes.
 
 Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
 - [indexeddb.md](./indexeddb.md) — `app_version_catalog`, install locks, planned `app_instance_materializations`
-- [api.md](./api.md) — admin install HTTP API
+- [config.md](./config.md) — `appRegistries` deploy reader config
+- [models.md](./models.md) — index and published version JSON stored in GCS
+- [service.md](./service.md) — Go publish/read helpers behind the registry bucket
 - [tests.md](./tests.md) — convergence unit tests
 
-## `gestaltd` startup
+Implementation:
+
+- Registry list handlers — `gestaltd/internal/server/handlers_admin_app_registry.go`
+- Install handlers — `gestaltd/internal/server/handlers_admin_app_install.go`
+- Registry fetcher — `gestaltd/internal/appregistry/reader.go`
+- Registry installer — `gestaltd/internal/appregistry/installer.go`
+- Catalog projections — `gestaltd/internal/coredata/app_version_catalog_projection.go`
+
+## Startup
 
 `coredata.NewWithOptions` — idempotently create host stores, including `app_version_catalog` and `app_version_install_locks`. Bootstrap does not write catalog records; the store starts empty until an install.
 
-When step 7 lands, startup also starts the background catalog controller (see below). Bootstrap itself still does not read the catalog or materialize registry apps.
+When `gestaltd serve` starts:
 
-## Background catalog controller (step 7, proposed)
+1. Load and validate deploy config, including `appRegistries` (`validateAppRegistries` checks registry names, `kind: gcs`, and that `publicUrl` can be derived from `gcs.bucket`).
+2. Pass the parsed `appRegistries` map through bootstrap into `server.New`, which clones it onto the running `Server` as an in-memory map.
+
+Bootstrap does not fetch registry indexes or prefetch version metadata. The source of truth for registry configuration remains the config file on disk; gestaltd does not persist `appRegistries` elsewhere.
+
+Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not bind installed apps into the provider graph.
+
+## Polling
 
 Every replica runs a background controller after `gestaltd serve` is up:
 
@@ -32,24 +47,160 @@ Every replica runs a background controller after `gestaltd serve` is up:
 
 The controller is **pull-based** and **local**: each replica reconciles itself against the shared catalog. No replica fans out install RPCs to peers.
 
-Optional follow-ups (not required for the first controller slice): manual `POST …/converge` on one replica, first-request convergence, pub/sub wakeups.
-
-Does **not** start app processes or bind the runtime provider graph — materialization on disk only (same as install today).
+Does **not** start app processes or bind the runtime provider graph — materialization on disk only.
 
 ## Runtime
 
-Admin HTTP under `/admin/api/v1`. See [api.md](./api.md) for request/response shapes.
+Admin HTTP under `/admin/api/v1` on the same listener as the other admin API (for example `/admin/api/v1/runtime/providers`). In deployments that split public and management listeners, call the management base URL.
 
-### `GET /admin/api/v1/app-registries`
+### How to invoke
+
+```bash
+# Local dev (default public port)
+export GESTALTD_URL=http://localhost:8080
+
+# Split management listener (production-style)
+# export GESTALTD_URL=https://gestalt-management.example.com
+```
+
+List configured registries:
+
+```bash
+curl -sS "$GESTALTD_URL/admin/api/v1/app-registries" | jq .
+```
+
+List published versions for one app:
+
+```bash
+curl -sS "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/versions" | jq .
+```
+
+Install one published version:
+
+```bash
+curl -sS -X POST "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/install" \
+  -H 'Content-Type: application/json' \
+  -d '{"version":"0.0.0-snapshot.gabc123","actor":"user:alice"}' | jq .
+```
+
+List known installed versions (fleet-wide):
+
+```bash
+curl -sS "$GESTALTD_URL/admin/api/v1/app-installations" | jq .
+```
+
+`toolshed` is the registry name from deploy `config.yaml` (`appRegistries.toolshed`). `g-issues` is the published app name.
+
+### Prerequisites
+
+`appRegistries` must be present in deploy config. Example ([toolshed#3251](https://github.com/valon-technologies/toolshed/pull/3251)):
+
+```yaml
+appRegistries:
+  toolshed:
+    kind: gcs
+    gcs:
+      bucket: gs://gitlab-peach-street-gestalt-app-registry
+```
+
+Gestalt derives `publicUrl` — `https://storage.googleapis.com/{bucket}` — from `gcs.bucket`. The `gs://` storage form is used internally at publish time but is not returned by the admin list API.
+
+The versions endpoint fetches `GET {publicUrl}/apps/{app}/index.json` over HTTP. The bucket must be readable at that public URL (or reachable from the gestaltd process network).
+
+Install routes additionally require:
+
+- IndexedDB `app_version_catalog` service configured on the server (`AppVersionCatalogService`)
+- IndexedDB `app_version_install_locks` service configured on the server (`AppVersionInstallLockService`)
+- A configured artifacts directory (`cfg.Server.ArtifactsDir`, propagated from the CLI `--artifacts-dir` at load time)
+
+List/get install endpoints project known versions from `app_version_catalog` only.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/admin/api/v1/app-registries` | List registries from config |
+| `GET` | `/admin/api/v1/app-registries/{registry}/apps/{app}/versions` | List published versions for one app |
+| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Validate version and record known version in catalog (catalog-only; local materialization via background controller) |
+| `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
+| `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
+
+List routes are read-only (`GET` only). Install uses `POST` on a separate route group with a longer request timeout (10 minutes).
+
+#### `GET /admin/api/v1/app-registries`
+
+Returns the named registries configured in `appRegistries`, sorted by name.
+
+**Response `200`**
+
+```json
+[
+  {
+    "name": "toolshed",
+    "kind": "gcs",
+    "publicUrl": "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry"
+  }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Registry key from `appRegistries` |
+| `kind` | string | Registry backend (`gcs` today) |
+| `publicUrl` | string | HTTPS root used to fetch index documents |
+
+When no registries are configured, the response is an empty array `[]` (not `null`).
 
 1. `listAdminAppRegistries` reads `s.appRegistries` (a clone of `appRegistries` from deploy config, set at `server.New`).
 2. If `appRegistries` is empty or unset, respond `200` with `[]`.
 3. Otherwise sort registry names and, for each entry, build `{ name, kind, publicUrl }`.
 4. Respond `200` with the JSON array.
 
-No GCS fetch. No IndexedDB read or write. This reflects **configured** registries only, not published or installed versions.
+No GCS fetch. No IndexedDB read or write.
 
-### `GET /admin/api/v1/app-registries/{registry}/apps/{app}/versions`
+#### `GET /admin/api/v1/app-registries/{registry}/apps/{app}/versions`
+
+Fetches `apps/{app}/index.json` from the configured registry's `publicUrl` and returns version summaries for `{app}`.
+
+**Path parameters**
+
+| Parameter | Description |
+|-----------|-------------|
+| `registry` | Name of a configured registry (`appRegistries` key) |
+| `app` | Published app name (same rules as `gestaltd app publish --app`) |
+
+App names must match `providerregistry.ValidateRepositoryName`: lowercase letters, digits, dots, underscores, and hyphens only. Invalid names (including path traversal such as `..`) return `400`.
+
+**Response `200`**
+
+```json
+{
+  "registry": "toolshed",
+  "app": "g-issues",
+  "versions": [
+    {
+      "version": "0.0.0-snapshot.gabc123",
+      "metadata": "apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
+      "platforms": ["linux/amd64", "darwin/arm64"],
+      "publishedAt": "2026-07-10T02:21:54Z"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `registry` | string | Registry name from the path |
+| `app` | string | App name from the path |
+| `versions` | array | Version summaries, newest `publishedAt` first |
+| `versions[].version` | string | Published version identifier |
+| `versions[].metadata` | string | Relative path to the full published version JSON in the bucket |
+| `versions[].platforms` | string array | Platforms published for this version (omitted when empty) |
+| `versions[].publishedAt` | RFC 3339 timestamp | Publish time (UTC) |
+
+When the app has no index or no versions yet, `versions` is `[]` (not `null`). A missing `apps/{app}/index.json` object is treated as an empty catalog.
+
+`metadata` points at the immutable published version document described in [models.md](./models.md). These routes do not inline published version fields (artifacts, interface, dependencies).
 
 1. `listAdminAppRegistryAppVersions` reads `{registry}` and `{app}` from the URL.
 2. Validate `app` (`providerregistry.ValidateRepositoryName`). Look up `{registry}` in `s.appRegistries`; reject unknown registries and non-`gcs` kinds.
@@ -58,34 +209,111 @@ No GCS fetch. No IndexedDB read or write. This reflects **configured** registrie
 
 No IndexedDB read or write. Lists **published** versions in the registry bucket, not fleet-installed versions from `app_version_catalog`.
 
-### `POST /admin/api/v1/app-registries/{registry}/apps/{app}/install`
+#### `POST /admin/api/v1/app-registries/{registry}/apps/{app}/install`
 
-**Today (step 6):** handling instance downloads, mounts, and writes the catalog.
+**Path parameters**
 
-**Proposed (step 7):**
+| Parameter | Description |
+|-----------|-------------|
+| `registry` | Name of a configured registry (`appRegistries` key) |
+| `app` | Published app name |
+
+**Request body**
+
+```json
+{
+  "version": "0.0.0-snapshot.gabc123",
+  "actor": "user:alice"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | string | yes | Published version to install |
+| `actor` | string | no | Actor recorded on catalog records |
+
+**Response `200`**
+
+```json
+{
+  "registry": "toolshed",
+  "app": "g-issues",
+  "installation": {
+    "app": "g-issues",
+    "version": "0.0.0-snapshot.gabc123",
+    "sourceRef": "abc123def456abc123def456abc123def456abcd",
+    "registry": "toolshed",
+    "providerReleaseUrl": "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry/apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
+    "artifactChecksums": {
+      "linux/amd64": "deadbeef…"
+    },
+    "installedAt": "2026-07-10T14:19:58Z",
+    "updatedAt": "2026-07-10T14:19:58Z"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `registry` | string | Registry name from the path |
+| `app` | string | App name from the path |
+| `installation` | object | Known version after a successful install (from the `version_added` record) |
+
+Re-installing a version that is already in the catalog returns **400 Bad Request** (`app version is already installed`).
+
+Synchronous on the handling instance. The HTTP response is sent after the catalog write finishes or fails.
 
 1. `installAdminAppRegistryApp` reads `{registry}` and `{app}` from the URL and `{ version, actor }` from the JSON body.
 2. Validate path params and look up `{registry}` in `s.appRegistries`.
-3. `Installer.Install` on the handling instance (synchronous; response waits for catalog write):
+3. `Installer.Install` on the handling instance:
    1. Claim a fleet install lock in `app_version_install_locks` for `(app, version)` (`409` if another holder holds a non-expired lock).
    2. If `(app, version)` is already known in `app_version_catalog`, return `400`.
    3. `RegistryReader.FetchEntry` — HTTP `GET` the published version document from the configured registry (validate the version exists; **no artifact download**).
    4. Append `version_added` to `app_version_catalog` with the install contract in record metadata.
    5. Release the install lock (always, via defer). On failure before step 4, append `install_failed` for audit.
-4. Respond `200` with `{ registry, app, installation }` (no `materializedPath` from this handler — local disk catch-up is the background controller's job).
+4. Respond `200` with `{ registry, app, installation }`.
 
-IndexedDB write on the handling instance. Registry metadata fetch only (version document). **No** local artifact download or extract on install. Does **not** start a process or bind the runtime provider graph. The handling replica materializes on the next controller tick like every other replica.
+Every replica (including the handler) materializes locally on the background catalog controller. IndexedDB write on the handling instance. Does **not** start a process or bind the runtime provider graph.
 
-### `GET /admin/api/v1/app-installations`
+#### `GET /admin/api/v1/app-installations`
+
+Returns all **known versions** projected from `version_added` catalog records. See [indexeddb.md](./indexeddb.md).
+
+**Response `200`**
+
+```json
+[
+  {
+    "app": "g-issues",
+    "version": "0.0.0-snapshot.gabc123",
+    "sourceRef": "abc123def456abc123def456abc123def456abcd",
+    "registry": "toolshed",
+    "providerReleaseUrl": "https://storage.googleapis.com/gitlab-peach-street-gestalt-app-registry/apps/g-issues/versions/0.0.0-snapshot.gabc123.json",
+    "artifactChecksums": {
+      "linux/amd64": "deadbeef…"
+    },
+    "installedAt": "2026-07-10T14:19:58Z",
+    "updatedAt": "2026-07-10T14:19:58Z"
+  }
+]
+```
+
+When no versions are known yet, the response is `[]` (not `null`).
 
 1. `listAdminAppInstallations` requires `AppVersionCatalog` on the server; otherwise respond `503`.
 2. `Catalog.ListAllKnownVersions` — read `app_version_catalog` and project known `(app, version)` pairs from `version_added` records.
 3. Map each projection to `{ app, version, sourceRef, registry, providerReleaseUrl, artifactChecksums, installedBy, installedAt, updatedAt }`.
 4. Respond `200` with the JSON array (empty if nothing installed fleet-wide).
 
-IndexedDB read only. No GCS fetch. Lists **fleet-known installed** versions, not everything published in a registry bucket.
+IndexedDB read only. No GCS fetch.
 
-### `GET /admin/api/v1/app-installations/{app}`
+#### `GET /admin/api/v1/app-installations/{app}`
+
+Returns **known versions** for one app.
+
+**Response `200`** — array of objects with the same shape as one element of the fleet list response above.
+
+**Response `404`** when the app has no `version_added` records yet.
 
 1. `getAdminAppInstallation` reads `{app}` from the URL and validates the app name.
 2. Requires `AppVersionCatalog` on the server; otherwise respond `503`.
@@ -93,4 +321,25 @@ IndexedDB read only. No GCS fetch. Lists **fleet-known installed** versions, not
 4. If no known versions, respond `404`.
 5. Otherwise map results to the same installation object shape and respond `200` with a JSON array.
 
-IndexedDB read only. No GCS fetch. One app may have multiple known versions in the array.
+IndexedDB read only. No GCS fetch.
+
+### Errors
+
+Errors use the standard gestaltd admin API error envelope (`error` field).
+
+| Status | When |
+|--------|------|
+| `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed |
+| `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
+| `409` | Another instance is already installing this `(app, version)` (install lock held and not expired) |
+| `502` | Published version fetch failed; failed to append `version_added` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
+| `500` | Artifacts directory not configured; registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
+| `503` | Version catalog service or installer not configured |
+
+Example:
+
+```json
+{
+  "error": "app registry not found"
+}
+```

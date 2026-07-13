@@ -5,8 +5,7 @@ The app registry should decouple app publishing from Gestalt deployments. Publis
 Related references:
 
 - [config.md](./config.md) — deploy reader config and CI publish flags
-- [api.md](./api.md) — admin HTTP API for listing registry versions
-- [lifecycle.md](./lifecycle.md) — replica lifecycle, convergence triggers, materialization vs runtime binding
+- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 - [models.md](./models.md) — JSON document shapes stored in GCS
 - [service.md](./service.md) — Go package API for publish and validation
 
@@ -257,8 +256,8 @@ Core recovery paths must not depend on dynamically installed apps.
 1. Prototype a GCS registry and publish a single app there (`publish-app-registry.yml` + `gestaltd app publish --bucket`).
 2. Use a parallel path to `publish-app-snapshot.yml` so normal app publishing is not interrupted.
 3. Start with publishing `g-issues`.
-4. Prototype a Gestalt endpoint that lists available versions in configured registries. See [api.md](./api.md).
+4. Prototype a Gestalt endpoint that lists available versions in configured registries. See [lifecycle.md](./lifecycle.md).
 5. Add IndexedDB version catalog store and projection helpers (`app_version_catalog` + known-version views). See [indexeddb.md](./indexeddb.md).
-6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog writes; `app_installations` store removed. See [api.md](./api.md), [tests.md](./tests.md).
+6. Prototype installing one registry app: materialize on the handling instance, record known versions in the catalog, expose via admin HTTP. **Done:** catalog writes; `app_installations` store removed. See [lifecycle.md](./lifecycle.md), [tests.md](./tests.md).
 7. Split install from local materialization — `POST …/install` writes `app_version_catalog` only; every replica runs a background controller (startup + 1 minute tick) to read the catalog and materialize locally. See [lifecycle.md](./lifecycle.md).
 8. Add install-time validation, fleet activation/rollback, and concurrency guards.

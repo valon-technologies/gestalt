@@ -8,7 +8,7 @@ Related docs:
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
-- [api.md](./api.md) — admin HTTP API for listing registry versions and installing apps
+- [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
 
 ---
 
