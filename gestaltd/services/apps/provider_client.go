@@ -266,9 +266,9 @@ func rejectProviderCatalogRoles(providerName string, cat *catalog.Catalog) error
 	if cat == nil {
 		return nil
 	}
-	for _, op := range cat.Operations {
-		if len(op.AllowedRoles) > 0 {
-			return fmt.Errorf("provider %q operation %q returned provider-owned allowedRoles; move roles to apps.<name>.allowedOperations in config.yaml", providerName, op.ID)
+	for i := range cat.Operations {
+		if len(cat.Operations[i].AllowedRoles) > 0 {
+			return fmt.Errorf("provider %q operation %q returned provider-owned allowedRoles; move roles to apps.<name>.allowedOperations in config.yaml", providerName, cat.Operations[i].ID)
 		}
 	}
 	return nil

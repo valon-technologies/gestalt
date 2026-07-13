@@ -87,6 +87,8 @@ func TestReadStaticCatalogRejectsProviderAllowedRoles(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			root := t.TempDir()
 			data := []byte(`
 name: provider

@@ -202,6 +202,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 
 	t.Run("rejects startup provider roles", func(t *testing.T) {
+		t.Parallel()
+
 		legacySpec := roundTripStaticSpec()
 		legacySpec.Catalog = legacySpec.Catalog.Clone()
 		legacySpec.Catalog.Operations[0].AllowedRoles = []string{"viewer"}
@@ -331,6 +333,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 
 	t.Run("rejects legacy provider session roles", func(t *testing.T) {
+		t.Parallel()
+
 		legacy, err := NewRemote(context.Background(), newAppProviderClient(t, NewProviderServer(&roundTripProvider{legacyRoles: true})), roundTripStaticSpec(), nil)
 		if err != nil {
 			t.Fatalf("NewRemote: %v", err)

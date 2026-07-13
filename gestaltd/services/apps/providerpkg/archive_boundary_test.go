@@ -113,7 +113,10 @@ func TestInspectPackageValidatesArchiveWithoutExtracting(t *testing.T) {
 	}
 
 	for _, allowedRoles := range []string{"[admin]", "[]", "null"} {
+		allowedRoles := allowedRoles
 		t.Run("rejects provider allowedRoles "+allowedRoles, func(t *testing.T) {
+			t.Parallel()
+
 			roleDir := t.TempDir()
 			_, manifest := mustWriteProviderPackageDir(t, roleDir, "github.com/acme/apps/provider", "0.0.1-alpha.1", "provider")
 			manifestData := mustRawManifestJSON(t, manifest)
