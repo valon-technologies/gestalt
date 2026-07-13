@@ -53,9 +53,9 @@ func rejectProviderOwnedAllowedRoles(cat *catalog.Catalog) error {
 	if cat == nil {
 		return nil
 	}
-	for _, op := range cat.Operations {
-		if len(op.AllowedRoles) > 0 {
-			return fmt.Errorf("catalog %q operation %q: provider-owned allowedRoles are not supported; move roles to apps.<name>.allowedOperations in config.yaml", cat.Name, op.ID)
+	for i := range cat.Operations {
+		if len(cat.Operations[i].AllowedRoles) > 0 {
+			return fmt.Errorf("catalog %q operation %q: provider-owned allowedRoles are not supported; move roles to apps.<name>.allowedOperations in config.yaml", cat.Name, cat.Operations[i].ID)
 		}
 	}
 	return nil
