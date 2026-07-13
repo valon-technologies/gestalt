@@ -68,12 +68,10 @@ function resolveGestaltDevApiProxyTarget(env) {
   );
 }
 
-function canInjectDevApiToken(req, devPort, apiTarget) {
-  const target = new URL(apiTarget);
+function canInjectDevApiToken(req, devPort) {
   const host = req.headers.host?.toLowerCase();
   const origin = req.headers.origin?.toLowerCase();
   return (
-    ["127.0.0.1", "localhost", "[::1]"].includes(target.hostname) &&
     ["127.0.0.1", "localhost", "[::1]"].some(
       (name) => `${name}:${devPort}` === host,
     ) &&
@@ -120,7 +118,7 @@ function gestaltConfig(env, command) {
         if (
           token &&
           !req.headers.authorization &&
-          canInjectDevApiToken(req, devPort, apiTarget)
+          canInjectDevApiToken(req, devPort)
         ) {
           proxyReq.setHeader("Authorization", `Bearer ${token}`);
         }
