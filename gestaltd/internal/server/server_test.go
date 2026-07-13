@@ -2474,15 +2474,12 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "theme-user@example.test"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "theme-user@example.test"}, nil
+		})
 		cfg.Services = svc
 		cfg.Authorization = authz
 		cfg.MountedUIs = []server.MountedUI{{
@@ -2505,11 +2502,22 @@ func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
 		t.Fatalf("GET theme.css unauthenticated: %v", err)
 	}
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("unauthenticated theme.css status = %d, want 302", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated theme.css status = %d, want 401", resp.StatusCode)
 	}
-	if got := resp.Header.Get("Location"); !strings.HasPrefix(got, "/api/v1/auth/login") {
-		t.Fatalf("unauthenticated theme.css Location = %q, want login redirect", got)
+
+	htmlReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/brand/", nil)
+	htmlReq.Header.Set("Accept", "text/html")
+	htmlResp, err := noRedirect.Do(htmlReq)
+	if err != nil {
+		t.Fatalf("GET brand HTML unauthenticated: %v", err)
+	}
+	_ = htmlResp.Body.Close()
+	if htmlResp.StatusCode != http.StatusFound {
+		t.Fatalf("unauthenticated HTML status = %d, want 302", htmlResp.StatusCode)
+	}
+	if got := htmlResp.Header.Get("Location"); !strings.HasPrefix(got, "/api/v1/auth/login") {
+		t.Fatalf("unauthenticated HTML Location = %q, want login redirect", got)
 	}
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/brand/theme.css", nil)
@@ -2538,15 +2546,12 @@ func TestMountedUIAppLevelAuthorizationRelationships(t *testing.T) {
 	t.Parallel()
 
 	const sessionToken = "session-token"
-	sessionAuth := &coretesting.StubAuthProvider{
-		N: "test",
-		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-			if token != sessionToken {
-				return nil, core.ErrNotFound
-			}
-			return &core.UserIdentity{Email: "ui-user@example.test"}, nil
-		},
-	}
+	sessionAuth := coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+		if token != sessionToken {
+			return nil, core.ErrNotFound
+		}
+		return &core.UserIdentity{Email: "ui-user@example.test"}, nil
+	})
 	shell := func(name string) http.HandlerFunc {
 		return func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte(name + "-shell"))
@@ -2925,15 +2930,12 @@ func TestMountedAppStaticAuthorizationRelationshipAllow(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "alpha-user@example.test"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "alpha-user@example.test"}, nil
+		})
 		cfg.Services = svc
 		cfg.Authorization = authz
 		cfg.AppDefs = map[string]*config.ProviderEntry{
@@ -2977,15 +2979,12 @@ func TestMountedAppStaticAuthorizationDenyWithoutAccess(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "beta-user@example.test"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "beta-user@example.test"}, nil
+		})
 		cfg.Services = svc
 		cfg.Authorization = authz
 		cfg.AppDefs = map[string]*config.ProviderEntry{
@@ -3663,15 +3662,12 @@ func TestReadinessCheck_IndexedDBDown(t *testing.T) {
 func TestAuthMiddleware_ValidSession(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token == "valid-session" {
-					return &core.UserIdentity{Email: "user@example.com"}, nil
-				}
-				return nil, fmt.Errorf("invalid token")
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token == "valid-session" {
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			}
+			return nil, fmt.Errorf("invalid token")
+		})
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -3805,15 +3801,12 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = nil
 		cfg.AuthProviders = map[string]core.IdentityProvider{
-			"alt": &coretesting.StubAuthProvider{
-				N: "alt",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "alt-session" {
-						return nil, fmt.Errorf("invalid token")
-					}
-					return &core.UserIdentity{Email: "alt-user@example.test"}, nil
-				},
-			},
+			"alt": coretesting.NamedIntrospectIdentityStub("alt", func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "alt-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "alt-user@example.test"}, nil
+			}),
 		}
 		cfg.Services = svc
 		cfg.Providers = testutil.NewProviderRegistry(t, openProvider, lockedProvider)
@@ -3930,12 +3923,9 @@ func TestAuthMiddleware_UnprefixedTokenRejected(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, _ string) (*core.UserIdentity, error) {
+			return nil, fmt.Errorf("not a session token")
+		})
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -4021,15 +4011,12 @@ func TestMetricsSessionAuthDoesNotRequireUserLookup(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, fmt.Errorf("invalid token")
-				}
-				return &core.UserIdentity{Email: "metrics@example.test"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, fmt.Errorf("invalid token")
+			}
+			return &core.UserIdentity{Email: "metrics@example.test"}, nil
+		})
 		cfg.Services = testutil.NewStubServices(t)
 		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
@@ -5484,15 +5471,12 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 	stub2 := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "USER@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "USER@example.com"}, nil
+		})
 		cfg.Providers = testutil.NewProviderRegistry(t, stub, stub2)
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"slack": testPluginDefsForConnections("slack", "default")["slack"],
@@ -5565,15 +5549,12 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicates(t *t
 
 			stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 			ts := newTestServer(t, func(cfg *server.Config) {
-				cfg.Auth = &coretesting.StubAuthProvider{
-					N: "stub",
-					ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-						if token != "session-token" {
-							return nil, core.ErrNotFound
-						}
-						return &core.UserIdentity{Email: email}, nil
-					},
-				}
+				cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, core.ErrNotFound
+					}
+					return &core.UserIdentity{Email: email}, nil
+				})
 				cfg.Providers = testutil.NewProviderRegistry(t, stub)
 				cfg.Services = svc
 			})
@@ -6750,15 +6731,12 @@ func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "user-token" {
-					return nil, fmt.Errorf("bad token")
-				}
-				return &core.UserIdentity{Email: "wrapped@test.local"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "user-token" {
+				return nil, fmt.Errorf("bad token")
+			}
+			return &core.UserIdentity{Email: "wrapped@test.local"}, nil
+		})
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.CatalogConnection = map[string]string{"svc": "workspace"}
 		cfg.Services = svc
@@ -6964,15 +6942,12 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "user-token" {
-					return nil, fmt.Errorf("bad token")
-				}
-				return &core.UserIdentity{Email: "alias@test.local"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "user-token" {
+				return nil, fmt.Errorf("bad token")
+			}
+			return &core.UserIdentity{Email: "alias@test.local"}, nil
+		})
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.Services = svc
 	})
@@ -7189,15 +7164,12 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "api-token" {
-					return nil, fmt.Errorf("bad token")
-				}
-				return &core.UserIdentity{Email: "selector@test.local"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "api-token" {
+				return nil, fmt.Errorf("bad token")
+			}
+			return &core.UserIdentity{Email: "selector@test.local"}, nil
+		})
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.Services = svc
 		cfg.AppDefs = map[string]*config.ProviderEntry{"messaging": entry}
@@ -9042,15 +9014,12 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "session-token" {
-						return nil, fmt.Errorf("bad token")
-					}
-					return &core.UserIdentity{Email: "user@example.com"}, nil
-				},
-			}
+			cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, fmt.Errorf("bad token")
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			})
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.DefaultConnection = map[string]string{"oauth-svc": testDefaultConnection}
 			cfg.AppDefs = map[string]*config.ProviderEntry{
@@ -9210,15 +9179,12 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "cli-api-token" {
-						return nil, fmt.Errorf("bad token")
-					}
-					return &core.UserIdentity{Email: "cli@test.local"}, nil
-				},
-			}
+			cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "cli-api-token" {
+					return nil, fmt.Errorf("bad token")
+				}
+				return &core.UserIdentity{Email: "cli@test.local"}, nil
+			})
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.DefaultConnection = map[string]string{"oauth-svc": testDefaultConnection}
 			cfg.AppDefs = map[string]*config.ProviderEntry{
@@ -12717,15 +12683,12 @@ func TestMCPEndpoint_ListUsesStrictCatalogResolution(t *testing.T) {
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "user@example.com"}, nil
+		})
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.MCPHandler = mcpHandler
@@ -12792,15 +12755,12 @@ func TestMCPEndpoint_MethodsReturn405BeforeAuth(t *testing.T) {
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "valid-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "valid-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "user@example.com"}, nil
+		})
 		cfg.PublicBaseURL = "https://valon.tools"
 		cfg.Services = svc
 		cfg.MCPHandler = mcpHandler
@@ -12836,15 +12796,12 @@ func TestMCPEndpoint_ValidOriginAndForwardedHostAllowed(t *testing.T) {
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "valid-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "valid-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "user@example.com"}, nil
+		})
 		cfg.PublicBaseURL = "https://valon.tools"
 		cfg.Services = svc
 		cfg.MCPHandler = mcpHandler
@@ -13045,19 +13002,16 @@ func TestMCPEndpoint_IgnoresSessionIDForDynamicCatalogIsolation(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, stub)
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				switch token {
-				case "auth-a":
-					return &core.UserIdentity{Email: "a@example.com"}, nil
-				case "auth-b":
-					return &core.UserIdentity{Email: "b@example.com"}, nil
-				default:
-					return nil, core.ErrNotFound
-				}
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			switch token {
+			case "auth-a":
+				return &core.UserIdentity{Email: "a@example.com"}, nil
+			case "auth-b":
+				return &core.UserIdentity{Email: "b@example.com"}, nil
+			default:
+				return nil, core.ErrNotFound
+			}
+		})
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.MCPHandler = mcpHandler
@@ -13163,19 +13117,16 @@ func TestMCPEndpoint_CallResolvesDynamicCatalogPerRequest(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, stub)
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				switch token {
-				case "auth-a":
-					return &core.UserIdentity{Email: "a@example.com"}, nil
-				case "auth-b":
-					return &core.UserIdentity{Email: "b@example.com"}, nil
-				default:
-					return nil, core.ErrNotFound
-				}
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			switch token {
+			case "auth-a":
+				return &core.UserIdentity{Email: "a@example.com"}, nil
+			case "auth-b":
+				return &core.UserIdentity{Email: "b@example.com"}, nil
+			default:
+				return nil, core.ErrNotFound
+			}
+		})
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.MCPHandler = mcpHandler
@@ -13407,15 +13358,12 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	mcpHandler := newMCPHandler(t, providers, svc, auditSink, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "user@example.com"}, nil
+		})
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.MCPHandler = mcpHandler
@@ -13975,19 +13923,16 @@ func TestExecuteOperation_RuntimeUnavailableMessage(t *testing.T) {
 func TestCookieAuth(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubAuthProvider{
-		N: "test",
-		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-			switch token {
-			case "valid-cookie-token":
-				return &core.UserIdentity{Email: "cookie@test.local"}, nil
-			case "valid-header-token":
-				return &core.UserIdentity{Email: "header@test.local"}, nil
-			default:
-				return nil, fmt.Errorf("invalid token")
-			}
-		},
-	}
+	stub := coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+		switch token {
+		case "valid-cookie-token":
+			return &core.UserIdentity{Email: "cookie@test.local"}, nil
+		case "valid-header-token":
+			return &core.UserIdentity{Email: "header@test.local"}, nil
+		default:
+			return nil, fmt.Errorf("invalid token")
+		}
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = stub
@@ -14099,15 +14044,12 @@ func TestLogout(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "user@example.com"}, nil
+		})
 		cfg.Services = testutil.NewStubServices(t)
 		cfg.AuditSink = auditSink
 	})
@@ -14572,15 +14514,12 @@ func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t 
 	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, fmt.Errorf("bad token")
-				}
-				return &core.UserIdentity{Email: "service-account-manager@test.local"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("test", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, fmt.Errorf("bad token")
+			}
+			return &core.UserIdentity{Email: "service-account-manager@test.local"}, nil
+		})
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProviderWithCapabilities{
 			stubManualProvider: stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-service-account-pending"},

@@ -150,10 +150,10 @@ func requestSessionOrBearerToken(r *http.Request) (string, error) {
 }
 
 func requestedAuthSource(r *http.Request) string {
-	if token, err := requestBearerToken(r); err == nil && token != "" {
+	if c, err := r.Cookie(sessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
 		return principal.SourceBearer.String()
 	}
-	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+	if token, err := requestBearerToken(r); err == nil && token != "" {
 		return principal.SourceBearer.String()
 	}
 	return ""
@@ -162,15 +162,17 @@ func requestedAuthSource(r *http.Request) string {
 func (s *Server) resolveRequestPrincipalWithResolver(r *http.Request, resolver *principal.Resolver) (*principal.Principal, error) {
 	var lastErr error
 
-	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-		p, err := resolver.ResolveToken(r.Context(), c.Value)
-		if p != nil && !principal.IsNonUserPrincipal(p) {
-			return p, nil
-		}
-		if principal.IsNonUserPrincipal(p) {
-			lastErr = principal.ErrInvalidToken
-		} else {
-			lastErr = err
+	if c, err := r.Cookie(sessionCookieName); err == nil {
+		if token := strings.TrimSpace(c.Value); token != "" {
+			p, err := resolver.ResolveToken(r.Context(), token)
+			if p != nil && !principal.IsNonUserPrincipal(p) {
+				return p, nil
+			}
+			if principal.IsNonUserPrincipal(p) {
+				lastErr = principal.ErrInvalidToken
+			} else {
+				lastErr = err
+			}
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -155,7 +156,7 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, ok := s.authorizeProtectedUIRequest(w, r, mounted, redirectLogin)
+		ctx, ok := s.authorizeMountedResource(w, r, mounted, redirectLogin)
 		if !ok {
 			return
 		}
@@ -163,31 +164,64 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 	})
 }
 
-func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handler {
+func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-			ProviderName: mounted.AppName,
-			Surface:      metricutil.InvocationSurfaceUI,
-			UIName:       mounted.Name,
-		})
-		next.ServeHTTP(w, r)
+		ctx, ok := s.authorizeMountedResource(w, r, s.adminMountedUI(), nil)
+		if !ok {
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Request, mounted MountedUI, redirectLogin protectedUILoginRedirect) (context.Context, bool) {
-	p, authenticated, err := s.resolveMountedUIPrincipal(r, mounted)
+func (s *Server) authorizeMountedResource(
+	w http.ResponseWriter,
+	r *http.Request,
+	mounted MountedUI,
+	redirectLogin protectedUILoginRedirect,
+) (context.Context, bool) {
+	if !mountedUIRequiresAuthorization(mounted) {
+		return r.Context(), true
+	}
+
+	auth, err := s.mountedUIAuthRuntime(mounted)
 	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve auth provider")
+		return nil, false
+	}
+	if auth.noAuth {
+		p := auth.anonymous
+		if enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p); enrichErr != nil {
+			slog.WarnContext(r.Context(), "auth: unable to resolve anonymous user ID", "error", enrichErr)
+		} else if enriched != nil {
+			p = enriched
+		}
+		return principal.WithPrincipal(r.Context(), p), true
+	}
+
+	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
+	switch {
+	case errors.Is(err, errInvalidAuthorizationHeader):
+		writeError(w, http.StatusUnauthorized, "invalid authorization header format")
+		return nil, false
+	case errors.Is(err, principal.ErrInvalidToken):
+		s.writeMountedUnauthenticated(w, r, redirectLogin)
+		return nil, false
+	case err != nil:
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return nil, false
-	}
-	if !authenticated {
-		if redirectLogin != nil {
-			if err := redirectLogin(w, r); err != nil {
-				writeError(w, http.StatusInternalServerError, err.Error())
-			}
-		}
+	case p == nil:
+		s.writeMountedUnauthenticated(w, r, redirectLogin)
 		return nil, false
 	}
+
+	if enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p); enrichErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		return nil, false
+	} else if enriched != nil {
+		p = enriched
+	}
+
 	if err := requireUserCaller(w, p); err != nil {
 		return nil, false
 	}
@@ -202,14 +236,32 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 
-	ctx := r.Context()
-	if p != nil {
-		ctx = principal.WithPrincipal(ctx, p)
-	}
+	ctx := principal.WithPrincipal(r.Context(), p)
 	if access.Policy != "" || access.Role != "" {
 		ctx = invocation.WithAccessContext(ctx, access)
 	}
 	return ctx, true
+}
+
+func (s *Server) writeMountedUnauthenticated(w http.ResponseWriter, r *http.Request, redirectLogin protectedUILoginRedirect) {
+	if redirectLogin != nil && strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html") {
+		if err := redirectLogin(w, r); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	writeError(w, http.StatusUnauthorized, "missing authorization")
+}
+
+func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
+			ProviderName: mounted.AppName,
+			Surface:      metricutil.InvocationSurfaceUI,
+			UIName:       mounted.Name,
+		})
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) authorizeMountedAppAccess(ctx context.Context, p *principal.Principal, mounted MountedUI) (invocation.AccessContext, bool, error) {
@@ -336,32 +388,6 @@ func (s *Server) mountedUIResourceDefaultRole(ctx context.Context, resourceName 
 		}
 	}
 	return "", nil
-}
-
-func (s *Server) resolveMountedUIPrincipal(r *http.Request, mounted MountedUI) (*principal.Principal, bool, error) {
-	auth, err := s.mountedUIAuthRuntime(mounted)
-	if err != nil {
-		return nil, false, err
-	}
-	if auth.noAuth {
-		return auth.anonymous, true, nil
-	}
-
-	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
-	switch {
-	case err == nil && p != nil:
-		enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)
-		if enrichErr != nil {
-			return nil, false, enrichErr
-		}
-		return enriched, true, nil
-	case err == nil:
-		return nil, false, nil
-	case errors.Is(err, errInvalidAuthorizationHeader), errors.Is(err, principal.ErrInvalidToken):
-		return nil, false, nil
-	default:
-		return nil, false, err
-	}
 }
 
 func (s *Server) redirectMountedUILogin(w http.ResponseWriter, r *http.Request) error {

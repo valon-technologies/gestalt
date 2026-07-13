@@ -47,15 +47,12 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithTracerProvider(tp))
 
 	srv, err := server.New(server.Config{
-		Auth: &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "trace@example.com"}, nil
-			},
-		},
+		Auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "trace@example.com"}, nil
+		}),
 		Services:       ds,
 		Providers:      providers,
 		Invoker:        broker,
@@ -213,15 +210,12 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) {
 	})
 	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, invocation.WithTracerProvider(tp))
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "agent-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "agent-trace@example.com", DisplayName: "Trace"}, nil
-			},
-		}
+		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "agent-session" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "agent-trace@example.com", DisplayName: "Trace"}, nil
+		})
 		cfg.Services = services
 		cfg.Providers = providers
 		cfg.Invoker = broker

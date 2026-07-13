@@ -21,9 +21,41 @@ type StubAuthProvider struct {
 
 	// Legacy test hooks mapped onto Token/Introspect.
 	HandleCallbackFn func(context.Context, string) (*core.UserIdentity, error)
-	ValidateTokenFn  func(context.Context, string) (*core.UserIdentity, error)
 	LoginURL         string
 	lastAuthorize    *core.AuthorizeRequest
+}
+
+// NamedIntrospectIdentityStub returns a stub whose Introspect handler validates tokens with fn.
+func NamedIntrospectIdentityStub(name string, fn func(context.Context, string) (*core.UserIdentity, error)) *StubAuthProvider {
+	stub := &StubAuthProvider{
+		N: name,
+		IntrospectFn: func(ctx context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
+			if req == nil || strings.TrimSpace(req.Token) == "" {
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+			if fn == nil {
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+			identity, err := fn(ctx, req.Token)
+			if err != nil {
+				// Test hooks use errors to mean "inactive token"; map to inactive introspection.
+				return &core.IntrospectResponse{Active: false}, nil //nolint:nilerr // test stub maps validation errors to inactive tokens
+			}
+			if identity == nil {
+				return &core.IntrospectResponse{Active: false}, nil
+			}
+			subject := "user:test"
+			if email := strings.TrimSpace(identity.Email); email != "" {
+				subject = "user:" + email
+			}
+			return &core.IntrospectResponse{
+				Active:   true,
+				Subject:  subject,
+				ClientID: core.DefaultOAuthClientID,
+			}, nil
+		},
+	}
+	return stub
 }
 
 type StubIdentityProvider = StubAuthProvider
@@ -129,24 +161,6 @@ func (s *StubAuthProvider) Introspect(ctx context.Context, req *core.IntrospectR
 	}
 	if req == nil || strings.TrimSpace(req.Token) == "" {
 		return &core.IntrospectResponse{Active: false}, nil
-	}
-	if s.ValidateTokenFn != nil {
-		identity, err := s.ValidateTokenFn(ctx, req.Token)
-		if err != nil {
-			identity = nil
-		}
-		if identity == nil {
-			return &core.IntrospectResponse{Active: false}, nil
-		}
-		subject := "user:test"
-		if identity.Email != "" {
-			subject = "user:" + strings.TrimSpace(identity.Email)
-		}
-		return &core.IntrospectResponse{
-			Active:   true,
-			Subject:  subject,
-			ClientID: core.DefaultOAuthClientID,
-		}, nil
 	}
 	switch req.Token {
 	case "valid-token", "valid-cookie-token", "valid-header-token":

@@ -31,11 +31,12 @@ Access tokens, refresh tokens, pending connection state, and OAuth state paramet
 
 ## Request authentication
 
-Requests are authenticated in the following order:
+Protected routes authenticate in this order:
 
-1. Check for a `session_token` cookie
-2. Check for an `Authorization: Bearer` header with a provider-issued grant or session token
-3. If no valid credentials are found, return 401
+1. `session_token` cookie when present
+2. `Authorization: Bearer` when the cookie is absent or invalid
+
+The resolved token is validated through the identity provider's `Introspect` endpoint. Unauthenticated HTML requests to protected static mounts redirect to login; other requests return `401`.
 
 ## Security headers
 

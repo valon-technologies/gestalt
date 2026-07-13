@@ -41,15 +41,12 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{
-		Auth: &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "session@example.com"}, nil
-			},
-		},
+		Auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token != "session-token" {
+				return nil, core.ErrNotFound
+			}
+			return &core.UserIdentity{Email: "session@example.com"}, nil
+		}),
 		AuditSink:   auditSink,
 		Services:    svc,
 		Providers:   providers,
@@ -243,22 +240,16 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			auditSink := invocation.NewSlogAuditSink(&auditBuf)
 
 			ts := newTestServer(t, func(cfg *server.Config) {
-				cfg.Auth = &coretesting.StubAuthProvider{
-					N: "stub",
-					ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-						return nil, fmt.Errorf("invalid token")
-					},
-				}
+				cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, _ string) (*core.UserIdentity, error) {
+					return nil, fmt.Errorf("invalid token")
+				})
 				cfg.AuditSink = auditSink
 				cfg.Services = testutil.NewStubServices(t)
 				if tc.pluginName != "" {
 					cfg.AuthProviders = map[string]core.IdentityProvider{
-						tc.routeAuth: &coretesting.StubAuthProvider{
-							N: tc.routeAuth,
-							ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-								return nil, fmt.Errorf("invalid token")
-							},
-						},
+						tc.routeAuth: coretesting.NamedIntrospectIdentityStub(tc.routeAuth, func(_ context.Context, _ string) (*core.UserIdentity, error) {
+							return nil, fmt.Errorf("invalid token")
+						}),
 					}
 					cfg.AppDefs = map[string]*config.ProviderEntry{
 						tc.pluginName: {RouteAuth: &config.RouteAuthDef{Provider: tc.routeAuth}},
