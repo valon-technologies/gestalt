@@ -3,6 +3,7 @@ import { IndexedDB } from "./providers/indexeddb.ts";
 import {
   type MigrationRunOptions,
   type Revision,
+  providerMigrationLedgerStore,
   resolveMigrationDbBinding,
   runMigrations,
 } from "./providers/migrations.ts";
@@ -244,16 +245,26 @@ function resolveMigrations(
   }
   if (typeof source === "function") {
     const resolved = source(name, config);
-    return resolved === undefined ? undefined : normalizeMigrationRunOptions(resolved);
+    return resolved === undefined
+      ? undefined
+      : normalizeMigrationRunOptions(resolved, name);
   }
-  return normalizeMigrationRunOptions(source);
+  return normalizeMigrationRunOptions(source, name);
 }
 
 function normalizeMigrationRunOptions(
   input: Revision[] | MigrationRunOptions,
+  providerName: string,
 ): MigrationRunOptions | undefined {
-  if (Array.isArray(input)) {
-    return input.length > 0 ? { revisions: input } : undefined;
+  const base = Array.isArray(input) ? { revisions: input } : input;
+  if (base.revisions.length === 0) {
+    return undefined;
   }
-  return input.revisions.length > 0 ? input : undefined;
+  if (base.ledgerStore?.trim()) {
+    return base;
+  }
+  return {
+    ...base,
+    ledgerStore: providerMigrationLedgerStore(providerName),
+  };
 }

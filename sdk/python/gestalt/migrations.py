@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Protocol, runtime_checkable
@@ -20,8 +21,37 @@ from ._indexeddb import (
 DEFAULT_LEDGER_STORE = "_gestalt_migrations"
 LEDGER_KEY_COLUMN = "revision_id"
 LEDGER_APPLIED_COLUMN = "applied_at"
+_CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 
 Record = dict[str, Any]
+
+
+def provider_migration_ledger_store(provider_name: str) -> str:
+    normalized = provider_name.strip()
+    if "/" in normalized:
+        normalized = normalized.rsplit("/", 1)[-1]
+    if not normalized:
+        return DEFAULT_LEDGER_STORE
+    slug = _slug_name(normalized)
+    if not slug:
+        return DEFAULT_LEDGER_STORE
+    snake = _CAMEL_BOUNDARY.sub(r"\1_\2", slug).replace("-", "_").lower()
+    return f"{snake}_migrations"
+
+
+def _slug_name(value: str) -> str:
+    chars: list[str] = []
+    for char in value:
+        if (
+            ("A" <= char <= "Z")
+            or ("a" <= char <= "z")
+            or ("0" <= char <= "9")
+            or char in "._-"
+        ):
+            chars.append(char)
+        else:
+            chars.append("-")
+    return "".join(chars).strip("-")
 
 
 @dataclass
@@ -221,6 +251,12 @@ def configure_migrations(provider: Any, name: str, config: dict[str, Any]) -> No
     options = normalize_migrations(migration_options(name, config))
     if options is None:
         return
+
+    if not (options.ledger_store or "").strip():
+        options = replace(
+            options,
+            ledger_store=provider_migration_ledger_store(name),
+        )
 
     binding = (options.db_binding or "").strip()
     if not binding:

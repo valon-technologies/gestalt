@@ -223,6 +223,7 @@ export {
 } from "./providers/app.ts";
 export {
   MigrationError,
+  providerMigrationLedgerStore,
   runMigrations,
   type AddIndexDeclaration,
   type BackfillRevision,

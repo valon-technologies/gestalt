@@ -8,6 +8,7 @@ import {
   type ObjectStoreSchema,
   type Record as DBRecord,
   type Revision,
+  providerMigrationLedgerStore,
   runMigrations,
 } from "../src/index.ts";
 
@@ -425,5 +426,17 @@ describe("runMigrations", () => {
 
     expect((await db.objectStore("dst").get("a")).id).toBe("a");
     expect(await ledgerIds(fake)).toEqual(["0001_seed", "0002_weird"]);
+  });
+
+  test("providerMigrationLedgerStore derives per-provider ledger names", () => {
+    expect(providerMigrationLedgerStore("gIssues")).toBe("g_issues_migrations");
+    expect(providerMigrationLedgerStore("dealHub")).toBe("deal_hub_migrations");
+    expect(providerMigrationLedgerStore("deal-hub")).toBe("deal_hub_migrations");
+    expect(providerMigrationLedgerStore("@scope/gIssues")).toBe("g_issues_migrations");
+    expect(providerMigrationLedgerStore("github.com/foo/myApp")).toBe(
+      "my_app_migrations",
+    );
+    expect(providerMigrationLedgerStore("my  app")).toBe("my__app_migrations");
+    expect(providerMigrationLedgerStore("   ")).toBe("_gestalt_migrations");
   });
 });

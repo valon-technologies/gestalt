@@ -53,6 +53,7 @@ _MIGRATIONS_EXPORTS = (
     "SchemaDeclaration",
     "SchemaRevision",
     "StoreDeclaration",
+    "provider_migration_ledger_store",
     "run_migrations",
 )
 
@@ -610,6 +611,7 @@ __all__ = [
     "SchemaDeclaration",
     "SchemaRevision",
     "StoreDeclaration",
+    "provider_migration_ledger_store",
     "run_migrations",
     "Model",
     "NotFoundError",

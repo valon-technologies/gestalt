@@ -83,8 +83,47 @@ export interface MigrationRunOptions {
   revisions: Revision[];
   /** Name of the IndexedDB binding to migrate. */
   dbBinding?: string;
-  /** Ledger store name. Defaults to `_gestalt_migrations`. */
+  /** Ledger store name. */
   ledgerStore?: string;
+}
+
+export function providerMigrationLedgerStore(providerName: string): string {
+  let normalized = providerName.trim();
+  const slash = normalized.lastIndexOf("/");
+  if (slash >= 0) {
+    normalized = normalized.slice(slash + 1);
+  }
+  if (!normalized) {
+    return DEFAULT_LEDGER_STORE;
+  }
+  const slug = migrationLedgerSlug(normalized);
+  if (!slug) {
+    return DEFAULT_LEDGER_STORE;
+  }
+  const snake = slug
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/-/g, "_")
+    .toLowerCase();
+  return `${snake}_migrations`;
+}
+
+function migrationLedgerSlug(value: string): string {
+  let slug = "";
+  for (const char of value) {
+    if (
+      (char >= "A" && char <= "Z") ||
+      (char >= "a" && char <= "z") ||
+      (char >= "0" && char <= "9") ||
+      char === "." ||
+      char === "_" ||
+      char === "-"
+    ) {
+      slug += char;
+    } else {
+      slug += "-";
+    }
+  }
+  return slug.replace(/^-+|-+$/g, "");
 }
 
 /** Resolve the IndexedDB binding for migration runs. */

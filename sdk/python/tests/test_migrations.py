@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from gestalt.migrations import (
     MigrationError,
@@ -7,6 +8,8 @@ from gestalt.migrations import (
     SchemaDeclaration,
     SchemaRevision,
     StoreDeclaration,
+    configure_migrations,
+    provider_migration_ledger_store,
     run_migrations,
 )
 
@@ -142,6 +145,58 @@ class MigrationTests(unittest.TestCase):
         ]
         with self.assertRaises(MigrationError):
             run_migrations(db, MigrationRunOptions(revisions=revisions))
+
+    def test_provider_migration_ledger_store(self) -> None:
+        self.assertEqual(provider_migration_ledger_store("gIssues"), "g_issues_migrations")
+        self.assertEqual(provider_migration_ledger_store("dealHub"), "deal_hub_migrations")
+        self.assertEqual(provider_migration_ledger_store("deal-hub"), "deal_hub_migrations")
+        self.assertEqual(provider_migration_ledger_store("@scope/gIssues"), "g_issues_migrations")
+        self.assertEqual(
+            provider_migration_ledger_store("github.com/foo/myApp"),
+            "my_app_migrations",
+        )
+        self.assertEqual(provider_migration_ledger_store("my  app"), "my__app_migrations")
+        self.assertEqual(provider_migration_ledger_store("   "), "_gestalt_migrations")
+
+    def test_configure_migrations_derives_per_provider_ledger_store(self) -> None:
+        class Provider:
+            def migration_options(self, _name: str, _config: dict) -> MigrationRunOptions:
+                return MigrationRunOptions(
+                    revisions=[init_revision("gIssues/0001_init", "widgets")]
+                )
+
+        db = FakeDB()
+
+        class FakeIndexedDB:
+            def __init__(self, _binding: str = "") -> None:
+                self._db = db
+
+            def object_store(self, name: str) -> FakeStore:
+                return self._db.object_store(name)
+
+            def create_object_store(self, name: str, schema=None) -> FakeStore:
+                return self._db.create_object_store(name, schema)
+
+            def delete_object_store(self, name: str) -> None:
+                self._db.delete_object_store(name)
+
+            def create_index(self, store: str, index) -> None:
+                self._db.create_index(store, index)
+
+            def delete_index(self, store: str, name: str) -> None:
+                self._db.delete_index(store, name)
+
+            def close(self) -> None:
+                self._db.close()
+
+        with patch("gestalt.migrations.IndexedDB", FakeIndexedDB):
+            configure_migrations(Provider(), "gIssues", {"indexeddb": "main-db"})
+
+        self.assertEqual(
+            db.object_store("g_issues_migrations").get_all_keys(),
+            ["gIssues/0001_init"],
+        )
+        self.assertNotIn("_gestalt_migrations", db.stores)
 
 
 if __name__ == "__main__":
