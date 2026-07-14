@@ -373,6 +373,19 @@ type remoteDelegatedAppStub struct {
 
 func (p *remoteDelegatedAppStub) RemoteCredentialDelegated() bool { return true }
 
+func TestBrokerCheckProviderAccessAllowsProviderScopedPrincipal(t *testing.T) {
+	t.Parallel()
+
+	broker := NewBroker(nil, nil, nil)
+	p := &principal.Principal{
+		SubjectID: "service_account:workflow-runner",
+		Scopes:    []string{"github:issues.triage"},
+	}
+	if err := broker.CheckProviderAccess(context.Background(), p, "github"); err != nil {
+		t.Fatalf("CheckProviderAccess: %v", err)
+	}
+}
+
 func TestBrokerInvokeGraphQLAuthorizationDeniesBeforeCredentialResolution(t *testing.T) {
 	t.Parallel()
 

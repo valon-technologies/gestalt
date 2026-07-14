@@ -231,11 +231,21 @@ func (m *Manager) resolveDefinitionSpec(ctx context.Context, p *principal.Princi
 	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
-	target, err := m.resolveTarget(ctx, authorizedPrincipal, spec.Target)
+	execPrincipal, err := m.executionPrincipal(spec.RunAs)
+	if err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	if err := m.authorizeRunAsTarget(ctx, execPrincipal, spec.Target); err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	target, err := m.resolveTarget(ctx, execPrincipal, spec.Target)
 	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
 	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, target, invocation.CallerProvider{}); err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	if err := m.authorizeRunAsTarget(ctx, execPrincipal, target); err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
 	activations, err := normalizeDefinitionActivations(spec.Activations)

@@ -248,19 +248,26 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	t.Parallel()
 
 	metrics := metrictest.NewManualMeterProvider(t)
+	authz := &managerServerAuthorizationProvider{allowed: true}
 	provider := newWorkflowManagerTelemetryProvider()
-	manager := workflowmanager.New(workflowmanager.Config{
-		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name: "github",
-				Operations: []catalog.CatalogOperation{
-					{ID: "issues.triage", Method: "POST"},
-				},
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "github",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "github",
+			Operations: []catalog.CatalogOperation{
+				{ID: "issues.triage", Method: "POST"},
 			},
-		}),
-		Workflow: workflowManagerTelemetryControl{provider: provider},
+		},
+	})
+	invoker := invocation.NewBroker(providers, nil, nil,
+		invocation.WithAuthorizationProvider(authz),
+		invocation.WithProviderKinds(map[string]invocation.ProviderKind{"github": invocation.ProviderKindApp}),
+	)
+	manager := workflowmanager.New(workflowmanager.Config{
+		Providers: providers,
+		Workflow:  workflowManagerTelemetryControl{provider: provider},
+		Invoker:   invoker,
 	})
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer(grpc.UnaryInterceptor(func(
@@ -271,7 +278,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	) (any, error) {
 		return handler(metricutil.WithMeterProvider(ctx, metrics.Provider), req)
 	}))
-	proto.RegisterWorkflowServer(srv, NewProviderServer("slack", manager, &managerServerAuthorizationProvider{allowed: true}))
+	proto.RegisterWorkflowServer(srv, NewProviderServer("slack", manager, authz))
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -423,6 +430,7 @@ func (p *workflowManagerTelemetryProvider) GetDefinition(context.Context, *proto
 	return &proto.WorkflowDefinition{
 		Id:         "definition-1",
 		Generation: 7,
+		RunAs:      "service_account:workflow-runner",
 		Target:     telemetryProtoAppStepTarget("github", "issues.triage"),
 	}, nil
 }

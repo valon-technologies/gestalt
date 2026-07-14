@@ -15,9 +15,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 )
 
@@ -71,143 +75,382 @@ func requireWorkflowManagerRequestContext(t *testing.T, reqCtx *proto.RequestCon
 }
 
 func testWorkflowManagerWithGithub(t *testing.T, provider *testWorkflowProvider) *Manager {
-	return New(Config{
-		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name: "github",
-				Operations: []catalog.CatalogOperation{
-					{ID: "issues.triage", Method: "POST"},
-				},
+	return testWorkflowManagerWithGithubInvoker(t, provider, nil)
+}
+
+func testWorkflowRunAsSubject() *core.RunAsSubject {
+	return &core.RunAsSubject{SubjectID: "service_account:workflow-runner"}
+}
+
+func testWorkflowGithubProviders(t *testing.T) *registry.ProviderMap[core.Provider] {
+	t.Helper()
+	return testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "github",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "github",
+			Operations: []catalog.CatalogOperation{
+				{ID: "issues.triage", Method: "POST"},
 			},
-		}),
-		Workflow: testWorkflowControl{provider: provider},
+		},
 	})
+}
+
+func testWorkflowManagerBroker(t *testing.T, providers *registry.ProviderMap[core.Provider], authz core.AuthorizationProvider) invocation.Invoker {
+	t.Helper()
+	return invocation.NewBroker(providers, nil, nil,
+		invocation.WithAuthorizationProvider(authz),
+		invocation.WithProviderKinds(map[string]invocation.ProviderKind{"github": invocation.ProviderKindApp}),
+	)
+}
+
+func testWorkflowManagerWithGithubInvoker(t *testing.T, provider *testWorkflowProvider, invoker invocation.Invoker) *Manager {
+	t.Helper()
+	providers := testWorkflowGithubProviders(t)
+	if invoker == nil {
+		invoker = testWorkflowManagerBroker(t, providers, allowAllAuthz{})
+	}
+	cfg := Config{Providers: providers, Workflow: testWorkflowControl{provider: provider}, Invoker: invoker}
+	return New(cfg)
+}
+
+func testWorkflowManagerPrincipalWithoutGithub() *principal.Principal {
+	return principal.Canonicalize(&principal.Principal{
+		SubjectID: principal.UserSubjectID("bob"),
+		UserID:    "bob",
+		Kind:      principal.KindUser,
+	})
+}
+
+type allowAllAuthz struct {
+	core.AuthorizationProvider
+}
+
+func (allowAllAuthz) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	return &proto.CheckAccessResponse{Allowed: true}, nil
+}
+
+type runAsGrantAuthz struct {
+	core.AuthorizationProvider
+	grants map[string]struct{}
+}
+
+type remoteDelegatedWorkflowApp struct {
+	*coretesting.StubIntegration
+}
+
+func (remoteDelegatedWorkflowApp) RemoteCredentialDelegated() bool { return true }
+
+type denyingAgentWorkflowAuthorizer struct {
+	agentmanager.Service
+	requests []invocation.AgentWorkflowAuthorizationRequest
+}
+
+func (a *denyingAgentWorkflowAuthorizer) AuthorizeWorkflowInvocation(_ context.Context, req invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error) {
+	a.requests = append(a.requests, req)
+	return invocation.AgentWorkflowAuthorization{}, status.Error(codes.PermissionDenied, "agent workflow target is not allowed")
+}
+
+type tokenCountingWorkflowBroker struct {
+	*invocation.Broker
+	tokenResolutions int
+}
+
+func (b *tokenCountingWorkflowBroker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+	b.tokenResolutions++
+	return b.Broker.ResolveToken(ctx, p, providerName, connection, instance)
+}
+
+func (a *runAsGrantAuthz) grantKey(subjectID, providerName, operation string) string {
+	return strings.TrimSpace(subjectID) + "|" + strings.TrimSpace(providerName) + "|" + strings.TrimSpace(operation)
+}
+
+func (a *runAsGrantAuthz) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	_, ok := a.grants[a.grantKey(req.GetSubject().GetId(), req.GetResource().GetId(), req.GetAction().GetName())]
+	return &proto.CheckAccessResponse{Allowed: ok}, nil
 }
 
 func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T) {
 	t.Parallel()
 
-	provider := newTestWorkflowProvider()
-	manager := testWorkflowManagerWithGithub(t, provider)
-	caller := testWorkflowManagerPrincipal()
+	t.Run("generation and input", func(t *testing.T) {
+		t.Parallel()
 
-	definition, err := manager.ApplyDefinition(context.Background(), caller, DefinitionApply{
-		ProviderName:   "local",
-		Caller:         testWorkflowManagerCaller(),
-		IdempotencyKey: "definition-apply-1",
-		Spec: coreworkflow.DefinitionSpec{
-			ID:     "definition-1",
-			Target: testWorkflowAppStepTarget("github", "issues.triage", map[string]any{"mode": "full"}),
-			Activations: []coreworkflow.Activation{{
-				ID: "github_issue",
-				Event: &coreworkflow.EventActivation{Match: coreworkflow.EventMatch{
-					Type:   "github.issue",
-					Source: "github",
-				}},
-				Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
-					"issue": {Signal: "data.issue"},
-				}},
-			}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("ApplyDefinition: %v", err)
-	}
-	if definition == nil || definition.Definition == nil || definition.Definition.ID != "definition-1" || definition.Definition.Generation != 1 {
-		t.Fatalf("definition = %#v", definition)
-	}
-	if len(provider.applyRequests) != 1 {
-		t.Fatalf("apply requests = %#v", provider.applyRequests)
-	}
-	if got := provider.applyRequests[0].GetProvider(); got != "local" {
-		t.Fatalf("apply provider name = %q, want local", got)
-	}
-	requireWorkflowManagerRequestContext(t, provider.applyRequests[0].GetContext(), invocation.ProviderKindApp, "github")
+		provider := newTestWorkflowProvider()
+		manager := testWorkflowManagerWithGithub(t, provider)
+		caller := testWorkflowManagerPrincipal()
 
-	run, err := manager.StartRun(context.Background(), caller, RunStart{
-		ProviderName:   "local",
-		Caller:         testWorkflowManagerCaller(),
-		DefinitionID:   "definition-1",
-		WorkflowKey:    "github:issues:triage",
-		Input:          map[string]any{"issue": map[string]any{"number": 42}},
-		IdempotencyKey: "run-1",
+		definition, err := manager.ApplyDefinition(context.Background(), caller, DefinitionApply{
+			ProviderName:   "local",
+			Caller:         testWorkflowManagerCaller(),
+			IdempotencyKey: "definition-apply-1",
+			Spec: coreworkflow.DefinitionSpec{
+				ID:     "definition-1",
+				RunAs:  testWorkflowRunAsSubject(),
+				Target: testWorkflowAppStepTarget("github", "issues.triage", map[string]any{"mode": "full"}),
+				Activations: []coreworkflow.Activation{{
+					ID: "github_issue",
+					Event: &coreworkflow.EventActivation{Match: coreworkflow.EventMatch{
+						Type:   "github.issue",
+						Source: "github",
+					}},
+					Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+						"issue": {Signal: "data.issue"},
+					}},
+				}},
+			},
+		})
+		if err != nil {
+			t.Fatalf("ApplyDefinition: %v", err)
+		}
+		if definition == nil || definition.Definition == nil || definition.Definition.ID != "definition-1" || definition.Definition.Generation != 1 {
+			t.Fatalf("definition = %#v", definition)
+		}
+		if len(provider.applyRequests) != 1 {
+			t.Fatalf("apply requests = %#v", provider.applyRequests)
+		}
+		if got := provider.applyRequests[0].GetProvider(); got != "local" {
+			t.Fatalf("apply provider name = %q, want local", got)
+		}
+		requireWorkflowManagerRequestContext(t, provider.applyRequests[0].GetContext(), invocation.ProviderKindApp, "github")
+
+		run, err := manager.StartRun(context.Background(), caller, RunStart{
+			ProviderName:   "local",
+			Caller:         testWorkflowManagerCaller(),
+			DefinitionID:   "definition-1",
+			WorkflowKey:    "github:issues:triage",
+			Input:          map[string]any{"issue": map[string]any{"number": 42}},
+			IdempotencyKey: "run-1",
+		})
+		if err != nil {
+			t.Fatalf("StartRun: %v", err)
+		}
+		if run == nil || run.Run == nil {
+			t.Fatalf("run = %#v", run)
+		}
+		if run.Run.DefinitionGeneration != 1 {
+			t.Fatalf("run generation = %d, want 1", run.Run.DefinitionGeneration)
+		}
+		if got := run.Run.Input["issue"].(map[string]any)["number"]; got != float64(42) {
+			t.Fatalf("run input issue.number = %#v, want 42", got)
+		}
+		runApp := requireWorkflowAppStep(t, run.Run.Target, 0)
+		if got := runApp.Operation; got != "issues.triage" {
+			t.Fatalf("run target operation = %q, want issues.triage", got)
+		}
+		if len(provider.startRunRequests) != 1 || provider.startRunRequests[0].GetExpectedDefinitionGeneration() != 1 {
+			t.Fatalf("start requests = %#v", provider.startRunRequests)
+		}
+		if got := provider.startRunRequests[0].GetProvider(); got != "local" {
+			t.Fatalf("start provider name = %q, want local", got)
+		}
+		requireWorkflowManagerRequestContext(t, provider.startRunRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 	})
-	if err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-	if run == nil || run.Run == nil {
-		t.Fatalf("run = %#v", run)
-	}
-	if run.Run.DefinitionGeneration != 1 {
-		t.Fatalf("run generation = %d, want 1", run.Run.DefinitionGeneration)
-	}
-	if got := run.Run.Input["issue"].(map[string]any)["number"]; got != float64(42) {
-		t.Fatalf("run input issue.number = %#v, want 42", got)
-	}
-	runApp := requireWorkflowAppStep(t, run.Run.Target, 0)
-	if got := runApp.Operation; got != "issues.triage" {
-		t.Fatalf("run target operation = %q, want issues.triage", got)
-	}
-	if len(provider.startRunRequests) != 1 || provider.startRunRequests[0].GetExpectedDefinitionGeneration() != 1 {
-		t.Fatalf("start requests = %#v", provider.startRunRequests)
-	}
-	if got := provider.startRunRequests[0].GetProvider(); got != "local" {
-		t.Fatalf("start provider name = %q, want local", got)
-	}
-	requireWorkflowManagerRequestContext(t, provider.startRunRequests[0].GetContext(), invocation.ProviderKindApp, "github")
+
+	t.Run("run_as target grants", func(t *testing.T) {
+		t.Parallel()
+
+		grant := map[string]struct{}{
+			"service_account:workflow-runner|github|issues.triage": {},
+		}
+		spec := coreworkflow.DefinitionSpec{
+			ID:     "definition-run-as",
+			RunAs:  testWorkflowRunAsSubject(),
+			Target: testWorkflowAppStepTarget("github", "issues.triage", nil),
+		}
+
+		t.Run("author without step grants", func(t *testing.T) {
+			t.Parallel()
+			providers := testWorkflowGithubProviders(t)
+			manager := New(Config{
+				Providers: providers,
+				Workflow:  testWorkflowControl{provider: newTestWorkflowProvider()},
+				Invoker:   testWorkflowManagerBroker(t, providers, &runAsGrantAuthz{grants: grant}),
+			})
+			if _, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), DefinitionApply{
+				ProviderName: "local",
+				Spec:         spec,
+			}); err != nil {
+				t.Fatalf("ApplyDefinition: %v", err)
+			}
+		})
+
+		t.Run("run_as without grants", func(t *testing.T) {
+			t.Parallel()
+			providers := testWorkflowGithubProviders(t)
+			broker := &tokenCountingWorkflowBroker{Broker: testWorkflowManagerBroker(t, providers, &runAsGrantAuthz{}).(*invocation.Broker)}
+			manager := New(Config{
+				Providers: providers,
+				Workflow:  testWorkflowControl{provider: newTestWorkflowProvider()},
+				Invoker:   broker,
+			})
+			_, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipal(), DefinitionApply{
+				ProviderName: "local",
+				Spec:         spec,
+			})
+			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+				t.Fatalf("ApplyDefinition error = %v, want authorization denied", err)
+			}
+			if broker.tokenResolutions != 0 {
+				t.Fatalf("token resolutions = %d, want 0", broker.tokenResolutions)
+			}
+		})
+
+		t.Run("starter without step grants", func(t *testing.T) {
+			t.Parallel()
+			provider := newTestWorkflowProvider()
+			providers := testWorkflowGithubProviders(t)
+			manager := New(Config{
+				Providers: providers,
+				Workflow:  testWorkflowControl{provider: provider},
+				Invoker:   testWorkflowManagerBroker(t, providers, &runAsGrantAuthz{grants: grant}),
+			})
+			if _, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipal(), DefinitionApply{
+				ProviderName: "local",
+				Spec:         spec,
+			}); err != nil {
+				t.Fatalf("ApplyDefinition: %v", err)
+			}
+			if _, err := manager.StartRun(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), RunStart{
+				ProviderName: "local",
+				DefinitionID: "definition-run-as",
+				WorkflowKey:  "github:issues:triage",
+			}); err != nil {
+				t.Fatalf("StartRun: %v", err)
+			}
+		})
+
+		t.Run("remote delegated target skips local grants", func(t *testing.T) {
+			t.Parallel()
+			provider := newTestWorkflowProvider()
+			providers := testutil.NewProviderRegistry(t, remoteDelegatedWorkflowApp{StubIntegration: &coretesting.StubIntegration{
+				N:          "linear",
+				ConnMode:   core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{ID: "issues.triage", Method: "POST"}}},
+			}})
+			manager := New(Config{
+				Providers: providers,
+				Workflow:  testWorkflowControl{provider: provider},
+				Invoker:   testWorkflowManagerBroker(t, providers, &runAsGrantAuthz{}),
+			})
+			spec := coreworkflow.DefinitionSpec{
+				ID:     "definition-remote-delegated",
+				RunAs:  testWorkflowRunAsSubject(),
+				Target: testWorkflowAppStepTarget("linear", "issues.triage", nil),
+			}
+			if _, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), DefinitionApply{
+				ProviderName: "local",
+				Spec:         spec,
+			}); err != nil {
+				t.Fatalf("ApplyDefinition: %v", err)
+			}
+			if _, err := manager.StartRun(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), RunStart{
+				ProviderName: "local",
+				DefinitionID: spec.ID,
+				WorkflowKey:  "linear:issues:triage",
+			}); err != nil {
+				t.Fatalf("StartRun: %v", err)
+			}
+		})
+
+		t.Run("agent starts authorize the stored target", func(t *testing.T) {
+			t.Parallel()
+			provider := newTestWorkflowProvider()
+			provider.definitions["definition-agent"] = &coreworkflow.Definition{
+				ID:         "definition-agent",
+				Generation: 1,
+				RunAs:      testWorkflowRunAsSubject(),
+				Target:     testWorkflowAppStepTarget("github", "issues.triage", nil),
+			}
+			providers := testWorkflowGithubProviders(t)
+			agentAuth := &denyingAgentWorkflowAuthorizer{}
+			manager := New(Config{
+				Providers:    providers,
+				Workflow:     testWorkflowControl{provider: provider},
+				AgentManager: agentAuth,
+				Invoker:      testWorkflowManagerBroker(t, providers, allowAllAuthz{}),
+			})
+			ctx := invocation.WithAgentInvocationContext(context.Background(), invocation.AgentInvocationContext{
+				ProviderName: "agent",
+				SessionID:    "session-1",
+				TurnID:       "turn-1",
+			})
+			operations := []string{workflowManagerOperationRunsStart, workflowManagerOperationRunsSignalOrStart}
+			for _, operation := range operations {
+				_, _, _, _, err := manager.resolveRequestProviderTarget(ctx, testWorkflowManagerPrincipal(), "local", "definition-agent", testWorkflowManagerCaller(), operation)
+				if status.Code(err) != codes.PermissionDenied {
+					t.Fatalf("resolveRequestProviderTarget(%q) error = %v, want permission denied", operation, err)
+				}
+			}
+			if len(agentAuth.requests) != 2 {
+				t.Fatalf("agent authorization requests = %d, want 2", len(agentAuth.requests))
+			}
+			for i, req := range agentAuth.requests {
+				if req.Operation != operations[i] {
+					t.Fatalf("agent authorization operation = %q, want %q", req.Operation, operations[i])
+				}
+				if req.Target == nil || requireWorkflowAppStep(t, *req.Target, 0).Name != "github" || requireWorkflowAppStep(t, *req.Target, 0).Operation != "issues.triage" {
+					t.Fatalf("agent authorization target = %#v, want github app step", req.Target)
+				}
+			}
+		})
+	})
 }
 
 func TestSignalOrStartRunRequiresDefinitionAndCarriesInput(t *testing.T) {
 	t.Parallel()
 
-	provider := newTestWorkflowProvider()
-	manager := testWorkflowManagerWithGithub(t, provider)
-	caller := testWorkflowManagerPrincipal()
-	if _, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName: "local",
-		WorkflowKey:  "github:issue:42",
-		Signal:       coreworkflow.Signal{Name: "github.issue"},
-	}); !errors.Is(err, invocation.ErrInvalidInvocation) {
-		t.Fatalf("SignalOrStartRun without definition error = %v, want invalid invocation", err)
-	}
+	t.Run("carries input", func(t *testing.T) {
+		t.Parallel()
 
-	if _, err := manager.ApplyDefinition(context.Background(), caller, DefinitionApply{
-		ProviderName: "local",
-		Caller:       testWorkflowManagerCaller(),
-		Spec: coreworkflow.DefinitionSpec{
-			ID:     "definition-1",
-			Target: testWorkflowAppStepTarget("github", "issues.triage", nil),
-		},
-	}); err != nil {
-		t.Fatalf("ApplyDefinition: %v", err)
-	}
-	signaled, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:   "local",
-		Caller:         testWorkflowManagerCaller(),
-		WorkflowKey:    "github:issue:42",
-		DefinitionID:   "definition-1",
-		Input:          map[string]any{"issue_number": 42},
-		IdempotencyKey: "signal-1",
-		Signal:         coreworkflow.Signal{Name: "github.issue", Payload: map[string]any{"ok": true}},
+		provider := newTestWorkflowProvider()
+		manager := testWorkflowManagerWithGithub(t, provider)
+		caller := testWorkflowManagerPrincipal()
+		if _, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+			ProviderName: "local",
+			WorkflowKey:  "github:issue:42",
+			Signal:       coreworkflow.Signal{Name: "github.issue"},
+		}); !errors.Is(err, invocation.ErrInvalidInvocation) {
+			t.Fatalf("SignalOrStartRun without definition error = %v, want invalid invocation", err)
+		}
+
+		if _, err := manager.ApplyDefinition(context.Background(), caller, DefinitionApply{
+			ProviderName: "local",
+			Caller:       testWorkflowManagerCaller(),
+			Spec: coreworkflow.DefinitionSpec{
+				ID:     "definition-1",
+				RunAs:  testWorkflowRunAsSubject(),
+				Target: testWorkflowAppStepTarget("github", "issues.triage", nil),
+			},
+		}); err != nil {
+			t.Fatalf("ApplyDefinition: %v", err)
+		}
+		signaled, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+			ProviderName:   "local",
+			Caller:         testWorkflowManagerCaller(),
+			WorkflowKey:    "github:issue:42",
+			DefinitionID:   "definition-1",
+			Input:          map[string]any{"issue_number": 42},
+			IdempotencyKey: "signal-1",
+			Signal:         coreworkflow.Signal{Name: "github.issue", Payload: map[string]any{"ok": true}},
+		})
+		if err != nil {
+			t.Fatalf("SignalOrStartRun: %v", err)
+		}
+		if signaled == nil || signaled.Run == nil || !signaled.StartedRun {
+			t.Fatalf("signaled = %#v", signaled)
+		}
+		if got := signaled.Run.Input["issue_number"]; got != float64(42) {
+			t.Fatalf("run input issue_number = %#v, want 42", got)
+		}
+		if len(provider.signalOrStartRequests) != 1 || provider.signalOrStartRequests[0].GetDefinitionId() != "definition-1" {
+			t.Fatalf("signal requests = %#v", provider.signalOrStartRequests)
+		}
+		if got := provider.signalOrStartRequests[0].GetProvider(); got != "local" {
+			t.Fatalf("signal provider name = %q, want local", got)
+		}
+		requireWorkflowManagerRequestContext(t, provider.signalOrStartRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 	})
-	if err != nil {
-		t.Fatalf("SignalOrStartRun: %v", err)
-	}
-	if signaled == nil || signaled.Run == nil || !signaled.StartedRun {
-		t.Fatalf("signaled = %#v", signaled)
-	}
-	if got := signaled.Run.Input["issue_number"]; got != float64(42) {
-		t.Fatalf("run input issue_number = %#v, want 42", got)
-	}
-	if len(provider.signalOrStartRequests) != 1 || provider.signalOrStartRequests[0].GetDefinitionId() != "definition-1" {
-		t.Fatalf("signal requests = %#v", provider.signalOrStartRequests)
-	}
-	if got := provider.signalOrStartRequests[0].GetProvider(); got != "local" {
-		t.Fatalf("signal provider name = %q, want local", got)
-	}
-	requireWorkflowManagerRequestContext(t, provider.signalOrStartRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 }
 
 func TestDeliverEventPreservesCallerApp(t *testing.T) {

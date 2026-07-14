@@ -548,12 +548,19 @@ func providerDelegatesRemoteAuthorization(prov core.Provider) bool {
 	return ok && delegated.RemoteCredentialDelegated()
 }
 
+func (b *Broker) providerDelegatesRemoteAuthorization(providerName string) bool {
+	if b == nil || b.providers == nil {
+		return false
+	}
+	provider, err := b.providers.Get(providerName)
+	return err == nil && providerDelegatesRemoteAuthorization(provider)
+}
+
 func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	req := authorizationAccessRequest(b.providerKinds, p, providerName, operationID)
-	resp, err := b.authorization.CheckAccess(ctx, req)
+	resp, err := b.authorization.CheckAccess(ctx, accessRequest(b.providerKinds, p, providerName, operationID))
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
@@ -563,10 +570,28 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	return nil
 }
 
-func authorizationAccessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
+func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+	if !principal.AllowsOperationPermission(p, providerName, operationID) {
+		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	}
+	if b.providerDelegatesRemoteAuthorization(providerName) {
+		return nil
+	}
+	return b.checkAuthorizationAccess(ctx, p, providerName, operationID)
+}
+
+func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
+	if !principal.AllowsProviderPermission(p, providerName) {
+		return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+	}
+	if b.providerDelegatesRemoteAuthorization(providerName) {
+		return nil
+	}
+	return b.checkAuthorizationAccess(ctx, p, providerName, providerName)
+}
+
+func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, action string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
-	subjectID := principal.EffectiveCredentialSubjectID(p)
-	providerName = strings.TrimSpace(providerName)
 	properties, _ := structpb.NewStruct(map[string]any{
 		"scope":     strings.Join(p.Scopes, " "),
 		"client_id": strings.TrimSpace(p.ClientID),
@@ -575,10 +600,10 @@ func authorizationAccessRequest(kinds map[string]ProviderKind, p *principal.Prin
 	return &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
 			Type:       "subject",
-			Id:         subjectID,
+			Id:         principal.EffectiveCredentialSubjectID(p),
 			Properties: properties,
 		},
-		Action:   &proto.Action{Name: strings.TrimSpace(operationID)},
+		Action:   &proto.Action{Name: strings.TrimSpace(action)},
 		Resource: AuthorizationResource(providerName, kinds),
 	}
 }
