@@ -1079,9 +1079,9 @@ class IndexedDBImpl implements IndexedDB {
   private readonly transport: HostServiceGrpcTransport;
 
   constructor(name?: string) {
-    const { target, token } = requireHostServiceTarget("IndexedDB");
+    const { target, token } = requireHostServiceTarget("indexeddb");
     const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("IndexedDB", target),
+      parseHostServiceTarget("indexeddb", target),
       hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
     );
     this.transport = transport;

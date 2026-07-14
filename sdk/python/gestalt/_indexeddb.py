@@ -662,7 +662,7 @@ class IndexedDB:
             raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
         token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         self._channel = host_service_channel(
-            "IndexedDB", target, token=token.strip(), binding=(name or "").strip()
+            "indexeddb", target, token=token.strip(), binding=(name or "").strip()
         )
         self._stub = pb_grpc.IndexedDBStub(self._channel)
 
