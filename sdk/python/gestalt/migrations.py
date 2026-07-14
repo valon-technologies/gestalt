@@ -6,7 +6,7 @@ import datetime as dt
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 
 from ._indexeddb import (
     AlreadyExistsError,
@@ -17,7 +17,7 @@ from ._indexeddb import (
     ObjectStoreSchema,
 )
 
-DEFAULT_LEDGER_STORE = "_gestalt_migrations"
+from .workflow_authoring import resolve_workflow_definition_spec
 LEDGER_KEY_COLUMN = "revision_id"
 LEDGER_APPLIED_COLUMN = "applied_at"
 
@@ -113,20 +113,6 @@ class WorkflowRevision:
 Revision = SchemaRevision | BackfillRevision | WorkflowRevision
 
 
-@runtime_checkable
-class WorkflowMigrationClient(Protocol):
-    """Applies workflow migrations through the host service."""
-
-    def apply_workflow_migration(
-        self,
-        revision_id: str,
-        provider: str,
-        idempotency_key: str,
-        definition: Any,
-    ) -> None:
-        """Apply one workflow migration revision."""
-
-
 @dataclass
 class MigrationRunOptions:
     """Options for one migration run."""
@@ -135,7 +121,6 @@ class MigrationRunOptions:
     db_binding: str | None = None
     ledger_store: str | None = None
     app_name: str | None = None
-    workflow_client: WorkflowMigrationClient | None = None
 
 
 MigrationsOption = list[Revision] | MigrationRunOptions
@@ -424,29 +409,38 @@ def _apply_revision(db: MigrationDB, revision: Revision, options: MigrationRunOp
 
 
 def _apply_workflow_revision(revision: WorkflowRevision, options: MigrationRunOptions) -> None:
-    from .migration import ApplyWorkflowMigrationRequest, Migration
-    from .workflow_authoring import resolve_workflow_definition_spec
+    from .workflow import Workflow
 
     app_name = (options.app_name or "").strip()
     if not app_name:
         raise MigrationError("workflow migration requires app name")
-    client = options.workflow_client
-    if client is None:
-        migration = Migration.connect()
-        resolved = resolve_workflow_definition_spec(revision.workflow.definition)
-        migration.apply_workflow_migration(
-            ApplyWorkflowMigrationRequest(
-                provider=revision.workflow.provider.strip(),
-                revision_id=revision.id,
-                spec=resolved,
-                idempotency_key="",
-            )
-        )
-        migration.close()
-        return
     provider = revision.workflow.provider.strip()
     resolved = resolve_workflow_definition_spec(revision.workflow.definition)
-    client.apply_workflow_migration(revision.id, provider, "", resolved)
+    workflow = Workflow.connect()
+    try:
+        idempotency_key = _workflow_migration_idempotency_key(
+            revision.id, provider, resolved.id
+        )
+        workflow.apply_definition(
+            provider=provider,
+            idempotency_key=idempotency_key,
+            spec=resolved,
+        )
+    finally:
+        workflow.close()
+
+
+def _workflow_migration_idempotency_key(
+    revision_id: str, provider: str, local_definition_id: str
+) -> str:
+    return "/".join(
+        [
+            "workflow-migration",
+            revision_id.strip(),
+            provider.strip(),
+            local_definition_id.strip(),
+        ]
+    )
 
 
 def _apply_backfill(db: MigrationDB, transform: BackfillTransform) -> None:

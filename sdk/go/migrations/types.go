@@ -2,9 +2,6 @@
 package migrations
 
 import (
-	"context"
-
-	"github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
@@ -74,17 +71,11 @@ type Revision struct {
 	Workflow *WorkflowMigration
 }
 
-// WorkflowMigrationClient applies workflow migrations through the host service.
-type WorkflowMigrationClient interface {
-	ApplyWorkflowMigration(ctx context.Context, revisionID, provider, idempotencyKey string, definition *client.WorkflowDefinitionSpec) error
-}
-
 // RunOptions configures a migration run.
 type RunOptions struct {
-	Revisions      []Revision
-	LedgerStore    string
-	AppName        string
-	WorkflowClient WorkflowMigrationClient
+	Revisions   []Revision
+	LedgerStore string
+	AppName     string
 }
 
 // Result reports which revisions were applied this run.

@@ -11,7 +11,6 @@ PROTO_MODULES = (
     "authorization",
     "cache",
     "indexeddb",
-    "migration",
     "external_credential",
     "app",
     "runtime_provider",

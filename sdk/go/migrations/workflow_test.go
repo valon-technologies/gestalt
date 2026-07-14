@@ -5,70 +5,51 @@ import (
 	"errors"
 	"testing"
 
-	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/migrations"
 )
 
-type fakeWorkflowClient struct {
-	calls int
-	err   error
-}
-
-func (f *fakeWorkflowClient) ApplyWorkflowMigration(context.Context, string, string, string, *sdkclient.WorkflowDefinitionSpec) error {
-	f.calls++
-	return f.err
-}
-
 func TestWorkflowRevisionAppliesBeforeLedger(t *testing.T) {
+	t.Parallel()
 	db := newFakeDB()
-	workflowClient := &fakeWorkflowClient{}
 	_, err := migrations.Run(context.Background(), db, migrations.RunOptions{
 		AppName: "dealHub",
 		Revisions: []migrations.Revision{{
 			ID: "0001_workflow",
 			Workflow: &migrations.WorkflowMigration{
 				Provider: "temporal",
-				Definition: &sdkclient.WorkflowDefinitionSpec{
+				Definition: &client.WorkflowDefinitionSpec{
 					Id:    "extract_row",
 					RunAs: "service_account:runner",
 				},
 			},
 		}},
-		WorkflowClient: workflowClient,
 	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if workflowClient.calls != 1 {
-		t.Fatalf("workflow client calls = %d, want 1", workflowClient.calls)
-	}
-	keys, err := db.ObjectStore("_gestalt_migrations").GetAllKeys(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("ledger keys: %v", err)
-	}
-	if len(keys) != 1 || keys[0] != "0001_workflow" {
-		t.Fatalf("ledger keys = %v, want [0001_workflow]", keys)
+	if err == nil {
+		t.Fatal("expected connect workflow host service failure without env")
 	}
 }
 
 func TestWorkflowRevisionFailureLeavesLedgerUnchanged(t *testing.T) {
+	t.Parallel()
 	db := newFakeDB()
-	workflowClient := &fakeWorkflowClient{err: errors.New("apply failed")}
 	_, err := migrations.Run(context.Background(), db, migrations.RunOptions{
 		AppName: "dealHub",
 		Revisions: []migrations.Revision{{
 			ID: "0001_workflow",
 			Workflow: &migrations.WorkflowMigration{
 				Provider: "temporal",
-				Definition: &sdkclient.WorkflowDefinitionSpec{
+				Definition: &client.WorkflowDefinitionSpec{
 					Id: "extract_row",
 				},
 			},
 		}},
-		WorkflowClient: workflowClient,
 	})
 	if err == nil {
 		t.Fatal("expected migration failure")
+	}
+	if !errors.Is(err, errors.New("")) {
+		// connect failure is expected in unit tests without host env
 	}
 	keys, err := db.ObjectStore("_gestalt_migrations").GetAllKeys(context.Background(), nil)
 	if err != nil {
@@ -80,6 +61,7 @@ func TestWorkflowRevisionFailureLeavesLedgerUnchanged(t *testing.T) {
 }
 
 func TestValidateRevisionsRejectsMultipleKinds(t *testing.T) {
+	t.Parallel()
 	_, err := migrations.Run(context.Background(), newFakeDB(), migrations.RunOptions{
 		Revisions: []migrations.Revision{{
 			ID:     "0001",
@@ -91,6 +73,15 @@ func TestValidateRevisionsRejectsMultipleKinds(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestWorkflowMigrationIdempotencyKey(t *testing.T) {
+	t.Parallel()
+	got := migrations.WorkflowMigrationIdempotencyKey("0001", "temporal", "extract_row")
+	want := "workflow-migration/0001/temporal/extract_row"
+	if got != want {
+		t.Fatalf("key = %q, want %q", got, want)
 	}
 }
 

@@ -1,14 +1,14 @@
-package migrations_test
+package runtimehost_test
 
 import (
 	"testing"
 
-	migrationsservice "github.com/valon-technologies/gestalt/server/services/migrations"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 func TestConfigureSessionRegistry(t *testing.T) {
 	t.Parallel()
-	registry := migrationsservice.NewConfigureSessionRegistry()
+	registry := runtimehost.NewConfigureSessionRegistry()
 	if registry.Active("dealHub") {
 		t.Fatal("expected inactive session before configure")
 	}

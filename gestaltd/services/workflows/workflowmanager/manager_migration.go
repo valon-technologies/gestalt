@@ -16,7 +16,6 @@ import (
 // DefinitionMigrationApply carries trusted bootstrap workflow migration input.
 type DefinitionMigrationApply struct {
 	AppName        string
-	RevisionID     string
 	ProviderName   string
 	Spec           coreworkflow.DefinitionSpec
 	IdempotencyKey string
@@ -27,12 +26,8 @@ type DefinitionMigrationApply struct {
 // provenance only. Semantic validation matches the public definition path.
 func (m *Manager) ApplyDefinitionMigration(ctx context.Context, req DefinitionMigrationApply) (out *ManagedDefinition, err error) {
 	appName := strings.TrimSpace(req.AppName)
-	revisionID := strings.TrimSpace(req.RevisionID)
 	if appName == "" {
 		return nil, fmt.Errorf("configuring app name is required")
-	}
-	if revisionID == "" {
-		return nil, fmt.Errorf("migration revision id is required")
 	}
 
 	p := principal.Canonicalized(&principal.Principal{SubjectID: core.GestaltdSubjectID})

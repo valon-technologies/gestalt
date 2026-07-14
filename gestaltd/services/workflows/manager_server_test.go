@@ -16,6 +16,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -320,6 +321,191 @@ func (p *recordingWorkflowProvider) DeliverEvent(_ context.Context, req *proto.D
 		event.Id = p.deliveredID
 	}
 	return event, nil
+}
+
+type trustedConfigureMigrationManager struct {
+	mu    sync.Mutex
+	calls int
+	last  workflowmanager.DefinitionMigrationApply
+}
+
+func (m *trustedConfigureMigrationManager) ApplyDefinitionMigration(_ context.Context, req workflowmanager.DefinitionMigrationApply) (*workflowmanager.ManagedDefinition, error) {
+	m.mu.Lock()
+	m.calls++
+	m.last = req
+	m.mu.Unlock()
+	parsedApp, _, err := coreworkflow.ParseAppManagedDefinitionID(req.Spec.ID)
+	if err != nil || parsedApp != req.AppName {
+		return nil, status.Error(codes.InvalidArgument, "expected namespaced definition id")
+	}
+	return &workflowmanager.ManagedDefinition{
+		ProviderName: req.ProviderName,
+		Definition:   &coreworkflow.Definition{ID: req.Spec.ID, Generation: 1},
+	}, nil
+}
+
+func (m *trustedConfigureMigrationManager) ApplyDefinition(context.Context, *principal.Principal, workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
+	panic("unexpected ApplyDefinition call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) GetDefinition(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedDefinition, error) {
+	panic("unexpected GetDefinition call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) ListDefinitions(context.Context, *principal.Principal, string) (*workflowmanager.ListDefinitionsResponse, error) {
+	panic("unexpected ListDefinitions call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) SetDefinitionPaused(context.Context, *principal.Principal, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
+	panic("unexpected SetDefinitionPaused call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) SetActivationPaused(context.Context, *principal.Principal, string, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
+	panic("unexpected SetActivationPaused call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) DeleteDefinition(context.Context, *principal.Principal, string, string) error {
+	panic("unexpected DeleteDefinition call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) ListRuns(context.Context, *principal.Principal, string, coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
+	panic("unexpected ListRuns call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) StartRun(context.Context, *principal.Principal, workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
+	panic("unexpected StartRun call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) GetRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
+	panic("unexpected GetRun call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) GetRunEvents(context.Context, *principal.Principal, string, string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	panic("unexpected GetRunEvents call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) GetRunOutput(context.Context, *principal.Principal, string, string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+	panic("unexpected GetRunOutput call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) CancelRun(context.Context, *principal.Principal, string, string, string) (*workflowmanager.ManagedRun, error) {
+	panic("unexpected CancelRun call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) SignalRun(context.Context, *principal.Principal, workflowmanager.RunSignal) (*workflowmanager.ManagedRunSignal, error) {
+	panic("unexpected SignalRun call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) SignalOrStartRun(context.Context, *principal.Principal, workflowmanager.RunSignalOrStart) (*workflowmanager.ManagedRunSignal, error) {
+	panic("unexpected SignalOrStartRun call in trusted configure test")
+}
+
+func (m *trustedConfigureMigrationManager) DeliverEvent(context.Context, *principal.Principal, workflowmanager.EventDeliver) (coreworkflow.Event, error) {
+	panic("unexpected DeliverEvent call in trusted configure test")
+}
+
+func TestProviderServerTrustedConfigureApplyRequiresActiveSession(t *testing.T) {
+	t.Parallel()
+	manager := &trustedConfigureMigrationManager{}
+	server := NewProviderServer(
+		"dealHub",
+		manager,
+		nil,
+		WithConfigureSessions(runtimehost.NewConfigureSessionRegistry()),
+		WithConfiguredWorkflowProviders(map[string]struct{}{"temporal": {}}),
+	)
+	_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
+		Provider:       "temporal",
+		IdempotencyKey: "workflow-migration/0001/temporal/extract_row",
+		Spec:           &proto.WorkflowDefinitionSpec{Id: "extract_row"},
+	})
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("status = %v, want FailedPrecondition", err)
+	}
+	manager.mu.Lock()
+	calls := manager.calls
+	manager.mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("manager calls = %d, want 0 outside configure session", calls)
+	}
+}
+
+func TestProviderServerTrustedConfigureApplyRejectsDefaultProvider(t *testing.T) {
+	t.Parallel()
+	sessions := runtimehost.NewConfigureSessionRegistry()
+	sessions.Begin("dealHub")
+	defer sessions.End("dealHub")
+	server := NewProviderServer(
+		"dealHub",
+		&trustedConfigureMigrationManager{},
+		nil,
+		WithConfigureSessions(sessions),
+		WithConfiguredWorkflowProviders(map[string]struct{}{"temporal": {}}),
+	)
+	_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
+		Provider:       "default",
+		IdempotencyKey: "workflow-migration/0001/default/extract_row",
+		Spec:           &proto.WorkflowDefinitionSpec{Id: "extract_row"},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("status = %v, want InvalidArgument", err)
+	}
+}
+
+func TestProviderServerTrustedConfigureApplyRejectsReservedDefinitionID(t *testing.T) {
+	t.Parallel()
+	sessions := runtimehost.NewConfigureSessionRegistry()
+	sessions.Begin("dealHub")
+	defer sessions.End("dealHub")
+	server := NewProviderServer(
+		"dealHub",
+		&trustedConfigureMigrationManager{},
+		nil,
+		WithConfigureSessions(sessions),
+		WithConfiguredWorkflowProviders(map[string]struct{}{"temporal": {}}),
+	)
+	_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
+		Provider:       "temporal",
+		IdempotencyKey: "workflow-migration/0001/temporal/app_dealHub_extract_row",
+		Spec:           &proto.WorkflowDefinitionSpec{Id: "app_dealHub_extract_row"},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("status = %v, want InvalidArgument", err)
+	}
+}
+
+func TestProviderServerTrustedConfigureApplyNamespacesLocalDefinitionID(t *testing.T) {
+	t.Parallel()
+	sessions := runtimehost.NewConfigureSessionRegistry()
+	sessions.Begin("dealHub")
+	defer sessions.End("dealHub")
+	manager := &trustedConfigureMigrationManager{}
+	server := NewProviderServer(
+		"dealHub",
+		manager,
+		nil,
+		WithConfigureSessions(sessions),
+		WithConfiguredWorkflowProviders(map[string]struct{}{"temporal": {}}),
+	)
+	_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
+		Provider:       "temporal",
+		IdempotencyKey: "workflow-migration/0001/temporal/extract_row",
+		Spec:           &proto.WorkflowDefinitionSpec{Id: "extract_row", RunAs: "service_account:runner"},
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	manager.mu.Lock()
+	calls := manager.calls
+	lastID := manager.last.Spec.ID
+	manager.mu.Unlock()
+	if calls != 1 {
+		t.Fatalf("manager calls = %d, want 1", calls)
+	}
+	want := coreworkflow.AppManagedDefinitionID("dealHub", "extract_row")
+	if lastID != want {
+		t.Fatalf("namespaced id = %q, want %q", lastID, want)
+	}
 }
 
 func (p *recordingWorkflowProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {

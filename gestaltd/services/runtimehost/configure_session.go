@@ -1,12 +1,12 @@
-package migrations
+package runtimehost
 
 import (
 	"strings"
 	"sync"
 )
 
-// ConfigureSessionRegistry tracks provider processes currently executing configure
-// or migration. Workflow migrations are only accepted while the caller app is
+// ConfigureSessionRegistry tracks provider processes currently executing configure.
+// Trusted workflow definition applies are only accepted while the caller app is
 // registered here.
 type ConfigureSessionRegistry struct {
 	mu       sync.RWMutex

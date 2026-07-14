@@ -56,12 +56,6 @@ _MIGRATIONS_EXPORTS = (
     "run_migrations",
 )
 
-_MIGRATION_AUTHORED_EXPORTS = (
-    "ApplyWorkflowMigrationRequest",
-    "ApplyWorkflowMigrationResponse",
-    "Migration",
-)
-
 _AGENT_PROTOCOL_EXPORTS = (
     "AGENT_EXECUTION_STATUS_CANCELED",
     "AGENT_EXECUTION_STATUS_FAILED",
@@ -526,9 +520,6 @@ _LAZY_EXPORTS.update(
 )
 _LAZY_EXPORTS.update(
     {name: ("._workflow", name) for name in _WORKFLOW_AUTHORED_EXPORTS}
-)
-_LAZY_EXPORTS.update(
-    {name: (".migration", name) for name in _MIGRATION_AUTHORED_EXPORTS}
 )
 _LAZY_EXPORTS.update({name: ("._workflow", name) for name in _WORKFLOW_HELPER_EXPORTS})
 _LAZY_EXPORTS.update(

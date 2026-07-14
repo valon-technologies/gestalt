@@ -22,7 +22,6 @@ import (
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
-	migrationsservice "github.com/valon-technologies/gestalt/server/services/migrations"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -55,7 +54,6 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 	hostServices = append(hostServices,
 		buildAppInvocationHostService(name, deps),
 		buildWorkflowProviderHostService(name, deps),
-		buildMigrationHostService(name, deps),
 		buildPluginAgentProviderHostService(name, deps),
 	)
 	if deps.Services != nil && !core.ExternalCredentialProviderMissing(deps.Services.ExternalCredentials) {
@@ -441,7 +439,7 @@ func registerS3Servers(bindings map[string]s3sdk.S3, defaultBinding, pluginName 
 	return s3.NewRoutingServers(bindings, defaultBinding, pluginName, accessURLs)
 }
 
-func buildMigrationHostService(appName string, deps Deps) runtimehost.HostService {
+func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -460,30 +458,13 @@ func buildMigrationHostService(appName string, deps Deps) runtimehost.HostServic
 		}
 	}
 	return runtimehost.HostService{
-		Name:           "migrations",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.Migration_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterMigrationServer(srv, migrationsservice.NewServer(migrationsservice.ServerConfig{
-				AppName:             appName,
-				Manager:             manager,
-				ConfigureSessions:   deps.MigrationConfigureSessions,
-				ConfiguredProviders: configured,
-			}))
-		},
-	}
-}
-
-func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.HostService {
-	manager := deps.WorkflowManager
-	if manager == nil {
-		manager = unavailableWorkflowManager{}
-	}
-	return runtimehost.HostService{
 		Name:           "workflow",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Workflow_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			opts := []workflowservice.ProviderServerOption{
 				workflowservice.WithAgentWorkflowInvocationAuthorizer(deps.AgentManager),
+				workflowservice.WithConfigureSessions(deps.ConfigureSessions),
+				workflowservice.WithConfiguredWorkflowProviders(configured),
 			}
 			proto.RegisterWorkflowServer(srv, workflowservice.NewProviderServer(
 				appName,

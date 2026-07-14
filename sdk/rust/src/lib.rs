@@ -35,8 +35,6 @@ mod indexeddb_provider;
 mod indexeddb_query_codec;
 /// Decoded app invocation results and the canonical invoke error.
 pub mod invoke_support;
-/// Generated Migration client and native types.
-pub mod migration;
 mod protocol;
 mod provider_server;
 mod router;
@@ -125,7 +123,6 @@ pub use invoke_support::{
     InvokeError, InvokeResultError, decode_app_result, decode_graphql_result, error_for_status,
     is_success,
 };
-pub use migration::Migration;
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};

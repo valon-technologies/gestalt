@@ -12,14 +12,6 @@ func applyWorkflowRevision(ctx context.Context, opts RunOptions, revision Revisi
 	if revision.Workflow == nil {
 		return fmt.Errorf("workflow revision %q is missing workflow payload", revision.ID)
 	}
-	workflowClient := opts.WorkflowClient
-	if workflowClient == nil {
-		var err error
-		workflowClient, err = defaultWorkflowMigrationClient(ctx)
-		if err != nil {
-			return err
-		}
-	}
 	if strings.TrimSpace(opts.AppName) == "" {
 		return fmt.Errorf("workflow migration requires app name")
 	}
@@ -28,35 +20,24 @@ func applyWorkflowRevision(ctx context.Context, opts RunOptions, revision Revisi
 	if err != nil {
 		return fmt.Errorf("workflow migration %q: %w", revision.ID, err)
 	}
-	return workflowClient.ApplyWorkflowMigration(ctx, revision.ID, provider, "", spec)
-}
-
-func defaultWorkflowMigrationClient(ctx context.Context) (WorkflowMigrationClient, error) {
-	migrationClient, err := client.ConnectMigration(ctx, "")
+	workflowClient, err := client.ConnectWorkflow(ctx, "")
 	if err != nil {
-		return nil, fmt.Errorf("connect migrations host service: %w", err)
+		return fmt.Errorf("connect workflow host service: %w", err)
 	}
-	return &hostWorkflowMigrationClient{client: migrationClient}, nil
-}
-
-type hostWorkflowMigrationClient struct {
-	client *client.Migration
-}
-
-func (c *hostWorkflowMigrationClient) ApplyWorkflowMigration(ctx context.Context, revisionID, provider, idempotencyKey string, spec *client.WorkflowDefinitionSpec) error {
-	if c == nil || c.client == nil {
-		return fmt.Errorf("migrations host service client is not configured")
-	}
-	if spec == nil {
-		return fmt.Errorf("workflow definition spec is required")
-	}
-	_, err := c.client.ApplyWorkflowMigration(ctx, &client.ApplyWorkflowMigrationRequest{
-		Provider:       strings.TrimSpace(provider),
-		RevisionId:     strings.TrimSpace(revisionID),
-		Spec:           spec,
-		IdempotencyKey: strings.TrimSpace(idempotencyKey),
-	})
+	idempotencyKey := WorkflowMigrationIdempotencyKey(revision.ID, provider, spec.Id)
+	_, err = workflowClient.ApplyDefinition(ctx, provider, idempotencyKey, spec)
 	return err
+}
+
+// WorkflowMigrationIdempotencyKey returns the stable idempotency key for a workflow revision.
+func WorkflowMigrationIdempotencyKey(revisionID, provider, localDefinitionID string) string {
+	parts := []string{
+		"workflow-migration",
+		strings.TrimSpace(revisionID),
+		strings.TrimSpace(provider),
+		strings.TrimSpace(localDefinitionID),
+	}
+	return strings.Join(parts, "/")
 }
 
 func workflowDefinitionSpecForMigration(definition any) (*client.WorkflowDefinitionSpec, error) {

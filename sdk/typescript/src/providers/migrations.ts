@@ -8,7 +8,7 @@ import {
   NotFoundError,
   type Record as DBRecord,
 } from "./indexeddb.ts";
-import { Migration } from "../migration.ts";
+import { Workflow } from "../workflow.ts";
 import {
   resolveWorkflowDefinitionSpec,
   type WorkflowBuilder,
@@ -99,15 +99,6 @@ export interface WorkflowRevision {
 /** One author-declared migration, identified by its stable, ordered `id`. */
 export type Revision = SchemaRevision | BackfillRevision | WorkflowRevision;
 
-export interface WorkflowMigrationClient {
-  applyWorkflowMigration(
-    revisionId: string,
-    provider: string,
-    idempotencyKey: string,
-    definition: WorkflowDefinitionSpec,
-  ): Promise<void>;
-}
-
 export interface MigrationRunOptions {
   revisions: Revision[];
   /** Name of the IndexedDB binding to migrate. */
@@ -116,7 +107,6 @@ export interface MigrationRunOptions {
   ledgerStore?: string;
   /** Configuring app name for workflow migrations. */
   appName?: string;
-  workflowClient?: WorkflowMigrationClient;
 }
 
 /** Resolve the IndexedDB binding for migration runs. */
@@ -390,7 +380,6 @@ async function applyWorkflowRevision(
   if (!appName) {
     throw new MigrationError("workflow migration requires app name");
   }
-  const client = options.workflowClient ?? (await defaultWorkflowMigrationClient());
   const provider = revision.workflow.provider.trim();
   const resolved = resolveWorkflowDefinitionSpec(revision.workflow.definition);
   const proto = workflowDefinitionSpecToProto(resolved);
@@ -398,21 +387,23 @@ async function applyWorkflowRevision(
     throw new MigrationError("workflow migration requires definition spec");
   }
   const spec = fromWireWorkflowDefinitionSpec(proto);
-  await client.applyWorkflowMigration(revision.id, provider, "", spec);
+  const workflow = Workflow.connect();
+  const idempotencyKey = workflowMigrationIdempotencyKey(
+    revision.id,
+    provider,
+    spec.id,
+  );
+  await workflow.applyDefinition(provider, idempotencyKey, spec);
 }
 
-async function defaultWorkflowMigrationClient(): Promise<WorkflowMigrationClient> {
-  const migration = Migration.connect();
-  return {
-    async applyWorkflowMigration(revisionId, provider, idempotencyKey, spec) {
-      await migration.applyWorkflowMigration({
-        provider,
-        revisionId,
-        spec,
-        idempotencyKey,
-      });
-    },
-  };
+function workflowMigrationIdempotencyKey(
+  revisionId: string,
+  provider: string,
+  localDefinitionId: string,
+): string {
+  return ["workflow-migration", revisionId.trim(), provider.trim(), localDefinitionId.trim()].join(
+    "/",
+  );
 }
 
 async function applyBackfill(

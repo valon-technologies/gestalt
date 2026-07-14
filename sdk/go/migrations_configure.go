@@ -36,10 +36,9 @@ func ConfigureMigrations(ctx context.Context, provider Provider, name string, co
 	}
 	defer db.Close()
 	if _, err := migrations.Run(ctx, db, migrations.RunOptions{
-		Revisions:      opts.Revisions,
-		LedgerStore:    opts.LedgerStore,
-		AppName:        name,
-		WorkflowClient: opts.WorkflowClient,
+		Revisions:   opts.Revisions,
+		LedgerStore: opts.LedgerStore,
+		AppName:     name,
 	}); err != nil {
 		return fmt.Errorf("migrations: run: %w", err)
 	}

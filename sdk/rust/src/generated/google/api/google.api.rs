@@ -28,7 +28,7 @@ pub struct Visibility {
     /// A list of visibility rules that apply to individual API elements.
     ///
     /// **NOTE:** All service configuration rules follow "last one wins" order.
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub rules: ::prost::alloc::vec::Vec<VisibilityRule>,
 }
 /// A visibility rule provides visibility configuration for an individual API
@@ -39,7 +39,7 @@ pub struct VisibilityRule {
     ///
     /// Refer to [selector][google.api.DocumentationRule.selector] for syntax
     /// details.
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub selector: ::prost::alloc::string::String,
     /// A comma-separated list of visibility labels that apply to the `selector`.
     /// Any of the listed labels can be used to grant the visibility.
@@ -56,7 +56,7 @@ pub struct VisibilityRule {
     ///
     /// Removing INTERNAL from this restriction will break clients that rely on
     /// this method and only had access to it through INTERNAL.
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub restriction: ::prost::alloc::string::String,
 }
 // @@protoc_insertion_point(module)

@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,10 +29,12 @@ type ManagerService = workflowmanager.Service
 type ProviderServer struct {
 	proto.UnimplementedWorkflowServer
 
-	appName       string
-	manager       ManagerService
-	authorization core.AuthorizationProvider
-	agentAuth     interface {
+	appName             string
+	manager             ManagerService
+	authorization       core.AuthorizationProvider
+	configureSessions   *runtimehost.ConfigureSessionRegistry
+	configuredProviders map[string]struct{}
+	agentAuth           interface {
 		AuthorizeWorkflowInvocation(context.Context, invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error)
 	}
 }
@@ -43,6 +46,18 @@ func WithAgentWorkflowInvocationAuthorizer(authorizer interface {
 }) ProviderServerOption {
 	return func(s *ProviderServer) {
 		s.agentAuth = authorizer
+	}
+}
+
+func WithConfigureSessions(sessions *runtimehost.ConfigureSessionRegistry) ProviderServerOption {
+	return func(s *ProviderServer) {
+		s.configureSessions = sessions
+	}
+}
+
+func WithConfiguredWorkflowProviders(providers map[string]struct{}) ProviderServerOption {
+	return func(s *ProviderServer) {
+		s.configuredProviders = providers
 	}
 }
 
@@ -123,6 +138,71 @@ func workflowManagerCaller(authCtx workflowManagerAuthContext) invocation.Caller
 }
 
 func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	if s != nil && s.configureSessions != nil && s.configureSessions.Active(s.appName) {
+		return s.applyTrustedConfigureDefinition(ctx, req)
+	}
+	return s.applyAuthorizedDefinition(ctx, req)
+}
+
+func (s *ProviderServer) applyTrustedConfigureDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	if s.manager == nil {
+		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
+	}
+	providerName, err := requiredWorkflowProviderName(req.GetProvider())
+	if err != nil {
+		return nil, err
+	}
+	if err := validateTrustedWorkflowProvider(providerName, s.configuredProviders); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "definition spec: %v", err)
+	}
+	if err := coreworkflow.ValidateLocalDefinitionID(spec.ID); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	spec.ID = coreworkflow.AppManagedDefinitionID(s.appName, spec.ID)
+	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
+	if idempotencyKey == "" {
+		return nil, status.Error(codes.InvalidArgument, "idempotency_key is required")
+	}
+	managed, err := s.manager.ApplyDefinitionMigration(ctx, workflowmanager.DefinitionMigrationApply{
+		AppName:        s.appName,
+		ProviderName:   providerName,
+		Spec:           *spec,
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowDefinitionToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow definition: %v", err)
+	}
+	return resp, nil
+}
+
+func validateTrustedWorkflowProvider(providerName string, configured map[string]struct{}) error {
+	providerName = strings.TrimSpace(providerName)
+	switch {
+	case providerName == "":
+		return fmt.Errorf("workflow provider is required")
+	case strings.EqualFold(providerName, "default"):
+		return fmt.Errorf("workflow provider %q is not allowed; name the workflow provider explicitly", providerName)
+	}
+	if configured != nil {
+		if _, ok := configured[providerName]; !ok {
+			return fmt.Errorf("workflow provider %q is not configured as a workflow provider", providerName)
+		}
+	}
+	return nil
+}
+
+func (s *ProviderServer) applyAuthorizedDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}

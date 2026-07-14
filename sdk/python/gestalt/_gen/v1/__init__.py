@@ -15,8 +15,6 @@ __all__ = [
     "cache_pb2_grpc",
     "indexeddb_pb2",
     "indexeddb_pb2_grpc",
-    "migration_pb2",
-    "migration_pb2_grpc",
     "runtime_pb2",
     "runtime_pb2_grpc",
     "s3_pb2",
