@@ -235,6 +235,9 @@ func (m *Manager) resolveDefinitionSpec(ctx context.Context, p *principal.Princi
 	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
+	if err := m.authorizeRunAsTarget(ctx, execPrincipal, spec.Target); err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
 	target, err := m.resolveTarget(ctx, execPrincipal, spec.Target)
 	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err

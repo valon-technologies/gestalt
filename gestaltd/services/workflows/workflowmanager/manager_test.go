@@ -151,6 +151,16 @@ func (a *denyingAgentWorkflowAuthorizer) AuthorizeWorkflowInvocation(_ context.C
 	return invocation.AgentWorkflowAuthorization{}, status.Error(codes.PermissionDenied, "agent workflow target is not allowed")
 }
 
+type tokenCountingWorkflowBroker struct {
+	*invocation.Broker
+	tokenResolutions int
+}
+
+func (b *tokenCountingWorkflowBroker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+	b.tokenResolutions++
+	return b.Broker.ResolveToken(ctx, p, providerName, connection, instance)
+}
+
 func (a *runAsGrantAuthz) grantKey(subjectID, providerName, operation string) string {
 	return strings.TrimSpace(subjectID) + "|" + strings.TrimSpace(providerName) + "|" + strings.TrimSpace(operation)
 }
@@ -268,10 +278,11 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 		t.Run("run_as without grants", func(t *testing.T) {
 			t.Parallel()
 			providers := testWorkflowGithubProviders(t)
+			broker := &tokenCountingWorkflowBroker{Broker: testWorkflowManagerBroker(t, providers, &runAsGrantAuthz{}).(*invocation.Broker)}
 			manager := New(Config{
 				Providers: providers,
 				Workflow:  testWorkflowControl{provider: newTestWorkflowProvider()},
-				Invoker:   testWorkflowManagerBroker(t, providers, &runAsGrantAuthz{}),
+				Invoker:   broker,
 			})
 			_, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipal(), DefinitionApply{
 				ProviderName: "local",
@@ -279,6 +290,9 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 			})
 			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 				t.Fatalf("ApplyDefinition error = %v, want authorization denied", err)
+			}
+			if broker.tokenResolutions != 0 {
+				t.Fatalf("token resolutions = %d, want 0", broker.tokenResolutions)
 			}
 		})
 
