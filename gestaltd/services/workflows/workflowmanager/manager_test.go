@@ -15,10 +15,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 )
 
@@ -137,6 +140,16 @@ type remoteDelegatedWorkflowApp struct {
 }
 
 func (remoteDelegatedWorkflowApp) RemoteCredentialDelegated() bool { return true }
+
+type denyingAgentWorkflowAuthorizer struct {
+	agentmanager.Service
+	requests []invocation.AgentWorkflowAuthorizationRequest
+}
+
+func (a *denyingAgentWorkflowAuthorizer) AuthorizeWorkflowInvocation(_ context.Context, req invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error) {
+	a.requests = append(a.requests, req)
+	return invocation.AgentWorkflowAuthorization{}, status.Error(codes.PermissionDenied, "agent workflow target is not allowed")
+}
 
 func (a *runAsGrantAuthz) grantKey(subjectID, providerName, operation string) string {
 	return strings.TrimSpace(subjectID) + "|" + strings.TrimSpace(providerName) + "|" + strings.TrimSpace(operation)
@@ -323,6 +336,48 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 				WorkflowKey:  "linear:issues:triage",
 			}); err != nil {
 				t.Fatalf("StartRun: %v", err)
+			}
+		})
+
+		t.Run("agent starts authorize the stored target", func(t *testing.T) {
+			t.Parallel()
+			provider := newTestWorkflowProvider()
+			provider.definitions["definition-agent"] = &coreworkflow.Definition{
+				ID:         "definition-agent",
+				Generation: 1,
+				RunAs:      testWorkflowRunAsSubject(),
+				Target:     testWorkflowAppStepTarget("github", "issues.triage", nil),
+			}
+			providers := testWorkflowGithubProviders(t)
+			agentAuth := &denyingAgentWorkflowAuthorizer{}
+			manager := New(Config{
+				Providers:    providers,
+				Workflow:     testWorkflowControl{provider: provider},
+				AgentManager: agentAuth,
+				Invoker:      testWorkflowManagerBroker(t, providers, allowAllAuthz{}),
+			})
+			ctx := invocation.WithAgentInvocationContext(context.Background(), invocation.AgentInvocationContext{
+				ProviderName: "agent",
+				SessionID:    "session-1",
+				TurnID:       "turn-1",
+			})
+			operations := []string{workflowManagerOperationRunsStart, workflowManagerOperationRunsSignalOrStart}
+			for _, operation := range operations {
+				_, _, _, _, err := manager.resolveRequestProviderTarget(ctx, testWorkflowManagerPrincipal(), "local", "definition-agent", testWorkflowManagerCaller(), operation)
+				if status.Code(err) != codes.PermissionDenied {
+					t.Fatalf("resolveRequestProviderTarget(%q) error = %v, want permission denied", operation, err)
+				}
+			}
+			if len(agentAuth.requests) != 2 {
+				t.Fatalf("agent authorization requests = %d, want 2", len(agentAuth.requests))
+			}
+			for i, req := range agentAuth.requests {
+				if req.Operation != operations[i] {
+					t.Fatalf("agent authorization operation = %q, want %q", req.Operation, operations[i])
+				}
+				if req.Target == nil || requireWorkflowAppStep(t, *req.Target, 0).Name != "github" || requireWorkflowAppStep(t, *req.Target, 0).Operation != "issues.triage" {
+					t.Fatalf("agent authorization target = %#v, want github app step", req.Target)
+				}
 			}
 		})
 	})
