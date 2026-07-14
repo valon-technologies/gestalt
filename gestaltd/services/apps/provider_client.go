@@ -13,6 +13,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -260,6 +261,10 @@ func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Cata
 }
 
 func callStartProvider(ctx context.Context, client proto.AppProviderClient, name string, config map[string]any) error {
+	if registrar := runtimehost.ConfigureSessionRegistrarForCall(); registrar != nil {
+		registrar.Begin(name)
+		defer registrar.End(name)
+	}
 	cfgStruct, err := protoutil.StructFromMap(config)
 	if err != nil {
 		return fmt.Errorf("encode provider config: %w", err)

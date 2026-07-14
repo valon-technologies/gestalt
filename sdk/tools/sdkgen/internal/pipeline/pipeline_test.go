@@ -49,6 +49,7 @@ func TestRealProtosValidateCleanly(t *testing.T) {
 		"gestalt.provider.v1.ExternalCredentials",
 		"gestalt.provider.v1.Identity",
 		"gestalt.provider.v1.IndexedDB",
+		"gestalt.provider.v1.Migration",
 		"gestalt.provider.v1.ProviderLifecycle",
 		"gestalt.provider.v1.Runtime",
 		"gestalt.provider.v1.S3",

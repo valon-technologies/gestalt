@@ -34,6 +34,14 @@ func (l *lazyWorkflowManager) ApplyDefinition(ctx context.Context, p *principal.
 	return target.ApplyDefinition(ctx, p, req)
 }
 
+func (l *lazyWorkflowManager) ApplyDefinitionMigration(ctx context.Context, req workflowmanager.DefinitionMigrationApply) (*workflowmanager.ManagedDefinition, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ApplyDefinitionMigration(ctx, req)
+}
+
 func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {

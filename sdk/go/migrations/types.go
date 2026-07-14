@@ -2,6 +2,8 @@
 package migrations
 
 import (
+	"context"
+
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
@@ -57,17 +59,31 @@ type BackfillRevision struct {
 	Backfill BackfillTransform
 }
 
+// WorkflowMigration applies a workflow definition through the trusted host path.
+type WorkflowMigration struct {
+	Provider   string
+	Definition map[string]any
+}
+
 // Revision is one ordered migration step.
 type Revision struct {
 	ID       string
 	Schema   *SchemaDeclaration
 	Backfill *BackfillTransform
+	Workflow *WorkflowMigration
+}
+
+// WorkflowMigrationClient applies workflow migrations through the host service.
+type WorkflowMigrationClient interface {
+	ApplyWorkflowMigration(ctx context.Context, revisionID, provider, idempotencyKey string, definition map[string]any) error
 }
 
 // RunOptions configures a migration run.
 type RunOptions struct {
-	Revisions   []Revision
-	LedgerStore string
+	Revisions      []Revision
+	LedgerStore    string
+	AppName        string
+	WorkflowClient WorkflowMigrationClient
 }
 
 // Result reports which revisions were applied this run.

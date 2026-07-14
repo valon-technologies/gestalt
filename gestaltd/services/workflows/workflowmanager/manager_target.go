@@ -61,7 +61,14 @@ func (m *Manager) executionPrincipal(runAs *core.RunAsSubject) (*principal.Princ
 	return invocation.RunAsPrincipal(nil, runAs), nil
 }
 
-func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
+type workflowStepAppResolver func(stepIndex int, step coreworkflow.AppCall) (coreworkflow.AppCall, error)
+type workflowStepAgentResolver func(stepIndex int, step coreworkflow.AgentTurn) (coreworkflow.AgentTurn, error)
+
+func validateTargetSteps(
+	target coreworkflow.Target,
+	resolveApp workflowStepAppResolver,
+	resolveAgent workflowStepAgentResolver,
+) (coreworkflow.Target, error) {
 	if len(target.Steps) == 0 {
 		return coreworkflow.Target{}, fmt.Errorf("workflow target.steps is required")
 	}
@@ -86,7 +93,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		case step.App != nil && step.Agent != nil:
 			return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d] must set exactly one of app or agent", i)
 		case step.App != nil:
-			app, err := m.resolveWorkflowStepApp(ctx, p, *step.App)
+			app, err := resolveApp(i, *step.App)
 			if err != nil {
 				return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].app: %w", i, err)
 			}
@@ -95,7 +102,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 			}
 			step.App = &app
 		case step.Agent != nil:
-			agent, err := m.resolveWorkflowStepAgent(ctx, p, *step.Agent)
+			agent, err := resolveAgent(i, *step.Agent)
 			if err != nil {
 				return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].agent: %w", i, err)
 			}
@@ -112,6 +119,17 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		out.Steps = append(out.Steps, step)
 	}
 	return out, nil
+}
+
+func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
+	return validateTargetSteps(target,
+		func(i int, app coreworkflow.AppCall) (coreworkflow.AppCall, error) {
+			return m.resolveWorkflowStepApp(ctx, p, app)
+		},
+		func(i int, agent coreworkflow.AgentTurn) (coreworkflow.AgentTurn, error) {
+			return m.resolveWorkflowStepAgent(ctx, p, agent)
+		},
+	)
 }
 
 func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Principal, target coreworkflow.AppCall) (coreworkflow.AppCall, error) {

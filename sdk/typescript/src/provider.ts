@@ -161,7 +161,7 @@ export abstract class ProviderBase {
       const dbBinding = resolveMigrationDbBinding(options, config);
       const db = new IndexedDB(dbBinding);
       try {
-        await runMigrations(db, options);
+        await runMigrations(db, { ...options, appName: name });
       } finally {
         db.close();
       }

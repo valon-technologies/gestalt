@@ -37,6 +37,7 @@ import (
 	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	indexeddbpkg "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	migrationsservice "github.com/valon-technologies/gestalt/server/services/migrations"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
@@ -180,6 +181,7 @@ type Deps struct {
 	AgentToolIDs          *agenttoolid.Codec
 	WorkflowManager       workflowmanager.Service
 	AgentManager          agentmanager.Service
+	MigrationConfigureSessions *migrationsservice.ConfigureSessionRegistry
 	Egress                EgressDeps
 	AppInvocation         invocation.Invoker
 	Runtime               runtimeprovider.Provider
@@ -909,6 +911,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.WorkflowManager = workflowManager
 	deps.AgentManager = agentManager
 	deps.PublicHostServices = publicHostServices
+	deps.MigrationConfigureSessions = migrationsservice.NewConfigureSessionRegistry()
+	runtimehost.SetConfigureSessionRegistrar(deps.MigrationConfigureSessions)
 	if factories != nil {
 		deps.DevSupervisor = factories.DevSupervisor
 	}

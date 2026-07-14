@@ -2707,608 +2707,6 @@ impl TransactionDurabilityHint {
         }
     }
 }
-/// ProviderIdentity describes a provider surface and the protocol versions it
-/// supports.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ProviderIdentity {
-    #[prost(enumeration = "ProviderKind", tag = "1")]
-    pub kind: i32,
-    #[prost(string, tag = "2")]
-    pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub version: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "6")]
-    pub warnings: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(int32, tag = "10")]
-    pub min_protocol_version: i32,
-    #[prost(int32, tag = "11")]
-    pub max_protocol_version: i32,
-}
-/// ConfigureProviderRequest configures a non-integration provider for one
-/// runtime session.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConfigureProviderRequest {
-    #[prost(string, tag = "1")]
-    pub name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub config: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "3")]
-    pub protocol_version: i32,
-}
-/// ConfigureProviderResponse confirms the protocol version the provider is
-/// serving.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ConfigureProviderResponse {
-    #[prost(int32, tag = "1")]
-    pub protocol_version: i32,
-}
-/// HealthCheckResponse reports runtime readiness for a provider surface.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct HealthCheckResponse {
-    #[prost(bool, tag = "1")]
-    pub ready: bool,
-    #[prost(string, tag = "2")]
-    pub message: ::prost::alloc::string::String,
-}
-/// StartRuntimeProviderResponse confirms the protocol version the provider is
-/// serving after the optional runtime start phase.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct StartRuntimeProviderResponse {
-    #[prost(int32, tag = "1")]
-    pub protocol_version: i32,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum ProviderKind {
-    Unspecified = 0,
-    App = 1,
-    Identity = 2,
-    Indexeddb = 3,
-    Secrets = 4,
-    Telemetry = 5,
-    Cache = 6,
-    S3 = 7,
-    Workflow = 8,
-    Authorization = 9,
-    Runtime = 10,
-    Agent = 11,
-    ExternalCredential = 12,
-    Test = 13,
-}
-impl ProviderKind {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "PROVIDER_KIND_UNSPECIFIED",
-            Self::App => "PROVIDER_KIND_APP",
-            Self::Identity => "PROVIDER_KIND_IDENTITY",
-            Self::Indexeddb => "PROVIDER_KIND_INDEXEDDB",
-            Self::Secrets => "PROVIDER_KIND_SECRETS",
-            Self::Telemetry => "PROVIDER_KIND_TELEMETRY",
-            Self::Cache => "PROVIDER_KIND_CACHE",
-            Self::S3 => "PROVIDER_KIND_S3",
-            Self::Workflow => "PROVIDER_KIND_WORKFLOW",
-            Self::Authorization => "PROVIDER_KIND_AUTHORIZATION",
-            Self::Runtime => "PROVIDER_KIND_RUNTIME",
-            Self::Agent => "PROVIDER_KIND_AGENT",
-            Self::ExternalCredential => "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
-            Self::Test => "PROVIDER_KIND_TEST",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "PROVIDER_KIND_UNSPECIFIED" => Some(Self::Unspecified),
-            "PROVIDER_KIND_APP" => Some(Self::App),
-            "PROVIDER_KIND_IDENTITY" => Some(Self::Identity),
-            "PROVIDER_KIND_INDEXEDDB" => Some(Self::Indexeddb),
-            "PROVIDER_KIND_SECRETS" => Some(Self::Secrets),
-            "PROVIDER_KIND_TELEMETRY" => Some(Self::Telemetry),
-            "PROVIDER_KIND_CACHE" => Some(Self::Cache),
-            "PROVIDER_KIND_S3" => Some(Self::S3),
-            "PROVIDER_KIND_WORKFLOW" => Some(Self::Workflow),
-            "PROVIDER_KIND_AUTHORIZATION" => Some(Self::Authorization),
-            "PROVIDER_KIND_RUNTIME" => Some(Self::Runtime),
-            "PROVIDER_KIND_AGENT" => Some(Self::Agent),
-            "PROVIDER_KIND_EXTERNAL_CREDENTIAL" => Some(Self::ExternalCredential),
-            "PROVIDER_KIND_TEST" => Some(Self::Test),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RuntimeSupport {
-    #[prost(bool, tag = "1")]
-    pub can_host_apps: bool,
-    #[prost(enumeration = "RuntimeEgressMode", tag = "3")]
-    pub egress_mode: i32,
-    #[prost(bool, tag = "7")]
-    pub supports_prepare_workspace: bool,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RuntimeSession {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub state: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "3")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(message, optional, tag = "4")]
-    pub lifecycle: ::core::option::Option<RuntimeSessionLifecycle>,
-    #[prost(string, tag = "5")]
-    pub state_reason: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub state_message: ::prost::alloc::string::String,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RuntimeSessionLifecycle {
-    #[prost(message, optional, tag = "1")]
-    pub started_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "2")]
-    pub recommended_drain_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "3")]
-    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RuntimeImagePullAuth {
-    #[prost(string, tag = "1")]
-    pub docker_config_json: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StartRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
-    pub app_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub template: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub image: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "4")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(message, optional, tag = "6")]
-    pub image_pull_auth: ::core::option::Option<RuntimeImagePullAuth>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListRuntimeSessionsRequest {
-    #[prost(int32, tag = "1")]
-    pub page_size: i32,
-    #[prost(string, tag = "2")]
-    pub page_token: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListRuntimeSessionsResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub sessions: ::prost::alloc::vec::Vec<RuntimeSession>,
-    #[prost(string, tag = "2")]
-    pub next_page_token: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct StopRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PrepareRuntimeWorkspaceRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    /// Opaque, path-safe workspace key minted by the host. Despite the name it
-    /// is not required to match any agent session id; it only identifies the
-    /// prepared workspace directory for later removal.
-    #[prost(string, tag = "2")]
-    pub agent_session_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub workspace: ::core::option::Option<AgentWorkspace>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PrepareRuntimeWorkspaceResponse {
-    #[prost(message, optional, tag = "1")]
-    pub workspace: ::core::option::Option<PreparedAgentWorkspace>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RemoveRuntimeWorkspaceRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    /// The workspace key the workspace was prepared under; see
-    /// PrepareRuntimeWorkspaceRequest.agent_session_id.
-    #[prost(string, tag = "2")]
-    pub agent_session_id: ::prost::alloc::string::String,
-}
-/// StartHostedAppRequest describes the app process to launch inside a
-/// runtime session. The runtime backend owns allocation and injection of the
-/// app's listener endpoint and returns a host-reachable dial target in the
-/// HostedApp response.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StartHostedAppRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub app_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub command: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "4")]
-    pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(btree_map = "string, string", tag = "5")]
-    pub env: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(string, repeated, tag = "7")]
-    pub allowed_hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "8")]
-    pub default_action: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
-    pub host_binary: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
-    pub workdir: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct HostedApp {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub app_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub dial_target: ::prost::alloc::string::String,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum RuntimeEgressMode {
-    Unspecified = 0,
-    None = 1,
-    Cidr = 2,
-    Hostname = 3,
-}
-impl RuntimeEgressMode {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "RUNTIME_EGRESS_MODE_UNSPECIFIED",
-            Self::None => "RUNTIME_EGRESS_MODE_NONE",
-            Self::Cidr => "RUNTIME_EGRESS_MODE_CIDR",
-            Self::Hostname => "RUNTIME_EGRESS_MODE_HOSTNAME",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "RUNTIME_EGRESS_MODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "RUNTIME_EGRESS_MODE_NONE" => Some(Self::None),
-            "RUNTIME_EGRESS_MODE_CIDR" => Some(Self::Cidr),
-            "RUNTIME_EGRESS_MODE_HOSTNAME" => Some(Self::Hostname),
-            _ => None,
-        }
-    }
-}
-/// S3ObjectRef identifies one object or object version.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct S3ObjectRef {
-    #[prost(string, tag = "2")]
-    pub key: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub version_id: ::prost::alloc::string::String,
-}
-/// S3ObjectMeta describes one object returned by the provider.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct S3ObjectMeta {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(string, tag = "2")]
-    pub etag: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
-    pub size: i64,
-    #[prost(string, tag = "4")]
-    pub content_type: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub last_modified: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(btree_map = "string, string", tag = "6")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(string, tag = "7")]
-    pub storage_class: ::prost::alloc::string::String,
-}
-/// ByteRange requests a half-open slice of an object's bytes.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ByteRange {
-    #[prost(int64, optional, tag = "1")]
-    pub start: ::core::option::Option<i64>,
-    #[prost(int64, optional, tag = "2")]
-    pub end: ::core::option::Option<i64>,
-}
-/// HeadObjectRequest fetches metadata for one object.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct HeadObjectRequest {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<S3ObjectRef>,
-}
-/// HeadObjectResponse returns object metadata.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct HeadObjectResponse {
-    #[prost(message, optional, tag = "1")]
-    pub meta: ::core::option::Option<S3ObjectMeta>,
-}
-/// ReadObjectRequest opens a streaming object read.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ReadObjectRequest {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(message, optional, tag = "2")]
-    pub range: ::core::option::Option<ByteRange>,
-    #[prost(string, tag = "3")]
-    pub if_match: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub if_none_match: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub if_modified_since: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "6")]
-    pub if_unmodified_since: ::core::option::Option<::prost_types::Timestamp>,
-}
-/// ReadObjectChunk is one frame in a streaming object read.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ReadObjectChunk {
-    #[prost(oneof = "read_object_chunk::Result", tags = "1, 2")]
-    pub result: ::core::option::Option<read_object_chunk::Result>,
-}
-/// Nested message and enum types in `ReadObjectChunk`.
-pub mod read_object_chunk {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Result {
-        #[prost(message, tag = "1")]
-        Meta(super::S3ObjectMeta),
-        #[prost(bytes, tag = "2")]
-        Data(::prost::alloc::vec::Vec<u8>),
-    }
-}
-/// WriteObjectOpen carries the metadata frame that must be sent first in a
-/// write-object stream.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WriteObjectOpen {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(string, tag = "2")]
-    pub content_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub cache_control: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub content_disposition: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub content_encoding: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub content_language: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "7")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(string, tag = "8")]
-    pub if_match: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
-    pub if_none_match: ::prost::alloc::string::String,
-}
-/// WriteObjectRequest is one frame in a write-object stream.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WriteObjectRequest {
-    #[prost(oneof = "write_object_request::Msg", tags = "1, 2")]
-    pub msg: ::core::option::Option<write_object_request::Msg>,
-}
-/// Nested message and enum types in `WriteObjectRequest`.
-pub mod write_object_request {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Msg {
-        #[prost(message, tag = "1")]
-        Open(super::WriteObjectOpen),
-        #[prost(bytes, tag = "2")]
-        Data(::prost::alloc::vec::Vec<u8>),
-    }
-}
-/// WriteObjectResponse returns metadata for the committed object.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WriteObjectResponse {
-    #[prost(message, optional, tag = "1")]
-    pub meta: ::core::option::Option<S3ObjectMeta>,
-}
-/// DeleteObjectRequest removes one object.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DeleteObjectRequest {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<S3ObjectRef>,
-}
-/// ListObjectsRequest lists objects in the provider's configured bucket.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListObjectsRequest {
-    #[prost(string, tag = "2")]
-    pub prefix: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub delimiter: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub continuation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub start_after: ::prost::alloc::string::String,
-    #[prost(int32, tag = "6")]
-    pub max_keys: i32,
-}
-/// ListObjectsResponse is one page of list-objects results.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListObjectsResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub objects: ::prost::alloc::vec::Vec<S3ObjectMeta>,
-    #[prost(string, repeated, tag = "2")]
-    pub common_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "3")]
-    pub next_continuation_token: ::prost::alloc::string::String,
-    #[prost(bool, tag = "4")]
-    pub has_more: bool,
-}
-/// CopyObjectRequest copies one object to another location.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CopyObjectRequest {
-    #[prost(message, optional, tag = "1")]
-    pub source: ::core::option::Option<S3ObjectRef>,
-    #[prost(message, optional, tag = "2")]
-    pub destination: ::core::option::Option<S3ObjectRef>,
-    #[prost(string, tag = "3")]
-    pub if_match: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub if_none_match: ::prost::alloc::string::String,
-}
-/// CopyObjectResponse returns metadata for the copied object.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CopyObjectResponse {
-    #[prost(message, optional, tag = "1")]
-    pub meta: ::core::option::Option<S3ObjectMeta>,
-}
-/// PresignObjectRequest asks the provider to mint a presigned URL.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PresignObjectRequest {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
-    pub method: i32,
-    #[prost(int64, tag = "3")]
-    pub expires_seconds: i64,
-    #[prost(string, tag = "4")]
-    pub content_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub content_disposition: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "6")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-}
-/// PresignObjectResponse returns a presigned URL plus any required headers.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PresignObjectResponse {
-    #[prost(string, tag = "1")]
-    pub url: ::prost::alloc::string::String,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
-    pub method: i32,
-    #[prost(message, optional, tag = "3")]
-    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(btree_map = "string, string", tag = "4")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-}
-/// CreateObjectAccessURLRequest asks the host to mint an HTTP object-access URL
-/// for a plugin-scoped S3 binding. The host authorizes and scopes the URL, then
-/// streams object bytes through the backing S3 provider.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CreateObjectAccessUrlRequest {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
-    pub method: i32,
-    #[prost(int64, tag = "3")]
-    pub expires_seconds: i64,
-    #[prost(string, tag = "4")]
-    pub content_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub content_disposition: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "6")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-}
-/// CreateObjectAccessURLResponse returns a hosted object-access URL plus any
-/// headers the caller must include when using it.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CreateObjectAccessUrlResponse {
-    #[prost(string, tag = "1")]
-    pub url: ::prost::alloc::string::String,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
-    pub method: i32,
-    #[prost(message, optional, tag = "3")]
-    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(btree_map = "string, string", tag = "4")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-}
-/// PresignMethod identifies the HTTP verb encoded into a presigned URL.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum PresignMethod {
-    Unspecified = 0,
-    Get = 1,
-    Put = 2,
-    Delete = 3,
-    Head = 4,
-}
-impl PresignMethod {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "PRESIGN_METHOD_UNSPECIFIED",
-            Self::Get => "PRESIGN_METHOD_GET",
-            Self::Put => "PRESIGN_METHOD_PUT",
-            Self::Delete => "PRESIGN_METHOD_DELETE",
-            Self::Head => "PRESIGN_METHOD_HEAD",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "PRESIGN_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
-            "PRESIGN_METHOD_GET" => Some(Self::Get),
-            "PRESIGN_METHOD_PUT" => Some(Self::Put),
-            "PRESIGN_METHOD_DELETE" => Some(Self::Delete),
-            "PRESIGN_METHOD_HEAD" => Some(Self::Head),
-            _ => None,
-        }
-    }
-}
-/// GetSecretRequest looks up one named secret.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetSecretRequest {
-    #[prost(string, tag = "1")]
-    pub name: ::prost::alloc::string::String,
-}
-/// GetSecretResponse returns the secret value.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetSecretResponse {
-    #[prost(string, tag = "1")]
-    pub value: ::prost::alloc::string::String,
-}
-/// HelloWorldRequest carries no input fields. It exists to exercise the
-/// provider-kind-specific request/response path.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct HelloWorldRequest {}
-/// HelloWorldResponse returns the fixed test-provider message.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct HelloWorldResponse {
-    #[prost(string, tag = "1")]
-    pub message: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowTarget {
     #[prost(message, repeated, tag = "8")]
@@ -3972,6 +3370,631 @@ impl WorkflowStepStatus {
             _ => None,
         }
     }
+}
+/// ApplyWorkflowMigrationRequest applies one workflow-definition migration revision
+/// on behalf of a configuring app provider. Only callable while the caller is in
+/// the trusted configure/migration phase.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ApplyWorkflowMigrationRequest {
+    /// Workflow provider name. Must be explicit; "default" is rejected.
+    #[prost(string, tag = "1")]
+    pub provider: ::prost::alloc::string::String,
+    /// Migration revision id recorded in the app ledger after success.
+    #[prost(string, tag = "2")]
+    pub revision_id: ::prost::alloc::string::String,
+    /// Raw workflow definition spec materialized by the app migration.
+    #[prost(message, optional, tag = "3")]
+    pub spec: ::core::option::Option<WorkflowDefinitionSpec>,
+    /// Stable idempotency key derived from migration identity and definition fingerprint.
+    #[prost(string, tag = "4")]
+    pub idempotency_key: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ApplyWorkflowMigrationResponse {
+    #[prost(message, optional, tag = "1")]
+    pub definition: ::core::option::Option<WorkflowDefinition>,
+}
+/// ProviderIdentity describes a provider surface and the protocol versions it
+/// supports.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProviderIdentity {
+    #[prost(enumeration = "ProviderKind", tag = "1")]
+    pub kind: i32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub display_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub description: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "6")]
+    pub warnings: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(int32, tag = "10")]
+    pub min_protocol_version: i32,
+    #[prost(int32, tag = "11")]
+    pub max_protocol_version: i32,
+}
+/// ConfigureProviderRequest configures a non-integration provider for one
+/// runtime session.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConfigureProviderRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub config: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "3")]
+    pub protocol_version: i32,
+}
+/// ConfigureProviderResponse confirms the protocol version the provider is
+/// serving.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ConfigureProviderResponse {
+    #[prost(int32, tag = "1")]
+    pub protocol_version: i32,
+}
+/// HealthCheckResponse reports runtime readiness for a provider surface.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HealthCheckResponse {
+    #[prost(bool, tag = "1")]
+    pub ready: bool,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+/// StartRuntimeProviderResponse confirms the protocol version the provider is
+/// serving after the optional runtime start phase.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StartRuntimeProviderResponse {
+    #[prost(int32, tag = "1")]
+    pub protocol_version: i32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ProviderKind {
+    Unspecified = 0,
+    App = 1,
+    Identity = 2,
+    Indexeddb = 3,
+    Secrets = 4,
+    Telemetry = 5,
+    Cache = 6,
+    S3 = 7,
+    Workflow = 8,
+    Authorization = 9,
+    Runtime = 10,
+    Agent = 11,
+    ExternalCredential = 12,
+    Test = 13,
+}
+impl ProviderKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PROVIDER_KIND_UNSPECIFIED",
+            Self::App => "PROVIDER_KIND_APP",
+            Self::Identity => "PROVIDER_KIND_IDENTITY",
+            Self::Indexeddb => "PROVIDER_KIND_INDEXEDDB",
+            Self::Secrets => "PROVIDER_KIND_SECRETS",
+            Self::Telemetry => "PROVIDER_KIND_TELEMETRY",
+            Self::Cache => "PROVIDER_KIND_CACHE",
+            Self::S3 => "PROVIDER_KIND_S3",
+            Self::Workflow => "PROVIDER_KIND_WORKFLOW",
+            Self::Authorization => "PROVIDER_KIND_AUTHORIZATION",
+            Self::Runtime => "PROVIDER_KIND_RUNTIME",
+            Self::Agent => "PROVIDER_KIND_AGENT",
+            Self::ExternalCredential => "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
+            Self::Test => "PROVIDER_KIND_TEST",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PROVIDER_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "PROVIDER_KIND_APP" => Some(Self::App),
+            "PROVIDER_KIND_IDENTITY" => Some(Self::Identity),
+            "PROVIDER_KIND_INDEXEDDB" => Some(Self::Indexeddb),
+            "PROVIDER_KIND_SECRETS" => Some(Self::Secrets),
+            "PROVIDER_KIND_TELEMETRY" => Some(Self::Telemetry),
+            "PROVIDER_KIND_CACHE" => Some(Self::Cache),
+            "PROVIDER_KIND_S3" => Some(Self::S3),
+            "PROVIDER_KIND_WORKFLOW" => Some(Self::Workflow),
+            "PROVIDER_KIND_AUTHORIZATION" => Some(Self::Authorization),
+            "PROVIDER_KIND_RUNTIME" => Some(Self::Runtime),
+            "PROVIDER_KIND_AGENT" => Some(Self::Agent),
+            "PROVIDER_KIND_EXTERNAL_CREDENTIAL" => Some(Self::ExternalCredential),
+            "PROVIDER_KIND_TEST" => Some(Self::Test),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeSupport {
+    #[prost(bool, tag = "1")]
+    pub can_host_apps: bool,
+    #[prost(enumeration = "RuntimeEgressMode", tag = "3")]
+    pub egress_mode: i32,
+    #[prost(bool, tag = "7")]
+    pub supports_prepare_workspace: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RuntimeSession {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub state: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "3")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(message, optional, tag = "4")]
+    pub lifecycle: ::core::option::Option<RuntimeSessionLifecycle>,
+    #[prost(string, tag = "5")]
+    pub state_reason: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub state_message: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeSessionLifecycle {
+    #[prost(message, optional, tag = "1")]
+    pub started_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "2")]
+    pub recommended_drain_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "3")]
+    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeImagePullAuth {
+    #[prost(string, tag = "1")]
+    pub docker_config_json: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StartRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub app_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub template: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub image: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "4")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(message, optional, tag = "6")]
+    pub image_pull_auth: ::core::option::Option<RuntimeImagePullAuth>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListRuntimeSessionsRequest {
+    #[prost(int32, tag = "1")]
+    pub page_size: i32,
+    #[prost(string, tag = "2")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListRuntimeSessionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub sessions: ::prost::alloc::vec::Vec<RuntimeSession>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StopRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrepareRuntimeWorkspaceRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    /// Opaque, path-safe workspace key minted by the host. Despite the name it
+    /// is not required to match any agent session id; it only identifies the
+    /// prepared workspace directory for later removal.
+    #[prost(string, tag = "2")]
+    pub agent_session_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub workspace: ::core::option::Option<AgentWorkspace>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PrepareRuntimeWorkspaceResponse {
+    #[prost(message, optional, tag = "1")]
+    pub workspace: ::core::option::Option<PreparedAgentWorkspace>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RemoveRuntimeWorkspaceRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    /// The workspace key the workspace was prepared under; see
+    /// PrepareRuntimeWorkspaceRequest.agent_session_id.
+    #[prost(string, tag = "2")]
+    pub agent_session_id: ::prost::alloc::string::String,
+}
+/// StartHostedAppRequest describes the app process to launch inside a
+/// runtime session. The runtime backend owns allocation and injection of the
+/// app's listener endpoint and returns a host-reachable dial target in the
+/// HostedApp response.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StartHostedAppRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub app_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub command: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "4")]
+    pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(btree_map = "string, string", tag = "5")]
+    pub env: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(string, repeated, tag = "7")]
+    pub allowed_hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "8")]
+    pub default_action: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub host_binary: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub workdir: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HostedApp {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub app_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub dial_target: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RuntimeEgressMode {
+    Unspecified = 0,
+    None = 1,
+    Cidr = 2,
+    Hostname = 3,
+}
+impl RuntimeEgressMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "RUNTIME_EGRESS_MODE_UNSPECIFIED",
+            Self::None => "RUNTIME_EGRESS_MODE_NONE",
+            Self::Cidr => "RUNTIME_EGRESS_MODE_CIDR",
+            Self::Hostname => "RUNTIME_EGRESS_MODE_HOSTNAME",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "RUNTIME_EGRESS_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "RUNTIME_EGRESS_MODE_NONE" => Some(Self::None),
+            "RUNTIME_EGRESS_MODE_CIDR" => Some(Self::Cidr),
+            "RUNTIME_EGRESS_MODE_HOSTNAME" => Some(Self::Hostname),
+            _ => None,
+        }
+    }
+}
+/// S3ObjectRef identifies one object or object version.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct S3ObjectRef {
+    #[prost(string, tag = "2")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub version_id: ::prost::alloc::string::String,
+}
+/// S3ObjectMeta describes one object returned by the provider.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct S3ObjectMeta {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<S3ObjectRef>,
+    #[prost(string, tag = "2")]
+    pub etag: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub size: i64,
+    #[prost(string, tag = "4")]
+    pub content_type: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub last_modified: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(btree_map = "string, string", tag = "6")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(string, tag = "7")]
+    pub storage_class: ::prost::alloc::string::String,
+}
+/// ByteRange requests a half-open slice of an object's bytes.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ByteRange {
+    #[prost(int64, optional, tag = "1")]
+    pub start: ::core::option::Option<i64>,
+    #[prost(int64, optional, tag = "2")]
+    pub end: ::core::option::Option<i64>,
+}
+/// HeadObjectRequest fetches metadata for one object.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HeadObjectRequest {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<S3ObjectRef>,
+}
+/// HeadObjectResponse returns object metadata.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HeadObjectResponse {
+    #[prost(message, optional, tag = "1")]
+    pub meta: ::core::option::Option<S3ObjectMeta>,
+}
+/// ReadObjectRequest opens a streaming object read.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ReadObjectRequest {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<S3ObjectRef>,
+    #[prost(message, optional, tag = "2")]
+    pub range: ::core::option::Option<ByteRange>,
+    #[prost(string, tag = "3")]
+    pub if_match: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub if_none_match: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub if_modified_since: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "6")]
+    pub if_unmodified_since: ::core::option::Option<::prost_types::Timestamp>,
+}
+/// ReadObjectChunk is one frame in a streaming object read.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReadObjectChunk {
+    #[prost(oneof = "read_object_chunk::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<read_object_chunk::Result>,
+}
+/// Nested message and enum types in `ReadObjectChunk`.
+pub mod read_object_chunk {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Meta(super::S3ObjectMeta),
+        #[prost(bytes, tag = "2")]
+        Data(::prost::alloc::vec::Vec<u8>),
+    }
+}
+/// WriteObjectOpen carries the metadata frame that must be sent first in a
+/// write-object stream.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteObjectOpen {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<S3ObjectRef>,
+    #[prost(string, tag = "2")]
+    pub content_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub cache_control: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub content_disposition: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub content_encoding: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub content_language: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "7")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(string, tag = "8")]
+    pub if_match: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub if_none_match: ::prost::alloc::string::String,
+}
+/// WriteObjectRequest is one frame in a write-object stream.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteObjectRequest {
+    #[prost(oneof = "write_object_request::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<write_object_request::Msg>,
+}
+/// Nested message and enum types in `WriteObjectRequest`.
+pub mod write_object_request {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Open(super::WriteObjectOpen),
+        #[prost(bytes, tag = "2")]
+        Data(::prost::alloc::vec::Vec<u8>),
+    }
+}
+/// WriteObjectResponse returns metadata for the committed object.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteObjectResponse {
+    #[prost(message, optional, tag = "1")]
+    pub meta: ::core::option::Option<S3ObjectMeta>,
+}
+/// DeleteObjectRequest removes one object.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeleteObjectRequest {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<S3ObjectRef>,
+}
+/// ListObjectsRequest lists objects in the provider's configured bucket.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListObjectsRequest {
+    #[prost(string, tag = "2")]
+    pub prefix: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub delimiter: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub continuation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub start_after: ::prost::alloc::string::String,
+    #[prost(int32, tag = "6")]
+    pub max_keys: i32,
+}
+/// ListObjectsResponse is one page of list-objects results.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListObjectsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub objects: ::prost::alloc::vec::Vec<S3ObjectMeta>,
+    #[prost(string, repeated, tag = "2")]
+    pub common_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "3")]
+    pub next_continuation_token: ::prost::alloc::string::String,
+    #[prost(bool, tag = "4")]
+    pub has_more: bool,
+}
+/// CopyObjectRequest copies one object to another location.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CopyObjectRequest {
+    #[prost(message, optional, tag = "1")]
+    pub source: ::core::option::Option<S3ObjectRef>,
+    #[prost(message, optional, tag = "2")]
+    pub destination: ::core::option::Option<S3ObjectRef>,
+    #[prost(string, tag = "3")]
+    pub if_match: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub if_none_match: ::prost::alloc::string::String,
+}
+/// CopyObjectResponse returns metadata for the copied object.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CopyObjectResponse {
+    #[prost(message, optional, tag = "1")]
+    pub meta: ::core::option::Option<S3ObjectMeta>,
+}
+/// PresignObjectRequest asks the provider to mint a presigned URL.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PresignObjectRequest {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<S3ObjectRef>,
+    #[prost(enumeration = "PresignMethod", tag = "2")]
+    pub method: i32,
+    #[prost(int64, tag = "3")]
+    pub expires_seconds: i64,
+    #[prost(string, tag = "4")]
+    pub content_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub content_disposition: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "6")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+/// PresignObjectResponse returns a presigned URL plus any required headers.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PresignObjectResponse {
+    #[prost(string, tag = "1")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(enumeration = "PresignMethod", tag = "2")]
+    pub method: i32,
+    #[prost(message, optional, tag = "3")]
+    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(btree_map = "string, string", tag = "4")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+/// CreateObjectAccessURLRequest asks the host to mint an HTTP object-access URL
+/// for a plugin-scoped S3 binding. The host authorizes and scopes the URL, then
+/// streams object bytes through the backing S3 provider.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateObjectAccessUrlRequest {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<S3ObjectRef>,
+    #[prost(enumeration = "PresignMethod", tag = "2")]
+    pub method: i32,
+    #[prost(int64, tag = "3")]
+    pub expires_seconds: i64,
+    #[prost(string, tag = "4")]
+    pub content_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub content_disposition: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "6")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+/// CreateObjectAccessURLResponse returns a hosted object-access URL plus any
+/// headers the caller must include when using it.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateObjectAccessUrlResponse {
+    #[prost(string, tag = "1")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(enumeration = "PresignMethod", tag = "2")]
+    pub method: i32,
+    #[prost(message, optional, tag = "3")]
+    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(btree_map = "string, string", tag = "4")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+/// PresignMethod identifies the HTTP verb encoded into a presigned URL.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PresignMethod {
+    Unspecified = 0,
+    Get = 1,
+    Put = 2,
+    Delete = 3,
+    Head = 4,
+}
+impl PresignMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PRESIGN_METHOD_UNSPECIFIED",
+            Self::Get => "PRESIGN_METHOD_GET",
+            Self::Put => "PRESIGN_METHOD_PUT",
+            Self::Delete => "PRESIGN_METHOD_DELETE",
+            Self::Head => "PRESIGN_METHOD_HEAD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PRESIGN_METHOD_UNSPECIFIED" => Some(Self::Unspecified),
+            "PRESIGN_METHOD_GET" => Some(Self::Get),
+            "PRESIGN_METHOD_PUT" => Some(Self::Put),
+            "PRESIGN_METHOD_DELETE" => Some(Self::Delete),
+            "PRESIGN_METHOD_HEAD" => Some(Self::Head),
+            _ => None,
+        }
+    }
+}
+/// GetSecretRequest looks up one named secret.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetSecretRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+/// GetSecretResponse returns the secret value.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetSecretResponse {
+    #[prost(string, tag = "1")]
+    pub value: ::prost::alloc::string::String,
+}
+/// HelloWorldRequest carries no input fields. It exists to exercise the
+/// provider-kind-specific request/response path.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HelloWorldRequest {}
+/// HelloWorldResponse returns the fixed test-provider message.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HelloWorldResponse {
+    #[prost(string, tag = "1")]
+    pub message: ::prost::alloc::string::String,
 }
 include!("gestalt.provider.v1.tonic.rs");
 // @@protoc_insertion_point(module)

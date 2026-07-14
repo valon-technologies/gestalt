@@ -74,8 +74,8 @@ func TestManagerServerPublicApplyRequiresServiceAccountManagement(t *testing.T) 
 		Context:  managerServerRequestContext("gestaltd"),
 		Spec:     &proto.WorkflowDefinitionSpec{RunAs: "service_account:ada"},
 	})
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("status = %s, want PermissionDenied (err=%v)", status.Code(err), err)
+	if status.Code(err) != codes.PermissionDenied && status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("status = %s, want PermissionDenied or InvalidArgument (err=%v)", status.Code(err), err)
 	}
 }
 

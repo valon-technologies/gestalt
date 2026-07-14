@@ -11,6 +11,7 @@ pub(crate) mod external_credential;
 pub(crate) mod host_service;
 pub(crate) mod identity;
 pub(crate) mod indexeddb;
+pub(crate) mod migration;
 pub(crate) mod runtime;
 pub(crate) mod runtime_provider;
 pub(crate) mod s3;

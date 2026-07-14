@@ -30,8 +30,12 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	if strings.HasPrefix(strings.TrimSpace(req.Spec.ID), coreworkflow.ConfigManagedDefinitionPrefix) {
-		return nil, fmt.Errorf("workflow definition id %q is reserved for configuration bootstrap", req.Spec.ID)
+	definitionID := strings.TrimSpace(req.Spec.ID)
+	if strings.HasPrefix(definitionID, coreworkflow.ConfigManagedDefinitionPrefix) {
+		return nil, fmt.Errorf("workflow definition id %q is reserved for configuration bootstrap", definitionID)
+	}
+	if strings.HasPrefix(definitionID, coreworkflow.AppManagedDefinitionPrefix) {
+		return nil, fmt.Errorf("workflow definition id %q is reserved for app migration bootstrap", definitionID)
 	}
 	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
 	if err != nil {

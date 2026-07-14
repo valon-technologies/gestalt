@@ -31,7 +31,12 @@ func ConfigureMigrations(ctx context.Context, provider Provider, name string, co
 		return fmt.Errorf("migrations: open indexeddb: %w", err)
 	}
 	defer db.Close()
-	if _, err := migrations.Run(ctx, db, opts); err != nil {
+	if _, err := migrations.Run(ctx, db, migrations.RunOptions{
+		Revisions:      opts.Revisions,
+		LedgerStore:    opts.LedgerStore,
+		AppName:        name,
+		WorkflowClient: opts.WorkflowClient,
+	}); err != nil {
 		return fmt.Errorf("migrations: run: %w", err)
 	}
 	return nil

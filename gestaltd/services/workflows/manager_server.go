@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -128,6 +129,16 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "ApplyDefinition", "definitions.apply")
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(req.GetSpec().GetId()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "workflow definition id is required")
+	}
+	definitionID := strings.TrimSpace(req.GetSpec().GetId())
+	if strings.HasPrefix(definitionID, coreworkflow.ConfigManagedDefinitionPrefix) {
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("workflow definition id %q is reserved for configuration bootstrap", definitionID))
+	}
+	if strings.HasPrefix(definitionID, coreworkflow.AppManagedDefinitionPrefix) {
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("workflow definition id %q is reserved for app migration bootstrap", definitionID))
 	}
 	if strings.TrimSpace(req.GetSpec().GetRunAs()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "workflow run_as is required")

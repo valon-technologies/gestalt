@@ -76,8 +76,29 @@ export interface BackfillRevision {
   schema?: never;
 }
 
+export interface WorkflowMigration {
+  provider: string;
+  definition: Record<string, unknown>;
+}
+
+export interface WorkflowRevision {
+  id: string;
+  workflow: WorkflowMigration;
+  schema?: never;
+  backfill?: never;
+}
+
 /** One author-declared migration, identified by its stable, ordered `id`. */
-export type Revision = SchemaRevision | BackfillRevision;
+export type Revision = SchemaRevision | BackfillRevision | WorkflowRevision;
+
+export interface WorkflowMigrationClient {
+  applyWorkflowMigration(
+    revisionId: string,
+    provider: string,
+    idempotencyKey: string,
+    definition: Record<string, unknown>,
+  ): Promise<void>;
+}
 
 export interface MigrationRunOptions {
   revisions: Revision[];
@@ -85,6 +106,9 @@ export interface MigrationRunOptions {
   dbBinding?: string;
   /** Ledger store name. Defaults to `_gestalt_migrations`. */
   ledgerStore?: string;
+  /** Configuring app name for workflow migrations. */
+  appName?: string;
+  workflowClient?: WorkflowMigrationClient;
 }
 
 /** Resolve the IndexedDB binding for migration runs. */
@@ -166,7 +190,7 @@ export async function runMigrations(
       continue;
     }
     try {
-      await applyRevision(db, revision);
+      await applyRevision(db, revision, options);
       await recordRevision(db, ledgerStore, revision.id);
       appliedNow.push(revision.id);
       current = revision.id;
@@ -198,9 +222,11 @@ function validateRevisions(revisions: Revision[]): Revision[] {
     const hasSchema = "schema" in revision && revision.schema != null;
     const backfill = revision.backfill;
     const hasBackfill = backfill != null;
-    if (hasSchema === hasBackfill) {
+    const hasWorkflow = "workflow" in revision && revision.workflow != null;
+    const kindCount = [hasSchema, hasBackfill, hasWorkflow].filter(Boolean).length;
+    if (kindCount !== 1) {
       throw new MigrationError(
-        `revision ${JSON.stringify(id)} must declare exactly one of "schema" or "backfill"`,
+        `revision ${JSON.stringify(id)} must declare exactly one of "schema", "backfill", or "workflow"`,
       );
     }
     if (backfill && backfill.from === backfill.into) {
@@ -332,12 +358,42 @@ async function ensureLedgerStore(
   });
 }
 
-async function applyRevision(db: IndexedDB, revision: Revision): Promise<void> {
+async function applyRevision(
+  db: IndexedDB,
+  revision: Revision,
+  options: MigrationRunOptions,
+): Promise<void> {
+  if (isWorkflowRevision(revision)) {
+    await applyWorkflowRevision(revision, options);
+    return;
+  }
   if (isSchemaRevision(revision)) {
     await applySchema(db, revision.schema);
     return;
   }
   await applyBackfill(db, revision.backfill);
+}
+
+async function applyWorkflowRevision(
+  revision: WorkflowRevision,
+  options: MigrationRunOptions,
+): Promise<void> {
+  const appName = options.appName?.trim();
+  if (!appName) {
+    throw new MigrationError("workflow migration requires app name");
+  }
+  const client = options.workflowClient;
+  if (!client) {
+    throw new MigrationError("workflow migration requires workflowClient");
+  }
+  const provider = revision.workflow.provider.trim();
+  const definition = revision.workflow.definition;
+  await client.applyWorkflowMigration(
+    revision.id,
+    provider,
+    "",
+    definition,
+  );
 }
 
 async function applyBackfill(
@@ -443,6 +499,10 @@ async function recordRevision(
     [LEDGER_KEY_COLUMN]: id,
     [LEDGER_APPLIED_COLUMN]: new Date().toISOString(),
   });
+}
+
+function isWorkflowRevision(revision: Revision): revision is WorkflowRevision {
+  return "workflow" in revision && revision.workflow != null;
 }
 
 function isSchemaRevision(revision: Revision): revision is SchemaRevision {

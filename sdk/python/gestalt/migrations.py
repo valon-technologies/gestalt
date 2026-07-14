@@ -94,7 +94,37 @@ class BackfillRevision:
     backfill: BackfillTransform
 
 
-Revision = SchemaRevision | BackfillRevision
+@dataclass
+class WorkflowMigration:
+    """Applies a workflow definition through the trusted host path."""
+
+    provider: str
+    definition: dict[str, Any]
+
+
+@dataclass
+class WorkflowRevision:
+    """A workflow-definition migration revision."""
+
+    id: str
+    workflow: WorkflowMigration
+
+
+Revision = SchemaRevision | BackfillRevision | WorkflowRevision
+
+
+@runtime_checkable
+class WorkflowMigrationClient(Protocol):
+    """Applies workflow migrations through the host service."""
+
+    def apply_workflow_migration(
+        self,
+        revision_id: str,
+        provider: str,
+        idempotency_key: str,
+        definition: dict[str, Any],
+    ) -> None:
+        """Apply one workflow migration revision."""
 
 
 @dataclass
@@ -104,6 +134,8 @@ class MigrationRunOptions:
     revisions: list[Revision]
     db_binding: str | None = None
     ledger_store: str | None = None
+    app_name: str | None = None
+    workflow_client: WorkflowMigrationClient | None = None
 
 
 MigrationsOption = list[Revision] | MigrationRunOptions
@@ -181,7 +213,7 @@ def run_migrations(db: MigrationDB, options: MigrationRunOptions) -> MigrationRe
         if revision.id in applied:
             continue
         try:
-            _apply_revision(db, revision)
+            _apply_revision(db, revision, options)
             _record_revision(db, ledger_store, revision.id)
             applied_now.append(revision.id)
             current = revision.id
@@ -229,7 +261,7 @@ def configure_migrations(provider: Any, name: str, config: dict[str, Any]) -> No
 
     db = IndexedDB(binding)
     try:
-        run_migrations(db, options)
+        run_migrations(db, replace(options, app_name=name))
     finally:
         db.close()
 
@@ -247,16 +279,17 @@ def _validate_revisions(revisions: list[Revision]) -> list[Revision]:
 
         schema = getattr(revision, "schema", None)
         backfill = getattr(revision, "backfill", None)
-        has_schema = schema is not None
-        has_backfill = backfill is not None
-        if has_schema == has_backfill:
+        workflow = getattr(revision, "workflow", None)
+        kind_count = sum(
+            1 for present in (schema is not None, backfill is not None, workflow is not None) if present
+        )
+        if kind_count != 1:
             raise MigrationError(
                 f'revision {json.dumps(revision_id)} must declare exactly one of '
-                f'"schema" or "backfill"'
+                f'"schema", "backfill", or "workflow"'
             )
         if (
-            has_backfill
-            and backfill is not None
+            backfill is not None
             and backfill.from_store == backfill.into
         ):
             raise MigrationError(
@@ -374,7 +407,10 @@ def _ensure_ledger_store(db: MigrationDB, ledger_store: str) -> None:
     )
 
 
-def _apply_revision(db: MigrationDB, revision: Revision) -> None:
+def _apply_revision(db: MigrationDB, revision: Revision, options: MigrationRunOptions) -> None:
+    if isinstance(revision, WorkflowRevision):
+        _apply_workflow_revision(revision, options)
+        return
     if isinstance(revision, SchemaRevision):
         _apply_schema(db, revision.schema)
         return
@@ -383,8 +419,20 @@ def _apply_revision(db: MigrationDB, revision: Revision) -> None:
         return
     raise MigrationError(
         f'revision {json.dumps(revision.id)} must declare exactly one of '
-        f'"schema" or "backfill"'
+        f'"schema", "backfill", or "workflow"'
     )
+
+
+def _apply_workflow_revision(revision: WorkflowRevision, options: MigrationRunOptions) -> None:
+    app_name = (options.app_name or "").strip()
+    if not app_name:
+        raise MigrationError("workflow migration requires app name")
+    client = options.workflow_client
+    if client is None:
+        raise MigrationError("workflow migration requires workflow_client")
+    provider = revision.workflow.provider.strip()
+    definition = revision.workflow.definition
+    client.apply_workflow_migration(revision.id, provider, "", definition)
 
 
 def _apply_backfill(db: MigrationDB, transform: BackfillTransform) -> None:

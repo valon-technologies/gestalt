@@ -1362,6 +1362,14 @@ func (m *stubWorkflowManager) ApplyDefinition(_ context.Context, p *principal.Pr
 	return cloneManagedDefinition(value), nil
 }
 
+func (m *stubWorkflowManager) ApplyDefinitionMigration(ctx context.Context, req workflowmanager.DefinitionMigrationApply) (*workflowmanager.ManagedDefinition, error) {
+	return m.ApplyDefinition(ctx, &principal.Principal{SubjectID: core.GestaltdSubjectID}, workflowmanager.DefinitionApply{
+		ProviderName:   req.ProviderName,
+		Spec:           req.Spec,
+		IdempotencyKey: req.IdempotencyKey,
+	})
+}
+
 func (m *stubWorkflowManager) GetDefinition(_ context.Context, p *principal.Principal, _ string, definitionID string) (*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

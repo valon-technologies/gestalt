@@ -36,9 +36,56 @@ type RuntimeProviderMetadata struct {
 	Warnings    []string
 }
 
-func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
+// ConfigureSessionRegistrar tracks trusted provider configure/migration phases.
+type ConfigureSessionRegistrar interface {
+	Begin(appName string)
+	End(appName string)
+}
+
+var configureSessionRegistrar ConfigureSessionRegistrar
+
+// SetConfigureSessionRegistrar installs the host-wide configure session tracker used
+// by provider lifecycle RPCs.
+func SetConfigureSessionRegistrar(registrar ConfigureSessionRegistrar) {
+	configureSessionRegistrar = registrar
+}
+
+// ConfigureSessionRegistrarForCall returns the active configure session tracker.
+func ConfigureSessionRegistrarForCall() ConfigureSessionRegistrar {
+	return configureSessionRegistrar
+}
+
+type configureOptions struct {
+	sessions ConfigureSessionRegistrar
+}
+
+// ConfigureOption configures provider lifecycle RPCs.
+type ConfigureOption func(*configureOptions)
+
+// WithConfigureSessions overrides the host-wide configure session tracker for one call.
+func WithConfigureSessions(sessions ConfigureSessionRegistrar) ConfigureOption {
+	return func(opts *configureOptions) {
+		opts.sessions = sessions
+	}
+}
+
+func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any, opts ...ConfigureOption) (*RuntimeProviderMetadata, error) {
 	if client == nil {
 		return nil, fmt.Errorf("runtime client is required")
+	}
+	var options configureOptions
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&options)
+		}
+	}
+	sessions := options.sessions
+	if sessions == nil {
+		sessions = configureSessionRegistrar
+	}
+	if sessions != nil {
+		sessions.Begin(name)
+		defer sessions.End(name)
 	}
 	metaCtx, cancel := providerConfigureContext(ctx)
 	defer cancel()

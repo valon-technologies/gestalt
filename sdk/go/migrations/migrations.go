@@ -53,7 +53,7 @@ func Run(ctx context.Context, db indexeddb.Database, opts RunOptions) (Result, e
 		if _, ok := applied[revision.ID]; ok {
 			continue
 		}
-		if err := applyRevision(ctx, db, revision); err != nil {
+		if err := applyRevision(ctx, db, revision, opts); err != nil {
 			var migErr *MigrationError
 			if errors.As(err, &migErr) {
 				return Result{}, err
@@ -98,10 +98,21 @@ func validateRevisions(revisions []Revision) ([]Revision, error) {
 
 		hasSchema := revision.Schema != nil
 		hasBackfill := revision.Backfill != nil
-		if hasSchema == hasBackfill {
+		hasWorkflow := revision.Workflow != nil
+		count := 0
+		if hasSchema {
+			count++
+		}
+		if hasBackfill {
+			count++
+		}
+		if hasWorkflow {
+			count++
+		}
+		if count != 1 {
 			return nil, &MigrationError{
 				Message: fmt.Sprintf(
-					`revision %s must declare exactly one of "schema" or "backfill"`,
+					`revision %s must declare exactly one of "schema", "backfill", or "workflow"`,
 					jsonString(id),
 				),
 			}
@@ -231,7 +242,10 @@ func ensureLedgerStore(ctx context.Context, db indexeddb.Database, ledgerStore s
 	})
 }
 
-func applyRevision(ctx context.Context, db indexeddb.Database, revision Revision) error {
+func applyRevision(ctx context.Context, db indexeddb.Database, revision Revision, opts RunOptions) error {
+	if isWorkflowRevision(revision) {
+		return applyWorkflowRevision(ctx, opts, revision)
+	}
 	if isSchemaRevision(revision) {
 		return applySchema(ctx, db, *revision.Schema)
 	}
@@ -352,6 +366,10 @@ func recordRevision(ctx context.Context, db indexeddb.Database, ledgerStore, id 
 
 func isSchemaRevision(revision Revision) bool {
 	return revision.Schema != nil
+}
+
+func isWorkflowRevision(revision Revision) bool {
+	return revision.Workflow != nil
 }
 
 func errorText(err error) string {
