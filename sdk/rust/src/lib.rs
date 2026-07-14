@@ -62,7 +62,7 @@ pub mod telemetry;
 pub mod test;
 /// Generated Workflow client and native types.
 pub mod workflow;
-mod workflow_authoring;
+mod workflow_define;
 /// Workflow provider contract and native workflow types.
 pub mod workflow_provider;
 
@@ -140,7 +140,7 @@ pub use s3_provider::{
 pub use secrets_provider::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::Workflow;
-pub use workflow_authoring::{
+pub use workflow_define::{
     DefineWorkflowOptions, WorkflowActivationConfig, WorkflowActivationScope, WorkflowBuilder,
     WorkflowComposeTextPart, WorkflowDefinitionSpecOrBuilder, WorkflowEventActivationConfig,
     WorkflowEventActivationOptions, WorkflowEventScope, WorkflowScheduleActivationConfig,
@@ -153,7 +153,7 @@ pub use workflow_authoring::{
     workflow_ref_step_input, workflow_ref_step_output, workflow_ref_template,
 };
 #[doc(hidden)]
-pub use workflow_authoring::{
+pub use workflow_define::{
     build_workflow_from_lowering_case, canonical_workflow_definition_spec,
     load_workflow_lowering_contract,
 };

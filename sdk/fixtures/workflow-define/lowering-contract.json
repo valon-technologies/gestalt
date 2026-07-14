@@ -1,5 +1,5 @@
 {
-  "description": "Language-neutral lowering contract from workflow authoring builder operations into WorkflowDefinitionSpec.",
+  "description": "Language-neutral lowering contract from workflow define builder operations into WorkflowDefinitionSpec.",
   "valueKinds": {
     "input": { "path": "dot-separated path into run input" },
     "signal": { "path": "dot-separated path into activation signal/event payload" },

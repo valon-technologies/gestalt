@@ -350,7 +350,7 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "workflow_value_input_from_value",
 )
 
-_WORKFLOW_AUTHORING_EXPORTS = (
+_WORKFLOW_DEFINE_EXPORTS = (
     "WorkflowBuilder",
     "define_workflow",
     "event",
@@ -519,7 +519,7 @@ _LAZY_EXPORTS.update(
 )
 _LAZY_EXPORTS.update({name: ("._workflow", name) for name in _WORKFLOW_HELPER_EXPORTS})
 _LAZY_EXPORTS.update(
-    {name: (".workflow_authoring", name) for name in _WORKFLOW_AUTHORING_EXPORTS}
+    {name: (".workflow_define", name) for name in _WORKFLOW_DEFINE_EXPORTS}
 )
 
 _LAZY_MODULES = {
@@ -560,7 +560,7 @@ __all__ = [
     *_PROTOCOL_TYPE_EXPORTS,
     *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
-    *_WORKFLOW_AUTHORING_EXPORTS,
+    *_WORKFLOW_DEFINE_EXPORTS,
     *_WORKFLOW_HELPER_EXPORTS,
     "Agent",
     "AgentProvider",

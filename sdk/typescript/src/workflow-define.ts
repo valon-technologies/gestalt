@@ -1,5 +1,5 @@
 /**
- * Fluent workflow authoring builder with proxy-based reference capture.
+ * Fluent workflow definition builder with proxy-based reference capture.
  *
  * This is a structural fluent builder: references are captured into workflow
  * value nodes, but step IDs and paths are not accumulated as compile-time types.

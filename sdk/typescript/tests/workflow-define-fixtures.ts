@@ -7,7 +7,7 @@ import {
   type StepConfig,
   type StepRefProxy,
   type WorkflowBuilder,
-} from "../src/workflow-authoring.ts";
+} from "../src/workflow-define.ts";
 import {
   workflowDefinitionSpec,
   workflowText,

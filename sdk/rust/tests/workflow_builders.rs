@@ -309,7 +309,7 @@ fn typed_workflow_builder_matches_extract_row_example() -> gestalt::Result<()> {
 }
 
 #[test]
-fn workflow_authoring_golden_fixtures_match_lowering_contract() -> gestalt::Result<()> {
+fn workflow_define_golden_fixtures_match_lowering_contract() -> gestalt::Result<()> {
     let cases = gestalt::load_workflow_lowering_contract()?;
     for case in cases {
         let spec = gestalt::build_workflow_from_lowering_case(&case)?.to_spec();

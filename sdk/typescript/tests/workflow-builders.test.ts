@@ -21,7 +21,7 @@ import {
 import {
   buildWorkflowFromLoweringCase,
   canonicalWorkflowDefinitionSpec,
-} from "./workflow-authoring-fixtures.ts";
+} from "./workflow-define-fixtures.ts";
 import { workflowStepWhenToProto } from "../src/providers/workflow.ts";
 
 test("workflow builders accept native JSON objects and Dates", () => {
@@ -207,7 +207,7 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
 
 const loweringContract = JSON.parse(
   readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "../../fixtures/workflow-authoring/lowering-contract.json"),
+    join(dirname(fileURLToPath(import.meta.url)), "../../fixtures/workflow-define/lowering-contract.json"),
     "utf8",
   ),
 ) as {
@@ -255,7 +255,7 @@ test("fluent workflow builder matches extract row example", () => {
 });
 
 for (const caseData of loweringContract.cases) {
-  test(`workflow authoring golden fixture: ${caseData.name}`, () => {
+  test(`workflow define golden fixture: ${caseData.name}`, () => {
     const spec = buildWorkflowFromLoweringCase(caseData).toSpec();
     expect(canonicalWorkflowDefinitionSpec(spec)).toEqual(caseData.expectedSpec);
   });

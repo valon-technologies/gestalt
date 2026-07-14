@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from gestalt._protocol import value_to_json, which_oneof
 from gestalt._workflow import workflow_definition_spec
-from gestalt.workflow_authoring import (
+from gestalt.workflow_define import (
     WorkflowBuilder,
     _capture_object,
     _TemplateMarker,
@@ -224,7 +224,7 @@ def _lower_contract_value_to_runtime(node: Mapping[str, Any]) -> Any:
 
 
 def load_workflow_lowering_contract() -> dict[str, Any]:
-    path = Path(__file__).resolve().parents[2] / "fixtures" / "workflow-authoring" / "lowering-contract.json"
+    path = Path(__file__).resolve().parents[2] / "fixtures" / "workflow-define" / "lowering-contract.json"
     return json.loads(path.read_text(encoding="utf-8"))
 
 

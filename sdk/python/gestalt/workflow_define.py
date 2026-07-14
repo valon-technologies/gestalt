@@ -1,4 +1,4 @@
-"""Fluent workflow authoring builder with proxy-based reference capture."""
+"""Fluent workflow definition builder with proxy-based reference capture."""
 
 from __future__ import annotations
 

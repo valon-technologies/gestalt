@@ -9,20 +9,20 @@ import {
   resolveWorkflowDefinitionSpec,
   WorkflowBuilder,
   type WorkflowDefinitionInput,
-} from "./workflow-authoring.ts";
+} from "./workflow-define.ts";
 import {
   Workflow as GeneratedWorkflow,
   type WorkflowDefinition,
 } from "./workflow.ts";
 import {
   workflowDefinitionSpecToProto,
-  type WorkflowDefinitionSpec as AuthoringWorkflowDefinitionSpec,
+  type WorkflowDefinitionSpec as BuilderWorkflowDefinitionSpec,
 } from "./providers/workflow.ts";
 
 export type { WorkflowDefinitionInput };
 
 function toClientWorkflowDefinitionSpec(
-  spec: AuthoringWorkflowDefinitionSpec,
+  spec: BuilderWorkflowDefinitionSpec,
 ): import("./workflow.ts").WorkflowDefinitionSpec {
   const proto = workflowDefinitionSpecToProto(spec);
   if (proto === undefined) {
@@ -31,7 +31,7 @@ function toClientWorkflowDefinitionSpec(
   return fromWireWorkflowDefinitionSpec(proto);
 }
 
-/** Workflow client with authoring-aware applyDefinition. */
+/** Workflow client that accepts fluent workflow builders in applyDefinition. */
 export class Workflow extends GeneratedWorkflow {
   override async applyDefinition(
     provider: string,

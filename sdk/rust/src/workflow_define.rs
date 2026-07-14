@@ -1,4 +1,4 @@
-//! Fluent workflow authoring builder with explicit path helpers.
+//! Fluent workflow definition builder with explicit path helpers.
 #![allow(missing_docs)]
 
 use std::collections::BTreeMap;
@@ -655,7 +655,7 @@ struct WorkflowLoweringWhen {
 #[doc(hidden)]
 pub fn load_workflow_lowering_contract() -> crate::Result<Vec<WorkflowLoweringCase>> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../fixtures/workflow-authoring/lowering-contract.json");
+        .join("../fixtures/workflow-define/lowering-contract.json");
     let data = fs::read_to_string(&path)
         .map_err(|err| crate::Error::internal(format!("read workflow lowering contract: {err}")))?;
     let contract: WorkflowLoweringContract = serde_json::from_str(&data).map_err(|err| {

@@ -262,10 +262,10 @@ func TestTypedWorkflowBuilderMatchesExtractRowExample(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CanonicalWorkflowDefinitionSpec: %v", err)
 	}
-	assertWorkflowAuthoringJSONEqual(t, expected, got)
+	assertWorkflowDefineJSONEqual(t, expected, got)
 }
 
-func TestWorkflowAuthoringGoldenFixtures(t *testing.T) {
+func TestWorkflowDefineGoldenFixtures(t *testing.T) {
 	contract, err := LoadWorkflowLoweringContract()
 	if err != nil {
 		t.Fatalf("LoadWorkflowLoweringContract: %v", err)
@@ -280,7 +280,7 @@ func TestWorkflowAuthoringGoldenFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CanonicalWorkflowDefinitionSpec: %v", err)
 			}
-			assertWorkflowAuthoringJSONEqual(t, caseData.ExpectedSpec, got)
+			assertWorkflowDefineJSONEqual(t, caseData.ExpectedSpec, got)
 		})
 	}
 }
@@ -313,7 +313,7 @@ func TestResolveWorkflowDefinitionSpecAcceptsBuilder(t *testing.T) {
 	}
 }
 
-func assertWorkflowAuthoringJSONEqual(t *testing.T, expected, actual map[string]any) {
+func assertWorkflowDefineJSONEqual(t *testing.T, expected, actual map[string]any) {
 	t.Helper()
 	expectedJSON, err := json.Marshal(expected)
 	if err != nil {

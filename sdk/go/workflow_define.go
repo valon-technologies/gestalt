@@ -5,12 +5,25 @@ import (
 	"strings"
 )
 
-// WorkflowRefInput references a run-input path in workflow authoring builders.
+func joinWorkflowPath(prefix, path string) string {
+	prefix = strings.TrimSpace(prefix)
+	path = strings.TrimSpace(path)
+	switch {
+	case prefix == "":
+		return path
+	case path == "":
+		return prefix
+	default:
+		return prefix + "." + path
+	}
+}
+
+// WorkflowRefInput references a run-input path in workflow definition builders.
 func WorkflowRefInput(path string) WorkflowValue {
 	return WorkflowValue{Input: strings.TrimSpace(path)}
 }
 
-// WorkflowRefSignal references an activation signal path in workflow authoring builders.
+// WorkflowRefSignal references an activation signal path in workflow definition builders.
 func WorkflowRefSignal(path string) WorkflowValue {
 	return WorkflowValue{Signal: strings.TrimSpace(path)}
 }

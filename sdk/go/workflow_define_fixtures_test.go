@@ -88,13 +88,13 @@ type workflowLoweringWhen struct {
 
 type workflowLoweringValueNode map[string]any
 
-// LoadWorkflowLoweringContract loads the shared workflow authoring fixture.
+// LoadWorkflowLoweringContract loads the shared workflow define fixture.
 func LoadWorkflowLoweringContract() (workflowLoweringContract, error) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
-		return workflowLoweringContract{}, fmt.Errorf("resolve workflow authoring fixture path")
+		return workflowLoweringContract{}, fmt.Errorf("resolve workflow define fixture path")
 	}
-	path := filepath.Join(filepath.Dir(file), "..", "fixtures", "workflow-authoring", "lowering-contract.json")
+	path := filepath.Join(filepath.Dir(file), "..", "fixtures", "workflow-define", "lowering-contract.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return workflowLoweringContract{}, err
@@ -310,19 +310,6 @@ func lowerContractText(node workflowLoweringValueNode) (string, error) {
 		return template, nil
 	default:
 		return "", fmt.Errorf("agent message text must be literal or template")
-	}
-}
-
-func joinWorkflowPath(prefix, path string) string {
-	prefix = strings.TrimSpace(prefix)
-	path = strings.TrimSpace(path)
-	switch {
-	case prefix == "":
-		return path
-	case path == "":
-		return prefix
-	default:
-		return prefix + "." + path
 	}
 }
 

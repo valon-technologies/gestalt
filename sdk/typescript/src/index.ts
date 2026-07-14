@@ -431,7 +431,7 @@ export {
   type ResolveAgentProviderInteractionRequest,
   type UpdateAgentProviderSessionRequest,
 } from "./providers/agent.ts";
-// The workflow authoring surface re-exports by name: its proto conversion
+// The workflow define surface re-exports by name: its proto conversion
 // helpers stay package-internal (cross-module plumbing, not public API).
 export {
   WorkflowProvider,
@@ -558,7 +558,7 @@ export {
   type StepWhenConfig,
   type WorkflowDefinitionInput,
   type WorkflowPrompt,
-} from "./workflow-authoring.ts";
+} from "./workflow-define.ts";
 export {
   GENAI_OPERATION_CHAT,
   GENAI_OPERATION_EXECUTE_TOOL,

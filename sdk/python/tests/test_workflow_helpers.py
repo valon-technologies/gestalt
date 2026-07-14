@@ -476,14 +476,14 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertIn("parse_workflow_run_context", gestalt.__all__)
 
     def test_define_workflow_requires_run_as(self) -> None:
-        from gestalt.workflow_authoring import define_workflow
+        from gestalt.workflow_define import define_workflow
 
         with self.assertRaisesRegex(ValueError, "run_as"):
             define_workflow(workflow_id="demo", run_as="")
 
     def test_fluent_workflow_builder_matches_extract_row_example(self) -> None:
-        from gestalt.workflow_authoring import define_workflow, event
-        from workflow_authoring_fixtures import (
+        from gestalt.workflow_define import define_workflow, event
+        from workflow_define_fixtures import (
             canonical_workflow_definition_spec,
             load_workflow_lowering_contract,
         )
@@ -523,7 +523,7 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(canonical_workflow_definition_spec(spec), expected)
 
     def test_resolve_workflow_definition_spec_accepts_builders(self) -> None:
-        from gestalt.workflow_authoring import (
+        from gestalt.workflow_define import (
             define_workflow,
             resolve_workflow_definition_spec,
             schedule,
@@ -540,20 +540,20 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(from_spec.id, "extractRow")
 
 
-def _load_workflow_authoring_cases() -> list[dict]:
-    from workflow_authoring_fixtures import load_workflow_lowering_contract
+def _load_workflow_define_cases() -> list[dict]:
+    from workflow_define_fixtures import load_workflow_lowering_contract
 
     return load_workflow_lowering_contract()["cases"]
 
 
-class WorkflowAuthoringGoldenTests(unittest.TestCase):
+class WorkflowDefineGoldenTests(unittest.TestCase):
     pass
 
 
-for case in _load_workflow_authoring_cases():
+for case in _load_workflow_define_cases():
     def _make_test(case_data: dict):
-        def test(self: WorkflowAuthoringGoldenTests) -> None:
-            from workflow_authoring_fixtures import (
+        def test(self: WorkflowDefineGoldenTests) -> None:
+            from workflow_define_fixtures import (
                 build_workflow_from_lowering_case,
                 canonical_workflow_definition_spec,
             )
@@ -568,7 +568,7 @@ for case in _load_workflow_authoring_cases():
         return test
 
     setattr(
-        WorkflowAuthoringGoldenTests,
+        WorkflowDefineGoldenTests,
         f"test_golden_fixture_{case['name']}",
         _make_test(case),
     )
