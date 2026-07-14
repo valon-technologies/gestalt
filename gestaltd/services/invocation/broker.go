@@ -24,12 +24,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// TargetAccessChecker checks whether a subject may use workflow execution targets.
-type TargetAccessChecker interface {
-	CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error
-	CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error
-}
-
 const (
 	tracerName         = "gestaltd"
 	graphQLOperationID = "graphql"
@@ -579,20 +573,7 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 }
 
 func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
-	if b == nil || b.authorization == nil {
-		if !principal.AllowsProviderPermission(p, providerName) {
-			return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-		}
-		return nil
-	}
-	resp, err := b.authorization.CheckAccess(ctx, accessRequest(b.providerKinds, p, providerName, providerName))
-	if err != nil {
-		return fmt.Errorf("%w: %s: %v", ErrAuthorizationDenied, providerName, err)
-	}
-	if resp == nil || !resp.GetAllowed() {
-		return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-	}
-	return nil
+	return b.CheckOperationAccess(ctx, p, providerName, providerName)
 }
 
 func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, action string) *proto.CheckAccessRequest {

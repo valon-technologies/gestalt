@@ -90,10 +90,13 @@ func testWorkflowManagerWithGithubInvoker(t *testing.T, provider *testWorkflowPr
 			},
 		},
 	})
-	cfg := Config{Providers: providers, Workflow: testWorkflowControl{provider: provider}}
-	if invoker != nil {
-		cfg.Invoker = invoker
+	if invoker == nil {
+		invoker = invocation.NewBroker(providers, nil, nil,
+			invocation.WithAuthorizationProvider(allowAllAuthz{}),
+			invocation.WithProviderKinds(map[string]invocation.ProviderKind{"github": invocation.ProviderKindApp}),
+		)
 	}
+	cfg := Config{Providers: providers, Workflow: testWorkflowControl{provider: provider}, Invoker: invoker}
 	return New(cfg)
 }
 
@@ -105,7 +108,16 @@ func testWorkflowManagerPrincipalWithoutGithub() *principal.Principal {
 	})
 }
 
+type allowAllAuthz struct {
+	core.AuthorizationProvider
+}
+
+func (allowAllAuthz) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	return &proto.CheckAccessResponse{Allowed: true}, nil
+}
+
 type runAsGrantAuthz struct {
+	core.AuthorizationProvider
 	grants map[string]struct{}
 }
 
@@ -117,42 +129,6 @@ func (a *runAsGrantAuthz) CheckAccess(_ context.Context, req *proto.CheckAccessR
 	_, ok := a.grants[a.grantKey(req.GetSubject().GetId(), req.GetResource().GetId(), req.GetAction().GetName())]
 	return &proto.CheckAccessResponse{Allowed: ok}, nil
 }
-
-func (a *runAsGrantAuthz) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
-	return &proto.CheckAccessManyResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return &proto.ListRelationshipsResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	return &proto.AddRelationshipResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
-	return &proto.DeleteRelationshipResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
-	return &proto.SetAuthorizationStateResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
-	return &proto.GetActiveModelRefResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
-	return &proto.SetActiveModelResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	return &proto.ListActiveModelResourceTypesResponse{}, nil
-}
-
-func (a *runAsGrantAuthz) Ping(context.Context) error { return nil }
-
-func (a *runAsGrantAuthz) Close() error { return nil }
 
 func testWorkflowManagerWithRunAsGrants(t *testing.T, provider *testWorkflowProvider, grants map[string]struct{}) *Manager {
 	t.Helper()

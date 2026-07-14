@@ -14,6 +14,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
+type targetAccessChecker interface {
+	CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error
+	CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error
+}
+
 func (m *Manager) resolveProvider(ctx context.Context, providerName string) (string, coreworkflow.Provider, error) {
 	if m == nil || m.workflow == nil {
 		return "", nil, ErrWorkflowNotConfigured
@@ -38,7 +43,11 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
-	if err := m.authorizeRunAsTarget(ctx, definition.Definition.RunAs, definition.Definition.Target); err != nil {
+	execPrincipal, err := m.executionPrincipal(definition.Definition.RunAs)
+	if err != nil {
+		return "", nil, coreworkflow.Target{}, 0, err
+	}
+	if err := m.authorizeRunAsTarget(ctx, execPrincipal, definition.Definition.Target); err != nil {
 		return "", nil, coreworkflow.Target{}, 0, err
 	}
 	return definition.ProviderName, definition.provider, definition.Definition.Target, definition.Definition.Generation, nil
@@ -49,11 +58,7 @@ func (m *Manager) executionPrincipal(runAs *core.RunAsSubject) (*principal.Princ
 	if runAs == nil || strings.TrimSpace(runAs.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow run_as is required", invocation.ErrInvalidInvocation)
 	}
-	p := &principal.Principal{SubjectID: strings.TrimSpace(runAs.SubjectID)}
-	if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
-		p.Kind = principal.Kind(kind)
-	}
-	return principal.Canonicalize(p), nil
+	return invocation.RunAsPrincipal(nil, runAs), nil
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
@@ -289,10 +294,9 @@ func workflowTargetAuthorizationFailure(err error) (*targetAuthorizationFailure,
 	return &failure, true
 }
 
-func (m *Manager) authorizeRunAsTarget(ctx context.Context, runAs *core.RunAsSubject, target coreworkflow.Target) error {
-	p, err := m.executionPrincipal(runAs)
-	if err != nil {
-		return err
+func (m *Manager) authorizeRunAsTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) error {
+	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
+		return fmt.Errorf("%w: workflow run_as is required", invocation.ErrInvalidInvocation)
 	}
 	decision := m.checkTargetAuthorization(ctx, p, target)
 	if decision.allowed {
@@ -302,23 +306,19 @@ func (m *Manager) authorizeRunAsTarget(ctx context.Context, runAs *core.RunAsSub
 }
 
 func (m *Manager) checkOperationAccess(ctx context.Context, p *principal.Principal, providerName, operation string) error {
-	if checker, ok := m.invoker.(invocation.TargetAccessChecker); ok {
-		return checker.CheckOperationAccess(ctx, p, providerName, operation)
+	checker, ok := m.invoker.(targetAccessChecker)
+	if !ok {
+		return fmt.Errorf("%w: workflow target access checker is not configured", invocation.ErrInternal)
 	}
-	if !principal.AllowsOperationPermission(p, providerName, operation) {
-		return invocation.ErrAuthorizationDenied
-	}
-	return nil
+	return checker.CheckOperationAccess(ctx, p, providerName, operation)
 }
 
 func (m *Manager) checkProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
-	if checker, ok := m.invoker.(invocation.TargetAccessChecker); ok {
-		return checker.CheckProviderAccess(ctx, p, providerName)
+	checker, ok := m.invoker.(targetAccessChecker)
+	if !ok {
+		return fmt.Errorf("%w: workflow target access checker is not configured", invocation.ErrInternal)
 	}
-	if !principal.AllowsProviderPermission(p, providerName) {
-		return invocation.ErrAuthorizationDenied
-	}
-	return nil
+	return checker.CheckProviderAccess(ctx, p, providerName)
 }
 
 func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
