@@ -78,8 +78,8 @@ func testWorkflowManagerWithGithub(t *testing.T, provider *testWorkflowProvider)
 	return testWorkflowManagerWithGithubInvoker(t, provider, nil)
 }
 
-func testWorkflowRunAsSubject() *core.RunAsSubject {
-	return &core.RunAsSubject{SubjectID: "service_account:workflow-runner"}
+func testWorkflowRunAsSubject() string {
+	return "service_account:workflow-runner"
 }
 
 func testWorkflowGithubProviders(t *testing.T) *registry.ProviderMap[core.Provider] {

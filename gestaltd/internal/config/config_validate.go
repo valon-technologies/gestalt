@@ -2040,19 +2040,12 @@ func validateWorkflowStepApps(cfg *Config, path string, steps []WorkflowStepConf
 	return nil
 }
 
-func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowRunAsConfig, error) {
-	if runAs == nil {
-		return nil, fmt.Errorf("config validation: %s is required", path)
+func normalizeWorkflowRunAs(path string, runAs string) (string, error) {
+	runAs = strings.TrimSpace(runAs)
+	if runAs == "" {
+		return "", fmt.Errorf("config validation: %s is required", path)
 	}
-	if runAs.Subject == nil {
-		return nil, fmt.Errorf("config validation: %s.subject is required", path)
-	}
-	subject := *runAs.Subject
-	subject.ID = strings.TrimSpace(subject.ID)
-	if subject.ID == "" {
-		return nil, fmt.Errorf("config validation: %s.subject.id is required", path)
-	}
-	return &WorkflowRunAsConfig{Subject: &subject}, nil
+	return runAs, nil
 }
 
 func normalizeWorkflowSteps(cfg *Config, path string, steps []WorkflowStepConfig) error {

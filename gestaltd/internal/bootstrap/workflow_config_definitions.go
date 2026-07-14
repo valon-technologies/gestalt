@@ -65,7 +65,7 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 		default:
 			return fmt.Errorf("bootstrap: get workflow definition %q for app %q: %w", desiredEntry.DefinitionID, appName, err)
 		}
-		runAs := definition.RunAs.SubjectRef()
+		runAs := strings.TrimSpace(definition.RunAs)
 		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs); err != nil {
 			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
@@ -250,9 +250,8 @@ func workflowConfigDefinitionID(definitionKey string) string {
 	return "cfg_" + strings.TrimSpace(definitionKey)
 }
 
-func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs *core.RunAsSubject) error {
-	runAs = core.NormalizeRunAsSubject(runAs)
-	hasRunAs := runAs != nil
+func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs string) error {
+	hasRunAs := strings.TrimSpace(runAs) != ""
 	for i := range target.Steps {
 		step := target.Steps[i]
 		if step.App != nil {

@@ -56,12 +56,12 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	return definition.ProviderName, definition.provider, definition.Definition.Target, definition.Definition.Generation, nil
 }
 
-func (m *Manager) executionPrincipal(runAs *core.RunAsSubject) (*principal.Principal, error) {
-	runAs = core.NormalizeRunAsSubject(runAs)
-	if runAs == nil || strings.TrimSpace(runAs.SubjectID) == "" {
+func (m *Manager) executionPrincipal(runAs string) (*principal.Principal, error) {
+	runAs = strings.TrimSpace(runAs)
+	if runAs == "" {
 		return nil, fmt.Errorf("%w: workflow run_as is required", invocation.ErrInvalidInvocation)
 	}
-	return invocation.RunAsPrincipal(nil, runAs), nil
+	return invocation.RunAsPrincipal(nil, &core.RunAsSubject{SubjectID: runAs}), nil
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
