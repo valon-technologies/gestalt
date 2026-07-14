@@ -471,7 +471,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, provider
 					Run:          run,
 					provider:     provider,
 				}
-				if !runAccessible(managed) {
+				if managed == nil || managed.Run == nil {
 					continue
 				}
 				if !providerStateSet {

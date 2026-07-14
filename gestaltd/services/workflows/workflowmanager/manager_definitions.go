@@ -72,7 +72,7 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 }
 
 func (m *Manager) GetDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) (*ManagedDefinition, error) {
-	return m.requireOwnedDefinition(ctx, p, definitionID, providerName)
+	return m.requireDefinition(ctx, p, definitionID, providerName)
 }
 
 func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal, providerName string) (*ListDefinitionsResponse, error) {
@@ -110,7 +110,7 @@ func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal, p
 			Definition:   definition,
 			provider:     provider,
 		}
-		if m.definitionAccessible(ctx, p, managed) {
+		if managed != nil && managed.Definition != nil {
 			out = append(out, managed)
 		}
 	}
@@ -129,7 +129,7 @@ func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principa
 		}
 		audit.finish(ctx, err)
 	}()
-	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, providerName)
+	existing, err := m.requireDefinition(ctx, p, definitionID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principa
 		}
 		audit.finish(ctx, err)
 	}()
-	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, providerName)
+	existing, err := m.requireDefinition(ctx, p, definitionID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 	defer func() {
 		audit.finish(ctx, err)
 	}()
-	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, providerName)
+	existing, err := m.requireDefinition(ctx, p, definitionID, providerName)
 	if err != nil {
 		return err
 	}
@@ -318,20 +318,13 @@ func (m *Manager) findDefinition(ctx context.Context, p *principal.Principal, de
 	return &ManagedDefinition{ProviderName: strings.TrimSpace(providerName), Definition: definition, provider: provider}, nil
 }
 
-func (m *Manager) requireOwnedDefinition(ctx context.Context, p *principal.Principal, definitionID, providerSelection string) (*ManagedDefinition, error) {
+func (m *Manager) requireDefinition(ctx context.Context, p *principal.Principal, definitionID, providerSelection string) (*ManagedDefinition, error) {
 	definition, err := m.findDefinition(ctx, p, definitionID, providerSelection)
 	if err != nil {
 		return nil, err
 	}
-	if !m.definitionAccessible(ctx, p, definition) {
+	if definition == nil || definition.Definition == nil {
 		return nil, core.ErrNotFound
 	}
 	return definition, nil
-}
-
-func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Principal, definition *ManagedDefinition) bool {
-	if definition == nil || definition.Definition == nil {
-		return false
-	}
-	return true
 }

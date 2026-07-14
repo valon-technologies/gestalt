@@ -511,7 +511,6 @@ type ProviderEntry struct {
 
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	Capabilities      *AppCapabilitiesConfig        `yaml:"capabilities,omitempty"`
 	IndexedDB         *IndexedDBBindingConfig       `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
@@ -2302,14 +2301,6 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 
 // OperationOverride holds deployer-owned allowed-operation metadata from config.
 type OperationOverride = operationexposure.OperationOverride
-
-type AppCapabilitiesConfig struct {
-	Workflow *AppWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`
-}
-
-type AppWorkflowCapabilitiesConfig struct {
-	Operations []string `yaml:"operations,omitempty"`
-}
 
 func Load(path string) (*Config, error) {
 	return LoadPaths([]string{path})

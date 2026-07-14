@@ -7,15 +7,14 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 const (
-	workflowManagerOperationDefinitionsApply  = workflowauth.OperationDefinitionsApply
-	workflowManagerOperationRunsStart         = workflowauth.OperationRunsStart
-	workflowManagerOperationRunsSignalOrStart = workflowauth.OperationRunsSignalOrStart
+	workflowManagerOperationDefinitionsApply  = "definitions.apply"
+	workflowManagerOperationRunsStart         = "runs.start"
+	workflowManagerOperationRunsSignalOrStart = "runs.signalOrStart"
 	workflowManagerOperationTargetScopeOnly   = ""
 )
 

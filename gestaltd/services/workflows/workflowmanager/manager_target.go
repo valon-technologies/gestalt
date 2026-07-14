@@ -31,7 +31,7 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 		return "", nil, coreworkflow.Target{}, 0, fmt.Errorf("%w: workflow definition_id is required", invocation.ErrInvalidInvocation)
 	}
 	ctx = withWorkflowCaller(ctx, caller)
-	definition, err := m.requireOwnedDefinition(ctx, p, definitionID, providerSelection)
+	definition, err := m.requireDefinition(ctx, p, definitionID, providerSelection)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, 0, err
 	}
@@ -125,9 +125,6 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 		}
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 	}
-	if !m.allowProvider(ctx, p, appName) || !m.allowOperation(ctx, p, appName, operation) {
-		return coreworkflow.AppCall{}, invocation.ErrAuthorizationDenied
-	}
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
@@ -199,7 +196,7 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	if target.Prompt.Template == "" && len(target.Messages) == 0 {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: workflow target agent prompt or messages is required", invocation.ErrInvalidInvocation)
 	}
-	if !m.allowProvider(ctx, p, target.ProviderName) || !principal.AllowsProviderPermission(p, target.ProviderName) {
+	if !principal.AllowsProviderPermission(p, target.ProviderName) {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, target.ProviderName)
 	}
 	target.Model = strings.TrimSpace(target.Model)
@@ -242,14 +239,6 @@ func validateWorkflowAgentOutput(output coreagent.Output) error {
 	return nil
 }
 
-func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	return true
-}
-
-func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	return true
-}
-
 func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
 	return invocation.AccessContext{}
 }
@@ -261,12 +250,10 @@ const (
 	targetAuthorizationComponentAppStep       = "app_step"
 
 	targetAuthorizationReasonMissingAgentProvider               = "missing_agent_provider"
-	targetAuthorizationReasonAuthorizerProviderDenied           = "authorizer_provider_denied"
 	targetAuthorizationReasonPrincipalProviderPermissionDenied  = "principal_provider_permission_denied"
 	targetAuthorizationReasonMissingToolProvider                = "missing_tool_provider"
 	targetAuthorizationReasonInvalidSystemToolRef               = "invalid_system_tool_ref"
 	targetAuthorizationReasonNonExactToolRefWithSystemTools     = "non_exact_tool_ref_with_system_tools"
-	targetAuthorizationReasonAuthorizerOperationDenied          = "authorizer_operation_denied"
 	targetAuthorizationReasonPrincipalOperationPermissionDenied = "principal_operation_permission_denied"
 	targetAuthorizationReasonMissingAppStep                     = "missing_app_step"
 	targetAuthorizationReasonMissingAppProvider                 = "missing_app_provider"
@@ -327,9 +314,6 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 			if agentProviderName == "" {
 				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonMissingAgentProvider, "", "", -1)
 			}
-			if !m.allowProvider(ctx, p, agentProviderName) {
-				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonAuthorizerProviderDenied, agentProviderName, "", -1)
-			}
 			if !principal.AllowsProviderPermission(p, agentProviderName) {
 				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonPrincipalProviderPermissionDenied, agentProviderName, "", -1)
 			}
@@ -357,12 +341,6 @@ func (m *Manager) checkWorkflowStepAppAuthorization(ctx context.Context, p *prin
 	if operation == "" {
 		return targetAuthorizationDenied(component, targetAuthorizationReasonMissingAppOperation, appName, "", -1)
 	}
-	if !m.allowProvider(ctx, p, appName) {
-		return targetAuthorizationDenied(component, targetAuthorizationReasonAuthorizerProviderDenied, appName, operation, -1)
-	}
-	if !m.allowOperation(ctx, p, appName, operation) {
-		return targetAuthorizationDenied(component, targetAuthorizationReasonAuthorizerOperationDenied, appName, operation, -1)
-	}
 	if !principal.AllowsOperationPermission(p, appName, operation) {
 		return targetAuthorizationDenied(component, targetAuthorizationReasonPrincipalOperationPermissionDenied, appName, operation, -1)
 	}
@@ -388,9 +366,6 @@ func (m *Manager) checkWorkflowAgentToolAuthorization(ctx context.Context, p *pr
 		return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonNonExactToolRefWithSystemTools, appName, operation, index)
 	}
 	if operation == "" {
-		if !m.allowProvider(ctx, p, appName) {
-			return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonAuthorizerProviderDenied, appName, "", index)
-		}
 		if !principal.AllowsProviderPermission(p, appName) {
 			return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonPrincipalProviderPermissionDenied, appName, "", index)
 		}

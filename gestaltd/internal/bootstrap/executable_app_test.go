@@ -55,7 +55,6 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -146,138 +145,6 @@ func (p *allowAllAuthorizationProvider) ListActiveModelResourceTypes(context.Con
 }
 func (p *allowAllAuthorizationProvider) Ping(context.Context) error { return nil }
 func (p *allowAllAuthorizationProvider) Close() error               { return nil }
-
-type workflowCapabilitiesAuthorizationProvider struct {
-	allowed map[string]map[string]struct{}
-}
-
-func workflowCapabilityForRPCAction(action string) (string, bool) {
-	switch strings.TrimSpace(action) {
-	case "ApplyDefinition":
-		return workflowauth.OperationDefinitionsApply, true
-	case "GetDefinition":
-		return workflowauth.OperationDefinitionsGet, true
-	case "ListDefinitions":
-		return workflowauth.OperationDefinitionsList, true
-	case "SetDefinitionPaused":
-		return workflowauth.OperationDefinitionsSetPaused, true
-	case "SetActivationPaused":
-		return workflowauth.OperationDefinitionsSetActivationPaused, true
-	case "DeleteDefinition":
-		return workflowauth.OperationDefinitionsDelete, true
-	case "StartRun":
-		return workflowauth.OperationRunsStart, true
-	case "ListRuns":
-		return workflowauth.OperationRunsList, true
-	case "GetRun":
-		return workflowauth.OperationRunsGet, true
-	case "GetRunEvents":
-		return workflowauth.OperationRunsGetEvents, true
-	case "GetRunOutput":
-		return workflowauth.OperationRunsGetOutput, true
-	case "CancelRun":
-		return workflowauth.OperationRunsCancel, true
-	case "SignalRun":
-		return workflowauth.OperationRunsSignal, true
-	case "SignalOrStartRun":
-		return workflowauth.OperationRunsSignalOrStart, true
-	case "DeliverEvent":
-		return workflowauth.OperationEventsDeliver, true
-	default:
-		return "", false
-	}
-}
-
-func newWorkflowCapabilitiesAuthorizationProvider(cfg *config.Config) core.AuthorizationProvider {
-	allowed := make(map[string]map[string]struct{})
-	if cfg != nil {
-		for appName, entry := range cfg.Apps {
-			if entry == nil || entry.Capabilities == nil || entry.Capabilities.Workflow == nil {
-				continue
-			}
-			ops := make(map[string]struct{}, len(entry.Capabilities.Workflow.Operations))
-			for _, operation := range entry.Capabilities.Workflow.Operations {
-				operation = strings.TrimSpace(operation)
-				if operation == "" {
-					continue
-				}
-				ops[operation] = struct{}{}
-			}
-			allowed[strings.TrimSpace(appName)] = ops
-		}
-	}
-	return &workflowCapabilitiesAuthorizationProvider{allowed: allowed}
-}
-
-func (p *workflowCapabilitiesAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	if req == nil || req.GetSubject() == nil || req.GetResource() == nil || req.GetAction() == nil {
-		return &proto.CheckAccessResponse{Allowed: false}, nil
-	}
-	if req.GetResource().GetType() == "workflow" {
-		capability, ok := workflowCapabilityForRPCAction(strings.TrimSpace(req.GetAction().GetName()))
-		if !ok {
-			return &proto.CheckAccessResponse{Allowed: false}, nil
-		}
-		for _, ops := range p.allowed {
-			if _, allowed := ops[capability]; allowed {
-				return &proto.CheckAccessResponse{Allowed: allowed}, nil
-			}
-		}
-		return &proto.CheckAccessResponse{Allowed: false}, nil
-	}
-	if req.GetResource().GetType() != workflowauth.ResourceTypeOperation || req.GetAction().GetName() != workflowauth.ActionInvoke {
-		return &proto.CheckAccessResponse{Allowed: false}, nil
-	}
-	appName := strings.TrimSpace(req.GetSubject().GetId())
-	resourceID := strings.TrimSpace(req.GetResource().GetId())
-	wantResourceID := workflowauth.OperationResourceID(appName, "")
-	if !strings.HasPrefix(resourceID, strings.TrimSuffix(wantResourceID, "/")) {
-		return &proto.CheckAccessResponse{Allowed: false}, nil
-	}
-	operation := strings.TrimPrefix(resourceID, appName+"/operations/")
-	ops, ok := p.allowed[appName]
-	if !ok {
-		return &proto.CheckAccessResponse{Allowed: false}, nil
-	}
-	_, allowed := ops[operation]
-	return &proto.CheckAccessResponse{Allowed: allowed}, nil
-}
-
-func (p *workflowCapabilitiesAuthorizationProvider) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
-	resp := &proto.CheckAccessManyResponse{Decisions: make([]*proto.CheckAccessResponse, 0, len(req.GetRequests()))}
-	for _, check := range req.GetRequests() {
-		decision, err := p.CheckAccess(ctx, check)
-		if err != nil {
-			return nil, err
-		}
-		resp.Decisions = append(resp.Decisions, decision)
-	}
-	return resp, nil
-}
-
-func (p *workflowCapabilitiesAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return &proto.ListRelationshipsResponse{}, nil
-}
-func (p *workflowCapabilitiesAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	return &proto.AddRelationshipResponse{}, nil
-}
-func (p *workflowCapabilitiesAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
-	return &proto.DeleteRelationshipResponse{}, nil
-}
-func (p *workflowCapabilitiesAuthorizationProvider) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
-	return &proto.SetAuthorizationStateResponse{}, nil
-}
-func (p *workflowCapabilitiesAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
-	return &proto.GetActiveModelRefResponse{}, nil
-}
-func (p *workflowCapabilitiesAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
-	return &proto.SetActiveModelResponse{}, nil
-}
-func (p *workflowCapabilitiesAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	return &proto.ListActiveModelResourceTypesResponse{}, nil
-}
-func (p *workflowCapabilitiesAuthorizationProvider) Ping(context.Context) error { return nil }
-func (p *workflowCapabilitiesAuthorizationProvider) Close() error               { return nil }
 
 type capturingRuntime struct {
 	provider *runtimeprovider.LocalProvider
@@ -4015,14 +3882,6 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Workflow manager definitions")
 	manager := newStubWorkflowManager()
-	workflowManagerOperations := []string{
-		workflowauth.OperationDefinitionsApply,
-		workflowauth.OperationDefinitionsGet,
-		workflowauth.OperationDefinitionsSetPaused,
-		workflowauth.OperationDefinitionsSetActivationPaused,
-		workflowauth.OperationDefinitionsDelete,
-		workflowauth.OperationEventsDeliver,
-	}
 
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
@@ -4031,11 +3890,6 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Capabilities: &config.AppCapabilitiesConfig{
-					Workflow: &config.AppWorkflowCapabilitiesConfig{
-						Operations: workflowManagerOperations,
-					},
-				},
 			},
 		},
 	}
@@ -4244,101 +4098,6 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 		"user:user-123",
 	}) {
 		t.Fatalf("manager subjects = %v, want all user:user-123", got)
-	}
-}
-
-func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echo",
-		Operations: []catalog.CatalogOperation{
-			{ID: "apply_workflow_definition", Method: http.MethodPost},
-			{ID: "deliver_workflow_event", Method: http.MethodPost},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Workflow manager capabilities")
-	manager := newStubWorkflowManager()
-
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"echo": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Capabilities: &config.AppCapabilitiesConfig{
-					Workflow: &config.AppWorkflowCapabilitiesConfig{
-						Operations: []string{workflowauth.OperationEventsDeliver},
-					},
-				},
-			},
-		},
-	}
-
-	secret := []byte("0123456789abcdef0123456789abcdef")
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		EncryptionKey:   secret,
-		WorkflowManager: manager,
-		Authorization:   newWorkflowCapabilitiesAuthorizationProvider(cfg),
-	}))
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	defer func() { _ = CloseProviders(providers) }()
-
-	prov, err := providers.Get("echo")
-	if err != nil {
-		t.Fatalf("providers.Get(echo): %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user:user-123",
-		UserID:    "user-123",
-		Kind:      principal.KindUser,
-		Source:    principal.SourceBearer,
-		Scopes:    []string{"echo"},
-	})
-
-	deliverEventResult, err := prov.Execute(ctx, "deliver_workflow_event", map[string]any{
-		"provider": "basic",
-		"type":     "roadmap.item.updated",
-		"source":   "roadmap",
-		"subject":  "item-123",
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(deliver_workflow_event): %v", err)
-	}
-	var deliveredEvent struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(deliverEventResult.Body, &deliveredEvent); err != nil {
-		t.Fatalf("json.Unmarshal(deliver event): %v", err)
-	}
-	if deliveredEvent.ID == "" {
-		t.Fatalf("deliver event result = %+v, want event id", deliveredEvent)
-	}
-
-	applyResult, err := prov.Execute(ctx, "apply_workflow_definition", map[string]any{
-		"definition_id": "roadmap_sync",
-		"provider":      "basic",
-		"run_as":        "service_account:echo-workflow",
-		"target": map[string]any{
-			"app":       "roadmap",
-			"operation": "sync",
-		},
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(apply_workflow_definition): %v", err)
-	}
-	var applyBody struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(applyResult.Body, &applyBody); err != nil {
-		t.Fatalf("json.Unmarshal(apply): %v", err)
-	}
-	if !strings.Contains(applyBody.Error, `ApplyDefinition`) || !strings.Contains(applyBody.Error, "PermissionDenied") {
-		t.Fatalf("apply workflow definition error = %q, want ApplyDefinition permission denied", applyBody.Error)
 	}
 }
 
@@ -6982,14 +6741,6 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.RuntimePlacementConfig{},
-				Capabilities: &config.AppCapabilitiesConfig{
-					Workflow: &config.AppWorkflowCapabilitiesConfig{
-						Operations: []string{
-							workflowauth.OperationDefinitionsApply,
-							workflowauth.OperationDefinitionsGet,
-						},
-					},
-				},
 			},
 		},
 	}
