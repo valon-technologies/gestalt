@@ -16,7 +16,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -73,7 +72,7 @@ func requiredWorkflowProviderName(name string) (string, error) {
 	return name, nil
 }
 
-func (s *ProviderServer) authorizeWorkflowRequest(ctx context.Context, req workflowProviderAuthRequest, operation string) (workflowManagerAuthContext, *principal.Principal, string, error) {
+func (s *ProviderServer) authorizeWorkflowRequest(ctx context.Context, req workflowProviderAuthRequest, action, agentSystemOperation string) (workflowManagerAuthContext, *principal.Principal, string, error) {
 	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return workflowManagerAuthContext{}, nil, "", err
@@ -82,7 +81,7 @@ func (s *ProviderServer) authorizeWorkflowRequest(ctx context.Context, req workf
 	if err != nil {
 		return workflowManagerAuthContext{}, nil, "", err
 	}
-	p, err := s.authorizeWorkflowAccessForProvider(ctx, authCtx, operation, providerName)
+	p, err := s.authorizeWorkflowAccessForProvider(ctx, authCtx, action, agentSystemOperation, providerName)
 	if err != nil {
 		return workflowManagerAuthContext{}, nil, "", err
 	}
@@ -126,7 +125,7 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationDefinitionsApply)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "ApplyDefinition", "definitions.apply")
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +192,7 @@ func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkfl
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationDefinitionsGet)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "GetDefinition", "definitions.get")
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +215,7 @@ func (s *ProviderServer) ListDefinitions(ctx context.Context, req *proto.ListWor
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationDefinitionsList)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "ListDefinitions", "definitions.list")
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +238,7 @@ func (s *ProviderServer) SetDefinitionPaused(ctx context.Context, req *proto.Set
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationDefinitionsSetPaused)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "SetDefinitionPaused", "definitions.setPaused")
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +261,7 @@ func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.Set
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationDefinitionsSetActivationPaused)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "SetActivationPaused", "definitions.setActivationPaused")
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +288,7 @@ func (s *ProviderServer) DeleteDefinition(ctx context.Context, req *proto.Delete
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationDefinitionsDelete)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "DeleteDefinition", "definitions.delete")
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +306,7 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsStart)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "StartRun", "runs.start")
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +334,7 @@ func (s *ProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowPr
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsList)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "ListRuns", "runs.list")
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +368,7 @@ func (s *ProviderServer) GetRun(ctx context.Context, req *proto.GetWorkflowProvi
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsGet)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "GetRun", "runs.get")
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +391,7 @@ func (s *ProviderServer) GetRunEvents(ctx context.Context, req *proto.GetWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsGetEvents)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "GetRunEvents", "runs.getEvents")
 	if err != nil {
 		return nil, err
 	}
@@ -411,7 +410,7 @@ func (s *ProviderServer) GetRunOutput(ctx context.Context, req *proto.GetWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsGetOutput)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "GetRunOutput", "runs.getOutput")
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +429,7 @@ func (s *ProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsCancel)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "CancelRun", "runs.cancel")
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +452,7 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsSignal)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "SignalRun", "runs.signal")
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +490,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationRunsSignalOrStart)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "SignalOrStartRun", "runs.signalOrStart")
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +519,7 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, workflowauth.OperationEventsDeliver)
+	authCtx, p, providerName, err := s.authorizeWorkflowRequest(ctx, req, "DeliverEvent", "events.deliver")
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +564,7 @@ func (s *ProviderServer) requestContext(req workflowProviderAuthRequest) (workfl
 	return workflowManagerAuthContext{request: authCtx, raw: raw}, nil
 }
 
-func (s *ProviderServer) authorizeWorkflowAccessForProvider(ctx context.Context, authCtx workflowManagerAuthContext, operation, providerName string) (*principal.Principal, error) {
+func (s *ProviderServer) authorizeWorkflowAccessForProvider(ctx context.Context, authCtx workflowManagerAuthContext, action, agentSystemOperation, providerName string) (*principal.Principal, error) {
 	if authCtx.Agent() != (invocation.AgentInvocationContext{}) {
 		if s == nil || s.agentAuth == nil {
 			return nil, status.Error(codes.FailedPrecondition, "agent workflow invocation authorizer is required")
@@ -576,7 +575,7 @@ func (s *ProviderServer) authorizeWorkflowAccessForProvider(ctx context.Context,
 			CallerName:        authCtx.Caller().Name,
 			Agent:             authCtx.Agent(),
 			Principal:         authCtx.Principal(),
-			Operation:         operation,
+			Operation:         strings.TrimSpace(agentSystemOperation),
 			RequestContext:    authCtx.raw,
 		})
 		if err != nil {
@@ -587,20 +586,20 @@ func (s *ProviderServer) authorizeWorkflowAccessForProvider(ctx context.Context,
 		}
 		return authCtx.Principal(), nil
 	}
-	if err := s.requireWorkflowAccess(ctx, authCtx, operation, providerName); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, action, providerName); err != nil {
 		return nil, err
 	}
 	return authCtx.Principal(), nil
 }
 
-func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, operation, providerName string) error {
+func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, action, providerName string) error {
 	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok && authCtx.CallerName() == "gestaltd" && origin.FullMethod != "" {
 		return nil
 	}
 	if s == nil || s.authorization == nil {
 		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow manager operation")
 	}
-	action := workflowRPCAction(operation)
+	action = strings.TrimSpace(action)
 	subjectID := ""
 	if p := authCtx.Principal(); p != nil {
 		subjectID = strings.TrimSpace(p.SubjectID)
@@ -626,43 +625,6 @@ func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx work
 		return status.Errorf(codes.PermissionDenied, "workflow RPC %q is not allowed for subject %q", action, subjectID)
 	}
 	return nil
-}
-
-func workflowRPCAction(operation string) string {
-	switch operation {
-	case workflowauth.OperationDefinitionsApply:
-		return "ApplyDefinition"
-	case workflowauth.OperationDefinitionsGet:
-		return "GetDefinition"
-	case workflowauth.OperationDefinitionsList:
-		return "ListDefinitions"
-	case workflowauth.OperationDefinitionsSetPaused:
-		return "SetDefinitionPaused"
-	case workflowauth.OperationDefinitionsSetActivationPaused:
-		return "SetActivationPaused"
-	case workflowauth.OperationDefinitionsDelete:
-		return "DeleteDefinition"
-	case workflowauth.OperationRunsStart:
-		return "StartRun"
-	case workflowauth.OperationRunsList:
-		return "ListRuns"
-	case workflowauth.OperationRunsGet:
-		return "GetRun"
-	case workflowauth.OperationRunsGetEvents:
-		return "GetRunEvents"
-	case workflowauth.OperationRunsGetOutput:
-		return "GetRunOutput"
-	case workflowauth.OperationRunsCancel:
-		return "CancelRun"
-	case workflowauth.OperationRunsSignal:
-		return "SignalRun"
-	case workflowauth.OperationRunsSignalOrStart:
-		return "SignalOrStartRun"
-	case workflowauth.OperationEventsDeliver:
-		return "DeliverEvent"
-	default:
-		return operation
-	}
 }
 
 func (s *ProviderServer) workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {

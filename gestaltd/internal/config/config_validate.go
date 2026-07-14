@@ -21,7 +21,6 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 )
 
 // ValidateStructure checks config shape: integration references, app
@@ -944,9 +943,6 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := normalizeProviderRuntimeConfig("apps."+name, entry, false); err != nil {
 		return err
 	}
-	if err := validateAppCapabilities("apps."+name+".capabilities", entry.Capabilities); err != nil {
-		return err
-	}
 	if err := validateProviderEntrySource("app", name, entry); err != nil {
 		return err
 	}
@@ -966,32 +962,6 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 		return err
 	}
 	return validateAppIntegrationConnections(name, entry)
-}
-
-func validateAppCapabilities(path string, capabilities *AppCapabilitiesConfig) error {
-	if capabilities == nil || capabilities.Workflow == nil {
-		return nil
-	}
-	operations := capabilities.Workflow.Operations
-	if len(operations) == 0 {
-		return fmt.Errorf("config validation: %s.workflow.operations is required when workflow capabilities are set", path)
-	}
-	seen := make(map[string]int, len(operations))
-	for i := range operations {
-		operation := strings.TrimSpace(operations[i])
-		operations[i] = operation
-		switch {
-		case operation == "":
-			return fmt.Errorf("config validation: %s.workflow.operations[%d] is required", path, i)
-		case !workflowauth.IsSupportedOperation(operation):
-			return fmt.Errorf("config validation: %s.workflow.operations[%d] %q is not supported; supported operations: %s", path, i, operation, strings.Join(workflowauth.SupportedOperations(), ", "))
-		}
-		if prev, ok := seen[operation]; ok {
-			return fmt.Errorf("config validation: %s.workflow.operations[%d] duplicates operations[%d]", path, i, prev)
-		}
-		seen[operation] = i
-	}
-	return nil
 }
 
 func validateAppRouteAuth(cfg *Config, name string, entry *ProviderEntry) error {
@@ -1148,9 +1118,6 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	}
 	if len(entry.S3) > 0 {
 		return fmt.Errorf("config validation: %s.s3 is only supported on apps.*", subject)
-	}
-	if entry.Capabilities != nil {
-		return fmt.Errorf("config validation: %s.capabilities is only supported on apps.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on apps.*", subject)
@@ -1372,9 +1339,6 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if len(entry.S3) > 0 {
 		return fmt.Errorf("config validation: %s.s3 is only supported on apps.*", subject)
 	}
-	if entry.Capabilities != nil {
-		return fmt.Errorf("config validation: %s.capabilities is only supported on apps.*", subject)
-	}
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)
 	}
@@ -1430,9 +1394,6 @@ func validateAppOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	}
 	if len(entry.S3) > 0 {
 		return fmt.Errorf("config validation: %s.s3 is only supported on apps.*", subject)
-	}
-	if entry.Capabilities != nil {
-		return fmt.Errorf("config validation: %s.capabilities is only supported on apps.*", subject)
 	}
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)

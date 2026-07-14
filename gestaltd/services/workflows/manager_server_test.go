@@ -16,7 +16,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -77,23 +76,6 @@ func TestManagerServerPublicApplyRequiresServiceAccountManagement(t *testing.T) 
 	})
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("status = %s, want PermissionDenied (err=%v)", status.Code(err), err)
-	}
-}
-
-func TestWorkflowRPCActionUsesWireNames(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]string{
-		workflowauth.OperationDefinitionsSetPaused:           "SetDefinitionPaused",
-		workflowauth.OperationDefinitionsSetActivationPaused: "SetActivationPaused",
-		workflowauth.OperationRunsGetEvents:                  "GetRunEvents",
-		workflowauth.OperationRunsGetOutput:                  "GetRunOutput",
-		workflowauth.OperationRunsSignalOrStart:              "SignalOrStartRun",
-	}
-	for operation, want := range tests {
-		if got := workflowRPCAction(operation); got != want {
-			t.Errorf("workflowRPCAction(%q) = %q, want %q", operation, got, want)
-		}
 	}
 }
 

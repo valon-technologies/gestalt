@@ -78,11 +78,11 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 }
 
 func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, providerName, runID string) (*ManagedRun, error) {
-	return m.requireOwnedRun(ctx, p, runID, providerName)
+	return m.requireRun(ctx, p, runID, providerName)
 }
 
 func (m *Manager) GetRunEvents(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
-	value, err := m.requireOwnedRun(ctx, p, runID, providerName)
+	value, err := m.requireRun(ctx, p, runID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (m *Manager) GetRunEvents(ctx context.Context, p *principal.Principal, prov
 }
 
 func (m *Manager) GetRunOutput(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
-	value, err := m.requireOwnedRun(ctx, p, runID, providerName)
+	value, err := m.requireRun(ctx, p, runID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, provide
 		}
 		audit.finish(ctx, err)
 	}()
-	value, err := m.requireOwnedRun(ctx, p, runID, providerName)
+	value, err := m.requireRun(ctx, p, runID, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 		}
 		audit.finish(ctx, err)
 	}()
-	value, err := m.requireOwnedRun(ctx, p, req.RunID, req.ProviderName)
+	value, err := m.requireRun(ctx, p, req.RunID, req.ProviderName)
 	if err != nil {
 		return nil, err
 	}
@@ -421,22 +421,15 @@ func (m *Manager) findRun(ctx context.Context, p *principal.Principal, runID, pr
 	return &ManagedRun{ProviderName: strings.TrimSpace(providerName), Run: run, provider: provider}, nil
 }
 
-func (m *Manager) requireOwnedRun(ctx context.Context, p *principal.Principal, runID, providerSelection string) (*ManagedRun, error) {
+func (m *Manager) requireRun(ctx context.Context, p *principal.Principal, runID, providerSelection string) (*ManagedRun, error) {
 	run, err := m.findRun(ctx, p, runID, providerSelection)
 	if err != nil {
 		return nil, err
 	}
-	if !runAccessible(run) {
+	if run == nil || run.Run == nil {
 		return nil, core.ErrNotFound
 	}
 	return run, nil
-}
-
-func runAccessible(run *ManagedRun) bool {
-	if run == nil || run.Run == nil {
-		return false
-	}
-	return true
 }
 
 func managedSignalResponse(providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse) (*ManagedRunSignal, error) {
