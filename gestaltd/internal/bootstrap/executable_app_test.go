@@ -5913,9 +5913,9 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	}
 
 	if _, err := boundS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Key: testPluginS3NamespacePrefix("echoext") + "plans/q3.txt",
+		Key: "plans/q3.txt",
 	}); err != nil {
-		t.Fatalf("expected namespaced backing key: %v", err)
+		t.Fatalf("expected backing key: %v", err)
 	}
 
 	startRequests := runtimeProvider.startAppRequestsCopy()
@@ -7816,7 +7816,7 @@ func TestPluginIndexedDBBindingsDoNotDependOnAppS3Bindings(t *testing.T) {
 	t.Cleanup(func() { _ = CloseProviders(providers) })
 }
 
-func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
+func TestPluginS3BindingsRoundtripKeys(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -7901,14 +7901,9 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 	}
 
 	if _, err := stubS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Key: testPluginS3NamespacePrefix("echoext") + "plans/q1.txt",
-	}); err != nil {
-		t.Fatalf("expected namespaced backing key: %v", err)
-	}
-	if _, err := stubS3.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Key: "plans/q1.txt",
-	}); err == nil {
-		t.Fatal("unnamespaced backing key should remain empty")
+	}); err != nil {
+		t.Fatalf("expected backing key: %v", err)
 	}
 }
 
@@ -7969,12 +7964,12 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 	}
 
 	if _, err := archiveS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Key: testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
+		Key: "plans/q2.txt",
 	}); err != nil {
 		t.Fatalf("archive binding should receive the write: %v", err)
 	}
 	if _, err := mainS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Key: testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
+		Key: "plans/q2.txt",
 	}); err == nil {
 		t.Fatal("main binding should remain untouched when archive is selected explicitly")
 	}
@@ -8046,10 +8041,6 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 	if got := checkEnv(t, []string{"main", "archive"}, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with multiple app s3 bindings")
 	}
-}
-
-func testPluginS3NamespacePrefix(pluginName string) string {
-	return "plugin_" + strconv.Itoa(len(pluginName)) + "_" + pluginName + "/"
 }
 
 type trackedIndexedDB struct {

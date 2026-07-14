@@ -169,10 +169,6 @@ func (m *ObjectAccessURLManager) tokenTTL(ttl time.Duration) time.Duration {
 	return ttl
 }
 
-func AppObjectKey(appName, key string) string {
-	return s3NamespacePrefix(appName) + key
-}
-
 func normalizeS3ObjectAccessRequest(req ObjectAccessURLRequest, expiresAt time.Time) (ObjectAccessTarget, error) {
 	pluginName := strings.TrimSpace(req.AppName)
 	if pluginName == "" {
