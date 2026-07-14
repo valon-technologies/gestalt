@@ -64,7 +64,7 @@ class _StepScope:
         return _WorkflowRef("stepInput", path, step_id)
 
     @property
-    def steps(self) -> Mapping[str, _StepOutputs]:
+    def steps(self) -> _StepOutputsMap:
         return _StepOutputsMap(self)
 
 
