@@ -253,9 +253,7 @@ apps:
 workflows:
   definitions:
     nightly_sync:
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: "service_account:roadmap-workflow"
       steps:
         - id: sync
           app:
@@ -270,9 +268,7 @@ workflows:
           schedule:
             cron: "0 2 * * *"
     nightly_summary:
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: "service_account:roadmap-workflow"
       steps:
         - id: summarize
           timeout: 120s
@@ -290,9 +286,7 @@ workflows:
           schedule:
             cron: "0 3 * * *"
     roadmap_updated:
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: "service_account:roadmap-workflow"
       steps:
         - id: sync
           app:

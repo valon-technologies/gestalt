@@ -1477,12 +1477,8 @@ func setWorkflowFixture(cfg *config.Config, app string, workflow *workflowFixtur
 	}
 }
 
-func workflowFixtureRunAs(app string) *config.WorkflowRunAsConfig {
-	return &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{
-			ID: "service_account:" + strings.TrimSpace(app) + "-workflow",
-		},
-	}
+func workflowFixtureRunAs(app string) string {
+	return "service_account:" + strings.TrimSpace(app) + "-workflow"
 }
 
 func workflowFixtureSteps(app, operation string, input map[string]any) []config.WorkflowStepConfig {
@@ -3882,11 +3878,7 @@ func TestBootstrapConfiguredWorkflowDefinitionRunAsAllowsUserCredentialedTarget(
 		},
 	})
 	nightly := cfg.Workflows.Definitions["nightly_sync"]
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{
-			ID: " service_account:roadmap-sync ",
-		},
-	}
+	nightly.RunAs = " service_account:roadmap-sync "
 	cfg.Workflows.Definitions["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -3929,9 +3921,7 @@ func TestBootstrapPersistsConfiguredWorkflowDefinitionRunAsUserSubject(t *testin
 		},
 	})
 	nightly := cfg.Workflows.Definitions["nightly_sync"]
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{ID: "user:ada"},
-	}
+	nightly.RunAs = "user:ada"
 	cfg.Workflows.Definitions["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -3981,9 +3971,7 @@ func TestBootstrapAppliesConfiguredWorkflowDefinitionsForRunAsConnectionOnUserDe
 	})
 	nightly := cfg.Workflows.Definitions["nightly_sync"]
 	nightly.Steps[0].App.Connection = "bot"
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
-	}
+	nightly.RunAs = "service_account:roadmap-sync"
 	cfg.Workflows.Definitions["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -4629,11 +4617,7 @@ func TestBootstrapConfiguredWorkflowEventDefinitionRunAsAllowsUserCredentialedTa
 		},
 	})
 	definition := cfg.Workflows.Definitions["task_updated"]
-	definition.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{
-			ID: "service_account:roadmap-events",
-		},
-	}
+	definition.RunAs = "service_account:roadmap-events"
 	cfg.Workflows.Definitions["task_updated"] = definition
 
 	factories := validFactories()

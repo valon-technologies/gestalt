@@ -203,7 +203,7 @@ type Run struct {
 	Steps                []StepExecution
 	Trigger              RunTrigger
 	CreatedBy            string
-	RunAs                *core.RunAsSubject
+	RunAs                string
 	CreatedAt            *time.Time
 	StartedAt            *time.Time
 	CompletedAt          *time.Time
@@ -242,7 +242,7 @@ type Schedule struct {
 	DefinitionID string
 	Paused       bool
 	CreatedBy    string
-	RunAs        *core.RunAsSubject
+	RunAs        string
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
 	NextRunAt    *time.Time
@@ -255,7 +255,7 @@ type EventTrigger struct {
 	DefinitionID string
 	Paused       bool
 	CreatedBy    string
-	RunAs        *core.RunAsSubject
+	RunAs        string
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
 }
@@ -270,7 +270,7 @@ type Definition struct {
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
 	ProviderName string
-	RunAs        *core.RunAsSubject
+	RunAs        string
 }
 
 type DefinitionSpec struct {
@@ -278,7 +278,7 @@ type DefinitionSpec struct {
 	Target      Target
 	Activations []Activation
 	Paused      bool
-	RunAs       *core.RunAsSubject
+	RunAs       string
 }
 
 type ScheduleActivation struct {

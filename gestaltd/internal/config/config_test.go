@@ -2870,9 +2870,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -2887,9 +2885,7 @@ workflows:
             cron: "0 2 * * *"
     task_updated:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-events
+      runAs: service_account:roadmap-events
       steps:
         - id: main
           app:
@@ -2924,11 +2920,7 @@ server:
 		}
 		wantScheduleDefinition := WorkflowDefinitionConfig{
 			Provider: "temporal",
-			RunAs: &WorkflowRunAsConfig{
-				Subject: &WorkflowRunAsSubjectConfig{
-					ID: "service_account:roadmap-workflow",
-				},
-			},
+			RunAs:    "service_account:roadmap-workflow",
 			Steps: workflowTestAppStepConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
 				"source": "yaml",
 			}),
@@ -2946,11 +2938,7 @@ server:
 		}
 		wantEventDefinition := WorkflowDefinitionConfig{
 			Provider: "temporal",
-			RunAs: &WorkflowRunAsConfig{
-				Subject: &WorkflowRunAsSubjectConfig{
-					ID: "service_account:roadmap-events",
-				},
-			},
+			RunAs:    "service_account:roadmap-events",
 			Steps: workflowTestAppStepConfig("roadmap", "backfill_items", "", map[string]any{
 				"source": "event",
 			}),
@@ -2981,9 +2969,7 @@ workflows:
   definitions:
     review:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-events
+      runAs: service_account:roadmap-events
       steps:
         - id: collect
           app:
@@ -3057,9 +3043,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -3089,9 +3073,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -3120,9 +3102,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -3146,9 +3126,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: diagnosis
           timeout: -500ms
@@ -3182,9 +3160,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: diagnosis
           timeout: 1s
@@ -3220,9 +3196,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: diagnosis
           timeout: 1s
@@ -3268,9 +3242,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: diagnosis
           app:
@@ -3299,9 +3271,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: diagnosis
           timeout: 1s
@@ -3343,9 +3313,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: diagnosis
           timeout: 1s
@@ -3384,9 +3352,7 @@ workflows:
   definitions:
     task_updated:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-events
+      runAs: service_account:roadmap-events
       steps:
         - id: run
           timeout: 1s
@@ -3528,7 +3494,44 @@ server:
 		if err == nil {
 			t.Fatal("Load succeeded, want error")
 		}
-		if !strings.Contains(err.Error(), "workflows.definitions.nightly.runAs.subject.id is required") {
+		if !strings.Contains(err.Error(), "workflows.definitions.nightly.runAs is required") {
+			t.Fatalf("Load error = %v", err)
+		}
+	})
+
+	t.Run("nested runAs shape is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+workflows:
+  definitions:
+    nightly:
+      provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+      steps:
+        - id: main
+          app:
+            name: roadmap
+            operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load succeeded, want nested runAs error")
+		}
+		if !strings.Contains(err.Error(), "cannot unmarshal !!map into string") {
 			t.Fatalf("Load error = %v", err)
 		}
 	})
@@ -3545,9 +3548,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -3628,9 +3629,7 @@ workflows:
   definitions:
     nightly:
       provider: missing
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -3672,9 +3671,7 @@ workflows:
   definitions:
     nightly:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -3721,9 +3718,7 @@ workflows:
   definitions:
     invalid:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:
@@ -3762,9 +3757,7 @@ workflows:
   definitions:
     invalid:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-events
+      runAs: service_account:roadmap-events
       steps:
         - id: main
           app:
@@ -3807,9 +3800,7 @@ workflows:
   definitions:
     invalid:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-events
+      runAs: service_account:roadmap-events
       steps:
         - id: main
           app:
@@ -3855,9 +3846,7 @@ workflows:
   definitions:
     invalid:
       provider: temporal
-      runAs:
-        subject:
-          id: service_account:roadmap-workflow
+      runAs: service_account:roadmap-workflow
       steps:
         - id: main
           app:

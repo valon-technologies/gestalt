@@ -6,9 +6,8 @@ import "strings"
 // ClientInfo credentials minted via RFC 7591 dynamic client registration.
 const GestaltdSubjectID = "system:gestaltd"
 
-// TODO(#1823): Add first-class run-as subject and external-identity grant
-// provisioning instead of relying on opaque subject IDs plus separate tuple
-// seeding.
+// RunAsSubject is retained for agent and app-invoke delegation. Workflow
+// definitions store their run-as identity as a plain subject ID string.
 type RunAsSubject struct {
 	SubjectID string
 }

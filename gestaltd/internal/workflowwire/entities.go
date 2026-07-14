@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -185,7 +184,7 @@ func RunFromProto(run *proto.WorkflowRun) (*coreworkflow.Run, error) {
 		CurrentStepID:        run.GetCurrentStepId(),
 		Steps:                steps,
 		Trigger:              trigger,
-		RunAs:                runAsSubjectFromString(run.GetRunAs()),
+		RunAs:                strings.TrimSpace(run.GetRunAs()),
 		CreatedAt:            TimeFromProto(run.GetCreatedAt()),
 		StartedAt:            TimeFromProto(run.GetStartedAt()),
 		CompletedAt:          TimeFromProto(run.GetCompletedAt()),
@@ -234,7 +233,7 @@ func RunToProto(run *coreworkflow.Run) (*proto.WorkflowRun, error) {
 		Input:                inputStruct,
 		CurrentStepId:        run.CurrentStepID,
 		Steps:                steps,
-		RunAs:                runAsSubjectToString(run.RunAs),
+		RunAs:                strings.TrimSpace(run.RunAs),
 	}, nil
 }
 
@@ -251,7 +250,7 @@ func DefinitionSpecFromProto(definition *proto.WorkflowDefinitionSpec) (*corewor
 		Target:      TargetFromProto(definition.GetTarget()),
 		Activations: activations,
 		Paused:      definition.GetPaused(),
-		RunAs:       runAsSubjectFromString(definition.GetRunAs()),
+		RunAs:       strings.TrimSpace(definition.GetRunAs()),
 	}, nil
 }
 
@@ -272,7 +271,7 @@ func DefinitionSpecToProto(definition *coreworkflow.DefinitionSpec) (*proto.Work
 		Target:      target,
 		Activations: activations,
 		Paused:      definition.Paused,
-		RunAs:       runAsSubjectToString(definition.RunAs),
+		RunAs:       strings.TrimSpace(definition.RunAs),
 	}, nil
 }
 
@@ -293,7 +292,7 @@ func DefinitionFromProto(definition *proto.WorkflowDefinition) (*coreworkflow.De
 		CreatedAt:    TimeFromProto(definition.GetCreatedAt()),
 		UpdatedAt:    TimeFromProto(definition.GetUpdatedAt()),
 		ProviderName: definition.GetProvider(),
-		RunAs:        runAsSubjectFromString(definition.GetRunAs()),
+		RunAs:        strings.TrimSpace(definition.GetRunAs()),
 	}, nil
 }
 
@@ -318,7 +317,7 @@ func DefinitionToProto(definition *coreworkflow.Definition) (*proto.WorkflowDefi
 		CreatedAt:   TimeToProto(definition.CreatedAt),
 		UpdatedAt:   TimeToProto(definition.UpdatedAt),
 		Provider:    definition.ProviderName,
-		RunAs:       runAsSubjectToString(definition.RunAs),
+		RunAs:       strings.TrimSpace(definition.RunAs),
 	}, nil
 }
 
@@ -719,20 +718,4 @@ func TimeFromProto(t *timestamppb.Timestamp) *time.Time {
 	}
 	value := t.AsTime()
 	return &value
-}
-
-func runAsSubjectFromString(value string) *core.RunAsSubject {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: value})
-}
-
-func runAsSubjectToString(value *core.RunAsSubject) string {
-	value = core.NormalizeRunAsSubject(value)
-	if value == nil {
-		return ""
-	}
-	return value.SubjectID
 }

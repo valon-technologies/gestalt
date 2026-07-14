@@ -763,7 +763,7 @@ type WorkflowsConfig struct {
 type WorkflowDefinitionConfig struct {
 	Provider string                              `yaml:"provider,omitempty"`
 	Steps    []WorkflowStepConfig                `yaml:"steps,omitempty"`
-	RunAs    *WorkflowRunAsConfig                `yaml:"runAs,omitempty"`
+	RunAs    string                              `yaml:"runAs,omitempty"`
 	Paused   bool                                `yaml:"paused,omitempty"`
 	On       map[string]WorkflowActivationConfig `yaml:"on,omitempty"`
 }
@@ -784,50 +784,6 @@ type WorkflowEventActivationConfig struct {
 	Type    string `yaml:"type,omitempty"`
 	Source  string `yaml:"source,omitempty"`
 	Subject string `yaml:"subject,omitempty"`
-}
-
-type WorkflowRunAsConfig struct {
-	Subject *WorkflowRunAsSubjectConfig `yaml:"subject,omitempty"`
-}
-
-// UnmarshalYAML accepts the canonical scalar service-account form while
-// retaining read compatibility with the legacy nested shape for one release.
-func (r *WorkflowRunAsConfig) UnmarshalYAML(value *yaml.Node) error {
-	if r == nil {
-		return nil
-	}
-	if value.Kind == yaml.ScalarNode {
-		var subjectID string
-		if err := value.Decode(&subjectID); err != nil {
-			return err
-		}
-		r.Subject = &WorkflowRunAsSubjectConfig{ID: strings.TrimSpace(subjectID)}
-		return nil
-	}
-	type legacy WorkflowRunAsConfig
-	var decoded legacy
-	if err := value.Decode(&decoded); err != nil {
-		return err
-	}
-	*r = WorkflowRunAsConfig(decoded)
-	return nil
-}
-
-type WorkflowRunAsSubjectConfig struct {
-	ID string `yaml:"id,omitempty"`
-}
-
-func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
-	if r == nil || r.Subject == nil {
-		return nil
-	}
-	subjectID := strings.TrimSpace(r.Subject.ID)
-	if subjectID == "" {
-		return nil
-	}
-	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID: subjectID,
-	})
 }
 
 type WorkflowTargetConfig struct {
