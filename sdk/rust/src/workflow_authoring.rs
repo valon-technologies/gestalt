@@ -48,7 +48,10 @@ fn workflow_value_signal(path: impl Into<String>) -> WorkflowValue {
     }
 }
 
-fn workflow_value_step_output(step_id: impl Into<String>, path: impl Into<String>) -> WorkflowValue {
+fn workflow_value_step_output(
+    step_id: impl Into<String>,
+    path: impl Into<String>,
+) -> WorkflowValue {
     WorkflowValue {
         kind: Some(WorkflowValueKind::StepOutput(WorkflowStepOutputSource {
             step_id: step_id.into(),
@@ -89,12 +92,18 @@ pub fn workflow_ref_signal(path: impl Into<String>) -> WorkflowValue {
 }
 
 /// References a prior step output path.
-pub fn workflow_ref_step_output(step_id: impl Into<String>, path: impl Into<String>) -> WorkflowValue {
+pub fn workflow_ref_step_output(
+    step_id: impl Into<String>,
+    path: impl Into<String>,
+) -> WorkflowValue {
     workflow_value_step_output(step_id, path)
 }
 
 /// References a prior step input path.
-pub fn workflow_ref_step_input(step_id: impl Into<String>, path: impl Into<String>) -> WorkflowValue {
+pub fn workflow_ref_step_input(
+    step_id: impl Into<String>,
+    path: impl Into<String>,
+) -> WorkflowValue {
     workflow_value_step_input(step_id, path)
 }
 
@@ -437,9 +446,7 @@ impl WorkflowBuilder {
     }
 }
 
-pub fn resolve_workflow_definition_spec(
-    input: WorkflowDefinitionSpec,
-) -> WorkflowDefinitionSpec {
+pub fn resolve_workflow_definition_spec(input: WorkflowDefinitionSpec) -> WorkflowDefinitionSpec {
     input
 }
 
@@ -597,8 +604,9 @@ pub fn load_workflow_lowering_contract() -> crate::Result<Vec<WorkflowLoweringCa
         .join("../fixtures/workflow-authoring/lowering-contract.json");
     let data = fs::read_to_string(&path)
         .map_err(|err| crate::Error::internal(format!("read workflow lowering contract: {err}")))?;
-    let contract: WorkflowLoweringContract = serde_json::from_str(&data)
-        .map_err(|err| crate::Error::internal(format!("parse workflow lowering contract: {err}")))?;
+    let contract: WorkflowLoweringContract = serde_json::from_str(&data).map_err(|err| {
+        crate::Error::internal(format!("parse workflow lowering contract: {err}"))
+    })?;
     Ok(contract.cases)
 }
 
@@ -643,10 +651,12 @@ pub fn build_workflow_from_lowering_case(
             builder.activations.push(WorkflowActivation {
                 id: activation.id.clone(),
                 paused: activation.paused,
-                trigger: Some(WorkflowActivationTrigger::Schedule(WorkflowScheduleActivation {
-                    cron: schedule.cron.clone(),
-                    timezone: schedule.timezone.clone(),
-                })),
+                trigger: Some(WorkflowActivationTrigger::Schedule(
+                    WorkflowScheduleActivation {
+                        cron: schedule.cron.clone(),
+                        timezone: schedule.timezone.clone(),
+                    },
+                )),
                 input,
             });
         }
@@ -663,11 +673,7 @@ pub fn build_workflow_from_lowering_case(
             config.inputs_map = Some(fields);
         }
         if let Some(app) = &step.app {
-            let input = app
-                .input
-                .as_ref()
-                .map(lower_contract_object)
-                .transpose()?;
+            let input = app.input.as_ref().map(lower_contract_object).transpose()?;
             config.app = Some(WorkflowStepAppConfig {
                 name: app.name.clone(),
                 operation: app.operation.clone(),
@@ -763,16 +769,22 @@ fn lower_contract_value(node: &Value) -> crate::Result<WorkflowValue> {
             node.get("path").and_then(Value::as_str).unwrap_or_default(),
         )),
         "stepOutput" => Ok(workflow_ref_step_output(
-            node.get("stepId").and_then(Value::as_str).unwrap_or_default(),
+            node.get("stepId")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
             node.get("path").and_then(Value::as_str).unwrap_or_default(),
         )),
         "stepInput" => Ok(workflow_ref_step_input(
-            node.get("stepId").and_then(Value::as_str).unwrap_or_default(),
+            node.get("stepId")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
             node.get("path").and_then(Value::as_str).unwrap_or_default(),
         )),
         "literal" => workflow_ref_literal(node.get("value").cloned().unwrap_or(Value::Null)),
         "template" => Ok(workflow_ref_template(
-            node.get("template").and_then(Value::as_str).unwrap_or_default(),
+            node.get("template")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
         )),
         "object" => {
             let fields = lower_contract_object(node)?;
@@ -930,11 +942,11 @@ fn canonical_step(step: &WorkflowStep) -> Value {
             );
         }
         if let Some(output) = &agent.output {
-        if let Some(AgentOutputKind::Structured(structured)) = output.kind.as_ref() {
-            if let Some(schema) = &structured.schema {
-                agent_value["output"] = json!({ "structured": { "schema": schema } });
+            if let Some(AgentOutputKind::Structured(structured)) = output.kind.as_ref() {
+                if let Some(schema) = &structured.schema {
+                    agent_value["output"] = json!({ "structured": { "schema": schema } });
+                }
             }
-        }
         }
         if let Some(model_options) = &agent.model_options {
             agent_value["modelOptions"] = Value::Object(model_options.clone());

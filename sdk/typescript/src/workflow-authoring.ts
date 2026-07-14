@@ -4,13 +4,15 @@
  * @module
  */
 
-import type { AgentOutput, AgentToolRef } from "./agent.ts";
+import type { AgentOutput, AgentToolRef } from "./providers/agent.ts";
 import type { JsonInput, JsonObjectInput } from "./protocol.ts";
+import { fromWireWorkflowDefinitionSpec } from "./internal/codec/workflow.ts";
 import {
   boundWorkflowTarget,
   workflowActivation,
   workflowAgentMessage,
   workflowDefinitionSpec,
+  workflowDefinitionSpecToProto,
   workflowEventActivation,
   workflowEventMatch,
   workflowStep,
@@ -125,9 +127,25 @@ export interface StepConfig {
   metadata?: JsonObjectInput | undefined;
 }
 
-export type EventScope = ReturnType<typeof createRefProxy>;
-export type ActivationScope = ReturnType<typeof createRefProxy>;
-export type StepScope = ReturnType<typeof createStepScope>;
+export interface StepRefProxy {
+  readonly [key: string]: unknown;
+}
+
+export interface StepScopeRefs {
+  readonly output: StepRefProxy;
+  readonly input: StepRefProxy;
+}
+
+export interface StepScope {
+  readonly input: StepRefProxy;
+  readonly signal: StepRefProxy;
+  stepOutput(stepId: string, path: string): WorkflowRef;
+  stepInput(stepId: string, path: string): WorkflowRef;
+  readonly steps: Record<string, StepScopeRefs>;
+}
+
+export type EventScope = StepRefProxy;
+export type ActivationScope = StepRefProxy;
 
 /** Creates an event activation configuration for `.on()`. */
 export function event(
@@ -193,11 +211,19 @@ export async function applyWorkflowDefinition(
   idempotencyKey: string,
   spec?: WorkflowDefinitionSpec | WorkflowBuilder,
 ): Promise<import("./workflow.ts").WorkflowDefinition> {
-  return workflow.applyDefinition(
-    provider,
-    idempotencyKey,
-    spec === undefined ? undefined : resolveWorkflowDefinitionSpec(spec),
-  );
+  const resolved =
+    spec === undefined ? undefined : toClientWorkflowDefinitionSpec(resolveWorkflowDefinitionSpec(spec));
+  return workflow.applyDefinition(provider, idempotencyKey, resolved);
+}
+
+function toClientWorkflowDefinitionSpec(
+  spec: WorkflowDefinitionSpec,
+): import("./workflow.ts").WorkflowDefinitionSpec {
+  const proto = workflowDefinitionSpecToProto(spec);
+  if (proto === undefined) {
+    throw new Error("workflow definition spec is required");
+  }
+  return fromWireWorkflowDefinitionSpec(proto);
 }
 
 export class WorkflowBuilder {
@@ -217,7 +243,7 @@ export class WorkflowBuilder {
     if (activation.__workflowActivation === "event") {
       const activationId = activation.options?.id?.trim() || activation.type;
       const mapped = activation.mapInput
-        ? activation.mapInput(createRefProxy("", "signal"))
+        ? activation.mapInput(createRefProxy("", "signal") as EventScope)
         : undefined;
       this.state.activations.push(
         workflowActivation({
@@ -241,7 +267,7 @@ export class WorkflowBuilder {
 
     const activationId = activation.options?.id?.trim() || activation.cron;
     const mapped = activation.mapInput
-      ? activation.mapInput(createRefProxy("", "input"))
+      ? activation.mapInput(createRefProxy("", "input") as ActivationScope)
       : undefined;
     this.state.activations.push(
       workflowActivation({
@@ -348,8 +374,8 @@ export class WorkflowBuilder {
 
 function createStepScope(): StepScope {
   return {
-    input: createRefProxy("", "input"),
-    signal: createRefProxy("", "signal"),
+    input: createRefProxy("", "input") as StepRefProxy,
+    signal: createRefProxy("", "signal") as StepRefProxy,
     stepOutput(stepId: string, path: string): WorkflowRef {
       return {
         [WORKFLOW_REF]: true,
@@ -374,8 +400,8 @@ function createStepScope(): StepScope {
             return undefined;
           }
           return {
-            output: createRefProxy("", "stepOutput", stepId),
-            input: createRefProxy("", "stepInput", stepId),
+            output: createRefProxy("", "stepOutput", stepId) as StepRefProxy,
+            input: createRefProxy("", "stepInput", stepId) as StepRefProxy,
           };
         },
       },
@@ -387,7 +413,7 @@ function createRefProxy(
   path: string,
   kind: WorkflowRefKind,
   stepId?: string,
-): unknown {
+): StepRefProxy {
   const marker: WorkflowRef = {
     [WORKFLOW_REF]: true,
     kind,
@@ -414,7 +440,7 @@ function createRefProxy(
       const nextPath = target.path ? `${target.path}.${String(prop)}` : String(prop);
       return createRefProxy(nextPath, target.kind, target.stepId);
     },
-  });
+  }) as unknown as StepRefProxy;
 }
 
 function isCapturedRef(value: unknown): value is CapturedRef {
@@ -791,7 +817,7 @@ function canonicalWorkflowStep(step: WorkflowStep): Record<string, unknown> {
       agent.sessionKey = step.agent.sessionKey;
     }
     if (step.agent.prompt !== undefined) {
-      agent.prompt = { template: step.agent.prompt.template ?? "" };
+      agent.prompt = { template: workflowTextTemplate(step.agent.prompt) };
     }
     if ((step.agent.messages ?? []).length > 0) {
       agent.messages = (step.agent.messages ?? []).map((message) => ({
@@ -799,7 +825,7 @@ function canonicalWorkflowStep(step: WorkflowStep): Record<string, unknown> {
         text:
           message.text === undefined
             ? undefined
-            : { template: message.text.template ?? "" },
+            : { template: workflowTextTemplate(message.text) },
       }));
     }
     if ((step.agent.tools ?? []).length > 0) {
@@ -828,6 +854,19 @@ function canonicalWorkflowStep(step: WorkflowStep): Record<string, unknown> {
   return out;
 }
 
+function workflowTextTemplate(text: unknown): string {
+  if (text === undefined || text === null) {
+    return "";
+  }
+  if (typeof text === "string") {
+    return text;
+  }
+  if (typeof text === "object" && "template" in text) {
+    return String((text as { template?: string }).template ?? "");
+  }
+  return "";
+}
+
 function canonicalWorkflowValue(value: WorkflowValue): Record<string, unknown> {
   const normalized = workflowValue(value);
   const kind = normalized.kind;
@@ -844,7 +883,7 @@ function canonicalWorkflowValue(value: WorkflowValue): Record<string, unknown> {
     case "array":
       return { array: kind.value.map((item) => canonicalWorkflowValue(item)) };
     case "template":
-      return { template: kind.value.template ?? "" };
+      return { template: workflowTextTemplate(kind.value) };
     case "input":
       return { input: kind.value };
     case "signal":
