@@ -433,6 +433,10 @@ describe("runMigrations", () => {
     expect(providerMigrationLedgerStore("dealHub")).toBe("deal_hub_migrations");
     expect(providerMigrationLedgerStore("deal-hub")).toBe("deal_hub_migrations");
     expect(providerMigrationLedgerStore("@scope/gIssues")).toBe("g_issues_migrations");
+    expect(providerMigrationLedgerStore("github.com/foo/myApp")).toBe(
+      "my_app_migrations",
+    );
+    expect(providerMigrationLedgerStore("my  app")).toBe("my__app_migrations");
     expect(providerMigrationLedgerStore("   ")).toBe("_gestalt_migrations");
   });
 });

@@ -44,7 +44,12 @@ def provider_migration_ledger_store(provider_name: str) -> str:
 def _slug_name(value: str) -> str:
     chars: list[str] = []
     for char in value:
-        if char.isalnum() or char in "._-":
+        if (
+            ("A" <= char <= "Z")
+            or ("a" <= char <= "z")
+            or ("0" <= char <= "9")
+            or char in "._-"
+        ):
             chars.append(char)
         else:
             chars.append("-")

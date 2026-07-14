@@ -16,6 +16,8 @@ func TestProviderLedgerStore(t *testing.T) {
 		{name: "multi-word camelCase", provider: "dealHub", want: "deal_hub_migrations"},
 		{name: "hyphenated slug", provider: "deal-hub", want: "deal_hub_migrations"},
 		{name: "scoped package name", provider: "@scope/gIssues", want: "g_issues_migrations"},
+		{name: "path-like provider name", provider: "github.com/foo/myApp", want: "my_app_migrations"},
+		{name: "spaces become separate dashes", provider: "my  app", want: "my__app_migrations"},
 		{name: "empty falls back", provider: "   ", want: "_gestalt_migrations"},
 	}
 	for _, tt := range tests {

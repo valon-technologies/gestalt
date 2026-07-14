@@ -150,6 +150,11 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(provider_migration_ledger_store("dealHub"), "deal_hub_migrations")
         self.assertEqual(provider_migration_ledger_store("deal-hub"), "deal_hub_migrations")
         self.assertEqual(provider_migration_ledger_store("@scope/gIssues"), "g_issues_migrations")
+        self.assertEqual(
+            provider_migration_ledger_store("github.com/foo/myApp"),
+            "my_app_migrations",
+        )
+        self.assertEqual(provider_migration_ledger_store("my  app"), "my__app_migrations")
         self.assertEqual(provider_migration_ledger_store("   "), "_gestalt_migrations")
 
     def test_configure_migrations_derives_per_provider_ledger_store(self) -> None:

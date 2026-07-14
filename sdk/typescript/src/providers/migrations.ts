@@ -95,13 +95,15 @@ export interface MigrationRunOptions {
  * Derive the default migration ledger store for a configured provider name.
  */
 export function providerMigrationLedgerStore(providerName: string): string {
-  const normalized = providerName.trim().replace(/^@[^/]+\//, "");
+  let normalized = providerName.trim();
+  const slash = normalized.lastIndexOf("/");
+  if (slash >= 0) {
+    normalized = normalized.slice(slash + 1);
+  }
   if (!normalized) {
     return DEFAULT_LEDGER_STORE;
   }
-  const slug = normalized
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  const slug = migrationLedgerSlug(normalized);
   if (!slug) {
     return DEFAULT_LEDGER_STORE;
   }
@@ -110,6 +112,25 @@ export function providerMigrationLedgerStore(providerName: string): string {
     .replace(/-/g, "_")
     .toLowerCase();
   return `${snake}_migrations`;
+}
+
+function migrationLedgerSlug(value: string): string {
+  let slug = "";
+  for (const char of value) {
+    if (
+      (char >= "A" && char <= "Z") ||
+      (char >= "a" && char <= "z") ||
+      (char >= "0" && char <= "9") ||
+      char === "." ||
+      char === "_" ||
+      char === "-"
+    ) {
+      slug += char;
+    } else {
+      slug += "-";
+    }
+  }
+  return slug.replace(/^-+|-+$/g, "");
 }
 
 /** Resolve the IndexedDB binding for migration runs. */
