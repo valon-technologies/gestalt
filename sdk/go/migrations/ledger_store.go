@@ -7,6 +7,7 @@ import (
 
 var camelBoundary = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 
+// ProviderLedgerStore returns the default ledger store for a provider name.
 func ProviderLedgerStore(providerName string) string {
 	normalized := strings.TrimSpace(providerName)
 	if at := strings.LastIndex(normalized, "/"); at >= 0 {

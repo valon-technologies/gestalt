@@ -4,8 +4,8 @@ from unittest.mock import patch
 from gestalt.migrations import (
     MigrationError,
     MigrationRunOptions,
-    SchemaRevision,
     SchemaDeclaration,
+    SchemaRevision,
     StoreDeclaration,
     configure_migrations,
     provider_migration_ledger_store,
