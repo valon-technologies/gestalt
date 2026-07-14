@@ -27,8 +27,6 @@ Record = dict[str, Any]
 
 
 def provider_migration_ledger_store(provider_name: str) -> str:
-    """Derive the default migration ledger store for a configured provider name."""
-
     normalized = provider_name.strip()
     if "/" in normalized:
         normalized = normalized.rsplit("/", 1)[-1]

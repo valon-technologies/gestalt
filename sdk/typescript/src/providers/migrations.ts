@@ -83,17 +83,10 @@ export interface MigrationRunOptions {
   revisions: Revision[];
   /** Name of the IndexedDB binding to migrate. */
   dbBinding?: string;
-  /**
-   * Ledger store name. When omitted, {@link runMigrations} defaults to
-   * `_gestalt_migrations`; provider startup derives a per-provider store from
-   * the configured provider name.
-   */
+  /** Ledger store name. */
   ledgerStore?: string;
 }
 
-/**
- * Derive the default migration ledger store for a configured provider name.
- */
 export function providerMigrationLedgerStore(providerName: string): string {
   let normalized = providerName.trim();
   const slash = normalized.lastIndexOf("/");
