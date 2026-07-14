@@ -245,3 +245,107 @@ fn app_step_mut(
         _ => Err(gestalt::Error::bad_request("expected app step")),
     }
 }
+
+#[test]
+fn define_workflow_requires_run_as() -> gestalt::Result<()> {
+    let err = gestalt::define_workflow(gestalt::DefineWorkflowOptions {
+        id: "demo".to_string(),
+        run_as: String::new(),
+        paused: false,
+    })
+    .unwrap_err();
+    assert!(err.to_string().contains("run_as"));
+    Ok(())
+}
+
+#[test]
+fn typed_workflow_builder_matches_extract_row_example() -> gestalt::Result<()> {
+    let spec = gestalt::define_workflow(gestalt::DefineWorkflowOptions {
+        id: "extractRow".to_string(),
+        run_as: "service_account:deal-hub-extraction".to_string(),
+        paused: false,
+    })?
+    .on(gestalt::WorkflowActivationConfig::Event(gestalt::event(
+        "deal_hub.analyses.extract.requested".to_string(),
+        Some(|| {
+            std::collections::BTreeMap::from([(
+                "analysisId".to_string(),
+                gestalt::workflow_ref_signal("data.analysisId"),
+            )])
+        }),
+        gestalt::WorkflowEventActivationOptions::default(),
+    )))
+    .step(
+        "extract",
+        gestalt::WorkflowStepConfig {
+            app: Some(gestalt::WorkflowStepAppConfig {
+                name: "dealHub".to_string(),
+                operation: "analyses.extractRowWorkflow".to_string(),
+                input: Some(|_scope: gestalt::WorkflowStepScope| {
+                    std::collections::BTreeMap::from([(
+                        "analysisId".to_string(),
+                        gestalt::WorkflowStepScope::input("analysisId"),
+                    )])
+                }),
+                input_map: None,
+                connection: String::new(),
+                instance: String::new(),
+                credential_mode: String::new(),
+            }),
+            ..Default::default()
+        },
+    )
+    .to_spec();
+
+    let cases = gestalt::load_workflow_lowering_contract()?;
+    let expected = cases
+        .iter()
+        .find(|case| case.name == "extract_row")
+        .expect("extract_row fixture")
+        .expected_spec
+        .clone();
+    assert_eq!(gestalt::canonical_workflow_definition_spec(&spec), expected);
+    Ok(())
+}
+
+#[test]
+fn workflow_authoring_golden_fixtures_match_lowering_contract() -> gestalt::Result<()> {
+    let cases = gestalt::load_workflow_lowering_contract()?;
+    for case in cases {
+        let spec = gestalt::build_workflow_from_lowering_case(&case)?.to_spec();
+        assert_eq!(
+            gestalt::canonical_workflow_definition_spec(&spec),
+            case.expected_spec,
+            "fixture {}",
+            case.name
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn resolve_workflow_definition_spec_accepts_builders_and_specs() -> gestalt::Result<()> {
+    let builder = gestalt::define_workflow(gestalt::DefineWorkflowOptions {
+        id: "extractRow".to_string(),
+        run_as: "service_account:deal-hub-extraction".to_string(),
+        paused: false,
+    })?
+    .on(gestalt::WorkflowActivationConfig::Schedule(
+        gestalt::schedule(
+            "0 2 * * *".to_string(),
+            Some(|| {
+                std::collections::BTreeMap::from([(
+                    "reason".to_string(),
+                    gestalt::workflow_ref_literal(serde_json::Value::String("nightly".to_string()))
+                        .expect("literal"),
+                )])
+            }),
+            Default::default(),
+        ),
+    ));
+
+    let from_builder = gestalt::resolve_workflow_definition_spec_from_builder(builder.clone());
+    let from_spec = gestalt::resolve_workflow_definition_spec(from_builder.clone());
+    assert_eq!(from_builder, from_spec);
+    Ok(())
+}

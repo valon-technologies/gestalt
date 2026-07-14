@@ -475,6 +475,105 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertIn("WorkflowRunContext", gestalt.__all__)
         self.assertIn("parse_workflow_run_context", gestalt.__all__)
 
+    def test_define_workflow_requires_run_as(self) -> None:
+        from gestalt.workflow_authoring import define_workflow
+
+        with self.assertRaisesRegex(ValueError, "run_as"):
+            define_workflow(workflow_id="demo", run_as="")
+
+    def test_typed_workflow_builder_matches_extract_row_example(self) -> None:
+        from gestalt.workflow_authoring import (
+            canonical_workflow_definition_spec,
+            define_workflow,
+            event,
+            load_workflow_lowering_contract,
+        )
+
+        spec = (
+            define_workflow(
+                workflow_id="extractRow",
+                run_as="service_account:deal-hub-extraction",
+            )
+            .on(
+                event(
+                    "deal_hub.analyses.extract.requested",
+                    lambda activation_event: {
+                        "analysisId": activation_event.data.analysisId,
+                    },
+                )
+            )
+            .step(
+                "extract",
+                {
+                    "app": {
+                        "name": "dealHub",
+                        "operation": "analyses.extractRowWorkflow",
+                        "input": lambda scope: {
+                            "analysisId": scope.input.analysisId,
+                        },
+                    }
+                },
+            )
+            .to_spec()
+        )
+
+        contract = load_workflow_lowering_contract()
+        expected = next(
+            case["expectedSpec"] for case in contract["cases"] if case["name"] == "extract_row"
+        )
+        self.assertEqual(canonical_workflow_definition_spec(spec), expected)
+
+    def test_resolve_workflow_definition_spec_accepts_builders(self) -> None:
+        from gestalt.workflow_authoring import (
+            define_workflow,
+            resolve_workflow_definition_spec,
+            schedule,
+        )
+
+        builder = define_workflow(
+            workflow_id="extractRow",
+            run_as="service_account:deal-hub-extraction",
+        ).on(schedule("0 2 * * *", lambda scope: {"reason": scope.reason}))
+
+        from_builder = resolve_workflow_definition_spec(builder)
+        from_spec = resolve_workflow_definition_spec(from_builder)
+        self.assertEqual(from_builder.activations[0].schedule.cron, "0 2 * * *")
+        self.assertEqual(from_spec.id, "extractRow")
+
+
+def _load_workflow_authoring_cases() -> list[dict]:
+    from gestalt.workflow_authoring import load_workflow_lowering_contract
+
+    return load_workflow_lowering_contract()["cases"]
+
+
+class WorkflowAuthoringGoldenTests(unittest.TestCase):
+    pass
+
+
+for case in _load_workflow_authoring_cases():
+    def _make_test(case_data: dict):
+        def test(self: WorkflowAuthoringGoldenTests) -> None:
+            from gestalt.workflow_authoring import (
+                build_workflow_from_lowering_case,
+                canonical_workflow_definition_spec,
+            )
+
+            spec = build_workflow_from_lowering_case(case_data).to_spec()
+            self.assertEqual(
+                canonical_workflow_definition_spec(spec),
+                case_data["expectedSpec"],
+            )
+
+        test.__name__ = f"test_golden_fixture_{case_data['name']}"
+        return test
+
+    setattr(
+        WorkflowAuthoringGoldenTests,
+        f"test_golden_fixture_{case['name']}",
+        _make_test(case),
+    )
+
 
 if __name__ == "__main__":
     unittest.main()

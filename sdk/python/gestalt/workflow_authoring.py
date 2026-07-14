@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, MutableMapping
+from typing import Any, Callable, Mapping
 
 from gestalt._gen.v1 import workflow_pb2 as pb
 from gestalt._protocol import value_to_json, which_oneof
@@ -18,7 +18,6 @@ from gestalt._workflow import (
     workflow_step,
     workflow_step_agent_turn,
     workflow_step_app_call,
-    workflow_step_when,
     workflow_text,
     workflow_value,
 )
