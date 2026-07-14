@@ -1394,8 +1394,13 @@ def _workflow_signal_or_start_run_request(
 def _workflow_apply_definition_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.ApplyWorkflowProviderDefinitionRequest):
         return _copy(value)
+    if value is not None and callable(getattr(value, "to_spec", None)):
+        kwargs = {"spec": value.to_spec(), **kwargs}
+        value = None
     data = _data(value, kwargs)
     spec = data.get("spec")
+    if spec is not None and callable(getattr(spec, "to_spec", None)):
+        spec = spec.to_spec()
     return pb.ApplyWorkflowProviderDefinitionRequest(
         provider=data.get("provider", ""),
         spec=workflow_definition_spec(spec) if spec is not None else None,
@@ -2258,8 +2263,15 @@ WorkflowSignalRunInput: TypeAlias = WorkflowSignalRun | WorkflowRequestMapping |
 WorkflowSignalOrStartRunInput: TypeAlias = (
     WorkflowSignalOrStartRun | WorkflowRequestMapping | None
 )
+class WorkflowDefinitionBuilder(Protocol):
+    """Structural contract implemented by typed workflow definition builders."""
+
+    def to_spec(self) -> Any:
+        """Return a native workflow definition specification."""
+
+
 WorkflowApplyDefinitionInput: TypeAlias = (
-    WorkflowApplyDefinition | WorkflowRequestMapping | None
+    WorkflowApplyDefinition | WorkflowRequestMapping | WorkflowDefinitionBuilder | None
 )
 WorkflowGetDefinitionInput: TypeAlias = (
     WorkflowGetDefinition | WorkflowRequestMapping | None

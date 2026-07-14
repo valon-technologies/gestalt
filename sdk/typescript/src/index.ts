@@ -100,7 +100,7 @@ export {
   type AgentWorkspaceGitCheckout,
   type PreparedAgentWorkspace,
 } from "./agent.ts";
-export { Workflow } from "./workflow.ts";
+export { Workflow } from "./workflow-service.ts";
 export {
   GestaltError,
   GestaltErrorCode,
@@ -432,7 +432,7 @@ export {
   type ResolveAgentProviderInteractionRequest,
   type UpdateAgentProviderSessionRequest,
 } from "./providers/agent.ts";
-// The workflow authoring surface re-exports by name: its proto conversion
+// The workflow define surface re-exports by name: its proto conversion
 // helpers stay package-internal (cross-module plumbing, not public API).
 export {
   WorkflowProvider,
@@ -536,6 +536,24 @@ export {
   type WorkflowValue,
   type WorkflowValueKind,
 } from "./providers/workflow.ts";
+export {
+  WorkflowBuilder,
+  defineWorkflow,
+  event,
+  schedule,
+  text,
+  type ActivationConfig,
+  type DefineWorkflowOptions,
+  type EventActivationConfig,
+  type EventActivationOptions,
+  type ScheduleActivationConfig,
+  type ScheduleActivationOptions,
+  type StepAgentConfig,
+  type StepAgentMessageConfig,
+  type StepAppConfig,
+  type StepConfig,
+  type StepWhenConfig,
+} from "./workflow-define.ts";
 export {
   GENAI_OPERATION_CHAT,
   GENAI_OPERATION_EXECUTE_TOOL,
