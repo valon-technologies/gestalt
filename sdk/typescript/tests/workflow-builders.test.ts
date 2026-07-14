@@ -7,18 +7,21 @@ import {
   WorkflowRunStatus,
   boundWorkflowTarget,
   boundWorkflowTargetFromTarget,
-  buildWorkflowFromLoweringCase,
-  canonicalWorkflowDefinitionSpec,
   defineWorkflow,
   event,
   resolveWorkflowDefinitionSpec,
   schedule,
+  text,
   workflowRun,
   workflowSignal,
   workflowStepWhen,
   workflowValue,
   type WorkflowValue,
 } from "../src/index.ts";
+import {
+  buildWorkflowFromLoweringCase,
+  canonicalWorkflowDefinitionSpec,
+} from "./workflow-authoring-fixtures.ts";
 import { workflowStepWhenToProto } from "../src/providers/workflow.ts";
 
 test("workflow builders accept native JSON objects and Dates", () => {
@@ -223,7 +226,7 @@ test("defineWorkflow requires runAs", () => {
   );
 });
 
-test("typed workflow builder matches extract row example", () => {
+test("fluent workflow builder matches extract row example", () => {
   const spec = defineWorkflow({
     id: "extractRow",
     runAs: "service_account:deal-hub-extraction",

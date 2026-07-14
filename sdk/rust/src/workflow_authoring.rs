@@ -1,4 +1,4 @@
-//! Typed workflow authoring builder with explicit path helpers.
+//! Fluent workflow authoring builder with explicit path helpers.
 #![allow(missing_docs)]
 
 use std::collections::BTreeMap;
@@ -446,6 +446,59 @@ impl WorkflowBuilder {
     }
 }
 
+/// Composes workflow template text from literals and workflow value references.
+pub fn workflow_compose_text(parts: &[WorkflowValue]) -> WorkflowText {
+    let mut rendered = String::new();
+    for (index, part) in parts.iter().enumerate() {
+        if index > 0 {
+            // Parts are explicit; callers include literal spacing.
+        }
+        rendered.push_str(&workflow_value_to_template_placeholder(part));
+    }
+    WorkflowText { template: rendered }
+}
+
+pub fn workflow_compose_text_with_literals(
+    parts: &[WorkflowComposeTextPart],
+) -> WorkflowText {
+    let mut rendered = String::new();
+    for part in parts {
+        match part {
+            WorkflowComposeTextPart::Literal(value) => rendered.push_str(value),
+            WorkflowComposeTextPart::Value(value) => {
+                rendered.push_str(&workflow_value_to_template_placeholder(value));
+            }
+        }
+    }
+    WorkflowText { template: rendered }
+}
+
+/// One segment of a composed workflow template.
+pub enum WorkflowComposeTextPart<'a> {
+    /// Literal text.
+    Literal(&'a str),
+    /// Captured workflow value reference.
+    Value(&'a WorkflowValue),
+}
+
+fn workflow_value_to_template_placeholder(value: &WorkflowValue) -> String {
+    match value.kind.as_ref() {
+        Some(WorkflowValueKind::Input(source)) => format!("${{{{ input.{} }}}}", source.path),
+        Some(WorkflowValueKind::Signal(source)) => format!("${{{{ signal.{} }}}}", source.path),
+        Some(WorkflowValueKind::StepOutput(source)) => format!(
+            "${{{{ steps.{}.outputs.{} }}}}",
+            source.step_id, source.path
+        ),
+        Some(WorkflowValueKind::StepInput(source)) => format!(
+            "${{{{ steps.{}.inputs.{} }}}}",
+            source.step_id, source.path
+        ),
+        _ => panic!(
+            "workflow compose text references must be input, signal, step output, or step input paths"
+        ),
+    }
+}
+
 pub fn resolve_workflow_definition_spec(input: WorkflowDefinitionSpec) -> WorkflowDefinitionSpec {
     input
 }
@@ -599,6 +652,7 @@ struct WorkflowLoweringWhen {
     equals: Option<Value>,
 }
 
+#[doc(hidden)]
 pub fn load_workflow_lowering_contract() -> crate::Result<Vec<WorkflowLoweringCase>> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../fixtures/workflow-authoring/lowering-contract.json");
@@ -610,6 +664,7 @@ pub fn load_workflow_lowering_contract() -> crate::Result<Vec<WorkflowLoweringCa
     Ok(contract.cases)
 }
 
+#[doc(hidden)]
 pub fn build_workflow_from_lowering_case(
     case_data: &WorkflowLoweringCase,
 ) -> crate::Result<WorkflowBuilder> {
@@ -849,6 +904,7 @@ fn join_path(prefix: &str, path: impl AsRef<str>) -> String {
     }
 }
 
+#[doc(hidden)]
 pub fn canonical_workflow_definition_spec(spec: &WorkflowDefinitionSpec) -> Value {
     json!({
         "id": spec.id,

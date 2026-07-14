@@ -100,7 +100,7 @@ export {
   type AgentWorkspaceGitCheckout,
   type PreparedAgentWorkspace,
 } from "./agent.ts";
-export { Workflow } from "./workflow.ts";
+export { Workflow } from "./workflow-service.ts";
 export {
   GestaltError,
   GestaltErrorCode,
@@ -537,14 +537,11 @@ export {
 } from "./providers/workflow.ts";
 export {
   WorkflowBuilder,
-  applyWorkflowDefinition,
-  buildWorkflowFromLoweringCase,
-  canonicalWorkflowDefinitionSpec,
   defineWorkflow,
   event,
-  lowerWorkflowValueNode,
   resolveWorkflowDefinitionSpec,
   schedule,
+  text,
   type ActivationConfig,
   type ActivationScope,
   type DefineWorkflowOptions,
@@ -559,6 +556,8 @@ export {
   type StepConfig,
   type StepScope,
   type StepWhenConfig,
+  type WorkflowDefinitionInput,
+  type WorkflowPrompt,
 } from "./workflow-authoring.ts";
 export {
   GENAI_OPERATION_CHAT,

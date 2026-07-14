@@ -352,15 +352,11 @@ _WORKFLOW_AUTHORED_EXPORTS = (
 
 _WORKFLOW_AUTHORING_EXPORTS = (
     "WorkflowBuilder",
-    "apply_workflow_definition",
-    "build_workflow_from_lowering_case",
-    "canonical_workflow_definition_spec",
     "define_workflow",
     "event",
-    "load_workflow_lowering_contract",
-    "lower_workflow_value_node",
     "resolve_workflow_definition_spec",
     "schedule",
+    "text",
 )
 
 _WORKFLOW_HELPER_EXPORTS = (

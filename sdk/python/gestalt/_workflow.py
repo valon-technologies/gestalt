@@ -1396,9 +1396,15 @@ def _workflow_apply_definition_request(value: Any | None = None, **kwargs: Any) 
         return _copy(value)
     data = _data(value, kwargs)
     spec = data.get("spec")
+    if spec is not None:
+        to_spec = getattr(spec, "to_spec", None)
+        if callable(to_spec):
+            spec = workflow_definition_spec(to_spec())
+        else:
+            spec = workflow_definition_spec(spec)
     return pb.ApplyWorkflowProviderDefinitionRequest(
         provider=data.get("provider", ""),
-        spec=workflow_definition_spec(spec) if spec is not None else None,
+        spec=spec,
         idempotency_key=data.get("idempotency_key", ""),
     )
 

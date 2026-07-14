@@ -481,11 +481,10 @@ class WorkflowHelperTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "run_as"):
             define_workflow(workflow_id="demo", run_as="")
 
-    def test_typed_workflow_builder_matches_extract_row_example(self) -> None:
-        from gestalt.workflow_authoring import (
+    def test_fluent_workflow_builder_matches_extract_row_example(self) -> None:
+        from gestalt.workflow_authoring import define_workflow, event
+        from workflow_authoring_fixtures import (
             canonical_workflow_definition_spec,
-            define_workflow,
-            event,
             load_workflow_lowering_contract,
         )
 
@@ -542,7 +541,7 @@ class WorkflowHelperTests(unittest.TestCase):
 
 
 def _load_workflow_authoring_cases() -> list[dict]:
-    from gestalt.workflow_authoring import load_workflow_lowering_contract
+    from workflow_authoring_fixtures import load_workflow_lowering_contract
 
     return load_workflow_lowering_contract()["cases"]
 
@@ -554,7 +553,7 @@ class WorkflowAuthoringGoldenTests(unittest.TestCase):
 for case in _load_workflow_authoring_cases():
     def _make_test(case_data: dict):
         def test(self: WorkflowAuthoringGoldenTests) -> None:
-            from gestalt.workflow_authoring import (
+            from workflow_authoring_fixtures import (
                 build_workflow_from_lowering_case,
                 canonical_workflow_definition_spec,
             )
