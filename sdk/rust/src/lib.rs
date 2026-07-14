@@ -142,15 +142,20 @@ pub use tonic::codegen::async_trait;
 pub use workflow::Workflow;
 pub use workflow_authoring::{
     DefineWorkflowOptions, WorkflowActivationConfig, WorkflowActivationScope, WorkflowBuilder,
-    WorkflowDefinitionSpecOrBuilder, WorkflowEventActivationConfig, WorkflowEventActivationOptions,
-    WorkflowEventScope, WorkflowLoweringCase, WorkflowScheduleActivationConfig,
+    WorkflowComposeTextPart, WorkflowDefinitionSpecOrBuilder, WorkflowEventActivationConfig,
+    WorkflowEventActivationOptions, WorkflowEventScope, WorkflowScheduleActivationConfig,
     WorkflowScheduleActivationOptions, WorkflowStepAgentConfig, WorkflowStepAgentMessageConfig,
     WorkflowStepAppConfig, WorkflowStepConfig, WorkflowStepScope, WorkflowStepWhenConfig,
-    apply_workflow_definition, build_workflow_from_lowering_case,
-    canonical_workflow_definition_spec, define_workflow, event, load_workflow_lowering_contract,
+    apply_workflow_definition, define_workflow, event,
     resolve_workflow_definition_spec, resolve_workflow_definition_spec_from_builder, schedule,
-    workflow_ref_array, workflow_ref_input, workflow_ref_literal, workflow_ref_object,
-    workflow_ref_signal, workflow_ref_step_input, workflow_ref_step_output, workflow_ref_template,
+    workflow_compose_text, workflow_compose_text_with_literals, workflow_ref_array,
+    workflow_ref_input, workflow_ref_literal, workflow_ref_object, workflow_ref_signal,
+    workflow_ref_step_input, workflow_ref_step_output, workflow_ref_template,
+};
+#[doc(hidden)]
+pub use workflow_authoring::{
+    build_workflow_from_lowering_case, canonical_workflow_definition_spec,
+    load_workflow_lowering_contract,
 };
 pub use workflow_provider::{
     ApplyWorkflowProviderDefinitionRequest, BoundWorkflowTarget, CancelWorkflowProviderRunRequest,

@@ -1,5 +1,5 @@
 /**
- * Public workflow authoring surface.
+ * Public fluent workflow authoring surface.
  *
  * Re-exports the workflow builder API by name: the module's proto conversion
  * helpers are SDK-internal plumbing and are deliberately not exported here.
@@ -110,14 +110,11 @@ export {
 } from "./workflow.ts";
 export {
   WorkflowBuilder,
-  applyWorkflowDefinition,
-  buildWorkflowFromLoweringCase,
-  canonicalWorkflowDefinitionSpec,
   defineWorkflow,
   event,
-  lowerWorkflowValueNode,
   resolveWorkflowDefinitionSpec,
   schedule,
+  text,
   type ActivationConfig,
   type ActivationScope,
   type DefineWorkflowOptions,
@@ -132,4 +129,6 @@ export {
   type StepConfig,
   type StepScope,
   type StepWhenConfig,
+  type WorkflowDefinitionInput,
+  type WorkflowPrompt,
 } from "../workflow-authoring.ts";
