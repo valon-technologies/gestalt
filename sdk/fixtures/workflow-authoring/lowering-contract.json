@@ -1,0 +1,307 @@
+{
+  "description": "Language-neutral lowering contract from workflow authoring builder operations into WorkflowDefinitionSpec.",
+  "valueKinds": {
+    "input": { "path": "dot-separated path into run input" },
+    "signal": { "path": "dot-separated path into activation signal/event payload" },
+    "stepOutput": { "stepId": "prior step id", "path": "dot-separated path into step output" },
+    "stepInput": { "stepId": "prior step id", "path": "dot-separated path into step input" },
+    "literal": { "value": "any JSON scalar, object, or array" },
+    "template": { "template": "workflow template string" },
+    "object": { "fields": "map of field name to value node" },
+    "array": { "values": "list of value nodes" }
+  },
+  "cases": [
+    {
+      "name": "comprehensive",
+      "init": {
+        "id": "comprehensiveWorkflow",
+        "runAs": "service_account:test-runner",
+        "paused": false
+      },
+      "activations": [
+        {
+          "id": "extract_requested",
+          "event": {
+            "type": "deal_hub.analyses.extract.requested",
+            "source": "deal_hub",
+            "subject": "analysis"
+          },
+          "input": {
+            "kind": "object",
+            "fields": {
+              "analysisId": { "kind": "signal", "path": "data.analysisId" },
+              "enabled": { "kind": "literal", "value": true }
+            }
+          }
+        },
+        {
+          "id": "nightly",
+          "schedule": {
+            "cron": "0 2 * * *",
+            "timezone": "America/New_York"
+          },
+          "input": {
+            "kind": "object",
+            "fields": {
+              "reason": { "kind": "literal", "value": "nightly" }
+            }
+          }
+        }
+      ],
+      "steps": [
+        {
+          "id": "extract",
+          "inputs": {
+            "kind": "object",
+            "fields": {
+              "thread": { "kind": "signal", "path": "event.thread_ts" }
+            }
+          },
+          "app": {
+            "name": "dealHub",
+            "operation": "analyses.extractRowWorkflow",
+            "input": {
+              "kind": "object",
+              "fields": {
+                "analysisId": { "kind": "input", "path": "analysisId" }
+              }
+            }
+          }
+        },
+        {
+          "id": "diagnosis",
+          "agent": {
+            "provider": "agent",
+            "model": "claude",
+            "prompt": {
+              "kind": "template",
+              "template": "Diagnose analysis ${{ input.analysisId }}"
+            },
+            "messages": [
+              {
+                "role": "system",
+                "text": { "kind": "literal", "value": "Use concise replies." }
+              }
+            ],
+            "tools": [
+              { "app": "datadog", "operation": "queryLogs" }
+            ],
+            "output": {
+              "structured": {
+                "schema": { "type": "object" }
+              }
+            },
+            "modelOptions": { "temperature": 0 }
+          },
+          "timeoutSeconds": 45,
+          "metadata": { "kind": "diagnosis" }
+        },
+        {
+          "id": "notify",
+          "app": {
+            "name": "slack",
+            "operation": "messages.post",
+            "input": {
+              "kind": "object",
+              "fields": {
+                "summary": { "kind": "stepOutput", "stepId": "diagnosis", "path": "agent.output.structured.value" },
+                "channels": {
+                  "kind": "array",
+                  "values": [
+                    { "kind": "literal", "value": "C123" },
+                    { "kind": "stepInput", "stepId": "extract", "path": "thread" }
+                  ]
+                },
+                "greeting": {
+                  "kind": "template",
+                  "template": "Hello ${{ input.customer.name }}"
+                }
+              }
+            }
+          },
+          "when": {
+            "value": {
+              "kind": "stepOutput",
+              "stepId": "diagnosis",
+              "path": "agent.output.structured.value.actionableForPr"
+            },
+            "equals": true
+          }
+        }
+      ],
+      "expectedSpec": {
+        "id": "comprehensiveWorkflow",
+        "runAs": "service_account:test-runner",
+        "paused": false,
+        "activations": [
+          {
+            "id": "extract_requested",
+            "paused": false,
+            "event": {
+              "match": {
+                "type": "deal_hub.analyses.extract.requested",
+                "source": "deal_hub",
+                "subject": "analysis"
+              }
+            },
+            "input": {
+              "object": {
+                "analysisId": { "signal": "data.analysisId" },
+                "enabled": { "literal": true }
+              }
+            }
+          },
+          {
+            "id": "nightly",
+            "paused": false,
+            "schedule": {
+              "cron": "0 2 * * *",
+              "timezone": "America/New_York"
+            },
+            "input": {
+              "object": {
+                "reason": { "literal": "nightly" }
+              }
+            }
+          }
+        ],
+        "target": {
+          "steps": [
+            {
+              "id": "extract",
+              "inputs": {
+                "thread": { "signal": "event.thread_ts" }
+              },
+              "app": {
+                "name": "dealHub",
+                "operation": "analyses.extractRowWorkflow",
+                "input": {
+                  "object": {
+                    "analysisId": { "input": "analysisId" }
+                  }
+                }
+              }
+            },
+            {
+              "id": "diagnosis",
+              "agent": {
+                "provider": "agent",
+                "model": "claude",
+                "prompt": { "template": "Diagnose analysis ${{ input.analysisId }}" },
+                "messages": [
+                  {
+                    "role": "system",
+                    "text": { "template": "Use concise replies." }
+                  }
+                ],
+                "tools": [{ "app": "datadog", "operation": "queryLogs" }],
+                "output": { "structured": { "schema": { "type": "object" } } },
+                "modelOptions": { "temperature": 0 }
+              },
+              "timeoutSeconds": 45,
+              "metadata": { "kind": "diagnosis" }
+            },
+            {
+              "id": "notify",
+              "app": {
+                "name": "slack",
+                "operation": "messages.post",
+                "input": {
+                  "object": {
+                    "summary": { "stepOutput": { "stepId": "diagnosis", "path": "agent.output.structured.value" } },
+                    "channels": {
+                      "array": [
+                        { "literal": "C123" },
+                        { "stepInput": { "stepId": "extract", "path": "thread" } }
+                      ]
+                    },
+                    "greeting": { "template": "Hello ${{ input.customer.name }}" }
+                  }
+                }
+              },
+              "when": {
+                "value": { "stepOutput": { "stepId": "diagnosis", "path": "agent.output.structured.value.actionableForPr" } },
+                "equals": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "extract_row",
+      "init": {
+        "id": "extractRow",
+        "runAs": "service_account:deal-hub-extraction"
+      },
+      "activations": [
+        {
+          "id": "deal_hub.analyses.extract.requested",
+          "event": {
+            "type": "deal_hub.analyses.extract.requested"
+          },
+          "input": {
+            "kind": "object",
+            "fields": {
+              "analysisId": { "kind": "signal", "path": "data.analysisId" }
+            }
+          }
+        }
+      ],
+      "steps": [
+        {
+          "id": "extract",
+          "app": {
+            "name": "dealHub",
+            "operation": "analyses.extractRowWorkflow",
+            "input": {
+              "kind": "object",
+              "fields": {
+                "analysisId": { "kind": "input", "path": "analysisId" }
+              }
+            }
+          }
+        }
+      ],
+      "expectedSpec": {
+        "id": "extractRow",
+        "runAs": "service_account:deal-hub-extraction",
+        "paused": false,
+        "activations": [
+          {
+            "id": "deal_hub.analyses.extract.requested",
+            "paused": false,
+            "event": {
+              "match": {
+                "type": "deal_hub.analyses.extract.requested",
+                "source": "",
+                "subject": ""
+              }
+            },
+            "input": {
+              "object": {
+                "analysisId": { "signal": "data.analysisId" }
+              }
+            }
+          }
+        ],
+        "target": {
+          "steps": [
+            {
+              "id": "extract",
+              "app": {
+                "name": "dealHub",
+                "operation": "analyses.extractRowWorkflow",
+                "input": {
+                  "object": {
+                    "analysisId": { "input": "analysisId" }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
