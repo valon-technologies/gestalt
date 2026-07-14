@@ -24,6 +24,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// TargetAccessChecker checks whether a subject may use workflow execution targets.
+type TargetAccessChecker interface {
+	CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error
+	CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error
+}
+
 const (
 	tracerName         = "gestaltd"
 	graphQLOperationID = "graphql"
@@ -552,8 +558,17 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	req := authorizationAccessRequest(b.providerKinds, p, providerName, operationID)
-	resp, err := b.authorization.CheckAccess(ctx, req)
+	return b.CheckOperationAccess(ctx, p, providerName, operationID)
+}
+
+func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+	if b == nil || b.authorization == nil {
+		if !principal.AllowsOperationPermission(p, providerName, operationID) {
+			return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+		}
+		return nil
+	}
+	resp, err := b.authorization.CheckAccess(ctx, accessRequest(b.providerKinds, p, providerName, operationID))
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
@@ -563,10 +578,25 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	return nil
 }
 
-func authorizationAccessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
+func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
+	if b == nil || b.authorization == nil {
+		if !principal.AllowsProviderPermission(p, providerName) {
+			return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+		}
+		return nil
+	}
+	resp, err := b.authorization.CheckAccess(ctx, accessRequest(b.providerKinds, p, providerName, providerName))
+	if err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrAuthorizationDenied, providerName, err)
+	}
+	if resp == nil || !resp.GetAllowed() {
+		return fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+	}
+	return nil
+}
+
+func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, action string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
-	subjectID := principal.EffectiveCredentialSubjectID(p)
-	providerName = strings.TrimSpace(providerName)
 	properties, _ := structpb.NewStruct(map[string]any{
 		"scope":     strings.Join(p.Scopes, " "),
 		"client_id": strings.TrimSpace(p.ClientID),
@@ -575,10 +605,10 @@ func authorizationAccessRequest(kinds map[string]ProviderKind, p *principal.Prin
 	return &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
 			Type:       "subject",
-			Id:         subjectID,
+			Id:         principal.EffectiveCredentialSubjectID(p),
 			Properties: properties,
 		},
-		Action:   &proto.Action{Name: strings.TrimSpace(operationID)},
+		Action:   &proto.Action{Name: strings.TrimSpace(action)},
 		Resource: AuthorizationResource(providerName, kinds),
 	}
 }

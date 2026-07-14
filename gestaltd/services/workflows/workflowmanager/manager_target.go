@@ -38,13 +38,22 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
-	// The caller must still be authorized for every referenced app operation and
-	// agent tool. This is an independent prerequisite; the provider worker then
-	// executes the step as the definition's stored run_as subject.
-	if !m.allowStoredTarget(ctx, p, definition.Definition.Target) {
-		return "", nil, coreworkflow.Target{}, 0, invocation.ErrAuthorizationDenied
+	if err := m.authorizeRunAsTarget(ctx, definition.Definition.RunAs, definition.Definition.Target); err != nil {
+		return "", nil, coreworkflow.Target{}, 0, err
 	}
 	return definition.ProviderName, definition.provider, definition.Definition.Target, definition.Definition.Generation, nil
+}
+
+func (m *Manager) executionPrincipal(runAs *core.RunAsSubject) (*principal.Principal, error) {
+	runAs = core.NormalizeRunAsSubject(runAs)
+	if runAs == nil || strings.TrimSpace(runAs.SubjectID) == "" {
+		return nil, fmt.Errorf("%w: workflow run_as is required", invocation.ErrInvalidInvocation)
+	}
+	p := &principal.Principal{SubjectID: strings.TrimSpace(runAs.SubjectID)}
+	if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
+		p.Kind = principal.Kind(kind)
+	}
+	return principal.Canonicalize(p), nil
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
@@ -139,7 +148,6 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 		return coreworkflow.AppCall{}, fmt.Errorf("instance name contains invalid characters")
 	}
 
-	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
@@ -149,9 +157,6 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, appName, resolver, p, operation, sessionConnections, sessionInstance)
 	if err != nil {
 		return coreworkflow.AppCall{}, err
-	}
-	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) {
-		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
 	if connection == "" {
 		connection = resolvedConnection
@@ -196,9 +201,6 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	if target.Prompt.Template == "" && len(target.Messages) == 0 {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: workflow target agent prompt or messages is required", invocation.ErrInvalidInvocation)
 	}
-	if !principal.AllowsProviderPermission(p, target.ProviderName) {
-		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, target.ProviderName)
-	}
 	target.Model = strings.TrimSpace(target.Model)
 	target.SessionKey = strings.TrimSpace(target.SessionKey)
 	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)
@@ -239,10 +241,6 @@ func validateWorkflowAgentOutput(output coreagent.Output) error {
 	return nil
 }
 
-func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
-	return invocation.AccessContext{}
-}
-
 const (
 	targetAuthorizationComponentTarget        = "target"
 	targetAuthorizationComponentAgentProvider = "agent_provider"
@@ -277,8 +275,10 @@ type workflowTargetAuthorizationError struct {
 	failure targetAuthorizationFailure
 }
 
-func (e workflowTargetAuthorizationError) Error() string { return core.ErrNotFound.Error() }
-func (e workflowTargetAuthorizationError) Unwrap() error { return core.ErrNotFound }
+func (e workflowTargetAuthorizationError) Error() string {
+	return invocation.ErrAuthorizationDenied.Error()
+}
+func (e workflowTargetAuthorizationError) Unwrap() error { return invocation.ErrAuthorizationDenied }
 
 func workflowTargetAuthorizationFailure(err error) (*targetAuthorizationFailure, bool) {
 	var targetErr workflowTargetAuthorizationError
@@ -289,13 +289,36 @@ func workflowTargetAuthorizationFailure(err error) (*targetAuthorizationFailure,
 	return &failure, true
 }
 
-func (m *Manager) allowStoredTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
-	authorizedPrincipal, err := m.authorizeAgentWorkflowTarget(ctx, p, workflowManagerOperationTargetScopeOnly, target, invocation.CallerProvider{})
+func (m *Manager) authorizeRunAsTarget(ctx context.Context, runAs *core.RunAsSubject, target coreworkflow.Target) error {
+	p, err := m.executionPrincipal(runAs)
 	if err != nil {
-		return false
+		return err
 	}
-	p = authorizedPrincipal
-	return m.checkTargetAuthorization(ctx, p, target).allowed
+	decision := m.checkTargetAuthorization(ctx, p, target)
+	if decision.allowed {
+		return nil
+	}
+	return workflowTargetAuthorizationError{failure: decision.failure}
+}
+
+func (m *Manager) checkOperationAccess(ctx context.Context, p *principal.Principal, providerName, operation string) error {
+	if checker, ok := m.invoker.(invocation.TargetAccessChecker); ok {
+		return checker.CheckOperationAccess(ctx, p, providerName, operation)
+	}
+	if !principal.AllowsOperationPermission(p, providerName, operation) {
+		return invocation.ErrAuthorizationDenied
+	}
+	return nil
+}
+
+func (m *Manager) checkProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
+	if checker, ok := m.invoker.(invocation.TargetAccessChecker); ok {
+		return checker.CheckProviderAccess(ctx, p, providerName)
+	}
+	if !principal.AllowsProviderPermission(p, providerName) {
+		return invocation.ErrAuthorizationDenied
+	}
+	return nil
 }
 
 func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
@@ -314,7 +337,7 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 			if agentProviderName == "" {
 				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonMissingAgentProvider, "", "", -1)
 			}
-			if !principal.AllowsProviderPermission(p, agentProviderName) {
+			if err := m.checkProviderAccess(ctx, p, agentProviderName); err != nil {
 				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonPrincipalProviderPermissionDenied, agentProviderName, "", -1)
 			}
 			hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
@@ -341,7 +364,7 @@ func (m *Manager) checkWorkflowStepAppAuthorization(ctx context.Context, p *prin
 	if operation == "" {
 		return targetAuthorizationDenied(component, targetAuthorizationReasonMissingAppOperation, appName, "", -1)
 	}
-	if !principal.AllowsOperationPermission(p, appName, operation) {
+	if err := m.checkOperationAccess(ctx, p, appName, operation); err != nil {
 		return targetAuthorizationDenied(component, targetAuthorizationReasonPrincipalOperationPermissionDenied, appName, operation, -1)
 	}
 	return targetAuthorizationAllowed()
@@ -366,7 +389,7 @@ func (m *Manager) checkWorkflowAgentToolAuthorization(ctx context.Context, p *pr
 		return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonNonExactToolRefWithSystemTools, appName, operation, index)
 	}
 	if operation == "" {
-		if !principal.AllowsProviderPermission(p, appName) {
+		if err := m.checkProviderAccess(ctx, p, appName); err != nil {
 			return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonPrincipalProviderPermissionDenied, appName, "", index)
 		}
 		return targetAuthorizationAllowed()

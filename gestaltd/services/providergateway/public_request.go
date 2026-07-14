@@ -235,10 +235,6 @@ func adaptPublicRequest(
 	return adapted, nil
 }
 
-func publicCallerProvider(_ protoreflect.Message, _ string) invocation.CallerProvider {
-	return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "gestaltd"}
-}
-
 func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Principal, msg protoreflect.Message, name, fullMethod string) error {
 	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
 	if fd == nil {
@@ -259,6 +255,10 @@ func fillPublicField(ctx context.Context, publicBaseURL string, p *principal.Pri
 		return status.Errorf(codes.Internal, "no public fill rule for %q", name)
 	}
 	return nil
+}
+
+func publicCallerProvider(_ protoreflect.Message, _ string) invocation.CallerProvider {
+	return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "gestaltd"}
 }
 
 func fieldSet(msg protoreflect.Message, name string) bool {

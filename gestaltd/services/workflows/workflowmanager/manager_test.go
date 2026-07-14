@@ -71,18 +71,163 @@ func requireWorkflowManagerRequestContext(t *testing.T, reqCtx *proto.RequestCon
 }
 
 func testWorkflowManagerWithGithub(t *testing.T, provider *testWorkflowProvider) *Manager {
-	return New(Config{
-		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name: "github",
-				Operations: []catalog.CatalogOperation{
-					{ID: "issues.triage", Method: "POST"},
-				},
+	return testWorkflowManagerWithGithubInvoker(t, provider, nil)
+}
+
+func testWorkflowRunAsSubject() *core.RunAsSubject {
+	return &core.RunAsSubject{SubjectID: "service_account:workflow-runner"}
+}
+
+func testWorkflowManagerWithGithubInvoker(t *testing.T, provider *testWorkflowProvider, invoker invocation.Invoker) *Manager {
+	t.Helper()
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "github",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "github",
+			Operations: []catalog.CatalogOperation{
+				{ID: "issues.triage", Method: "POST"},
 			},
-		}),
-		Workflow: testWorkflowControl{provider: provider},
+		},
+	})
+	cfg := Config{Providers: providers, Workflow: testWorkflowControl{provider: provider}}
+	if invoker != nil {
+		cfg.Invoker = invoker
+	}
+	return New(cfg)
+}
+
+func testWorkflowManagerPrincipalWithoutGithub() *principal.Principal {
+	return principal.Canonicalize(&principal.Principal{
+		SubjectID: principal.UserSubjectID("bob"),
+		UserID:    "bob",
+		Kind:      principal.KindUser,
+	})
+}
+
+type runAsGrantAuthz struct {
+	grants map[string]struct{}
+}
+
+func (a *runAsGrantAuthz) grantKey(subjectID, providerName, operation string) string {
+	return strings.TrimSpace(subjectID) + "|" + strings.TrimSpace(providerName) + "|" + strings.TrimSpace(operation)
+}
+
+func (a *runAsGrantAuthz) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	_, ok := a.grants[a.grantKey(req.GetSubject().GetId(), req.GetResource().GetId(), req.GetAction().GetName())]
+	return &proto.CheckAccessResponse{Allowed: ok}, nil
+}
+
+func (a *runAsGrantAuthz) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	return &proto.CheckAccessManyResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	return &proto.ListRelationshipsResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	return &proto.AddRelationshipResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	return &proto.DeleteRelationshipResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	return &proto.SetAuthorizationStateResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+	return &proto.GetActiveModelRefResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	return &proto.SetActiveModelResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	return &proto.ListActiveModelResourceTypesResponse{}, nil
+}
+
+func (a *runAsGrantAuthz) Ping(context.Context) error { return nil }
+
+func (a *runAsGrantAuthz) Close() error { return nil }
+
+func testWorkflowManagerWithRunAsGrants(t *testing.T, provider *testWorkflowProvider, grants map[string]struct{}) *Manager {
+	t.Helper()
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "github",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name:       "github",
+			Operations: []catalog.CatalogOperation{{ID: "issues.triage", Method: "POST"}},
+		},
+	})
+	invoker := invocation.NewBroker(providers, nil, nil,
+		invocation.WithAuthorizationProvider(&runAsGrantAuthz{grants: grants}),
+		invocation.WithProviderKinds(map[string]invocation.ProviderKind{"github": invocation.ProviderKindApp}),
+	)
+	cfg := Config{
+		Providers: providers,
+		Workflow:  testWorkflowControl{provider: provider},
+		Invoker:   invoker,
+	}
+	return New(cfg)
+}
+
+func TestRunAsTargetExecutionAuthority(t *testing.T) {
+	t.Parallel()
+
+	grant := map[string]struct{}{
+		"service_account:workflow-runner|github|issues.triage": {},
+	}
+	spec := coreworkflow.DefinitionSpec{
+		ID:     "definition-run-as",
+		RunAs:  testWorkflowRunAsSubject(),
+		Target: testWorkflowAppStepTarget("github", "issues.triage", nil),
+	}
+
+	t.Run("author without step grants", func(t *testing.T) {
+		t.Parallel()
+		manager := testWorkflowManagerWithRunAsGrants(t, newTestWorkflowProvider(), grant)
+		if _, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), DefinitionApply{
+			ProviderName: "local",
+			Spec:         spec,
+		}); err != nil {
+			t.Fatalf("ApplyDefinition: %v", err)
+		}
+	})
+
+	t.Run("run_as without grants", func(t *testing.T) {
+		t.Parallel()
+		manager := testWorkflowManagerWithRunAsGrants(t, newTestWorkflowProvider(), nil)
+		_, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipal(), DefinitionApply{
+			ProviderName: "local",
+			Spec:         spec,
+		})
+		if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+			t.Fatalf("ApplyDefinition error = %v, want authorization denied", err)
+		}
+	})
+
+	t.Run("starter without step grants", func(t *testing.T) {
+		t.Parallel()
+		provider := newTestWorkflowProvider()
+		manager := testWorkflowManagerWithRunAsGrants(t, provider, grant)
+		if _, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipal(), DefinitionApply{
+			ProviderName: "local",
+			Spec:         spec,
+		}); err != nil {
+			t.Fatalf("ApplyDefinition: %v", err)
+		}
+		if _, err := manager.StartRun(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), RunStart{
+			ProviderName: "local",
+			DefinitionID: "definition-run-as",
+			WorkflowKey:  "github:issues:triage",
+		}); err != nil {
+			t.Fatalf("StartRun: %v", err)
+		}
 	})
 }
 
@@ -99,6 +244,7 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 		IdempotencyKey: "definition-apply-1",
 		Spec: coreworkflow.DefinitionSpec{
 			ID:     "definition-1",
+			RunAs:  testWorkflowRunAsSubject(),
 			Target: testWorkflowAppStepTarget("github", "issues.triage", map[string]any{"mode": "full"}),
 			Activations: []coreworkflow.Activation{{
 				ID: "github_issue",
@@ -178,6 +324,7 @@ func TestSignalOrStartRunRequiresDefinitionAndCarriesInput(t *testing.T) {
 		Caller:       testWorkflowManagerCaller(),
 		Spec: coreworkflow.DefinitionSpec{
 			ID:     "definition-1",
+			RunAs:  testWorkflowRunAsSubject(),
 			Target: testWorkflowAppStepTarget("github", "issues.triage", nil),
 		},
 	}); err != nil {
