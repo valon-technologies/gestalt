@@ -9,18 +9,42 @@ import (
 func TestAppManagedDefinitionID(t *testing.T) {
 	t.Parallel()
 	got := coreworkflow.AppManagedDefinitionID("dealHub", "extract_row")
-	want := "app_dealHub_extract_row"
-	if got != want {
-		t.Fatalf("AppManagedDefinitionID() = %q, want %q", got, want)
+	appName, localID, err := coreworkflow.ParseAppManagedDefinitionID(got)
+	if err != nil {
+		t.Fatalf("ParseAppManagedDefinitionID: %v", err)
+	}
+	if appName != "dealHub" || localID != "extract_row" {
+		t.Fatalf("round trip = (%q, %q), want (dealHub, extract_row)", appName, localID)
 	}
 }
 
-func TestValidateAppManagedDefinitionID(t *testing.T) {
+func TestAppManagedDefinitionIDCollisionSafe(t *testing.T) {
 	t.Parallel()
-	if err := coreworkflow.ValidateAppManagedDefinitionID("dealHub", "app_dealHub_extract_row"); err != nil {
-		t.Fatalf("ValidateAppManagedDefinitionID: %v", err)
+	left := coreworkflow.AppManagedDefinitionID("foo_bar", "baz")
+	right := coreworkflow.AppManagedDefinitionID("foo", "bar_baz")
+	if left == right {
+		t.Fatalf("distinct app/local pairs produced the same stored id: %q", left)
 	}
-	if err := coreworkflow.ValidateAppManagedDefinitionID("dealHub", "app_other_extract_row"); err == nil {
-		t.Fatal("expected namespace mismatch error")
+}
+
+func TestValidateLocalDefinitionID(t *testing.T) {
+	t.Parallel()
+	if err := coreworkflow.ValidateLocalDefinitionID("extract_row"); err != nil {
+		t.Fatalf("ValidateLocalDefinitionID: %v", err)
+	}
+	if err := coreworkflow.ValidateLocalDefinitionID("app_dealHub_extract_row"); err == nil {
+		t.Fatal("expected reserved prefix rejection")
+	}
+}
+
+func TestParseAppManagedDefinitionID(t *testing.T) {
+	t.Parallel()
+	stored := coreworkflow.AppManagedDefinitionID("foo_bar", "baz")
+	appName, localID, err := coreworkflow.ParseAppManagedDefinitionID(stored)
+	if err != nil {
+		t.Fatalf("ParseAppManagedDefinitionID: %v", err)
+	}
+	if appName != "foo_bar" || localID != "baz" {
+		t.Fatalf("parsed = (%q, %q), want (foo_bar, baz)", appName, localID)
 	}
 }

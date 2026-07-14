@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -63,10 +64,15 @@ func (s *Server) ApplyWorkflowMigration(ctx context.Context, req *proto.ApplyWor
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "definition spec: %v", err)
 	}
+	if err := coreworkflow.ValidateLocalDefinitionID(spec.ID); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	namespacedID := coreworkflow.AppManagedDefinitionID(s.appName, spec.ID)
+	spec.ID = namespacedID
 
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	if idempotencyKey == "" {
-		idempotencyKey = workflowMigrationIdempotencyKey(s.appName, revisionID, providerName, spec.ID)
+		idempotencyKey = workflowMigrationIdempotencyKey(s.appName, revisionID, providerName, namespacedID)
 	}
 
 	managed, err := s.manager.ApplyDefinitionMigration(ctx, workflowmanager.DefinitionMigrationApply{

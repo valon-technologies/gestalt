@@ -8,6 +8,14 @@ import {
   NotFoundError,
   type Record as DBRecord,
 } from "./indexeddb.ts";
+import { Migration } from "../migration.ts";
+import {
+  resolveWorkflowDefinitionSpec,
+  type WorkflowBuilder,
+} from "../workflow-authoring.ts";
+import type { WorkflowDefinitionSpec } from "./workflow-public.ts";
+import { fromWireWorkflowDefinitionSpec } from "../internal/codec/workflow.ts";
+import { workflowDefinitionSpecToProto } from "./workflow.ts";
 
 const DEFAULT_LEDGER_STORE = "_gestalt_migrations";
 const LEDGER_KEY_COLUMN = "revision_id";
@@ -78,7 +86,7 @@ export interface BackfillRevision {
 
 export interface WorkflowMigration {
   provider: string;
-  definition: Record<string, unknown>;
+  definition: WorkflowDefinitionSpec | WorkflowBuilder;
 }
 
 export interface WorkflowRevision {
@@ -96,7 +104,7 @@ export interface WorkflowMigrationClient {
     revisionId: string,
     provider: string,
     idempotencyKey: string,
-    definition: Record<string, unknown>,
+    definition: WorkflowDefinitionSpec,
   ): Promise<void>;
 }
 
@@ -382,18 +390,29 @@ async function applyWorkflowRevision(
   if (!appName) {
     throw new MigrationError("workflow migration requires app name");
   }
-  const client = options.workflowClient;
-  if (!client) {
-    throw new MigrationError("workflow migration requires workflowClient");
-  }
+  const client = options.workflowClient ?? (await defaultWorkflowMigrationClient());
   const provider = revision.workflow.provider.trim();
-  const definition = revision.workflow.definition;
-  await client.applyWorkflowMigration(
-    revision.id,
-    provider,
-    "",
-    definition,
-  );
+  const resolved = resolveWorkflowDefinitionSpec(revision.workflow.definition);
+  const proto = workflowDefinitionSpecToProto(resolved);
+  if (proto === undefined) {
+    throw new MigrationError("workflow migration requires definition spec");
+  }
+  const spec = fromWireWorkflowDefinitionSpec(proto);
+  await client.applyWorkflowMigration(revision.id, provider, "", spec);
+}
+
+async function defaultWorkflowMigrationClient(): Promise<WorkflowMigrationClient> {
+  const migration = Migration.connect();
+  return {
+    async applyWorkflowMigration(revisionId, provider, idempotencyKey, spec) {
+      await migration.applyWorkflowMigration({
+        provider,
+        revisionId,
+        spec,
+        idempotencyKey,
+      });
+    },
+  };
 }
 
 async function applyBackfill(

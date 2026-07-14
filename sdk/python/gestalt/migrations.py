@@ -99,7 +99,7 @@ class WorkflowMigration:
     """Applies a workflow definition through the trusted host path."""
 
     provider: str
-    definition: dict[str, Any]
+    definition: Any
 
 
 @dataclass
@@ -122,7 +122,7 @@ class WorkflowMigrationClient(Protocol):
         revision_id: str,
         provider: str,
         idempotency_key: str,
-        definition: dict[str, Any],
+        definition: Any,
     ) -> None:
         """Apply one workflow migration revision."""
 
@@ -424,15 +424,29 @@ def _apply_revision(db: MigrationDB, revision: Revision, options: MigrationRunOp
 
 
 def _apply_workflow_revision(revision: WorkflowRevision, options: MigrationRunOptions) -> None:
+    from .migration import ApplyWorkflowMigrationRequest, Migration
+    from .workflow_authoring import resolve_workflow_definition_spec
+
     app_name = (options.app_name or "").strip()
     if not app_name:
         raise MigrationError("workflow migration requires app name")
     client = options.workflow_client
     if client is None:
-        raise MigrationError("workflow migration requires workflow_client")
+        migration = Migration.connect()
+        resolved = resolve_workflow_definition_spec(revision.workflow.definition)
+        migration.apply_workflow_migration(
+            ApplyWorkflowMigrationRequest(
+                provider=revision.workflow.provider.strip(),
+                revision_id=revision.id,
+                spec=resolved,
+                idempotency_key="",
+            )
+        )
+        migration.close()
+        return
     provider = revision.workflow.provider.strip()
-    definition = revision.workflow.definition
-    client.apply_workflow_migration(revision.id, provider, "", definition)
+    resolved = resolve_workflow_definition_spec(revision.workflow.definition)
+    client.apply_workflow_migration(revision.id, provider, "", resolved)
 
 
 def _apply_backfill(db: MigrationDB, transform: BackfillTransform) -> None:

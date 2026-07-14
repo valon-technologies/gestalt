@@ -2,13 +2,10 @@ package migrations
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/go/client"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func applyWorkflowRevision(ctx context.Context, opts RunOptions, revision Revision) error {
@@ -27,11 +24,11 @@ func applyWorkflowRevision(ctx context.Context, opts RunOptions, revision Revisi
 		return fmt.Errorf("workflow migration requires app name")
 	}
 	provider := strings.TrimSpace(revision.Workflow.Provider)
-	definition := revision.Workflow.Definition
-	if definition == nil {
-		return fmt.Errorf("workflow migration %q requires definition spec", revision.ID)
+	spec, err := workflowDefinitionSpecForMigration(revision.Workflow.Definition)
+	if err != nil {
+		return fmt.Errorf("workflow migration %q: %w", revision.ID, err)
 	}
-	return workflowClient.ApplyWorkflowMigration(ctx, revision.ID, provider, "", definition)
+	return workflowClient.ApplyWorkflowMigration(ctx, revision.ID, provider, "", spec)
 }
 
 func defaultWorkflowMigrationClient(ctx context.Context) (WorkflowMigrationClient, error) {
@@ -46,15 +43,14 @@ type hostWorkflowMigrationClient struct {
 	client *client.Migration
 }
 
-func (c *hostWorkflowMigrationClient) ApplyWorkflowMigration(ctx context.Context, revisionID, provider, idempotencyKey string, definition map[string]any) error {
+func (c *hostWorkflowMigrationClient) ApplyWorkflowMigration(ctx context.Context, revisionID, provider, idempotencyKey string, spec *client.WorkflowDefinitionSpec) error {
 	if c == nil || c.client == nil {
 		return fmt.Errorf("migrations host service client is not configured")
 	}
-	spec, err := workflowDefinitionSpecFromMap(definition)
-	if err != nil {
-		return err
+	if spec == nil {
+		return fmt.Errorf("workflow definition spec is required")
 	}
-	_, err = c.client.ApplyWorkflowMigration(ctx, &client.ApplyWorkflowMigrationRequest{
+	_, err := c.client.ApplyWorkflowMigration(ctx, &client.ApplyWorkflowMigrationRequest{
 		Provider:       strings.TrimSpace(provider),
 		RevisionId:     strings.TrimSpace(revisionID),
 		Spec:           spec,
@@ -63,25 +59,13 @@ func (c *hostWorkflowMigrationClient) ApplyWorkflowMigration(ctx context.Context
 	return err
 }
 
-func workflowDefinitionSpecFromMap(raw map[string]any) (*client.WorkflowDefinitionSpec, error) {
-	wire, err := workflowDefinitionSpecProtoFromMap(raw)
-	if err != nil {
-		return nil, err
+func workflowDefinitionSpecForMigration(definition any) (*client.WorkflowDefinitionSpec, error) {
+	switch typed := definition.(type) {
+	case *client.WorkflowDefinitionSpec:
+		return typed, nil
+	case client.WorkflowDefinitionSpec:
+		return &typed, nil
+	default:
+		return nil, fmt.Errorf("unsupported workflow definition spec %T", definition)
 	}
-	return client.FromWireWorkflowDefinitionSpec(wire), nil
-}
-
-func workflowDefinitionSpecProtoFromMap(raw map[string]any) (*proto.WorkflowDefinitionSpec, error) {
-	if raw == nil {
-		return nil, fmt.Errorf("workflow definition spec is required")
-	}
-	payload, err := json.Marshal(raw)
-	if err != nil {
-		return nil, fmt.Errorf("encode workflow definition spec: %w", err)
-	}
-	spec := &proto.WorkflowDefinitionSpec{}
-	if err := protojson.Unmarshal(payload, spec); err != nil {
-		return nil, fmt.Errorf("decode workflow definition spec: %w", err)
-	}
-	return spec, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/migrations"
 )
 
@@ -13,33 +14,33 @@ type fakeWorkflowClient struct {
 	err   error
 }
 
-func (f *fakeWorkflowClient) ApplyWorkflowMigration(context.Context, string, string, string, map[string]any) error {
+func (f *fakeWorkflowClient) ApplyWorkflowMigration(context.Context, string, string, string, *sdkclient.WorkflowDefinitionSpec) error {
 	f.calls++
 	return f.err
 }
 
 func TestWorkflowRevisionAppliesBeforeLedger(t *testing.T) {
 	db := newFakeDB()
-	client := &fakeWorkflowClient{}
+	workflowClient := &fakeWorkflowClient{}
 	_, err := migrations.Run(context.Background(), db, migrations.RunOptions{
 		AppName: "dealHub",
 		Revisions: []migrations.Revision{{
 			ID: "0001_workflow",
 			Workflow: &migrations.WorkflowMigration{
 				Provider: "temporal",
-				Definition: map[string]any{
-					"id":     "app_dealHub_extract_row",
-					"run_as": "service_account:runner",
+				Definition: &sdkclient.WorkflowDefinitionSpec{
+					Id:    "extract_row",
+					RunAs: "service_account:runner",
 				},
 			},
 		}},
-		WorkflowClient: client,
+		WorkflowClient: workflowClient,
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if client.calls != 1 {
-		t.Fatalf("workflow client calls = %d, want 1", client.calls)
+	if workflowClient.calls != 1 {
+		t.Fatalf("workflow client calls = %d, want 1", workflowClient.calls)
 	}
 	keys, err := db.ObjectStore("_gestalt_migrations").GetAllKeys(context.Background(), nil)
 	if err != nil {
@@ -52,19 +53,19 @@ func TestWorkflowRevisionAppliesBeforeLedger(t *testing.T) {
 
 func TestWorkflowRevisionFailureLeavesLedgerUnchanged(t *testing.T) {
 	db := newFakeDB()
-	client := &fakeWorkflowClient{err: errors.New("apply failed")}
+	workflowClient := &fakeWorkflowClient{err: errors.New("apply failed")}
 	_, err := migrations.Run(context.Background(), db, migrations.RunOptions{
 		AppName: "dealHub",
 		Revisions: []migrations.Revision{{
 			ID: "0001_workflow",
 			Workflow: &migrations.WorkflowMigration{
 				Provider: "temporal",
-				Definition: map[string]any{
-					"id": "app_dealHub_extract_row",
+				Definition: &sdkclient.WorkflowDefinitionSpec{
+					Id: "extract_row",
 				},
 			},
 		}},
-		WorkflowClient: client,
+		WorkflowClient: workflowClient,
 	})
 	if err == nil {
 		t.Fatal("expected migration failure")

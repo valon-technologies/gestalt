@@ -19,6 +19,10 @@ func ConfigureMigrations(ctx context.Context, provider Provider, name string, co
 	if err != nil {
 		return fmt.Errorf("migrations: resolve options: %w", err)
 	}
+	opts.Revisions, err = normalizeMigrationRevisions(opts.Revisions)
+	if err != nil {
+		return fmt.Errorf("migrations: workflow revisions: %w", err)
+	}
 	if strings.TrimSpace(binding) == "" {
 		if raw, ok := config["indexeddb"]; ok {
 			if s, ok := raw.(string); ok {
