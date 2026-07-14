@@ -43,6 +43,9 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
+	if _, err := m.authorizeAgentWorkflowTarget(ctx, p, operation, definition.Definition.Target, caller); err != nil {
+		return "", nil, coreworkflow.Target{}, 0, err
+	}
 	execPrincipal, err := m.executionPrincipal(definition.Definition.RunAs)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, 0, err

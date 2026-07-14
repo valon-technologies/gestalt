@@ -231,15 +231,18 @@ func (m *Manager) resolveDefinitionSpec(ctx context.Context, p *principal.Princi
 	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
+	execPrincipal, err := m.executionPrincipal(spec.RunAs)
+	if err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	if err := m.authorizeRunAsTarget(ctx, execPrincipal, spec.Target); err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
 	spec, err = m.validateAndNormalizeDefinitionSpec(ctx, spec)
 	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
 	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, spec.Target, invocation.CallerProvider{}); err != nil {
-		return coreworkflow.DefinitionSpec{}, err
-	}
-	execPrincipal, err := m.executionPrincipal(spec.RunAs)
-	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
 	if err := m.authorizeRunAsTarget(ctx, execPrincipal, spec.Target); err != nil {
