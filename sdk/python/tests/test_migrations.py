@@ -4,6 +4,7 @@ from unittest.mock import patch
 from gestalt.migrations import (
     MigrationError,
     MigrationRunOptions,
+    Revision,
     SchemaDeclaration,
     SchemaRevision,
     StoreDeclaration,
@@ -71,7 +72,7 @@ def _data_store_calls(calls: list[str]) -> list[str]:
 class MigrationTests(unittest.TestCase):
     def test_fresh_install_and_restart(self) -> None:
         db = FakeDB()
-        revisions = [init_revision("0001_init", "widgets")]
+        revisions: list[Revision] = [init_revision("0001_init", "widgets")]
         result = run_migrations(db, MigrationRunOptions(revisions=revisions))
         self.assertEqual(result.applied, ["0001_init"])
         self.assertEqual(result.head, "0001_init")
@@ -94,7 +95,7 @@ class MigrationTests(unittest.TestCase):
 
     def test_ledger_ahead_of_code(self) -> None:
         db = FakeDB()
-        revisions = [init_revision("0001_init", "widgets")]
+        revisions: list[Revision] = [init_revision("0001_init", "widgets")]
         run_migrations(db, MigrationRunOptions(revisions=revisions))
         db.object_store("_gestalt_migrations").put(
             {
@@ -138,7 +139,7 @@ class MigrationTests(unittest.TestCase):
 
     def test_duplicate_revision_ids(self) -> None:
         db = FakeDB()
-        revisions = [
+        revisions: list[Revision] = [
             init_revision("0001_init", "widgets"),
             init_revision("0001_init", "gadgets"),
         ]
