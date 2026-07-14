@@ -5,10 +5,8 @@ package s3
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"io"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,13 +22,10 @@ import (
 type s3Server struct {
 	proto.UnimplementedS3Server
 	client      s3sdk.S3
-	keyPrefix   string
 	pluginName  string
 	bindingName string
 	accessURLs  *ObjectAccessURLManager
 }
-
-const s3ContinuationTokenPrefix = "gestalt_s3_ct_"
 
 type ServerOptions struct {
 	BindingName string
@@ -44,7 +39,6 @@ func NewServer(client s3sdk.S3, pluginName string) proto.S3Server {
 func NewServerWithOptions(client s3sdk.S3, pluginName string, opts ServerOptions) proto.S3Server {
 	return &s3Server{
 		client:      client,
-		keyPrefix:   s3NamespacePrefix(pluginName),
 		pluginName:  strings.TrimSpace(pluginName),
 		bindingName: strings.TrimSpace(opts.BindingName),
 		accessURLs:  opts.AccessURLs,
@@ -111,29 +105,21 @@ func (s *routingS3ObjectAccessServer) server(ctx context.Context) (proto.S3Objec
 }
 
 func (s *s3Server) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {
-	meta, err := s.client.HeadObject(ctx, s.namespacedRef(objectRefFromProto(req.GetRef())))
+	meta, err := s.client.HeadObject(ctx, objectRefFromProto(req.GetRef()))
 	if err != nil {
 		return nil, s3ToGRPCErr(err)
-	}
-	meta, err = s.requireOwnedMetaNamespace(meta)
-	if err != nil {
-		return nil, err
 	}
 	return &proto.HeadObjectResponse{Meta: objectMetaToProto(meta)}, nil
 }
 
 func (s *s3Server) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
-	result, err := s.client.ReadObject(stream.Context(), s.namespacedReadRequest(req))
+	result, err := s.client.ReadObject(stream.Context(), s.readRequest(req))
 	if err != nil {
 		return s3ToGRPCErr(err)
 	}
 	defer func() { _ = result.Body.Close() }()
-	meta, err := s.requireOwnedMetaNamespace(result.Meta)
-	if err != nil {
-		return err
-	}
 	if err := stream.Send(&proto.ReadObjectChunk{
-		Result: &proto.ReadObjectChunk_Meta{Meta: objectMetaToProto(meta)},
+		Result: &proto.ReadObjectChunk_Meta{Meta: objectMetaToProto(result.Meta)},
 	}); err != nil {
 		return err
 	}
@@ -192,7 +178,7 @@ func (s *s3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
 		}
 	}()
 
-	meta, err := s.client.WriteObject(stream.Context(), s.namespacedWriteRequest(open, pr))
+	meta, err := s.client.WriteObject(stream.Context(), s.writeRequest(open, pr))
 	if err != nil {
 		_ = pr.CloseWithError(err)
 		select {
@@ -200,11 +186,6 @@ func (s *s3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
 		case <-stream.Context().Done():
 		}
 		return s3ToGRPCErr(err)
-	}
-	meta, err = s.requireOwnedMetaNamespace(meta)
-	if err != nil {
-		_ = pr.CloseWithError(err)
-		return err
 	}
 	_ = pr.Close()
 	sendErr := stream.SendAndClose(&proto.WriteObjectResponse{Meta: objectMetaToProto(meta)})
@@ -226,61 +207,47 @@ func (s *s3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
 }
 
 func (s *s3Server) DeleteObject(ctx context.Context, req *proto.DeleteObjectRequest) (*emptypb.Empty, error) {
-	if err := s.client.DeleteObject(ctx, s.namespacedRef(objectRefFromProto(req.GetRef()))); err != nil {
+	if err := s.client.DeleteObject(ctx, objectRefFromProto(req.GetRef())); err != nil {
 		return nil, s3ToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *s3Server) ListObjects(ctx context.Context, req *proto.ListObjectsRequest) (*proto.ListObjectsResponse, error) {
-	listReq, err := s.namespacedListRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	page, err := s.client.ListObjects(ctx, listReq)
+	page, err := s.client.ListObjects(ctx, s.listRequest(req))
 	if err != nil {
 		return nil, s3ToGRPCErr(err)
 	}
 	resp := &proto.ListObjectsResponse{
 		CommonPrefixes:        make([]string, 0, len(page.CommonPrefixes)),
-		NextContinuationToken: s.wrapContinuationToken(page.NextContinuationToken),
+		NextContinuationToken: page.NextContinuationToken,
 		HasMore:               page.HasMore,
 		Objects:               make([]*proto.S3ObjectMeta, 0, len(page.Objects)),
 	}
-	for i := range page.CommonPrefixes {
-		if prefix, ok := s.stripOwnedKeyNamespace(page.CommonPrefixes[i]); ok {
-			resp.CommonPrefixes = append(resp.CommonPrefixes, prefix)
-		}
-	}
+	resp.CommonPrefixes = append(resp.CommonPrefixes, page.CommonPrefixes...)
 	for i := range page.Objects {
-		if obj, ok := s.stripOwnedMetaNamespace(page.Objects[i]); ok {
-			resp.Objects = append(resp.Objects, objectMetaToProto(obj))
-		}
+		resp.Objects = append(resp.Objects, objectMetaToProto(page.Objects[i]))
 	}
 	return resp, nil
 }
 
 func (s *s3Server) CopyObject(ctx context.Context, req *proto.CopyObjectRequest) (*proto.CopyObjectResponse, error) {
 	meta, err := s.client.CopyObject(ctx, s3sdk.CopyRequest{
-		Source:      s.namespacedRef(objectRefFromProto(req.GetSource())),
-		Destination: s.namespacedRef(objectRefFromProto(req.GetDestination())),
+		Source:      objectRefFromProto(req.GetSource()),
+		Destination: objectRefFromProto(req.GetDestination()),
 		IfMatch:     req.GetIfMatch(),
 		IfNoneMatch: req.GetIfNoneMatch(),
 	})
 	if err != nil {
 		return nil, s3ToGRPCErr(err)
 	}
-	meta, err = s.requireOwnedMetaNamespace(meta)
-	if err != nil {
-		return nil, err
-	}
 	return &proto.CopyObjectResponse{Meta: objectMetaToProto(meta)}, nil
 }
 
 func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRequest) (*proto.PresignObjectResponse, error) {
-	if s.keyPrefix != "" {
+	if s.pluginName != "" {
 		if s.accessURLs == nil || s.bindingName == "" {
-			return nil, status.Error(codes.FailedPrecondition, "presign is not supported for plugin-scoped s3 bindings")
+			return nil, status.Error(codes.FailedPrecondition, "presign is not supported for app s3 bindings")
 		}
 		result, err := s.accessURLs.MintURL(ObjectAccessURLRequest{
 			AppName:            s.pluginName,
@@ -306,7 +273,7 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 		return resp, nil
 	}
 	result, err := s.client.PresignObject(ctx, s3sdk.PresignRequest{
-		Ref:                s.namespacedRef(objectRefFromProto(req.GetRef())),
+		Ref:                objectRefFromProto(req.GetRef()),
 		Method:             presignMethodFromProto(req.GetMethod()),
 		Expires:            timeDurationSeconds(req.GetExpiresSeconds()),
 		ContentType:        req.GetContentType(),
@@ -327,45 +294,9 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 	return resp, nil
 }
 
-func (s *s3Server) namespacedRef(ref s3sdk.ObjectRef) s3sdk.ObjectRef {
-	ref.Key = s.applyKeyNamespace(ref.Key)
-	return ref
-}
-
-func (s *s3Server) stripOwnedMetaNamespace(meta s3sdk.ObjectMeta) (s3sdk.ObjectMeta, bool) {
-	key, ok := s.stripOwnedKeyNamespace(meta.Ref.Key)
-	if !ok {
-		return s3sdk.ObjectMeta{}, false
-	}
-	meta.Ref.Key = key
-	return meta, true
-}
-
-func (s *s3Server) requireOwnedMetaNamespace(meta s3sdk.ObjectMeta) (s3sdk.ObjectMeta, error) {
-	meta, ok := s.stripOwnedMetaNamespace(meta)
-	if !ok {
-		return s3sdk.ObjectMeta{}, status.Error(codes.Internal, "s3 provider returned object outside app namespace")
-	}
-	return meta, nil
-}
-
-func (s *s3Server) applyKeyNamespace(key string) string {
-	return s.keyPrefix + key
-}
-
-func (s *s3Server) stripOwnedKeyNamespace(key string) (string, bool) {
-	if s.keyPrefix == "" {
-		return key, true
-	}
-	if !strings.HasPrefix(key, s.keyPrefix) {
-		return "", false
-	}
-	return strings.TrimPrefix(key, s.keyPrefix), true
-}
-
-func (s *s3Server) namespacedReadRequest(req *proto.ReadObjectRequest) s3sdk.ReadRequest {
+func (s *s3Server) readRequest(req *proto.ReadObjectRequest) s3sdk.ReadRequest {
 	out := s3sdk.ReadRequest{
-		Ref:         s.namespacedRef(objectRefFromProto(req.GetRef())),
+		Ref:         objectRefFromProto(req.GetRef()),
 		Range:       byteRangeFromProto(req.GetRange()),
 		IfMatch:     req.GetIfMatch(),
 		IfNoneMatch: req.GetIfNoneMatch(),
@@ -381,9 +312,9 @@ func (s *s3Server) namespacedReadRequest(req *proto.ReadObjectRequest) s3sdk.Rea
 	return out
 }
 
-func (s *s3Server) namespacedWriteRequest(open *proto.WriteObjectOpen, body io.Reader) s3sdk.WriteRequest {
+func (s *s3Server) writeRequest(open *proto.WriteObjectOpen, body io.Reader) s3sdk.WriteRequest {
 	return s3sdk.WriteRequest{
-		Ref:                s.namespacedRef(objectRefFromProto(open.GetRef())),
+		Ref:                objectRefFromProto(open.GetRef()),
 		ContentType:        open.GetContentType(),
 		CacheControl:       open.GetCacheControl(),
 		ContentDisposition: open.GetContentDisposition(),
@@ -396,50 +327,14 @@ func (s *s3Server) namespacedWriteRequest(open *proto.WriteObjectOpen, body io.R
 	}
 }
 
-func (s *s3Server) namespacedListRequest(req *proto.ListObjectsRequest) (s3sdk.ListRequest, error) {
-	continuationToken, err := s.unwrapContinuationToken(req.GetContinuationToken())
-	if err != nil {
-		return s3sdk.ListRequest{}, err
-	}
-	startAfter := req.GetStartAfter()
-	if startAfter != "" {
-		startAfter = s.applyKeyNamespace(startAfter)
-	}
+func (s *s3Server) listRequest(req *proto.ListObjectsRequest) s3sdk.ListRequest {
 	return s3sdk.ListRequest{
-		Prefix:            s.applyKeyNamespace(req.GetPrefix()),
+		Prefix:            req.GetPrefix(),
 		Delimiter:         req.GetDelimiter(),
-		ContinuationToken: continuationToken,
-		StartAfter:        startAfter,
+		ContinuationToken: req.GetContinuationToken(),
+		StartAfter:        req.GetStartAfter(),
 		MaxKeys:           req.GetMaxKeys(),
-	}, nil
-}
-
-func s3NamespacePrefix(pluginName string) string {
-	if pluginName == "" {
-		return ""
 	}
-	return "plugin_" + strconv.Itoa(len(pluginName)) + "_" + pluginName + "/"
-}
-
-func (s *s3Server) wrapContinuationToken(token string) string {
-	if token == "" || s.keyPrefix == "" {
-		return token
-	}
-	return s3ContinuationTokenPrefix + base64.RawURLEncoding.EncodeToString([]byte(token))
-}
-
-func (s *s3Server) unwrapContinuationToken(token string) (string, error) {
-	if token == "" || s.keyPrefix == "" {
-		return token, nil
-	}
-	if !strings.HasPrefix(token, s3ContinuationTokenPrefix) {
-		return token, nil
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, s3ContinuationTokenPrefix))
-	if err != nil {
-		return "", status.Error(codes.InvalidArgument, "invalid continuation token")
-	}
-	return string(decoded), nil
 }
 
 func timeDurationSeconds(seconds int64) time.Duration {

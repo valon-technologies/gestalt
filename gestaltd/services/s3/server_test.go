@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestS3ServerPrefixesKeysPerPlugin(t *testing.T) {
+func TestS3ServerPassesKeysThroughUnchanged(t *testing.T) {
 	t.Parallel()
 
 	store := &coretesting.StubS3{}
@@ -45,17 +45,9 @@ func TestS3ServerPrefixesKeysPerPlugin(t *testing.T) {
 		t.Fatal("expected WriteObject response")
 	}
 
-	_, err := store.HeadObject(ctx, s3sdk.ObjectRef{
-		Key: s3NamespacePrefix("roadmap") + "plans/q2.txt",
-	})
+	_, err := store.HeadObject(ctx, s3sdk.ObjectRef{Key: "plans/q2.txt"})
 	if err != nil {
-		t.Fatalf("HeadObject(prefixed): %v", err)
-	}
-	_, err = store.HeadObject(ctx, s3sdk.ObjectRef{
-		Key: "plans/q2.txt",
-	})
-	if !errors.Is(err, s3sdk.ErrNotFound) {
-		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
+		t.Fatalf("HeadObject: %v", err)
 	}
 }
 
@@ -86,48 +78,44 @@ func TestRoutingS3ServerRoutesByHostBindingMetadata(t *testing.T) {
 		t.Fatalf("WriteObject: %v", err)
 	}
 	if _, err := archive.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Key: s3NamespacePrefix("roadmap") + "plans/q2.txt",
+		Key: "plans/q2.txt",
 	}); err != nil {
 		t.Fatalf("archive HeadObject: %v", err)
 	}
 	if _, err := main.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Key: s3NamespacePrefix("roadmap") + "plans/q2.txt",
+		Key: "plans/q2.txt",
 	}); !errors.Is(err, s3sdk.ErrNotFound) {
 		t.Fatalf("main HeadObject error = %v, want ErrNotFound", err)
 	}
 }
 
-func TestS3ServerLeavesEmptyStartAfterUnset(t *testing.T) {
+func TestS3ServerPassesListKeysThroughUnchanged(t *testing.T) {
 	t.Parallel()
 
 	store := &coretesting.StubS3{}
 	srv := NewServer(store, "roadmap").(*s3Server)
 
-	got, gotErr := srv.namespacedListRequest(&proto.ListObjectsRequest{
+	got := srv.listRequest(&proto.ListObjectsRequest{
 		Prefix: "plans/",
 	})
-	if gotErr != nil {
-		t.Fatalf("namespacedListRequest: %v", gotErr)
-	}
 	if got.StartAfter != "" {
 		t.Fatalf("StartAfter = %q, want empty", got.StartAfter)
 	}
-	wantPrefix := s3NamespacePrefix("roadmap") + "plans/"
-	if got.Prefix != wantPrefix {
-		t.Fatalf("Prefix = %q, want %q", got.Prefix, wantPrefix)
+	if got.Prefix != "plans/" {
+		t.Fatalf("Prefix = %q, want plans/", got.Prefix)
 	}
 }
 
-func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
+func TestS3ServerListPassesKeysThroughUnchanged(t *testing.T) {
 	t.Parallel()
 
 	store := &coretesting.StubS3{}
 	srv := NewServer(store, "roadmap").(*s3Server)
 	ctx := context.Background()
 	for _, key := range []string{
-		s3NamespacePrefix("roadmap") + "plans/a.txt",
-		s3NamespacePrefix("roadmap") + "plans/nested/b.txt",
-		s3NamespacePrefix("roadmap") + "plans/z.txt",
+		"plans/a.txt",
+		"plans/nested/b.txt",
+		"plans/z.txt",
 	} {
 		if _, err := store.WriteObject(ctx, s3sdk.WriteRequest{
 			Ref:  s3sdk.ObjectRef{Key: key},
@@ -144,9 +132,6 @@ func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("ListObjects(first): %v", err)
-	}
-	if got := first.GetNextContinuationToken(); strings.Contains(got, s3NamespacePrefix("roadmap")) {
-		t.Fatalf("NextContinuationToken leaked namespace prefix: %q", got)
 	}
 	if len(first.GetObjects()) != 1 || first.GetObjects()[0].GetRef().GetKey() != "plans/a.txt" {
 		t.Fatalf("first objects = %v, want [plans/a.txt]", first.GetObjects())
@@ -206,8 +191,8 @@ func TestS3ServerListRoundTripsOpaqueBackendContinuationTokens(t *testing.T) {
 	if client.reqs[0].ContinuationToken != "" {
 		t.Fatalf("first backend continuation token = %q, want empty", client.reqs[0].ContinuationToken)
 	}
-	if got := first.GetNextContinuationToken(); got == "" || got == "plugin_roadmap/internal-offset-2" || strings.Contains(got, s3NamespacePrefix("roadmap")) {
-		t.Fatalf("wrapped continuation token = %q, want opaque wrapped token", got)
+	if got := first.GetNextContinuationToken(); got != "plugin_roadmap/internal-offset-2" {
+		t.Fatalf("continuation token = %q, want backend token", got)
 	}
 
 	_, err = srv.ListObjects(context.Background(), &proto.ListObjectsRequest{
@@ -336,17 +321,17 @@ func TestS3ServerWriteObjectPropagatesRecvErrorObservedDuringSendAndClose(t *tes
 	}
 }
 
-func TestS3ServerListDropsKeysOutsideAppNamespace(t *testing.T) {
+func TestS3ServerListReturnsBackendKeys(t *testing.T) {
 	t.Parallel()
 
 	srv := NewServer(listResultS3Client{
 		page: s3sdk.ListPage{
 			Objects: []s3sdk.ObjectMeta{
-				{Ref: s3sdk.ObjectRef{Key: s3NamespacePrefix("roadmap") + "plans/a.txt"}},
+				{Ref: s3sdk.ObjectRef{Key: "plans/a.txt"}},
 				{Ref: s3sdk.ObjectRef{Key: "plans/escape.txt"}},
 			},
 			CommonPrefixes: []string{
-				s3NamespacePrefix("roadmap") + "plans/nested/",
+				"plans/nested/",
 				"plans/escape/",
 			},
 		},
@@ -359,15 +344,15 @@ func TestS3ServerListDropsKeysOutsideAppNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListObjects: %v", err)
 	}
-	if got := resp.GetCommonPrefixes(); len(got) != 1 || got[0] != "plans/nested/" {
-		t.Fatalf("CommonPrefixes = %v, want [plans/nested/]", got)
+	if got := resp.GetCommonPrefixes(); len(got) != 2 || got[0] != "plans/nested/" || got[1] != "plans/escape/" {
+		t.Fatalf("CommonPrefixes = %v, want backend prefixes", got)
 	}
-	if got := resp.GetObjects(); len(got) != 1 || got[0].GetRef().GetKey() != "plans/a.txt" {
-		t.Fatalf("Objects = %v, want [plans/a.txt]", got)
+	if got := resp.GetObjects(); len(got) != 2 || got[0].GetRef().GetKey() != "plans/a.txt" || got[1].GetRef().GetKey() != "plans/escape.txt" {
+		t.Fatalf("Objects = %v, want backend objects", got)
 	}
 }
 
-func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
+func TestS3ServerReturnsBackendMetadata(t *testing.T) {
 	t.Parallel()
 
 	t.Run("head", func(t *testing.T) {
@@ -379,11 +364,11 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 			},
 		}, "roadmap")
 
-		_, err := srv.HeadObject(context.Background(), &proto.HeadObjectRequest{
+		resp, err := srv.HeadObject(context.Background(), &proto.HeadObjectRequest{
 			Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 		})
-		if status.Code(err) != codes.Internal {
-			t.Fatalf("HeadObject error = %v, want codes.Internal", err)
+		if err != nil || resp.GetMeta().GetRef().GetKey() != "plans/escape.txt" {
+			t.Fatalf("HeadObject = %#v, %v; want backend metadata", resp, err)
 		}
 	})
 
@@ -403,11 +388,8 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		err := srv.ReadObject(&proto.ReadObjectRequest{
 			Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 		}, stream)
-		if status.Code(err) != codes.Internal {
-			t.Fatalf("ReadObject error = %v, want codes.Internal", err)
-		}
-		if len(stream.chunks) != 0 {
-			t.Fatalf("ReadObject leaked chunks = %d, want 0", len(stream.chunks))
+		if err != nil || len(stream.chunks) != 2 {
+			t.Fatalf("ReadObject = %v with %d chunks; want backend metadata and body", err, len(stream.chunks))
 		}
 	})
 
@@ -431,8 +413,8 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		})
 
 		err := srv.WriteObject(stream)
-		if status.Code(err) != codes.Internal {
-			t.Fatalf("WriteObject error = %v, want codes.Internal", err)
+		if err != nil || stream.resp.GetMeta().GetRef().GetKey() != "plans/escape.txt" {
+			t.Fatalf("WriteObject = %v, %#v; want backend metadata", err, stream.resp)
 		}
 	})
 
@@ -445,12 +427,12 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 			},
 		}, "roadmap")
 
-		_, err := srv.CopyObject(context.Background(), &proto.CopyObjectRequest{
+		resp, err := srv.CopyObject(context.Background(), &proto.CopyObjectRequest{
 			Source:      &proto.S3ObjectRef{Key: "plans/source.txt"},
 			Destination: &proto.S3ObjectRef{Key: "plans/dest.txt"},
 		})
-		if status.Code(err) != codes.Internal {
-			t.Fatalf("CopyObject error = %v, want codes.Internal", err)
+		if err != nil || resp.GetMeta().GetRef().GetKey() != "plans/escape.txt" {
+			t.Fatalf("CopyObject = %#v, %v; want backend metadata", resp, err)
 		}
 	})
 }
@@ -473,7 +455,7 @@ func TestS3ServerRejectsAppScopedPresign(t *testing.T) {
 		t.Fatalf("PresignObject error = %v, want codes.FailedPrecondition", err)
 	}
 	if called {
-		t.Fatal("PresignObject called backend for plugin-scoped binding")
+		t.Fatal("PresignObject called backend for app binding")
 	}
 }
 
@@ -503,13 +485,13 @@ func TestS3ServerAppScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 		t.Fatalf("PresignObject: %v", err)
 	}
 	if called {
-		t.Fatal("PresignObject called backend for plugin-scoped binding")
+		t.Fatal("PresignObject called backend for app binding")
 	}
 	if !strings.HasPrefix(resp.GetUrl(), "https://gestalt.example.test"+ObjectAccessPathPrefix) {
 		t.Fatalf("url = %q, want hosted object access URL", resp.GetUrl())
 	}
-	if strings.Contains(resp.GetUrl(), s3NamespacePrefix("roadmap")) || strings.Contains(resp.GetUrl(), "plans/q2.txt") {
-		t.Fatalf("url leaks plugin-scoped object path: %q", resp.GetUrl())
+	if strings.Contains(resp.GetUrl(), "plans/q2.txt") {
+		t.Fatalf("url leaks object path: %q", resp.GetUrl())
 	}
 	if resp.GetMethod() != proto.PresignMethod_PRESIGN_METHOD_PUT {
 		t.Fatalf("method = %v, want PUT", resp.GetMethod())

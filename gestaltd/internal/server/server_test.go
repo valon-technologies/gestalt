@@ -14,7 +14,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -373,14 +372,8 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 		t.Fatal("PUT response missing ETag")
 	}
 
-	prefixed := s3sdk.ObjectRef{
-		Key: s3.AppObjectKey("brain", targetRef.Key),
-	}
-	if _, err := store.HeadObject(context.Background(), prefixed); err != nil {
-		t.Fatalf("HeadObject(prefixed): %v", err)
-	}
-	if _, err := store.HeadObject(context.Background(), targetRef); !errors.Is(err, s3sdk.ErrNotFound) {
-		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
+	if _, err := store.HeadObject(context.Background(), targetRef); err != nil {
+		t.Fatalf("HeadObject: %v", err)
 	}
 
 	getURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
