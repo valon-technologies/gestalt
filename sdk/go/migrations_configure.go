@@ -26,6 +26,9 @@ func ConfigureMigrations(ctx context.Context, provider Provider, name string, co
 			}
 		}
 	}
+	if strings.TrimSpace(opts.LedgerStore) == "" {
+		opts.LedgerStore = migrations.ProviderLedgerStore(name)
+	}
 	db, err := IndexedDB(ctx, binding)
 	if err != nil {
 		return fmt.Errorf("migrations: open indexeddb: %w", err)

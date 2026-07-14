@@ -83,8 +83,33 @@ export interface MigrationRunOptions {
   revisions: Revision[];
   /** Name of the IndexedDB binding to migrate. */
   dbBinding?: string;
-  /** Ledger store name. Defaults to `_gestalt_migrations`. */
+  /**
+   * Ledger store name. When omitted, {@link runMigrations} defaults to
+   * `_gestalt_migrations`; provider startup derives a per-provider store from
+   * the configured provider name.
+   */
   ledgerStore?: string;
+}
+
+/**
+ * Derive the default migration ledger store for a configured provider name.
+ */
+export function providerMigrationLedgerStore(providerName: string): string {
+  const normalized = providerName.trim().replace(/^@[^/]+\//, "");
+  if (!normalized) {
+    return DEFAULT_LEDGER_STORE;
+  }
+  const slug = normalized
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) {
+    return DEFAULT_LEDGER_STORE;
+  }
+  const snake = slug
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/-/g, "_")
+    .toLowerCase();
+  return `${snake}_migrations`;
 }
 
 /** Resolve the IndexedDB binding for migration runs. */
