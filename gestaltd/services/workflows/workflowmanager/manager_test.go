@@ -132,6 +132,12 @@ type runAsGrantAuthz struct {
 	grants map[string]struct{}
 }
 
+type remoteDelegatedWorkflowApp struct {
+	*coretesting.StubIntegration
+}
+
+func (remoteDelegatedWorkflowApp) RemoteCredentialDelegated() bool { return true }
+
 func (a *runAsGrantAuthz) grantKey(subjectID, providerName, operation string) string {
 	return strings.TrimSpace(subjectID) + "|" + strings.TrimSpace(providerName) + "|" + strings.TrimSpace(operation)
 }
@@ -282,6 +288,39 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 				ProviderName: "local",
 				DefinitionID: "definition-run-as",
 				WorkflowKey:  "github:issues:triage",
+			}); err != nil {
+				t.Fatalf("StartRun: %v", err)
+			}
+		})
+
+		t.Run("remote delegated target skips local grants", func(t *testing.T) {
+			t.Parallel()
+			provider := newTestWorkflowProvider()
+			providers := testutil.NewProviderRegistry(t, remoteDelegatedWorkflowApp{StubIntegration: &coretesting.StubIntegration{
+				N:          "linear",
+				ConnMode:   core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{ID: "issues.triage", Method: "POST"}}},
+			}})
+			manager := New(Config{
+				Providers: providers,
+				Workflow:  testWorkflowControl{provider: provider},
+				Invoker:   testWorkflowManagerBroker(t, providers, &runAsGrantAuthz{}),
+			})
+			spec := coreworkflow.DefinitionSpec{
+				ID:     "definition-remote-delegated",
+				RunAs:  testWorkflowRunAsSubject(),
+				Target: testWorkflowAppStepTarget("linear", "issues.triage", nil),
+			}
+			if _, err := manager.ApplyDefinition(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), DefinitionApply{
+				ProviderName: "local",
+				Spec:         spec,
+			}); err != nil {
+				t.Fatalf("ApplyDefinition: %v", err)
+			}
+			if _, err := manager.StartRun(context.Background(), testWorkflowManagerPrincipalWithoutGithub(), RunStart{
+				ProviderName: "local",
+				DefinitionID: spec.ID,
+				WorkflowKey:  "linear:issues:triage",
 			}); err != nil {
 				t.Fatalf("StartRun: %v", err)
 			}

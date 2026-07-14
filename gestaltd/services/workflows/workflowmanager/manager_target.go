@@ -16,7 +16,6 @@ import (
 
 type targetAccessChecker interface {
 	CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error
-	CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error
 }
 
 func (m *Manager) resolveProvider(ctx context.Context, providerName string) (string, coreworkflow.Provider, error) {
@@ -314,11 +313,7 @@ func (m *Manager) checkOperationAccess(ctx context.Context, p *principal.Princip
 }
 
 func (m *Manager) checkProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
-	checker, ok := m.invoker.(targetAccessChecker)
-	if !ok {
-		return fmt.Errorf("%w: workflow target access checker is not configured", invocation.ErrInternal)
-	}
-	return checker.CheckProviderAccess(ctx, p, providerName)
+	return m.checkOperationAccess(ctx, p, providerName, providerName)
 }
 
 func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {

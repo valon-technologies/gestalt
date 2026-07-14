@@ -548,6 +548,14 @@ func providerDelegatesRemoteAuthorization(prov core.Provider) bool {
 	return ok && delegated.RemoteCredentialDelegated()
 }
 
+func (b *Broker) providerDelegatesRemoteAuthorization(providerName string) bool {
+	if b == nil || b.providers == nil {
+		return false
+	}
+	provider, err := b.providers.Get(providerName)
+	return err == nil && providerDelegatesRemoteAuthorization(provider)
+}
+
 func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
 	if b == nil || b.authorization == nil {
 		return nil
@@ -556,10 +564,10 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 }
 
 func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
-	if b == nil || b.authorization == nil {
-		if !principal.AllowsOperationPermission(p, providerName, operationID) {
-			return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
-		}
+	if !principal.AllowsOperationPermission(p, providerName, operationID) {
+		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	}
+	if b == nil || b.authorization == nil || b.providerDelegatesRemoteAuthorization(providerName) {
 		return nil
 	}
 	resp, err := b.authorization.CheckAccess(ctx, accessRequest(b.providerKinds, p, providerName, operationID))
@@ -570,10 +578,6 @@ func (b *Broker) CheckOperationAccess(ctx context.Context, p *principal.Principa
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
 	return nil
-}
-
-func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal, providerName string) error {
-	return b.CheckOperationAccess(ctx, p, providerName, providerName)
 }
 
 func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, action string) *proto.CheckAccessRequest {
