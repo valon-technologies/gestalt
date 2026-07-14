@@ -14,7 +14,7 @@ func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition
 	if err != nil {
 		return nil, err
 	}
-	definition.ProviderName = managed.ProviderName
+	definition.Provider = managed.ProviderName
 	return definition, nil
 }
 
@@ -26,7 +26,7 @@ func managedWorkflowRunToProto(managed *workflowmanager.ManagedRun) (*proto.Work
 	if err != nil {
 		return nil, err
 	}
-	run.ProviderName = managed.ProviderName
+	run.Provider = managed.ProviderName
 	return run, nil
 }
 
@@ -38,7 +38,7 @@ func managedWorkflowRunSignalToProto(managed *workflowmanager.ManagedRunSignal) 
 	if err != nil {
 		return nil, err
 	}
-	run.ProviderName = managed.ProviderName
+	run.Provider = managed.ProviderName
 	signal, err := workflowwire.SignalToProto(managed.Signal)
 	if err != nil {
 		return nil, err

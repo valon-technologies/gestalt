@@ -29,6 +29,7 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 		RequestID:               "req-abc-123",
 		Source:                  "binding:test-hook",
 		SubjectID:               principal.UserSubjectID("user-42"),
+		CreatedBy:               principal.UserSubjectID("user-42"),
 		Provider:                "alpha",
 		Operation:               "fetch",
 		Depth:                   1,
@@ -69,6 +70,9 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 	}
 	if record["subject_id"] != principal.UserSubjectID("user-42") {
 		t.Errorf("expected subject_id=%q, got %v", principal.UserSubjectID("user-42"), record["subject_id"])
+	}
+	if record["created_by"] != principal.UserSubjectID("user-42") {
+		t.Errorf("expected created_by=%q, got %v", principal.UserSubjectID("user-42"), record["created_by"])
 	}
 	if _, has := record["user_id"]; has {
 		t.Errorf("expected emitted audit record to omit user_id, got %v", record["user_id"])

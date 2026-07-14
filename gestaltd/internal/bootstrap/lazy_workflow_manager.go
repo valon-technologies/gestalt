@@ -34,52 +34,52 @@ func (l *lazyWorkflowManager) ApplyDefinition(ctx context.Context, p *principal.
 	return target.ApplyDefinition(ctx, p, req)
 }
 
-func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.GetDefinition(ctx, p, definitionID)
+	return target.GetDefinition(ctx, p, providerName, definitionID)
 }
 
-func (l *lazyWorkflowManager) ListDefinitions(ctx context.Context, p *principal.Principal) (*workflowmanager.ListDefinitionsResponse, error) {
+func (l *lazyWorkflowManager) ListDefinitions(ctx context.Context, p *principal.Principal, providerName string) (*workflowmanager.ListDefinitionsResponse, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListDefinitions(ctx, p)
+	return target.ListDefinitions(ctx, p, providerName)
 }
 
-func (l *lazyWorkflowManager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, providerName, definitionID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.SetDefinitionPaused(ctx, p, definitionID, paused)
+	return target.SetDefinitionPaused(ctx, p, providerName, definitionID, paused)
 }
 
-func (l *lazyWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, providerName, definitionID, activationID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.SetActivationPaused(ctx, p, definitionID, activationID, paused)
+	return target.SetActivationPaused(ctx, p, providerName, definitionID, activationID, paused)
 }
 
-func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error {
+func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) error {
 	target, err := l.current()
 	if err != nil {
 		return err
 	}
-	return target.DeleteDefinition(ctx, p, definitionID)
+	return target.DeleteDefinition(ctx, p, providerName, definitionID)
 }
 
-func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
+func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Principal, providerName string, req coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListRuns(ctx, p, req)
+	return target.ListRuns(ctx, p, providerName, req)
 }
 
 func (l *lazyWorkflowManager) StartRun(ctx context.Context, p *principal.Principal, req workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
@@ -90,36 +90,36 @@ func (l *lazyWorkflowManager) StartRun(ctx context.Context, p *principal.Princip
 	return target.StartRun(ctx, p, req)
 }
 
-func (l *lazyWorkflowManager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*workflowmanager.ManagedRun, error) {
+func (l *lazyWorkflowManager) GetRun(ctx context.Context, p *principal.Principal, providerName, runID string) (*workflowmanager.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.GetRun(ctx, p, runID)
+	return target.GetRun(ctx, p, providerName, runID)
 }
 
-func (l *lazyWorkflowManager) GetRunEvents(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+func (l *lazyWorkflowManager) GetRunEvents(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.GetRunEvents(ctx, p, runID)
+	return target.GetRunEvents(ctx, p, providerName, runID)
 }
 
-func (l *lazyWorkflowManager) GetRunOutput(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+func (l *lazyWorkflowManager) GetRunOutput(ctx context.Context, p *principal.Principal, providerName, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.GetRunOutput(ctx, p, runID)
+	return target.GetRunOutput(ctx, p, providerName, runID)
 }
 
-func (l *lazyWorkflowManager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*workflowmanager.ManagedRun, error) {
+func (l *lazyWorkflowManager) CancelRun(ctx context.Context, p *principal.Principal, providerName, runID, reason string) (*workflowmanager.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.CancelRun(ctx, p, runID, reason)
+	return target.CancelRun(ctx, p, providerName, runID, reason)
 }
 
 func (l *lazyWorkflowManager) SignalRun(ctx context.Context, p *principal.Principal, req workflowmanager.RunSignal) (*workflowmanager.ManagedRunSignal, error) {

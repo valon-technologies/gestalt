@@ -102,8 +102,8 @@ func WorkflowRunContext(req Request) map[string]any {
 	if len(req.Signals) > 0 {
 		ctxValue["signals"] = WorkflowSignalsContext(req.Signals)
 	}
-	if createdBySubjectID := strings.TrimSpace(req.CreatedBySubjectID); createdBySubjectID != "" {
-		ctxValue["createdBySubjectId"] = createdBySubjectID
+	if createdBySubjectID := strings.TrimSpace(req.CreatedBy); createdBySubjectID != "" {
+		ctxValue["createdBy"] = createdBySubjectID
 	}
 	if runAs := WorkflowSubjectContext(req.RunAs); len(runAs) > 0 {
 		ctxValue["runAs"] = runAs
@@ -304,8 +304,8 @@ func WorkflowSignalsContext(signals []gestalt.WorkflowSignal) []map[string]any {
 				value["metadata"] = metadata
 			}
 		}
-		if createdBySubjectID := strings.TrimSpace(signal.CreatedBySubjectID); createdBySubjectID != "" {
-			value["createdBySubjectId"] = createdBySubjectID
+		if createdBySubjectID := strings.TrimSpace(signal.CreatedBy); createdBySubjectID != "" {
+			value["createdBy"] = createdBySubjectID
 		}
 		if !signal.CreatedAt.IsZero() {
 			value["createdAt"] = signal.CreatedAt.UTC().Format(time.RFC3339Nano)

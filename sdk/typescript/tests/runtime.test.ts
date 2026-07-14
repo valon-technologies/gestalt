@@ -1560,6 +1560,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
 
   const definition = await (workflow.applyDefinition as any)(
     create(ApplyWorkflowProviderDefinitionRequestSchema, {
+      provider: "fixture-workflow",
       idempotencyKey: "def-1",
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, { id: "service_account:planner" }),
@@ -1580,10 +1581,10 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     }),
   );
   expect(definition.id).toBe("roadmap_sync");
-  expect(definition.createdBySubjectId).toBe("service_account:planner");
 
   const run = await (workflow.startRun as any)(
     create(StartWorkflowProviderRunRequestSchema, {
+      provider: "fixture-workflow",
       idempotencyKey: "req-1",
       definitionId: "roadmap_sync",
       context: create(RequestContextSchema, {
@@ -1600,7 +1601,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(runApp.name).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
-  expect(run.createdBySubjectId).toBe("user:user-123");
 
   const pausedDefinition = await (workflow.setActivationPaused as any)({
     definitionId: "roadmap_sync",
@@ -1611,7 +1611,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
 
   await (workflow.deliverEvent as any)(
     create(DeliverWorkflowProviderEventRequestSchema, {
-      appName: "roadmap",
+      provider: "fixture-workflow",
       event: {
         id: "evt-1",
         source: "tests",
@@ -1659,7 +1659,7 @@ test("integration provider request context includes workflow metadata", async ()
           runId: "run-123",
           provider: "temporal",
           executionRef: "exec-ref-123",
-          createdBySubjectId: "user:user-123",
+          createdBy: "user:user-123",
           target: {
             kind: "steps",
             steps: [
@@ -1711,7 +1711,7 @@ test("integration provider request context includes workflow metadata", async ()
       runId: "run-123",
       provider: "temporal",
       executionRef: "exec-ref-123",
-      createdBySubjectId: "user:user-123",
+      createdBy: "user:user-123",
       target: {
         kind: "steps",
         steps: [

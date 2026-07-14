@@ -62,10 +62,8 @@ import { fromWireAgentOutput, toWireAgentOutput } from "./agent.ts";
 import {
   fromWireAgentToolRef,
   fromWireRequestContext,
-  fromWireSubjectContext,
   toWireAgentToolRef,
   toWireRequestContext,
-  toWireSubjectContext,
 } from "./app.ts";
 import {
   fromWireTimestamp,
@@ -79,7 +77,7 @@ export function toWireApplyWorkflowProviderDefinitionRequest(
   value: Init<ApplyWorkflowProviderDefinitionRequest>,
 ): wire.ApplyWorkflowProviderDefinitionRequest {
   return create(wire.ApplyWorkflowProviderDefinitionRequestSchema, {
-    providerName: value.providerName ?? "",
+    provider: value.provider ?? "",
     ...(value.spec !== undefined
       ? { spec: toWireWorkflowDefinitionSpec(value.spec) }
       : {}),
@@ -94,7 +92,7 @@ export function fromWireApplyWorkflowProviderDefinitionRequest(
   value: wire.ApplyWorkflowProviderDefinitionRequest,
 ): ApplyWorkflowProviderDefinitionRequest {
   return {
-    providerName: value.providerName,
+    provider: value.provider,
     ...(value.spec !== undefined
       ? { spec: fromWireWorkflowDefinitionSpec(value.spec) }
       : {}),
@@ -130,6 +128,7 @@ export function toWireCancelWorkflowProviderRunRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -142,6 +141,7 @@ export function fromWireCancelWorkflowProviderRunRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -153,6 +153,7 @@ export function toWireDeleteWorkflowProviderDefinitionRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -164,6 +165,7 @@ export function fromWireDeleteWorkflowProviderDefinitionRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -171,11 +173,10 @@ export function toWireDeliverWorkflowProviderEventRequest(
   value: Init<DeliverWorkflowProviderEventRequest>,
 ): wire.DeliverWorkflowProviderEventRequest {
   return create(wire.DeliverWorkflowProviderEventRequestSchema, {
-    appName: value.appName ?? "",
+    provider: value.provider ?? "",
     ...(value.event !== undefined
       ? { event: toWireWorkflowEvent(value.event) }
       : {}),
-    providerName: value.providerName ?? "",
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
@@ -186,11 +187,10 @@ export function fromWireDeliverWorkflowProviderEventRequest(
   value: wire.DeliverWorkflowProviderEventRequest,
 ): DeliverWorkflowProviderEventRequest {
   return {
-    appName: value.appName,
+    provider: value.provider,
     ...(value.event !== undefined
       ? { event: fromWireWorkflowEvent(value.event) }
       : {}),
-    providerName: value.providerName,
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
@@ -205,6 +205,7 @@ export function toWireGetWorkflowProviderDefinitionRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -216,6 +217,7 @@ export function fromWireGetWorkflowProviderDefinitionRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -227,6 +229,7 @@ export function toWireGetWorkflowProviderRunEventsRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -238,6 +241,7 @@ export function fromWireGetWorkflowProviderRunEventsRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -265,6 +269,7 @@ export function toWireGetWorkflowProviderRunOutputRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -276,6 +281,7 @@ export function fromWireGetWorkflowProviderRunOutputRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -307,6 +313,7 @@ export function toWireGetWorkflowProviderRunRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -318,6 +325,7 @@ export function fromWireGetWorkflowProviderRunRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -328,6 +336,7 @@ export function toWireListWorkflowProviderDefinitionsRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -338,6 +347,7 @@ export function fromWireListWorkflowProviderDefinitionsRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -368,6 +378,7 @@ export function toWireListWorkflowProviderRunsRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -382,6 +393,7 @@ export function fromWireListWorkflowProviderRunsRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -413,6 +425,7 @@ export function toWireSetWorkflowProviderActivationPausedRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -426,6 +439,7 @@ export function fromWireSetWorkflowProviderActivationPausedRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -438,6 +452,7 @@ export function toWireSetWorkflowProviderDefinitionPausedRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -450,6 +465,7 @@ export function fromWireSetWorkflowProviderDefinitionPausedRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -462,7 +478,7 @@ export function toWireSignalOrStartWorkflowProviderRunRequest(
     ...(value.signal !== undefined
       ? { signal: toWireWorkflowSignal(value.signal) }
       : {}),
-    providerName: value.providerName ?? "",
+    provider: value.provider ?? "",
     definitionId: value.definitionId ?? "",
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
@@ -481,7 +497,7 @@ export function fromWireSignalOrStartWorkflowProviderRunRequest(
     ...(value.signal !== undefined
       ? { signal: fromWireWorkflowSignal(value.signal) }
       : {}),
-    providerName: value.providerName,
+    provider: value.provider,
     definitionId: value.definitionId,
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration,
@@ -502,6 +518,7 @@ export function toWireSignalWorkflowProviderRunRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    provider: value.provider ?? "",
   });
 }
 
@@ -516,6 +533,7 @@ export function fromWireSignalWorkflowProviderRunRequest(
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
       : {}),
+    provider: value.provider,
   };
 }
 
@@ -551,7 +569,7 @@ export function toWireStartWorkflowProviderRunRequest(
   return create(wire.StartWorkflowProviderRunRequestSchema, {
     idempotencyKey: value.idempotencyKey ?? "",
     workflowKey: value.workflowKey ?? "",
-    providerName: value.providerName ?? "",
+    provider: value.provider ?? "",
     definitionId: value.definitionId ?? "",
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
@@ -567,7 +585,7 @@ export function fromWireStartWorkflowProviderRunRequest(
   return {
     idempotencyKey: value.idempotencyKey,
     workflowKey: value.workflowKey,
-    providerName: value.providerName,
+    provider: value.provider,
     definitionId: value.definitionId,
     ...(value.input !== undefined ? { input: value.input } : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration,
@@ -694,17 +712,14 @@ export function toWireWorkflowDefinition(
       : {}),
     activations: (value.activations ?? []).map(toWireWorkflowActivation),
     paused: value.paused ?? false,
-    createdBySubjectId: value.createdBySubjectId ?? "",
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
       : {}),
     ...(value.updatedAt !== undefined
       ? { updatedAt: toWireTimestamp(value.updatedAt) }
       : {}),
-    providerName: value.providerName ?? "",
-    ...(value.runAs !== undefined
-      ? { runAs: toWireSubjectContext(value.runAs) }
-      : {}),
+    provider: value.provider ?? "",
+    runAs: value.runAs ?? "",
   });
 }
 
@@ -719,17 +734,14 @@ export function fromWireWorkflowDefinition(
       : {}),
     activations: value.activations.map(fromWireWorkflowActivation),
     paused: value.paused,
-    createdBySubjectId: value.createdBySubjectId,
     ...(value.createdAt !== undefined
       ? { createdAt: fromWireTimestamp(value.createdAt) }
       : {}),
     ...(value.updatedAt !== undefined
       ? { updatedAt: fromWireTimestamp(value.updatedAt) }
       : {}),
-    providerName: value.providerName,
-    ...(value.runAs !== undefined
-      ? { runAs: fromWireSubjectContext(value.runAs) }
-      : {}),
+    provider: value.provider,
+    runAs: value.runAs,
   };
 }
 
@@ -743,9 +755,7 @@ export function toWireWorkflowDefinitionSpec(
       : {}),
     activations: (value.activations ?? []).map(toWireWorkflowActivation),
     paused: value.paused ?? false,
-    ...(value.runAs !== undefined
-      ? { runAs: toWireSubjectContext(value.runAs) }
-      : {}),
+    runAs: value.runAs ?? "",
   });
 }
 
@@ -759,9 +769,7 @@ export function fromWireWorkflowDefinitionSpec(
       : {}),
     activations: value.activations.map(fromWireWorkflowActivation),
     paused: value.paused,
-    ...(value.runAs !== undefined
-      ? { runAs: fromWireSubjectContext(value.runAs) }
-      : {}),
+    runAs: value.runAs,
   };
 }
 
@@ -948,13 +956,10 @@ export function toWireWorkflowRun(value: Init<WorkflowRun>): wire.WorkflowRun {
     ...(value.output !== undefined
       ? { output: toWireValue(value.output) }
       : {}),
-    createdBySubjectId: value.createdBySubjectId ?? "",
     workflowKey: value.workflowKey ?? "",
-    providerName: value.providerName ?? "",
+    provider: value.provider ?? "",
     definitionId: value.definitionId ?? "",
-    ...(value.runAs !== undefined
-      ? { runAs: toWireSubjectContext(value.runAs) }
-      : {}),
+    runAs: value.runAs ?? "",
     ...(value.input !== undefined ? { input: value.input } : {}),
     definitionGeneration: value.definitionGeneration ?? 0n,
     currentStepId: value.currentStepId ?? "",
@@ -985,13 +990,10 @@ export function fromWireWorkflowRun(value: wire.WorkflowRun): WorkflowRun {
     ...(value.output !== undefined
       ? { output: fromWireValue(value.output) }
       : {}),
-    createdBySubjectId: value.createdBySubjectId,
     workflowKey: value.workflowKey,
-    providerName: value.providerName,
+    provider: value.provider,
     definitionId: value.definitionId,
-    ...(value.runAs !== undefined
-      ? { runAs: fromWireSubjectContext(value.runAs) }
-      : {}),
+    runAs: value.runAs,
     ...(value.input !== undefined ? { input: value.input } : {}),
     definitionGeneration: value.definitionGeneration,
     currentStepId: value.currentStepId,
@@ -1141,7 +1143,6 @@ export function toWireWorkflowSignal(
     name: value.name ?? "",
     ...(value.payload !== undefined ? { payload: value.payload } : {}),
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    createdBySubjectId: value.createdBySubjectId ?? "",
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
       : {}),
@@ -1158,7 +1159,6 @@ export function fromWireWorkflowSignal(
     name: value.name,
     ...(value.payload !== undefined ? { payload: value.payload } : {}),
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    createdBySubjectId: value.createdBySubjectId,
     ...(value.createdAt !== undefined
       ? { createdAt: fromWireTimestamp(value.createdAt) }
       : {}),

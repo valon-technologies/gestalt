@@ -45,7 +45,7 @@ test("Workflow forwards request context to provider calls", async () => {
     method: string;
     subjectId: string;
     idempotencyKey?: string;
-    providerName?: string;
+    provider?: string;
     runId?: string;
     definitionId?: string;
     signalName?: string | undefined;
@@ -62,11 +62,11 @@ test("Workflow forwards request context to provider calls", async () => {
             method: "apply-definition",
             subjectId: input.context?.subject?.id ?? "",
             idempotencyKey: input.idempotencyKey,
-            providerName: input.providerName,
+            provider: input.provider,
             ...(input.spec?.id ? { definitionId: input.spec.id } : {}),
           });
           return create(WorkflowDefinitionSchema, {
-            providerName: input.providerName || "basic",
+            provider: "basic",
             id: input.spec?.id || "def-1",
             generation: 3n,
             target: input.spec?.target,
@@ -77,6 +77,7 @@ test("Workflow forwards request context to provider calls", async () => {
           calls.push({
             method: "list-definitions",
             subjectId: input.context?.subject?.id ?? "",
+            provider: input.provider,
           });
           return create(ListWorkflowProviderDefinitionsResponseSchema, {
             definitions: [create(WorkflowDefinitionSchema, { id: "def-1", generation: 3n })],
@@ -87,11 +88,11 @@ test("Workflow forwards request context to provider calls", async () => {
             method: "start-run",
             subjectId: input.context?.subject?.id ?? "",
             idempotencyKey: input.idempotencyKey,
-            providerName: input.providerName,
+            provider: input.provider,
             definitionId: input.definitionId,
           });
           return create(WorkflowRunSchema, {
-            providerName: input.providerName || "basic",
+            provider: "basic",
             id: "run-1",
             status: WorkflowRunStatus.PENDING,
             definitionId: input.definitionId,
@@ -102,13 +103,14 @@ test("Workflow forwards request context to provider calls", async () => {
           calls.push({
             method: "signal-run",
             subjectId: input.context?.subject?.id ?? "",
+            provider: input.provider,
             runId: input.runId,
             signalName: input.signal?.name,
           });
           return create(SignalWorkflowRunResponseSchema, {
             run: create(WorkflowRunSchema, {
               id: input.runId,
-              providerName: "basic",
+              provider: "basic",
             }),
             signal: input.signal,
           });
@@ -117,6 +119,7 @@ test("Workflow forwards request context to provider calls", async () => {
           calls.push({
             method: "delete-definition",
             subjectId: input.context?.subject?.id ?? "",
+            provider: input.provider,
             definitionId: input.definitionId,
           });
           return create(EmptySchema, {});
@@ -148,7 +151,7 @@ test("Workflow forwards request context to provider calls", async () => {
     const workflow = Workflow.connect({ context });
 
     const applied = await workflow.applyDefinition(
-      "basic",
+      "local",
       "workflow-definition-key-ts",
       {
         id: "def-1",
@@ -173,23 +176,22 @@ test("Workflow forwards request context to provider calls", async () => {
         paused: false,
       },
     );
-    const definitions = await workflow.listDefinitions({});
+    const definitions = await workflow.listDefinitions("local");
     const startedRun = await workflow.startRun(
       "workflow-request-key-ts",
       "roadmap-summary:item-1",
-      "basic",
+      "local",
       "def-1",
       0n,
       { itemId: "item-1" },
     );
-    const signaledRun = await workflow.signalRun("run-1", {
+    const signaledRun = await workflow.signalRun("local", "run-1", {
       id: "",
       name: "roadmap.item.updated",
-      createdBySubjectId: "",
       idempotencyKey: "",
       sequence: 0n,
     });
-    await workflow.deleteDefinition("def-1");
+    await workflow.deleteDefinition("local", "def-1");
 
     expect(applied.id).toBe("def-1");
     expect(definitions[0]?.id).toBe("def-1");
@@ -200,29 +202,32 @@ test("Workflow forwards request context to provider calls", async () => {
         method: "apply-definition",
         subjectId: "user:user-123",
         idempotencyKey: "workflow-definition-key-ts",
-        providerName: "basic",
+        provider: "local",
         definitionId: "def-1",
       },
       {
         method: "list-definitions",
         subjectId: "user:user-123",
+        provider: "local",
       },
       {
         method: "start-run",
         subjectId: "user:user-123",
         idempotencyKey: "workflow-request-key-ts",
-        providerName: "basic",
+        provider: "local",
         definitionId: "def-1",
       },
       {
         method: "signal-run",
         subjectId: "user:user-123",
+        provider: "local",
         runId: "run-1",
         signalName: "roadmap.item.updated",
       },
       {
         method: "delete-definition",
         subjectId: "user:user-123",
+        provider: "local",
         definitionId: "def-1",
       },
     ]);
@@ -320,7 +325,7 @@ test("Workflow honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
     const workflow = Workflow.connect();
-    const definitions = await workflow.listDefinitions({});
+    const definitions = await workflow.listDefinitions("local");
 
     expect(definitions[0]?.id).toBe("def-1");
     expect(seenTokens).toEqual(["relay-token-typescript"]);

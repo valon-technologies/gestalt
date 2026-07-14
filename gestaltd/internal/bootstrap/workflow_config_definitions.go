@@ -51,7 +51,7 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
 		providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
-		existingProto, err := provider.GetDefinition(providerCtx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: desiredEntry.DefinitionID})
+		existingProto, err := provider.GetDefinition(providerCtx, &proto.GetWorkflowProviderDefinitionRequest{Provider: desiredEntry.ProviderName, DefinitionId: desiredEntry.DefinitionID})
 		switch {
 		case err == nil:
 			existing, existingErr := workflowwire.DefinitionFromProto(existingProto)
@@ -81,7 +81,8 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
 		if _, err := provider.ApplyDefinition(providerCtx, &proto.ApplyWorkflowProviderDefinitionRequest{
-			Spec: specProto,
+			Provider: desiredEntry.ProviderName,
+			Spec:     specProto,
 			Context: &proto.RequestContext{
 				Subject: &proto.SubjectContext{
 					Id: workflowConfigOwnerSubjectID(),
@@ -172,7 +173,7 @@ func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, runtime *workf
 		}
 		desiredByProviderDefinition[workflowConfigProviderObjectKey(entry.ProviderName, entry.DefinitionID)] = struct{}{}
 	}
-	for _, providerName := range runtime.ProviderNames() {
+	for _, providerName := range runtime.ConfiguredProviderNames() {
 		if !workflowConfigProviderIncluded(includeProvider, providerName) {
 			continue
 		}
@@ -180,7 +181,7 @@ func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, runtime *workf
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow definitions requires provider %q: %w", providerName, err)
 		}
-		resp, err := provider.ListDefinitions(ctx, &proto.ListWorkflowProviderDefinitionsRequest{})
+		resp, err := provider.ListDefinitions(ctx, &proto.ListWorkflowProviderDefinitionsRequest{Provider: providerName})
 		if err != nil {
 			workflowLogSkippedConfigWorkflowCleanup(ctx, "definitions", providerName, err)
 			continue
@@ -196,7 +197,7 @@ func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, runtime *workf
 			if _, ok := desiredByProviderDefinition[workflowConfigProviderObjectKey(providerName, definition.ID)]; ok {
 				continue
 			}
-			if err := provider.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{DefinitionId: definition.ID}); err != nil && !isWorkflowObjectNotFound(err) {
+			if err := provider.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{Provider: providerName, DefinitionId: definition.ID}); err != nil && !isWorkflowObjectNotFound(err) {
 				return fmt.Errorf("bootstrap: delete workflow definition %q: %w", definition.ID, err)
 			}
 		}
@@ -221,8 +222,7 @@ func isWorkflowConfigOwnedDefinition(existing *coreworkflow.Definition, definiti
 		return false
 	}
 	return existing.ID == definitionID &&
-		strings.HasPrefix(existing.ID, "cfg_") &&
-		strings.TrimSpace(existing.CreatedBySubjectID) == workflowConfigOwnerSubjectID()
+		strings.HasPrefix(existing.ID, "cfg_")
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {

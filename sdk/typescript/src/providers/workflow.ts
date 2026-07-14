@@ -286,7 +286,7 @@ export interface WorkflowDefinitionSpec {
   target?: BoundWorkflowTarget | undefined;
   activations?: readonly WorkflowActivation[] | undefined;
   paused?: boolean | undefined;
-  runAs?: SubjectInput | undefined;
+  runAs?: string | undefined;
 }
 
 export interface WorkflowDefinition {
@@ -295,11 +295,11 @@ export interface WorkflowDefinition {
   target?: BoundWorkflowTarget | undefined;
   activations?: readonly WorkflowActivation[] | undefined;
   paused?: boolean | undefined;
-  createdBySubjectId?: string | undefined;
+  createdBy?: string | undefined;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
-  providerName?: string | undefined;
-  runAs?: Subject | undefined;
+  provider?: string | undefined;
+  runAs?: string | undefined;
 }
 
 export interface WorkflowSignal {
@@ -307,7 +307,7 @@ export interface WorkflowSignal {
   name?: string | undefined;
   payload?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
-  createdBySubjectId?: string | undefined;
+  createdBy?: string | undefined;
   createdAt?: Date | undefined;
   idempotencyKey?: string | undefined;
   sequence?: bigint | number | undefined;
@@ -369,11 +369,11 @@ export interface WorkflowRun {
   completedAt?: Date | undefined;
   statusMessage?: string | undefined;
   output?: JsonInput | undefined;
-  createdBySubjectId?: string | undefined;
+  createdBy?: string | undefined;
   workflowKey?: string | undefined;
-  providerName?: string | undefined;
+  provider?: string | undefined;
   definitionId?: string | undefined;
-  runAs?: Subject | undefined;
+  runAs?: string | undefined;
   input?: JsonObjectInput | undefined;
   definitionGeneration?: bigint | number | undefined;
   currentStepId?: string | undefined;
@@ -407,6 +407,7 @@ export interface GetWorkflowProviderRunOutputResponse {
 }
 
 export interface ApplyWorkflowProviderDefinitionRequest {
+  provider: string;
   spec?: WorkflowDefinitionSpec | undefined;
   idempotencyKey?: string | undefined;
   context?: ProtoRequestContext | undefined;
@@ -414,16 +415,19 @@ export interface ApplyWorkflowProviderDefinitionRequest {
 
 export interface GetWorkflowProviderDefinitionRequest {
   definitionId: string;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListWorkflowProviderDefinitionsRequest {
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface SetWorkflowProviderDefinitionPausedRequest {
   definitionId: string;
   paused: boolean;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -431,15 +435,18 @@ export interface SetWorkflowProviderActivationPausedRequest {
   definitionId: string;
   activationId: string;
   paused: boolean;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface DeleteWorkflowProviderDefinitionRequest {
   definitionId: string;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface StartWorkflowProviderRunRequest {
+  provider: string;
   definitionId?: string | undefined;
   expectedDefinitionGeneration?: bigint | number | undefined;
   input?: JsonObjectInput | undefined;
@@ -450,10 +457,12 @@ export interface StartWorkflowProviderRunRequest {
 
 export interface GetWorkflowProviderRunRequest {
   runId: string;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListWorkflowProviderRunsRequest {
+  provider: string;
   pageSize?: number | undefined;
   pageToken?: string | undefined;
   status?: WorkflowRunStatus | undefined;
@@ -463,23 +472,27 @@ export interface ListWorkflowProviderRunsRequest {
 
 export interface GetWorkflowProviderRunEventsRequest {
   runId: string;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface GetWorkflowProviderRunOutputRequest {
   runId: string;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface CancelWorkflowProviderRunRequest {
   runId: string;
   reason: string;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface SignalWorkflowProviderRunRequest {
   runId: string;
   signal?: WorkflowSignal | undefined;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -490,6 +503,7 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   input?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
   signal?: WorkflowSignal | undefined;
+  provider: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -501,7 +515,7 @@ export interface SignalWorkflowRunResponse {
 }
 
 export interface DeliverWorkflowProviderEventRequest {
-  appName?: string | undefined;
+  provider: string;
   event?: WorkflowEvent | undefined;
   context?: ProtoRequestContext | undefined;
 }
@@ -700,10 +714,10 @@ export function workflowDefinition(input: WorkflowDefinition = {}): WorkflowDefi
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
     activations: input.activations?.map(workflowActivation) ?? [],
     paused: input.paused ?? false,
-    createdBySubjectId: input.createdBySubjectId ?? "",
+    createdBy: input.createdBy,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
-    providerName: input.providerName ?? "",
+    provider: input.provider ?? "",
     runAs: input.runAs,
   };
 }
@@ -714,7 +728,7 @@ export function workflowSignal(input: WorkflowSignal = {}): WorkflowSignal {
     name: input.name ?? "",
     payload: input.payload === undefined ? undefined : jsonObjectClone(input.payload),
     metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
-    createdBySubjectId: input.createdBySubjectId ?? "",
+    createdBy: input.createdBy,
     createdAt: input.createdAt,
     idempotencyKey: input.idempotencyKey ?? "",
     sequence: BigInt(input.sequence ?? 0),
@@ -746,9 +760,9 @@ export function workflowRun(input: WorkflowRun = {}): WorkflowRun {
     completedAt: input.completedAt,
     statusMessage: input.statusMessage ?? "",
     output: input.output === undefined ? undefined : jsonClone(input.output),
-    createdBySubjectId: input.createdBySubjectId ?? "",
+    createdBy: input.createdBy,
     workflowKey: input.workflowKey ?? "",
-    providerName: input.providerName ?? "",
+    provider: input.provider ?? "",
     definitionId: input.definitionId ?? "",
     runAs: input.runAs,
     input: input.input === undefined ? undefined : jsonObjectClone(input.input),
@@ -1287,7 +1301,7 @@ export function workflowDefinitionSpecToProto(input?: WorkflowDefinitionSpec): P
     target: boundWorkflowTargetToProto(spec.target),
     activations: spec.activations?.map(workflowActivationToProto) ?? [],
     paused: spec.paused ?? false,
-    runAs: subjectToProto(spec.runAs),
+    runAs: spec.runAs ?? "",
   });
 }
 
@@ -1299,11 +1313,10 @@ export function workflowDefinitionToProto(input: WorkflowDefinition): ProtoWorkf
     target: boundWorkflowTargetToProto(definition.target),
     activations: definition.activations?.map(workflowActivationToProto) ?? [],
     paused: definition.paused ?? false,
-    createdBySubjectId: definition.createdBySubjectId ?? "",
     createdAt: optionalTimestamp(definition.createdAt),
     updatedAt: optionalTimestamp(definition.updatedAt),
-    providerName: definition.providerName ?? "",
-    runAs: subjectToProto(definition.runAs),
+    provider: definition.provider ?? "",
+    runAs: definition.runAs ?? "",
   });
 }
 
@@ -1315,11 +1328,10 @@ export function workflowDefinitionFromProto(input?: ProtoWorkflowDefinition): Wo
     target: boundWorkflowTargetFromProto(input.target),
     activations: input.activations.map((activation) => workflowActivationFromProto(activation)!),
     paused: input.paused,
-    createdBySubjectId: input.createdBySubjectId,
     createdAt: optionalDate(input.createdAt),
     updatedAt: optionalDate(input.updatedAt),
-    providerName: input.providerName,
-    runAs: subjectFromProto(input.runAs),
+    provider: input.provider,
+    runAs: input.runAs,
   });
 }
 
@@ -1330,7 +1342,6 @@ export function workflowSignalToProto(input?: WorkflowSignal): ProtoWorkflowSign
     name: input.name ?? "",
     payload: optionalStruct(input.payload),
     metadata: optionalStruct(input.metadata),
-    createdBySubjectId: input.createdBySubjectId ?? "",
     createdAt: optionalTimestamp(input.createdAt),
     idempotencyKey: input.idempotencyKey ?? "",
     sequence: BigInt(input.sequence ?? 0),
@@ -1344,7 +1355,6 @@ export function workflowSignalFromProto(input?: ProtoWorkflowSignal): WorkflowSi
     name: input.name,
     payload: optionalObjectFromStruct(input.payload),
     metadata: optionalObjectFromStruct(input.metadata),
-    createdBySubjectId: input.createdBySubjectId,
     createdAt: optionalDate(input.createdAt),
     idempotencyKey: input.idempotencyKey,
     sequence: input.sequence,
@@ -1502,11 +1512,10 @@ export function workflowRunToProto(input: WorkflowRun): ProtoWorkflowRun {
     completedAt: optionalTimestamp(run.completedAt),
     statusMessage: run.statusMessage ?? "",
     output: run.output === undefined ? undefined : valueFromJson(run.output),
-    createdBySubjectId: run.createdBySubjectId ?? "",
     workflowKey: run.workflowKey ?? "",
-    providerName: run.providerName ?? "",
+    provider: run.provider ?? "",
     definitionId: run.definitionId ?? "",
-    runAs: subjectToProto(run.runAs),
+    runAs: run.runAs ?? "",
     input: optionalStruct(run.input),
     definitionGeneration: BigInt(run.definitionGeneration ?? 0),
     currentStepId: run.currentStepId ?? "",
@@ -1526,11 +1535,10 @@ export function workflowRunFromProto(input?: ProtoWorkflowRun): WorkflowRun | un
     completedAt: optionalDate(input.completedAt),
     statusMessage: input.statusMessage,
     output: input.output === undefined ? undefined : jsonFromValue(input.output) as JsonInput,
-    createdBySubjectId: input.createdBySubjectId,
     workflowKey: input.workflowKey,
-    providerName: input.providerName,
+    provider: input.provider,
     definitionId: input.definitionId,
-    runAs: subjectFromProto(input.runAs),
+    runAs: input.runAs,
     input: optionalObjectFromStruct(input.input),
     definitionGeneration: input.definitionGeneration,
     currentStepId: input.currentStepId,
@@ -1582,6 +1590,7 @@ export function workflowRunSignalFromProto(input?: ProtoSignalWorkflowRunRespons
 
 function applyWorkflowProviderDefinitionRequestFromProto(input: ProtoApplyWorkflowProviderDefinitionRequest): ApplyWorkflowProviderDefinitionRequest {
   return {
+    provider: input.provider,
     spec: workflowDefinitionSpecFromProto(input.spec),
     idempotencyKey: input.idempotencyKey,
     context: input.context,
@@ -1589,27 +1598,28 @@ function applyWorkflowProviderDefinitionRequestFromProto(input: ProtoApplyWorkfl
 }
 
 function getWorkflowProviderDefinitionRequestFromProto(input: ProtoGetWorkflowProviderDefinitionRequest): GetWorkflowProviderDefinitionRequest {
-  return { definitionId: input.definitionId, context: input.context };
+  return { definitionId: input.definitionId, provider: input.provider, context: input.context };
 }
 
 function listWorkflowProviderDefinitionsRequestFromProto(input: ProtoListWorkflowProviderDefinitionsRequest): ListWorkflowProviderDefinitionsRequest {
-  return { context: input.context };
+  return { provider: input.provider, context: input.context };
 }
 
 function setWorkflowProviderDefinitionPausedRequestFromProto(input: ProtoSetWorkflowProviderDefinitionPausedRequest): SetWorkflowProviderDefinitionPausedRequest {
-  return { definitionId: input.definitionId, paused: input.paused, context: input.context };
+  return { definitionId: input.definitionId, paused: input.paused, provider: input.provider, context: input.context };
 }
 
 function setWorkflowProviderActivationPausedRequestFromProto(input: ProtoSetWorkflowProviderActivationPausedRequest): SetWorkflowProviderActivationPausedRequest {
-  return { definitionId: input.definitionId, activationId: input.activationId, paused: input.paused, context: input.context };
+  return { definitionId: input.definitionId, activationId: input.activationId, paused: input.paused, provider: input.provider, context: input.context };
 }
 
 function deleteWorkflowProviderDefinitionRequestFromProto(input: ProtoDeleteWorkflowProviderDefinitionRequest): DeleteWorkflowProviderDefinitionRequest {
-  return { definitionId: input.definitionId, context: input.context };
+  return { definitionId: input.definitionId, provider: input.provider, context: input.context };
 }
 
 function startWorkflowProviderRunRequestFromProto(input: ProtoStartWorkflowProviderRunRequest): StartWorkflowProviderRunRequest {
   return {
+    provider: input.provider,
     definitionId: input.definitionId,
     expectedDefinitionGeneration: input.expectedDefinitionGeneration,
     input: optionalObjectFromStruct(input.input),
@@ -1620,11 +1630,12 @@ function startWorkflowProviderRunRequestFromProto(input: ProtoStartWorkflowProvi
 }
 
 function getWorkflowProviderRunRequestFromProto(input: ProtoGetWorkflowProviderRunRequest): GetWorkflowProviderRunRequest {
-  return { runId: input.runId, context: input.context };
+  return { runId: input.runId, provider: input.provider, context: input.context };
 }
 
 function listWorkflowProviderRunsRequestFromProto(input: ProtoListWorkflowProviderRunsRequest): ListWorkflowProviderRunsRequest {
   return {
+    provider: input.provider,
     pageSize: input.pageSize,
     pageToken: input.pageToken,
     status: input.status as WorkflowRunStatus,
@@ -1634,23 +1645,24 @@ function listWorkflowProviderRunsRequestFromProto(input: ProtoListWorkflowProvid
 }
 
 function getWorkflowProviderRunEventsRequestFromProto(input: ProtoGetWorkflowProviderRunEventsRequest): GetWorkflowProviderRunEventsRequest {
-  return { runId: input.runId, context: input.context };
+  return { runId: input.runId, provider: input.provider, context: input.context };
 }
 
 function getWorkflowProviderRunOutputRequestFromProto(input: ProtoGetWorkflowProviderRunOutputRequest): GetWorkflowProviderRunOutputRequest {
-  return { runId: input.runId, context: input.context };
+  return { runId: input.runId, provider: input.provider, context: input.context };
 }
 
 function cancelWorkflowProviderRunRequestFromProto(input: ProtoCancelWorkflowProviderRunRequest): CancelWorkflowProviderRunRequest {
-  return { runId: input.runId, reason: input.reason, context: input.context };
+  return { runId: input.runId, reason: input.reason, provider: input.provider, context: input.context };
 }
 
 function signalWorkflowProviderRunRequestFromProto(input: ProtoSignalWorkflowProviderRunRequest): SignalWorkflowProviderRunRequest {
-  return { runId: input.runId, signal: workflowSignalFromProto(input.signal), context: input.context };
+  return { runId: input.runId, signal: workflowSignalFromProto(input.signal), provider: input.provider, context: input.context };
 }
 
 function signalOrStartWorkflowProviderRunRequestFromProto(input: ProtoSignalOrStartWorkflowProviderRunRequest): SignalOrStartWorkflowProviderRunRequest {
   return {
+    provider: input.provider,
     workflowKey: input.workflowKey,
     definitionId: input.definitionId,
     expectedDefinitionGeneration: input.expectedDefinitionGeneration,
@@ -1663,7 +1675,7 @@ function signalOrStartWorkflowProviderRunRequestFromProto(input: ProtoSignalOrSt
 
 function deliverWorkflowProviderEventRequestFromProto(input: ProtoDeliverWorkflowProviderEventRequest): DeliverWorkflowProviderEventRequest {
   return {
-    appName: input.appName,
+    provider: input.provider,
     event: workflowEventFromProto(input.event),
     context: input.context,
   };
@@ -1676,18 +1688,18 @@ export function workflowDefinitionSpecFromProto(input?: ProtoWorkflowDefinitionS
     target: boundWorkflowTargetFromProto(input.target),
     activations: input.activations.map((activation) => workflowActivationFromProto(activation)!),
     paused: input.paused,
-    runAs: subjectInputFromProto(input.runAs),
+    runAs: input.runAs,
   });
 }
 
 export interface WorkflowExecutionRequest {
-  providerName?: string | undefined;
+  provider?: string | undefined;
   runId?: string | undefined;
   target?: BoundWorkflowTarget | undefined;
   trigger?: WorkflowRunTrigger | undefined;
   input?: Record<string, JsonInput> | undefined;
   metadata?: Record<string, JsonInput> | undefined;
-  createdBySubjectId?: string | undefined;
+  createdBy?: string | undefined;
   signals?: readonly WorkflowSignal[] | undefined;
   steps?: Record<string, { inputs?: Record<string, unknown>; outputs?: unknown }> | undefined;
 }
@@ -1704,7 +1716,7 @@ export interface WorkflowRunContextSignal {
   name: string;
   payload: Record<string, JsonInput>;
   metadata: Record<string, JsonInput>;
-  createdBySubjectId: string;
+  createdBy: string;
   createdAt: string;
   idempotencyKey: string;
   sequence?: number | undefined;
@@ -1718,7 +1730,7 @@ export interface WorkflowRunContext {
   input: Record<string, JsonInput>;
   metadata: Record<string, JsonInput>;
   signals: readonly WorkflowRunContextSignal[];
-  createdBySubjectId: string;
+  createdBy: string;
   latestSignal?: WorkflowRunContextSignal | undefined;
 }
 
@@ -1812,13 +1824,13 @@ export function pathValue(value: unknown, path: string): { value: unknown; ok: b
 export function workflowRunContext(input: WorkflowExecutionRequest = {}): WorkflowRunContext {
   const signals = workflowSignalsContext(input.signals);
   return {
-    provider: input.providerName ?? "",
+    provider: input.provider ?? "",
     runId: input.runId ?? "",
     target: workflowTargetContext(input.target),
     trigger: workflowTriggerContext(input.trigger),
     input: valueMapInput(input.input),
     metadata: valueMapInput(input.metadata),
-    createdBySubjectId: input.createdBySubjectId ?? "",
+    createdBy: input.createdBy ?? "",
     signals,
     latestSignal: signals.at(-1),
   };
@@ -1830,13 +1842,13 @@ export function parseWorkflowRunContext(value: unknown): WorkflowRunContext {
     ? data.signals.map(workflowRunContextSignal).filter((signal): signal is WorkflowRunContextSignal => signal !== undefined)
     : [];
   return {
-    provider: workflowContextString(data.provider ?? data.providerName),
+    provider: workflowContextString(data.provider ?? data.provider),
     runId: workflowContextString(data.runId),
     target: workflowContextOptionalObject(data.target),
     trigger: workflowRunContextTrigger(data.trigger),
     input: workflowContextObject(data.input),
     metadata: workflowContextObject(data.metadata),
-    createdBySubjectId: workflowContextString(data.createdBySubjectId),
+    createdBy: workflowContextString(data.createdBy),
     signals,
     latestSignal: signals.at(-1),
   };
@@ -1848,7 +1860,7 @@ export function workflowSignalsContext(signals?: readonly WorkflowSignal[]): rea
     name: signal.name ?? "",
     payload: compactWorkflowSignalPayload(signal.payload ?? {}),
     metadata: valueMapInput(signal.metadata as Record<string, JsonInput> | undefined),
-    createdBySubjectId: signal.createdBySubjectId ?? "",
+    createdBy: "",
     createdAt: signal.createdAt?.toISOString() ?? "",
     idempotencyKey: signal.idempotencyKey ?? "",
     sequence: typeof signal.sequence === "number" ? signal.sequence : typeof signal.sequence === "bigint" ? Number(signal.sequence) : undefined,
@@ -2137,7 +2149,7 @@ function workflowRunContextSignal(value: unknown): WorkflowRunContextSignal | un
     name: workflowContextString(record.name),
     payload: workflowContextObject(record.payload),
     metadata: workflowContextObject(record.metadata),
-    createdBySubjectId: workflowContextString(record.createdBySubjectId),
+    createdBy: workflowContextString(record.createdBy),
     createdAt: workflowContextString(record.createdAt),
     idempotencyKey: workflowContextString(record.idempotencyKey),
     sequence,

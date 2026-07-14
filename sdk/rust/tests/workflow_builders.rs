@@ -90,7 +90,7 @@ fn workflow_copy_helpers_do_not_alias_nested_payloads() -> gestalt::Result<()> {
 fn workflow_values_and_templates_use_current_roots() -> gestalt::Result<()> {
     let ctx = WorkflowEvalContext {
         request: WorkflowExecutionRequest {
-            provider_name: "indexeddb".to_string(),
+            provider: "indexeddb".to_string(),
             run_id: "run-1".to_string(),
             input: Some(json!({"customer": {"id": "cust_1"}})),
             signals: vec![WorkflowSignal {

@@ -69,7 +69,7 @@ func TestWorkflowEventDeliveryUsesAuthorizedSourceAsCallerApp(t *testing.T) {
 		t.Fatalf("delivered events = %#v, want 1", provider.deliveredEvents)
 	}
 	delivered := provider.deliveredEvents[0]
-	if delivered.GetAppName() != "roadmap" || delivered.GetEvent().GetSource() != "roadmap" {
+	if delivered.GetEvent().GetSource() != "roadmap" {
 		t.Fatalf("delivered provider event = %#v", delivered)
 	}
 }

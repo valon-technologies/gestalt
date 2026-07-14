@@ -791,6 +791,29 @@ type WorkflowRunAsConfig struct {
 	Subject *WorkflowRunAsSubjectConfig `yaml:"subject,omitempty"`
 }
 
+// UnmarshalYAML accepts the canonical scalar service-account form while
+// retaining read compatibility with the legacy nested shape for one release.
+func (r *WorkflowRunAsConfig) UnmarshalYAML(value *yaml.Node) error {
+	if r == nil {
+		return nil
+	}
+	if value.Kind == yaml.ScalarNode {
+		var subjectID string
+		if err := value.Decode(&subjectID); err != nil {
+			return err
+		}
+		r.Subject = &WorkflowRunAsSubjectConfig{ID: strings.TrimSpace(subjectID)}
+		return nil
+	}
+	type legacy WorkflowRunAsConfig
+	var decoded legacy
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*r = WorkflowRunAsConfig(decoded)
+	return nil
+}
+
 type WorkflowRunAsSubjectConfig struct {
 	ID string `yaml:"id,omitempty"`
 }
@@ -799,8 +822,12 @@ func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 	if r == nil || r.Subject == nil {
 		return nil
 	}
+	subjectID := strings.TrimSpace(r.Subject.ID)
+	if subjectID == "" {
+		return nil
+	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID: r.Subject.ID,
+		SubjectID: subjectID,
 	})
 }
 

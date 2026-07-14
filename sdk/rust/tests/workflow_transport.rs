@@ -34,7 +34,7 @@ struct TestWorkflowProvider {
     applied_definitions: Mutex<Vec<(String, String, usize)>>,
     definition_pauses: Mutex<Vec<(String, bool)>>,
     activation_pauses: Mutex<Vec<(String, String, bool)>>,
-    delivered_events: Mutex<Vec<(String, String)>>,
+    delivered_events: Mutex<Vec<String>>,
     started_inputs: Mutex<Vec<serde_json::Value>>,
 }
 
@@ -73,7 +73,7 @@ impl WorkflowProvider for TestWorkflowProvider {
             .lock()
             .expect("applied_definitions lock")
             .push((
-                request.provider_name.clone(),
+                "workflow-runtime".to_string(),
                 spec.id.clone(),
                 spec.activations.len(),
             ));
@@ -83,7 +83,7 @@ impl WorkflowProvider for TestWorkflowProvider {
             target: spec.target,
             activations: spec.activations,
             paused: spec.paused,
-            provider_name: request.provider_name,
+            provider: "workflow-runtime".to_string(),
             ..Default::default()
         })
     }
@@ -99,7 +99,7 @@ impl WorkflowProvider for TestWorkflowProvider {
         Ok(gestalt::WorkflowDefinition {
             id: request.definition_id,
             paused: request.paused,
-            provider_name: "workflow-runtime".to_string(),
+            provider: "workflow-runtime".to_string(),
             ..Default::default()
         })
     }
@@ -123,7 +123,7 @@ impl WorkflowProvider for TestWorkflowProvider {
                 paused: request.paused,
                 ..Default::default()
             }],
-            provider_name: "workflow-runtime".to_string(),
+            provider: "workflow-runtime".to_string(),
             ..Default::default()
         })
     }
@@ -145,7 +145,7 @@ impl WorkflowProvider for TestWorkflowProvider {
             id: request.idempotency_key,
             status: WorkflowRunStatus::Pending as i32,
             target: Some(app_target()),
-            provider_name: request.provider_name,
+            provider: "workflow-runtime".to_string(),
             definition_id: request.definition_id,
             workflow_key: request.workflow_key,
             input: request.input,
@@ -189,7 +189,7 @@ impl WorkflowProvider for TestWorkflowProvider {
         self.delivered_events
             .lock()
             .expect("delivered_events lock")
-            .push((request.app_name, event.r#type.clone()));
+            .push(event.r#type.clone());
         Ok(event)
     }
 }
@@ -249,7 +249,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     let mut client = WorkflowClient::new(channel);
     let applied = client
         .apply_definition(ApplyWorkflowProviderDefinitionRequest {
-            provider_name: "workflow-runtime".to_string(),
             spec: Some(gestalt::WorkflowDefinitionSpec {
                 id: "definition-42".to_string(),
                 target: Some(app_target()),
@@ -301,7 +300,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
 
     let started = client
         .start_run(StartWorkflowProviderRunRequest {
-            provider_name: "workflow-runtime".to_string(),
             idempotency_key: "run-42".to_string(),
             definition_id: "definition-42".to_string(),
             workflow_key: "wf-key".to_string(),
@@ -349,7 +347,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
 
     let delivered = client
         .deliver_event(DeliverWorkflowProviderEventRequest {
-            app_name: "demo".to_string(),
             event: Some(WorkflowEvent {
                 id: "evt_1".to_string(),
                 source: "github".to_string(),
@@ -357,7 +354,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 r#type: "github.pull_request".to_string(),
                 ..Default::default()
             }),
-            provider_name: "workflow-runtime".to_string(),
             ..Default::default()
         })
         .await
@@ -414,7 +410,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
             .lock()
             .expect("delivered_events lock")
             .clone(),
-        vec![("demo".to_string(), "github.pull_request".to_string())]
+        vec!["github.pull_request".to_string()]
     );
 
     serve_task.abort();

@@ -772,8 +772,8 @@ func (s relayTestWorkflowProviderServer) GetDefinition(_ context.Context, req *p
 		s.calls.Add(1)
 	}
 	return &proto.WorkflowDefinition{
-		ProviderName: "registered",
-		Id:           req.GetDefinitionId(),
+		Provider: "registered",
+		Id:       req.GetDefinitionId(),
 	}, nil
 }
 
@@ -1209,7 +1209,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 				if err != nil {
 					t.Fatalf("WorkflowProvider.GetDefinition via relay: %v", err)
 				}
-				if resp.GetProviderName() != "registered" || resp.GetId() != "definition-1" {
+				if resp.GetProvider() != "registered" || resp.GetId() != "definition-1" {
 					t.Fatalf("WorkflowProvider.GetDefinition response = %+v, want registered definition-1", resp)
 				}
 			},

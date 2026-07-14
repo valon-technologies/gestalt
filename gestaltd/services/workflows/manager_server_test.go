@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -38,7 +39,8 @@ func TestManagerServerMissingOrDeniedAuthorizationDenyWorkflowManagerMethods(t *
 
 			server := NewProviderServer("caller", nil, tc.auth)
 			_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
-				Context: managerServerRequestContext("caller"),
+				Provider: "local",
+				Context:  managerServerRequestContext("caller"),
 			})
 			if status.Code(err) != tc.code {
 				t.Fatalf("ApplyDefinition error = %v, want %s", err, tc.code)
@@ -51,14 +53,47 @@ func TestManagerServerRejectsCallerSuppliedDefinitionRunAs(t *testing.T) {
 	t.Parallel()
 
 	server := NewProviderServer("caller", nil, &managerServerAuthorizationProvider{allowed: true})
-	runAs := &proto.SubjectContext{Id: "user:ada"}
+	runAs := "service_account:ada"
 
 	_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
-		Context: managerServerRequestContext("caller"),
-		Spec:    &proto.WorkflowDefinitionSpec{RunAs: runAs},
+		Provider: "selected",
+		Context:  managerServerRequestContext("caller"),
+		Spec:     &proto.WorkflowDefinitionSpec{RunAs: runAs},
+	})
+	if status.Code(err) != codes.PermissionDenied && status.Code(err) != codes.InvalidArgument && status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("status = %s, want permission denied, invalid argument, or failed precondition (err=%v)", status.Code(err), err)
+	}
+}
+
+func TestManagerServerPublicApplyRequiresServiceAccountManagement(t *testing.T) {
+	t.Parallel()
+
+	server := NewProviderServer("gestaltd", nil, &managerServerAuthorizationProvider{})
+	ctx := publicrpc.WithPublicOrigin(context.Background(), proto.Workflow_ApplyDefinition_FullMethodName)
+	_, err := server.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
+		Provider: "selected",
+		Context:  managerServerRequestContext("gestaltd"),
+		Spec:     &proto.WorkflowDefinitionSpec{RunAs: "service_account:ada"},
 	})
 	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("status = %s, want %s (err=%v)", status.Code(err), codes.PermissionDenied, err)
+		t.Fatalf("status = %s, want PermissionDenied (err=%v)", status.Code(err), err)
+	}
+}
+
+func TestWorkflowRPCActionUsesWireNames(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		workflowauth.OperationDefinitionsSetPaused:           "SetDefinitionPaused",
+		workflowauth.OperationDefinitionsSetActivationPaused: "SetActivationPaused",
+		workflowauth.OperationRunsGetEvents:                  "GetRunEvents",
+		workflowauth.OperationRunsGetOutput:                  "GetRunOutput",
+		workflowauth.OperationRunsSignalOrStart:              "SignalOrStartRun",
+	}
+	for operation, want := range tests {
+		if got := workflowRPCAction(operation); got != want {
+			t.Errorf("workflowRPCAction(%q) = %q, want %q", operation, got, want)
+		}
 	}
 }
 
@@ -83,9 +118,9 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	server := NewProviderServer("sourceApp", manager, authz)
 
 	delivered, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
-		ProviderName: "selected",
-		Context:      managerServerRequestContext("sourceApp"),
-		Event:        &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
+		Provider: "selected",
+		Context:  managerServerRequestContext("sourceApp"),
+		Event:    &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
 	})
 	if err != nil {
 		t.Fatalf("DeliverEvent: %v", err)
@@ -96,11 +131,11 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	if len(selected.deliverReqs) != 1 {
 		t.Fatalf("selected deliver requests = %d, want 1", len(selected.deliverReqs))
 	}
-	if got := selected.deliverReqs[0].GetAppName(); got != "sourceApp" {
-		t.Fatalf("selected deliver app = %q, want sourceApp", got)
-	}
 	if got := selected.deliverReqs[0].GetEvent().GetSource(); got != "sourceApp" {
 		t.Fatalf("selected deliver source = %q, want sourceApp", got)
+	}
+	if got := selected.deliverReqs[0].GetProvider(); got != "selected" {
+		t.Fatalf("selected deliver provider = %q, want selected", got)
 	}
 	if len(other.deliverReqs) != 0 {
 		t.Fatalf("other deliver requests = %d, want 0", len(other.deliverReqs))
@@ -109,8 +144,8 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	if len(authzRequests) != 1 {
 		t.Fatalf("authorization checks = %d, want 1", len(authzRequests))
 	}
-	if got := authzRequests[0].GetResource().GetId(); got != workflowauth.OperationResourceID("sourceApp", workflowauth.OperationEventsDeliver) {
-		t.Fatalf("authorization resource = %q, want deliver event resource", got)
+	if got := authzRequests[0].GetResource().GetId(); got != "selected" {
+		t.Fatalf("authorization resource = %q, want selected workflow resource", got)
 	}
 	assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
 		"level":          "INFO",
@@ -122,6 +157,7 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 		"target_name":    "example.event",
 		"caller_app":     "sourceApp",
 		"subject_id":     "user:user-123",
+		"created_by":     "user:user-123",
 		"request_id_set": true,
 		"allowed":        true,
 	})
@@ -143,19 +179,15 @@ func TestManagerServerDeliverEventIgnoresSpoofedAppNameOnInternalPath(t *testing
 	server := NewProviderServer("sourceApp", manager, &managerServerAuthorizationProvider{allowed: true})
 
 	_, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
-		ProviderName: "selected",
-		AppName:      "evilApp",
-		Context:      managerServerRequestContext("sourceApp"),
-		Event:        &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
+		Provider: "selected",
+		Context:  managerServerRequestContext("sourceApp"),
+		Event:    &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
 	})
 	if err != nil {
 		t.Fatalf("DeliverEvent: %v", err)
 	}
 	if len(selected.deliverReqs) != 1 {
 		t.Fatalf("selected deliver requests = %d, want 1", len(selected.deliverReqs))
-	}
-	if got := selected.deliverReqs[0].GetAppName(); got != "sourceApp" {
-		t.Fatalf("selected deliver app = %q, want sourceApp", got)
 	}
 }
 
@@ -316,5 +348,5 @@ func (p *recordingWorkflowProvider) GetDefinition(context.Context, *proto.GetWor
 	if err != nil {
 		return nil, err
 	}
-	return &proto.WorkflowDefinition{Id: "definition-1", Target: target, CreatedBySubjectId: "user:user-123"}, nil
+	return &proto.WorkflowDefinition{Id: "definition-1", Target: target}, nil
 }

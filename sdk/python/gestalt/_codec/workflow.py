@@ -24,7 +24,7 @@ def to_wire_apply_workflow_provider_definition_request(
     value: native.ApplyWorkflowProviderDefinitionRequest,
 ) -> Any:
     return _workflow_pb2.ApplyWorkflowProviderDefinitionRequest(
-        provider_name=value.provider_name,
+        provider=value.provider,
         spec=None
         if value.spec is None
         else to_wire_workflow_definition_spec(value.spec),
@@ -39,7 +39,7 @@ def from_wire_apply_workflow_provider_definition_request(
     value: Any,
 ) -> native.ApplyWorkflowProviderDefinitionRequest:
     return native.ApplyWorkflowProviderDefinitionRequest(
-        provider_name=value.provider_name,
+        provider=value.provider,
         spec=from_wire_workflow_definition_spec(value.spec)
         if value.HasField("spec")
         else None,
@@ -71,6 +71,7 @@ def to_wire_cancel_workflow_provider_run_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -83,6 +84,7 @@ def from_wire_cancel_workflow_provider_run_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -94,6 +96,7 @@ def to_wire_delete_workflow_provider_definition_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -105,6 +108,7 @@ def from_wire_delete_workflow_provider_definition_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -112,9 +116,8 @@ def to_wire_deliver_workflow_provider_event_request(
     value: native.DeliverWorkflowProviderEventRequest,
 ) -> Any:
     return _workflow_pb2.DeliverWorkflowProviderEventRequest(
-        app_name=value.app_name,
+        provider=value.provider,
         event=None if value.event is None else to_wire_workflow_event(value.event),
-        provider_name=value.provider_name,
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
@@ -125,11 +128,10 @@ def from_wire_deliver_workflow_provider_event_request(
     value: Any,
 ) -> native.DeliverWorkflowProviderEventRequest:
     return native.DeliverWorkflowProviderEventRequest(
-        app_name=value.app_name,
+        provider=value.provider,
         event=from_wire_workflow_event(value.event)
         if value.HasField("event")
         else None,
-        provider_name=value.provider_name,
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
@@ -144,6 +146,7 @@ def to_wire_get_workflow_provider_definition_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -155,6 +158,7 @@ def from_wire_get_workflow_provider_definition_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -166,6 +170,7 @@ def to_wire_get_workflow_provider_run_events_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -177,6 +182,7 @@ def from_wire_get_workflow_provider_run_events_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -204,6 +210,7 @@ def to_wire_get_workflow_provider_run_output_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -215,6 +222,7 @@ def from_wire_get_workflow_provider_run_output_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -242,6 +250,7 @@ def to_wire_get_workflow_provider_run_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -253,6 +262,7 @@ def from_wire_get_workflow_provider_run_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -263,6 +273,7 @@ def to_wire_list_workflow_provider_definitions_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -273,6 +284,7 @@ def from_wire_list_workflow_provider_definitions_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -303,6 +315,7 @@ def to_wire_list_workflow_provider_runs_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -317,6 +330,7 @@ def from_wire_list_workflow_provider_runs_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -348,6 +362,7 @@ def to_wire_set_workflow_provider_activation_paused_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -361,6 +376,7 @@ def from_wire_set_workflow_provider_activation_paused_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -373,6 +389,7 @@ def to_wire_set_workflow_provider_definition_paused_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -385,6 +402,7 @@ def from_wire_set_workflow_provider_definition_paused_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -395,7 +413,7 @@ def to_wire_signal_or_start_workflow_provider_run_request(
         workflow_key=value.workflow_key,
         idempotency_key=value.idempotency_key,
         signal=None if value.signal is None else to_wire_workflow_signal(value.signal),
-        provider_name=value.provider_name,
+        provider=value.provider,
         definition_id=value.definition_id,
         input=None if value.input is None else to_wire_struct(value.input),
         expected_definition_generation=value.expected_definition_generation,
@@ -414,7 +432,7 @@ def from_wire_signal_or_start_workflow_provider_run_request(
         signal=from_wire_workflow_signal(value.signal)
         if value.HasField("signal")
         else None,
-        provider_name=value.provider_name,
+        provider=value.provider,
         definition_id=value.definition_id,
         input=from_wire_struct(value.input) if value.HasField("input") else None,
         expected_definition_generation=value.expected_definition_generation,
@@ -433,6 +451,7 @@ def to_wire_signal_workflow_provider_run_request(
         context=None
         if value.context is None
         else app.to_wire_request_context(value.context),
+        provider=value.provider,
     )
 
 
@@ -447,6 +466,7 @@ def from_wire_signal_workflow_provider_run_request(
         context=app.from_wire_request_context(value.context)
         if value.HasField("context")
         else None,
+        provider=value.provider,
     )
 
 
@@ -480,7 +500,7 @@ def to_wire_start_workflow_provider_run_request(
     return _workflow_pb2.StartWorkflowProviderRunRequest(
         idempotency_key=value.idempotency_key,
         workflow_key=value.workflow_key,
-        provider_name=value.provider_name,
+        provider=value.provider,
         definition_id=value.definition_id,
         input=None if value.input is None else to_wire_struct(value.input),
         expected_definition_generation=value.expected_definition_generation,
@@ -496,7 +516,7 @@ def from_wire_start_workflow_provider_run_request(
     return native.StartWorkflowProviderRunRequest(
         idempotency_key=value.idempotency_key,
         workflow_key=value.workflow_key,
-        provider_name=value.provider_name,
+        provider=value.provider,
         definition_id=value.definition_id,
         input=from_wire_struct(value.input) if value.HasField("input") else None,
         expected_definition_generation=value.expected_definition_generation,
@@ -590,17 +610,14 @@ def to_wire_workflow_definition(value: native.WorkflowDefinition) -> Any:
         else to_wire_bound_workflow_target(value.target),
         activations=[to_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
-        created_by_subject_id=value.created_by_subject_id,
         created_at=None
         if value.created_at is None
         else to_wire_timestamp(value.created_at),
         updated_at=None
         if value.updated_at is None
         else to_wire_timestamp(value.updated_at),
-        provider_name=value.provider_name,
-        run_as=None
-        if value.run_as is None
-        else app.to_wire_subject_context(value.run_as),
+        provider=value.provider,
+        run_as=value.run_as,
     )
 
 
@@ -613,17 +630,14 @@ def from_wire_workflow_definition(value: Any) -> native.WorkflowDefinition:
         else None,
         activations=[from_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
-        created_by_subject_id=value.created_by_subject_id,
         created_at=from_wire_timestamp(value.created_at)
         if value.HasField("created_at")
         else None,
         updated_at=from_wire_timestamp(value.updated_at)
         if value.HasField("updated_at")
         else None,
-        provider_name=value.provider_name,
-        run_as=app.from_wire_subject_context(value.run_as)
-        if value.HasField("run_as")
-        else None,
+        provider=value.provider,
+        run_as=value.run_as,
     )
 
 
@@ -635,9 +649,7 @@ def to_wire_workflow_definition_spec(value: native.WorkflowDefinitionSpec) -> An
         else to_wire_bound_workflow_target(value.target),
         activations=[to_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
-        run_as=None
-        if value.run_as is None
-        else app.to_wire_subject_context(value.run_as),
+        run_as=value.run_as,
     )
 
 
@@ -649,9 +661,7 @@ def from_wire_workflow_definition_spec(value: Any) -> native.WorkflowDefinitionS
         else None,
         activations=[from_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
-        run_as=app.from_wire_subject_context(value.run_as)
-        if value.HasField("run_as")
-        else None,
+        run_as=value.run_as,
     )
 
 
@@ -794,13 +804,10 @@ def to_wire_workflow_run(value: native.WorkflowRun) -> Any:
         else to_wire_timestamp(value.completed_at),
         status_message=value.status_message,
         output=None if value.output is None else to_wire_value(value.output),
-        created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
-        provider_name=value.provider_name,
+        provider=value.provider,
         definition_id=value.definition_id,
-        run_as=None
-        if value.run_as is None
-        else app.to_wire_subject_context(value.run_as),
+        run_as=value.run_as,
         input=None if value.input is None else to_wire_struct(value.input),
         definition_generation=value.definition_generation,
         current_step_id=value.current_step_id,
@@ -829,13 +836,10 @@ def from_wire_workflow_run(value: Any) -> native.WorkflowRun:
         else None,
         status_message=value.status_message,
         output=from_wire_value(value.output) if value.HasField("output") else None,
-        created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
-        provider_name=value.provider_name,
+        provider=value.provider,
         definition_id=value.definition_id,
-        run_as=app.from_wire_subject_context(value.run_as)
-        if value.HasField("run_as")
-        else None,
+        run_as=value.run_as,
         input=from_wire_struct(value.input) if value.HasField("input") else None,
         definition_generation=value.definition_generation,
         current_step_id=value.current_step_id,
@@ -952,7 +956,6 @@ def to_wire_workflow_signal(value: native.WorkflowSignal) -> Any:
         name=value.name,
         payload=None if value.payload is None else to_wire_struct(value.payload),
         metadata=None if value.metadata is None else to_wire_struct(value.metadata),
-        created_by_subject_id=value.created_by_subject_id,
         created_at=None
         if value.created_at is None
         else to_wire_timestamp(value.created_at),
@@ -969,7 +972,6 @@ def from_wire_workflow_signal(value: Any) -> native.WorkflowSignal:
         metadata=from_wire_struct(value.metadata)
         if value.HasField("metadata")
         else None,
-        created_by_subject_id=value.created_by_subject_id,
         created_at=from_wire_timestamp(value.created_at)
         if value.HasField("created_at")
         else None,

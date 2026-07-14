@@ -734,8 +734,8 @@ where
 #[derive(Clone, Debug, Default, PartialEq)]
 /// One workflow callback execution request.
 pub struct WorkflowExecutionRequest {
-    /// The `provider_name` field.
-    pub provider_name: String,
+    /// The `provider` field.
+    pub provider: String,
     /// The `run_id` field.
     pub run_id: String,
     /// The `target` field.
@@ -1146,7 +1146,7 @@ mod tests {
     fn evaluates_current_templates_and_paths() {
         let ctx = WorkflowEvalContext {
             request: WorkflowExecutionRequest {
-                provider_name: "indexeddb".to_owned(),
+                provider: "indexeddb".to_owned(),
                 run_id: "run-1".to_owned(),
                 input: Some(json!({"customer": {"id": "cust_1"}})),
                 signals: vec![WorkflowSignal {

@@ -107,6 +107,7 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	definition, err := workflowClient.ApplyDefinition(rpcCtx, &proto.ApplyWorkflowProviderDefinitionRequest{
+		Provider:       "workflow-test",
 		IdempotencyKey: "definition-1",
 		Context:        workflowProviderTransportContext(),
 		Spec: &proto.WorkflowDefinitionSpec{
@@ -143,6 +144,7 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 		t.Fatalf("NewStruct: %v", err)
 	}
 	run, err := workflowClient.StartRun(rpcCtx, &proto.StartWorkflowProviderRunRequest{
+		Provider:                     "workflow-test",
 		IdempotencyKey:               "run-1",
 		Context:                      workflowProviderTransportContext(),
 		DefinitionId:                 "definition-1",
@@ -164,8 +166,9 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	delivered, err := workflowClient.DeliverEvent(rpcCtx, &proto.DeliverWorkflowProviderEventRequest{
-		Event:   &proto.WorkflowEvent{Type: "issue.created"},
-		Context: workflowProviderTransportContext(),
+		Provider: "workflow-test",
+		Event:    &proto.WorkflowEvent{Type: "issue.created"},
+		Context:  workflowProviderTransportContext(),
 	})
 	if err != nil {
 		t.Fatalf("DeliverEvent: %v", err)
@@ -184,8 +187,8 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 func workflowProviderTransportContext() *proto.RequestContext {
 	return &proto.RequestContext{
 		Subject: &proto.SubjectContext{
-			Id:                  "user:transport",
-						Email:               "transport@example.test",
+			Id:    "user:transport",
+			Email: "transport@example.test",
 		},
 	}
 }

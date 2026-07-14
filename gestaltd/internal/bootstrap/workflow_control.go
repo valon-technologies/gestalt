@@ -10,7 +10,7 @@ import (
 // gestaltd's user-facing HTTP routes need for workflow runs and events.
 type WorkflowControl interface {
 	ResolveProvider(ctx context.Context, name string) (providerName string, provider coreworkflow.Provider, err error)
-	ProviderNames() []string
+	DefaultProviderName() string
 }
 
 var _ WorkflowControl = (*workflowRuntime)(nil)

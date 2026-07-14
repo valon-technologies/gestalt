@@ -44,7 +44,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version-file: sdk/go/go.mod
+          go-version: '1.26.5'
 
       - name: Install Buf
         run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
@@ -78,4 +78,3 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --no-deps
-

@@ -25,7 +25,6 @@ func TestRegistryDiscoversPublicMethods(t *testing.T) {
 		gestaltproto.App_Invoke_FullMethodName,
 		gestaltproto.App_InvokeGraphQL_FullMethodName,
 		gestaltproto.Workflow_GetDefinition_FullMethodName,
-		gestaltproto.Workflow_DeliverEvent_FullMethodName,
 		gestaltproto.Agent_CreateSession_FullMethodName,
 		gestaltproto.Agent_GetSession_FullMethodName,
 		gestaltproto.Agent_ListSessions_FullMethodName,

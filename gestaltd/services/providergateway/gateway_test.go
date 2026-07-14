@@ -516,27 +516,12 @@ func TestPreparePublicRequest(t *testing.T) {
 			},
 		},
 		{
-			name:       "workflow deliver event fills context subject",
+			name:       "workflow deliver event is internal only",
 			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
-			req:        &proto.DeliverWorkflowProviderEventRequest{AppName: "roadmap", Event: &proto.WorkflowEvent{}},
-			checkAdapted: func(t *testing.T, adapted gproto.Message) {
-				t.Helper()
-				out, ok := adapted.(*proto.DeliverWorkflowProviderEventRequest)
-				if !ok {
-					t.Fatalf("adapted type = %T, want *proto.DeliverWorkflowProviderEventRequest", adapted)
-				}
-				if out.GetContext().GetSubject().GetId() != "user:alice" {
-					t.Fatalf("context.subject.id = %q, want %q", out.GetContext().GetSubject().GetId(), "user:alice")
-				}
-			},
-			checkAuth: func(t *testing.T, auth *stubAuthorizationProvider) {
-				t.Helper()
-				if got := auth.request.GetResource().GetId(); got != "roadmap" {
-					t.Fatalf("Resource.Id = %q, want %q", got, "roadmap")
-				}
-			},
+			req:        &proto.DeliverWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{}},
+			wantCode:   codes.NotFound,
 		},
 		{
 			name:       "app invoke rejects empty app",
@@ -551,8 +536,8 @@ func TestPreparePublicRequest(t *testing.T) {
 			fullMethod: proto.Workflow_DeliverEvent_FullMethodName,
 			withOrigin: true,
 			introspect: activeAlice,
-			req:        &proto.DeliverWorkflowProviderEventRequest{AppName: "roadmap", Event: &proto.WorkflowEvent{}},
-			wantCode:   codes.PermissionDenied,
+			req:        &proto.DeliverWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{}},
+			wantCode:   codes.NotFound,
 			setup: func(transport *ProviderGatewayTransport) {
 				transport.SetAuthorizationProvider(nil)
 			},
@@ -563,8 +548,8 @@ func TestPreparePublicRequest(t *testing.T) {
 			withOrigin: true,
 			introspect: activeAlice,
 			authAllow:  &denied,
-			req:        &proto.DeliverWorkflowProviderEventRequest{AppName: "roadmap", Event: &proto.WorkflowEvent{}},
-			wantCode:   codes.PermissionDenied,
+			req:        &proto.DeliverWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{}},
+			wantCode:   codes.NotFound,
 		},
 		{
 			name:       "identity authorize skips bearer and provider authorization",
@@ -704,6 +689,27 @@ func TestPreparePublicRequest(t *testing.T) {
 				tc.checkAuth(t, authorization)
 			}
 		})
+	}
+}
+
+func TestPublicResourceIDRequiresWorkflowProvider(t *testing.T) {
+	t.Parallel()
+
+	transport := NewProviderGatewayTransport()
+	_, err := transport.publicResourceID(
+		&proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"},
+		proto.Workflow_GetDefinition_FullMethodName,
+	)
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("status.Code(err) = %v, want InvalidArgument (%v)", status.Code(err), err)
+	}
+
+	resourceID, err := transport.publicResourceID(
+		&proto.GetWorkflowProviderDefinitionRequest{Provider: "temporal", DefinitionId: "definition-1"},
+		proto.Workflow_GetDefinition_FullMethodName,
+	)
+	if err != nil || resourceID != "temporal" {
+		t.Fatalf("resource ID = %q, err = %v, want temporal", resourceID, err)
 	}
 }
 

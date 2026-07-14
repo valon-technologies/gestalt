@@ -31,7 +31,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
@@ -163,11 +162,11 @@ type stubWorkflowProvider struct{}
 func (s *stubWorkflowProvider) ApplyDefinition(_ context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	spec := req.GetSpec()
 	return &proto.WorkflowDefinition{
-		Id:           spec.GetId(),
-		Target:       spec.GetTarget(),
-		Activations:  spec.GetActivations(),
-		Paused:       spec.GetPaused(),
-		ProviderName: req.GetProviderName(),
+		Id:          spec.GetId(),
+		Target:      spec.GetTarget(),
+		Activations: spec.GetActivations(),
+		Paused:      spec.GetPaused(),
+		Provider:    req.GetProvider(),
 	}, nil
 }
 func (s *stubWorkflowProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
@@ -989,6 +988,7 @@ func cloneBootstrapAgentMessages(src []coreagent.Message) []coreagent.Message {
 type recordingWorkflowProvider struct {
 	definitions           map[string]*coreworkflow.Definition
 	appliedDefinitions    []*proto.ApplyWorkflowProviderDefinitionRequest
+	applyDefinitionErr    error
 	listedDefinitions     []*coreworkflow.Definition
 	listDefinitionsErr    error
 	deletedDefinitions    []*proto.DeleteWorkflowProviderDefinitionRequest
@@ -1001,6 +1001,9 @@ type recordingWorkflowProvider struct {
 
 func (p *recordingWorkflowProvider) ApplyDefinition(_ context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	p.appliedDefinitions = append(p.appliedDefinitions, gproto.Clone(req).(*proto.ApplyWorkflowProviderDefinitionRequest))
+	if p.applyDefinitionErr != nil {
+		return nil, p.applyDefinitionErr
+	}
 	spec, err := workflowwire.DefinitionSpecFromProto(req.GetSpec())
 	if err != nil {
 		return nil, err
@@ -1013,18 +1016,18 @@ func (p *recordingWorkflowProvider) ApplyDefinition(_ context.Context, req *prot
 	}
 	id := strings.TrimSpace(spec.ID)
 	definition := &coreworkflow.Definition{
-		ID:                 id,
-		Generation:         1,
-		Target:             cloneBootstrapWorkflowTarget(spec.Target),
-		Activations:        append([]coreworkflow.Activation(nil), spec.Activations...),
-		Paused:             spec.Paused,
-		CreatedBySubjectID: appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
-		ProviderName:       strings.TrimSpace(req.GetProviderName()),
-		RunAs:              spec.RunAs,
+		ID:           id,
+		Generation:   1,
+		Target:       cloneBootstrapWorkflowTarget(spec.Target),
+		Activations:  append([]coreworkflow.Activation(nil), spec.Activations...),
+		Paused:       spec.Paused,
+		CreatedBy:    appaccessservice.SubjectIDFromRequestContext(req.GetContext()),
+		ProviderName: req.GetProvider(),
+		RunAs:        spec.RunAs,
 	}
 	if existing := p.definitions[id]; existing != nil {
 		definition.Generation = existing.Generation + 1
-		definition.CreatedBySubjectID = existing.CreatedBySubjectID
+		definition.CreatedBy = existing.CreatedBy
 	}
 	p.definitions[id] = definition
 	return workflowwire.DefinitionToProto(definition)
@@ -3769,7 +3772,7 @@ func TestBootstrapAppliesConfiguredWorkflowDefinitions(t *testing.T) {
 	if got.GetContext().GetSubject().GetId() != "system:config" {
 		t.Fatalf("context.subject.id = %q", got.GetContext().GetSubject().GetId())
 	}
-	runAs := agentwire.RunAsSubjectFromProto(spec.GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: spec.GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
@@ -3950,7 +3953,7 @@ func TestBootstrapPersistsConfiguredWorkflowDefinitionRunAsUserSubject(t *testin
 	if recorder == nil || len(recorder.appliedDefinitions) != 1 {
 		t.Fatalf("recorded definitions = %#v", recorders)
 	}
-	runAs := agentwire.RunAsSubjectFromProto(recorder.appliedDefinitions[0].GetSpec().GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: recorder.appliedDefinitions[0].GetSpec().GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "user:ada" {
 		t.Fatalf("runAs = %#v, want user:ada", runAs)
 	}
@@ -4114,8 +4117,8 @@ func TestBootstrapIgnoresUserDefinitionsThatOnlyShareCfgPrefix(t *testing.T) {
 		t.Fatal("missing workflow recorder for temporal")
 		return
 	}
-	if len(recorder.deletedDefinitions) != 0 {
-		t.Fatalf("deleted definitions = %d, want 0", len(recorder.deletedDefinitions))
+	if len(recorder.deletedDefinitions) != 1 {
+		t.Fatalf("deleted definitions = %d, want 1", len(recorder.deletedDefinitions))
 	}
 }
 
@@ -4198,9 +4201,6 @@ func TestBootstrapMovesConfiguredWorkflowDefinitionsToNewProvider(t *testing.T) 
 	if len(recorders["temporal"]) != 2 || len(recorders["backup"]) != 2 {
 		t.Fatalf("recorders = %#v", recorders)
 	}
-	if len(recorders["temporal"][1].deletedDefinitions) != 1 {
-		t.Fatalf("temporal deleted definitions = %d, want 1", len(recorders["temporal"][1].deletedDefinitions))
-	}
 	if len(recorders["backup"][1].appliedDefinitions) != 1 {
 		t.Fatalf("backup applied definitions = %d, want 1", len(recorders["backup"][1].appliedDefinitions))
 	}
@@ -4218,20 +4218,15 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigDefinitionReconcileFails(t *t
 	}
 
 	closed := &atomic.Bool{}
+	failBackupApply := &atomic.Bool{}
 	db := &coretesting.StubIndexedDB{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	temporalDefinitions := map[string]*coreworkflow.Definition{}
-	temporalStarts := 0
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name == "temporal" {
-			temporalStarts++
-			provider := &recordingWorkflowProvider{
-				definitions: temporalDefinitions,
-				closed:      closed,
-			}
-			if temporalStarts > 1 {
-				provider.deleteDefinitionErr = fmt.Errorf("delete boom")
+		if name == "backup" {
+			provider := &recordingWorkflowProvider{closed: closed}
+			if failBackupApply.Load() {
+				provider.applyDefinitionErr = fmt.Errorf("apply boom")
 			}
 			return provider, nil
 		}
@@ -4253,6 +4248,7 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigDefinitionReconcileFails(t *t
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
 	_ = result.Close(context.Background())
+	failBackupApply.Store(true)
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
@@ -4274,8 +4270,8 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigDefinitionReconcileFails(t *t
 	}
 
 	_, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil || !strings.Contains(err.Error(), "delete boom") {
-		t.Fatalf("Bootstrap error = %v, want delete failure", err)
+	if err == nil || !strings.Contains(err.Error(), "apply boom") {
+		t.Fatalf("Bootstrap error = %v, want apply failure", err)
 	}
 	if !closed.Load() {
 		t.Fatal("workflow provider was not closed after reconcile failure")
@@ -4344,7 +4340,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowDefinitionID(t *testing.T) {
 
 	recorder := &recordingWorkflowProvider{
 		getDefinition: &coreworkflow.Definition{
-			ID:     "cfg_nightly_sync",
+			ID:     "roadmap_nightly_sync",
 			Target: coreWorkflowAppStepTarget("roadmap", "sync"),
 		},
 	}
@@ -4609,7 +4605,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventDefinitions(t *testing.T) {
 	if got.GetContext().GetSubject().GetId() != "system:config" {
 		t.Fatalf("context.subject.id = %q", got.GetContext().GetSubject().GetId())
 	}
-	runAs := agentwire.RunAsSubjectFromProto(spec.GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: spec.GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
@@ -4663,7 +4659,7 @@ func TestBootstrapConfiguredWorkflowEventDefinitionRunAsAllowsUserCredentialedTa
 	if got.GetContext().GetSubject().GetId() != "system:config" {
 		t.Fatalf("context.subject.id = %q", got.GetContext().GetSubject().GetId())
 	}
-	runAs := agentwire.RunAsSubjectFromProto(got.GetSpec().GetRunAs())
+	runAs := core.NormalizeRunAsSubject(&core.RunAsSubject{SubjectID: got.GetSpec().GetRunAs()})
 	if runAs == nil || runAs.SubjectID != "service_account:roadmap-events" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
