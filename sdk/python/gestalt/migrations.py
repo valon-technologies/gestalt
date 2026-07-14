@@ -6,7 +6,7 @@ import datetime as dt
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from ._indexeddb import (
     AlreadyExistsError,
@@ -16,8 +16,9 @@ from ._indexeddb import (
     NotFoundError,
     ObjectStoreSchema,
 )
-
 from .workflow_authoring import resolve_workflow_definition_spec
+
+DEFAULT_LEDGER_STORE = "_gestalt_migrations"
 LEDGER_KEY_COLUMN = "revision_id"
 LEDGER_APPLIED_COLUMN = "applied_at"
 

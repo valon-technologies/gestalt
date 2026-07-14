@@ -566,7 +566,6 @@ __all__ = [
     *_WORKFLOW_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORING_EXPORTS,
     *_WORKFLOW_HELPER_EXPORTS,
-    *_MIGRATION_AUTHORED_EXPORTS,
     "Agent",
     "AgentProvider",
     "AlreadyExistsError",

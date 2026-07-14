@@ -9,13 +9,9 @@ import {
   type Record as DBRecord,
 } from "./indexeddb.ts";
 import { Workflow } from "../workflow.ts";
-import {
-  resolveWorkflowDefinitionSpec,
-  type WorkflowBuilder,
-} from "../workflow-authoring.ts";
+import type { WorkflowBuilder } from "../workflow-authoring.ts";
 import type { WorkflowDefinitionSpec } from "./workflow-public.ts";
 import { fromWireWorkflowDefinitionSpec } from "../internal/codec/workflow.ts";
-import { workflowDefinitionSpecToProto } from "./workflow.ts";
 
 const DEFAULT_LEDGER_STORE = "_gestalt_migrations";
 const LEDGER_KEY_COLUMN = "revision_id";
@@ -381,6 +377,8 @@ async function applyWorkflowRevision(
     throw new MigrationError("workflow migration requires app name");
   }
   const provider = revision.workflow.provider.trim();
+  const { resolveWorkflowDefinitionSpec } = await import("../workflow-authoring.ts");
+  const { workflowDefinitionSpecToProto } = await import("./workflow.ts");
   const resolved = resolveWorkflowDefinitionSpec(revision.workflow.definition);
   const proto = workflowDefinitionSpecToProto(resolved);
   if (proto === undefined) {
