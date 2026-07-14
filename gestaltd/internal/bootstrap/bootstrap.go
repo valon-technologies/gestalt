@@ -160,41 +160,41 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
 	// raw config value.
-	EncryptionKey         []byte
-	BaseURL               string
-	RuntimeRelayBaseURL   string
-	SecretManager         core.SecretManager
-	Services              *coredata.Services
-	SelectedIndexedDBName string
-	IndexedDBs            map[string]indexeddb.IndexedDB
-	IndexedDBDefs         map[string]*config.ProviderEntry
-	IndexedDBFactory      IndexedDBFactory
-	Caches                map[string]corecache.Cache
-	CacheDefs             map[string]*config.ProviderEntry
-	CacheFactory          CacheFactory
-	S3                    map[string]s3sdk.S3
-	Authentication        core.IdentityProvider
-	Authorization         core.AuthorizationProvider
-	WorkflowRuntime       *workflowRuntime
-	AgentRuntime          *agentRuntime
-	AgentTurnScopes       *agentturnscope.Store
-	AgentToolIDs          *agenttoolid.Codec
-	WorkflowManager       workflowmanager.Service
-	AgentManager          agentmanager.Service
+	EncryptionKey              []byte
+	BaseURL                    string
+	RuntimeRelayBaseURL        string
+	SecretManager              core.SecretManager
+	Services                   *coredata.Services
+	SelectedIndexedDBName      string
+	IndexedDBs                 map[string]indexeddb.IndexedDB
+	IndexedDBDefs              map[string]*config.ProviderEntry
+	IndexedDBFactory           IndexedDBFactory
+	Caches                     map[string]corecache.Cache
+	CacheDefs                  map[string]*config.ProviderEntry
+	CacheFactory               CacheFactory
+	S3                         map[string]s3sdk.S3
+	Authentication             core.IdentityProvider
+	Authorization              core.AuthorizationProvider
+	WorkflowRuntime            *workflowRuntime
+	AgentRuntime               *agentRuntime
+	AgentTurnScopes            *agentturnscope.Store
+	AgentToolIDs               *agenttoolid.Codec
+	WorkflowManager            workflowmanager.Service
+	AgentManager               agentmanager.Service
 	MigrationConfigureSessions *migrationsservice.ConfigureSessionRegistry
-	Egress                EgressDeps
-	AppInvocation         invocation.Invoker
-	Runtime               runtimeprovider.Provider
-	RuntimeRegistry       *runtimeRegistry
-	PublicHostServices    *runtimehost.PublicHostServiceRegistry
-	HostServiceTLSCAFile  string
-	HostServiceTLSCAPEM   string
-	Telemetry             core.TelemetryProvider
-	ProviderTransport     providergateway.Transport
-	CallerTokenPublicKey  string
-	DevSupervisor         *providerdev.Supervisor
-	RemoteClients         *remote.ClientSet
-	RemoteToken           string
+	Egress                     EgressDeps
+	AppInvocation              invocation.Invoker
+	Runtime                    runtimeprovider.Provider
+	RuntimeRegistry            *runtimeRegistry
+	PublicHostServices         *runtimehost.PublicHostServiceRegistry
+	HostServiceTLSCAFile       string
+	HostServiceTLSCAPEM        string
+	Telemetry                  core.TelemetryProvider
+	ProviderTransport          providergateway.Transport
+	CallerTokenPublicKey       string
+	DevSupervisor              *providerdev.Supervisor
+	RemoteClients              *remote.ClientSet
+	RemoteToken                string
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }

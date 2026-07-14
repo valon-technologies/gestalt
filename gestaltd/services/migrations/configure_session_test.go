@@ -7,6 +7,7 @@ import (
 )
 
 func TestConfigureSessionRegistry(t *testing.T) {
+	t.Parallel()
 	registry := migrationsservice.NewConfigureSessionRegistry()
 	if registry.Active("dealHub") {
 		t.Fatal("expected inactive session before configure")

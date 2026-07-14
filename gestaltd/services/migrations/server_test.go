@@ -32,6 +32,7 @@ func (m *recordingMigrationManager) ApplyDefinitionMigration(_ context.Context, 
 }
 
 func TestApplyWorkflowMigrationRequiresConfigurePhase(t *testing.T) {
+	t.Parallel()
 	server := migrationsservice.NewServer(migrationsservice.ServerConfig{
 		AppName:             "dealHub",
 		Manager:             &recordingMigrationManager{},
@@ -49,6 +50,7 @@ func TestApplyWorkflowMigrationRequiresConfigurePhase(t *testing.T) {
 }
 
 func TestApplyWorkflowMigrationRejectsDefaultProvider(t *testing.T) {
+	t.Parallel()
 	sessions := migrationsservice.NewConfigureSessionRegistry()
 	sessions.Begin("dealHub")
 	defer sessions.End("dealHub")
@@ -69,6 +71,7 @@ func TestApplyWorkflowMigrationRejectsDefaultProvider(t *testing.T) {
 }
 
 func TestApplyWorkflowMigrationRejectsWrongNamespace(t *testing.T) {
+	t.Parallel()
 	sessions := migrationsservice.NewConfigureSessionRegistry()
 	sessions.Begin("dealHub")
 	defer sessions.End("dealHub")
@@ -89,6 +92,7 @@ func TestApplyWorkflowMigrationRejectsWrongNamespace(t *testing.T) {
 }
 
 func TestApplyWorkflowMigrationDerivesIdempotencyKey(t *testing.T) {
+	t.Parallel()
 	sessions := migrationsservice.NewConfigureSessionRegistry()
 	sessions.Begin("dealHub")
 	defer sessions.End("dealHub")

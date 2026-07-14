@@ -7,6 +7,7 @@ import (
 )
 
 func TestAppManagedDefinitionID(t *testing.T) {
+	t.Parallel()
 	got := coreworkflow.AppManagedDefinitionID("dealHub", "extract_row")
 	want := "app_dealHub_extract_row"
 	if got != want {
@@ -15,6 +16,7 @@ func TestAppManagedDefinitionID(t *testing.T) {
 }
 
 func TestValidateAppManagedDefinitionID(t *testing.T) {
+	t.Parallel()
 	if err := coreworkflow.ValidateAppManagedDefinitionID("dealHub", "app_dealHub_extract_row"); err != nil {
 		t.Fatalf("ValidateAppManagedDefinitionID: %v", err)
 	}
