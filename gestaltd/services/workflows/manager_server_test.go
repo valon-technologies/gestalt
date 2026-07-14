@@ -323,19 +323,19 @@ func (p *recordingWorkflowProvider) DeliverEvent(_ context.Context, req *proto.D
 	return event, nil
 }
 
-type trustedConfigureMigrationManager struct {
+type trustedConfigureManager struct {
 	mu    sync.Mutex
 	calls int
-	last  workflowmanager.DefinitionMigrationApply
+	last  workflowmanager.DefinitionApply
 }
 
-func (m *trustedConfigureMigrationManager) ApplyDefinitionMigration(_ context.Context, req workflowmanager.DefinitionMigrationApply) (*workflowmanager.ManagedDefinition, error) {
+func (m *trustedConfigureManager) ApplyDefinition(_ context.Context, _ *principal.Principal, req workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
 	m.calls++
 	m.last = req
 	m.mu.Unlock()
 	parsedApp, _, err := coreworkflow.ParseAppManagedDefinitionID(req.Spec.ID)
-	if err != nil || parsedApp != req.AppName {
+	if err != nil || parsedApp != "dealHub" {
 		return nil, status.Error(codes.InvalidArgument, "expected namespaced definition id")
 	}
 	return &workflowmanager.ManagedDefinition{
@@ -344,69 +344,65 @@ func (m *trustedConfigureMigrationManager) ApplyDefinitionMigration(_ context.Co
 	}, nil
 }
 
-func (m *trustedConfigureMigrationManager) ApplyDefinition(context.Context, *principal.Principal, workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
-	panic("unexpected ApplyDefinition call in trusted configure test")
-}
-
-func (m *trustedConfigureMigrationManager) GetDefinition(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedDefinition, error) {
+func (m *trustedConfigureManager) GetDefinition(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedDefinition, error) {
 	panic("unexpected GetDefinition call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) ListDefinitions(context.Context, *principal.Principal, string) (*workflowmanager.ListDefinitionsResponse, error) {
+func (m *trustedConfigureManager) ListDefinitions(context.Context, *principal.Principal, string) (*workflowmanager.ListDefinitionsResponse, error) {
 	panic("unexpected ListDefinitions call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) SetDefinitionPaused(context.Context, *principal.Principal, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
+func (m *trustedConfigureManager) SetDefinitionPaused(context.Context, *principal.Principal, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
 	panic("unexpected SetDefinitionPaused call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) SetActivationPaused(context.Context, *principal.Principal, string, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
+func (m *trustedConfigureManager) SetActivationPaused(context.Context, *principal.Principal, string, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
 	panic("unexpected SetActivationPaused call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) DeleteDefinition(context.Context, *principal.Principal, string, string) error {
+func (m *trustedConfigureManager) DeleteDefinition(context.Context, *principal.Principal, string, string) error {
 	panic("unexpected DeleteDefinition call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) ListRuns(context.Context, *principal.Principal, string, coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
+func (m *trustedConfigureManager) ListRuns(context.Context, *principal.Principal, string, coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
 	panic("unexpected ListRuns call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) StartRun(context.Context, *principal.Principal, workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
+func (m *trustedConfigureManager) StartRun(context.Context, *principal.Principal, workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
 	panic("unexpected StartRun call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) GetRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
+func (m *trustedConfigureManager) GetRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
 	panic("unexpected GetRun call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) GetRunEvents(context.Context, *principal.Principal, string, string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+func (m *trustedConfigureManager) GetRunEvents(context.Context, *principal.Principal, string, string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
 	panic("unexpected GetRunEvents call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) GetRunOutput(context.Context, *principal.Principal, string, string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+func (m *trustedConfigureManager) GetRunOutput(context.Context, *principal.Principal, string, string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
 	panic("unexpected GetRunOutput call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) CancelRun(context.Context, *principal.Principal, string, string, string) (*workflowmanager.ManagedRun, error) {
+func (m *trustedConfigureManager) CancelRun(context.Context, *principal.Principal, string, string, string) (*workflowmanager.ManagedRun, error) {
 	panic("unexpected CancelRun call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) SignalRun(context.Context, *principal.Principal, workflowmanager.RunSignal) (*workflowmanager.ManagedRunSignal, error) {
+func (m *trustedConfigureManager) SignalRun(context.Context, *principal.Principal, workflowmanager.RunSignal) (*workflowmanager.ManagedRunSignal, error) {
 	panic("unexpected SignalRun call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) SignalOrStartRun(context.Context, *principal.Principal, workflowmanager.RunSignalOrStart) (*workflowmanager.ManagedRunSignal, error) {
+func (m *trustedConfigureManager) SignalOrStartRun(context.Context, *principal.Principal, workflowmanager.RunSignalOrStart) (*workflowmanager.ManagedRunSignal, error) {
 	panic("unexpected SignalOrStartRun call in trusted configure test")
 }
 
-func (m *trustedConfigureMigrationManager) DeliverEvent(context.Context, *principal.Principal, workflowmanager.EventDeliver) (coreworkflow.Event, error) {
+func (m *trustedConfigureManager) DeliverEvent(context.Context, *principal.Principal, workflowmanager.EventDeliver) (coreworkflow.Event, error) {
 	panic("unexpected DeliverEvent call in trusted configure test")
 }
 
 func TestProviderServerTrustedConfigureApplyRequiresActiveSession(t *testing.T) {
 	t.Parallel()
-	manager := &trustedConfigureMigrationManager{}
+	manager := &trustedConfigureManager{}
 	server := NewProviderServer(
 		"dealHub",
 		manager,
@@ -437,7 +433,7 @@ func TestProviderServerTrustedConfigureApplyRejectsDefaultProvider(t *testing.T)
 	defer sessions.End("dealHub")
 	server := NewProviderServer(
 		"dealHub",
-		&trustedConfigureMigrationManager{},
+		&trustedConfigureManager{},
 		nil,
 		WithConfigureSessions(sessions),
 		WithConfiguredWorkflowProviders(map[string]struct{}{"temporal": {}}),
@@ -459,7 +455,7 @@ func TestProviderServerTrustedConfigureApplyRejectsReservedDefinitionID(t *testi
 	defer sessions.End("dealHub")
 	server := NewProviderServer(
 		"dealHub",
-		&trustedConfigureMigrationManager{},
+		&trustedConfigureManager{},
 		nil,
 		WithConfigureSessions(sessions),
 		WithConfiguredWorkflowProviders(map[string]struct{}{"temporal": {}}),
@@ -479,7 +475,7 @@ func TestProviderServerTrustedConfigureApplyNamespacesLocalDefinitionID(t *testi
 	sessions := runtimehost.NewConfigureSessionRegistry()
 	sessions.Begin("dealHub")
 	defer sessions.End("dealHub")
-	manager := &trustedConfigureMigrationManager{}
+	manager := &trustedConfigureManager{}
 	server := NewProviderServer(
 		"dealHub",
 		manager,

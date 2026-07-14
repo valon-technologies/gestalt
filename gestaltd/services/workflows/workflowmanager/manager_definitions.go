@@ -34,9 +34,6 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if strings.HasPrefix(definitionID, coreworkflow.ConfigManagedDefinitionPrefix) {
 		return nil, fmt.Errorf("workflow definition id %q is reserved for configuration bootstrap", definitionID)
 	}
-	if strings.HasPrefix(definitionID, coreworkflow.AppManagedDefinitionPrefix) {
-		return nil, fmt.Errorf("workflow definition id %q is reserved for app migration bootstrap", definitionID)
-	}
 	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
 	if err != nil {
 		return nil, err
@@ -227,6 +224,10 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 }
 
 func (m *Manager) resolveDefinitionSpec(ctx context.Context, p *principal.Principal, spec coreworkflow.DefinitionSpec) (coreworkflow.DefinitionSpec, error) {
+	spec.ID = strings.TrimSpace(spec.ID)
+	if spec.ID == "" {
+		return coreworkflow.DefinitionSpec{}, fmt.Errorf("%w: workflow definition id is required", invocation.ErrInvalidInvocation)
+	}
 	authorizedPrincipal, err := m.authorizeAgentWorkflowTarget(ctx, p, workflowManagerOperationDefinitionsApply, spec.Target, invocation.CallerProvider{})
 	if err != nil {
 		return coreworkflow.DefinitionSpec{}, err
@@ -238,33 +239,14 @@ func (m *Manager) resolveDefinitionSpec(ctx context.Context, p *principal.Princi
 	if err := m.authorizeRunAsTarget(ctx, execPrincipal, spec.Target); err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
-	spec, err = m.validateAndNormalizeDefinitionSpec(ctx, spec)
-	if err != nil {
-		return coreworkflow.DefinitionSpec{}, err
-	}
-	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, spec.Target, invocation.CallerProvider{}); err != nil {
-		return coreworkflow.DefinitionSpec{}, err
-	}
-	if err := m.authorizeRunAsTarget(ctx, execPrincipal, spec.Target); err != nil {
-		return coreworkflow.DefinitionSpec{}, err
-	}
-	return spec, nil
-}
-
-func (m *Manager) validateAndNormalizeDefinitionSpec(ctx context.Context, spec coreworkflow.DefinitionSpec) (coreworkflow.DefinitionSpec, error) {
-	spec.ID = strings.TrimSpace(spec.ID)
-	if spec.ID == "" {
-		return coreworkflow.DefinitionSpec{}, fmt.Errorf("%w: workflow definition id is required", invocation.ErrInvalidInvocation)
-	}
-	if err := validateDefinitionRunAs(spec.RunAs); err != nil {
-		return coreworkflow.DefinitionSpec{}, err
-	}
-	execPrincipal, err := m.executionPrincipal(spec.RunAs)
-	if err != nil {
-		return coreworkflow.DefinitionSpec{}, err
-	}
 	target, err := m.resolveTarget(ctx, execPrincipal, spec.Target)
 	if err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, target, invocation.CallerProvider{}); err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	if err := m.authorizeRunAsTarget(ctx, execPrincipal, target); err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
 	activations, err := normalizeDefinitionActivations(spec.Activations)
@@ -274,18 +256,6 @@ func (m *Manager) validateAndNormalizeDefinitionSpec(ctx context.Context, spec c
 	spec.Target = target
 	spec.Activations = activations
 	return spec, nil
-}
-
-func validateDefinitionRunAs(runAs *core.RunAsSubject) error {
-	runAs = core.NormalizeRunAsSubject(runAs)
-	if runAs == nil || strings.TrimSpace(runAs.SubjectID) == "" {
-		return fmt.Errorf("%w: workflow run_as is required", invocation.ErrInvalidInvocation)
-	}
-	kind, subjectID, ok := core.ParseSubjectID(runAs.SubjectID)
-	if !ok || kind != "service_account" || subjectID == "" {
-		return fmt.Errorf("%w: workflow run_as must be service_account:<id>", invocation.ErrInvalidInvocation)
-	}
-	return nil
 }
 
 func normalizeDefinitionActivations(values []coreworkflow.Activation) ([]coreworkflow.Activation, error) {

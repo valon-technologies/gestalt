@@ -86,7 +86,6 @@ type AgentControl interface {
 
 type Service interface {
 	ApplyDefinition(ctx context.Context, p *principal.Principal, req DefinitionApply) (*ManagedDefinition, error)
-	ApplyDefinitionMigration(ctx context.Context, req DefinitionMigrationApply) (*ManagedDefinition, error)
 	GetDefinition(ctx context.Context, p *principal.Principal, providerName, definitionID string) (*ManagedDefinition, error)
 	ListDefinitions(ctx context.Context, p *principal.Principal, providerName string) (*ListDefinitionsResponse, error)
 	SetDefinitionPaused(ctx context.Context, p *principal.Principal, providerName, definitionID string, paused bool) (*ManagedDefinition, error)

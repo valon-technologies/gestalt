@@ -1847,10 +1847,6 @@ func (unavailableWorkflowManager) ApplyDefinition(context.Context, *principal.Pr
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) ApplyDefinitionMigration(context.Context, workflowmanager.DefinitionMigrationApply) (*workflowmanager.ManagedDefinition, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
 func (unavailableWorkflowManager) GetDefinition(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedDefinition, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }

@@ -170,11 +170,21 @@ func (s *ProviderServer) applyTrustedConfigureDefinition(ctx context.Context, re
 	if idempotencyKey == "" {
 		return nil, status.Error(codes.InvalidArgument, "idempotency_key is required")
 	}
-	managed, err := s.manager.ApplyDefinitionMigration(ctx, workflowmanager.DefinitionMigrationApply{
-		AppName:        s.appName,
+	if strings.TrimSpace(req.GetSpec().GetRunAs()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "workflow run_as is required")
+	}
+	kind, subjectID, ok := core.ParseSubjectID(req.GetSpec().GetRunAs())
+	if !ok || kind != "service_account" || subjectID == "" {
+		return nil, status.Error(codes.InvalidArgument, "workflow run_as must be service_account:<id>")
+	}
+	p := principal.Canonicalized(&principal.Principal{SubjectID: core.GestaltdSubjectID})
+	caller := invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: s.appName}
+	ctx = invocation.WithCallerProvider(ctx, caller.Kind, caller.Name)
+	managed, err := s.manager.ApplyDefinition(ctx, p, workflowmanager.DefinitionApply{
 		ProviderName:   providerName,
 		Spec:           *spec,
 		IdempotencyKey: idempotencyKey,
+		Caller:         caller,
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
