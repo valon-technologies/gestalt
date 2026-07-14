@@ -760,7 +760,7 @@ type WorkflowDefinitionSpec struct {
 	Target      *BoundWorkflowTarget
 	Activations []WorkflowActivation
 	Paused      bool
-	RunAs       *Subject
+	RunAs       string
 }
 
 // WorkflowDefinition is the provider-owned definition projection.
@@ -778,6 +778,9 @@ type WorkflowDefinition struct {
 }
 
 func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
+	if err := input.Validate(); err != nil {
+		return nil, err
+	}
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -791,7 +794,7 @@ func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.Workflo
 		Target:      target,
 		Activations: activations,
 		Paused:      input.Paused,
-		RunAs:       workflowSubjectID(input.RunAs),
+		RunAs:       strings.TrimSpace(input.RunAs),
 	}, nil
 }
 
@@ -808,7 +811,7 @@ func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) (Workf
 		Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
 		Activations: activations,
 		Paused:      value.GetPaused(),
-		RunAs:       workflowSubjectFromID(value.GetRunAs()),
+		RunAs:       strings.TrimSpace(value.GetRunAs()),
 	}, nil
 }
 
@@ -1158,4 +1161,361 @@ func workflowSubjectFromID(value string) *Subject {
 		return nil
 	}
 	return &Subject{ID: value}
+}
+
+// WorkflowRefInput references a run-input path in a workflow definition.
+func WorkflowRefInput(path string) WorkflowValue {
+	return WorkflowValue{Input: strings.TrimSpace(path)}
+}
+
+// WorkflowRefSignal references an activation signal path in a workflow definition.
+func WorkflowRefSignal(path string) WorkflowValue {
+	return WorkflowValue{Signal: strings.TrimSpace(path)}
+}
+
+// WorkflowRefStepOutput references a prior step output path.
+func WorkflowRefStepOutput(stepID, path string) WorkflowValue {
+	return WorkflowValue{StepOutput: &WorkflowStepOutputSource{
+		StepID: strings.TrimSpace(stepID),
+		Path:   strings.TrimSpace(path),
+	}}
+}
+
+// WorkflowRefStepInput references a prior step input path.
+func WorkflowRefStepInput(stepID, path string) WorkflowValue {
+	return WorkflowValue{StepInput: &WorkflowStepInputSource{
+		StepID: strings.TrimSpace(stepID),
+		Path:   strings.TrimSpace(path),
+	}}
+}
+
+// WorkflowRefLiteral builds a literal workflow value.
+func WorkflowRefLiteral(value any) WorkflowValue {
+	return WorkflowValue{Literal: value, LiteralSet: true}
+}
+
+// WorkflowRefTemplate builds a template workflow value.
+func WorkflowRefTemplate(template string) WorkflowValue {
+	text := WorkflowText{Template: template}
+	return WorkflowValue{Template: &text}
+}
+
+// WorkflowRefObject builds an object workflow value from field builders.
+func WorkflowRefObject(fields map[string]WorkflowValue) WorkflowValue {
+	return WorkflowValue{Object: fields}
+}
+
+// WorkflowRefArray builds an array workflow value.
+func WorkflowRefArray(values ...WorkflowValue) WorkflowValue {
+	return WorkflowValue{Array: values}
+}
+
+// WorkflowEventActivationOptions configures an event activation.
+type WorkflowEventActivationOptions struct {
+	ID      string
+	Source  string
+	Subject string
+	Paused  bool
+}
+
+// WorkflowScheduleActivationOptions configures a schedule activation.
+type WorkflowScheduleActivationOptions struct {
+	ID       string
+	Timezone string
+	Paused   bool
+}
+
+// WorkflowEventActivationConfig is accepted by WorkflowBuilder.On.
+type WorkflowEventActivationConfig struct {
+	Type     string
+	MapInput func() map[string]WorkflowValue
+	Options  WorkflowEventActivationOptions
+}
+
+// WorkflowScheduleActivationConfig is accepted by WorkflowBuilder.On.
+type WorkflowScheduleActivationConfig struct {
+	Cron     string
+	MapInput func() map[string]WorkflowValue
+	Options  WorkflowScheduleActivationOptions
+}
+
+// WorkflowActivationConfig is an activation accepted by WorkflowBuilder.On.
+type WorkflowActivationConfig interface {
+	workflowActivationConfig()
+}
+
+func (WorkflowEventActivationConfig) workflowActivationConfig()    {}
+func (WorkflowScheduleActivationConfig) workflowActivationConfig() {}
+
+// WorkflowStepAppConfig configures an app step action.
+type WorkflowStepAppConfig struct {
+	Name           string
+	Operation      string
+	Input          func() map[string]WorkflowValue
+	Connection     string
+	Instance       string
+	CredentialMode string
+}
+
+// WorkflowStepAgentMessageConfig configures one agent message.
+type WorkflowStepAgentMessageConfig struct {
+	Role string
+	Text string
+}
+
+// WorkflowStepAgentConfig configures an agent step action.
+type WorkflowStepAgentConfig struct {
+	Provider     string
+	Model        string
+	SessionKey   string
+	Prompt       string
+	Messages     []WorkflowStepAgentMessageConfig
+	Tools        []AgentToolRef
+	Output       *AgentOutput
+	ModelOptions any
+}
+
+// WorkflowStepWhenConfig configures a step guard.
+type WorkflowStepWhenConfig struct {
+	Value  WorkflowValue
+	Equals any
+}
+
+// WorkflowStepConfig configures one workflow step.
+type WorkflowStepConfig struct {
+	Inputs         func() map[string]WorkflowValue
+	App            *WorkflowStepAppConfig
+	Agent          *WorkflowStepAgentConfig
+	When           *WorkflowStepWhenConfig
+	TimeoutSeconds int32
+	Metadata       any
+}
+
+// WorkflowBuilder incrementally authors a workflow definition spec.
+type WorkflowBuilder struct {
+	id          string
+	runAs       string
+	activations []WorkflowActivation
+	steps       []WorkflowStep
+}
+
+// Event creates an event activation configuration. The options argument is
+// optional; its zero value is used when it is omitted.
+func Event(typeName string, mapInput func() map[string]WorkflowValue, options ...WorkflowEventActivationOptions) WorkflowEventActivationConfig {
+	var config WorkflowEventActivationOptions
+	if len(options) > 0 {
+		config = options[0]
+	}
+	return WorkflowEventActivationConfig{
+		Type:     typeName,
+		MapInput: mapInput,
+		Options:  config,
+	}
+}
+
+// Schedule creates a schedule activation configuration. The options argument
+// is optional; its zero value is used when it is omitted.
+func Schedule(cron string, mapInput func() map[string]WorkflowValue, options ...WorkflowScheduleActivationOptions) WorkflowScheduleActivationConfig {
+	var config WorkflowScheduleActivationOptions
+	if len(options) > 0 {
+		config = options[0]
+	}
+	return WorkflowScheduleActivationConfig{
+		Cron:     cron,
+		MapInput: mapInput,
+		Options:  config,
+	}
+}
+
+// DefineWorkflow starts a fluent workflow definition builder. ID and runAs
+// are checked when ToSpec or an apply bridge materializes the definition.
+func DefineWorkflow(id, runAs string) *WorkflowBuilder {
+	return &WorkflowBuilder{
+		id:    strings.TrimSpace(id),
+		runAs: strings.TrimSpace(runAs),
+	}
+}
+
+// On appends one activation to the builder.
+func (b *WorkflowBuilder) On(activation WorkflowActivationConfig) *WorkflowBuilder {
+	if b == nil {
+		return b
+	}
+	switch typed := activation.(type) {
+	case WorkflowEventActivationConfig:
+		activationID := strings.TrimSpace(typed.Options.ID)
+		if activationID == "" {
+			activationID = strings.TrimSpace(typed.Type)
+		}
+		var input WorkflowValue
+		if typed.MapInput != nil {
+			input = WorkflowRefObject(typed.MapInput())
+		}
+		b.activations = append(b.activations, WorkflowActivation{
+			ID:     activationID,
+			Paused: typed.Options.Paused,
+			Event: &WorkflowEventActivation{Match: &WorkflowEventMatch{
+				Type:    typed.Type,
+				Source:  typed.Options.Source,
+				Subject: typed.Options.Subject,
+			}},
+			Input: input,
+		})
+	case WorkflowScheduleActivationConfig:
+		activationID := strings.TrimSpace(typed.Options.ID)
+		if activationID == "" {
+			activationID = strings.TrimSpace(typed.Cron)
+		}
+		var input WorkflowValue
+		if typed.MapInput != nil {
+			input = WorkflowRefObject(typed.MapInput())
+		}
+		b.activations = append(b.activations, WorkflowActivation{
+			ID:     activationID,
+			Paused: typed.Options.Paused,
+			Schedule: &WorkflowScheduleActivation{
+				Cron:     typed.Cron,
+				Timezone: typed.Options.Timezone,
+			},
+			Input: input,
+		})
+	}
+	return b
+}
+
+// Step appends one step to the builder.
+func (b *WorkflowBuilder) Step(stepID string, config WorkflowStepConfig) *WorkflowBuilder {
+	if b == nil {
+		return b
+	}
+	if config.App != nil && config.Agent != nil {
+		panic("workflow step cannot configure both app and agent actions")
+	}
+	step := WorkflowStep{ID: stepID}
+	if config.Inputs != nil {
+		step.Inputs = config.Inputs()
+	}
+	if config.App != nil {
+		var input WorkflowValue
+		if config.App.Input != nil {
+			input = WorkflowRefObject(config.App.Input())
+		}
+		step.App = &WorkflowStepAppCall{
+			Name:           config.App.Name,
+			Operation:      config.App.Operation,
+			Input:          input,
+			Connection:     config.App.Connection,
+			Instance:       config.App.Instance,
+			CredentialMode: config.App.CredentialMode,
+		}
+	}
+	if config.Agent != nil {
+		messages := make([]WorkflowAgentMessage, 0, len(config.Agent.Messages))
+		for _, message := range config.Agent.Messages {
+			messages = append(messages, WorkflowAgentMessage{
+				Role: message.Role,
+				Text: WorkflowText{Template: message.Text},
+			})
+		}
+		step.Agent = &WorkflowStepAgentTurn{
+			Provider:     config.Agent.Provider,
+			Model:        config.Agent.Model,
+			SessionKey:   config.Agent.SessionKey,
+			Prompt:       WorkflowText{Template: config.Agent.Prompt},
+			Messages:     messages,
+			Tools:        config.Agent.Tools,
+			Output:       config.Agent.Output,
+			ModelOptions: config.Agent.ModelOptions,
+		}
+	}
+	if config.When != nil {
+		step.When = &WorkflowStepWhen{
+			Value:  config.When.Value,
+			Equals: config.When.Equals,
+		}
+	}
+	step.TimeoutSeconds = config.TimeoutSeconds
+	step.Metadata = config.Metadata
+	b.steps = append(b.steps, step)
+	return b
+}
+
+// Validate checks the required identity fields of a workflow definition.
+func (s WorkflowDefinitionSpec) Validate() error {
+	if strings.TrimSpace(s.ID) == "" {
+		return fmt.Errorf("workflow definition requires ID")
+	}
+	if strings.TrimSpace(s.RunAs) == "" {
+		return fmt.Errorf("workflow definition requires RunAs")
+	}
+	return nil
+}
+
+// ToSpec returns the authored workflow definition spec after validating its
+// required identity fields.
+func (b *WorkflowBuilder) ToSpec() (WorkflowDefinitionSpec, error) {
+	if b == nil {
+		return WorkflowDefinitionSpec{}, fmt.Errorf("workflow builder is nil")
+	}
+	var target *BoundWorkflowTarget
+	if len(b.steps) > 0 {
+		target = &BoundWorkflowTarget{Steps: append([]WorkflowStep(nil), b.steps...)}
+	}
+	spec := WorkflowDefinitionSpec{
+		ID:          strings.TrimSpace(b.id),
+		RunAs:       strings.TrimSpace(b.runAs),
+		Activations: append([]WorkflowActivation(nil), b.activations...),
+		Target:      target,
+	}
+	if err := spec.Validate(); err != nil {
+		return WorkflowDefinitionSpec{}, err
+	}
+	return spec, nil
+}
+
+// Text builds workflow template text from literals and workflow value
+// references. Step output and input references intentionally lower to the
+// plural outputs and inputs template paths.
+func Text(parts ...any) string {
+	var builder strings.Builder
+	for _, part := range parts {
+		switch typed := part.(type) {
+		case string:
+			builder.WriteString(typed)
+		case WorkflowValue:
+			builder.WriteString(workflowValueToTemplatePlaceholder(typed))
+		default:
+			panic(fmt.Sprintf("Text parts must be strings or WorkflowValue, got %T", part))
+		}
+	}
+	return builder.String()
+}
+
+// WorkflowComposeText is kept as a compatibility alias for Text.
+func WorkflowComposeText(parts ...any) string {
+	return Text(parts...)
+}
+
+func workflowValueToTemplatePlaceholder(value WorkflowValue) string {
+	if value.Input != "" {
+		return fmt.Sprintf("${{ input.%s }}", strings.TrimSpace(value.Input))
+	}
+	if value.Signal != "" {
+		return fmt.Sprintf("${{ signal.%s }}", strings.TrimSpace(value.Signal))
+	}
+	if value.StepOutput != nil {
+		return fmt.Sprintf(
+			"${{ steps.%s.outputs.%s }}",
+			strings.TrimSpace(value.StepOutput.StepID),
+			strings.TrimSpace(value.StepOutput.Path),
+		)
+	}
+	if value.StepInput != nil {
+		return fmt.Sprintf(
+			"${{ steps.%s.inputs.%s }}",
+			strings.TrimSpace(value.StepInput.StepID),
+			strings.TrimSpace(value.StepInput.Path),
+		)
+	}
+	panic("Text references must be input, signal, step output, or step input paths")
 }

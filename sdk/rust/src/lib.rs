@@ -60,8 +60,14 @@ mod secrets_server;
 pub mod telemetry;
 /// Generated Test client and native types.
 pub mod test;
-/// Generated Workflow client and native types.
-pub mod workflow;
+mod workflow_authoring;
+#[path = "workflow.rs"]
+mod workflow_generated;
+/// Generated workflow clients and native types plus typed workflow authoring helpers.
+pub mod workflow {
+    pub use crate::workflow_authoring::*;
+    pub use crate::workflow_generated::*;
+}
 /// Workflow provider contract and native workflow types.
 pub mod workflow_provider;
 

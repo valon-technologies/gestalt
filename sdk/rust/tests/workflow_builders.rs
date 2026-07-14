@@ -3,7 +3,12 @@ mod helpers;
 
 use serde::Serialize;
 use serde_json::json;
+use std::collections::BTreeMap;
 
+use gestalt::workflow::{
+    WorkflowStepAgentConfig, WorkflowStepAppConfig, WorkflowStepConfig, define_workflow, schedule,
+    step_output, text,
+};
 use gestalt::{
     BoundWorkflowTarget, WorkflowAgentMessage, WorkflowEvalContext, WorkflowExecutionRequest,
     WorkflowSignal, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall,
@@ -49,6 +54,61 @@ fn workflow_steps_do_not_require_timeout() -> gestalt::Result<()> {
         Some(json!({"ok": false, "count": 0.0}))
     );
     Ok(())
+}
+
+#[test]
+fn typed_workflow_builder_lowers_app_to_agent_chain() -> gestalt::Result<()> {
+    let mut extract = WorkflowStepConfig::default();
+    extract.app = Some(
+        WorkflowStepAppConfig::new("dealHub", "extractRow").with_input(|| {
+            BTreeMap::from([(
+                String::from("account_id"),
+                gestalt::workflow::input("account_id"),
+            )])
+        }),
+    );
+
+    let mut summarize = WorkflowStepConfig::default();
+    summarize.agent = Some(
+        WorkflowStepAgentConfig::new("openai")
+            .with_prompt(text(&[step_output("extract", "summary")])?),
+    );
+
+    let builder = define_workflow("example", "service_account:workflow-runner")?
+        .on(schedule("0 * * * *", || {
+            BTreeMap::from([(
+                String::from("account_id"),
+                gestalt::workflow::input("account_id"),
+            )])
+        }))
+        .step("extract", extract)
+        .step("summarize", summarize);
+    let spec = builder.to_spec();
+    assert_eq!(spec.run_as, "service_account:workflow-runner");
+    assert_eq!(spec.activations.len(), 1);
+    let steps = spec.target.expect("target").steps;
+    assert_eq!(steps.len(), 2);
+    let agent = match steps[1].action.as_ref() {
+        Some(gestalt::workflow::WorkflowStepAction::Agent(agent)) => agent,
+        _ => return Err(gestalt::Error::bad_request("expected summarize agent step")),
+    };
+    assert_eq!(
+        agent.prompt.as_ref().expect("prompt").template,
+        "${{ steps.extract.outputs.summary }}"
+    );
+    Ok(())
+}
+
+#[test]
+#[should_panic(expected = "workflow step cannot configure both app and agent actions")]
+fn workflow_builder_rejects_both_app_and_agent_actions() {
+    let builder = gestalt::workflow::define_workflow("example", "service_account:runner")
+        .expect("valid workflow metadata");
+    let mut config = WorkflowStepConfig::default();
+    config.app = Some(WorkflowStepAppConfig::default());
+    config.agent = Some(WorkflowStepAgentConfig::default());
+
+    let _ = builder.step("invalid", config);
 }
 
 #[test]

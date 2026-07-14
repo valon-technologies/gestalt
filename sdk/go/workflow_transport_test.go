@@ -102,25 +102,16 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("Workflow: %v", err)
 	}
 
-	applied, err := workflow.ApplyDefinition(context.Background(), "default", "workflow-definition-key-go", &client.WorkflowDefinitionSpec{
-		Id: "definition-1",
-		Target: &client.BoundWorkflowTarget{Steps: []*client.WorkflowStep{{
-			Id: "review",
-			Action: &client.WorkflowStepActionApp{Value: &client.WorkflowStepAppCall{
+	builder := gestalt.DefineWorkflow("definition-1", "service_account:workflow-runner").
+		Step("review", gestalt.WorkflowStepConfig{
+			App: &gestalt.WorkflowStepAppConfig{
 				Name:      "github",
 				Operation: "pullRequests.review",
-			}},
-		}}},
-		Activations: []*client.WorkflowActivation{{
-			Id: "github_pr",
-			Trigger: &client.WorkflowActivationTriggerEvent{Value: &client.WorkflowEventActivation{Match: &client.WorkflowEventMatch{
-				Type:   "github.pull_request",
-				Source: "github",
-			}}},
-		}},
-	})
+			},
+		})
+	applied, err := workflow.ApplyDefinitionFrom(context.Background(), "default", "workflow-definition-key-go", builder)
 	if err != nil {
-		t.Fatalf("ApplyDefinition: %v", err)
+		t.Fatalf("ApplyDefinitionFrom: %v", err)
 	}
 	if applied.Provider != "default" || applied.Id != "definition-1" || applied.Generation != 3 {
 		t.Fatalf("definition = %#v", applied)

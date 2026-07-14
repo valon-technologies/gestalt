@@ -266,6 +266,7 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "WorkflowApplyDefinition",
     "WorkflowDefinition",
     "WorkflowDefinitionSpec",
+    "WorkflowDefinitionBuilder",
     "WorkflowDeleteDefinition",
     "WorkflowDeliverEvent",
     "WorkflowEvent",
@@ -349,6 +350,16 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "workflow_text_input_from_text",
     "workflow_value",
     "workflow_value_input_from_value",
+)
+
+_WORKFLOW_DEFINE_EXPORTS = (
+    "WorkflowStepAppConfig",
+    "WorkflowStepAgentConfig",
+    "WorkflowBuilder",
+    "define_workflow",
+    "event",
+    "schedule",
+    "text",
 )
 
 _WORKFLOW_HELPER_EXPORTS = (
@@ -510,6 +521,9 @@ _LAZY_EXPORTS.update(
     {name: ("._workflow", name) for name in _WORKFLOW_AUTHORED_EXPORTS}
 )
 _LAZY_EXPORTS.update({name: ("._workflow", name) for name in _WORKFLOW_HELPER_EXPORTS})
+_LAZY_EXPORTS.update(
+    {name: ("._workflow_authoring", name) for name in _WORKFLOW_DEFINE_EXPORTS}
+)
 
 _LAZY_MODULES = {
     "telemetry": ".telemetry",
@@ -549,6 +563,7 @@ __all__ = [
     *_PROTOCOL_TYPE_EXPORTS,
     *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
+    *_WORKFLOW_DEFINE_EXPORTS,
     *_WORKFLOW_HELPER_EXPORTS,
     "Agent",
     "AgentProvider",

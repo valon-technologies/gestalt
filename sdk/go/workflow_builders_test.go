@@ -3,6 +3,8 @@ package gestalt
 import (
 	"testing"
 	"time"
+
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 )
 
 func TestWorkflowRunUsesNativeTimesInputAndSteps(t *testing.T) {
@@ -122,7 +124,8 @@ func TestWorkflowSignalAndEventUseNativePayloads(t *testing.T) {
 
 func TestWorkflowDefinitionSpecStepsAndActivationsUseNewValueRoots(t *testing.T) {
 	spec, err := workflowDefinitionSpecToProto(WorkflowDefinitionSpec{
-		ID: "definition-1",
+		ID:    "definition-1",
+		RunAs: "service_account:workflow-runner",
 		Target: &BoundWorkflowTarget{Steps: []WorkflowStep{
 			{
 				ID: "collect",
@@ -187,6 +190,106 @@ func TestWorkflowDefinitionSpecStepsAndActivationsUseNewValueRoots(t *testing.T)
 	activation := spec.GetActivations()[0]
 	if activation.GetEvent().GetMatch().GetType() != "slack.message" {
 		t.Fatalf("activation event = %#v", activation.GetEvent())
+	}
+}
+
+func TestWorkflowBuilderInlineExtractSummarizeChain(t *testing.T) {
+	builder := DefineWorkflow("summarize-analysis", "service_account:workflow-runner").
+		On(Event("analysis.extract.requested", func() map[string]WorkflowValue {
+			return map[string]WorkflowValue{
+				"analysis_id": WorkflowRefSignal("data.analysis_id"),
+			}
+		})).
+		Step("extract", WorkflowStepConfig{
+			App: &WorkflowStepAppConfig{
+				Name:      "dealHub",
+				Operation: "analyses.extractRowWorkflow",
+				Input: func() map[string]WorkflowValue {
+					return map[string]WorkflowValue{
+						"analysis_id": WorkflowRefInput("analysis_id"),
+					}
+				},
+			},
+		}).
+		Step("summarize", WorkflowStepConfig{
+			Agent: &WorkflowStepAgentConfig{
+				Provider: "openai",
+				Model:    "gpt-5",
+				Prompt: Text(
+					"Summarize the extracted analysis: ",
+					WorkflowRefStepOutput("extract", "app.body.json"),
+				),
+			},
+		})
+
+	spec, err := builder.ToSpec()
+	if err != nil {
+		t.Fatalf("ToSpec: %v", err)
+	}
+	if spec.ID != "summarize-analysis" || spec.RunAs != "service_account:workflow-runner" {
+		t.Fatalf("identity = %#v", spec)
+	}
+	if len(spec.Activations) != 1 || len(spec.Target.Steps) != 2 {
+		t.Fatalf("definition shape = %#v", spec)
+	}
+	if got := spec.Activations[0].Input.Object["analysis_id"].Signal; got != "data.analysis_id" {
+		t.Fatalf("activation input = %q", got)
+	}
+	if got := spec.Target.Steps[0].App.Input.Object["analysis_id"].Input; got != "analysis_id" {
+		t.Fatalf("extract input = %q", got)
+	}
+	if got := spec.Target.Steps[1].Agent.Prompt.Template; got != "Summarize the extracted analysis: ${{ steps.extract.outputs.app.body.json }}" {
+		t.Fatalf("summarize prompt = %q", got)
+	}
+}
+
+func TestWorkflowBuilderRejectsBothAppAndAgent(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic when configuring both app and agent on one step")
+		}
+	}()
+	DefineWorkflow("invalid-step", "service_account:workflow-runner").Step("broken", WorkflowStepConfig{
+		App: &WorkflowStepAppConfig{
+			Name:      "dealHub",
+			Operation: "extractRow",
+		},
+		Agent: &WorkflowStepAgentConfig{
+			Provider: "openai",
+			Prompt:   "summarize",
+		},
+	})
+}
+
+func TestWorkflowBuilderValidationAndApplySource(t *testing.T) {
+	if _, err := DefineWorkflow("", "service_account:workflow-runner").ToSpec(); err == nil {
+		t.Fatal("expected ID validation error")
+	}
+	if _, err := DefineWorkflow("workflow", "").ToSpec(); err == nil {
+		t.Fatal("expected RunAs validation error")
+	}
+
+	applyStub := func(source client.WorkflowDefinitionSpecSource) (*client.WorkflowDefinitionSpec, error) {
+		return source.ToWorkflowDefinitionSpec()
+	}
+	spec, err := applyStub(DefineWorkflow("workflow", "service_account:workflow-runner"))
+	if err != nil {
+		t.Fatalf("apply source: %v", err)
+	}
+	if spec.Id != "workflow" || spec.RunAs != "service_account:workflow-runner" {
+		t.Fatalf("client spec = %#v", spec)
+	}
+}
+
+func TestWorkflowTextLowersPluralStepPaths(t *testing.T) {
+	got := Text(
+		WorkflowRefStepOutput("extract", "body"),
+		" / ",
+		WorkflowRefStepInput("extract", "analysis_id"),
+	)
+	want := "${{ steps.extract.outputs.body }} / ${{ steps.extract.inputs.analysis_id }}"
+	if got != want {
+		t.Fatalf("Text = %q, want %q", got, want)
 	}
 }
 
