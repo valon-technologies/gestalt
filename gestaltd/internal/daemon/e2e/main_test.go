@@ -218,7 +218,7 @@ providers:
 	}
 }
 
-func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
+func TestE2ESyncDefaultSuccessReportsProgressAndQuietSuppressesIt(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -251,8 +251,28 @@ func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
 	if got := stdout.String(); got != "" {
 		t.Fatalf("default sync stdout = %q, want empty", got)
 	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("default sync stderr = %q, want empty", got)
+	for _, want := range []string{"Loading configuration", "Resolving lockfile", "Preparing artifacts", "Artifacts prepared"} {
+		if got := stderr.String(); !strings.Contains(got, want) {
+			t.Fatalf("default sync stderr missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(stderr.String(), "DEFAULT_SYNC_") {
+		t.Fatalf("default sync leaked subprocess output into lifecycle summary: %q", stderr.String())
+	}
+
+	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
+		t.Fatalf("remove prepared provider for quiet sync: %v", err)
+	}
+	quiet := gestaltdCommand("sync", "--quiet", "--locked", "--config", configPath)
+	stdout.Reset()
+	stderr.Reset()
+	quiet.Stdout = &stdout
+	quiet.Stderr = &stderr
+	if err := quiet.Run(); err != nil {
+		t.Fatalf("quiet gestaltd sync: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("quiet sync output stdout=%q stderr=%q, want both empty", stdout.String(), stderr.String())
 	}
 }
 
