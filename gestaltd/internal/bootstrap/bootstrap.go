@@ -193,8 +193,9 @@ type Deps struct {
 	ProviderTransport       providergateway.Transport
 	CallerTokenPublicKey    string
 	DevSupervisor           *providerdev.Supervisor
-	RemoteClients           *remote.ClientSet
-	RemoteToken             string
+	RemoteClients           map[string]*remote.ClientSet
+	DefaultRemoteName       string
+	DefaultRemoteToken      string
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -893,15 +894,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
-	if remoteURL := strings.TrimSpace(cfg.Server.Remote); remoteURL != "" {
-		deps.RemoteToken = cfg.Server.RemoteToken
-		deps.RemoteClients, err = remote.NewClientSet(ctx, remote.Config{
-			URL:   remoteURL,
-			Token: cfg.Server.RemoteToken,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap: remote client: %w", err)
-		}
+	if clients, defaultName, defaultToken, err := dialRemoteClients(ctx, cfg); err != nil {
+		return nil, err
+	} else if len(clients) > 0 {
+		deps.RemoteClients = clients
+		deps.DefaultRemoteName = defaultName
+		deps.DefaultRemoteToken = defaultToken
 	}
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
@@ -940,7 +938,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
 	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
-	skipSchemaBootstrap := !providerBuildsLocal(cfg, def)
+	skipSchemaBootstrap := !resolvesLocal(cfg, def, true)
 	svc, svcErr := coredata.NewWithOptions(ctx, store, coredata.NewOptions{SkipSchemaBootstrap: skipSchemaBootstrap})
 	if svcErr != nil {
 		_ = store.Close()
@@ -1149,7 +1147,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		authCloseErr,
 		authorizationCloseErr,
 		externalCredentialsCloseErr,
-		p.Deps.RemoteClients.Close(),
+		closeRemoteClients(p.Deps.RemoteClients),
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeCaches(p.ExtraCaches...),
@@ -1545,16 +1543,6 @@ func failPendingStartupProviders(deps Deps, err error) {
 	if deps.AgentRuntime != nil {
 		deps.AgentRuntime.FailPendingProviders(err)
 	}
-}
-
-func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
-	if entry == nil {
-		return false
-	}
-	if entry.DevActive || entry.Local {
-		return true
-	}
-	return cfg == nil || strings.TrimSpace(cfg.Server.Remote) == ""
 }
 
 func buildConfiguredProviders[T any](
@@ -2001,11 +1989,15 @@ func buildNamedAuthProvider(cfg *config.Config, name string, authEntry *config.P
 	if authEntry == nil {
 		return nil, nil
 	}
-	if !providerBuildsLocal(cfg, authEntry) {
-		if deps.RemoteClients == nil || deps.RemoteClients.Identity == nil {
-			return nil, fmt.Errorf("bootstrap: remote identity client is required when server.remote is configured")
+	if !resolvesLocal(cfg, authEntry, true) {
+		clients, err := requireDefaultClientSet(deps)
+		if err != nil {
+			return nil, err
 		}
-		return identityservice.NewRemote(deps.RemoteClients.Identity, name)
+		if clients.Identity == nil {
+			return nil, fmt.Errorf("bootstrap: remote identity client is required when a default remote is configured")
+		}
+		return identityservice.NewRemote(clients.Identity, name)
 	}
 	if factories.Auth == nil {
 		return nil, fmt.Errorf("bootstrap: authentication factory is not registered")
@@ -2063,11 +2055,15 @@ func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, na
 	if entry == nil {
 		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
 	}
-	if !providerBuildsLocal(cfg, entry) {
-		if deps.RemoteClients == nil || deps.RemoteClients.Authorization == nil {
-			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: remote authorization client is required when server.remote is configured")
+	if !resolvesLocal(cfg, entry, true) {
+		clients, err := requireDefaultClientSet(deps)
+		if err != nil {
+			return providerdrivers.AuthorizationBuildResult{}, err
 		}
-		provider, err := authorizationservice.NewRemote(deps.RemoteClients.Authorization, logicalName)
+		if clients.Authorization == nil {
+			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: remote authorization client is required when a default remote is configured")
+		}
+		provider, err := authorizationservice.NewRemote(clients.Authorization, logicalName)
 		if err != nil {
 			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
@@ -2125,9 +2121,16 @@ func buildIndexedDB(cfg *config.Config, name string, entry *config.ProviderEntry
 	if entry == nil {
 		return nil, fmt.Errorf("indexeddb provider is required")
 	}
-	if !providerBuildsLocal(cfg, entry) {
+	if !resolvesLocal(cfg, entry, true) {
+		clients, err := requireDefaultClientSet(deps)
+		if err != nil {
+			return nil, err
+		}
+		if clients.IndexedDB == nil {
+			return nil, fmt.Errorf("bootstrap: remote indexeddb client is required when a default remote is configured")
+		}
 		return indexeddbpkg.NewRemote(indexeddbpkg.RemoteConfig{
-			Client: deps.RemoteClients.IndexedDB,
+			Client: clients.IndexedDB,
 			Name:   name,
 		})
 	}
@@ -2198,9 +2201,16 @@ func buildWorkflow(ctx context.Context, cfg *config.Config, name string, entry *
 	if entry == nil {
 		return nil, fmt.Errorf("workflow provider is required")
 	}
-	if !providerBuildsLocal(cfg, entry) {
+	if !resolvesLocal(cfg, entry, true) {
+		clients, err := requireDefaultClientSet(deps)
+		if err != nil {
+			return nil, err
+		}
+		if clients.Workflow == nil {
+			return nil, fmt.Errorf("bootstrap: remote workflow client is required when a default remote is configured")
+		}
 		return workflowservice.NewRemote(ctx, workflowservice.RemoteConfig{
-			Client: deps.RemoteClients.Workflow,
+			Client: clients.Workflow,
 			Name:   name,
 		})
 	}
@@ -2259,9 +2269,16 @@ func buildAgent(ctx context.Context, cfg *config.Config, name string, entry *con
 	if entry == nil {
 		return nil, fmt.Errorf("agent provider is required")
 	}
-	if !providerBuildsLocal(cfg, entry) {
+	if !resolvesLocal(cfg, entry, true) {
+		clients, err := requireDefaultClientSet(deps)
+		if err != nil {
+			return nil, err
+		}
+		if clients.Agent == nil {
+			return nil, fmt.Errorf("bootstrap: remote agent client is required when a default remote is configured")
+		}
 		return agentservice.NewRemote(ctx, agentservice.RemoteConfig{
-			Client: deps.RemoteClients.Agent,
+			Client: clients.Agent,
 			Name:   name,
 		})
 	}

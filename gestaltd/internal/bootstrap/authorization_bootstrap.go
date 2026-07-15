@@ -32,7 +32,7 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 	if entry == nil {
 		return nil
 	}
-	if !providerBuildsLocal(cfg, entry) {
+	if !resolvesLocal(cfg, entry, true) {
 		return nil
 	}
 	provider := providers[name]

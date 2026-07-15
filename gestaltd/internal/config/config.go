@@ -493,8 +493,10 @@ type ProviderEntry struct {
 	Config  yaml.Node      `yaml:"config,omitempty"`
 	Default bool           `yaml:"default,omitempty"`
 	// Local forces this provider to build in-process locally even when
-	// server.remote delegates other host providers to a remote gestaltd.
-	Local           bool                                   `yaml:"local,omitempty"`
+	// server.remotes delegates other host providers to a remote gestaltd.
+	Local bool `yaml:"local,omitempty"`
+	// Remote names the gestaltd control plane that serves this app.
+	Remote          string                                 `yaml:"remote,omitempty"`
 	Env             map[string]string                      `yaml:"env,omitempty"`
 	Egress          *ProviderEgressConfig                  `yaml:"egress,omitempty"`
 	DisplayName     string                                 `yaml:"displayName,omitempty"`
@@ -1923,20 +1925,28 @@ type AdminConfig struct {
 	AllowedRoles        []string `yaml:"allowedRoles,omitempty"`
 }
 
+type RemoteConfig struct {
+	URL     string `yaml:"url"`
+	Token   string `yaml:"token,omitempty"`
+	Default bool   `yaml:"default,omitempty"`
+}
+
 type ServerConfig struct {
 	Public        ListenerConfig           `yaml:"public"`
 	Management    ManagementListenerConfig `yaml:"management"`
 	BaseURL       string                   `yaml:"baseUrl"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
-	Remote        string                   `yaml:"remote,omitempty" json:"remote,omitempty"`
-	RemoteToken   string                   `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`
-	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
-	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
-	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
-	Egress        EgressConfig             `yaml:"egress,omitempty"`
-	Admin         AdminConfig              `yaml:"admin,omitempty"`
-	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
+	Remotes       map[string]*RemoteConfig `yaml:"remotes,omitempty" json:"remotes,omitempty"`
+	// Deprecated: input aliases retained for decoding.
+	Remote       string                `yaml:"remote,omitempty" json:"remote,omitempty"`
+	RemoteToken  string                `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`
+	Providers    ServerProvidersConfig `yaml:"providers,omitempty"`
+	Agent        ServerAgentConfig     `yaml:"agent,omitempty"`
+	Runtime      ServerRuntimeConfig   `yaml:"runtime,omitempty"`
+	Egress       EgressConfig          `yaml:"egress,omitempty"`
+	Admin        AdminConfig           `yaml:"admin,omitempty"`
+	AutoActivate *bool                 `yaml:"autoActivate,omitempty"`
 }
 
 type ServerAgentConfig struct{}
