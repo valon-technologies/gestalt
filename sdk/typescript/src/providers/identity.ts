@@ -143,7 +143,7 @@ export class IdentityProvider extends ProviderBase {
   private readonly revokeGrantHandler: IdentityProviderOptions["revokeGrant"];
 
   constructor(options: IdentityProviderOptions) {
-    super(options);
+    super(options, "identity");
     this.authorizeHandler = options.authorize;
     this.tokenHandler = options.token;
     this.introspectHandler = options.introspect;

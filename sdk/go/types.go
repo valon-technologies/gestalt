@@ -99,6 +99,12 @@ type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*Catalog, error)
 }
 
+// WorkflowDeclarationsProvider is implemented by integration providers that
+// declare static workflow definitions reconciled by the host.
+type WorkflowDeclarationsProvider interface {
+	DeclaredWorkflowDefinitions() ([]WorkflowDefinitionSpec, error)
+}
+
 // Subject identifies the caller that initiated an operation.
 type Subject struct {
 	ID          string

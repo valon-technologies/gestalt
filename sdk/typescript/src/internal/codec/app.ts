@@ -600,6 +600,7 @@ export function toWireProviderMetadata(
     supportsSessionCatalog: value.supportsSessionCatalog ?? false,
     minProtocolVersion: value.minProtocolVersion ?? 0,
     maxProtocolVersion: value.maxProtocolVersion ?? 0,
+    workflowDefinitionSpecs: value.workflowDefinitionSpecs ?? [],
   });
 }
 
@@ -624,6 +625,7 @@ export function fromWireProviderMetadata(
     supportsSessionCatalog: value.supportsSessionCatalog,
     minProtocolVersion: value.minProtocolVersion,
     maxProtocolVersion: value.maxProtocolVersion,
+    workflowDefinitionSpecs: value.workflowDefinitionSpecs,
   };
 }
 

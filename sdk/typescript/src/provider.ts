@@ -1,4 +1,5 @@
 import type { MaybePromise } from "./api.ts";
+import type { WorkflowDefinitionInput } from "./workflow-define.ts";
 import { IndexedDB } from "./providers/indexeddb.ts";
 import {
   type MigrationRunOptions,
@@ -88,6 +89,12 @@ export interface ProviderBaseOptions {
    * author's own configure handler. The author never calls a runner.
    */
   migrations?: MigrationsOption;
+  /**
+   * Workflow definitions declared as static desired state. The host reconciles
+   * these on the config-definitions path; declarations cannot depend on config.
+   * Only app (`integration`) providers publish these via GetMetadata.
+   */
+  workflows?: readonly WorkflowDefinitionInput[];
   configure?: ConfigureHandler;
   healthCheck?: HealthCheckHandler;
   warnings?: string[] | WarningsHandler;
@@ -107,18 +114,32 @@ export abstract class ProviderBase {
   readonly version: string;
 
   private readonly migrationsSource: MigrationsOption | undefined;
+  protected readonly workflowsSource: readonly WorkflowDefinitionInput[] | undefined;
   private readonly configureHandler: ConfigureHandler | undefined;
   private readonly healthCheckHandler: HealthCheckHandler | undefined;
   private readonly warningsSource: string[] | WarningsHandler | undefined;
   private readonly startHandler: StartHandler | undefined;
   private readonly closeHandler: CloseHandler | undefined;
 
-  protected constructor(options: ProviderBaseOptions) {
+  protected constructor(
+    options: ProviderBaseOptions,
+    declaringKind?: ProviderKind,
+  ) {
     this.name = slugName(options.name ?? "");
     this.displayName = options.displayName?.trim() ?? "";
     this.description = options.description?.trim() ?? "";
     this.version = options.version?.trim() ?? "";
     this.migrationsSource = options.migrations;
+    this.workflowsSource = options.workflows;
+    if (
+      declaringKind !== undefined &&
+      declaringKind !== "integration" &&
+      (options.workflows?.length ?? 0) > 0
+    ) {
+      console.warn(
+        `[gestalt] workflows on ${declaringKind} providers are ignored; declare workflows with defineApp({ workflows: [...] }) instead`,
+      );
+    }
     this.configureHandler = options.configure;
     this.healthCheckHandler = options.healthCheck;
     this.warningsSource = Array.isArray(options.warnings)

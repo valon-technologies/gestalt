@@ -51,7 +51,7 @@ export class CacheProvider extends ProviderBase {
   private readonly deleteManyHandler: CacheProviderOptions["deleteMany"];
 
   constructor(options: CacheProviderOptions) {
-    super(options);
+    super(options, "cache");
     this.getHandler = options.get;
     this.setHandler = options.set;
     this.deleteHandler = options.delete;

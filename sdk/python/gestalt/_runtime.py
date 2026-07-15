@@ -1377,8 +1377,27 @@ def _provider_servicer(*, app: App) -> Any:
     class ProviderServicer(app_pb2_grpc.AppProviderServicer):
         @_grpc_handler("provider metadata")
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
+            from ._codec.workflow import to_wire_workflow_definition_spec
+
+            workflow_definition_specs = []
+            for index, declared in enumerate(app.workflow_definitions()):
+                try:
+                    spec = (
+                        declared.to_spec()
+                        if hasattr(declared, "to_spec")
+                        else declared
+                    )
+                    workflow_definition_specs.append(
+                        to_wire_workflow_definition_spec(spec).SerializeToString()
+                    )
+                except Exception as error:
+                    raise Error(
+                        HTTPStatus.BAD_REQUEST,
+                        f"workflow definitions[{index}]: {error}",
+                    ) from error
             return app_pb2.ProviderMetadata(
                 supports_session_catalog=app.supports_session_catalog(),
+                workflow_definition_specs=workflow_definition_specs,
                 min_protocol_version=CURRENT_PROTOCOL_VERSION,
                 max_protocol_version=CURRENT_PROTOCOL_VERSION,
             )

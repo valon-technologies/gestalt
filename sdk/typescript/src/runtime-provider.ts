@@ -179,7 +179,7 @@ export class RuntimeProvider extends ProviderBase {
   private readonly startAppHandler: RuntimeProviderOptions["startApp"];
 
   constructor(options: RuntimeProviderOptions) {
-    super(options);
+    super(options, "runtime");
     this.getSupportHandler = options.getSupport;
     this.startSessionHandler = options.startSession;
     this.getSessionHandler = options.getSession;

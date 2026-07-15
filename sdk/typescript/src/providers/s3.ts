@@ -214,7 +214,7 @@ export class S3Provider extends ProviderBase {
   private readonly presignObjectHandler: S3ProviderOptions["presignObject"];
 
   constructor(options: S3ProviderOptions) {
-    super(options);
+    super(options, "s3");
     this.headObjectHandler = options.headObject;
     this.readObjectHandler = options.readObject;
     this.writeObjectHandler = options.writeObject;

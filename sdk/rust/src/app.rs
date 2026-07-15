@@ -393,6 +393,15 @@ pub struct ProviderMetadata {
     pub min_protocol_version: i32,
     /// The `max_protocol_version` field.
     pub max_protocol_version: i32,
+    /// Workflow definitions this app declares as desired state. Each entry is a
+    /// serialized gestalt.provider.v1.WorkflowDefinitionSpec (workflow.proto).
+    /// Framed as bytes because workflow.proto imports app.proto, so this file
+    /// cannot reference WorkflowDefinitionSpec directly. The spec `id` is the
+    /// app-local id; stored ids look like app_notes_daily-summary (app name + local id)
+    /// and are applied with gestaltd authority on the config-definitions reconcile path.
+    ///
+    /// The `workflow_definition_specs` field.
+    pub workflow_definition_specs: Vec<Vec<u8>>,
 }
 
 /// RequestContext bundles the caller, credential, access, and host metadata for

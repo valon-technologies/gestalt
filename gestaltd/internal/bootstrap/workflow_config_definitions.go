@@ -24,29 +24,42 @@ type desiredWorkflowConfigDefinition struct {
 	DefinitionKey string
 	ProviderName  string
 	DefinitionID  string
-	definition    config.WorkflowDefinitionConfig
+	FromApp       string
+	Spec          coreworkflow.DefinitionSpec
 }
 
 type workflowConfigProviderFilter func(providerName string) bool
 
-func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
+func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, appDecls *appWorkflowDeclarations, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
-	desired, err := desiredWorkflowConfigDefinitions(cfg)
+	cfgDesired, err := desiredWorkflowConfigDefinitions(cfg)
+	if err != nil {
+		return err
+	}
+	var reported map[string][]*proto.WorkflowDefinitionSpec
+	if appDecls != nil {
+		reported = appDecls.Snapshot()
+	}
+	appDesired, err := desiredAppWorkflowDefinitions(cfg, reported)
+	if err != nil {
+		return err
+	}
+	desired, err := mergeDesiredWorkflowDefinitions(cfgDesired, appDesired)
 	if err != nil {
 		return err
 	}
 
-	for _, rowID := range slices.Sorted(maps.Keys(desired)) {
-		desiredEntry := desired[rowID]
+	for _, definitionID := range slices.Sorted(maps.Keys(desired)) {
+		desiredEntry := desired[definitionID]
 		if !workflowConfigProviderIncluded(includeProvider, desiredEntry.ProviderName) {
 			continue
 		}
-		definition := desiredEntry.definition
-		target := workflowConfigTarget(definition.Steps)
-		appName := workflowConfigTargetLabel(target)
-		_, provider, err := runtime.ResolveProvider(ctx, definition.Provider)
+		spec := desiredEntry.Spec
+		target := spec.Target
+		appName := workflowDefinitionTargetLabel(desiredEntry, target)
+		_, provider, err := runtime.ResolveProvider(ctx, desiredEntry.ProviderName)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
@@ -58,23 +71,16 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 			if existingErr != nil {
 				return fmt.Errorf("bootstrap: decode workflow definition %q for app %q: %w", desiredEntry.DefinitionID, appName, existingErr)
 			}
-			if !isWorkflowConfigOwnedDefinition(existing, desiredEntry.DefinitionID) {
+			if !isManagedWorkflowDefinitionOwned(existing, desiredEntry.DefinitionID) {
 				return fmt.Errorf("bootstrap: workflow definition %q for app %q conflicts with existing unmanaged definition id %q", desiredEntry.DefinitionKey, appName, desiredEntry.DefinitionID)
 			}
 		case isWorkflowObjectNotFound(err):
 		default:
 			return fmt.Errorf("bootstrap: get workflow definition %q for app %q: %w", desiredEntry.DefinitionID, appName, err)
 		}
-		runAs := strings.TrimSpace(definition.RunAs)
+		runAs := strings.TrimSpace(spec.RunAs)
 		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs); err != nil {
 			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
-		}
-		spec := coreworkflow.DefinitionSpec{
-			ID:          desiredEntry.DefinitionID,
-			Target:      target,
-			Activations: workflowConfigActivations(definition.On),
-			Paused:      definition.Paused,
-			RunAs:       runAs,
 		}
 		specProto, err := workflowwire.DefinitionSpecToProto(&spec)
 		if err != nil {
@@ -93,10 +99,21 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 		}
 	}
 
-	if err := cleanupRemovedWorkflowConfigDefinitions(ctx, runtime, desired, includeProvider); err != nil {
+	if err := cleanupRemovedWorkflowConfigDefinitions(ctx, cfg, runtime, reported, desired, includeProvider); err != nil {
 		return err
 	}
 	return nil
+}
+
+func workflowDefinitionTargetLabel(entry desiredWorkflowConfigDefinition, target coreworkflow.Target) string {
+	if appName := strings.TrimSpace(entry.FromApp); appName != "" {
+		return appName
+	}
+	return workflowConfigTargetLabel(target)
+}
+
+func isManagedWorkflowDefinitionOwned(existing *coreworkflow.Definition, definitionID string) bool {
+	return isWorkflowConfigOwnedDefinition(existing, definitionID) || isAppWorkflowOwnedDefinition(existing, definitionID)
 }
 
 func workflowConfigProviderIncluded(includeProvider workflowConfigProviderFilter, providerName string) bool {
@@ -117,12 +134,20 @@ func desiredWorkflowConfigDefinitions(cfg *config.Config) (map[string]desiredWor
 		if err != nil {
 			return nil, err
 		}
-		rowID := strings.TrimSpace(definitionKey)
-		desired[rowID] = desiredWorkflowConfigDefinition{
+		definitionID := workflowConfigDefinitionID(definitionKey)
+		target := workflowConfigTarget(definition.Steps)
+		runAs := strings.TrimSpace(definition.RunAs)
+		desired[definitionID] = desiredWorkflowConfigDefinition{
 			DefinitionKey: definitionKey,
 			ProviderName:  providerName,
-			DefinitionID:  workflowConfigDefinitionID(definitionKey),
-			definition:    definition,
+			DefinitionID:  definitionID,
+			Spec: coreworkflow.DefinitionSpec{
+				ID:          definitionID,
+				Target:      target,
+				Activations: workflowConfigActivations(definition.On),
+				Paused:      definition.Paused,
+				RunAs:       runAs,
+			},
 		}
 	}
 	return desired, nil
@@ -164,15 +189,16 @@ func isWorkflowObjectNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, runtime *workflowRuntime, desired map[string]desiredWorkflowConfigDefinition, includeProvider workflowConfigProviderFilter) error {
+func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, reported map[string][]*proto.WorkflowDefinitionSpec, desired map[string]desiredWorkflowConfigDefinition, includeProvider workflowConfigProviderFilter) error {
 	desiredByProviderDefinition := make(map[string]struct{}, len(desired))
-	for rowID := range desired {
-		entry := desired[rowID]
+	for definitionID := range desired {
+		entry := desired[definitionID]
 		if !workflowConfigProviderIncluded(includeProvider, entry.ProviderName) {
 			continue
 		}
 		desiredByProviderDefinition[workflowConfigProviderObjectKey(entry.ProviderName, entry.DefinitionID)] = struct{}{}
 	}
+	protectedPrefixes := appWorkflowProtectedPrefixes(cfg, reported)
 	for _, providerName := range runtime.ConfiguredProviderNames() {
 		if !workflowConfigProviderIncluded(includeProvider, providerName) {
 			continue
@@ -191,10 +217,13 @@ func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, runtime *workf
 			if err != nil {
 				return fmt.Errorf("bootstrap: decode workflow definition from provider %q: %w", providerName, err)
 			}
-			if definition == nil || !isWorkflowConfigOwnedDefinition(definition, definition.ID) {
+			if definition == nil || !isManagedWorkflowDefinitionOwned(definition, definition.ID) {
 				continue
 			}
 			if _, ok := desiredByProviderDefinition[workflowConfigProviderObjectKey(providerName, definition.ID)]; ok {
+				continue
+			}
+			if definitionMatchesProtectedPrefix(definition.ID, protectedPrefixes) {
 				continue
 			}
 			if err := provider.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{Provider: providerName, DefinitionId: definition.ID}); err != nil && !isWorkflowObjectNotFound(err) {
@@ -222,7 +251,7 @@ func isWorkflowConfigOwnedDefinition(existing *coreworkflow.Definition, definiti
 		return false
 	}
 	return existing.ID == definitionID &&
-		strings.HasPrefix(existing.ID, "cfg_")
+		strings.HasPrefix(existing.ID, coreworkflow.ConfigManagedDefinitionPrefix)
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {
@@ -247,7 +276,7 @@ func workflowConfigTarget(steps []config.WorkflowStepConfig) coreworkflow.Target
 }
 
 func workflowConfigDefinitionID(definitionKey string) string {
-	return "cfg_" + strings.TrimSpace(definitionKey)
+	return coreworkflow.ConfigManagedDefinitionPrefix + strings.TrimSpace(definitionKey)
 }
 
 func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs string) error {
@@ -421,4 +450,23 @@ func workflowConfigConnectionModeForName(plan config.StaticConnectionPlan, appNa
 
 func workflowConfigOwnerSubjectID() string {
 	return "system:config"
+}
+
+func deferredAppWorkflowReconcileTask(deferred *deferredProviders, runtime *workflowRuntime, defaultProvider string, reconcile func(context.Context, workflowConfigProviderFilter) error) workflowConfigReconcileTask {
+	return workflowConfigReconcileTask{
+		name: "app workflow declarations (deferred apps)",
+		reconcile: func(ctx context.Context) error {
+			if deferred != nil {
+				select {
+				case <-deferred.ready():
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			if err := waitRuntimeWorkflowProviderReady(ctx, runtime, defaultProvider); err != nil {
+				return err
+			}
+			return reconcile(ctx, workflowConfigOnlyProvider(defaultProvider))
+		},
+	}
 }

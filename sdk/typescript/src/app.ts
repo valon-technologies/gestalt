@@ -275,6 +275,15 @@ export interface ProviderMetadata {
   supportsSessionCatalog: boolean;
   minProtocolVersion: number;
   maxProtocolVersion: number;
+  /**
+   * Workflow definitions this app declares as desired state. Each entry is a
+   * serialized gestalt.provider.v1.WorkflowDefinitionSpec (workflow.proto).
+   * Framed as bytes because workflow.proto imports app.proto, so this file
+   * cannot reference WorkflowDefinitionSpec directly. The spec `id` is the
+   * app-local id; stored ids look like app_notes_daily-summary (app name + local id)
+   * and are applied with gestaltd authority on the config-definitions reconcile path.
+   */
+  workflowDefinitionSpecs: Uint8Array[];
 }
 
 /**

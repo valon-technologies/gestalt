@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { create, toJson } from "@bufbuild/protobuf";
+import { create, fromBinary, toJson } from "@bufbuild/protobuf";
 import { EmptySchema, ValueSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
@@ -58,6 +58,7 @@ import {
   ApplyWorkflowProviderDefinitionRequestSchema,
   DeliverWorkflowProviderEventRequestSchema,
   StartWorkflowProviderRunRequestSchema,
+  WorkflowDefinitionSpecSchema,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
@@ -82,8 +83,12 @@ import {
   defineApp,
   defineRuntimeProvider,
   defineS3Provider,
+  defineWorkflow,
 } from "../src/index.ts";
-import { boundWorkflowTargetToProto } from "../src/providers/workflow.ts";
+import {
+  boundWorkflowTargetToProto,
+  workflowDefinitionSpecToProto,
+} from "../src/providers/workflow.ts";
 import { createS3Service } from "../src/providers/s3.ts";
 import {
   captureChildStderr,
@@ -491,6 +496,36 @@ test("integration provider service exposes metadata, configure, execute, and ses
     (parameter: any) => parameter.name === "name",
   );
   expect(toJson(ValueSchema, nameParameter?.default as any)).toBe("World");
+
+  const workflowDefinition = defineWorkflow({
+    id: "daily-summary",
+    runAs: "service_account:sa1",
+  });
+  const workflowMetadata = await (
+    createProviderService(
+      defineApp({
+        workflows: [workflowDefinition],
+        operations: [
+          {
+            id: "noop",
+            handler() {
+              return { ok: true };
+            },
+          },
+        ],
+      }),
+    ).getMetadata as any
+  )();
+  expect(workflowMetadata.workflowDefinitionSpecs).toHaveLength(1);
+  const expectedWorkflowSpec = workflowDefinitionSpecToProto(
+    workflowDefinition.toSpec(),
+  )!;
+  expect(
+    fromBinary(
+      WorkflowDefinitionSpecSchema,
+      workflowMetadata.workflowDefinitionSpecs[0],
+    ),
+  ).toEqual(expectedWorkflowSpec);
 
   await expectConnectCode(
     (service.startProvider as any)(

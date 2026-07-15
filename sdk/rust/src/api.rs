@@ -321,6 +321,11 @@ pub trait Provider: Send + Sync + 'static {
         false
     }
 
+    /// Returns workflow definitions declared as static desired state.
+    fn workflow_definitions(&self) -> Vec<crate::workflow::WorkflowDefinitionSpec> {
+        Vec::new()
+    }
+
     /// Returns an optional request-scoped catalog extension.
     async fn catalog_for_request(&self, _request: &Request) -> Result<Option<Catalog>> {
         Ok(None)

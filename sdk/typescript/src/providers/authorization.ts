@@ -278,7 +278,7 @@ export class AuthorizationProvider extends ProviderBase {
   private readonly handlers: AuthorizationProviderOptions;
 
   constructor(options: AuthorizationProviderOptions) {
-    super(options);
+    super(options, "authorization");
     this.handlers = options;
   }
 

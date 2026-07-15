@@ -540,8 +540,15 @@ type ProviderMetadata struct {
 	SupportsSessionCatalog bool                           `protobuf:"varint,8,opt,name=supports_session_catalog,json=supportsSessionCatalog,proto3" json:"supports_session_catalog,omitempty"`
 	MinProtocolVersion     int32                          `protobuf:"varint,11,opt,name=min_protocol_version,json=minProtocolVersion,proto3" json:"min_protocol_version,omitempty"`
 	MaxProtocolVersion     int32                          `protobuf:"varint,12,opt,name=max_protocol_version,json=maxProtocolVersion,proto3" json:"max_protocol_version,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Workflow definitions this app declares as desired state. Each entry is a
+	// serialized gestalt.provider.v1.WorkflowDefinitionSpec (workflow.proto).
+	// Framed as bytes because workflow.proto imports app.proto, so this file
+	// cannot reference WorkflowDefinitionSpec directly. The spec `id` is the
+	// app-local id; stored ids look like app_notes_daily-summary (app name + local id)
+	// and are applied with gestaltd authority on the config-definitions reconcile path.
+	WorkflowDefinitionSpecs [][]byte `protobuf:"bytes,13,rep,name=workflow_definition_specs,json=workflowDefinitionSpecs,proto3" json:"workflow_definition_specs,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ProviderMetadata) Reset() {
@@ -642,6 +649,13 @@ func (x *ProviderMetadata) GetMaxProtocolVersion() int32 {
 		return x.MaxProtocolVersion
 	}
 	return 0
+}
+
+func (x *ProviderMetadata) GetWorkflowDefinitionSpecs() [][]byte {
+	if x != nil {
+		return x.WorkflowDefinitionSpecs
+	}
+	return nil
 }
 
 // OperationResult is the serialized result returned from an Execute call.
@@ -2375,7 +2389,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x14\n" +
-	"\x05field\x18\x05 \x01(\tR\x05field\"\x93\x05\n" +
+	"\x05field\x18\x05 \x01(\tR\x05field\"\xcf\x05\n" +
 	"\x10ProviderMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
@@ -2387,7 +2401,8 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0estatic_catalog\x18\a \x01(\v2\x1c.gestalt.provider.v1.CatalogR\rstaticCatalog\x128\n" +
 	"\x18supports_session_catalog\x18\b \x01(\bR\x16supportsSessionCatalog\x120\n" +
 	"\x14min_protocol_version\x18\v \x01(\x05R\x12minProtocolVersion\x120\n" +
-	"\x14max_protocol_version\x18\f \x01(\x05R\x12maxProtocolVersion\x1al\n" +
+	"\x14max_protocol_version\x18\f \x01(\x05R\x12maxProtocolVersion\x12:\n" +
+	"\x19workflow_definition_specs\x18\r \x03(\fR\x17workflowDefinitionSpecs\x1al\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
 	"\x05value\x18\x02 \x01(\v2'.gestalt.provider.v1.ConnectionParamDefR\x05value:\x028\x01\"\xe7\x01\n" +

@@ -531,7 +531,7 @@ export class AgentProvider extends ProviderBase {
   private readonly getCapabilitiesHandler: AgentProviderOptions["getCapabilities"];
 
   constructor(options: AgentProviderOptions) {
-    super(options);
+    super(options, "agent");
     this.createSessionHandler = options.createSession;
     this.getSessionHandler = options.getSession;
     this.listSessionsHandler = options.listSessions;

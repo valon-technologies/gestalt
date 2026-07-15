@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 type stubProvider struct{}
@@ -74,6 +75,16 @@ var sessionCatalogStubRouter = gestalt.MustRouter(
 			Method: http.MethodPost,
 		},
 		(*sessionCatalogStubProvider).testOp,
+	),
+)
+
+var workflowDeclarationsStubRouter = gestalt.MustRouter(
+	gestalt.Register(
+		gestalt.Operation[stubInput, stubOutput]{
+			ID:     "test_op",
+			Method: http.MethodPost,
+		},
+		(*workflowDeclarationsStubProvider).testOp,
 	),
 )
 
@@ -140,6 +151,17 @@ type panicHTTPSubjectProvider struct {
 
 type rejectHTTPSubjectProvider struct {
 	stubProvider
+}
+
+type workflowDeclarationsStubProvider struct {
+	stubProvider
+}
+
+func (p *workflowDeclarationsStubProvider) DeclaredWorkflowDefinitions() ([]gestalt.WorkflowDefinitionSpec, error) {
+	return []gestalt.WorkflowDefinitionSpec{{
+		ID:    "daily-summary",
+		RunAs: "service_account:sa1",
+	}}, nil
 }
 
 func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ string) (*gestalt.Catalog, error) {
@@ -282,6 +304,24 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		}
 		if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
 			t.Fatalf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+	})
+
+	t.Run("workflow declarations provider", func(t *testing.T) {
+		client := newAppProviderClient(t, &workflowDeclarationsStubProvider{}, workflowDeclarationsStubRouter)
+		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
+		if err != nil {
+			t.Fatalf("GetMetadata: %v", err)
+		}
+		if len(meta.GetWorkflowDefinitionSpecs()) != 1 {
+			t.Fatalf("WorkflowDefinitionSpecs = %d, want 1", len(meta.GetWorkflowDefinitionSpecs()))
+		}
+		wire := &proto.WorkflowDefinitionSpec{}
+		if err := gproto.Unmarshal(meta.GetWorkflowDefinitionSpecs()[0], wire); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if wire.GetId() != "daily-summary" || wire.GetRunAs() != "service_account:sa1" {
+			t.Fatalf("wire = %#v", wire)
 		}
 	})
 

@@ -116,6 +116,7 @@ type ProviderBuildResult struct {
 	Provider             core.Provider
 	ConnectionAuth       map[string]OAuthHandler
 	ManualConnectionAuth map[string]ManualTokenExchanger
+	WorkflowDeclarations []*proto.WorkflowDefinitionSpec
 }
 
 type providerMetadata struct {
@@ -159,40 +160,41 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
 	// raw config value.
-	EncryptionKey         []byte
-	BaseURL               string
-	RuntimeRelayBaseURL   string
-	SecretManager         core.SecretManager
-	Services              *coredata.Services
-	SelectedIndexedDBName string
-	IndexedDBs            map[string]indexeddb.IndexedDB
-	IndexedDBDefs         map[string]*config.ProviderEntry
-	IndexedDBFactory      IndexedDBFactory
-	Caches                map[string]corecache.Cache
-	CacheDefs             map[string]*config.ProviderEntry
-	CacheFactory          CacheFactory
-	S3                    map[string]s3sdk.S3
-	Authentication        core.IdentityProvider
-	Authorization         core.AuthorizationProvider
-	WorkflowRuntime       *workflowRuntime
-	AgentRuntime          *agentRuntime
-	AgentTurnScopes       *agentturnscope.Store
-	AgentToolIDs          *agenttoolid.Codec
-	WorkflowManager       workflowmanager.Service
-	AgentManager          agentmanager.Service
-	Egress                EgressDeps
-	AppInvocation         invocation.Invoker
-	Runtime               runtimeprovider.Provider
-	RuntimeRegistry       *runtimeRegistry
-	PublicHostServices    *runtimehost.PublicHostServiceRegistry
-	HostServiceTLSCAFile  string
-	HostServiceTLSCAPEM   string
-	Telemetry             core.TelemetryProvider
-	ProviderTransport     providergateway.Transport
-	CallerTokenPublicKey  string
-	DevSupervisor         *providerdev.Supervisor
-	RemoteClients         *remote.ClientSet
-	RemoteToken           string
+	EncryptionKey           []byte
+	BaseURL                 string
+	RuntimeRelayBaseURL     string
+	SecretManager           core.SecretManager
+	Services                *coredata.Services
+	SelectedIndexedDBName   string
+	IndexedDBs              map[string]indexeddb.IndexedDB
+	IndexedDBDefs           map[string]*config.ProviderEntry
+	IndexedDBFactory        IndexedDBFactory
+	Caches                  map[string]corecache.Cache
+	CacheDefs               map[string]*config.ProviderEntry
+	CacheFactory            CacheFactory
+	S3                      map[string]s3sdk.S3
+	Authentication          core.IdentityProvider
+	Authorization           core.AuthorizationProvider
+	WorkflowRuntime         *workflowRuntime
+	AgentRuntime            *agentRuntime
+	AgentTurnScopes         *agentturnscope.Store
+	AgentToolIDs            *agenttoolid.Codec
+	WorkflowManager         workflowmanager.Service
+	AgentManager            agentmanager.Service
+	AppWorkflowDeclarations *appWorkflowDeclarations
+	Egress                  EgressDeps
+	AppInvocation           invocation.Invoker
+	Runtime                 runtimeprovider.Provider
+	RuntimeRegistry         *runtimeRegistry
+	PublicHostServices      *runtimehost.PublicHostServiceRegistry
+	HostServiceTLSCAFile    string
+	HostServiceTLSCAPEM     string
+	Telemetry               core.TelemetryProvider
+	ProviderTransport       providergateway.Transport
+	CallerTokenPublicKey    string
+	DevSupervisor           *providerdev.Supervisor
+	RemoteClients           *remote.ClientSet
+	RemoteToken             string
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -909,6 +911,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.WorkflowManager = workflowManager
 	deps.AgentManager = agentManager
 	deps.PublicHostServices = publicHostServices
+	deps.AppWorkflowDeclarations = newAppWorkflowDeclarations()
 	if factories != nil {
 		deps.DevSupervisor = factories.DevSupervisor
 	}
@@ -1357,12 +1360,17 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		if err := reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
-			return err
-		}
-		return nil
+		return reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Deps.AppWorkflowDeclarations, includeProvider)
 	}
+	defaultWorkflowProvider, _, defaultProviderErr := cfg.EffectiveWorkflowProvider("")
 	var deferredWorkflowConfigReconcileTasks []workflowConfigReconcileTask
+	if defaultProviderErr == nil && strings.TrimSpace(defaultWorkflowProvider) != "" {
+		deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, deferredAppWorkflowReconcileTask(deferred, prepared.Deps.WorkflowRuntime, defaultWorkflowProvider, reconcileWorkflowConfig))
+	} else if defaultProviderErr != nil {
+		slog.Warn("skipping deferred app workflow declaration reconcile: default workflow provider unavailable", "error", defaultProviderErr)
+	} else {
+		slog.Warn("skipping deferred app workflow declaration reconcile: no default workflow provider configured")
+	}
 	runtimePlacedWorkflowProviders := runtimePlacedWorkflowProviderNames(cfg)
 	if len(runtimePlacedWorkflowProviders) > 0 {
 		localWorkflowProviders := func(providerName string) bool {
@@ -1372,7 +1380,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		if err := reconcileWorkflowConfig(ctx, localWorkflowProviders); err != nil {
 			return nil, err
 		}
-		deferredWorkflowConfigReconcileTasks = runtimeWorkflowConfigReconcileTasks(prepared.Deps.WorkflowRuntime, runtimePlacedWorkflowProviders, reconcileWorkflowConfig)
+		deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, runtimeWorkflowConfigReconcileTasks(prepared.Deps.WorkflowRuntime, runtimePlacedWorkflowProviders, reconcileWorkflowConfig)...)
 	} else if err := reconcileWorkflowConfig(ctx, nil); err != nil {
 		return nil, err
 	}
