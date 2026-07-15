@@ -69,9 +69,6 @@ persistence:
     - ReadWriteOnce
   size: 1Gi
 
-# Deployment rollout strategy. Use Recreate when persistence is enabled so a
-# single-replica pod can remount ReadWriteOnce volumes. Use RollingUpdate for
-# external datastores without PVCs to avoid gateway gaps during upgrades.
 updateStrategy:
   type: Recreate
   rollingUpdate:
