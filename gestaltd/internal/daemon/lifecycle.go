@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -81,6 +82,10 @@ func formatLifecycleProgressComplete(event operator.LifecycleProgressEvent) stri
 		return "Lockfile not required"
 	case event.Status == operator.LifecycleProgressNoop:
 		return "No artifact changes needed"
+	case event.Operation == operator.LifecycleOperationLock && event.Phase == operator.LifecyclePhaseLock && event.Reason == "written":
+		return fmt.Sprintf("Lockfile written to %s", event.Path)
+	case event.Operation == operator.LifecycleOperationLock && event.Phase == operator.LifecyclePhaseLock && event.Reason == "current":
+		return fmt.Sprintf("Lockfile is up to date: %s", event.Path)
 	case event.Operation == operator.LifecycleOperationLock && event.Phase == operator.LifecyclePhaseLock:
 		return "Lockfile ready"
 	case event.Operation == operator.LifecycleOperationSync && event.Phase == operator.LifecyclePhaseComplete:

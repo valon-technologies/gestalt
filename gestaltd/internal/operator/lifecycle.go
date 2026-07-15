@@ -278,6 +278,8 @@ func (l *Lifecycle) lockAtPaths(configPaths []string, lockfilePath, artifactsDir
 			Phase:     LifecyclePhaseLock,
 			Status:    LifecycleProgressCompleted,
 			Subject:   "lockfile",
+			Reason:    "written",
+			Path:      paths.lockfilePath,
 		})
 	}
 	return normalizeLockfile(lock), nil
@@ -315,7 +317,7 @@ func (l *Lifecycle) CheckLockAtPaths(configPaths []string, lockfilePath, artifac
 		}
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
-	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationLock, Phase: LifecyclePhaseLock, Status: LifecycleProgressCompleted, Subject: "lockfile"})
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationLock, Phase: LifecyclePhaseLock, Status: LifecycleProgressCompleted, Subject: "lockfile", Reason: "current", Path: paths.lockfilePath})
 	return nil
 }
 
