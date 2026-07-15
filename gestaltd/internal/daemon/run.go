@@ -42,14 +42,26 @@ func Run(opts Options) error {
 }
 
 func run(args []string, version string) error {
+	cliRunMu.Lock()
+	defer cliRunMu.Unlock()
+	flags, args, err := parseGlobalCLIOutputFlags(args)
+	if err != nil {
+		return err
+	}
+	reporter := NewTerminalReporter(os.Stderr, CLIOutputPolicy{
+		CLIOutputFlags: flags,
+		Interactive:    stderrInteractive(),
+	})
+	installCLIReporter(reporter)
+	defer reporter.Clear()
 	if len(args) > 0 {
 		switch args[0] {
+		case "version", "--version", "-v", "-V":
+			_, err := fmt.Fprintln(os.Stdout, version)
+			return err
 		case "-h", "--help", "help":
 			printMainUsage(os.Stderr)
 			return flag.ErrHelp
-		case "version", "--version", "-v":
-			fmt.Println(version)
-			return nil
 		case "provider":
 			return runProvider(args[1:])
 		case "app":
@@ -297,7 +309,9 @@ func runSync(args []string) error {
 		return err
 	}
 
-	verbose := *verboseLong || *verboseShort
+	outputFlags := currentCLIOutputFlags()
+	verbose := outputFlags.Verbose || *verboseLong || *verboseShort
+	quiet := outputFlags.Quiet
 	observabilityRequested := verbose || *outputFormat == syncOutputFormatJSON
 	var metrics *operator.SyncMetricsRecorder
 	observability := operator.SyncObservability{}
@@ -306,7 +320,7 @@ func runSync(args []string) error {
 		observability.Recorder = metrics
 	}
 	observability.BuildOutput = providerpkg.CommandOutput{Stdout: io.Discard, Stderr: io.Discard}
-	if *outputFormat == syncOutputFormatJSON || verbose {
+	if !quiet && (*outputFormat == syncOutputFormatJSON || verbose) {
 		observability.BuildOutput = providerpkg.CommandOutput{Stdout: os.Stderr, Stderr: os.Stderr}
 	}
 	opts := operator.SyncOptions{
@@ -323,7 +337,7 @@ func runSync(args []string) error {
 	switch {
 	case *outputFormat == syncOutputFormatJSON:
 		return writeSyncJSON(os.Stdout, metrics.Snapshot())
-	case verbose:
+	case *outputFormat != syncOutputFormatJSON && verbose && !quiet:
 		return writeSyncText(os.Stderr, metrics.Snapshot(), true)
 	default:
 		return nil
@@ -457,7 +471,7 @@ func maskEmpty(s string) string {
 
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
+	writeUsageLine(w, "  gestaltd [--verbose] [--quiet] [--no-progress] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync [--locked] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "  gestaltd serve [PATH]... [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--no-sync] [--port PORT] [--remote URL] [--remote-token TOKEN]")
@@ -477,6 +491,10 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  version     Print the version and exit")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
+	writeUsageLine(w, "  -v, -V, --version  Print the root version and exit")
+	writeUsageLine(w, "  --verbose         Include detailed human status where supported")
+	writeUsageLine(w, "  --quiet           Suppress normal human status; warnings and errors remain visible")
+	writeUsageLine(w, "  --no-progress     Disable animated activity indicators")
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory for sync/serve; relative paths use the current working directory")
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json in the current working directory")
@@ -554,4 +572,9 @@ func printValidateUsage(w io.Writer) {
 
 func writeUsageLine(w io.Writer, line string) {
 	_, _ = fmt.Fprintln(w, line)
+}
+
+func stderrInteractive() bool {
+	info, err := os.Stderr.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
