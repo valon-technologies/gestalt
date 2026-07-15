@@ -11,8 +11,15 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  {{- $updateStrategy := .Values.updateStrategy | default dict }}
+  {{- $strategyType := default "Recreate" $updateStrategy.type }}
   strategy:
-    type: Recreate
+    type: {{ $strategyType }}
+    {{- if eq $strategyType "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ default 0 $updateStrategy.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ default 1 $updateStrategy.rollingUpdate.maxSurge }}
+    {{- end }}
   selector:
     matchLabels:
       {{- include "gestaltd.selectorLabels" . | nindent 6 }}
