@@ -19,6 +19,7 @@ type ResolvedCommand struct {
 	Env          map[string]string
 	Inputs       []string
 	ReadyTimeout time.Duration
+	FrontendOnly bool
 }
 
 type ResolvedSourceBuild struct {
@@ -80,6 +81,7 @@ func resolvePhaseCommands(label string, phases []providermanifestv1.SourcePhaseC
 			Env:          maps.Clone(phase.Env),
 			Inputs:       append([]string(nil), phase.Inputs...),
 			ReadyTimeout: readyTimeout,
+			FrontendOnly: phase.FrontendOnly,
 		})
 	}
 	return out, nil

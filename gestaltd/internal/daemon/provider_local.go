@@ -139,8 +139,9 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	}
 	session.PublicURL = providerLocalPublicURL(env.Config)
 	session.AdminURL = strings.TrimRight(session.PublicURL, "/") + "/admin/"
-	logProviderLocalSummary("local provider ready", session)
-	return runServer(env)
+	return runServerWithReady(env, func() {
+		logProviderLocalSummary("local provider ready", session)
+	})
 }
 
 func buildProviderLocalTargetOverlay(sessionDir string, index int, opts providerLocalCommandOptions, path string, port int, configPathsSoFar []string) (*providerLocalTargetOverlay, error) {

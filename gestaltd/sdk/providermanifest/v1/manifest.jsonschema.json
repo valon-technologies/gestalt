@@ -184,6 +184,9 @@
                   "readyTimeout": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "frontendOnly": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -218,6 +221,9 @@
             "readyTimeout": {
               "type": "string",
               "minLength": 1
+            },
+            "frontendOnly": {
+              "type": "boolean"
             }
           }
         }

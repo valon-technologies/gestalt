@@ -345,12 +345,14 @@ func (i SourceInstall) MarshalYAML() (any, error) {
 
 // SourceRun declares how a local-source provider is executed from source.
 // gestaltd execs Command directly (no shell) with the GESTALT_PROVIDER_SOCKET
-// contract env vars set.
+// contract env vars set. FrontendOnly may be set only on a single-command run
+// declaration when the command never serves GESTALT_PROVIDER_SOCKET.
 type SourceRun struct {
 	Command      []string          `json:"command" yaml:"command"`
 	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+	FrontendOnly bool              `json:"frontendOnly,omitempty" yaml:"frontendOnly,omitempty"`
 
 	Commands []SourcePhaseCommand `json:"-" yaml:"-"`
 	WireForm phaseWireForm        `json:"-" yaml:"-"`
@@ -363,6 +365,9 @@ func (r *SourceRun) PhaseCommands() []SourcePhaseCommand {
 	if len(r.Commands) > 0 {
 		out := make([]SourcePhaseCommand, len(r.Commands))
 		copy(out, r.Commands)
+		if r.FrontendOnly && len(out) == 1 {
+			out[0].FrontendOnly = true
+		}
 		return out
 	}
 	if len(r.Command) == 0 {
@@ -373,12 +378,14 @@ func (r *SourceRun) PhaseCommands() []SourcePhaseCommand {
 		Workdir:      r.Workdir,
 		Env:          r.Env,
 		ReadyTimeout: r.ReadyTimeout,
+		FrontendOnly: r.FrontendOnly,
 	}}
 }
 
 func (r *SourceRun) setCommands(commands []SourcePhaseCommand, wire phaseWireForm) {
 	r.Commands = commands
 	r.WireForm = wire
+	r.FrontendOnly = len(commands) == 1 && commands[0].FrontendOnly
 	var inputs []string
 	syncLegacyPhaseFields(&r.Command, &r.Workdir, &r.Env, &inputs, &r.ReadyTimeout, commands, wire)
 }
@@ -397,11 +404,17 @@ func (r *SourceRun) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
+		if err := validateSourceRunFrontendOnlyFlag(false, commands); err != nil {
+			return err
+		}
 		r.setCommands(commands, phaseWireCommandList)
 		return nil
 	}
 	cmd, err := parsePhaseCommandFromJSON(trimmed, sourceRunWireFields, "run")
 	if err != nil {
+		return err
+	}
+	if err := validateSourceRunFrontendOnlyFlag(false, []SourcePhaseCommand{cmd}); err != nil {
 		return err
 	}
 	r.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
@@ -410,6 +423,9 @@ func (r *SourceRun) UnmarshalJSON(data []byte) error {
 
 func (r SourceRun) MarshalJSON() ([]byte, error) {
 	commands := r.PhaseCommands()
+	if err := validateSourceRunFrontendOnlyFlag(r.FrontendOnly, commands); err != nil {
+		return nil, err
+	}
 	switch r.WireForm {
 	case phaseWireCommandList:
 		return marshalPhaseCommandListJSON(commands, sourceRunWireFields)
@@ -435,11 +451,17 @@ func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
 		if err != nil {
 			return err
 		}
+		if err := validateSourceRunFrontendOnlyFlag(false, commands); err != nil {
+			return err
+		}
 		r.setCommands(commands, phaseWireCommandList)
 		return nil
 	case yaml.MappingNode:
 		cmd, err := parsePhaseCommandFromYAML(value, sourceRunWireFields, "run")
 		if err != nil {
+			return err
+		}
+		if err := validateSourceRunFrontendOnlyFlag(false, []SourcePhaseCommand{cmd}); err != nil {
 			return err
 		}
 		r.setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
@@ -449,8 +471,23 @@ func (r *SourceRun) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
+func validateSourceRunFrontendOnlyFlag(frontendOnly bool, commands []SourcePhaseCommand) error {
+	if frontendOnly && len(commands) != 1 {
+		return fmt.Errorf("run.frontendOnly requires exactly one run command")
+	}
+	for _, command := range commands {
+		if command.FrontendOnly && len(commands) != 1 {
+			return fmt.Errorf("run.frontendOnly requires exactly one run command")
+		}
+	}
+	return nil
+}
+
 func (r SourceRun) MarshalYAML() (any, error) {
 	commands := r.PhaseCommands()
+	if err := validateSourceRunFrontendOnlyFlag(r.FrontendOnly, commands); err != nil {
+		return nil, err
+	}
 	switch r.WireForm {
 	case phaseWireCommandList:
 		return marshalPhaseCommandListYAML(commands, sourceRunWireFields)
@@ -1233,6 +1270,7 @@ var sourceRunWireFields = map[string]struct{}{
 	"workdir":      {},
 	"env":          {},
 	"readyTimeout": {},
+	"frontendOnly": {},
 }
 
 var specWireFields = map[string]struct{}{

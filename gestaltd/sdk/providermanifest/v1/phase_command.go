@@ -15,6 +15,7 @@ type SourcePhaseCommand struct {
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	Inputs       []string          `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+	FrontendOnly bool              `json:"frontendOnly,omitempty" yaml:"frontendOnly,omitempty"`
 }
 
 type phaseWireForm int
@@ -32,6 +33,7 @@ type sourcePhaseCommandWire struct {
 	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	Inputs       []string          `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+	FrontendOnly bool              `json:"frontendOnly,omitempty" yaml:"frontendOnly,omitempty"`
 }
 
 func parsePhaseCommandFromJSON(data []byte, allowed map[string]struct{}, subject string) (SourcePhaseCommand, error) {
@@ -194,7 +196,7 @@ func syncLegacyPhaseFields(command *[]string, workdir *string, env *map[string]s
 func marshalPhaseCommandListJSONValue(commands []SourcePhaseCommand, allowed map[string]struct{}) []any {
 	out := make([]any, 0, len(commands))
 	for _, cmd := range commands {
-		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" {
+		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" && !cmd.FrontendOnly {
 			out = append(out, append([]string(nil), cmd.Command...))
 			continue
 		}
@@ -210,7 +212,7 @@ func marshalPhaseCommandListJSON(commands []SourcePhaseCommand, allowed map[stri
 func marshalPhaseCommandListYAML(commands []SourcePhaseCommand, allowed map[string]struct{}) ([]any, error) {
 	out := make([]any, 0, len(commands))
 	for _, cmd := range commands {
-		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" {
+		if cmd.Workdir == "" && len(cmd.Env) == 0 && len(cmd.Inputs) == 0 && cmd.ReadyTimeout == "" && !cmd.FrontendOnly {
 			out = append(out, append([]string(nil), cmd.Command...))
 			continue
 		}

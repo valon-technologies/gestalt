@@ -513,7 +513,7 @@ Source app manifests may declare three serial phases: `install`, `build`, and
 `run`. Each phase accepts:
 
 - **Argv list** — a YAML sequence of strings, for example `[npm, ci]`
-- **Object** — `{ command: [...], workdir, env, inputs, readyTimeout }`
+- **Object** — `{ command: [...], workdir, env, inputs, readyTimeout, frontendOnly }`
 - **Command list** — a sequence of argv lists and/or objects executed in order
 
 ```yaml
@@ -546,6 +546,24 @@ Legacy object-form `build.command` and single `run` argv arrays remain valid.
 | `env` | map[string]string | Extra environment variables for this step. |
 | `inputs` | string[] | Manifest-relative paths fingerprinting local source builds. No globs. |
 | `readyTimeout` | string | (`run` only) How long gestaltd waits for a dev server to bind `GESTALT_DEV_PORT`. |
+| `frontendOnly` | boolean | (`run` only) Explicitly declares that this single run command never serves `GESTALT_PROVIDER_SOCKET`; it may skip backend socket readiness. |
+
+`frontendOnly: true` is valid only when `run` has exactly one command. The
+frontend must bind the supplied `GESTALT_DEV_PORT` exactly and honor
+`GESTALT_DEV_BASE_PATH`; framework-selected port fallback is unsupported. The
+frontend is mounted behind gestaltd, so it should use the public mounted URL
+and must not advertise its own internal click target. Omit `frontendOnly` for
+any app that may start a backend provider: gestaltd waits through the full
+configured `readyTimeout` so a slow backend is not misclassified.
+
+For a static frontend with no provider process, declare the capability on its
+single run command:
+
+```yaml
+run:
+  - command: [npm, run, dev]
+    frontendOnly: true
+```
 
 ### Static Assets
 

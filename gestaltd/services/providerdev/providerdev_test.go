@@ -1,8 +1,9 @@
 package providerdev_test
 
 import (
+	"bytes"
 	"context"
-	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -77,6 +79,69 @@ func TestSupervisorNotReadyReturns503(t *testing.T) {
 	}
 	if got := rec.header.Get("Retry-After"); got != "1" {
 		t.Fatalf("Retry-After = %q, want 1", got)
+	}
+}
+
+func TestSupervisorSuppressesChildOutputAtInfoAndStreamsAtDebug(t *testing.T) {
+	t.Parallel()
+	fakeServerBin := buildFakeDevServer(t)
+
+	for _, level := range []slog.Level{slog.LevelInfo, slog.LevelDebug} {
+		level := level
+		t.Run(level.String(), func(t *testing.T) {
+			var logs safeLogBuffer
+			logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: level}))
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			sup, err := providerdev.Start(ctx, logger, []providerdev.Target{{
+				Name:         "demo",
+				BasePath:     "/demo",
+				Workdir:      t.TempDir(),
+				Command:      []string{"sh", "-c", "echo child-routine; exec \"$GESTALT_TEST_FAKE\""},
+				Env:          map[string]string{"GESTALT_TEST_FAKE": fakeServerBin},
+				ReadyTimeout: 10 * time.Second,
+			}})
+			if err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			t.Cleanup(sup.Stop)
+
+			waitForHandlerReady(t, sup.Handlers()["demo"], "/demo/")
+			if level == slog.LevelInfo && strings.Contains(logs.String(), "child-routine") {
+				t.Fatalf("normal logs exposed child output: %s", logs.String())
+			}
+			if level == slog.LevelDebug && !strings.Contains(logs.String(), "child-routine") {
+				t.Fatalf("debug logs omitted child output: %s", logs.String())
+			}
+		})
+	}
+}
+
+func TestSupervisorIncludesBoundedChildTailOnFailure(t *testing.T) {
+	t.Parallel()
+
+	var logs safeLogBuffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	sup, err := providerdev.Start(ctx, logger, []providerdev.Target{{
+		Name:         "broken",
+		Workdir:      t.TempDir(),
+		Command:      []string{"sh", "-c", "echo startup-failed; echo bind-failed >&2; exit 1"},
+		ReadyTimeout: 10 * time.Second,
+	}})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(sup.Stop)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(logs.String(), "startup-failed") {
+		time.Sleep(25 * time.Millisecond)
+	}
+	got := logs.String()
+	if !strings.Contains(got, "output_tail") || !strings.Contains(got, "startup-failed") || !strings.Contains(got, "bind-failed") {
+		t.Fatalf("failure logs = %s, want bounded child tail", got)
 	}
 }
 
@@ -198,7 +263,7 @@ func TestSupervisorAppRunClassification(t *testing.T) {
 	}
 }
 
-func TestSupervisorFrontendOnlyAppClassification(t *testing.T) {
+func TestSupervisorFrontendOnlyApp(t *testing.T) {
 	t.Parallel()
 	workdir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -229,24 +294,13 @@ func TestSupervisorFrontendOnlyAppClassification(t *testing.T) {
 			Workdir:      workdir,
 			Command:      []string{buildFakeDevServer(t)},
 			ReadyTimeout: 10 * time.Second,
+			FrontendOnly: true,
 		}},
 	})
 	if err != nil {
 		t.Fatalf("StartApp: %v", err)
 	}
 
-	dialCtx, dialCancel := context.WithTimeout(ctx, 2*time.Second)
-	defer dialCancel()
-	_, dialErr := runtimehost.DialExternalProviderSocket(dialCtx, handle.SocketPath(), runtimehost.ProcessConfig{
-		ProviderName: "frontend-only",
-		Telemetry:    telemetry,
-	})
-	if !errors.Is(dialErr, runtimehost.ErrProviderSocketNotServed) {
-		t.Fatalf("dial error = %v, want ErrProviderSocketNotServed", dialErr)
-	}
-	if !errors.Is(providerdev.ClassifyFrontendOnlyDevApp(ctx, dialErr, handle), providerdev.ErrFrontendOnlyDevApp) {
-		t.Fatalf("expected frontend-only classification")
-	}
 	waitForHandlerStatus(t, handle.FrontendHandler(), "/solo/", http.StatusOK)
 }
 
@@ -341,6 +395,23 @@ type responseRecorder struct {
 	header http.Header
 	status int
 	body   strings.Builder
+}
+
+type safeLogBuffer struct {
+	mu sync.Mutex
+	bytes.Buffer
+}
+
+func (b *safeLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.Buffer.Write(p)
+}
+
+func (b *safeLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.Buffer.String()
 }
 
 func (r *responseRecorder) Header() http.Header { return r.header }

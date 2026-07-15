@@ -34,6 +34,16 @@ func httpCatalogConnectionMap(connMaps bootstrap.ConnectionMaps) map[string]stri
 }
 
 func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) error {
+	return run(ctx, cfg, result, nil)
+}
+
+// RunWithReady is like Run but invokes onReady after all configured public
+// listeners have been bound and the HTTP serving goroutines have started.
+func RunWithReady(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onReady func()) error {
+	return run(ctx, cfg, result, onReady)
+}
+
+func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onReady func()) error {
 	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
 	mcpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "mcp", result.AuditSink, invocation.WithoutRateLimit())
 
@@ -191,7 +201,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		})
 	}
 
-	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor)
+	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady)
 }
 
 type indexedDBPinger interface {
@@ -218,7 +228,7 @@ func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services ind
 	}
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor) error {
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func()) error {
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
 	}
@@ -249,6 +259,9 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 				listenErr <- namedListenFailure{name: entry.name, err: err}
 			}
 		}()
+	}
+	if readyCallback != nil {
+		readyCallback()
 	}
 
 	defer func() {

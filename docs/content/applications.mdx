@@ -1057,9 +1057,9 @@ When the app manifest declares `run:` commands and config sets
 1. **Full-stack dev** — a `run` command opens the provider socket on
    `GESTALT_PROVIDER_SOCKET` and (optionally) another `run` command binds a
    frontend dev server to `GESTALT_DEV_PORT`.
-2. **Frontend-only dev** — only the frontend binds `GESTALT_DEV_PORT`; gestaltd
-   serves API routes from pinned artifacts or skips backend registration after a
-   short readiness grace period.
+2. **Frontend-only dev** — a single `run` command is marked
+   `frontendOnly: true`, never serves `GESTALT_PROVIDER_SOCKET`, and only the
+   frontend binds `GESTALT_DEV_PORT`.
 
 gestaltd appends these environment variables to each `run` command (manifest
 `env` entries are applied first):
@@ -1075,6 +1075,11 @@ gestaltd appends these environment variables to each `run` command (manifest
 The dev supervisor probes frontend readiness on `GESTALT_DEV_PORT`, restarts
 crashed commands with exponential backoff, and allows one dev binder per app
 name.
+
+The frontend-only declaration is intentionally explicit: it is the only way a
+frontend-ready app skips backend socket waiting. The frontend must bind the
+provided port exactly, honor `GESTALT_DEV_BASE_PATH`, and rely on gestaltd's
+public mounted URL rather than advertising its internal dev-server URL.
 
 ### Package script recipe
 

@@ -185,6 +185,13 @@ gestaltd injects (after manifest `env` entries):
 | `GESTALT_BASE_URL` | Public gestaltd origin for two-origin Vite `/api/v1` proxying |
 | `GESTALT_PROVIDER_SOCKET` | Unix socket for the app provider when a backend `run` command is present |
 
+Mark a single frontend-only run command with `frontendOnly: true` only when it
+never serves `GESTALT_PROVIDER_SOCKET`. The frontend must bind the supplied
+`GESTALT_DEV_PORT` exactly, honor `GESTALT_DEV_BASE_PATH`, and use gestaltd's
+public mounted URL; automatic port fallback or an internal dev-server click
+target is not supported. Apps without this declaration retain the full
+configured backend socket readiness timeout.
+
 Map these in your framework dev script. See
 [Applications > Local Development](/applications#local-development) for
 Vite, Angular, webpack-dev-server, and Parcel examples.

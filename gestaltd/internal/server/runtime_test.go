@@ -118,7 +118,7 @@ func TestServeRuntimeReadyAfterWorkflowProvidersStart(t *testing.T) {
 	serveDone := make(chan struct{})
 	go func() {
 		defer close(serveDone)
-		_ = serveRuntime(ctx, &config.Config{}, bootstrap.ConnectionMaps{}, result, nil, servers, &switchableHandler{}, workflowProvidersReady, nil)
+		_ = serveRuntime(ctx, &config.Config{}, bootstrap.ConnectionMaps{}, result, nil, servers, &switchableHandler{}, workflowProvidersReady, nil, nil)
 	}()
 
 	select {

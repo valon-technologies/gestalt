@@ -1,7 +1,6 @@
 package providerdev
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -12,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -56,6 +54,7 @@ type managedProc struct {
 	cmd       *exec.Cmd
 	done      chan struct{}
 	waitErr   error
+	output    *childOutput
 }
 
 func (t Target) procKey() string {
@@ -168,15 +167,20 @@ func (s *Supervisor) runProc(ctx context.Context, proc *managedProc) {
 			return
 		}
 		if err := proc.start(ctx, s.logger); err != nil {
-			s.logger.Warn("dev process failed to start", "provider", proc.target.Name, "error", err)
+			args := []any{"provider", proc.target.Name, "error", err}
+			args = append(args, childFailureLogArgs(proc.currentOutput())...)
+			s.logger.Warn("dev process failed to start", args...)
 		} else {
 			waitErr := proc.wait()
 			if ctx.Err() != nil {
 				return
 			}
+			args := []any{"provider", proc.target.Name}
 			if waitErr != nil {
-				s.logger.Warn("dev process exited", "provider", proc.target.Name, "error", waitErr)
+				args = append(args, "error", waitErr)
 			}
+			args = append(args, childFailureLogArgs(proc.currentOutput())...)
+			s.logger.Warn("dev process exited", args...)
 		}
 		proc.ready.Store(false)
 		timer := time.NewTimer(backoff)
@@ -247,10 +251,9 @@ func (p *managedProc) start(ctx context.Context, logger *slog.Logger) error {
 	cmd.Dir = p.target.Workdir
 	cmd.Env = devCommandEnv(port, p.target)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdout := newPrefixedLineWriter(logger, p.target.Name, "stdout")
-	stderr := newPrefixedLineWriter(logger, p.target.Name, "stderr")
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
+	output := newChildOutput(logger, "provider", p.target.Name, "provider")
+	cmd.Stdout, cmd.Stderr = output.writers()
+	p.output = output
 
 	if err := cmd.Start(); err != nil {
 		return err
@@ -283,12 +286,15 @@ func (p *managedProc) probeReadiness(ctx context.Context, logger *slog.Logger, p
 		if err == nil {
 			_ = conn.Close()
 			p.ready.Store(true)
-			logger.Info("dev process ready", "provider", p.target.Name, "port", port)
+			logger.Info("dev process ready", "provider", p.target.Name)
+			logger.Debug("dev process upstream ready", "provider", p.target.Name, "port", port)
 			return
 		}
 		if !warned && time.Now().After(deadline) {
 			warned = true
-			logger.Warn("dev process readiness timeout; continuing probe", "provider", p.target.Name, "timeout", p.target.ReadyTimeout)
+			args := []any{"provider", p.target.Name, "timeout", p.target.ReadyTimeout}
+			args = append(args, childFailureLogArgs(p.currentOutput())...)
+			logger.Warn("dev process readiness timeout; continuing probe", args...)
 		}
 		timer := time.NewTimer(devReadinessProbeTick)
 		select {
@@ -301,6 +307,12 @@ func (p *managedProc) probeReadiness(ctx context.Context, logger *slog.Logger, p
 		case <-timer.C:
 		}
 	}
+}
+
+func (p *managedProc) currentOutput() *childOutput {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.output
 }
 
 func (p *managedProc) wait() error {
@@ -337,6 +349,9 @@ func (p *managedProc) stop() {
 // devCommandEnv builds the child process environment. GESTALT_DEV,
 // GESTALT_DEV_PORT, and GESTALT_DEV_BASE_PATH are reserved contract
 // variables and are appended last so manifest dev.env cannot override them.
+// A dev child must bind GESTALT_DEV_PORT exactly; automatic fallback to a
+// different framework-selected port cannot be discovered generically and
+// leaves the public proxy unavailable.
 func devCommandEnv(port int, target Target) []string {
 	env := append([]string(nil), os.Environ()...)
 	for key, value := range target.Env {
@@ -361,31 +376,4 @@ func reserveLocalPort() (int, error) {
 		return 0, fmt.Errorf("reserve local dev port: unexpected listener address type")
 	}
 	return addr.Port, nil
-}
-
-type prefixedLineWriter struct {
-	logger   *slog.Logger
-	provider string
-	stream   string
-	buf      []byte
-}
-
-func newPrefixedLineWriter(logger *slog.Logger, provider, stream string) *prefixedLineWriter {
-	return &prefixedLineWriter{logger: logger, provider: provider, stream: stream}
-}
-
-func (w *prefixedLineWriter) Write(p []byte) (int, error) {
-	w.buf = append(w.buf, p...)
-	for {
-		idx := bytes.IndexByte(w.buf, '\n')
-		if idx < 0 {
-			break
-		}
-		line := strings.TrimRight(string(w.buf[:idx]), "\r")
-		w.buf = w.buf[idx+1:]
-		if line != "" {
-			w.logger.Info(line, "provider", w.provider, "stream", w.stream)
-		}
-	}
-	return len(p), nil
 }

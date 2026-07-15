@@ -20,10 +20,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
-
-const frontendOnlyGrace = 5 * time.Second
 
 var ErrFrontendOnlyDevApp = errors.New("frontend-only dev app")
 
@@ -32,6 +29,7 @@ type AppCommand struct {
 	Command      []string
 	Env          map[string]string
 	ReadyTimeout time.Duration
+	FrontendOnly bool
 }
 
 type AppTarget struct {
@@ -67,6 +65,7 @@ type appManaged struct {
 	target AppTarget
 	port   int
 	cancel context.CancelFunc
+	logger *slog.Logger
 
 	frontendReady     chan struct{}
 	frontendReadyOnce sync.Once
@@ -87,6 +86,7 @@ type appCommandProc struct {
 	cmd     *exec.Cmd
 	done    chan struct{}
 	waitErr error
+	output  *childOutput
 }
 
 func AppTargetForEntry(name string, entry *config.ProviderEntry) (AppTarget, error) {
@@ -119,6 +119,7 @@ func AppTargetForEntry(name string, entry *config.ProviderEntry) (AppTarget, err
 			Command:      append([]string(nil), command.Command...),
 			Env:          command.Env,
 			ReadyTimeout: readyTimeout,
+			FrontendOnly: command.FrontendOnly,
 		})
 	}
 	return AppTarget{
@@ -156,6 +157,7 @@ func (s *Supervisor) StartApp(ctx context.Context, target AppTarget) (*AppHandle
 		target:        target,
 		port:          port,
 		cancel:        appCancel,
+		logger:        s.logger,
 		frontendReady: make(chan struct{}),
 		allExited:     make(chan struct{}),
 	}
@@ -211,15 +213,22 @@ func (s *Supervisor) runAppCommand(ctx context.Context, proc *appCommandProc, co
 		}
 		if err := proc.start(ctx, command); err != nil {
 			if s.logger != nil {
-				s.logger.Warn("dev app command failed to start", "app", proc.parent.target.Name, "command", proc.index, "error", err)
+				args := []any{"app", proc.parent.target.Name, "command", proc.index, "error", err}
+				args = append(args, childFailureLogArgs(proc.currentOutput())...)
+				s.logger.Warn("dev app command failed to start", args...)
 			}
 		} else {
 			waitErr := proc.wait()
 			if ctx.Err() != nil {
 				return
 			}
-			if waitErr != nil && s.logger != nil {
-				s.logger.Warn("dev app command exited", "app", proc.parent.target.Name, "command", proc.index, "error", waitErr)
+			if s.logger != nil {
+				args := []any{"app", proc.parent.target.Name, "command", proc.index}
+				if waitErr != nil {
+					args = append(args, "error", waitErr)
+				}
+				args = append(args, childFailureLogArgs(proc.currentOutput())...)
+				s.logger.Warn("dev app command exited", args...)
 			}
 		}
 		timer := time.NewTimer(backoff)
@@ -253,8 +262,9 @@ func (p *appCommandProc) start(ctx context.Context, command AppCommand) error {
 	cmd.Dir = command.Workdir
 	cmd.Env = devAppCommandEnv(p.parent.port, p.parent.target, command.Env)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	output := newChildOutput(p.parent.logger, "app", p.parent.target.Name, strconv.Itoa(p.index))
+	cmd.Stdout, cmd.Stderr = output.writers()
+	p.output = output
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -325,7 +335,8 @@ func (a *appManaged) probeFrontendReadiness(ctx context.Context, logger *slog.Lo
 			a.ready.Store(true)
 			a.frontendReadyOnce.Do(func() { close(a.frontendReady) })
 			if logger != nil && !loggedReady {
-				logger.Info("dev app frontend ready", "app", a.target.Name, "port", a.port)
+				logger.Info("dev app frontend ready", "app", a.target.Name)
+				logger.Debug("dev app frontend upstream ready", "app", a.target.Name, "port", a.port)
 				loggedReady = true
 			}
 		} else {
@@ -335,7 +346,15 @@ func (a *appManaged) probeFrontendReadiness(ctx context.Context, logger *slog.Lo
 		if !warned && time.Now().After(deadline) {
 			warned = true
 			if logger != nil {
-				logger.Warn("dev app frontend readiness timeout; continuing probe", "app", a.target.Name)
+				args := []any{"app", a.target.Name}
+				for i, proc := range a.commandProcs() {
+					if output := proc.currentOutput(); output != nil {
+						if tail := output.tail(); tail != "" {
+							args = append(args, fmt.Sprintf("command_%d_output_tail", i), "\n"+tail)
+						}
+					}
+				}
+				logger.Warn("dev app frontend readiness timeout; continuing probe", args...)
 			}
 		}
 		timer := time.NewTimer(devReadinessProbeTick)
@@ -346,6 +365,18 @@ func (a *appManaged) probeFrontendReadiness(ctx context.Context, logger *slog.Lo
 		case <-timer.C:
 		}
 	}
+}
+
+func (a *appManaged) commandProcs() []*appCommandProc {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]*appCommandProc(nil), a.procs...)
+}
+
+func (p *appCommandProc) currentOutput() *childOutput {
+	p.parent.mu.Lock()
+	defer p.parent.mu.Unlock()
+	return p.output
 }
 
 func maxReadyTimeout(commands []AppCommand) time.Duration {
@@ -409,35 +440,4 @@ func devAppCommandEnv(port int, target AppTarget, manifestEnv map[string]string)
 		env = append(env, "GESTALT_PROVIDER_SOCKET="+socket)
 	}
 	return env
-}
-
-// ClassifyFrontendOnlyDevApp returns ErrFrontendOnlyDevApp when the socket dial
-// timed out but the frontend port became ready.
-func ClassifyFrontendOnlyDevApp(ctx context.Context, dialErr error, handle *AppHandle) error {
-	if dialErr == nil {
-		return nil
-	}
-	if !errors.Is(dialErr, runtimehost.ErrProviderSocketNotServed) {
-		return dialErr
-	}
-	if handle == nil {
-		return dialErr
-	}
-	select {
-	case <-handle.AllExited():
-		return fmt.Errorf("dev app %q exited before classification", handle.name)
-	case <-handle.FrontendReady():
-		timer := time.NewTimer(frontendOnlyGrace)
-		defer timer.Stop()
-		select {
-		case <-handle.AllExited():
-			return fmt.Errorf("dev app %q exited during frontend-only grace", handle.name)
-		case <-timer.C:
-			return ErrFrontendOnlyDevApp
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	case <-ctx.Done():
-		return dialErr
-	}
 }

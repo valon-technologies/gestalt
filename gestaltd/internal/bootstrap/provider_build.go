@@ -44,6 +44,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1225,27 +1226,25 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 		prepared.Cleanup()
 	}
 	timeout := 90 * time.Second
-	if commands, err := providerpkg.SourceRunCommands(entry.ResolvedManifestPath); err == nil {
-		for _, command := range commands {
-			if command.ReadyTimeout > timeout {
-				timeout = command.ReadyTimeout
-			}
+	for _, command := range target.Commands {
+		if command.ReadyTimeout > timeout {
+			timeout = command.ReadyTimeout
 		}
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	conn, err := runtimehost.DialExternalProviderSocket(dialCtx, handle.SocketPath(), runtimehost.ProcessConfig{
-		ProviderName: name,
-		Telemetry:    deps.Telemetry,
+	conn, err := dialDevAppSocket(ctx, handle.FrontendReady(), handle.AllExited(), timeout, isFrontendOnlyDevApp(target), func(dialCtx context.Context) (*grpc.ClientConn, error) {
+		return runtimehost.DialExternalProviderSocket(dialCtx, handle.SocketPath(), runtimehost.ProcessConfig{
+			ProviderName: name,
+			Telemetry:    deps.Telemetry,
+		})
 	})
-	if classifyErr := providerdev.ClassifyFrontendOnlyDevApp(ctx, err, handle); classifyErr != nil {
+	if err != nil {
 		if conn != nil {
 			_ = conn.Close()
 		}
-		if !errors.Is(classifyErr, providerdev.ErrFrontendOnlyDevApp) {
+		if !errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
 			stopDevApp()
 		}
-		return nil, classifyErr
+		return nil, err
 	}
 	closer := closerFunc(func() error {
 		var closeErr error
@@ -1269,6 +1268,52 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 		return nil, err
 	}
 	return prov, nil
+}
+
+// dialDevAppSocket skips provider-socket dialing only for a manifest-declared
+// frontend-only app. Every other app retains its complete configured timeout,
+// even when its frontend listener becomes ready first.
+func isFrontendOnlyDevApp(target providerdev.AppTarget) bool {
+	return len(target.Commands) == 1 && target.Commands[0].FrontendOnly
+}
+
+func dialDevAppSocket(ctx context.Context, frontendReady, allExited <-chan struct{}, timeout time.Duration, frontendOnly bool, dial func(context.Context) (*grpc.ClientConn, error)) (*grpc.ClientConn, error) {
+	if frontendOnly {
+		readyCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		select {
+		case <-frontendReady:
+			return nil, providerdev.ErrFrontendOnlyDevApp
+		case <-allExited:
+			return nil, fmt.Errorf("dev app exited before frontend readiness")
+		case <-readyCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("dev app frontend did not become ready within %s: %w", timeout, context.DeadlineExceeded)
+		}
+	}
+
+	dialCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	type result struct {
+		conn *grpc.ClientConn
+		err  error
+	}
+	dialResults := make(chan result, 1)
+	go func() {
+		conn, err := dial(dialCtx)
+		dialResults <- result{conn: conn, err: err}
+	}()
+
+	select {
+	case result := <-dialResults:
+		return result.conn, result.err
+	case <-allExited:
+		return nil, fmt.Errorf("dev app exited before provider socket became ready")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 type closerFunc func() error

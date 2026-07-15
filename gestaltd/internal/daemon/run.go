@@ -229,7 +229,14 @@ func flagIntValue(flag *int) int {
 }
 
 func runServer(env *bootstrapEnv) error {
+	return runServerWithReady(env, nil)
+}
+
+func runServerWithReady(env *bootstrapEnv, onReady func()) error {
 	defer env.Close()
+	if onReady != nil {
+		return server.RunWithReady(env.Ctx, env.Config, env.Result, onReady)
+	}
 	return server.Run(env.Ctx, env.Config, env.Result)
 }
 
@@ -525,6 +532,7 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "the fleet loads pinned artifacts while PATH UIs with a manifest run: block hot-reload.")
 	writeUsageLine(w, "Without --config, PATH arguments run an isolated synthesized baseline (unlocked).")
 	writeUsageLine(w, "Local UIs with a manifest run: block are proxied to a hot-reload dev server automatically.")
+	writeUsageLine(w, "Dev app commands must bind GESTALT_DEV_PORT exactly; automatic framework port fallback is not supported.")
 	writeUsageLine(w, "For production, use --locked --no-sync to trust the committed lockfile and prebuilt")
 	writeUsageLine(w, "artifacts without materialization or staleness checks.")
 	writeUsageLine(w, "Use --locked alone when artifacts may need to be materialized at startup.")

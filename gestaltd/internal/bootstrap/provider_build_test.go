@@ -29,12 +29,91 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 )
+
+func TestDialDevAppSocketFrontendOnly(t *testing.T) {
+	t.Parallel()
+
+	dial := func(context.Context) (*grpc.ClientConn, error) {
+		t.Fatal("frontend-only app should not dial provider socket")
+		return nil, nil
+	}
+	for _, tc := range []struct {
+		name      string
+		timeout   time.Duration
+		ready     bool
+		wantErr   error
+		maxWait   time.Duration
+	}{
+		{
+			name:    "ready skips socket dial",
+			timeout: time.Hour,
+			ready:   true,
+			wantErr: providerdev.ErrFrontendOnlyDevApp,
+			maxWait: time.Second,
+		},
+		{
+			name:    "timeout without readiness",
+			timeout: 25 * time.Millisecond,
+			wantErr: context.DeadlineExceeded,
+			maxWait: time.Second,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			frontendReady := make(chan struct{})
+			if tc.ready {
+				close(frontendReady)
+			}
+			allExited := make(chan struct{})
+			started := time.Now()
+			_, err := dialDevAppSocket(context.Background(), frontendReady, allExited, tc.timeout, true, dial)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("dialDevAppSocket error = %v, want %v", err, tc.wantErr)
+			}
+			if elapsed := time.Since(started); elapsed > tc.maxWait {
+				t.Fatalf("frontend-only dial took %s, want bounded wait", elapsed)
+			}
+		})
+	}
+}
+
+func TestDialDevAppSocketWaitsForLateBackendAfterFrontendReady(t *testing.T) {
+	t.Parallel()
+
+	frontendReady := make(chan struct{})
+	close(frontendReady)
+	allExited := make(chan struct{})
+	want := &grpc.ClientConn{}
+	started := time.Now()
+	got, err := dialDevAppSocket(context.Background(), frontendReady, allExited, 6*time.Second, false, func(ctx context.Context) (*grpc.ClientConn, error) {
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			return want, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	})
+	if err != nil {
+		t.Fatalf("dialDevAppSocket error = %v, want late backend success", err)
+	}
+	if got != want {
+		t.Fatalf("connection = %p, want %p", got, want)
+	}
+	if elapsed := time.Since(started); elapsed < 5*time.Second {
+		t.Fatalf("late backend test completed in %s, want it to cross the old grace period", elapsed)
+	}
+}
 
 type providerBuildOrderingAgentProvider struct {
 	coreagent.UnimplementedProvider
