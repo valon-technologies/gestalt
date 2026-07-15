@@ -18,21 +18,21 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
-func operatorLifecycleWithCLIProgress() *operator.Lifecycle {
+func operatorLifecycleWithCLIProgress(showSourceOutput bool) *operator.Lifecycle {
 	reporter := currentCLIReporter()
 	return operatorLifecycle().
-		WithSourceCommandOutput(sourceCommandOutput(reporter)).
+		WithSourceCommandOutput(sourceCommandOutput(reporter, showSourceOutput)).
 		WithProgress(newLifecycleProgressReporter(reporter))
 }
 
 func operatorLifecycleWithCLIOutput() *operator.Lifecycle {
 	reporter := currentCLIReporter()
-	return operatorLifecycle().WithSourceCommandOutput(sourceCommandOutput(reporter))
+	return operatorLifecycle().WithSourceCommandOutput(sourceCommandOutput(reporter, false))
 }
 
-func sourceCommandOutput(reporter *TerminalReporter) providerpkg.CommandOutput {
+func sourceCommandOutput(reporter *TerminalReporter, showSuccess bool) providerpkg.CommandOutput {
 	output := reporter.ChildOutput()
-	if reporter.policy.Verbose && !reporter.policy.Quiet {
+	if (showSuccess || reporter.policy.Verbose) && !reporter.policy.Quiet {
 		return providerpkg.CommandOutput{Stdout: output, Stderr: output}
 	}
 	return providerpkg.CommandOutputCaptureOnFailure(output)
@@ -101,19 +101,19 @@ func formatLifecycleProgressComplete(event operator.LifecycleProgressEvent) stri
 func lockConfig(configFlags []string, lockfilePath, artifactsDir string, check bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	if check {
-		return operatorLifecycleWithCLIProgress().CheckLockAtPaths(configPaths, lockfilePath, artifactsDir)
+		return operatorLifecycleWithCLIProgress(false).CheckLockAtPaths(configPaths, lockfilePath, artifactsDir)
 	}
-	_, err := operatorLifecycleWithCLIProgress().LockAtPaths(configPaths, lockfilePath, artifactsDir)
+	_, err := operatorLifecycleWithCLIProgress(false).LockAtPaths(configPaths, lockfilePath, artifactsDir)
 	return err
 }
 
 func syncConfig(configFlags []string, lockfilePath, artifactsDir string, check bool) error {
-	return syncConfigOptions(configFlags, lockfilePath, artifactsDir, check, operator.SyncOptions{Parallelism: 1})
+	return syncConfigOptions(configFlags, lockfilePath, artifactsDir, check, operator.SyncOptions{Parallelism: 1}, false)
 }
 
-func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, check bool, opts operator.SyncOptions) error {
+func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, check bool, opts operator.SyncOptions, showSourceOutput bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
-	lc := operatorLifecycleWithCLIProgress()
+	lc := operatorLifecycleWithCLIProgress(showSourceOutput)
 	if check {
 		return lc.CheckSyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 	}
@@ -121,7 +121,7 @@ func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, 
 }
 
 func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*config.Config, error) {
-	lc := operatorLifecycleWithCLIProgress().WithDevServeEligible(!locked)
+	lc := operatorLifecycleWithCLIProgress(false).WithDevServeEligible(!locked)
 	if len(forcedDevAppKeys) > 0 {
 		lc = lc.WithForcedDevAppKeys(forcedDevAppKeys)
 	}

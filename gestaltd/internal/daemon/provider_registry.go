@@ -523,7 +523,7 @@ func runProviderUpgrade(args []string) error {
 		return nil
 	}
 	providerCommandStatus("Refreshing provider lock state...")
-	if _, err := operatorLifecycleWithCLIProgress().LockAtPaths(operator.ResolveConfigPaths(configPaths), *lockfilePath, ""); err != nil {
+	if _, err := operatorLifecycleWithCLIProgress(false).LockAtPaths(operator.ResolveConfigPaths(configPaths), *lockfilePath, ""); err != nil {
 		return err
 	}
 	providerCommandStatus("Provider lock refresh succeeded.")

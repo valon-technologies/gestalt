@@ -329,7 +329,7 @@ func runSync(args []string) error {
 		Observability: observability,
 	}
 
-	if err := syncConfigOptions(configPaths, *lockfilePath, *artifactsDir, *check, opts); err != nil {
+	if err := syncConfigOptions(configPaths, *lockfilePath, *artifactsDir, *check, opts, *outputFormat == syncOutputFormatJSON); err != nil {
 		return err
 	}
 
