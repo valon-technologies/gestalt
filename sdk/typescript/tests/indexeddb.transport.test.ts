@@ -121,7 +121,8 @@ afterAll(() => {
   }
 });
 
-describe("IndexedDB transport", () => {
+// Shared harness state and env mutation require serial execution.
+describe.serial("IndexedDB transport", () => {
   test("createObjectStore forwards declared columns", async () => {
     const envName = ENV_HOST_SERVICE_SOCKET;
     const previousTarget = process.env[envName];

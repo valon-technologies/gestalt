@@ -342,6 +342,7 @@ export interface CancelAgentProviderTurnRequest {
   reason: string;
   context?: RequestContext;
   providerName: string;
+  sessionId: string;
 }
 
 export interface CreateAgentProviderSessionRequest {
@@ -400,6 +401,7 @@ export interface GetAgentProviderTurnRequest {
   turnId: string;
   context?: RequestContext;
   providerName: string;
+  sessionId: string;
 }
 
 export interface ListAgentProviderInteractionsRequest {
@@ -439,6 +441,7 @@ export interface ListAgentProviderTurnEventsRequest {
   limit: number;
   context?: RequestContext;
   providerName: string;
+  sessionId: string;
 }
 
 export interface ListAgentProviderTurnEventsResponse {
@@ -803,6 +806,7 @@ export class Agent {
     const request = {
       turnId,
       providerName: options?.providerName ?? "",
+      sessionId: "",
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<GetAgentProviderTurnRequest>;
     const response = await callUnary(() =>
@@ -899,6 +903,7 @@ export class Agent {
       turnId,
       reason: options?.reason ?? "",
       providerName: options?.providerName ?? "",
+      sessionId: "",
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<CancelAgentProviderTurnRequest>;
     const response = await callUnary(() =>
@@ -945,6 +950,7 @@ export class Agent {
       afterSeq: options?.afterSeq ?? 0n,
       limit: options?.limit ?? 0,
       providerName: options?.providerName ?? "",
+      sessionId: "",
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<ListAgentProviderTurnEventsRequest>;
     const response = fromWireListAgentProviderTurnEventsResponse(

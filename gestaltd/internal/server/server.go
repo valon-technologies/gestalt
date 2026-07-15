@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -136,6 +137,8 @@ type Server struct {
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[uint64]http.Handler
 	publicGRPCHandler      http.Handler
+	publicRESTHandler      http.Handler
+	publicGatewayConn      *publicrpc.InProcessConn
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3sdk.S3
 	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
@@ -417,16 +420,26 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Workflow != nil {
 		s.workflowProviderName = strings.TrimSpace(cfg.Workflow.DefaultProviderName())
 	}
-	s.publicGRPCHandler = buildPublicGRPCHandler(publicGRPCConfig{
-		Transport:           cfg.PublicGatewayTransport,
-		Invoker:             cfg.Invoker,
-		AgentManager:        cfg.AgentManager,
-		WorkflowManager:     s.workflowSchedules,
-		Authentication:      cfg.Auth,
-		Authorization:       cfg.Authorization,
-		IndexedDB:           cfg.IndexedDB,
-		ExternalCredentials: externalCredentials,
-	})
+	if cfg.RouteProfile != RouteProfileManagement {
+		conn, restHandler, err := buildPublicGateway(publicGRPCConfig{
+			Transport:           cfg.PublicGatewayTransport,
+			Invoker:             cfg.Invoker,
+			AgentManager:        cfg.AgentManager,
+			WorkflowManager:     s.workflowSchedules,
+			Authentication:      cfg.Auth,
+			Authorization:       cfg.Authorization,
+			IndexedDB:           cfg.IndexedDB,
+			ExternalCredentials: externalCredentials,
+		})
+		if err != nil {
+			return nil, err
+		}
+		s.publicGatewayConn = conn
+		if conn != nil && conn.Server != nil {
+			s.publicGRPCHandler = http.HandlerFunc(conn.Server.ServeHTTP)
+		}
+		s.publicRESTHandler = restHandler
+	}
 	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}
@@ -437,6 +450,15 @@ func New(cfg Config) (*Server, error) {
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
+}
+
+// Close releases in-process public gateway resources.
+func (s *Server) Close() {
+	if s == nil || s.publicGatewayConn == nil {
+		return
+	}
+	s.publicGatewayConn.Close()
+	s.publicGatewayConn = nil
 }
 
 func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {

@@ -494,6 +494,8 @@ pub struct CancelAgentProviderTurnRequest {
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
     pub provider_name: String,
+    /// The `session_id` field.
+    pub session_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.CreateAgentProviderSessionRequest`.
@@ -592,6 +594,8 @@ pub struct GetAgentProviderTurnRequest {
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
     pub provider_name: String,
+    /// The `session_id` field.
+    pub session_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderInteractionsRequest`.
@@ -655,6 +659,8 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub context: Option<RequestContext>,
     /// The `provider_name` field.
     pub provider_name: String,
+    /// The `session_id` field.
+    pub session_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ListAgentProviderTurnEventsResponse`.
@@ -1041,6 +1047,7 @@ impl Agent {
             turn_id,
             provider_name: options.provider_name,
             context: self.context.clone(),
+            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_get_agent_provider_turn_request(request));
@@ -1126,6 +1133,7 @@ impl Agent {
             reason: options.reason,
             provider_name: options.provider_name,
             context: self.context.clone(),
+            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_cancel_agent_provider_turn_request(request));
@@ -1166,6 +1174,7 @@ impl Agent {
             limit: options.limit,
             provider_name: options.provider_name,
             context: self.context.clone(),
+            ..Default::default()
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_list_agent_provider_turn_events_request(request));

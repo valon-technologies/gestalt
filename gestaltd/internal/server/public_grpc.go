@@ -23,6 +23,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
+
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type publicGRPCConfig struct {
@@ -36,46 +38,47 @@ type publicGRPCConfig struct {
 	ExternalCredentials core.ExternalCredentialProvider
 }
 
-func buildPublicGRPCHandler(cfg publicGRPCConfig) http.Handler {
-	if cfg.Transport == nil || cfg.Invoker == nil {
-		return nil
-	}
-	srv := grpc.NewServer(grpc.UnaryInterceptor(publicPrepareUnaryInterceptor(cfg.Transport)))
-	publicrpc.RegisterPublicAppServer(srv, appaccessservice.NewServer(
+func appAccessServer(cfg publicGRPCConfig) proto.AppServer {
+	return appaccessservice.NewServer(
 		cfg.Invoker,
 		appaccessservice.WithAgentAppInvocationAuthorizer(cfg.AgentManager),
-	))
-	if cfg.AgentManager != nil {
-		publicrpc.RegisterPublicAgentServer(srv, agentservice.NewProviderServer(
-			"gestaltd",
-			cfg.AgentManager,
-		))
-	}
-	if cfg.WorkflowManager != nil {
-		publicrpc.RegisterPublicWorkflowServer(srv, workflowservice.NewProviderServer(
-			"gestaltd",
-			cfg.WorkflowManager,
-			cfg.Authorization,
-			workflowservice.WithAgentWorkflowInvocationAuthorizer(cfg.AgentManager),
-		))
-	}
-	if cfg.IndexedDB != nil {
-		publicrpc.RegisterPublicIndexedDBServer(srv, indexeddbservice.NewServer(
-			cfg.IndexedDB,
-			"gestaltd",
-			indexeddbservice.ServerOptions{},
-		))
-	}
-	if cfg.Authentication != nil {
-		publicrpc.RegisterPublicIdentityServer(srv, identityservice.NewProviderServer(cfg.Authentication))
-	}
-	if cfg.Authorization != nil {
-		publicrpc.RegisterPublicAuthorizationServer(srv, authorizationservice.NewProviderServer(cfg.Authorization))
-	}
-	if cfg.ExternalCredentials != nil {
-		publicrpc.RegisterPublicExternalCredentialsServer(srv, externalcredentialsservice.NewProviderServer(cfg.ExternalCredentials))
-	}
-	return http.HandlerFunc(srv.ServeHTTP)
+	)
+}
+
+func agentProviderServer(cfg publicGRPCConfig) proto.AgentServer {
+	return agentservice.NewProviderServer(
+		"gestaltd",
+		cfg.AgentManager,
+	)
+}
+
+func workflowProviderServer(cfg publicGRPCConfig) proto.WorkflowServer {
+	return workflowservice.NewProviderServer(
+		"gestaltd",
+		cfg.WorkflowManager,
+		cfg.Authorization,
+		workflowservice.WithAgentWorkflowInvocationAuthorizer(cfg.AgentManager),
+	)
+}
+
+func indexedDBServer(cfg publicGRPCConfig) proto.IndexedDBServer {
+	return indexeddbservice.NewServer(
+		cfg.IndexedDB,
+		"gestaltd",
+		indexeddbservice.ServerOptions{},
+	)
+}
+
+func identityProviderServer(cfg publicGRPCConfig) proto.IdentityServer {
+	return identityservice.NewProviderServer(cfg.Authentication)
+}
+
+func authorizationProviderServer(cfg publicGRPCConfig) proto.AuthorizationServer {
+	return authorizationservice.NewProviderServer(cfg.Authorization)
+}
+
+func externalCredentialsProviderServer(cfg publicGRPCConfig) proto.ExternalCredentialsServer {
+	return externalcredentialsservice.NewProviderServer(cfg.ExternalCredentials)
 }
 
 func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTransport) grpc.UnaryServerInterceptor {

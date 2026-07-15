@@ -1,9 +1,10 @@
 import datetime
 
+from google.api import annotations_pb2 as _annotations_pb2
 from google.api import visibility_pb2 as _visibility_pb2
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
-from . import annotations_pb2 as _annotations_pb2
+from . import annotations_pb2 as _annotations_pb2_1
 from . import app_pb2 as _app_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
@@ -504,10 +505,12 @@ class GetAgentProviderTurnRequest(_message.Message):
     TURN_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     context: _app_pb2.RequestContext
     provider_name: str
-    def __init__(self, turn_id: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider_name: _Optional[str] = ...) -> None: ...
+    session_id: str
+    def __init__(self, turn_id: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider_name: _Optional[str] = ..., session_id: _Optional[str] = ...) -> None: ...
 
 class ListAgentProviderTurnsRequest(_message.Message):
     __slots__ = ()
@@ -539,11 +542,13 @@ class CancelAgentProviderTurnRequest(_message.Message):
     REASON_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     reason: str
     context: _app_pb2.RequestContext
     provider_name: str
-    def __init__(self, turn_id: _Optional[str] = ..., reason: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider_name: _Optional[str] = ...) -> None: ...
+    session_id: str
+    def __init__(self, turn_id: _Optional[str] = ..., reason: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider_name: _Optional[str] = ..., session_id: _Optional[str] = ...) -> None: ...
 
 class AgentTurnEvent(_message.Message):
     __slots__ = ()
@@ -574,12 +579,14 @@ class ListAgentProviderTurnEventsRequest(_message.Message):
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     after_seq: int
     limit: int
     context: _app_pb2.RequestContext
     provider_name: str
-    def __init__(self, turn_id: _Optional[str] = ..., after_seq: _Optional[int] = ..., limit: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider_name: _Optional[str] = ...) -> None: ...
+    session_id: str
+    def __init__(self, turn_id: _Optional[str] = ..., after_seq: _Optional[int] = ..., limit: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., provider_name: _Optional[str] = ..., session_id: _Optional[str] = ...) -> None: ...
 
 class ListAgentProviderTurnEventsResponse(_message.Message):
     __slots__ = ()

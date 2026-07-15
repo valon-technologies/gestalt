@@ -767,6 +767,7 @@ export function toWireCancelAgentProviderTurnRequest(
       ? { context: toWireRequestContext(value.context) }
       : {}),
     providerName: value.providerName ?? "",
+    sessionId: value.sessionId ?? "",
   });
 }
 
@@ -780,6 +781,7 @@ export function fromWireCancelAgentProviderTurnRequest(
       ? { context: fromWireRequestContext(value.context) }
       : {}),
     providerName: value.providerName,
+    sessionId: value.sessionId,
   };
 }
 
@@ -962,6 +964,7 @@ export function toWireGetAgentProviderTurnRequest(
       ? { context: toWireRequestContext(value.context) }
       : {}),
     providerName: value.providerName ?? "",
+    sessionId: value.sessionId ?? "",
   });
 }
 
@@ -974,6 +977,7 @@ export function fromWireGetAgentProviderTurnRequest(
       ? { context: fromWireRequestContext(value.context) }
       : {}),
     providerName: value.providerName,
+    sessionId: value.sessionId,
   };
 }
 
@@ -1074,6 +1078,7 @@ export function toWireListAgentProviderTurnEventsRequest(
       ? { context: toWireRequestContext(value.context) }
       : {}),
     providerName: value.providerName ?? "",
+    sessionId: value.sessionId ?? "",
   });
 }
 
@@ -1088,6 +1093,7 @@ export function fromWireListAgentProviderTurnEventsRequest(
       ? { context: fromWireRequestContext(value.context) }
       : {}),
     providerName: value.providerName,
+    sessionId: value.sessionId,
   };
 }
 

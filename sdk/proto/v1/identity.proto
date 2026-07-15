@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/annotations.proto";
 import "google/api/visibility.proto";
 import "v1/annotations.proto";
 
@@ -129,6 +130,10 @@ service Identity {
   option (host_binding) = "identity";
 
   rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/identity/authorize"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -139,6 +144,10 @@ service Identity {
     option (signature) = "state";
   }
   rpc Token(TokenRequest) returns (TokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/identity/token"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -153,6 +162,10 @@ service Identity {
     option (optional_signature) = "expires_in";
   }
   rpc Introspect(IntrospectRequest) returns (IntrospectResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/identity/introspect"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -160,22 +173,26 @@ service Identity {
     option (signature) = "token_type_hint";
   }
   rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {
+    option (google.api.http) = {get: "/api/v2/identity/userinfo"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
   }
   rpc ListGrants(ListGrantsRequest) returns (ListGrantsResponse) {
+    option (google.api.http) = {get: "/api/v2/identity/grants"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
   }
   rpc GetGrant(GetGrantRequest) returns (GetGrantResponse) {
+    option (google.api.http) = {get: "/api/v2/identity/grants/{grant_id}"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
     option (signature) = "grant_id";
   }
   rpc RevokeGrant(RevokeGrantRequest) returns (RevokeGrantResponse) {
+    option (google.api.http) = {delete: "/api/v2/identity/grants/{grant_id}"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };

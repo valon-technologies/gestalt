@@ -145,6 +145,7 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}
+	t.Cleanup(srv.Close)
 	return srv
 }
 

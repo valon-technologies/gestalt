@@ -707,6 +707,7 @@ func ToWireCancelAgentProviderTurnRequest(value *CancelAgentProviderTurnRequest)
 		Reason:       value.Reason,
 		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
+		SessionId:    value.SessionId,
 	}
 	return out
 }
@@ -720,6 +721,7 @@ func FromWireCancelAgentProviderTurnRequest(value *proto.CancelAgentProviderTurn
 		Reason:       value.Reason,
 		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
+		SessionId:    value.SessionId,
 	}
 	return out
 }
@@ -878,6 +880,7 @@ func ToWireGetAgentProviderTurnRequest(value *GetAgentProviderTurnRequest) *prot
 		TurnId:       value.TurnId,
 		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
+		SessionId:    value.SessionId,
 	}
 	return out
 }
@@ -890,6 +893,7 @@ func FromWireGetAgentProviderTurnRequest(value *proto.GetAgentProviderTurnReques
 		TurnId:       value.TurnId,
 		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
+		SessionId:    value.SessionId,
 	}
 	return out
 }
@@ -1002,6 +1006,7 @@ func ToWireListAgentProviderTurnEventsRequest(value *ListAgentProviderTurnEvents
 		Limit:        value.Limit,
 		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
+		SessionId:    value.SessionId,
 	}
 	return out
 }
@@ -1016,6 +1021,7 @@ func FromWireListAgentProviderTurnEventsRequest(value *proto.ListAgentProviderTu
 		Limit:        value.Limit,
 		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
+		SessionId:    value.SessionId,
 	}
 	return out
 }

@@ -184,6 +184,20 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 		r.NotFound(apiNotFound)
 		r.MethodNotAllowed(apiMethodNotAllowed)
 	})
+	s.mountPublicRESTRoutes(r)
+}
+
+func (s *Server) mountPublicRESTRoutes(r chi.Router) {
+	r.Route("/api/v2", func(r chi.Router) {
+		if s.publicRESTHandler == nil {
+			r.NotFound(apiNotFound)
+			r.MethodNotAllowed(apiMethodNotAllowed)
+			return
+		}
+		r.Handle("/*", s.publicRESTHandler)
+		r.NotFound(apiNotFound)
+		r.MethodNotAllowed(apiMethodNotAllowed)
+	})
 }
 
 const defaultAPIRouteTimeout = 60 * time.Second

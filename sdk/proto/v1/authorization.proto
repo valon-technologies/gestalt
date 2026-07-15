@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/annotations.proto";
 import "google/api/visibility.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -213,6 +214,10 @@ service Authorization {
   option (host_binding) = "authorization";
 
   rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/authorization/access:check"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -220,6 +225,10 @@ service Authorization {
     option (signature) = "resource";
   }
   rpc CheckAccessMany(CheckAccessManyRequest) returns (CheckAccessManyResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/authorization/access:checkMany"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -227,6 +236,7 @@ service Authorization {
   }
 
   rpc ListRelationships(ListRelationshipsRequest) returns (ListRelationshipsResponse) {
+    option (google.api.http) = {get: "/api/v2/authorization/relationships"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -235,18 +245,30 @@ service Authorization {
     option (signature) = "filter";
   }
   rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/authorization/relationships"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
     option (signature) = "relationship";
   }
   rpc DeleteRelationship(DeleteRelationshipRequest) returns (DeleteRelationshipResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/authorization/relationships:delete"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
     option (signature) = "relationship_tuple";
   }
   rpc SetAuthorizationState(SetAuthorizationStateRequest) returns (SetAuthorizationStateResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/authorization/state"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -255,17 +277,23 @@ service Authorization {
   }
 
   rpc GetActiveModelRef(google.protobuf.Empty) returns (GetActiveModelRefResponse) {
+    option (google.api.http) = {get: "/api/v2/authorization/models/active"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
   }
   rpc SetActiveModel(SetActiveModelRequest) returns (SetActiveModelResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/authorization/models/active"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
     option (signature) = "model";
   }
   rpc ListActiveModelResourceTypes(ListActiveModelResourceTypesRequest) returns (ListActiveModelResourceTypesResponse) {
+    option (google.api.http) = {get: "/api/v2/authorization/models/active/resource-types"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
