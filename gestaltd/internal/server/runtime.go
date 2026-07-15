@@ -263,6 +263,12 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 
 	workflowErr := make(chan error, 1)
 	go func() {
+		if err := result.StartAppProviders(ctx); err != nil {
+			if ctx.Err() == nil {
+				workflowErr <- err
+			}
+			return
+		}
 		if err := result.StartWorkflowProviders(ctx); err != nil {
 			workflowErr <- err
 			return

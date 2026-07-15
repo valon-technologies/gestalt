@@ -5318,6 +5318,68 @@ func TestBootstrapAllowsAppConfiguredWithBothOpenAPIAndGraphQLAPISurfaces(t *tes
 	}
 }
 
+func TestBootstrapCanDeferAppProviderStartup(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"openapi":"3.0.0",
+			"info":{"title":"deferred","version":"1.0.0"},
+			"paths":{"/status":{"get":{"operationId":"status","responses":{"200":{"description":"ok"}}}}}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := validConfig()
+	cfg.Apps = map[string]*config.ProviderEntry{
+		"deferred": {
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					DefaultConnection: config.AppConnectionName,
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						config.AppConnectionName: {Mode: providermanifestv1.ConnectionModeNone},
+					},
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						OpenAPI: &providermanifestv1.OpenAPISurface{Document: srv.URL, BaseURL: srv.URL},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := bootstrap.BootstrapWithOptions(context.Background(), cfg, validFactories(), bootstrap.BootstrapOptions{
+		DeferAppProviderStartup: true,
+	})
+	if err != nil {
+		t.Fatalf("BootstrapWithOptions: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("app provider requests before startup = %d, want 0", got)
+	}
+	select {
+	case <-result.StartupProvidersReady:
+		t.Fatal("startup providers became ready before StartAppProviders")
+	default:
+	}
+
+	if err := result.StartAppProviders(context.Background()); err != nil {
+		t.Fatalf("StartAppProviders: %v", err)
+	}
+	select {
+	case <-result.StartupProvidersReady:
+	case <-time.After(5 * time.Second):
+		t.Fatal("startup providers did not become ready")
+	}
+	if got := requests.Load(); got == 0 {
+		t.Fatal("app provider did not load its OpenAPI document after startup")
+	}
+}
+
 func TestBootstrapNoIntegrations(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
