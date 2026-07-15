@@ -3,10 +3,13 @@ package runtimehost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -20,6 +23,85 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
+
+const shutdownHelperEnv = "GESTALT_RUNTIMEHOST_SHUTDOWN_HELPER"
+
+func TestProviderProcessShutdownKeepsHostServicesAvailable(t *testing.T) {
+	if os.Getenv(shutdownHelperEnv) == "1" {
+		runShutdownHelper()
+		return
+	}
+
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	proc, err := startProviderProcess(ctx, ProcessConfig{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=^TestProviderProcessShutdownKeepsHostServicesAvailable$"},
+		Env:     map[string]string{shutdownHelperEnv: "1"},
+		HostServices: []HostService{{
+			Name: "health",
+			Register: func(srv *grpc.Server) {
+				healthpb.RegisterHealthServer(srv, healthServer)
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("start provider process: %v", err)
+	}
+	if err := proc.Close(); err != nil {
+		t.Fatalf("close provider process: %v", err)
+	}
+}
+
+func runShutdownHelper() {
+	socket := os.Getenv(proto.EnvProviderSocket)
+	lis, err := net.Listen("unix", socket)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "listen provider socket:", err)
+		os.Exit(1)
+	}
+	defer func() { _ = lis.Close() }()
+
+	srv := grpc.NewServer()
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	healthpb.RegisterHealthServer(srv, healthServer)
+	go func() { _ = srv.Serve(lis) }()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+
+	if err := checkHostService(os.Getenv(HostServiceSocketEnv)); err != nil {
+		fmt.Fprintln(os.Stderr, "check host service during shutdown:", err)
+		os.Exit(1)
+	}
+	srv.GracefulStop()
+}
+
+func checkHostService(socket string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	conn, err := grpc.NewClient(
+		"passthrough:///host-service",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithAuthority("localhost"),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", socket)
+		}),
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	_, err = healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{})
+	return err
+}
 
 func TestResolvePluginTempBaseDirCreatesMissingCandidate(t *testing.T) {
 	t.Parallel()
