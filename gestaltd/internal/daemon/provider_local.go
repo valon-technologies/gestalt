@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -111,9 +110,9 @@ func runProviderValidate(args []string) error {
 	logProviderLocalSummary("provider validated", session)
 	logConfigSummary(result.Paths, result.Config)
 	for _, warning := range result.Warnings {
-		slog.Warn(warning)
+		currentCLIReporter().Warning(warning)
 	}
-	slog.Info("config ok")
+	currentCLIReporter().Status("config ok")
 	return nil
 }
 
@@ -139,8 +138,9 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	}
 	session.PublicURL = providerLocalPublicURL(env.Config)
 	session.AdminURL = strings.TrimRight(session.PublicURL, "/") + "/admin/"
-	logProviderLocalSummary("local provider ready", session)
-	return runServer(env)
+	return runServerWithReady(env, func() {
+		logProviderLocalSummary("local provider ready", session)
+	})
 }
 
 func buildProviderLocalTargetOverlay(sessionDir string, index int, opts providerLocalCommandOptions, path string, port int, configPathsSoFar []string) (*providerLocalTargetOverlay, error) {
@@ -505,14 +505,7 @@ func providerLocalExternalCredentialsSourceConfig() any {
 }
 
 func providerLocalPublicURL(cfg *config.Config) string {
-	if cfg == nil {
-		return ""
-	}
-	addr := cfg.Server.PublicAddr()
-	if addr == "" {
-		return ""
-	}
-	return (&url.URL{Scheme: "http", Host: addr}).String()
+	return canonicalPublicURL(cfg)
 }
 
 func providerLocalBaseURL(port int) string {
@@ -545,14 +538,14 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 	if len(publicUIPaths) == 0 {
 		publicUIPaths = nil
 	}
-	args := []any{
+	detailArgs := []any{
 		"config_files", session.ConfigPaths,
 		"public_url", session.PublicURL,
 		"admin_url", session.AdminURL,
 		"mounted_ui_paths", publicUIPaths,
 	}
 	if session.Locked || len(session.DevAppKeys) > 0 || len(session.TargetKeys) > 0 {
-		args = append(args,
+		detailArgs = append(detailArgs,
 			"dev_app_keys", session.DevAppKeys,
 			"target_keys", session.TargetKeys,
 			"artifacts_dir", session.ArtifactsDir,
@@ -560,14 +553,19 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 		)
 	}
 	if session.ManifestPath != "" {
-		args = append(args,
+		detailArgs = append(detailArgs,
 			"kind", session.Kind,
 			"manifest", session.ManifestPath,
 			"auto_mounted_ui_path", session.AutoMountedUIPath,
 			"app", session.TargetKey,
 		)
 	}
-	slog.Info(message, args...)
+	if strings.Contains(message, "ready") {
+		currentCLIReporter().Status(message + ": " + session.PublicURL)
+	} else {
+		currentCLIReporter().Status(message)
+	}
+	currentCLIReporter().Verbose(formatCLIFields(message+" details", detailArgs...))
 }
 
 func reserveLocalPort() (int, error) {

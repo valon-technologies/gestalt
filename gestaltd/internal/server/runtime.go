@@ -34,6 +34,16 @@ func httpCatalogConnectionMap(connMaps bootstrap.ConnectionMaps) map[string]stri
 }
 
 func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) error {
+	return run(ctx, cfg, result, nil)
+}
+
+// RunWithReady is like Run but invokes onReady after all configured public
+// listeners have been bound and the HTTP serving goroutines have started.
+func RunWithReady(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onReady func()) error {
+	return run(ctx, cfg, result, onReady)
+}
+
+func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onReady func()) error {
 	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
 	mcpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "mcp", result.AuditSink, invocation.WithoutRateLimit())
 
@@ -43,7 +53,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	}
 
 	if cfg.Server.BaseURL != "" {
-		slog.Info("gestaltd base URL configured",
+		slog.Debug("gestaltd base URL configured",
 			"base_url", cfg.Server.BaseURL,
 			"auth_callback", cfg.Server.BaseURL+config.AuthCallbackPath,
 			"integration_callback", cfg.Server.BaseURL+config.IntegrationCallbackPath,
@@ -157,14 +167,13 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		if cfg.Server.Admin.AuthorizationPolicy != "" {
 			slog.Warn(
 				"management listener serves /metrics without Gestalt auth; /admin requires Gestalt session auth and server.admin policy access",
-				"addr", managementAddr,
 			)
 		} else {
 			slog.Warn(
 				"management listener serves /admin and /metrics without Gestalt auth; protect server.management with private networking or an internal reverse proxy",
-				"addr", managementAddr,
 			)
 		}
+		slog.Debug("management listener address", "addr", managementAddr)
 
 		managementConfig := baseConfig
 		managementConfig.RouteProfile = RouteProfileManagement
@@ -191,7 +200,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		})
 	}
 
-	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor)
+	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady)
 }
 
 type indexedDBPinger interface {
@@ -218,7 +227,7 @@ func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services ind
 	}
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor) error {
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func()) error {
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
 	}
@@ -244,11 +253,14 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	for _, entry := range bound {
 		entry := entry
 		go func() {
-			slog.Info("gestaltd listening", "listener", entry.name, "addr", entry.listener.Addr())
+			slog.Debug("gestaltd listening", "listener", entry.name, "addr", entry.listener.Addr())
 			if err := entry.server.Serve(entry.listener); err != nil && err != http.ErrServerClosed {
 				listenErr <- namedListenFailure{name: entry.name, err: err}
 			}
 		}()
+	}
+	if readyCallback != nil {
+		readyCallback()
 	}
 
 	defer func() {
@@ -276,7 +288,7 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		close(workflowProvidersReady)
 
 		result.StartWorkflowConfigReconciliation(ctx)
-		slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
+		slog.Debug("workflow providers ready", "count", len(result.ExtraWorkflows))
 
 		mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
 		if err != nil {
@@ -284,11 +296,11 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 			return
 		}
 		mcpSlot.Set(mcpHandler)
-		slog.Info("MCP endpoint enabled", "path", "/mcp")
+		slog.Debug("MCP endpoint enabled", "path", "/mcp")
 
 		select {
 		case <-result.ProvidersReady:
-			slog.InfoContext(ctx, "all deferred app providers ready")
+			slog.DebugContext(ctx, "all deferred app providers ready")
 		case <-ctx.Done():
 		}
 	}()
