@@ -95,7 +95,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	}
 	var configEntry *config.ProviderEntry
 	if i.ConfigApps != nil {
-		configEntry = i.ConfigApps[appName]
+		configEntry = resolveConfigAppEntry(i.ConfigApps, appName)
 	}
 	fromVersion := resolveFromVersion(knownVersions, configEntry)
 	if fromVersion == "" {

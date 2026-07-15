@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -181,4 +182,44 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 	if requests[0].ToVersion != fixture.Version {
 		t.Fatalf("first to_version = %q, want %s", requests[0].ToVersion, fixture.Version)
 	}
+}
+
+func TestInstaller_resolves_config_entry_when_registry_app_name_differs_from_config_key(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"gIssues": configEntryWithManifestApp("g-issues", "0.0.0-config"),
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+	}
+
+	if _, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+		Actor:    "user:alice",
+	}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+}
+
+func configEntryWithManifestApp(appName, version string) *config.ProviderEntry {
+	entry := &config.ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Source:      "github.com/valon-technologies/valon-tools/apps/" + appName,
+			DisplayName: appName,
+		},
+	}
+	entry.Source.SetResolvedPackage("", version)
+	return entry
 }
