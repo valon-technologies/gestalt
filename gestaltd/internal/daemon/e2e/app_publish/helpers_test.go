@@ -24,10 +24,14 @@ func gestaltdCommand(args ...string) *exec.Cmd {
 	return exec.Command(gestaltdBin, args...)
 }
 
-func runAppCommandResult(workDir string, args ...string) ([]byte, error) {
+func runAppCommandStreams(workDir string, args ...string) ([]byte, []byte, error) {
 	cmd := gestaltdCommand(append([]string{"app"}, args...)...)
 	cmd.Dir = workDir
-	return cmd.CombinedOutput()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
 }
 
 func runProviderPackageCommand(t *testing.T, pluginDir string, args ...string) {

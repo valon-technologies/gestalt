@@ -8,6 +8,49 @@ import (
 	"time"
 )
 
+type commandProgress struct {
+	activity *TerminalActivity
+	started  time.Time
+}
+
+func startCommandProgress(format string, args ...any) *commandProgress {
+	activity := currentCLIReporter().Start(fmt.Sprintf(format, args...) + "...")
+	return &commandProgress{activity: activity, started: activity.started}
+}
+
+func (p *commandProgress) done(format string, args ...any) {
+	if p == nil {
+		return
+	}
+	message := fmt.Sprintf(format, args...) + " in " + elapsedSince(p.started)
+	if p.activity != nil {
+		p.activity.Finish(message)
+		p.activity = nil
+		return
+	}
+	currentCLIReporter().Status(message)
+}
+
+func progressStatus(format string, args ...any) {
+	currentCLIReporter().Status(fmt.Sprintf(format, args...))
+}
+
+func (p *commandProgress) status(format string, args ...any) {
+	if p == nil {
+		progressStatus(format, args...)
+		return
+	}
+	if p.activity != nil {
+		p.activity.Clear()
+		p.activity = nil
+	}
+	currentCLIReporter().Status(fmt.Sprintf(format, args...))
+}
+
+func elapsedSince(start time.Time) string {
+	return time.Since(start).Round(time.Millisecond).String()
+}
+
 const (
 	defaultActivityDelay    = 200 * time.Millisecond
 	defaultActivityInterval = 100 * time.Millisecond
@@ -224,6 +267,7 @@ type TerminalActivity struct {
 	reporter *TerminalReporter
 	state    *activityState
 	once     sync.Once
+	started  time.Time
 }
 
 // NewTerminalReporter creates a reporter writing to output. Callers should
@@ -243,23 +287,25 @@ func (r *TerminalReporter) Start(message string) *TerminalActivity {
 	if r.active != nil {
 		r.finishLocked(r.active, "")
 	}
+	now := time.Now()
 	state := &activityState{
 		message: strings.TrimSpace(message),
 		stop:    make(chan struct{}),
 	}
 	r.active = state
+	activity := &TerminalActivity{reporter: r, state: state, started: now}
 	if r.policy.Quiet {
-		return &TerminalActivity{reporter: r, state: state}
+		return activity
 	}
 	if !r.policy.Interactive || r.policy.NoProgress {
 		r.writeStableLocked(state.message)
 		state.started = true
-		return &TerminalActivity{reporter: r, state: state}
+		return activity
 	}
 	state.timer = time.AfterFunc(r.policy.ActivityDelay, func() {
 		r.activate(state)
 	})
-	return &TerminalActivity{reporter: r, state: state}
+	return activity
 }
 
 func (r *TerminalReporter) activate(state *activityState) {

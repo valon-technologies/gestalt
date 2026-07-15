@@ -117,7 +117,7 @@ func runAppPublish(args []string) (err error) {
 	if manifestApp != strings.TrimSpace(*appName) {
 		return fmt.Errorf("%s: manifest source app %q does not match --app %q; update manifest source or pass the matching --app name", manifestPath, manifestApp, strings.TrimSpace(*appName))
 	}
-	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesFromDirs([]string(distDirs), *version)
+	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesWithProgress([]string(distDirs), *version)
 	if err != nil {
 		return err
 	}
@@ -345,6 +345,7 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 
 	publishArtifacts := make([]appregistry.PublishArtifact, 0, len(sortedArchives))
 	artifactObjects := make([]appPublishObject, 0, len(sortedArchives))
+	hashProgress := startCommandProgress("Hashing %d app publish files", len(sortedArchives)+1)
 	for _, archive := range sortedArchives {
 		filename := filepath.Base(archive.Path)
 		rel := path.Join(artifactPrefix, filename)
@@ -395,6 +396,7 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 	if err != nil {
 		return appPublishPlan{}, err
 	}
+	hashProgress.done("Hashed %d app publish files", len(sortedArchives)+1)
 
 	indexRel := layout.IndexPath
 	return appPublishPlan{
@@ -439,6 +441,8 @@ func writeTempJSON(pattern string, data []byte) (string, error) {
 }
 
 func preflightAppPublishPlan(plan appPublishPlan) error {
+	objectCount := len(plan.ArtifactObjects) + 2 // artifacts, entry metadata, and the app index
+	progress := startCommandProgress("Checking %d remote app objects before upload", objectCount)
 	if err := preflightAppRegistryIndex(plan); err != nil {
 		return err
 	}
@@ -447,6 +451,7 @@ func preflightAppPublishPlan(plan appPublishPlan) error {
 			return err
 		}
 	}
+	progress.done("Checked %d remote app objects", objectCount)
 	return nil
 }
 
@@ -495,12 +500,18 @@ func uploadAppPublishPlan(plan appPublishPlan, sourceRef string) error {
 }
 
 func uploadAppPublishImmutableObjects(plan appPublishPlan, sourceRef string) error {
+	objectCount := len(plan.ArtifactObjects) + 1
+	progress := startCommandProgress("Uploading %d immutable app objects", objectCount)
 	for _, object := range plan.ArtifactObjects {
 		if err := uploadAppPublishObjectIfNeeded(object, sourceRef); err != nil {
 			return err
 		}
 	}
-	return uploadAppPublishObjectIfNeeded(plan.EntryObject, sourceRef)
+	if err := uploadAppPublishObjectIfNeeded(plan.EntryObject, sourceRef); err != nil {
+		return err
+	}
+	progress.done("Processed %d immutable app objects", objectCount)
+	return nil
 }
 
 func uploadAppPublishObjectIfNeeded(object appPublishObject, sourceRef string) error {
@@ -550,7 +561,11 @@ func uploadAppPublishObject(object appPublishObject, sourceRef string) error {
 
 func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 	indexPath := plan.IndexObject.StorageURL
+	progress := startCommandProgress("Updating app registry index")
 	for attempt := 1; attempt <= appPublishIndexUpdateAttempts; attempt++ {
+		if attempt > 1 {
+			progress.status("App registry index changed concurrently; retrying attempt %d/%d", attempt, appPublishIndexUpdateAttempts)
+		}
 		generation, existing, err := downloadAppRegistryObject(indexPath)
 		if err != nil {
 			return err
@@ -571,6 +586,7 @@ func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 		}
 		if !changed {
 			_, _ = fmt.Fprintf(os.Stdout, "skipped unchanged index for %s %s\n", plan.AppName, plan.Version)
+			progress.done("App registry index unchanged")
 			return nil
 		}
 		data, err := json.MarshalIndent(updated, "", "  ")
@@ -584,12 +600,14 @@ func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 		if err := uploadAppRegistryIndexFile(tmpPath, indexPath, sourceRef, generation); err != nil {
 			_ = os.Remove(tmpPath)
 			if appPublishPreconditionFailed(err) && attempt < appPublishIndexUpdateAttempts {
+				progress.status("App registry index update conflict; retrying")
 				continue
 			}
 			return err
 		}
 		_ = os.Remove(tmpPath)
 		_, _ = fmt.Fprintf(os.Stdout, "updated %s\n", indexPath)
+		progress.done("Updated app registry index")
 		return nil
 	}
 	return fmt.Errorf("update %s: exceeded retry limit after concurrent index updates", indexPath)

@@ -320,7 +320,7 @@ func runSync(args []string) error {
 		return err
 	}
 
-	outputFlags := currentCLIOutputFlags()
+	outputFlags := currentCLIReporter().policy.CLIOutputFlags
 	verbose := outputFlags.Verbose || *verboseLong || *verboseShort
 	quiet := outputFlags.Quiet
 	observabilityRequested := verbose || *outputFormat == syncOutputFormatJSON

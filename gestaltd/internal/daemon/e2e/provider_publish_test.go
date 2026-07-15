@@ -93,7 +93,7 @@ providerSnapshotRepositories:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := runProviderCommandResult(pluginDir,
+	stdout, stderr, err := runProviderCommandStreams(pluginDir,
 		"publish",
 		"--config", configPath,
 		"--repo", "valon",
@@ -105,11 +105,18 @@ providerSnapshotRepositories:
 		"--format", "json",
 	)
 	if err != nil {
-		t.Fatalf("provider publish failed: %v\n%s", err, out)
+		t.Fatalf("provider publish failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 	}
 	var plan providerPublishPlan
-	if err := json.Unmarshal(out, &plan); err != nil {
-		t.Fatalf("dry-run JSON did not parse: %v\n%s", err, out)
+	if err := json.Unmarshal(stdout, &plan); err != nil {
+		t.Fatalf("dry-run JSON did not parse: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if strings.Contains(string(stdout), "[progress]") {
+		t.Fatalf("progress leaked into provider publish JSON stdout: %s", stdout)
+	}
+	if !strings.Contains(string(stderr), "Inspecting and hashing 1 release archives") ||
+		!strings.Contains(string(stderr), "Hashing 2 publish files") {
+		t.Fatalf("provider publish progress missing from stderr: %s", stderr)
 	}
 	if plan.Schema != providerPublishPlanSchema {
 		t.Fatalf("schema = %q, want %q", plan.Schema, providerPublishPlanSchema)

@@ -127,7 +127,7 @@ func runProviderPublish(args []string) (err error) {
 	if err != nil {
 		return fmt.Errorf("read --manifest: %w", err)
 	}
-	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesFromDirs([]string(distDirs), *version)
+	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesWithProgress([]string(distDirs), *version)
 	if err != nil {
 		return err
 	}
@@ -144,10 +144,12 @@ func runProviderPublish(args []string) (err error) {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
 
+	hashProgress := startCommandProgress("Hashing %d publish files", len(releaseArchives)+1)
 	files, sourceInfo, err := providerPublishFiles(repo, *manifestPath, sourceRef, releaseArchives, tmpDir)
 	if err != nil {
 		return err
 	}
+	hashProgress.done("Hashed %d publish files", len(files))
 	if *dryRun {
 		if *format == providerPublishFormatJSON {
 			return printProviderPublishPlanJSON(*repoName, sourceInfo, *version, files)
@@ -361,6 +363,7 @@ func newProviderPublishPlan(publishRepository string, sourceInfo providerPublish
 }
 
 func preflightProviderPublishFiles(files []providerPublishFile) error {
+	progress := startCommandProgress("Checking %d remote objects before upload", len(files))
 	for _, file := range files {
 		if err := validateProviderPublishMetadataFile(file); err != nil {
 			return err
@@ -373,6 +376,7 @@ func preflightProviderPublishFiles(files []providerPublishFile) error {
 			return fmt.Errorf("%s already exists; %s", file.StorageURL, republishCorruptObjectGuidance)
 		}
 	}
+	progress.done("Checked %d remote objects", len(files))
 	return nil
 }
 
@@ -387,7 +391,27 @@ func validateProviderPublishMetadataFile(file providerPublishFile) error {
 }
 
 func uploadProviderPublishFiles(files []providerPublishFile, sourceRef string) error {
+	archiveCount := 0
+	metadataCount := 0
+	for _, file := range files {
+		switch file.Kind {
+		case providerPublishFileKindArchive:
+			archiveCount++
+		case providerPublishFileKindMetadata:
+			metadataCount++
+		}
+	}
 	for _, kind := range []string{providerPublishFileKindArchive, providerPublishFileKindMetadata} {
+		count := archiveCount
+		label := "release archives"
+		if kind == providerPublishFileKindMetadata {
+			count = metadataCount
+			label = providerrelease.MetadataFile
+		}
+		if count == 0 {
+			continue
+		}
+		progress := startCommandProgress("Uploading %d %s", count, label)
 		for _, file := range files {
 			if file.Kind != kind {
 				continue
@@ -396,6 +420,7 @@ func uploadProviderPublishFiles(files []providerPublishFile, sourceRef string) e
 				return err
 			}
 		}
+		progress.done("Uploaded %d %s", count, label)
 	}
 	return nil
 }
