@@ -828,9 +828,11 @@ serve TypeScript or JSX source at runtime — only the prepared `static/` bundle
 ### Relative asset references
 
 Use relative URLs in HTML, CSS, and JS (`./assets/app.js`, not `/assets/app.js`).
-Gestalt injects a `<base href="/{mount}/">` tag when serving mounted apps so
-relative references resolve under the mount path. Client routers should derive
-their base from `document.baseURI` rather than hard-coding `/`.
+Gestalt injects `<base href="/{mount}/">` and
+`<meta name="gestalt-app-name" content="{registered-key}">` when serving mounted
+apps. Use `base()` and `appApiBase()` from `@valon-technologies/gestalt/mount`
+for mount-relative links and self-app operation routes instead of hard-coding
+deployment keys or mount paths.
 
 During `build`, Gestalt sets `GESTALT_BUILD_STATIC` to an absolute path under
 `.gestalt/build-static/` in the manifest directory. Your build script must write
@@ -856,7 +858,8 @@ export default defineConfig({
 ```
 
 `gestalt()` sets `base` to a relative path, configures the dev server for
-`GESTALT_DEV_*` when gestaltd proxies local `run` commands, and proxies `/api/v1`
+`GESTALT_DEV_*` when gestaltd proxies local `run` commands, injects
+`gestalt-app-name` from `GESTALT_APP_NAME`, and proxies `/api/v1`
 to `GESTALT_BASE_URL` for two-origin local dev.
 
 Manual equivalent when not using the plugin:
@@ -910,8 +913,18 @@ apps:
 Only one app may mount at `/`.
 
 Gestalt serves static files from the prepared `static/` directory, applies SPA
-fallback (unknown paths under the mount return `index.html`), and injects
-`<base href>` into HTML responses when the document does not already define one.
+fallback (unknown paths under the mount return `index.html`), and injects host
+context into HTML responses:
+
+- `<meta name="gestalt-app-name" content="...">` with the registered deployment
+  key from `apps.<name>` (not the mount path, package directory, or manifest
+  source slug).
+- `<base href>` when the document does not already define one.
+
+`apps.<name>` is the runtime identity. The static `mount`, manifest `source`,
+and provider catalog `name` are separate concepts and must not be used to
+predict API routes in application code.
+
 Theme endpoints (`/theme.css`, `/theme/*`) are handled before the static file
 handler when `static.theme` is configured.
 
@@ -974,11 +987,16 @@ only after the app passes the configured authorization policy.
 
 The frontend can stay small because Gestalt already handles sessions, route
 authorization, and static asset serving. A mounted UI calls the app
-operations on the same origin:
+operations on the same origin using the registered app key injected by
+gestaltd:
 
-```js
-export async function saveItem(item) {
-  const response = await fetch("/api/v1/workspace_review/items.save", {
+```ts
+import { appApiBase } from "@valon-technologies/gestalt/mount";
+
+const API_BASE = appApiBase();
+
+export async function saveItem(item: unknown) {
+  const response = await fetch(`${API_BASE}/items.save`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(item),

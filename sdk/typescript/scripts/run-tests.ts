@@ -1,13 +1,18 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-const S3_TRANSPORT_TEST = join("tests", "s3.transport.test.ts");
+const ISOLATED_TESTS = [
+  join("tests", "s3.transport.test.ts"),
+  join("tests", "indexeddb.transport.test.ts"),
+];
 
 const testFiles = (await collectTestFiles("tests"))
-  .filter((path) => path !== S3_TRANSPORT_TEST)
+  .filter((path) => !ISOLATED_TESTS.includes(path))
   .sort();
 
-await runBunTest([S3_TRANSPORT_TEST]);
+for (const path of ISOLATED_TESTS) {
+  await runBunTest([path]);
+}
 await runBunTest(testFiles);
 
 async function collectTestFiles(dir: string): Promise<string[]> {

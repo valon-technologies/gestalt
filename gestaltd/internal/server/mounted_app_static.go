@@ -55,7 +55,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 		handler, err := ui.StaticHandler(ui.StaticConfig{
 			FS:           os.DirFS(entry.ResolvedStaticRoot),
 			DynamicIndex: true,
-			RenderIndex:  injectBaseHref(mount),
+			RenderIndex:  injectAppContext(name, mount),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("app %q static: %w", name, err)
@@ -76,35 +76,69 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 	return mounted, nil
 }
 
-func injectBaseHref(mount string) func([]byte) []byte {
+func injectAppContext(appName, mount string) func([]byte) []byte {
+	appName = strings.TrimSpace(appName)
 	mount = strings.TrimSpace(mount)
 	baseHref := "/"
 	if mount != "" && mount != "/" {
 		baseHref = mount + "/"
 	}
-	tag := []byte("<base href=\"" + html.EscapeString(baseHref) + "\">")
+	appMeta := []byte(
+		"<meta name=\"gestalt-app-name\" content=\"" + html.EscapeString(appName) + "\">",
+	)
+	baseTag := []byte("<base href=\"" + html.EscapeString(baseHref) + "\">")
+
 	return func(data []byte) []byte {
-		if hasHTMLBaseTag(data) {
-			return data
+		data = injectIntoHTMLHead(data, appMeta)
+		if !hasHTMLBaseTag(data) {
+			data = injectIntoHTMLHead(data, baseTag)
 		}
-		lower := bytes.ToLower(data)
-		if idx := bytes.Index(lower, []byte("<head>")); idx >= 0 {
-			insertAt := idx + len("<head>")
+		return data
+	}
+}
+
+func injectIntoHTMLHead(data, tag []byte) []byte {
+	lower := bytes.ToLower(data)
+	for searchFrom := 0; searchFrom < len(lower); {
+		headIdx := bytes.Index(lower[searchFrom:], []byte("<head"))
+		if headIdx < 0 {
+			break
+		}
+		headIdx += searchFrom
+		if insertAt, ok := htmlTagInsertAt(data, lower, headIdx); ok {
 			out := make([]byte, 0, len(data)+len(tag))
 			out = append(out, data[:insertAt]...)
 			out = append(out, tag...)
 			out = append(out, data[insertAt:]...)
 			return out
 		}
-		if idx := bytes.Index(lower, []byte("<html>")); idx >= 0 {
-			insertAt := idx + len("<html>")
+		searchFrom = headIdx + 5
+	}
+	if htmlIdx := bytes.Index(lower, []byte("<html")); htmlIdx >= 0 {
+		if insertAt, ok := htmlTagInsertAt(data, lower, htmlIdx); ok {
 			out := make([]byte, 0, len(data)+len(tag))
 			out = append(out, data[:insertAt]...)
 			out = append(out, tag...)
 			out = append(out, data[insertAt:]...)
 			return out
 		}
-		return append(append([]byte(nil), tag...), data...)
+	}
+	return append(append([]byte(nil), tag...), data...)
+}
+
+func htmlTagInsertAt(data, lower []byte, tagIdx int) (int, bool) {
+	if tagIdx+5 >= len(lower) {
+		return 0, false
+	}
+	switch lower[tagIdx+5] {
+	case '>', ' ', '\t', '\n', '\r':
+		closeIdx := bytes.IndexByte(data[tagIdx:], '>')
+		if closeIdx < 0 {
+			return 0, false
+		}
+		return tagIdx + closeIdx + 1, true
+	default:
+		return 0, false
 	}
 }
 

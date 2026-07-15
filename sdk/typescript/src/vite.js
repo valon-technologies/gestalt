@@ -45,6 +45,20 @@ function devBinding(port) {
 
 const DEFAULT_DEV_API_PROXY_TARGET = "http://127.0.0.1:8080";
 const DEV_API_PROXY_TOKEN_ENV = "GESTALT_DEV_API_PROXY_TOKEN";
+const MANAGED_DEV_APP_NAME_ERROR =
+  "GESTALT_APP_NAME is required when GESTALT_DEV_PORT is set (managed gestaltd development)";
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeHtmlAttribute(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
 
 /**
  * @param {string | undefined | null} value
@@ -93,6 +107,11 @@ function gestaltConfig(env, command) {
     return null;
   }
 
+  const appName = env.GESTALT_APP_NAME?.trim();
+  if (!appName) {
+    throw new Error(MANAGED_DEV_APP_NAME_ERROR);
+  }
+
   const port = parseDevPort(devPort);
   const base = normalizeBasePath(env.GESTALT_DEV_BASE_PATH);
   const binding = devBinding(port);
@@ -138,16 +157,25 @@ export function gestalt(options = {}) {
     transformIndexHtml: {
       order: "pre",
       handler(html) {
-        if (!env.GESTALT_DEV_PORT?.trim()) {
+        const devPort = env.GESTALT_DEV_PORT?.trim();
+        if (!devPort) {
           return html;
         }
-        const devBase = normalizeBasePath(env.GESTALT_DEV_BASE_PATH);
-        if (/<base\b/i.test(html)) {
-          return html;
+        const appName = env.GESTALT_APP_NAME?.trim();
+        if (!appName) {
+          throw new Error(MANAGED_DEV_APP_NAME_ERROR);
+        }
+        const injection = [
+          `<meta name="gestalt-app-name" content="${escapeHtmlAttribute(appName)}">`,
+        ];
+        if (!/<base\b/i.test(html)) {
+          injection.push(
+            `<base href="${escapeHtmlAttribute(normalizeBasePath(env.GESTALT_DEV_BASE_PATH))}">`,
+          );
         }
         return html.replace(
           /<head(\s[^>]*)?>/i,
-          (match) => `${match}<base href="${devBase}">`,
+          (match) => `${match}${injection.join("")}`,
         );
       },
     },

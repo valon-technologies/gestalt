@@ -9,6 +9,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
+} from "../src/host-service.ts";
+import {
   IndexedDB,
   NotFoundError,
   AlreadyExistsError,
@@ -16,7 +18,7 @@ import {
   ColumnType,
   bound,
   only,
-} from "../src/index.ts";
+} from "../src/providers/indexeddb.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const GESTALTD_DIR = join(REPO_ROOT, "gestaltd");

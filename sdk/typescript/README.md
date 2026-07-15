@@ -137,6 +137,20 @@ that need to classify GraphQL errors themselves.
 
 ## Runtime and build entrypoints
 
+Mounted browser UIs receive their registered deployment key from gestaltd via
+`<meta name="gestalt-app-name">`. Use the browser-only mount helpers for
+self-app API routes:
+
+```ts
+import { appApiBase, appName, base } from "@valon-technologies/gestalt/mount";
+
+const API_BASE = appApiBase();
+const mountPrefix = base();
+```
+
+Do not hard-code `/api/v1/{app}` paths or derive keys from mount paths,
+directory names, or manifest source slugs.
+
 Source-mode runtime:
 
 ```sh

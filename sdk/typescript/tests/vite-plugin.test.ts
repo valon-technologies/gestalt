@@ -95,6 +95,7 @@ describe("gestalt vite plugin", () => {
           gestalt({
             env: {
               GESTALT_DEV_PORT: "5173",
+              GESTALT_APP_NAME: "ciCd",
               GESTALT_DEV_BASE_PATH: "/example",
               GESTALT_BASE_URL: "http://127.0.0.1:65003",
             },
@@ -132,6 +133,7 @@ describe("gestalt vite plugin", () => {
           gestalt({
             env: {
               GESTALT_DEV_PORT: "5173",
+              GESTALT_APP_NAME: "ciCd",
               GESTALT_API_PROXY_TARGET: "http://127.0.0.1:9000",
             },
           }),
@@ -156,6 +158,7 @@ describe("gestalt vite plugin", () => {
           gestalt({
             env: {
               GESTALT_DEV_PORT: "5173",
+              GESTALT_APP_NAME: "ciCd",
               GESTALT_DEV_API_PROXY_TOKEN: "test-token",
             },
           }),
@@ -177,8 +180,6 @@ describe("gestalt vite plugin", () => {
       headers: { host: "127.0.0.1:5173" },
     });
     expect(authorization).toBe("Bearer test-token");
-
-    expect(authorization).toBe("Bearer test-token");
   });
 
   test("live dev server serves mount with foreign Host and injected base tag", async () => {
@@ -195,6 +196,7 @@ describe("gestalt vite plugin", () => {
       const port = await freePort();
       const env = {
         GESTALT_DEV_PORT: String(port),
+        GESTALT_APP_NAME: "ci_cd",
         GESTALT_DEV_BASE_PATH: basePath,
       };
       const server = await createViteServer({
@@ -211,6 +213,7 @@ describe("gestalt vite plugin", () => {
       expect(response.status).toBe(200);
       const html = await response.text();
       expect(html).toContain(wantBase);
+      expect(html).toContain('<meta name="gestalt-app-name" content="ci_cd">');
       await server.close();
       viteServers.pop();
     }
@@ -230,6 +233,52 @@ describe("gestalt vite plugin", () => {
     expect(html).not.toMatch(/\ssrc=["']\//);
     expect(html).not.toMatch(/\shref=["']\//);
     expect(html).toMatch(/\ssrc=["']\.\//);
+    expect(html).not.toContain("gestalt-app-name");
+  });
+
+  test("escapes app name in injected metadata", async () => {
+    const port = await freePort();
+    const env = {
+      GESTALT_DEV_PORT: String(port),
+      GESTALT_APP_NAME: 'app" onclick="alert(1)',
+      GESTALT_DEV_BASE_PATH: "/example",
+    };
+    const server = await createViteServer({
+      configFile: false,
+      root: fixtureRoot,
+      plugins: [gestalt({ env })],
+    });
+    viteServers.push(server);
+    await server.listen();
+
+    const response = await fetch(`http://127.0.0.1:${port}/example/`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(
+      '<meta name="gestalt-app-name" content="app&quot; onclick=&quot;alert(1)">',
+    );
+    expect(html).not.toContain('content="app" onclick="alert(1)"');
+    await server.close();
+    viteServers.pop();
+  });
+
+  test("GESTALT_DEV_PORT without GESTALT_APP_NAME is rejected", async () => {
+    await expect(
+      resolveConfig(
+        {
+          configFile: false,
+          root: fixtureRoot,
+          plugins: [
+            gestalt({
+              env: {
+                GESTALT_DEV_PORT: "5173",
+              },
+            }),
+          ],
+        },
+        "serve",
+      ),
+    ).rejects.toThrow("GESTALT_APP_NAME is required");
   });
 
   test("occupied port rejects with strictPort", async () => {
@@ -243,6 +292,7 @@ describe("gestalt vite plugin", () => {
         gestalt({
           env: {
             GESTALT_DEV_PORT: String(port),
+            GESTALT_APP_NAME: "ciCd",
             GESTALT_DEV_BASE_PATH: "/example",
           },
         }),
