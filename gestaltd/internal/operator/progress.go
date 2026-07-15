@@ -30,8 +30,8 @@ const (
 	LifecycleProgressNoop      LifecycleProgressStatus = "noop"
 )
 
-// LifecycleProgressEvent deliberately contains summaries rather than raw
-// paths, URLs, cache keys, or subprocess output.
+// LifecycleProgressEvent contains concise operation state. A completed write
+// may include its output path.
 type LifecycleProgressEvent struct {
 	Operation LifecycleProgressOperation
 	Phase     LifecycleProgressPhase
@@ -39,6 +39,7 @@ type LifecycleProgressEvent struct {
 
 	Subject string
 	Reason  string
+	Path    string
 }
 
 func (l *Lifecycle) emitProgress(event LifecycleProgressEvent) {

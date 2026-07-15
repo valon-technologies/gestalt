@@ -232,16 +232,27 @@ func TestE2ESyncDefaultSuccessReportsProgressAndQuietSuppressesIt(t *testing.T) 
 		t.Fatalf("write build script: %v", err)
 	}
 	configPath := writeE2EConfig(t, dir, appDir, 18080)
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
 
-	out, err := gestaltdCommand("lock", "--config", configPath).CombinedOutput()
+	out, err := gestaltdCommand("lock", "--config", configPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("gestaltd lock: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "Lockfile written to "+lockPath) {
+		t.Fatalf("lock output missing destination %q:\n%s", lockPath, out)
+	}
+	out, err = gestaltdCommand("lock", "--check", "--config", configPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock --check: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "Lockfile is up to date: "+lockPath) {
+		t.Fatalf("lock --check output missing current status for %q:\n%s", lockPath, out)
 	}
 	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
 		t.Fatalf("remove prepared provider: %v", err)
 	}
 
-	cmd := gestaltdCommand("sync", "--locked", "--config", configPath)
+	cmd := gestaltdCommand("sync", "--locked", "--config", configPath, "--lockfile", lockPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -263,7 +274,7 @@ func TestE2ESyncDefaultSuccessReportsProgressAndQuietSuppressesIt(t *testing.T) 
 	if err := os.RemoveAll(filepath.Join(dir, "providers", "example")); err != nil {
 		t.Fatalf("remove prepared provider for quiet sync: %v", err)
 	}
-	quiet := gestaltdCommand("sync", "--quiet", "--locked", "--config", configPath)
+	quiet := gestaltdCommand("sync", "--quiet", "--locked", "--config", configPath, "--lockfile", lockPath)
 	stdout.Reset()
 	stderr.Reset()
 	quiet.Stdout = &stdout
