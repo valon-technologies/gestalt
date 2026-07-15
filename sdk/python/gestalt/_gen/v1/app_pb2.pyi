@@ -124,6 +124,7 @@ class ProviderMetadata(_message.Message):
     SUPPORTS_SESSION_CATALOG_FIELD_NUMBER: _ClassVar[int]
     MIN_PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     MAX_PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
+    WORKFLOW_DEFINITION_SPECS_FIELD_NUMBER: _ClassVar[int]
     name: str
     display_name: str
     description: str
@@ -134,7 +135,8 @@ class ProviderMetadata(_message.Message):
     supports_session_catalog: bool
     min_protocol_version: int
     max_protocol_version: int
-    def __init__(self, name: _Optional[str] = ..., display_name: _Optional[str] = ..., description: _Optional[str] = ..., connection_mode: _Optional[_Union[ConnectionMode, str]] = ..., auth_types: _Optional[_Iterable[str]] = ..., connection_params: _Optional[_Mapping[str, ConnectionParamDef]] = ..., static_catalog: _Optional[_Union[Catalog, _Mapping]] = ..., supports_session_catalog: _Optional[bool] = ..., min_protocol_version: _Optional[int] = ..., max_protocol_version: _Optional[int] = ...) -> None: ...
+    workflow_definition_specs: _containers.RepeatedScalarFieldContainer[bytes]
+    def __init__(self, name: _Optional[str] = ..., display_name: _Optional[str] = ..., description: _Optional[str] = ..., connection_mode: _Optional[_Union[ConnectionMode, str]] = ..., auth_types: _Optional[_Iterable[str]] = ..., connection_params: _Optional[_Mapping[str, ConnectionParamDef]] = ..., static_catalog: _Optional[_Union[Catalog, _Mapping]] = ..., supports_session_catalog: _Optional[bool] = ..., min_protocol_version: _Optional[int] = ..., max_protocol_version: _Optional[int] = ..., workflow_definition_specs: _Optional[_Iterable[bytes]] = ...) -> None: ...
 
 class OperationResult(_message.Message):
     __slots__ = ()

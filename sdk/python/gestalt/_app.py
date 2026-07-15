@@ -57,6 +57,7 @@ class App:
         *,
         module_name: str | None = None,
         migrations: Any | None = None,
+        workflows: Any | None = None,
     ) -> None:
         self.name = _slug_name(name)
         self._module_name = module_name
@@ -65,6 +66,7 @@ class App:
         self._session_catalog_handler: tuple[Any, bool] | None = None
         self._http_subject_handler: tuple[Any, bool] | None = None
         self._migrations: MigrationRunOptions | None = normalize_migrations(migrations)
+        self._workflows: list[Any] = _normalize_workflow_declarations(workflows)
 
     @classmethod
     def from_manifest(
@@ -149,6 +151,11 @@ class App:
 
         _ = name, config
         return self._migrations
+
+    def workflow_definitions(self) -> list[Any]:
+        """Return app-declared workflow definition specs for startup."""
+
+        return list(self._workflows)
 
     def configure_provider(self, name: str, config: dict[str, Any]) -> None:
         """Invoke the registered configuration hook if one exists."""
@@ -583,3 +590,11 @@ def _name_from_yaml_manifest(text: str, fallback_name: str) -> str:
 def _slug_name(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-")
     return cleaned or "app"
+
+
+def _normalize_workflow_declarations(value: Any | None) -> list[Any]:
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)):
+        raise TypeError("workflows must be a sequence")
+    return list(value)

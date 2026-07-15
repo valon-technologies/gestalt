@@ -290,6 +290,13 @@ func (b *preparedProviderBuilds) Start(
 			if b.onInstalled != nil && pending.sha != "" {
 				b.onInstalled(pending.name, pending.sha)
 			}
+			if deps.AppWorkflowDeclarations != nil {
+				decls := result.WorkflowDeclarations
+				if decls == nil {
+					decls = []*proto.WorkflowDefinitionSpec{}
+				}
+				deps.AppWorkflowDeclarations.Set(pending.name, decls)
+			}
 			slog.Info("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
 		}(pending)
 	}
@@ -526,6 +533,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 	if err != nil {
 		return nil, err
 	}
+	workflowDeclarations := appservice.DeclaredWorkflowDefinitions(pluginProv)
 	allowedOperations := entry.EffectiveAllowedOperations()
 	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
@@ -571,7 +579,12 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			closeIfPossible(apiProv, pluginProv)
 			return nil, err
 		}
-		return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, nil, deps)
+		result, err := newProviderBuildResult(name, entry, manifest, pluginConfig, merged, nil, deps)
+		if err != nil {
+			return nil, err
+		}
+		result.WorkflowDeclarations = workflowDeclarations
+		return result, nil
 	}
 
 	specProv, authFallback, err := buildConfiguredSpecComposite(ctx, name, entry, plan, manifestApp, meta, deps, allowedOperations)
@@ -585,7 +598,12 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			closeIfPossible(pluginProv)
 			return nil, err
 		}
-		return newProviderBuildResult(name, entry, manifest, pluginConfig, restricted, nil, deps)
+		result, err := newProviderBuildResult(name, entry, manifest, pluginConfig, restricted, nil, deps)
+		if err != nil {
+			return nil, err
+		}
+		result.WorkflowDeclarations = workflowDeclarations
+		return result, nil
 	}
 	filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
 	if err != nil {
@@ -605,7 +623,12 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 		closeIfPossible(specProv, pluginProv)
 		return nil, err
 	}
-	return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, authFallback, deps)
+	result, err := newProviderBuildResult(name, entry, manifest, pluginConfig, merged, authFallback, deps)
+	if err != nil {
+		return nil, err
+	}
+	result.WorkflowDeclarations = workflowDeclarations
+	return result, nil
 }
 
 type specProviderConfig struct {

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -808,5 +809,48 @@ func TestGetAppProviderSupportWithRetryLabelsContextDoneFailures(t *testing.T) {
 	}
 	if got := err.Error(); got != `get provider metadata: rpc error: code = Unavailable desc = metadata warming up` {
 		t.Fatalf("getAppProviderSupportWithRetry error = %q", got)
+	}
+}
+
+type workflowDeclarationsMetadataServer struct {
+	proto.UnimplementedAppProviderServer
+	specs [][]byte
+}
+
+func (s *workflowDeclarationsMetadataServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
+	return &proto.ProviderMetadata{WorkflowDefinitionSpecs: s.specs}, nil
+}
+
+func (s *workflowDeclarationsMetadataServer) StartProvider(context.Context, *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
+	return &proto.StartProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+}
+
+func (s *workflowDeclarationsMetadataServer) Execute(context.Context, *proto.ExecuteRequest) (*proto.OperationResult, error) {
+	return &proto.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
+}
+
+func TestRemoteProviderDeclaredWorkflowDefinitions(t *testing.T) {
+	t.Parallel()
+
+	spec := &proto.WorkflowDefinitionSpec{Id: "daily", RunAs: "service_account:sa1"}
+	encoded, err := gproto.Marshal(spec)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	server := &workflowDeclarationsMetadataServer{specs: [][]byte{encoded}}
+	prov, err := NewRemote(context.Background(), newAppProviderClient(t, server), manualOnlyStaticSpec(), nil)
+	if err != nil {
+		t.Fatalf("NewRemote: %v", err)
+	}
+	decls := DeclaredWorkflowDefinitions(prov)
+	if len(decls) != 1 || decls[0].GetId() != "daily" {
+		t.Fatalf("declarations = %#v", decls)
+	}
+
+	_, err = NewRemote(context.Background(), newAppProviderClient(t, &workflowDeclarationsMetadataServer{
+		specs: [][]byte{{0xff}},
+	}), manualOnlyStaticSpec(), nil)
+	if err == nil {
+		t.Fatal("expected corrupt workflow_definition_specs to fail NewRemote")
 	}
 }

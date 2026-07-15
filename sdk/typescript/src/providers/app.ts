@@ -30,6 +30,10 @@ import {
   ProviderBase,
   type ProviderBaseOptions,
 } from "../provider.ts";
+import {
+  resolveWorkflowDefinitionSpec,
+} from "../workflow-define.ts";
+import type { WorkflowDefinitionSpec } from "./workflow.ts";
 import type { Schema } from "../schema.ts";
 
 const JSON_CONTENT_TYPE = "application/json";
@@ -191,6 +195,13 @@ export class AppProvider extends ProviderBase {
       }
       this.operations.set(entry.id, entry);
     }
+  }
+
+  /** Returns workflow definition specs declared on this provider. */
+  declaredWorkflowSpecs(): WorkflowDefinitionSpec[] {
+    return (this.workflowsSource ?? []).map((input) =>
+      resolveWorkflowDefinitionSpec(input),
+    );
   }
 
   /**

@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	protobuf "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -32,22 +33,23 @@ type StaticProviderSpec struct {
 }
 
 type remoteProviderBase struct {
-	client        proto.AppProviderClient
-	support       integrationProviderSupport
-	name          string
-	displayName   string
-	description   string
-	connection    core.ConnectionMode
-	catalog       *catalog.Catalog
-	iconSVG       string
-	authTypes     []string
-	connParams    map[string]core.ConnectionParamDef
-	credFields    []core.CredentialFieldDef
-	discovery     *core.DiscoveryConfig
-	closer        io.Closer
-	publicBaseURL string
-	callerKind    invocation.ProviderKind
-	callerName    string
+	client              proto.AppProviderClient
+	support             integrationProviderSupport
+	name                string
+	displayName         string
+	description         string
+	connection          core.ConnectionMode
+	catalog             *catalog.Catalog
+	iconSVG             string
+	authTypes           []string
+	connParams          map[string]core.ConnectionParamDef
+	credFields          []core.CredentialFieldDef
+	discovery           *core.DiscoveryConfig
+	closer              io.Closer
+	publicBaseURL       string
+	callerKind          invocation.ProviderKind
+	callerName          string
+	workflowDefinitions []*proto.WorkflowDefinitionSpec
 }
 
 var (
@@ -55,7 +57,8 @@ var (
 )
 
 type integrationProviderSupport struct {
-	sessionCatalog bool
+	sessionCatalog      bool
+	workflowDefinitions []*proto.WorkflowDefinitionSpec
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemote.
@@ -88,18 +91,19 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 	}
 
 	base := &remoteProviderBase{
-		client:      client,
-		support:     *support,
-		name:        spec.Name,
-		displayName: spec.DisplayName,
-		description: spec.Description,
-		connection:  spec.ConnectionMode,
-		catalog:     spec.Catalog,
-		iconSVG:     spec.IconSVG,
-		authTypes:   spec.AuthTypes,
-		connParams:  spec.ConnectionParams,
-		credFields:  spec.CredentialFields,
-		discovery:   spec.DiscoveryConfig,
+		client:              client,
+		support:             *support,
+		name:                spec.Name,
+		displayName:         spec.DisplayName,
+		description:         spec.Description,
+		connection:          spec.ConnectionMode,
+		catalog:             spec.Catalog,
+		iconSVG:             spec.IconSVG,
+		authTypes:           spec.AuthTypes,
+		connParams:          spec.ConnectionParams,
+		credFields:          spec.CredentialFields,
+		discovery:           spec.DiscoveryConfig,
+		workflowDefinitions: append([]*proto.WorkflowDefinitionSpec(nil), support.workflowDefinitions...),
 	}
 	for _, opt := range opts {
 		opt(base)
@@ -115,8 +119,13 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 	for {
 		meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
 		if err == nil {
+			specs, decodeErr := decodeWorkflowDefinitionSpecs(meta.GetWorkflowDefinitionSpecs())
+			if decodeErr != nil {
+				return nil, decodeErr
+			}
 			return &integrationProviderSupport{
-				sessionCatalog: meta.GetSupportsSessionCatalog(),
+				sessionCatalog:      meta.GetSupportsSessionCatalog(),
+				workflowDefinitions: specs,
 			}, nil
 		}
 		if status.Code(err) == codes.Unimplemented {
@@ -132,6 +141,42 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 		case <-ticker.C:
 		}
 	}
+}
+
+func (p *remoteProviderBase) DeclaredWorkflowDefinitions() []*proto.WorkflowDefinitionSpec {
+	if p == nil || len(p.workflowDefinitions) == 0 {
+		return nil
+	}
+	return append([]*proto.WorkflowDefinitionSpec(nil), p.workflowDefinitions...)
+}
+
+// DeclaredWorkflowDefinitions returns workflow specs declared by a remote app
+// provider, or nil when the provider does not surface declarations.
+func DeclaredWorkflowDefinitions(p core.Provider) []*proto.WorkflowDefinitionSpec {
+	if p == nil {
+		return nil
+	}
+	if remote, ok := p.(interface {
+		DeclaredWorkflowDefinitions() []*proto.WorkflowDefinitionSpec
+	}); ok {
+		return remote.DeclaredWorkflowDefinitions()
+	}
+	return nil
+}
+
+func decodeWorkflowDefinitionSpecs(raw [][]byte) ([]*proto.WorkflowDefinitionSpec, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	specs := make([]*proto.WorkflowDefinitionSpec, 0, len(raw))
+	for i, encoded := range raw {
+		spec := &proto.WorkflowDefinitionSpec{}
+		if err := protobuf.Unmarshal(encoded, spec); err != nil {
+			return nil, fmt.Errorf("decode workflow_definition_specs[%d]: %w", i, err)
+		}
+		specs = append(specs, spec)
+	}
+	return specs, nil
 }
 
 func (p *remoteProviderBase) Close() error {

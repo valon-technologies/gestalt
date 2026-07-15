@@ -280,6 +280,13 @@ class ProviderMetadata:
     supports_session_catalog: bool = False
     min_protocol_version: int = 0
     max_protocol_version: int = 0
+    #: Workflow definitions this app declares as desired state. Each entry is a
+    #: serialized gestalt.provider.v1.WorkflowDefinitionSpec (workflow.proto).
+    #: Framed as bytes because workflow.proto imports app.proto, so this file
+    #: cannot reference WorkflowDefinitionSpec directly. The spec `id` is the
+    #: app-local id; stored ids look like app_notes_daily-summary (app name + local id)
+    #: and are applied with gestaltd authority on the config-definitions reconcile path.
+    workflow_definition_specs: list[bytes] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

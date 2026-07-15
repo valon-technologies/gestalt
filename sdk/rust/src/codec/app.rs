@@ -304,6 +304,7 @@ pub(crate) fn from_wire_provider_metadata(value: v1::ProviderMetadata) -> Provid
         supports_session_catalog: value.supports_session_catalog,
         min_protocol_version: value.min_protocol_version,
         max_protocol_version: value.max_protocol_version,
+        workflow_definition_specs: value.workflow_definition_specs,
     }
 }
 

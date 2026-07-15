@@ -10,6 +10,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	protobuf "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -70,11 +71,29 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 // GetMetadata returns the metadata field; it is safe to call on a nil receiver.
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	_, ok := s.sessionCat()
-	return &proto.ProviderMetadata{
+	meta := &proto.ProviderMetadata{
 		SupportsSessionCatalog: ok,
 		MinProtocolVersion:     proto.CurrentProtocolVersion,
 		MaxProtocolVersion:     proto.CurrentProtocolVersion,
-	}, nil
+	}
+	if decl, ok := s.provider.(WorkflowDeclarationsProvider); ok {
+		specs, err := decl.DeclaredWorkflowDefinitions()
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "workflow definitions: %v", err)
+		}
+		for i, spec := range specs {
+			wire, err := workflowDefinitionSpecToProto(spec)
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "workflow definitions[%d]: %v", i, err)
+			}
+			encoded, err := protobuf.Marshal(wire)
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "workflow definitions[%d]: %v", i, err)
+			}
+			meta.WorkflowDefinitionSpecs = append(meta.WorkflowDefinitionSpecs, encoded)
+		}
+	}
+	return meta, nil
 }
 
 // Execute routes one operation invocation to its handler.

@@ -848,7 +848,7 @@ export class WorkflowProvider extends ProviderBase {
   readonly kind = "workflow" as const;
 
   constructor(private readonly options: WorkflowProviderOptions) {
-    super(options);
+    super(options, "workflow");
   }
 
   applyDefinition(request: ApplyWorkflowProviderDefinitionRequest): MaybePromise<WorkflowDefinition> {

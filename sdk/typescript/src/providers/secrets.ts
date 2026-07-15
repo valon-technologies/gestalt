@@ -17,7 +17,7 @@ export class SecretsProvider extends ProviderBase {
   private readonly getSecretHandler: SecretsProviderOptions["getSecret"];
 
   constructor(options: SecretsProviderOptions) {
-    super(options);
+    super(options, "secrets");
     this.getSecretHandler = options.getSecret;
   }
 

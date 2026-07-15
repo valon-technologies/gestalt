@@ -5,6 +5,7 @@ import { createServer } from "node:http2";
 import { dirname, resolve } from "node:path";
 
 import { create } from "@bufbuild/protobuf";
+import { toBinary } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   Code,
@@ -146,7 +147,9 @@ import {
   WorkflowProvider,
   createWorkflowProviderService,
   isWorkflowProvider,
+  workflowDefinitionSpecToProto,
 } from "./workflow.ts";
+import { WorkflowDefinitionSpecSchema } from "../internal/gen/v1/workflow_pb.ts";
 import {
   defaultProviderName,
   formatProviderTarget,
@@ -577,6 +580,15 @@ export function createProviderService(
           ),
           staticCatalog: catalogToProto(provider.staticCatalog()),
           supportsSessionCatalog: provider.supportsSessionCatalog(),
+          workflowDefinitionSpecs: provider
+            .declaredWorkflowSpecs()
+            .map((spec) => {
+              const wire = workflowDefinitionSpecToProto(spec);
+              if (!wire) {
+                throw new Error("workflow definition spec is required");
+              }
+              return toBinary(WorkflowDefinitionSpecSchema, wire);
+            }),
           minProtocolVersion: CURRENT_PROTOCOL_VERSION,
           maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
         });

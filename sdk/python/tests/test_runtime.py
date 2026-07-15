@@ -58,7 +58,12 @@ from gestalt import (
     WorkflowRunEvent,
     _bootstrap,
     _runtime,
+    define_workflow,
     parse_subject_id,
+)
+from gestalt._codec.workflow import (
+    from_wire_workflow_definition_spec,
+    to_wire_workflow_definition_spec,
 )
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
@@ -348,7 +353,11 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(result, 2)
 
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
-        app = App("source-name")
+        workflow_definition = define_workflow(
+            id="daily-summary",
+            run_as="service_account:sa1",
+        )
+        app = App("source-name", workflows=[workflow_definition])
         configured: list[tuple[str, dict[str, Any]]] = []
 
         @app.configure
@@ -529,6 +538,17 @@ class MainEntrypointTests(unittest.TestCase):
             metadata.max_protocol_version,
             _runtime.CURRENT_PROTOCOL_VERSION,
         )
+        self.assertEqual(len(metadata.workflow_definition_specs), 1)
+        expected_workflow_spec = to_wire_workflow_definition_spec(
+            workflow_definition.to_spec()
+        )
+        wire_workflow_spec = from_wire_workflow_definition_spec(
+            type(expected_workflow_spec).FromString(
+                metadata.workflow_definition_specs[0]
+            )
+        )
+        self.assertEqual(wire_workflow_spec.id, expected_workflow_spec.id)
+        self.assertEqual(wire_workflow_spec.run_as, expected_workflow_spec.run_as)
         self.assertEqual(
             start_response.protocol_version,
             _runtime.CURRENT_PROTOCOL_VERSION,

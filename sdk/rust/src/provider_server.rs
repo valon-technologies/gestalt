@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use prost::Message;
 use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
@@ -10,6 +11,7 @@ use crate::api::{
     Access, Credential, HTTPSubjectRequest, Request, Response, Subject, scope_request_context,
 };
 use crate::catalog::{catalog_to_proto, object_map};
+use crate::codec::workflow::to_wire_workflow_definition_spec;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
 use crate::generated::v1::app_provider_server::AppProvider;
@@ -162,8 +164,14 @@ where
         &self,
         _request: GrpcRequest<()>,
     ) -> std::result::Result<GrpcResponse<ProviderMetadata>, Status> {
+        let mut workflow_definition_specs = Vec::new();
+        for spec in self.provider.workflow_definitions() {
+            let wire = to_wire_workflow_definition_spec(spec);
+            workflow_definition_specs.push(wire.encode_to_vec());
+        }
         Ok(GrpcResponse::new(ProviderMetadata {
             supports_session_catalog: self.provider.supports_session_catalog(),
+            workflow_definition_specs,
             min_protocol_version: CURRENT_PROTOCOL_VERSION,
             max_protocol_version: CURRENT_PROTOCOL_VERSION,
             ..ProviderMetadata::default()

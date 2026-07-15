@@ -595,15 +595,16 @@ func ToWireProviderMetadata(value *ProviderMetadata) *proto.ProviderMetadata {
 		return nil
 	}
 	out := &proto.ProviderMetadata{
-		Name:                   value.Name,
-		DisplayName:            value.DisplayName,
-		Description:            value.Description,
-		ConnectionMode:         proto.ConnectionMode(value.ConnectionMode),
-		AuthTypes:              value.AuthTypes,
-		StaticCatalog:          ToWireCatalog(value.StaticCatalog),
-		SupportsSessionCatalog: value.SupportsSessionCatalog,
-		MinProtocolVersion:     value.MinProtocolVersion,
-		MaxProtocolVersion:     value.MaxProtocolVersion,
+		Name:                    value.Name,
+		DisplayName:             value.DisplayName,
+		Description:             value.Description,
+		ConnectionMode:          proto.ConnectionMode(value.ConnectionMode),
+		AuthTypes:               value.AuthTypes,
+		StaticCatalog:           ToWireCatalog(value.StaticCatalog),
+		SupportsSessionCatalog:  value.SupportsSessionCatalog,
+		MinProtocolVersion:      value.MinProtocolVersion,
+		MaxProtocolVersion:      value.MaxProtocolVersion,
+		WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
 	}
 	if value.ConnectionParams != nil {
 		out.ConnectionParams = make(map[string]*proto.ConnectionParamDef, len(value.ConnectionParams))
@@ -619,15 +620,16 @@ func FromWireProviderMetadata(value *proto.ProviderMetadata) *ProviderMetadata {
 		return nil
 	}
 	out := &ProviderMetadata{
-		Name:                   value.Name,
-		DisplayName:            value.DisplayName,
-		Description:            value.Description,
-		ConnectionMode:         ConnectionMode(value.ConnectionMode),
-		AuthTypes:              value.AuthTypes,
-		StaticCatalog:          FromWireCatalog(value.StaticCatalog),
-		SupportsSessionCatalog: value.SupportsSessionCatalog,
-		MinProtocolVersion:     value.MinProtocolVersion,
-		MaxProtocolVersion:     value.MaxProtocolVersion,
+		Name:                    value.Name,
+		DisplayName:             value.DisplayName,
+		Description:             value.Description,
+		ConnectionMode:          ConnectionMode(value.ConnectionMode),
+		AuthTypes:               value.AuthTypes,
+		StaticCatalog:           FromWireCatalog(value.StaticCatalog),
+		SupportsSessionCatalog:  value.SupportsSessionCatalog,
+		MinProtocolVersion:      value.MinProtocolVersion,
+		MaxProtocolVersion:      value.MaxProtocolVersion,
+		WorkflowDefinitionSpecs: value.WorkflowDefinitionSpecs,
 	}
 	if value.ConnectionParams != nil {
 		out.ConnectionParams = make(map[string]*ConnectionParamDef, len(value.ConnectionParams))

@@ -10,10 +10,12 @@ use generated::v1::app_provider_client::AppProviderClient;
 use generated::v1::{
     AccessContext, AgentToolRef, CredentialContext, ExecuteRequest, GetSessionCatalogRequest,
     HostContext, HttpSubjectRequest, RequestContext, ResolveHttpSubjectRequest,
-    StartProviderRequest, StringList, SubjectContext,
+    StartProviderRequest, StringList, SubjectContext, WorkflowDefinitionSpec as WireWorkflowDefinitionSpec,
 };
+use gestalt::workflow::WorkflowDefinitionSpec;
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
+use prost::Message;
 use tokio::net::UnixStream;
 use tonic::Code;
 use tonic::codegen::async_trait;
@@ -43,6 +45,14 @@ impl Provider for TestProvider {
 
     fn supports_session_catalog(&self) -> bool {
         true
+    }
+
+    fn workflow_definitions(&self) -> Vec<WorkflowDefinitionSpec> {
+        vec![WorkflowDefinitionSpec {
+            id: "daily-summary".to_string(),
+            run_as: "service_account:sa1".to_string(),
+            ..Default::default()
+        }]
     }
 
     async fn catalog_for_request(&self, request: &Request) -> gestalt::Result<Option<Catalog>> {
@@ -314,6 +324,11 @@ async fn serves_provider_requests_over_unix_socket() {
         metadata.max_protocol_version,
         gestalt::CURRENT_PROTOCOL_VERSION
     );
+    assert_eq!(metadata.workflow_definition_specs.len(), 1);
+    let wire = WireWorkflowDefinitionSpec::decode(metadata.workflow_definition_specs[0].as_slice())
+        .expect("decode workflow definition spec");
+    assert_eq!(wire.id, "daily-summary");
+    assert_eq!(wire.run_as, "service_account:sa1");
 
     let err = client
         .start_provider(StartProviderRequest {

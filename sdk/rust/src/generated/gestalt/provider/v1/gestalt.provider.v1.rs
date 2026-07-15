@@ -183,6 +183,14 @@ pub struct ProviderMetadata {
     pub min_protocol_version: i32,
     #[prost(int32, tag = "12")]
     pub max_protocol_version: i32,
+    /// Workflow definitions this app declares as desired state. Each entry is a
+    /// serialized gestalt.provider.v1.WorkflowDefinitionSpec (workflow.proto).
+    /// Framed as bytes because workflow.proto imports app.proto, so this file
+    /// cannot reference WorkflowDefinitionSpec directly. The spec `id` is the
+    /// app-local id; stored ids look like app_notes_daily-summary (app name + local id)
+    /// and are applied with gestaltd authority on the config-definitions reconcile path.
+    #[prost(bytes = "vec", repeated, tag = "13")]
+    pub workflow_definition_specs: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// OperationResult is the serialized result returned from an Execute call.
 #[derive(Clone, PartialEq, ::prost::Message)]
