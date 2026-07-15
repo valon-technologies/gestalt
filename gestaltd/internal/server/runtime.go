@@ -270,6 +270,9 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 			if err := entry.server.Shutdown(drainCtx); err != nil {
 				slog.Warn("server shutdown", "listener", entry.name, "error", err)
 			}
+			if closer, ok := entry.server.Handler.(interface{ Close() }); ok {
+				closer.Close()
+			}
 		}
 	}()
 

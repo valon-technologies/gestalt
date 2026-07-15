@@ -959,6 +959,8 @@ pub struct GetAgentProviderTurnRequest {
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "6")]
     pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnsRequest {
@@ -997,6 +999,8 @@ pub struct CancelAgentProviderTurnRequest {
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "7")]
     pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurnEvent {
@@ -1031,6 +1035,8 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "8")]
     pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnEventsResponse {

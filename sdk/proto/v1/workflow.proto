@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/annotations.proto";
 import "google/api/visibility.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -442,6 +443,10 @@ service Workflow {
   option (host_binding) = "workflow";
 
   rpc ApplyDefinition(ApplyWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
+    option (google.api.http) = {
+      post: "/api/v2/workflow/definitions:apply"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -453,6 +458,7 @@ service Workflow {
     option (signature) = "spec";
   }
   rpc GetDefinition(GetWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
+    option (google.api.http) = {get: "/api/v2/workflow/definitions/{definition_id}"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -463,6 +469,7 @@ service Workflow {
     option (signature) = "definition_id";
   }
   rpc ListDefinitions(ListWorkflowProviderDefinitionsRequest) returns (ListWorkflowProviderDefinitionsResponse) {
+    option (google.api.http) = {get: "/api/v2/workflow/definitions"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -472,6 +479,10 @@ service Workflow {
     option (signature) = "provider";
   }
   rpc SetDefinitionPaused(SetWorkflowProviderDefinitionPausedRequest) returns (WorkflowDefinition) {
+    option (google.api.http) = {
+      post: "/api/v2/workflow/definitions/{definition_id}:setPaused"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -483,6 +494,10 @@ service Workflow {
     option (signature) = "paused";
   }
   rpc SetActivationPaused(SetWorkflowProviderActivationPausedRequest) returns (WorkflowDefinition) {
+    option (google.api.http) = {
+      post: "/api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -495,6 +510,7 @@ service Workflow {
     option (signature) = "paused";
   }
   rpc DeleteDefinition(DeleteWorkflowProviderDefinitionRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {delete: "/api/v2/workflow/definitions/{definition_id}"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -506,6 +522,10 @@ service Workflow {
   }
 
   rpc StartRun(StartWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (google.api.http) = {
+      post: "/api/v2/workflow/definitions/{definition_id}/runs"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -520,6 +540,7 @@ service Workflow {
     option (signature) = "input";
   }
   rpc ListRuns(ListWorkflowProviderRunsRequest) returns (ListWorkflowProviderRunsResponse) {
+    option (google.api.http) = {get: "/api/v2/workflow/runs"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -533,6 +554,7 @@ service Workflow {
     option (signature) = "target_app";
   }
   rpc GetRun(GetWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (google.api.http) = {get: "/api/v2/workflow/runs/{run_id}"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -543,6 +565,7 @@ service Workflow {
     option (signature) = "run_id";
   }
   rpc GetRunEvents(GetWorkflowProviderRunEventsRequest) returns (GetWorkflowProviderRunEventsResponse) {
+    option (google.api.http) = {get: "/api/v2/workflow/runs/{run_id}/events"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -553,6 +576,7 @@ service Workflow {
     option (signature) = "run_id";
   }
   rpc GetRunOutput(GetWorkflowProviderRunOutputRequest) returns (GetWorkflowProviderRunOutputResponse) {
+    option (google.api.http) = {get: "/api/v2/workflow/runs/{run_id}/output"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -563,6 +587,10 @@ service Workflow {
     option (signature) = "run_id";
   }
   rpc CancelRun(CancelWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (google.api.http) = {
+      post: "/api/v2/workflow/runs/{run_id}:cancel"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -574,6 +602,10 @@ service Workflow {
     option (signature) = "reason";
   }
   rpc SignalRun(SignalWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/workflow/runs/{run_id}:signal"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -585,6 +617,10 @@ service Workflow {
     option (signature) = "signal";
   }
   rpc SignalOrStartRun(SignalOrStartWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/workflow/definitions/{definition_id}:signalOrStart"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };

@@ -2,12 +2,14 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const S3_TRANSPORT_TEST = join("tests", "s3.transport.test.ts");
+const INDEXEDDB_TRANSPORT_TEST = join("tests", "indexeddb.transport.test.ts");
 
 const testFiles = (await collectTestFiles("tests"))
-  .filter((path) => path !== S3_TRANSPORT_TEST)
+  .filter((path) => path !== S3_TRANSPORT_TEST && path !== INDEXEDDB_TRANSPORT_TEST)
   .sort();
 
 await runBunTest([S3_TRANSPORT_TEST]);
+await runBunTest([INDEXEDDB_TRANSPORT_TEST]);
 await runBunTest(testFiles);
 
 async function collectTestFiles(dir: string): Promise<string[]> {

@@ -356,6 +356,7 @@ class CancelAgentProviderTurnRequest:
     reason: str = ""
     context: RequestContext | None = None
     provider_name: str = ""
+    session_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,6 +419,7 @@ class GetAgentProviderTurnRequest:
     turn_id: str = ""
     context: RequestContext | None = None
     provider_name: str = ""
+    session_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -458,6 +460,7 @@ class ListAgentProviderTurnEventsRequest:
     limit: int = 0
     context: RequestContext | None = None
     provider_name: str = ""
+    session_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)

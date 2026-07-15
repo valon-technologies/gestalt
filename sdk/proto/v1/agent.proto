@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "google/api/annotations.proto";
 import "google/api/visibility.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -332,6 +333,7 @@ message GetAgentProviderTurnRequest {
   string turn_id = 1;
   RequestContext context = 5;
   string provider_name = 6;
+  string session_id = 7;
 }
 
 message ListAgentProviderTurnsRequest {
@@ -366,6 +368,7 @@ message CancelAgentProviderTurnRequest {
   string reason = 2;
   RequestContext context = 6;
   string provider_name = 7;
+  string session_id = 8;
 }
 
 message AgentTurnEvent {
@@ -389,6 +392,7 @@ message ListAgentProviderTurnEventsRequest {
   int32 limit = 3;
   RequestContext context = 7;
   string provider_name = 8;
+  string session_id = 9;
 }
 
 message ListAgentProviderTurnEventsResponse {
@@ -452,6 +456,10 @@ service Agent {
   option (host_binding) = "agent";
 
   rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession) {
+    option (google.api.http) = {
+      post: "/api/v2/agent/sessions"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -467,6 +475,7 @@ service Agent {
     option (optional_signature) = "tools";
   }
   rpc GetSession(GetAgentProviderSessionRequest) returns (AgentSession) {
+    option (google.api.http) = {get: "/api/v2/agent/sessions/{session_id}"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -477,6 +486,7 @@ service Agent {
     option (optional_signature) = "provider_name";
   }
   rpc ListSessions(ListAgentProviderSessionsRequest) returns (ListAgentProviderSessionsResponse) {
+    option (google.api.http) = {get: "/api/v2/agent/sessions"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -490,6 +500,10 @@ service Agent {
     option (optional_signature) = "provider_name";
   }
   rpc UpdateSession(UpdateAgentProviderSessionRequest) returns (AgentSession) {
+    option (google.api.http) = {
+      patch: "/api/v2/agent/sessions/{session_id}"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -504,6 +518,10 @@ service Agent {
   }
 
   rpc CreateTurn(CreateAgentProviderTurnRequest) returns (AgentTurn) {
+    option (google.api.http) = {
+      post: "/api/v2/agent/sessions/{session_id}/turns"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -522,6 +540,7 @@ service Agent {
     option (optional_signature) = "output";
   }
   rpc GetTurn(GetAgentProviderTurnRequest) returns (AgentTurn) {
+    option (google.api.http) = {get: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -532,6 +551,7 @@ service Agent {
     option (optional_signature) = "provider_name";
   }
   rpc ListTurns(ListAgentProviderTurnsRequest) returns (ListAgentProviderTurnsResponse) {
+    option (google.api.http) = {get: "/api/v2/agent/sessions/{session_id}/turns"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -546,6 +566,10 @@ service Agent {
     option (optional_signature) = "provider_name";
   }
   rpc CancelTurn(CancelAgentProviderTurnRequest) returns (AgentTurn) {
+    option (google.api.http) = {
+      post: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel"
+      body: "*"
+    };
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };
@@ -558,6 +582,7 @@ service Agent {
   }
 
   rpc ListTurnEvents(ListAgentProviderTurnEventsRequest) returns (ListAgentProviderTurnEventsResponse) {
+    option (google.api.http) = {get: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}/events"};
     option (google.api.method_visibility) = {
       restriction: "PUBLIC"
     };

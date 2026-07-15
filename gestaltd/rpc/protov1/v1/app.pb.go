@@ -7,6 +7,7 @@
 package proto
 
 import (
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/api/visibility"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -2340,7 +2341,7 @@ var File_v1_app_proto protoreflect.FileDescriptor
 
 const file_v1_app_proto_rawDesc = "" +
 	"\n" +
-	"\fv1/app.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/api/visibility.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x14v1/annotations.proto\"\xaa\x01\n" +
+	"\fv1/app.proto\x12\x13gestalt.provider.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/api/visibility.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x14v1/annotations.proto\"\xaa\x01\n" +
 	"\x10CatalogParameter\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12 \n" +
@@ -2585,15 +2586,15 @@ const file_v1_app_proto_rawDesc = "" +
 	"\rStartProvider\x12).gestalt.provider.v1.StartProviderRequest\x1a*.gestalt.provider.v1.StartProviderResponse\"&\x8a\xb5\x18\x04name\x8a\xb5\x18\x10protocol_version\x8a\xb5\x18\x06config\x12\x9a\x01\n" +
 	"\aExecute\x12#.gestalt.provider.v1.ExecuteRequest\x1a$.gestalt.provider.v1.OperationResult\"D\x8a\xb5\x18\toperation\x8a\xb5\x18\x05token\x8a\xb5\x18\rinvocation_id\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x06params\x12u\n" +
 	"\x12ResolveHTTPSubject\x12..gestalt.provider.v1.ResolveHTTPSubjectRequest\x1a/.gestalt.provider.v1.ResolveHTTPSubjectResponse\x12\x8e\x01\n" +
-	"\x11GetSessionCatalog\x12-.gestalt.provider.v1.GetSessionCatalogRequest\x1a..gestalt.provider.v1.GetSessionCatalogResponse\"\x1a\x8a\xb5\x18\x05token\x8a\xb5\x18\rinvocation_id2\xd6\x03\n" +
-	"\x03App\x12\xf5\x01\n" +
-	"\x06Invoke\x12%.gestalt.provider.v1.AppInvokeRequest\x1a$.gestalt.provider.v1.OperationResult\"\x9d\x01\x8a\xb5\x18\x03app\x8a\xb5\x18\toperation\x8a\xb5\x18\x06params\x9a\xb5\x18\x0e\n" +
+	"\x11GetSessionCatalog\x12-.gestalt.provider.v1.GetSessionCatalogRequest\x1a..gestalt.provider.v1.GetSessionCatalogResponse\"\x1a\x8a\xb5\x18\x05token\x8a\xb5\x18\rinvocation_id2\xae\x04\n" +
+	"\x03App\x12\xa8\x02\n" +
+	"\x06Invoke\x12%.gestalt.provider.v1.AppInvokeRequest\x1a$.gestalt.provider.v1.OperationResult\"\xd0\x01\x8a\xb5\x18\x03app\x8a\xb5\x18\toperation\x8a\xb5\x18\x06params\x9a\xb5\x18\x0e\n" +
 	"\x06status\x12\x04body\xa2\xb5\x18\n" +
 	"connection\xa2\xb5\x18\binstance\xa2\xb5\x18\x0fidempotency_key\xa2\xb5\x18\x0fcredential_mode\xa2\xb5\x18\x06run_as\xca\xf3\x18\x11\n" +
-	"\acontext\x12\x06run_as\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xcd\x01\n" +
-	"\rInvokeGraphQL\x12,.gestalt.provider.v1.AppInvokeGraphQLRequest\x1a$.gestalt.provider.v1.OperationResult\"h\x8a\xb5\x18\x03app\x8a\xb5\x18\bdocument\xa2\xb5\x18\n" +
+	"\acontext\x12\x06run_as\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02-:\x01*\"(/api/v2/app/{app}/operations/{operation}\x12\xf2\x01\n" +
+	"\rInvokeGraphQL\x12,.gestalt.provider.v1.AppInvokeGraphQLRequest\x1a$.gestalt.provider.v1.OperationResult\"\x8c\x01\x8a\xb5\x18\x03app\x8a\xb5\x18\bdocument\xa2\xb5\x18\n" +
 	"connection\xa2\xb5\x18\binstance\xa2\xb5\x18\x0fidempotency_key\xa2\xb5\x18\tvariables\xca\xf3\x18\t\n" +
-	"\acontext\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x1a\a\x8a\xb5\x18\x03appB\xd4\x01\n" +
+	"\acontext\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1e:\x01*\"\x19/api/v2/app/{app}/graphql\x1a\a\x8a\xb5\x18\x03appB\xd4\x01\n" +
 	"\x17com.gestalt.provider.v1B\bAppProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

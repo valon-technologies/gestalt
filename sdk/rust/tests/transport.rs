@@ -10,7 +10,8 @@ use generated::v1::app_provider_client::AppProviderClient;
 use generated::v1::{
     AccessContext, AgentToolRef, CredentialContext, ExecuteRequest, GetSessionCatalogRequest,
     HostContext, HttpSubjectRequest, RequestContext, ResolveHttpSubjectRequest,
-    StartProviderRequest, StringList, SubjectContext, WorkflowDefinitionSpec as WireWorkflowDefinitionSpec,
+    StartProviderRequest, StringList, SubjectContext,
+    WorkflowDefinitionSpec as WireWorkflowDefinitionSpec,
 };
 use gestalt::workflow::WorkflowDefinitionSpec;
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};

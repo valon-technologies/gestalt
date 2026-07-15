@@ -896,7 +896,7 @@ func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, req *prot
 	if err != nil {
 		return nil, err
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), providerName, "", req.GetContext())
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), providerName, req.GetSessionId(), req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -994,7 +994,7 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	if err != nil {
 		return nil, err
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), providerName, "", req.GetContext())
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), providerName, req.GetSessionId(), req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -1038,7 +1038,7 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, re
 	if err != nil {
 		return nil, err
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), providerName, "", req.GetContext())
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), providerName, req.GetSessionId(), req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -1406,10 +1406,12 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 		if turn == nil {
 			continue
 		}
-		sessionID := strings.TrimSpace(turn.SessionID)
 		if expectedSessionID = strings.TrimSpace(expectedSessionID); expectedSessionID != "" {
-			sessionID = expectedSessionID
+			if strings.TrimSpace(turn.SessionID) != expectedSessionID {
+				continue
+			}
 		}
+		sessionID := strings.TrimSpace(turn.SessionID)
 		normalized, err := normalizeProviderTurn(candidate.name, sessionID, turnID, turn)
 		if err != nil {
 			return nil, err

@@ -457,6 +457,7 @@ pub(crate) fn to_wire_cancel_agent_provider_turn_request(
         reason: value.reason,
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
+        session_id: value.session_id,
     }
 }
 
@@ -540,6 +541,7 @@ pub(crate) fn to_wire_get_agent_provider_turn_request(
         turn_id: value.turn_id,
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
+        session_id: value.session_id,
     }
 }
 
@@ -604,6 +606,7 @@ pub(crate) fn to_wire_list_agent_provider_turn_events_request(
         limit: value.limit,
         context: value.context.map(to_wire_request_context),
         provider_name: value.provider_name,
+        session_id: value.session_id,
     }
 }
 

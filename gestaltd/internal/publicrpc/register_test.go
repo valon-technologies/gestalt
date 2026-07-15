@@ -64,7 +64,7 @@ func TestPublicRegistrationMarksOrigin(t *testing.T) {
 			t.Parallel()
 			serverImpl := &originAppServer{}
 			conn := dialGRPC(t, func(s *grpc.Server) {
-				publicrpc.RegisterPublicAppServer(s, serverImpl)
+				publicrpc.RegisterPublicServer(s, serverImpl, gestaltproto.App_ServiceDesc)
 			})
 
 			if err := tc.call(gestaltproto.NewAppClient(conn)); err != nil {
@@ -82,7 +82,7 @@ func TestPublicRegistrationExcludesInternalMethods(t *testing.T) {
 
 	tracker := &workflowTracker{}
 	conn := dialGRPC(t, func(s *grpc.Server) {
-		publicrpc.RegisterPublicWorkflowServer(s, tracker)
+		publicrpc.RegisterPublicServer(s, tracker, gestaltproto.Workflow_ServiceDesc)
 	})
 
 	client := gestaltproto.NewWorkflowClient(conn)

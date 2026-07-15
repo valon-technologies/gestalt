@@ -7,6 +7,7 @@
 package proto
 
 import (
+	_ "google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/api/visibility"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -914,7 +915,7 @@ var File_v1_identity_proto protoreflect.FileDescriptor
 
 const file_v1_identity_proto_rawDesc = "" +
 	"\n" +
-	"\x11v1/identity.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/api/visibility.proto\x1a\x14v1/annotations.proto\"\xa3\x01\n" +
+	"\x11v1/identity.proto\x12\x13gestalt.provider.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/api/visibility.proto\x1a\x14v1/annotations.proto\"\xa3\x01\n" +
 	"\x10AuthorizeRequest\x12#\n" +
 	"\rresponse_type\x18\x01 \x01(\tR\fresponseType\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12!\n" +
@@ -977,19 +978,19 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name2\xf8\a\n" +
-	"\bIdentity\x12\xaa\x01\n" +
-	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"N\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\xd9\x01\n" +
-	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\x88\x01\x8a\xb5\x18\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\xfc\t\n" +
+	"\bIdentity\x12\xcf\x01\n" +
+	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"s\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/api/v2/identity/authorize\x12\xfa\x01\n" +
+	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\xa9\x01\x8a\xb5\x18\n" +
 	"grant_type\x8a\xb5\x18\x04code\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\xa2\xb5\x18\n" +
-	"expires_in\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12\x89\x01\n" +
+	"expires_in\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/api/v2/identity/token\x12\xaf\x01\n" +
 	"\n" +
-	"Introspect\x12&.gestalt.provider.v1.IntrospectRequest\x1a'.gestalt.provider.v1.IntrospectResponse\"*\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12g\n" +
-	"\bUserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\"\x0e\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12m\n" +
+	"Introspect\x12&.gestalt.provider.v1.IntrospectRequest\x1a'.gestalt.provider.v1.IntrospectResponse\"P\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/api/v2/identity/introspect\x12\x88\x01\n" +
+	"\bUserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\"/\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b\x12\x19/api/v2/identity/userinfo\x12\x8c\x01\n" +
 	"\n" +
-	"ListGrants\x12&.gestalt.provider.v1.ListGrantsRequest\x1a'.gestalt.provider.v1.ListGrantsResponse\"\x0e\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12s\n" +
-	"\bGetGrant\x12$.gestalt.provider.v1.GetGrantRequest\x1a%.gestalt.provider.v1.GetGrantResponse\"\x1a\x8a\xb5\x18\bgrant_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x12|\n" +
-	"\vRevokeGrant\x12'.gestalt.provider.v1.RevokeGrantRequest\x1a(.gestalt.provider.v1.RevokeGrantResponse\"\x1a\x8a\xb5\x18\bgrant_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x1a\f\x8a\xb5\x18\bidentityB\xd9\x01\n" +
+	"ListGrants\x12&.gestalt.provider.v1.ListGrantsRequest\x1a'.gestalt.provider.v1.ListGrantsResponse\"-\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x19\x12\x17/api/v2/identity/grants\x12\x9d\x01\n" +
+	"\bGetGrant\x12$.gestalt.provider.v1.GetGrantRequest\x1a%.gestalt.provider.v1.GetGrantResponse\"D\x8a\xb5\x18\bgrant_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02$\x12\"/api/v2/identity/grants/{grant_id}\x12\xa6\x01\n" +
+	"\vRevokeGrant\x12'.gestalt.provider.v1.RevokeGrantRequest\x1a(.gestalt.provider.v1.RevokeGrantResponse\"D\x8a\xb5\x18\bgrant_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02$*\"/api/v2/identity/grants/{grant_id}\x1a\f\x8a\xb5\x18\bidentityB\xd9\x01\n" +
 	"\x17com.gestalt.provider.v1B\rIdentityProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

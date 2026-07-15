@@ -377,6 +377,7 @@ type CancelAgentProviderTurnRequest struct {
 	Reason       string
 	Context      *RequestContext
 	ProviderName string
+	SessionId    string
 }
 
 // CreateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.CreateAgentProviderSessionRequest.
@@ -437,6 +438,7 @@ type GetAgentProviderTurnRequest struct {
 	TurnId       string
 	Context      *RequestContext
 	ProviderName string
+	SessionId    string
 }
 
 // ListAgentProviderInteractionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsRequest.
@@ -477,6 +479,7 @@ type ListAgentProviderTurnEventsRequest struct {
 	Limit        int32
 	Context      *RequestContext
 	ProviderName string
+	SessionId    string
 }
 
 // ListAgentProviderTurnEventsResponse is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsResponse.

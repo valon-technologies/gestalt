@@ -1878,6 +1878,20 @@ func TestManagerFollowUpsUseRequestedProvider(t *testing.T) {
 	if alpha.getTurnCalls != 1 || alpha.getSessionCalls != 1 || beta.getTurnCalls != 0 || beta.getSessionCalls != 0 {
 		t.Fatalf("GetTurn calls = alpha turn:%d session:%d beta turn:%d session:%d, want only alpha", alpha.getTurnCalls, alpha.getSessionCalls, beta.getTurnCalls, beta.getSessionCalls)
 	}
+	if _, err := manager.GetTurn(ctx, p, &proto.GetAgentProviderTurnRequest{
+		ProviderName: "alpha",
+		TurnId:       alphaTurn.ID,
+		SessionId:    alphaSession.ID,
+	}); err != nil {
+		t.Fatalf("GetTurn matching session_id: %v", err)
+	}
+	if _, err := manager.GetTurn(ctx, p, &proto.GetAgentProviderTurnRequest{
+		ProviderName: "alpha",
+		TurnId:       alphaTurn.ID,
+		SessionId:    "other-session",
+	}); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetTurn mismatched session_id error = %v, want not found", err)
+	}
 
 	created, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
 		ProviderName:   "alpha",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 )
@@ -26,42 +27,66 @@ func PublicOriginFromContext(ctx context.Context) (PublicOrigin, bool) {
 	return origin, ok
 }
 
+// Servers holds public service implementations shared by gRPC and REST surfaces.
+type Servers struct {
+	App                 proto.AppServer
+	Agent               proto.AgentServer
+	Workflow            proto.WorkflowServer
+	IndexedDB           proto.IndexedDBServer
+	Identity            proto.IdentityServer
+	Authorization       proto.AuthorizationServer
+	ExternalCredentials proto.ExternalCredentialsServer
+}
+
+type serverRegistration struct {
+	server       any
+	description  grpc.ServiceDesc
+	registerREST func(context.Context, *runtime.ServeMux, *grpc.ClientConn) error
+}
+
+func (s Servers) registrations() []serverRegistration {
+	return []serverRegistration{
+		{s.App, proto.App_ServiceDesc, proto.RegisterAppHandler},
+		{s.Agent, proto.Agent_ServiceDesc, proto.RegisterAgentHandler},
+		{s.Workflow, proto.Workflow_ServiceDesc, proto.RegisterWorkflowHandler},
+		{s.IndexedDB, proto.IndexedDB_ServiceDesc, nil},
+		{s.Identity, proto.Identity_ServiceDesc, proto.RegisterIdentityHandler},
+		{s.Authorization, proto.Authorization_ServiceDesc, proto.RegisterAuthorizationHandler},
+		{s.ExternalCredentials, proto.ExternalCredentials_ServiceDesc, nil},
+	}
+}
+
+// RegisterPublicServers registers only PUBLIC methods for each configured server.
+func RegisterPublicServers(s grpc.ServiceRegistrar, servers Servers) {
+	for _, registration := range servers.registrations() {
+		if registration.server != nil {
+			RegisterPublicServer(s, registration.server, registration.description)
+		}
+	}
+}
+
+// RegisterPublicServer registers only PUBLIC methods from desc on srv.
+func RegisterPublicServer(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
+	registerPublic(s, srv, desc)
+}
+
+// RegisterRESTGateway registers generated /api/v2 handlers that dispatch through
+// conn. IndexedDB and ExternalCredentials are intentionally excluded.
+func RegisterRESTGateway(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn, servers Servers) error {
+	if mux == nil || conn == nil {
+		return nil
+	}
+	for _, registration := range servers.registrations() {
+		if registration.server != nil && registration.registerREST != nil {
+			if err := registration.registerREST(ctx, mux, conn); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 var loadGeneratedRegistry = sync.OnceValues(NewGeneratedRegistry)
-
-// RegisterPublicAppServer registers only PUBLIC App methods.
-func RegisterPublicAppServer(s grpc.ServiceRegistrar, srv proto.AppServer) {
-	registerPublic(s, srv, proto.App_ServiceDesc)
-}
-
-// RegisterPublicAgentServer registers only PUBLIC Agent methods.
-func RegisterPublicAgentServer(s grpc.ServiceRegistrar, srv proto.AgentServer) {
-	registerPublic(s, srv, proto.Agent_ServiceDesc)
-}
-
-// RegisterPublicWorkflowServer registers only PUBLIC Workflow methods.
-func RegisterPublicWorkflowServer(s grpc.ServiceRegistrar, srv proto.WorkflowServer) {
-	registerPublic(s, srv, proto.Workflow_ServiceDesc)
-}
-
-// RegisterPublicIndexedDBServer registers only PUBLIC IndexedDB methods.
-func RegisterPublicIndexedDBServer(s grpc.ServiceRegistrar, srv proto.IndexedDBServer) {
-	registerPublic(s, srv, proto.IndexedDB_ServiceDesc)
-}
-
-// RegisterPublicIdentityServer registers only PUBLIC Identity methods.
-func RegisterPublicIdentityServer(s grpc.ServiceRegistrar, srv proto.IdentityServer) {
-	registerPublic(s, srv, proto.Identity_ServiceDesc)
-}
-
-// RegisterPublicAuthorizationServer registers only PUBLIC Authorization methods.
-func RegisterPublicAuthorizationServer(s grpc.ServiceRegistrar, srv proto.AuthorizationServer) {
-	registerPublic(s, srv, proto.Authorization_ServiceDesc)
-}
-
-// RegisterPublicExternalCredentialsServer registers only PUBLIC ExternalCredentials methods.
-func RegisterPublicExternalCredentialsServer(s grpc.ServiceRegistrar, srv proto.ExternalCredentialsServer) {
-	registerPublic(s, srv, proto.ExternalCredentials_ServiceDesc)
-}
 
 func registerPublic(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
 	reg, err := loadGeneratedRegistry()

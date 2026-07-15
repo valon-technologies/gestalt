@@ -633,6 +633,7 @@ def to_wire_cancel_agent_provider_turn_request(
         if value.context is None
         else app.to_wire_request_context(value.context),
         provider_name=value.provider_name,
+        session_id=value.session_id,
     )
 
 
@@ -646,6 +647,7 @@ def from_wire_cancel_agent_provider_turn_request(
         if value.HasField("context")
         else None,
         provider_name=value.provider_name,
+        session_id=value.session_id,
     )
 
 
@@ -820,6 +822,7 @@ def to_wire_get_agent_provider_turn_request(
         if value.context is None
         else app.to_wire_request_context(value.context),
         provider_name=value.provider_name,
+        session_id=value.session_id,
     )
 
 
@@ -832,6 +835,7 @@ def from_wire_get_agent_provider_turn_request(
         if value.HasField("context")
         else None,
         provider_name=value.provider_name,
+        session_id=value.session_id,
     )
 
 
@@ -932,6 +936,7 @@ def to_wire_list_agent_provider_turn_events_request(
         if value.context is None
         else app.to_wire_request_context(value.context),
         provider_name=value.provider_name,
+        session_id=value.session_id,
     )
 
 
@@ -946,6 +951,7 @@ def from_wire_list_agent_provider_turn_events_request(
         if value.HasField("context")
         else None,
         provider_name=value.provider_name,
+        session_id=value.session_id,
     )
 
 

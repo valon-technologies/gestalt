@@ -1,8 +1,35 @@
 # HTTP API
 
-`gestaltd` exposes a REST API and an optional MCP endpoint. When `server.management` is not configured, every route below is served from the public listener. When `server.management` is configured, `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener and return `404` on the public listener. Prefer the split-listener setup for production so the operator surface does not share the public listener.
+`gestaltd` exposes a REST API and an optional MCP endpoint. `/api/v1` remains the hand-written CLI-oriented surface. `/api/v2` exposes the generated public provider API over REST for App, Agent, Workflow, Authorization, and Identity. IndexedDB and External Credentials remain available on public gRPC and `/api/v1` where applicable, but have no `/api/v2` routes.
+
+When `server.management` is not configured, every route below is served from the public listener. When `server.management` is configured, `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener and return `404` on the public listener. `/api/v2` is mounted only on the public and all-in-one listeners; the management-only listener returns `404` for `/api/v2/*`. Prefer the split-listener setup for production so the operator surface does not share the public listener.
 
 App catalog and connection routes use `/api/v1/apps`. The CLI uses the `app` command (alias `apps`), while server config uses the `apps` map. See [Config File](/reference/config-file#providersapps) for context.
+
+## `/api/v2` public REST surface
+
+`/api/v2` is generated from `google.api.http` annotations on public unary gRPC methods. Mutations use JSON bodies with `body: "*"`. Path-bound fields and server-filled `context` are omitted from JSON. `GET` and `DELETE` requests have no body; remaining request fields are lower-camel-case query parameters.
+
+Workflow and Agent providers never appear in paths. Mutations carry `provider` or `providerName` in JSON. Reads and deletes pass `provider` or `providerName` as query parameters.
+
+`POST /api/v2/identity/authorize` and `POST /api/v2/identity/token` are unauthenticated. Every other `/api/v2` route requires `Authorization: Bearer <token>`.
+
+App `Invoke` and `InvokeGraphQL` forward the provider's raw HTTP status, headers, and body instead of JSON-encoding `OperationResult`.
+
+| Service | Example routes |
+| --- | --- |
+| App | `POST /api/v2/app/{app}/operations/{operation}`, `POST /api/v2/app/{app}/graphql` |
+| Agent | `POST /api/v2/agent/sessions`, `GET /api/v2/agent/sessions/{session_id}/turns/{turn_id}` |
+| Workflow | `POST /api/v2/workflow/definitions:apply`, `GET /api/v2/workflow/runs/{run_id}` |
+| Authorization | `POST /api/v2/authorization/access:check`, `GET /api/v2/authorization/relationships` |
+| Identity | `POST /api/v2/identity/token`, `GET /api/v2/identity/userinfo` |
+
+Regenerate server bindings after changing `sdk/proto` with:
+
+```sh
+cd sdk/proto
+buf generate --template buf.go.server.gen.yaml
+```
 
 ## Authentication model
 

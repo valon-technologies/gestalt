@@ -70,7 +70,7 @@ After changing `sdk/proto`, regenerate and check the server Go bindings:
 cd sdk/proto
 buf generate --template buf.go.server.gen.yaml
 cd ../..
-git diff --exit-code -- gestaltd/internal/gen/v1/*.pb.go gestaltd/internal/gen/v1/*_grpc.pb.go
+git diff --exit-code -- gestaltd/rpc/protov1/v1/*.pb.go gestaltd/rpc/protov1/v1/*_grpc.pb.go gestaltd/rpc/protov1/v1/*.pb.gw.go
 ```
 
 ### CLI
