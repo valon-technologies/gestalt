@@ -59,7 +59,9 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 	}
 	factories.DevSupervisor = devSupervisor
 
-	result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+	result, err := bootstrap.BootstrapWithOptions(ctx, cfg, factories, bootstrap.BootstrapOptions{
+		DeferAppProviderStartup: true,
+	})
 	if err != nil {
 		if devSupervisor != nil {
 			devSupervisor.Stop()

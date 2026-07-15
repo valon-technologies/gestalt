@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,6 +10,118 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
+
+func TestResultStartAppProvidersReconcilesAfterProvidersReady(t *testing.T) {
+	t.Parallel()
+
+	startup := newDeferredProviders()
+	release := make(chan struct{})
+	var started atomic.Bool
+	var reconciled atomic.Int32
+	wantErr := errors.New("reconcile failed")
+	result := &Result{
+		StartupProvidersReady: startup.ready(),
+		startup:               startup,
+		startAppProviders: func() {
+			if !started.CompareAndSwap(false, true) {
+				return
+			}
+			startup.set(nil, nil)
+			go func() {
+				<-release
+				startup.finish()
+			}()
+		},
+		startupWorkflowConfigReconcile: func(context.Context) error {
+			reconciled.Add(1)
+			return wantErr
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- result.StartAppProviders(context.Background()) }()
+
+	select {
+	case err := <-done:
+		t.Fatalf("StartAppProviders returned before providers were ready: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if got := reconciled.Load(); got != 0 {
+		t.Fatalf("workflow reconciliations before providers were ready = %d, want 0", got)
+	}
+
+	close(release)
+	select {
+	case err := <-done:
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("StartAppProviders error = %v, want %v", err, wantErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("StartAppProviders did not finish after providers became ready")
+	}
+	if got := reconciled.Load(); got != 1 {
+		t.Fatalf("workflow reconciliations = %d, want 1", got)
+	}
+	if err := result.StartAppProviders(context.Background()); !errors.Is(err, wantErr) {
+		t.Fatalf("second StartAppProviders error = %v, want %v", err, wantErr)
+	}
+	if got := reconciled.Load(); got != 1 {
+		t.Fatalf("workflow reconciliations after second start = %d, want 1", got)
+	}
+}
+
+func TestResultStartupOperationsWaitForWorkflowReconcile(t *testing.T) {
+	t.Parallel()
+
+	startup := newDeferredProviders()
+	startup.finish()
+	reconcileStarted := make(chan struct{})
+	reconcileRelease := make(chan struct{})
+	result := &Result{
+		StartupProvidersReady: startup.ready(),
+		startup:               startup,
+		startAppProviders:     func() {},
+		startupWorkflowConfigReconcile: func(context.Context) error {
+			close(reconcileStarted)
+			<-reconcileRelease
+			return nil
+		},
+	}
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- result.StartAppProviders(context.Background()) }()
+	select {
+	case <-reconcileStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("workflow reconciliation did not start")
+	}
+
+	waitDone := make(chan struct{})
+	go func() {
+		result.startupOperations.Wait()
+		close(waitDone)
+	}()
+	select {
+	case <-waitDone:
+		t.Fatal("startup operation completed while workflow reconciliation was running")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(reconcileRelease)
+	select {
+	case err := <-startDone:
+		if err != nil {
+			t.Fatalf("StartAppProviders: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("StartAppProviders did not finish")
+	}
+	select {
+	case <-waitDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("startup operation wait did not finish after reconciliation")
+	}
+}
 
 func TestNewProviderActivationStartsProvidersOnce(t *testing.T) {
 	t.Parallel()

@@ -258,6 +258,7 @@ type Result struct {
 	WorkflowControl        WorkflowControl
 	AgentControl           AgentControl
 	AgentManager           agentmanager.Service
+	StartupProvidersReady  <-chan struct{}
 	ProvidersReady         <-chan struct{}
 	ConnectionAuth         func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth   func() map[string]map[string]ManualTokenExchanger
@@ -276,12 +277,54 @@ type Result struct {
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
 	workflowConfigReconcileTasksStarted bool
+	startupWorkflowConfigReconcile      func(context.Context) error
+	startupWorkflowConfigReconcileOnce  sync.Once
+	startupWorkflowConfigReconcileErr   error
+	startupOperations                   sync.WaitGroup
 	auditClose                          func(context.Context) error
 	appHostServiceCleanup               func()
+	startAppProviders                   func()
 	activateAppProviders                func(context.Context)
+	startup                             *deferredProviders
 	deferred                            *deferredProviders
 	mu                                  sync.Mutex
 	closed                              bool
+}
+
+// StartAppProviders starts app providers that are required during normal
+// server startup. Daemons may defer this until after their public listener is
+// bound so hosted apps can call back through the public host-service relay
+// while they configure.
+func (r *Result) StartAppProviders(ctx context.Context) error {
+	if r == nil || r.startAppProviders == nil {
+		return nil
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return fmt.Errorf("bootstrap result already closed")
+	}
+	if r.startup != nil {
+		r.startup.markActivating()
+	}
+	r.startupOperations.Add(1)
+	ready := r.StartupProvidersReady
+	r.mu.Unlock()
+	defer r.startupOperations.Done()
+	r.startAppProviders()
+	if ready != nil {
+		select {
+		case <-ready:
+		case <-ctx.Done():
+			return fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
+		}
+	}
+	r.startupWorkflowConfigReconcileOnce.Do(func() {
+		if r.startupWorkflowConfigReconcile != nil {
+			r.startupWorkflowConfigReconcileErr = r.startupWorkflowConfigReconcile(ctx)
+		}
+	})
+	return r.startupWorkflowConfigReconcileErr
 }
 
 func (r *Result) ActivateAppProviders(ctx context.Context) {
@@ -401,6 +444,13 @@ func (r *Result) Close(ctx context.Context) error {
 	defer r.mu.Unlock()
 	if r.closed {
 		return nil
+	}
+	// StartAppProviders continues past provider readiness to reconcile workflow
+	// declarations. Wait for that entire operation before closing its runtime
+	// dependencies.
+	r.startupOperations.Wait()
+	if r.startup != nil {
+		r.startup.waitReady()
 	}
 	if r.deferred != nil {
 		r.deferred.waitReady()
@@ -1163,7 +1213,15 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+type BootstrapOptions struct {
+	DeferAppProviderStartup bool
+}
+
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
+	return BootstrapWithOptions(ctx, cfg, factories, BootstrapOptions{})
+}
+
+func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, opts BootstrapOptions) (*Result, error) {
 	prepared, err := prepareCore(ctx, cfg, factories, true)
 	if err != nil {
 		return nil, err
@@ -1188,17 +1246,15 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	providers := providerBuilds.providers
 	var (
-		noopReady              <-chan struct{}
 		connAuthResolver       func() map[string]map[string]OAuthHandler
 		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
 	)
+	startup := newDeferredProviders()
 	deferred := newDeferredProviders()
 	closeProviders := true
 	defer func() {
 		if closeProviders {
-			if noopReady != nil {
-				<-noopReady
-			}
+			startup.waitReady()
 			deferred.waitReady()
 			_ = CloseProviders(providers)
 		}
@@ -1301,18 +1357,26 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}
 
-	var noopConnAuth func() map[string]map[string]OAuthHandler
-	var noopManualConnAuth func() map[string]map[string]ManualTokenExchanger
-	noopReady, noopConnAuth, noopManualConnAuth, _ = noopBuilds.Start(ctx, prepared.Deps, buildProvider)
-	select {
-	case <-noopReady:
-	case <-ctx.Done():
-		return nil, fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
+	startStartupProviders := newProviderActivation(ctx, noopBuilds, prepared.Deps, buildProvider, func(
+		ready <-chan struct{},
+		connAuth func() map[string]map[string]OAuthHandler,
+		manualConnAuth func() map[string]map[string]ManualTokenExchanger,
+	) {
+		startup.set(connAuth, manualConnAuth)
+		go func() {
+			<-ready
+			startup.finish()
+			slog.InfoContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
+		}()
+	})
+	if !opts.DeferAppProviderStartup {
+		startStartupProviders()
+		select {
+		case <-startup.ready():
+		case <-ctx.Done():
+			return nil, fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
+		}
 	}
-	slog.InfoContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
-
-	noopAuth := noopConnAuth()
-	noopManualAuth := noopManualConnAuth()
 
 	startDeferredProviders := newProviderActivation(ctx, updateBuilds, prepared.Deps, buildProvider, func(
 		ready <-chan struct{},
@@ -1326,17 +1390,24 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}()
 	})
 	activateAppProviders := func(context.Context) { startDeferredProviders() }
-	if autoActivate {
+	if autoActivate && !opts.DeferAppProviderStartup {
 		startDeferredProviders()
+	}
+	startAppProviders := func() {
+		startStartupProviders()
+		if autoActivate {
+			startDeferredProviders()
+		}
 	}
 
 	connAuthResolver = func() map[string]map[string]OAuthHandler {
+		a := startup.connectionAuth()
 		b := deferred.connectionAuth()
 		if len(b) == 0 {
-			return noopAuth
+			return a
 		}
-		merged := make(map[string]map[string]OAuthHandler, len(noopAuth)+len(b))
-		for k, v := range noopAuth {
+		merged := make(map[string]map[string]OAuthHandler, len(a)+len(b))
+		for k, v := range a {
 			merged[k] = v
 		}
 		for k, v := range b {
@@ -1345,12 +1416,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return merged
 	}
 	manualConnAuthResolver = func() map[string]map[string]ManualTokenExchanger {
+		a := startup.manualConnectionAuth()
 		b := deferred.manualConnectionAuth()
 		if len(b) == 0 {
-			return noopManualAuth
+			return a
 		}
-		merged := make(map[string]map[string]ManualTokenExchanger, len(noopManualAuth)+len(b))
-		for k, v := range noopManualAuth {
+		merged := make(map[string]map[string]ManualTokenExchanger, len(a)+len(b))
+		for k, v := range a {
 			merged[k] = v
 		}
 		for k, v := range b {
@@ -1373,17 +1445,26 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		slog.Warn("skipping deferred app workflow declaration reconcile: no default workflow provider configured")
 	}
 	runtimePlacedWorkflowProviders := runtimePlacedWorkflowProviderNames(cfg)
+	var startupWorkflowConfigReconcile func(context.Context) error
 	if len(runtimePlacedWorkflowProviders) > 0 {
 		localWorkflowProviders := func(providerName string) bool {
 			_, runtimePlaced := runtimePlacedWorkflowProviders[strings.TrimSpace(providerName)]
 			return !runtimePlaced
 		}
-		if err := reconcileWorkflowConfig(ctx, localWorkflowProviders); err != nil {
-			return nil, err
+		startupWorkflowConfigReconcile = func(ctx context.Context) error {
+			return reconcileWorkflowConfig(ctx, localWorkflowProviders)
 		}
 		deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, runtimeWorkflowConfigReconcileTasks(prepared.Deps.WorkflowRuntime, runtimePlacedWorkflowProviders, reconcileWorkflowConfig)...)
-	} else if err := reconcileWorkflowConfig(ctx, nil); err != nil {
-		return nil, err
+	} else {
+		startupWorkflowConfigReconcile = func(ctx context.Context) error {
+			return reconcileWorkflowConfig(ctx, nil)
+		}
+	}
+	if !opts.DeferAppProviderStartup {
+		if err := startupWorkflowConfigReconcile(ctx); err != nil {
+			return nil, err
+		}
+		startupWorkflowConfigReconcile = nil
 	}
 
 	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization, prepared.Services.Users)
@@ -1397,41 +1478,45 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
 	result := &Result{
-		Auth:                         prepared.Auth,
-		SelectedAuthProvider:         prepared.SelectedAuthProvider,
-		AuthProviders:                prepared.AuthProviders,
-		Authorization:                prepared.Authorization,
-		Services:                     prepared.Services,
-		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
-		ExtraCaches:                  prepared.ExtraCaches,
-		S3:                           prepared.Deps.S3,
-		ExtraS3s:                     prepared.ExtraS3s,
-		ExtraWorkflows:               extraWorkflows,
-		ExtraAgents:                  extraAgents,
-		Providers:                    providers,
-		WorkflowControl:              prepared.Deps.WorkflowRuntime,
-		AgentControl:                 prepared.Deps.AgentRuntime,
-		AgentManager:                 prepared.Deps.AgentManager,
-		ProvidersReady:               deferred.ready(),
-		ConnectionAuth:               connAuthResolver,
-		ManualConnectionAuth:         manualConnAuthResolver,
-		Invoker:                      sharedInvoker,
-		AppInvocation:                pluginInvoker,
-		CapabilityLister:             sharedInvoker,
-		AuditSink:                    audit,
-		SecretManager:                prepared.SecretManager,
-		Telemetry:                    prepared.Telemetry,
-		Runtimes:                     prepared.runtimeRegistry,
-		PublicHostServices:           publicHostServices,
-		PublicGatewayTransport:       publicGatewayTransport,
-		CallerTokenIssuer:            prepared.CallerTokenIssuer,
-		DevSupervisor:                prepared.Deps.DevSupervisor,
-		runtimeRegistry:              prepared.runtimeRegistry,
-		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
-		auditClose:                   auditClose,
-		appHostServiceCleanup:        appHostServiceCleanup,
-		activateAppProviders:         activateAppProviders,
-		deferred:                     deferred,
+		Auth:                           prepared.Auth,
+		SelectedAuthProvider:           prepared.SelectedAuthProvider,
+		AuthProviders:                  prepared.AuthProviders,
+		Authorization:                  prepared.Authorization,
+		Services:                       prepared.Services,
+		ExtraIndexedDBs:                prepared.ExtraIndexedDBs,
+		ExtraCaches:                    prepared.ExtraCaches,
+		S3:                             prepared.Deps.S3,
+		ExtraS3s:                       prepared.ExtraS3s,
+		ExtraWorkflows:                 extraWorkflows,
+		ExtraAgents:                    extraAgents,
+		Providers:                      providers,
+		WorkflowControl:                prepared.Deps.WorkflowRuntime,
+		AgentControl:                   prepared.Deps.AgentRuntime,
+		AgentManager:                   prepared.Deps.AgentManager,
+		StartupProvidersReady:          startup.ready(),
+		ProvidersReady:                 deferred.ready(),
+		ConnectionAuth:                 connAuthResolver,
+		ManualConnectionAuth:           manualConnAuthResolver,
+		Invoker:                        sharedInvoker,
+		AppInvocation:                  pluginInvoker,
+		CapabilityLister:               sharedInvoker,
+		AuditSink:                      audit,
+		SecretManager:                  prepared.SecretManager,
+		Telemetry:                      prepared.Telemetry,
+		Runtimes:                       prepared.runtimeRegistry,
+		PublicHostServices:             publicHostServices,
+		PublicGatewayTransport:         publicGatewayTransport,
+		CallerTokenIssuer:              prepared.CallerTokenIssuer,
+		DevSupervisor:                  prepared.Deps.DevSupervisor,
+		runtimeRegistry:                prepared.runtimeRegistry,
+		workflowConfigReconcileTasks:   deferredWorkflowConfigReconcileTasks,
+		startupWorkflowConfigReconcile: startupWorkflowConfigReconcile,
+		auditClose:                     auditClose,
+		appHostServiceCleanup:          appHostServiceCleanup,
+		startAppProviders:              startAppProviders,
+		activateAppProviders:           activateAppProviders,
+		startup:                        startup,
+		deferred:                       deferred,
 	}
 	for _, pending := range updateBuilds.pending {
 		if pending.proxy != nil {
