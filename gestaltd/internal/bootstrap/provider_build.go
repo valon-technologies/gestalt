@@ -83,7 +83,7 @@ func prepareProviderBuilds(
 		} else if err != nil {
 			return nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
-		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", catalogOperationCount(builtin.Catalog()))
+		slog.Debug("loaded builtin provider", "provider", builtin.Name(), "operations", catalogOperationCount(builtin.Catalog()))
 	}
 
 	builds := &preparedProviderBuilds{
@@ -153,7 +153,7 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if err := providers.Register(name, provider); err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
-		slog.Info("registered remote app provider", "provider", name)
+		slog.Debug("registered remote app provider", "provider", name)
 	}
 	return nil
 }
@@ -229,7 +229,7 @@ func (b *preparedProviderBuilds) Start(
 					pending.proxy.fail(err)
 					b.providers.Remove(pending.name)
 				}
-				slog.Info("frontend-only dev app; no backend provider registered", "provider", pending.name)
+				slog.Debug("frontend-only dev app; no backend provider registered", "provider", pending.name)
 				return
 			}
 			if err != nil {
@@ -297,7 +297,7 @@ func (b *preparedProviderBuilds) Start(
 				}
 				deps.AppWorkflowDeclarations.Set(pending.name, decls)
 			}
-			slog.Info("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
+			slog.Debug("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
 		}(pending)
 	}
 

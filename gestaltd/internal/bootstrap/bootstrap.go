@@ -382,7 +382,7 @@ func (r *Result) StartWorkflowProviders(ctx context.Context) error {
 				errs = append(errs, err)
 				continue
 			}
-			slog.InfoContext(ctx, "workflow provider started", "duration", time.Since(started).String())
+			slog.DebugContext(ctx, "workflow provider started", "duration", time.Since(started).String())
 		}
 	}
 	return errors.Join(errs...)
@@ -430,7 +430,7 @@ func runWorkflowConfigReconcileTask(ctx context.Context, task workflowConfigReco
 				continue
 			}
 		}
-		slog.InfoContext(ctx, "workflow config reconciled", "task", taskName)
+		slog.DebugContext(ctx, "workflow config reconciled", "task", taskName)
 		return
 	}
 }
@@ -1366,7 +1366,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		go func() {
 			<-ready
 			startup.finish()
-			slog.InfoContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
+			slog.DebugContext(ctx, "all ready-blocking app providers loaded", "count", len(noopBuilds.pending))
 		}()
 	})
 	if !opts.DeferAppProviderStartup {

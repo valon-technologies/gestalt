@@ -417,7 +417,7 @@ func TestE2EProviderValidateStaticApp(t *testing.T) {
 	staticApp := setupStaticAppDir(t, dir)
 	setAppManifestSource(t, staticApp.AppDir, "github.com/test/ui/roadmap.review")
 
-	cmd := gestaltdCommand("provider", "validate", "--path", staticApp.ManifestPath)
+	cmd := gestaltdCommand("provider", "validate", "--verbose", "--path", staticApp.ManifestPath)
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -493,7 +493,7 @@ apps:
 				t.Fatalf("write config: %v", err)
 			}
 
-			cmd := gestaltdCommand("provider", "validate", "--path", appDir, "--config", cfgPath)
+			cmd := gestaltdCommand("provider", "validate", "--verbose", "--path", appDir, "--config", cfgPath)
 			cmd.Env = append(os.Environ(),
 				"GESTALT_PROVIDERS_DIR="+providersDir,
 				"GOTELEMETRY=off",

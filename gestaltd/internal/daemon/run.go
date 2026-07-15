@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -176,7 +176,9 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		env.Close()
 		return err
 	}
-	return runServer(env)
+	return runServerWithReady(env, func() {
+		currentCLIReporter().Status("gestaltd ready: " + canonicalPublicURL(env.Config))
+	})
 }
 
 type serveProviderLocalOptions struct {
@@ -228,9 +230,9 @@ func flagIntValue(flag *int) int {
 	return *flag
 }
 
-func runServer(env *bootstrapEnv) error {
+func runServerWithReady(env *bootstrapEnv, onReady func()) error {
 	defer env.Close()
-	return server.Run(env.Ctx, env.Config, env.Result)
+	return server.RunWithReady(env.Ctx, env.Config, env.Result, onReady)
 }
 
 const maxServePortScan = 100
@@ -259,7 +261,7 @@ func resolveServePort(cfg *config.Config, portFlag int) error {
 		}
 		_ = l.Close()
 		if candidate != requested {
-			slog.Info("gestaltd port in use; using next free port", "requested", requested, "actual", candidate)
+			currentCLIReporter().Warning(fmt.Sprintf("gestaltd port in use; using next free port (requested %d, using %d)", requested, candidate))
 		}
 		cfg.Server.Public.Port = candidate
 		return nil
@@ -412,14 +414,14 @@ func validateConfig(configFlags []string, lockfilePath, artifactsDir string, opt
 
 	logConfigSummary(result.Paths, result.Config)
 	for _, w := range result.Warnings {
-		slog.Warn(w)
+		currentCLIReporter().Warning(w)
 	}
-	slog.Info("config ok")
+	currentCLIReporter().Status("config ok")
 	return nil
 }
 
 func logConfigSummary(paths []string, cfg *config.Config) {
-	slog.Info("config loaded",
+	currentCLIReporter().Verbose(formatCLIFields("config loaded",
 		"config_files", paths,
 		"server_port", cfg.Server.PublicListener().Port,
 		"server_public_addr", cfg.Server.PublicAddr(),
@@ -431,14 +433,23 @@ func logConfigSummary(paths []string, cfg *config.Config) {
 		"authentication_provider", selectedProviderLabel(cfg.SelectedIdentityProvider()),
 		"runtime_secrets_provider", selectedProviderLabel(cfg.SelectedSecretsProvider()),
 		"telemetry_provider", selectedProviderLabel(cfg.SelectedTelemetryProvider()),
-	)
+	))
 
 	for name, entry := range cfg.Apps {
 		if entry != nil {
-			slog.Info("integration configured", "integration", name, "type", "app")
+			currentCLIReporter().Verbose(formatCLIFields("integration configured", "integration", name, "type", "app"))
 		}
 	}
 
+}
+
+func formatCLIFields(message string, args ...any) string {
+	var builder strings.Builder
+	builder.WriteString(message)
+	for i := 0; i+1 < len(args); i += 2 {
+		fmt.Fprintf(&builder, " %v=%v", args[i], args[i+1])
+	}
+	return builder.String()
 }
 
 func providerEntryLabel(entry *config.ProviderEntry) string {
@@ -475,6 +486,46 @@ func maskEmpty(s string) string {
 		return "(not set)"
 	}
 	return s
+}
+
+func canonicalPublicURL(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	listener := cfg.Server.PublicListener()
+	if baseURL := strings.TrimRight(strings.TrimSpace(cfg.Server.BaseURL), "/"); baseURL != "" {
+		if updated := loopbackBaseURLWithPort(baseURL, listener.Port); updated != "" {
+			return updated
+		}
+		return baseURL
+	}
+	host := strings.TrimSpace(listener.Host)
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "localhost"
+	}
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(listener.Port))
+}
+
+func loopbackBaseURLWithPort(raw string, port int) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	host := parsed.Hostname()
+	if !actionableLoopbackHost(host) {
+		return ""
+	}
+	parsed.Host = net.JoinHostPort("localhost", strconv.Itoa(port))
+	return strings.TrimRight(parsed.String(), "/")
+}
+
+func actionableLoopbackHost(host string) bool {
+	switch strings.TrimSpace(host) {
+	case "", "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
 func printMainUsage(w io.Writer) {
@@ -519,6 +570,7 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "the fleet loads pinned artifacts while PATH UIs with a manifest run: block hot-reload.")
 	writeUsageLine(w, "Without --config, PATH arguments run an isolated synthesized baseline (unlocked).")
 	writeUsageLine(w, "Local UIs with a manifest run: block are proxied to a hot-reload dev server automatically.")
+	writeUsageLine(w, "Dev app commands must bind GESTALT_DEV_PORT exactly; automatic framework port fallback is not supported.")
 	writeUsageLine(w, "For production, use --locked --no-sync to trust the committed lockfile and prebuilt")
 	writeUsageLine(w, "artifacts without materialization or staleness checks.")
 	writeUsageLine(w, "Use --locked alone when artifacts may need to be materialized at startup.")
