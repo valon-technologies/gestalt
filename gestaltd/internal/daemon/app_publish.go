@@ -117,7 +117,7 @@ func runAppPublish(args []string) (err error) {
 	if manifestApp != strings.TrimSpace(*appName) {
 		return fmt.Errorf("%s: manifest source app %q does not match --app %q; update manifest source or pass the matching --app name", manifestPath, manifestApp, strings.TrimSpace(*appName))
 	}
-	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesFromDirs([]string(distDirs), *version)
+	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivesFromDirsWithProgress([]string(distDirs), *version)
 	if err != nil {
 		return err
 	}
@@ -345,6 +345,7 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 
 	publishArtifacts := make([]appregistry.PublishArtifact, 0, len(sortedArchives))
 	artifactObjects := make([]appPublishObject, 0, len(sortedArchives))
+	hashProgress := startCommandProgress("Hashing %d app publish files", len(sortedArchives)+1)
 	for _, archive := range sortedArchives {
 		filename := filepath.Base(archive.Path)
 		rel := path.Join(artifactPrefix, filename)
@@ -395,6 +396,7 @@ func buildAppPublishPlan(input appPublishPlanInput) (appPublishPlan, error) {
 	if err != nil {
 		return appPublishPlan{}, err
 	}
+	hashProgress.done("Hashed %d app publish files", len(sortedArchives)+1)
 
 	indexRel := layout.IndexPath
 	return appPublishPlan{
@@ -439,6 +441,8 @@ func writeTempJSON(pattern string, data []byte) (string, error) {
 }
 
 func preflightAppPublishPlan(plan appPublishPlan) error {
+	objectCount := len(plan.ArtifactObjects) + 2 // artifacts, entry metadata, and the app index
+	progress := startCommandProgress("Checking %d remote app objects before upload", objectCount)
 	if err := preflightAppRegistryIndex(plan); err != nil {
 		return err
 	}
@@ -447,6 +451,7 @@ func preflightAppPublishPlan(plan appPublishPlan) error {
 			return err
 		}
 	}
+	progress.done("Checked %d remote app objects", objectCount)
 	return nil
 }
 
@@ -495,24 +500,44 @@ func uploadAppPublishPlan(plan appPublishPlan, sourceRef string) error {
 }
 
 func uploadAppPublishImmutableObjects(plan appPublishPlan, sourceRef string) error {
+	objectCount := len(plan.ArtifactObjects) + 1
+	progress := startCommandProgress("Uploading %d immutable app objects", objectCount)
+	stdoutLines := make([]string, 0, objectCount)
 	for _, object := range plan.ArtifactObjects {
-		if err := uploadAppPublishObjectIfNeeded(object, sourceRef); err != nil {
+		line, err := uploadAppPublishObjectIfNeeded(object, sourceRef)
+		if err != nil {
 			return err
 		}
+		if line != "" {
+			stdoutLines = append(stdoutLines, line)
+		}
 	}
-	return uploadAppPublishObjectIfNeeded(plan.EntryObject, sourceRef)
-}
-
-func uploadAppPublishObjectIfNeeded(object appPublishObject, sourceRef string) error {
-	matches, err := appPublishObjectMatchesExisting(object)
+	line, err := uploadAppPublishObjectIfNeeded(plan.EntryObject, sourceRef)
 	if err != nil {
 		return err
 	}
-	if matches {
-		_, _ = fmt.Fprintf(os.Stdout, "skipped existing %s\n", object.StorageURL)
-		return nil
+	if line != "" {
+		stdoutLines = append(stdoutLines, line)
 	}
-	return uploadAppPublishObject(object, sourceRef)
+	progress.done("Processed %d immutable app objects", objectCount)
+	for _, line := range stdoutLines {
+		_, _ = fmt.Fprintln(os.Stdout, line)
+	}
+	return nil
+}
+
+func uploadAppPublishObjectIfNeeded(object appPublishObject, sourceRef string) (string, error) {
+	matches, err := appPublishObjectMatchesExisting(object)
+	if err != nil {
+		return "", err
+	}
+	if matches {
+		return fmt.Sprintf("skipped existing %s", object.StorageURL), nil
+	}
+	if err := uploadAppPublishObject(object, sourceRef); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("uploaded %s", object.StorageURL), nil
 }
 
 func appPublishObjectMatchesExisting(object appPublishObject) (bool, error) {
@@ -544,13 +569,16 @@ func uploadAppPublishObject(object appPublishObject, sourceRef string) error {
 	if _, err := runProviderPublishCommand("gcloud", "storage", "cp", "--if-generation-match=0", "--custom-metadata="+metadata, object.LocalPath, object.StorageURL); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "uploaded %s\n", object.StorageURL)
 	return nil
 }
 
 func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 	indexPath := plan.IndexObject.StorageURL
+	progress := startCommandProgress("Updating app registry index")
 	for attempt := 1; attempt <= appPublishIndexUpdateAttempts; attempt++ {
+		if attempt > 1 {
+			progress.status("App registry index changed concurrently; retrying attempt %d/%d", attempt, appPublishIndexUpdateAttempts)
+		}
 		generation, existing, err := downloadAppRegistryObject(indexPath)
 		if err != nil {
 			return err
@@ -570,6 +598,7 @@ func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 			return err
 		}
 		if !changed {
+			progress.done("App registry index unchanged")
 			_, _ = fmt.Fprintf(os.Stdout, "skipped unchanged index for %s %s\n", plan.AppName, plan.Version)
 			return nil
 		}
@@ -584,11 +613,13 @@ func uploadAppRegistryIndex(plan appPublishPlan, sourceRef string) error {
 		if err := uploadAppRegistryIndexFile(tmpPath, indexPath, sourceRef, generation); err != nil {
 			_ = os.Remove(tmpPath)
 			if appPublishPreconditionFailed(err) && attempt < appPublishIndexUpdateAttempts {
+				progress.status("App registry index update conflict; retrying")
 				continue
 			}
 			return err
 		}
 		_ = os.Remove(tmpPath)
+		progress.done("Updated app registry index")
 		_, _ = fmt.Fprintf(os.Stdout, "updated %s\n", indexPath)
 		return nil
 	}

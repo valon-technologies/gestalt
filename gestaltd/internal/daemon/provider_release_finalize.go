@@ -40,13 +40,23 @@ func runProviderRelease(args []string) (err error) {
 		}
 	}
 
-	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchives(*distDir, *version)
+	discoveryProgress := startCommandProgress("Discovering release archives in %s", *distDir)
+	archivePaths, err := releaseArchivePathsInDirs([]string{*distDir})
 	if err != nil {
 		return err
 	}
-	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives, nil, true); err != nil {
+	discoveryProgress.done("Discovered %d release archives", len(archivePaths))
+	releaseManifest, releaseVersion, releaseArchives, err := collectReleaseArchivePathsWithProgress(archivePaths, *version)
+	if err != nil {
+		return err
+	}
+	validationProgress := startCommandProgress("Validating provider release metadata")
+	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives, nil, false); err != nil {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
+	validationProgress.done("Validated provider release metadata for %s", releaseVersion)
+	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", filepath.Join(*distDir, providerrelease.MetadataFile))
+	progressStatus("Generated %s with %d artifact(s) in %s", providerrelease.MetadataFile, len(releaseArchives), *distDir)
 
 	return nil
 }
@@ -68,19 +78,45 @@ func collectReleaseArchives(distDir, versionGuard string) (*providermanifestv1.M
 }
 
 func collectReleaseArchivesFromDirs(distDirs []string, versionGuard string) (*providermanifestv1.Manifest, string, []releaseArchive, error) {
+	archivePaths, err := releaseArchivePathsInDirs(distDirs)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	return collectReleaseArchivePaths(archivePaths, versionGuard)
+}
+
+func collectReleaseArchivesFromDirsWithProgress(distDirs []string, versionGuard string) (*providermanifestv1.Manifest, string, []releaseArchive, error) {
+	archivePaths, err := releaseArchivePathsInDirs(distDirs)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	return collectReleaseArchivePathsWithProgress(archivePaths, versionGuard)
+}
+
+func collectReleaseArchivePathsWithProgress(archivePaths []string, versionGuard string) (*providermanifestv1.Manifest, string, []releaseArchive, error) {
+	progress := startCommandProgress("Inspecting and hashing %d release archives", len(archivePaths))
+	manifest, version, archives, err := collectReleaseArchivePaths(archivePaths, versionGuard)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	progress.done("Inspected and hashed %d release archives", len(archives))
+	return manifest, version, archives, nil
+}
+
+func releaseArchivePathsInDirs(distDirs []string) ([]string, error) {
 	var archivePaths []string
 	for _, distDir := range distDirs {
 		paths, err := releaseArchivePathsInDir(distDir)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, err
 		}
 		archivePaths = append(archivePaths, paths...)
 	}
 	sort.Strings(archivePaths)
 	if len(archivePaths) == 0 {
-		return nil, "", nil, fmt.Errorf("no .tar.gz release archives found in %s", strings.Join(distDirs, ", "))
+		return nil, fmt.Errorf("no .tar.gz release archives found in %s", strings.Join(distDirs, ", "))
 	}
-	return collectReleaseArchivePaths(archivePaths, versionGuard)
+	return archivePaths, nil
 }
 
 func releaseArchivePathsInDir(distDir string) ([]string, error) {

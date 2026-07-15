@@ -93,7 +93,7 @@ providerSnapshotRepositories:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := runProviderCommandResult(pluginDir,
+	stdout, stderr, err := runProviderCommandStreams(pluginDir,
 		"publish",
 		"--config", configPath,
 		"--repo", "valon",
@@ -105,11 +105,18 @@ providerSnapshotRepositories:
 		"--format", "json",
 	)
 	if err != nil {
-		t.Fatalf("provider publish failed: %v\n%s", err, out)
+		t.Fatalf("provider publish failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 	}
 	var plan providerPublishPlan
-	if err := json.Unmarshal(out, &plan); err != nil {
-		t.Fatalf("dry-run JSON did not parse: %v\n%s", err, out)
+	if err := json.Unmarshal(stdout, &plan); err != nil {
+		t.Fatalf("dry-run JSON did not parse: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
+	}
+	if strings.Contains(string(stdout), "[progress]") {
+		t.Fatalf("progress leaked into provider publish JSON stdout: %s", stdout)
+	}
+	if !strings.Contains(string(stderr), "Inspecting and hashing 1 release archives") ||
+		!strings.Contains(string(stderr), "Hashing 2 publish files") {
+		t.Fatalf("provider publish progress missing from stderr: %s", stderr)
 	}
 	if plan.Schema != providerPublishPlanSchema {
 		t.Fatalf("schema = %q, want %q", plan.Schema, providerPublishPlanSchema)
@@ -398,6 +405,82 @@ exit 1
 	}
 	if archiveUpload >= metadataUpload {
 		t.Fatalf("uploads are not phased archive -> metadata:\n%s", got)
+	}
+}
+
+func TestRun_ProviderPackageReleaseProgressStaysOnStderr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		release     bool
+		version     string
+		stdoutWant  string
+		stderrWants []string
+	}{
+		{
+			name:       "package",
+			version:    "0.0.1-progress.1",
+			stdoutWant: "gestalt-app-ui-test_v0.0.1-progress.1.tar.gz",
+			stderrWants: []string{
+				"Discovering provider source",
+				"Validating provider source manifest",
+				"Building and hashing provider contents for generic archive",
+				"Built and hashed provider contents for generic archive",
+				"Assembling provider archive",
+				"Assembled provider archive",
+				"Generated 1 provider archive(s)",
+			},
+		},
+		{
+			name:       "release",
+			release:    true,
+			version:    "0.0.1-progress.2",
+			stdoutWant: "provider-release.yaml",
+			stderrWants: []string{
+				"Discovering release archives",
+				"Inspecting and hashing 1 release archives",
+				"Validating provider release metadata",
+				"Generated provider-release.yaml with 1 artifact(s)",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			pluginDir := newUIReleaseFixture(t, t.TempDir())
+			outputDir := t.TempDir()
+			if tc.release {
+				runProviderPackageCommand(t, pluginDir,
+					"--version", tc.version,
+					"--output", outputDir,
+				)
+			}
+			args := []string{"package", "--version", tc.version}
+			if tc.release {
+				args = []string{"release", "--dist-dir", outputDir, "--version", tc.version}
+			} else {
+				args = append(args, "--output", outputDir)
+			}
+			stdout, stderr, err := runProviderCommandStreams(pluginDir, args...)
+			if err != nil {
+				t.Fatalf("provider %s failed: %v\nstdout=%s\nstderr=%s", tc.name, err, stdout, stderr)
+			}
+			for _, want := range tc.stderrWants {
+				if strings.Contains(string(stdout), want) {
+					t.Fatalf("provider %s progress leaked into stdout: %s", tc.name, stdout)
+				}
+				if !strings.Contains(string(stderr), want) {
+					t.Fatalf("provider %s stderr missing %q: %s", tc.name, want, stderr)
+				}
+			}
+			if want := "created " + filepath.Join(outputDir, tc.stdoutWant); !strings.Contains(string(stdout), want) {
+				t.Fatalf("provider %s stdout missing %q: %s", tc.name, want, stdout)
+			}
+		})
 	}
 }
 
