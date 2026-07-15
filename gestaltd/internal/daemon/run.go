@@ -282,6 +282,16 @@ func runLock(args []string) error {
 	return lockConfig(configPaths, *lockfilePath, "", *check)
 }
 
+func syncBuildOutput(quiet bool, outputFormat string, verbose bool) providerpkg.CommandOutput {
+	if quiet {
+		return providerpkg.CommandOutputCaptureOnFailure(os.Stderr)
+	}
+	if outputFormat == syncOutputFormatJSON || verbose {
+		return providerpkg.CommandOutput{Stdout: os.Stderr, Stderr: os.Stderr}
+	}
+	return providerpkg.CommandOutput{Stdout: io.Discard, Stderr: io.Discard}
+}
+
 func runSync(args []string) error {
 	fs := flag.NewFlagSet("gestaltd sync", flag.ContinueOnError)
 	fs.Usage = func() { printSyncUsage(fs.Output()) }
@@ -319,10 +329,7 @@ func runSync(args []string) error {
 		metrics = operator.NewSyncMetricsRecorder()
 		observability.Recorder = metrics
 	}
-	observability.BuildOutput = providerpkg.CommandOutput{Stdout: io.Discard, Stderr: io.Discard}
-	if !quiet && (*outputFormat == syncOutputFormatJSON || verbose) {
-		observability.BuildOutput = providerpkg.CommandOutput{Stdout: os.Stderr, Stderr: os.Stderr}
-	}
+	observability.BuildOutput = syncBuildOutput(quiet, *outputFormat, verbose)
 	opts := operator.SyncOptions{
 		Locked:        *locked,
 		Parallelism:   *parallelism,
