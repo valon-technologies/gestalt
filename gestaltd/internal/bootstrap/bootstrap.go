@@ -1364,15 +1364,20 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	defaultWorkflowProvider, _, defaultProviderErr := cfg.EffectiveWorkflowProvider("")
 	var deferredWorkflowConfigReconcileTasks []workflowConfigReconcileTask
-	if defaultProviderErr == nil && strings.TrimSpace(defaultWorkflowProvider) != "" {
+	switch {
+	case defaultProviderErr == nil && strings.TrimSpace(defaultWorkflowProvider) != "":
 		deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, deferredAppWorkflowReconcileTask(deferred, prepared.Deps.WorkflowRuntime, defaultWorkflowProvider, reconcileWorkflowConfig))
-	} else if defaultProviderErr != nil {
+	case defaultProviderErr != nil:
 		slog.Warn("skipping deferred app workflow declaration reconcile: default workflow provider unavailable", "error", defaultProviderErr)
-	} else {
+	default:
 		slog.Warn("skipping deferred app workflow declaration reconcile: no default workflow provider configured")
 	}
 	runtimePlacedWorkflowProviders := runtimePlacedWorkflowProviderNames(cfg)
-	if len(runtimePlacedWorkflowProviders) > 0 {
+	if len(runtimePlacedWorkflowProviders) == 0 {
+		if err := reconcileWorkflowConfig(ctx, nil); err != nil {
+			return nil, err
+		}
+	} else {
 		localWorkflowProviders := func(providerName string) bool {
 			_, runtimePlaced := runtimePlacedWorkflowProviders[strings.TrimSpace(providerName)]
 			return !runtimePlaced
@@ -1381,8 +1386,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			return nil, err
 		}
 		deferredWorkflowConfigReconcileTasks = append(deferredWorkflowConfigReconcileTasks, runtimeWorkflowConfigReconcileTasks(prepared.Deps.WorkflowRuntime, runtimePlacedWorkflowProviders, reconcileWorkflowConfig)...)
-	} else if err := reconcileWorkflowConfig(ctx, nil); err != nil {
-		return nil, err
 	}
 
 	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization, prepared.Services.Users)
