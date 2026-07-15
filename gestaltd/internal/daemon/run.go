@@ -338,12 +338,6 @@ func runSync(args []string) error {
 		Observability: observability,
 	}
 
-	var syncActivity *TerminalActivity
-	if verbose && !quiet {
-		syncActivity = currentCLIReporter().Start("Syncing artifacts")
-		defer syncActivity.Finish("")
-	}
-
 	if err := syncConfigOptions(configPaths, *lockfilePath, *artifactsDir, *check, opts); err != nil {
 		return err
 	}

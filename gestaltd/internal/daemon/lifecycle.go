@@ -17,12 +17,69 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
+func operatorLifecycleWithCLIProgress() *operator.Lifecycle {
+	return operatorLifecycle().WithProgress(newLifecycleProgressReporter(currentCLIReporter()))
+}
+
+func newLifecycleProgressReporter(reporter *TerminalReporter) operator.LifecycleProgress {
+	if reporter == nil {
+		return nil
+	}
+	return func(event operator.LifecycleProgressEvent) {
+		switch event.Status {
+		case operator.LifecycleProgressStarted:
+			reporter.Status(formatLifecycleProgressStart(event))
+		case operator.LifecycleProgressCompleted, operator.LifecycleProgressNoop:
+			reporter.Status(formatLifecycleProgressComplete(event))
+		}
+	}
+}
+
+func formatLifecycleProgressStart(event operator.LifecycleProgressEvent) string {
+	switch event.Phase {
+	case operator.LifecyclePhaseConfig:
+		return "Loading configuration"
+	case operator.LifecyclePhaseLock:
+		return "Resolving lockfile"
+	case operator.LifecyclePhaseInstall:
+		if event.Operation == operator.LifecycleOperationServe {
+			return "Preparing artifacts for serve"
+		}
+		return "Preparing artifacts"
+	default:
+		return "Preparing lifecycle"
+	}
+}
+
+func formatLifecycleProgressComplete(event operator.LifecycleProgressEvent) string {
+	switch {
+	case event.Status == operator.LifecycleProgressNoop && event.Operation == operator.LifecycleOperationLock && event.Phase == operator.LifecyclePhaseLock && event.Reason == "not_required":
+		return "Lockfile not required"
+	case event.Status == operator.LifecycleProgressNoop:
+		return "No artifact changes needed"
+	case event.Operation == operator.LifecycleOperationLock && event.Phase == operator.LifecyclePhaseLock:
+		return "Lockfile ready"
+	case event.Operation == operator.LifecycleOperationSync && event.Phase == operator.LifecyclePhaseComplete:
+		return "Artifacts ready"
+	case event.Operation == operator.LifecycleOperationServe && event.Phase == operator.LifecyclePhaseComplete:
+		return "Artifacts ready for serve"
+	case event.Phase == operator.LifecyclePhaseConfig:
+		return "Configuration loaded"
+	case event.Phase == operator.LifecyclePhaseLock:
+		return "Lockfile resolved"
+	case event.Phase == operator.LifecyclePhaseInstall:
+		return "Artifacts prepared"
+	default:
+		return "Lifecycle step complete"
+	}
+}
+
 func lockConfig(configFlags []string, lockfilePath, artifactsDir string, check bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	if check {
-		return operatorLifecycle().CheckLockAtPaths(configPaths, lockfilePath, artifactsDir)
+		return operatorLifecycleWithCLIProgress().CheckLockAtPaths(configPaths, lockfilePath, artifactsDir)
 	}
-	_, err := operatorLifecycle().LockAtPaths(configPaths, lockfilePath, artifactsDir)
+	_, err := operatorLifecycleWithCLIProgress().LockAtPaths(configPaths, lockfilePath, artifactsDir)
 	return err
 }
 
@@ -32,14 +89,15 @@ func syncConfig(configFlags []string, lockfilePath, artifactsDir string, check b
 
 func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, check bool, opts operator.SyncOptions) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
+	lc := operatorLifecycleWithCLIProgress()
 	if check {
-		return operatorLifecycle().CheckSyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
+		return lc.CheckSyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 	}
-	return operatorLifecycle().SyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
+	return lc.SyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 }
 
 func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*config.Config, error) {
-	lc := operatorLifecycle().WithDevServeEligible(!locked)
+	lc := operatorLifecycleWithCLIProgress().WithDevServeEligible(!locked)
 	if len(forcedDevAppKeys) > 0 {
 		lc = lc.WithForcedDevAppKeys(forcedDevAppKeys)
 	}

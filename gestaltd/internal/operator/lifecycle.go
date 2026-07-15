@@ -96,6 +96,7 @@ type StaticValidationOptions struct {
 type Lifecycle struct {
 	configSecretResolver     func(context.Context, *config.Config) error
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
+	progress                 LifecycleProgress
 	httpClient               *http.Client
 	providerResolver         *providerregistry.Resolver
 	// devServeEligible enables manifest run: activation. Set true only for an
@@ -174,6 +175,11 @@ func (l *Lifecycle) WithSourceAuthSecretResolver(resolve func(context.Context, *
 	return l
 }
 
+func (l *Lifecycle) WithProgress(progress LifecycleProgress) *Lifecycle {
+	l.progress = progress
+	return l
+}
+
 func (l *Lifecycle) WithHTTPClient(client *http.Client) *Lifecycle {
 	l.httpClient = client
 	return l
@@ -242,9 +248,13 @@ func (l *Lifecycle) LockAtPaths(configPaths []string, lockfilePath, artifactsDir
 
 type lockAtPathsOptions struct {
 	allowLocalSourceAuthSecrets bool
+	silent                      bool
 }
 
 func (l *Lifecycle) lockAtPaths(configPaths []string, lockfilePath, artifactsDir string, opts lockAtPathsOptions) (*Lockfile, error) {
+	if !opts.silent {
+		l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationLock, Phase: LifecyclePhaseLock, Status: LifecycleProgressStarted, Subject: "lockfile"})
+	}
 	lock, _, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, lockfilePath, artifactsDir, opts)
 	if cleanup != nil {
 		defer cleanup()
@@ -255,11 +265,19 @@ func (l *Lifecycle) lockAtPaths(configPaths []string, lockfilePath, artifactsDir
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
 		return nil, err
 	}
-	slog.Info("wrote lockfile", "path", paths.lockfilePath)
+	if !opts.silent {
+		l.emitProgress(LifecycleProgressEvent{
+			Operation: LifecycleOperationLock,
+			Phase:     LifecyclePhaseLock,
+			Status:    LifecycleProgressCompleted,
+			Subject:   "lockfile",
+		})
+	}
 	return normalizeLockfile(lock), nil
 }
 
 func (l *Lifecycle) CheckLockAtPaths(configPaths []string, lockfilePath, artifactsDir string) error {
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationLock, Phase: LifecyclePhaseLock, Status: LifecycleProgressStarted, Subject: "lockfile"})
 	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, lockfilePath, artifactsDir, lockAtPathsOptions{})
 	if cleanup != nil {
 		defer cleanup()
@@ -274,6 +292,7 @@ func (l *Lifecycle) CheckLockAtPaths(configPaths []string, lockfilePath, artifac
 	currentLock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
 		if os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
+			l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationLock, Phase: LifecyclePhaseLock, Status: LifecycleProgressNoop, Subject: "lockfile", Reason: "not_required"})
 			return nil
 		}
 		return fmt.Errorf("lockfile is missing or unreadable; run `%s`: %w", formatLockCommand(paths), err)
@@ -289,6 +308,7 @@ func (l *Lifecycle) CheckLockAtPaths(configPaths []string, lockfilePath, artifac
 		}
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationLock, Phase: LifecyclePhaseLock, Status: LifecycleProgressCompleted, Subject: "lockfile"})
 	return nil
 }
 
@@ -309,8 +329,6 @@ func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, lockfilePat
 		return nil, nil, lifecyclePaths{}, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers.App), "identity", len(lock.Providers.Identity), "authorization", len(lock.Providers.Authorization), "indexeddbs", len(lock.Providers.IndexedDB), "cache", len(lock.Providers.Cache), "s3", len(lock.Providers.S3), "workflow", len(lock.Providers.Workflow), "agent", len(lock.Providers.Agent), "runtime", len(lock.Providers.Runtime), "secrets", len(lock.Providers.Secrets), "telemetry", len(lock.Providers.Telemetry), "audit", len(lock.Providers.Audit))
-	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, paths, nil
 }
 
@@ -967,6 +985,7 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 }
 
 func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool) (*config.Config, map[string]string, error) {
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationServe, Phase: LifecyclePhaseConfig, Status: LifecycleProgressStarted, Subject: "configuration"})
 	cfg, err := l.loadConfigForLifecycle(configPaths, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
@@ -1003,16 +1022,19 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, lockfilePath, 
 	if err := config.ValidateRuntime(cfg); err != nil {
 		return nil, nil, err
 	}
-
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationServe, Phase: LifecyclePhaseConfig, Status: LifecycleProgressCompleted, Subject: "configuration"})
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationServe, Phase: LifecyclePhaseInstall, Status: LifecycleProgressStarted, Subject: "serve"})
 	if err := l.applyLockedProviders(configPaths, lockfilePath, artifactsDir, cfg, locked, secretsLock, mode); err != nil {
 		return nil, nil, err
 	}
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationServe, Phase: LifecyclePhaseInstall, Status: LifecycleProgressCompleted, Subject: "serve"})
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, err
 	}
 	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, nil, err
 	}
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationServe, Phase: LifecyclePhaseComplete, Status: LifecycleProgressCompleted, Subject: "serve"})
 	return cfg, nil, nil
 }
 
@@ -1102,6 +1124,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPaths(configPaths []string, lockfil
 
 func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir string, mode artifactMode, opts SyncOptions) error {
 	opts = normalizeSyncOptions(opts)
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationSync, Phase: LifecyclePhaseConfig, Status: LifecycleProgressStarted, Subject: "configuration"})
 	syncCache, err := materializedCacheFromSyncOptions(mode, opts)
 	if err != nil {
 		return err
@@ -1124,6 +1147,8 @@ func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir
 	if recorder != nil {
 		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.syncCache.dir, opts.CacheDir != "", mode == artifactModeMaterialize && paths.syncCache.dir != "")
 	}
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationSync, Phase: LifecyclePhaseConfig, Status: LifecycleProgressCompleted, Subject: "configuration"})
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationSync, Phase: LifecyclePhaseLock, Status: LifecycleProgressStarted, Subject: "lockfile"})
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
 		if os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
@@ -1145,6 +1170,7 @@ func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir
 	if !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{}) {
 		return lockMetadataStaleError(paths, "lockfile stale")
 	}
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationSync, Phase: LifecyclePhaseLock, Status: LifecycleProgressCompleted, Subject: "lockfile"})
 	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, mode, configSecretResolutionSourceAuth); err != nil {
 		return err
 	}
@@ -1157,8 +1183,14 @@ func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir
 	if recorder != nil {
 		recorder.FinishLoadPhase()
 	}
+	if configHasProviderLoading(cfg) {
+		l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationSync, Phase: LifecyclePhaseInstall, Status: LifecycleProgressStarted, Subject: "sync"})
+	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, opts); err != nil {
 		return err
+	}
+	if configHasProviderLoading(cfg) {
+		l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationSync, Phase: LifecyclePhaseInstall, Status: LifecycleProgressCompleted, Subject: "sync"})
 	}
 	if recorder != nil {
 		recorder.FinishMaterializePhase()
@@ -1174,6 +1206,11 @@ func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir
 		recorder.RecordOutputStats(mode == artifactModeMaterialize, paths.artifactsDir, preparedArtifactRoots(paths, cfg))
 		recorder.Finish()
 	}
+	status := LifecycleProgressCompleted
+	if !configHasProviderLoading(cfg) {
+		status = LifecycleProgressNoop
+	}
+	l.emitProgress(LifecycleProgressEvent{Operation: LifecycleOperationSync, Phase: LifecyclePhaseComplete, Status: status, Subject: "sync"})
 	return nil
 }
 
@@ -1810,7 +1847,7 @@ func (l *Lifecycle) autoRelockAtPathsIfNeeded(configPaths []string, lockfilePath
 	if locked || (err == nil && lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{})) {
 		return lock, err
 	}
-	lock, err = l.lockAtPaths(configPaths, lockfilePath, artifactsDir, lockAtPathsOptions{allowLocalSourceAuthSecrets: true})
+	lock, err = l.lockAtPaths(configPaths, lockfilePath, artifactsDir, lockAtPathsOptions{allowLocalSourceAuthSecrets: true, silent: true})
 	if err != nil {
 		return nil, fmt.Errorf("auto-lock: %w", err)
 	}
