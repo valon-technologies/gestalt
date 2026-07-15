@@ -117,3 +117,27 @@ func TestResolveHonorsExplicitRepositorySelection(t *testing.T) {
 		t.Fatalf("Resolve picked %q, want explicitly selected %q", resolved.RepositoryName, "fork")
 	}
 }
+
+func TestResolveReportsEachRepositoryBeforeFetching(t *testing.T) {
+	t.Parallel()
+	server := newIndexServer(t)
+	var fetched []string
+	resolver := &Resolver{
+		Client: server.Client(),
+		OnRepositoryFetch: func(repo NamedRepository) {
+			fetched = append(fetched, repo.Name)
+		},
+	}
+	if _, err := resolver.Resolve(context.Background(), ResolveRequest{
+		Package: testPackage,
+		Repositories: []NamedRepository{
+			{Name: "gestalt", URL: server.URL + "/canonical.yaml"},
+			{Name: "fork", URL: server.URL + "/mirror.yaml"},
+		},
+	}); err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	if got, want := strings.Join(fetched, ","), "gestalt,fork"; got != want {
+		t.Fatalf("repositories reported = %q, want %q", got, want)
+	}
+}

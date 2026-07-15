@@ -109,7 +109,11 @@ func runProviderRepoAdd(args []string) error {
 	}
 	if len(configPaths) > 0 {
 		path := operator.ResolveConfigPaths(configPaths)[0]
-		return editProjectProviderRepository(path, name, repoURL, false)
+		if err := editProjectProviderRepository(path, name, repoURL, false); err != nil {
+			return err
+		}
+		providerCommandStatus("Added provider repository %q", name)
+		return nil
 	}
 	storePath := providerregistry.UserRepositoryStorePath()
 	store, err := providerregistry.ReadRepositoryStore(storePath)
@@ -120,7 +124,11 @@ func runProviderRepoAdd(args []string) error {
 		store.Repositories = make(map[string]providerregistry.Repository)
 	}
 	store.Repositories[name] = providerregistry.Repository{URL: repoURL}
-	return providerregistry.WriteRepositoryStore(storePath, store)
+	if err := providerregistry.WriteRepositoryStore(storePath, store); err != nil {
+		return err
+	}
+	providerCommandStatus("Added provider repository %q", name)
+	return nil
 }
 
 func runProviderRepoRemove(args []string) error {
@@ -136,15 +144,26 @@ func runProviderRepoRemove(args []string) error {
 	name := strings.TrimSpace(fs.Arg(0))
 	if len(configPaths) > 0 {
 		path := operator.ResolveConfigPaths(configPaths)[0]
-		return removeProjectProviderRepository(path, name)
+		if err := removeProjectProviderRepository(path, name); err != nil {
+			return err
+		}
+		providerCommandStatus("Removed provider repository %q", name)
+		return nil
 	}
 	storePath := providerregistry.UserRepositoryStorePath()
 	store, err := providerregistry.ReadRepositoryStore(storePath)
 	if err != nil {
 		return err
 	}
+	if _, ok := store.Repositories[name]; !ok {
+		return fmt.Errorf("provider repository %q not found", name)
+	}
 	delete(store.Repositories, name)
-	return providerregistry.WriteRepositoryStore(storePath, store)
+	if err := providerregistry.WriteRepositoryStore(storePath, store); err != nil {
+		return err
+	}
+	providerCommandStatus("Removed provider repository %q", name)
+	return nil
 }
 
 func runProviderRepoList(args []string) error {
@@ -186,23 +205,28 @@ func runProviderRepoUpdate(args []string) error {
 		return err
 	}
 	for _, repo := range repos {
+		activity := providerCommandActivity("Fetching provider repository %q", repo.Name)
 		index, err := providerregistry.FetchIndex(context.Background(), nil, repo.URL, repo.Token)
 		if err != nil {
+			activity.Clear()
 			return fmt.Errorf("update provider repo %s: %w", repo.Name, err)
 		}
 		data, err := yaml.Marshal(index)
 		if err != nil {
+			activity.Clear()
 			return err
 		}
 		path := filepath.Join(cacheDir, repo.Name+".yaml")
 		tmp := path + ".tmp"
 		if err := os.WriteFile(tmp, data, 0o600); err != nil {
+			activity.Clear()
 			return err
 		}
 		if err := os.Rename(tmp, path); err != nil {
+			activity.Clear()
 			return err
 		}
-		fmt.Printf("updated %s\n", repo.Name)
+		activity.Finish(fmt.Sprintf("Updated provider repository %q", repo.Name))
 	}
 	return nil
 }
@@ -221,10 +245,13 @@ func runProviderSearch(args []string) error {
 		return err
 	}
 	for _, repo := range filterProviderRepositories(repos, *repoName) {
+		activity := providerCommandActivity("Fetching provider repository %q", repo.Name)
 		index, err := providerregistry.FetchIndex(context.Background(), nil, repo.URL, repo.Token)
 		if err != nil {
+			activity.Clear()
 			return fmt.Errorf("search provider repo %s: %w", repo.Name, err)
 		}
+		activity.Finish(fmt.Sprintf("Fetched provider repository %q", repo.Name))
 		for _, pkg := range slices.Sorted(maps.Keys(index.Packages)) {
 			entry := index.Packages[pkg]
 			haystack := strings.ToLower(pkg + " " + entry.DisplayName + " " + entry.Description)
@@ -253,10 +280,13 @@ func runProviderInfo(args []string) error {
 		return err
 	}
 	for _, repo := range filterProviderRepositories(repos, *repoName) {
+		activity := providerCommandActivity("Fetching provider repository %q", repo.Name)
 		index, err := providerregistry.FetchIndex(context.Background(), nil, repo.URL, repo.Token)
 		if err != nil {
+			activity.Clear()
 			return fmt.Errorf("info provider repo %s: %w", repo.Name, err)
 		}
+		activity.Finish(fmt.Sprintf("Fetched provider repository %q", repo.Name))
 		entry, ok := index.Packages[pkg]
 		if !ok {
 			continue
@@ -336,7 +366,7 @@ func runProviderAdd(args []string) error {
 	if err != nil {
 		return err
 	}
-	resolved, err := (&providerregistry.Resolver{}).Resolve(context.Background(), providerregistry.ResolveRequest{
+	resolved, err := providerCommandResolver().Resolve(context.Background(), providerregistry.ResolveRequest{
 		Package:           fs.Arg(0),
 		VersionConstraint: *version,
 		RepositoryName:    *repoName,
@@ -388,7 +418,7 @@ func runProviderAdd(args []string) error {
 	if err := applyProviderEntry(doc, apiVersion, entryKind, entryName, resolved, *version, *repoName, writePackageSource, setValues); err != nil {
 		return err
 	}
-	preflight, err := preflightProviderConfigMutation(primary, root, *lockfilePath, *noLock)
+	preflight, err := runProviderMutationPreflight(primary, root, *lockfilePath, *noLock)
 	if err != nil {
 		return err
 	}
@@ -401,9 +431,9 @@ func runProviderAdd(args []string) error {
 			return err
 		}
 	}
-	fmt.Printf("Added %s %s\nPackage: %s\nRepository: %s\nVersion: %s\nConfig: %s\n", entryKind, entryName, resolved.Package, resolved.RepositoryName, resolved.Version, result.ConfigPath)
+	providerCommandStatus("Added %s %s; package %s; repository %q; version %s; config %s", entryKind, entryName, resolved.Package, resolved.RepositoryName, resolved.Version, result.ConfigPath)
 	if result.LockWritten {
-		fmt.Printf("Lockfile: %s\n", result.LockfilePath)
+		providerCommandStatus("Lockfile: %s", result.LockfilePath)
 	}
 	return nil
 }
@@ -434,7 +464,7 @@ func runProviderRemove(args []string) error {
 		return err
 	}
 	deleteKey(targets[0].node, fs.Arg(0))
-	preflight, err := preflightProviderConfigMutation(primary, root, *lockfilePath, *noLock)
+	preflight, err := runProviderMutationPreflight(primary, root, *lockfilePath, *noLock)
 	if err != nil {
 		return err
 	}
@@ -442,9 +472,9 @@ func runProviderRemove(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Removed %s %s\nConfig: %s\n", targets[0].kind, fs.Arg(0), result.ConfigPath)
+	providerCommandStatus("Removed %s %s; config %s", targets[0].kind, fs.Arg(0), result.ConfigPath)
 	if result.LockWritten {
-		fmt.Printf("Lockfile: %s\n", result.LockfilePath)
+		providerCommandStatus("Lockfile: %s", result.LockfilePath)
 	}
 	return nil
 }
@@ -478,7 +508,7 @@ func runProviderUpgrade(args []string) error {
 		if err != nil {
 			return err
 		}
-		preflight, err := preflightProviderConfigMutation(primary, root, *lockfilePath, false)
+		preflight, err := runProviderMutationPreflight(primary, root, *lockfilePath, false)
 		if err != nil {
 			return err
 		}
@@ -486,17 +516,54 @@ func runProviderUpgrade(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Updated %s %s version constraint to %s\nConfig: %s\n", targetKind, fs.Arg(0), *version, result.ConfigPath)
+		providerCommandStatus("Updated %s %s version constraint to %s; config %s", targetKind, fs.Arg(0), *version, result.ConfigPath)
 		if result.LockWritten {
-			fmt.Printf("Lockfile: %s\n", result.LockfilePath)
+			providerCommandStatus("Lockfile: %s", result.LockfilePath)
 		}
 		return nil
 	}
-	if err := lockConfig(configPaths, *lockfilePath, "", false); err != nil {
+	providerCommandStatus("Refreshing provider lock state...")
+	if _, err := operatorLifecycleWithCLIProgress().LockAtPaths(operator.ResolveConfigPaths(configPaths), *lockfilePath, ""); err != nil {
 		return err
 	}
-	fmt.Println("Refreshed provider lock state")
+	providerCommandStatus("Provider lock refresh succeeded.")
 	return nil
+}
+
+func providerCommandResolver() *providerregistry.Resolver {
+	return &providerregistry.Resolver{
+		OnRepositoryFetch: func(repo providerregistry.NamedRepository) {
+			providerCommandStatus("Resolving provider package from repository %q", repo.Name)
+		},
+	}
+}
+
+func providerCommandStatus(format string, args ...any) {
+	currentCLIReporter().Status(fmt.Sprintf(format, args...))
+}
+
+func providerCommandActivity(format string, args ...any) *TerminalActivity {
+	return currentCLIReporter().Start(fmt.Sprintf(format, args...))
+}
+
+func runProviderMutationPreflight(configPath string, root *yaml.Node, lockfilePath string, noLock bool) (*providerMutationPreflight, error) {
+	var activity *TerminalActivity
+	if noLock {
+		activity = providerCommandActivity("Running provider configuration preflight")
+	} else {
+		activity = providerCommandActivity("Running provider configuration and lock preflight")
+	}
+	preflight, err := preflightProviderConfigMutation(configPath, root, lockfilePath, noLock)
+	if err != nil {
+		activity.Clear()
+		return nil, err
+	}
+	if noLock {
+		activity.Finish("Provider configuration preflight succeeded.")
+	} else {
+		activity.Finish("Provider configuration and lock preflight succeeded.")
+	}
+	return preflight, nil
 }
 
 func loadProviderRepositories(configPaths []string) ([]providerregistry.NamedRepository, error) {
@@ -603,9 +670,11 @@ func removeProjectProviderRepository(path, name string) error {
 	if err != nil {
 		return err
 	}
-	if repos := mappingValueNodeLocal(doc, "providerRepositories"); repos != nil {
-		deleteKey(repos, name)
+	repos := mappingValueNodeLocal(doc, "providerRepositories")
+	if repos == nil || mappingValueNodeLocal(repos, name) == nil {
+		return fmt.Errorf("provider repository %q not found", name)
 	}
+	deleteKey(repos, name)
 	return writeConfigDocument(path, root)
 }
 

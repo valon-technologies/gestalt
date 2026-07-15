@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"net/http"
@@ -34,7 +35,7 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
 	out := runGestaltd(t, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock")
 	assertContains(t, out, "Added app alpha")
-	assertContains(t, out, "Version: 1.2.3")
+	assertContains(t, out, "version 1.2.3")
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -60,6 +61,77 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 	if got := entry.Source.PackageVersionConstraint(); got != "" {
 		t.Fatalf("Source.PackageVersionConstraint = %q, want empty", got)
 	}
+}
+
+func TestE2EProviderCommandProgressAndRepositoryMutationOutput(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "gestalt.yaml")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v8\napps:\n")
+	indexURL := writeProviderLifecycleIndex(t, dir)
+	env := []string{
+		"XDG_CONFIG_HOME=" + filepath.Join(dir, "xdg-config"),
+		"XDG_CACHE_HOME=" + filepath.Join(dir, "xdg-cache"),
+	}
+
+	stdout, stderr, err := runGestaltdStreamsWithEnv(env, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
+	if err != nil {
+		t.Fatalf("provider repo add: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertContains(t, stderr, `Added provider repository "local"`)
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("provider repo add stdout = %q, want empty", stdout)
+	}
+
+	stdout, stderr, err = runGestaltdStreamsWithEnv(env, "provider", "search", "alpha", "--repo", "local", "--config", cfgPath)
+	if err != nil {
+		t.Fatalf("provider search: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertContains(t, stdout, "local\tgithub.com/acme/providers/alpha\tAlpha")
+	if strings.Contains(stdout, "Fetching provider repository") {
+		t.Fatalf("provider search progress leaked to stdout: %s", stdout)
+	}
+	assertContains(t, stderr, `Fetching provider repository "local"`)
+
+	stdout, stderr, err = runGestaltdStreamsWithEnv(env, "provider", "info", "github.com/acme/providers/alpha", "--repo", "local", "--config", cfgPath)
+	if err != nil {
+		t.Fatalf("provider info: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertContains(t, stdout, "local\tgithub.com/acme/providers/alpha\tAlpha")
+	assertContains(t, stderr, `Fetching provider repository "local"`)
+
+	stdout, stderr, err = runGestaltdStreamsWithEnv(env, "provider", "repo", "remove", "local", "--config", cfgPath)
+	if err != nil {
+		t.Fatalf("provider repo remove: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertContains(t, stderr, `Removed provider repository "local"`)
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("provider repo remove stdout = %q, want empty", stdout)
+	}
+
+	stdout, stderr, err = runGestaltdStreamsWithEnv(env, "provider", "repo", "remove", "local", "--config", cfgPath)
+	if err == nil {
+		t.Fatalf("provider repo remove missing name succeeded\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if strings.Contains(stderr, `Removed provider repository`) {
+		t.Fatalf("missing repo remove reported success: stderr=%q", stderr)
+	}
+	if !strings.Contains(stdout+stderr, "not found") {
+		t.Fatalf("missing repo remove error = stdout:%q stderr:%q", stdout, stderr)
+	}
+
+	updateConfigPath := filepath.Join(dir, "update.yaml")
+	writeProviderLifecycleTestFile(t, updateConfigPath, fmt.Sprintf("apiVersion: gestaltd.config/v8\nproviderRepositories:\n  gestalt:\n    url: %s\n", indexURL))
+	stdout, stderr, err = runGestaltdStreamsWithEnv(env, "provider", "repo", "update", "--config", updateConfigPath)
+	if err != nil {
+		t.Fatalf("provider repo update: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertContains(t, stderr, `Updated provider repository "gestalt"`)
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("provider repo update stdout = %q, want empty", stdout)
+	}
+	assertContains(t, stderr, `Fetching provider repository "gestalt"`)
 }
 
 func TestE2EProviderAddAndUpgradeWriteLockWithTokenedRepository(t *testing.T) {
@@ -114,9 +186,11 @@ packages:
 	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v8\napps:\n")
 	env := []string{"XDG_CONFIG_HOME=" + xdgConfigHome}
 
-	out := runGestaltdWithEnv(t, env, "provider", "add", pkg, "--config", cfgPath, "--repo", "private", "--name", "alpha", "--version", "1.2.3", "--lockfile", lockPath)
-	assertContains(t, out, "Added app alpha")
-	assertContains(t, out, "Lockfile: "+lockPath)
+	stdout, stderr, err := runGestaltdStreamsWithEnv(env, "provider", "add", pkg, "--config", cfgPath, "--repo", "private", "--name", "alpha", "--version", "1.2.3", "--lockfile", lockPath)
+	if err != nil {
+		t.Fatalf("provider add: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertProviderMutationStatusStderr(t, stdout, stderr, "Added app alpha", "Lockfile: "+lockPath)
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -130,9 +204,11 @@ packages:
 	}
 	assertProviderLifecycleLockEntry(t, lockPath, "1.2.3", server.URL+"/"+metadata123)
 
-	out = runGestaltdWithEnv(t, env, "provider", "upgrade", "alpha", "--version", "1.3.0", "--config", cfgPath, "--lockfile", lockPath)
-	assertContains(t, out, "Updated app alpha version constraint to 1.3.0")
-	assertContains(t, out, "Lockfile: "+lockPath)
+	stdout, stderr, err = runGestaltdStreamsWithEnv(env, "provider", "upgrade", "alpha", "--version", "1.3.0", "--config", cfgPath, "--lockfile", lockPath)
+	if err != nil {
+		t.Fatalf("provider upgrade: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertProviderMutationStatusStderr(t, stdout, stderr, "Updated app alpha version constraint to 1.3.0", "Lockfile: "+lockPath)
 	cfg, err = config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load after upgrade: %v", err)
@@ -143,6 +219,14 @@ packages:
 	assertProviderLifecycleLockEntry(t, lockPath, "1.3.0", server.URL+"/"+metadata130)
 	if got := authorizedIndexRequests.Load(); got < 3 {
 		t.Fatalf("authorized index requests = %d, want at least 3", got)
+	}
+
+	stdout, stderr, err = runGestaltdStreamsWithEnv(env, "provider", "remove", "alpha", "--kind", "app", "--config", cfgPath, "--lockfile", lockPath, "--quiet")
+	if err != nil {
+		t.Fatalf("quiet provider remove: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	if stdout != "" || stderr != "" {
+		t.Fatalf("quiet provider remove output = stdout:%q stderr:%q, want both empty", stdout, stderr)
 	}
 }
 
@@ -167,27 +251,17 @@ func TestE2EProviderAddExactSourceAndRejectsRepeatedConfig(t *testing.T) {
 		t.Fatalf("MetadataURL = %q", got)
 	}
 
+	out, err = runGestaltdResult("provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--exact-source", "--no-lock")
+	if err == nil {
+		t.Fatalf("duplicate provider add succeeded: %s", out)
+	}
+	assertContains(t, out, "already exists")
+
 	out, err = runGestaltdResult("provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--config", otherCfgPath, "--repo", "local", "--name", "beta", "--no-lock")
 	if err == nil {
 		t.Fatalf("provider add with repeated --config succeeded: %s", out)
 	}
 	assertContains(t, out, "only one --config")
-}
-
-func TestE2EProviderAddRejectsExistingName(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v8\napps:\n  alpha:\n    source: env\n")
-	indexURL := writeProviderLifecycleIndex(t, dir)
-
-	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
-	out, err := runGestaltdResult("provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock")
-	if err == nil {
-		t.Fatalf("provider add duplicate succeeded: %s", out)
-	}
-	assertContains(t, out, "already exists")
 }
 
 func TestE2EProviderListOfflineAndLockStatus(t *testing.T) {
@@ -545,26 +619,39 @@ func runGestaltd(t *testing.T, args ...string) string {
 	return out
 }
 
-func runGestaltdWithEnv(t *testing.T, env []string, args ...string) string {
-	t.Helper()
-	out, err := runGestaltdResultWithEnv(env, args...)
-	if err != nil {
-		t.Fatalf("gestaltd %s failed: %v\n%s", strings.Join(args, " "), err, out)
-	}
-	return out
-}
-
 func runGestaltdResult(args ...string) (string, error) {
-	return runGestaltdResultWithEnv(nil, args...)
+	cmd := gestaltdCommand(args...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
-func runGestaltdResultWithEnv(env []string, args ...string) (string, error) {
+func runGestaltdStreamsWithEnv(env []string, args ...string) (string, string, error) {
 	cmd := gestaltdCommand(args...)
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
+}
+
+func assertProviderMutationStatusStderr(t *testing.T, stdout, stderr string, want ...string) {
+	t.Helper()
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("provider mutation stdout = %q, want empty", stdout)
+	}
+	for _, part := range want {
+		assertContains(t, stderr, part)
+	}
+	assertContains(t, stderr, "Running provider configuration and lock preflight")
+	assertContains(t, stderr, "Provider configuration and lock preflight succeeded.")
+	for _, leaked := range []string{"gestaltd-provider-preflight-", "gestaltd-lock-", "wrote lockfile"} {
+		if strings.Contains(stderr, leaked) {
+			t.Fatalf("provider mutation stderr leaked %q: %s", leaked, stderr)
+		}
+	}
 }
 
 func assertProviderLifecycleLockEntry(t *testing.T, lockPath, version, source string) {
