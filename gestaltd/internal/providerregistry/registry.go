@@ -91,7 +91,8 @@ type ResolveRequest struct {
 }
 
 type Resolver struct {
-	Client *http.Client
+	Client            *http.Client
+	OnRepositoryFetch func(NamedRepository)
 }
 
 func ValidateRepositoryName(name string) error {
@@ -155,6 +156,9 @@ func (r *Resolver) Resolve(ctx context.Context, req ResolveRequest) (*ResolvedPa
 	var matches []ResolvedPackage
 	var errs []error
 	for _, repo := range repos {
+		if r != nil && r.OnRepositoryFetch != nil {
+			r.OnRepositoryFetch(repo)
+		}
 		index, err := FetchIndex(ctx, r.client(), repo.URL, repo.Token)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", repo.Name, err))
