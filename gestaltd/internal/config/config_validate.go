@@ -6,7 +6,6 @@ import (
 	"maps"
 	"net"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -49,7 +48,7 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeAppStaticMounts(cfg); err != nil {
 		return err
 	}
-	return nil
+	return canonicalizeRemotes(cfg)
 }
 
 // ValidateCanonicalStructure checks config shape assuming canonicalization has
@@ -768,7 +767,7 @@ func validateRuntimeConfig(cfg *Config) error {
 	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
 		return err
 	}
-	if err := normalizeRemoteGestaltdConfig(cfg); err != nil {
+	if err := validateRemotesConfig(cfg); err != nil {
 		return err
 	}
 	for name, entry := range cfg.Runtime.Providers {
@@ -824,92 +823,6 @@ func validateRuntimeRelayBaseURL(raw string) error {
 	return validateHTTPOriginURL("server.runtime.relayBaseUrl", raw)
 }
 
-func validateRemoteGestaltdURL(raw string) error {
-	return validateHTTPOriginURL("server.remote", raw)
-}
-
-func normalizeRemoteGestaltdConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	cfg.Server.Remote = strings.TrimRight(strings.TrimSpace(cfg.Server.Remote), "/")
-	cfg.Server.RemoteToken = strings.TrimSpace(cfg.Server.RemoteToken)
-	return validateRemoteGestaltdURL(cfg.Server.Remote)
-}
-
-// ValidateRemoteGestaltd checks serve-time remote requirements.
-func ValidateRemoteGestaltd(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	if strings.TrimSpace(cfg.Server.Remote) == "" {
-		return nil
-	}
-	if strings.TrimSpace(cfg.Server.RemoteToken) == "" {
-		return fmt.Errorf("config validation: server.remoteToken is required when server.remote is set")
-	}
-	return nil
-}
-
-// ApplyServeRemoteOverrides applies gestaltd serve CLI overrides for remote
-// gestaltd delegation and validates the resolved remote configuration.
-func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
-	if cfg == nil {
-		return nil
-	}
-	if remote != "" {
-		cfg.Server.Remote = remote
-	}
-	if remoteToken != "" {
-		cfg.Server.RemoteToken = remoteToken
-	}
-	if err := normalizeRemoteGestaltdConfig(cfg); err != nil {
-		return err
-	}
-	if strings.TrimSpace(cfg.Server.Remote) != "" && strings.TrimSpace(cfg.Server.RemoteToken) == "" {
-		token, err := defaultRemoteToken()
-		if err != nil {
-			return err
-		}
-		cfg.Server.RemoteToken = token
-	}
-	return ValidateRemoteGestaltd(cfg)
-}
-
-func defaultRemoteToken() (string, error) {
-	if token := strings.TrimSpace(os.Getenv("GESTALT_API_KEY")); token != "" {
-		return token, nil
-	}
-	path := gestaltCredentialsPath()
-	if path == "" {
-		return "", nil
-	}
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("config validation: read Gestalt credentials: %w", err)
-	}
-	var creds struct {
-		APIToken string `json:"api_token"`
-	}
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return "", fmt.Errorf("config validation: parse Gestalt credentials: %w", err)
-	}
-	return strings.TrimSpace(creds.APIToken), nil
-}
-
-func gestaltCredentialsPath() string {
-	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
-		return filepath.Join(xdg, "gestalt", "credentials.json")
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".config", "gestalt", "credentials.json")
-	}
-	return ""
-}
-
 func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {
 	if entry == nil {
 		return false
@@ -947,6 +860,9 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 		return err
 	}
 	if err := validateAppRouteAuth(cfg, name, entry); err != nil {
+		return err
+	}
+	if err := validateAppRemoteRefs(cfg, name, entry); err != nil {
 		return err
 	}
 	if err := validateAppIndexedDBConfig(cfg, name, entry); err != nil {
@@ -1124,6 +1040,9 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	}
 	if entry.AuthorizationPolicy != "" {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.*", subject)
+	}
+	if strings.TrimSpace(entry.Remote) != "" {
+		return fmt.Errorf("config validation: %s.remote is only supported on apps.*", subject)
 	}
 	if _, err := cfg.EffectiveRuntimePlacement(subject, entry); err != nil {
 		return err
@@ -1359,6 +1278,9 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if entry.AuthorizationPolicy != "" {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.*", subject)
 	}
+	if strings.TrimSpace(entry.Remote) != "" {
+		return fmt.Errorf("config validation: %s.remote is only supported on apps.*", subject)
+	}
 	if entry.IndexedDB == nil {
 		return nil
 	}
@@ -1406,6 +1328,9 @@ func validateAppOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	}
 	if entry.AuthorizationPolicy != "" {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on apps.*", subject)
+	}
+	if strings.TrimSpace(entry.Remote) != "" {
+		return fmt.Errorf("config validation: %s.remote is only supported on apps.*", subject)
 	}
 	return nil
 }

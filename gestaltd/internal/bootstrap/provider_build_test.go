@@ -698,8 +698,12 @@ func remoteRoutingConfig(t *testing.T, localDevActive map[string]bool) *config.C
 		}
 	}
 	return &config.Config{
-		Server: config.ServerConfig{Remote: "https://remote.test"},
-		Apps:   apps,
+		Server: config.ServerConfig{
+			Remotes: map[string]*config.RemoteConfig{
+				"default": {URL: "https://remote.test", Token: "remote-token", Default: true},
+			},
+		},
+		Apps: apps,
 	}
 }
 
@@ -716,7 +720,7 @@ func localRoutingAppStub(name string) *coretesting.StubIntegration {
 	}
 }
 
-func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteApp proto.AppClient, localApps ...core.Provider) *invocation.Broker {
+func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteApps map[string]proto.AppClient, localApps ...core.Provider) *invocation.Broker {
 	t.Helper()
 	reg := registry.New()
 	for _, provider := range localApps {
@@ -724,7 +728,11 @@ func newRemoteRoutingBroker(t *testing.T, cfg *config.Config, remoteApp proto.Ap
 			t.Fatalf("Register %q: %v", provider.Name(), err)
 		}
 	}
-	if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClients: &remote.ClientSet{App: remoteApp}}); err != nil {
+	remoteClients := make(map[string]*remote.ClientSet, len(remoteApps))
+	for name, app := range remoteApps {
+		remoteClients[name] = &remote.ClientSet{App: app}
+	}
+	if err := registerRemoteApps(&reg.Providers, cfg, Deps{RemoteClients: remoteClients}); err != nil {
 		t.Fatalf("registerRemoteApps: %v", err)
 	}
 	svc := testutil.NewStubServices(t)
@@ -804,7 +812,9 @@ func TestRemoteAppRoutingLifecycles(t *testing.T) {
 			t.Parallel()
 
 			remoteClient := &recordingRemoteAppClient{}
-			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), remoteClient, tc.localStubs...)
+			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), map[string]proto.AppClient{
+				"default": remoteClient,
+			}, tc.localStubs...)
 
 			for _, check := range tc.localChecks {
 				result := invokeRemoteRoutingApp(t, broker, check.app, check.operation)
@@ -828,6 +838,41 @@ func TestRemoteAppRoutingLifecycles(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("named remotes", func(t *testing.T) {
+		t.Parallel()
+
+		prodApp := &recordingRemoteAppClient{}
+		peerApp := &recordingRemoteAppClient{}
+		cfg := &config.Config{
+			Server: config.ServerConfig{
+				Remotes: map[string]*config.RemoteConfig{
+					"prod": {URL: "https://prod.test", Token: "prod", Default: true},
+					"peer": {URL: "https://peer.test", Token: "peer"},
+				},
+			},
+			Apps: map[string]*config.ProviderEntry{
+				"linear":        remoteRoutingAppEntry(t, "linear", "issues.list"),
+				"valon-profile": remoteRoutingAppEntry(t, "valon-profile", "profile.get"),
+			},
+		}
+		cfg.Apps["linear"].Remote = "prod"
+		cfg.Apps["valon-profile"].Remote = "peer"
+
+		broker := newRemoteRoutingBroker(t, cfg, map[string]proto.AppClient{
+			"prod": prodApp,
+			"peer": peerApp,
+		})
+		invokeRemoteRoutingApp(t, broker, "linear", "issues.list")
+		invokeRemoteRoutingApp(t, broker, "valon-profile", "profile.get")
+
+		if got := len(prodApp.snapshot()); got != 1 {
+			t.Fatalf("prod calls = %d", got)
+		}
+		if got := len(peerApp.snapshot()); got != 1 {
+			t.Fatalf("peer calls = %d", got)
+		}
+	})
 }
 
 func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
@@ -868,7 +913,9 @@ func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
 			t.Parallel()
 
 			remoteClient := &recordingRemoteAppClient{err: tc.remoteErr}
-			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), remoteClient)
+			broker := newRemoteRoutingBroker(t, remoteRoutingConfig(t, tc.localApps), map[string]proto.AppClient{
+				"default": remoteClient,
+			})
 
 			_, err := broker.Invoke(context.Background(), remoteRoutingPrincipal(tc.app), tc.app, "", tc.operation, nil)
 			if !errors.Is(err, tc.wantErr) {
@@ -881,24 +928,53 @@ func TestRemoteAppRoutingFailureSemantics(t *testing.T) {
 	}
 }
 
-func TestProviderBuildsLocal(t *testing.T) {
+func TestResolvesLocal(t *testing.T) {
 	t.Parallel()
 
-	cfg := &config.Config{Server: config.ServerConfig{Remote: "https://remote.test"}}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Remotes: map[string]*config.RemoteConfig{
+				"prod": {URL: "https://prod.test", Token: "prod", Default: true},
+				"peer": {URL: "https://peer.test", Token: "peer"},
+			},
+		},
+	}
+	secondaryOnly := &config.Config{
+		Server: config.ServerConfig{
+			Remotes: map[string]*config.RemoteConfig{
+				"peer": {URL: "https://peer.test", Token: "peer"},
+			},
+		},
+	}
 
-	if !providerBuildsLocal(cfg, &config.ProviderEntry{DevActive: true}) {
-		t.Fatal("DevActive entry should build local")
+	if !resolvesLocal(cfg, &config.ProviderEntry{DevActive: true}, false) {
+		t.Fatal("DevActive should resolve local for apps")
 	}
-	if !providerBuildsLocal(cfg, &config.ProviderEntry{Local: true}) {
-		t.Fatal("local entry should build local when server.remote is configured")
+	if !resolvesLocal(cfg, &config.ProviderEntry{Local: true}, false) {
+		t.Fatal("local entry should resolve local for apps")
 	}
-	if providerBuildsLocal(cfg, &config.ProviderEntry{}) {
-		t.Fatal("non-DevActive entry with remote configured should not build local")
+	if resolvesLocal(cfg, &config.ProviderEntry{}, false) {
+		t.Fatal("unmapped app with default remote should not resolve local")
 	}
-	if !providerBuildsLocal(&config.Config{}, &config.ProviderEntry{}) {
-		t.Fatal("entry without remote configured should build local")
+	if !resolvesLocal(&config.Config{}, &config.ProviderEntry{}, false) {
+		t.Fatal("app without remotes should resolve local")
 	}
-	if providerBuildsLocal(cfg, nil) {
-		t.Fatal("nil entry should not build local")
+	if resolvesLocal(cfg, nil, false) {
+		t.Fatal("nil entry should not resolve local")
+	}
+	if !resolvesLocal(secondaryOnly, &config.ProviderEntry{}, true) {
+		t.Fatal("host provider should resolve local without default remote")
+	}
+	if !resolvesLocal(secondaryOnly, &config.ProviderEntry{}, false) {
+		t.Fatal("unmapped app should resolve local without default remote")
+	}
+	if resolvesLocal(cfg, &config.ProviderEntry{Remote: "peer"}, false) {
+		t.Fatal("explicit app remote should not resolve local")
+	}
+	if got := appRemoteName(cfg, &config.ProviderEntry{Remote: "peer"}); got != "peer" {
+		t.Fatalf("appRemoteName = %q, want peer", got)
+	}
+	if got := appRemoteName(cfg, &config.ProviderEntry{}); got != "prod" {
+		t.Fatalf("appRemoteName = %q, want prod", got)
 	}
 }

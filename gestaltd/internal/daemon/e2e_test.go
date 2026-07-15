@@ -452,11 +452,18 @@ func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 	if err := config.ApplyServeRemoteOverrides(cfg, "", "test-token"); err != nil {
 		t.Fatalf("ApplyServeRemoteOverrides: %v", err)
 	}
-	if got := cfg.Server.Remote; got != "https://valon.tools" {
-		t.Fatalf("Server.Remote = %q, want https://valon.tools", got)
+	if got := cfg.DefaultRemoteName(); got != "default" {
+		t.Fatalf("DefaultRemoteName = %q, want default", got)
 	}
-	if got := cfg.Server.RemoteToken; got != "test-token" {
-		t.Fatalf("Server.RemoteToken = %q, want test-token", got)
+	remote := cfg.Server.Remotes["default"]
+	if remote == nil {
+		t.Fatal("server.remotes.default is nil")
+	}
+	if got := remote.URL; got != "https://valon.tools" {
+		t.Fatalf("remote URL = %q, want https://valon.tools", got)
+	}
+	if got := remote.Token; got != "test-token" {
+		t.Fatalf("remote token = %q, want test-token", got)
 	}
 	if cfg.Apps["example"] == nil {
 		t.Fatal(`Apps["example"] = nil`)
