@@ -100,7 +100,7 @@ func prepareProviderBuilds(
 
 	for name := range cfg.Apps {
 		entry := cfg.Apps[name]
-		if !resolvesLocal(cfg, entry, false) {
+		if !providerBuildsLocal(cfg, entry) {
 			continue
 		}
 		sha := currentAppSHA(entry)
@@ -130,18 +130,17 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 	if providers == nil || cfg == nil {
 		return nil
 	}
+	if strings.TrimSpace(cfg.Server.Remote) == "" {
+		return nil
+	}
+	clients := deps.RemoteClients
+	if clients == nil || clients.App == nil {
+		return fmt.Errorf("bootstrap: remote client is required when server.remote is configured")
+	}
 	for name, entry := range cfg.Apps {
 		name = strings.TrimSpace(name)
-		if name == "" || entry == nil {
+		if name == "" || entry == nil || providerBuildsLocal(cfg, entry) {
 			continue
-		}
-		if resolvesLocal(cfg, entry, false) {
-			continue
-		}
-		remoteName := appRemoteName(cfg, entry)
-		clients := deps.RemoteClients[remoteName]
-		if clients == nil || clients.App == nil {
-			return fmt.Errorf("bootstrap: remote %q client is required for app %q", remoteName, name)
 		}
 		spec, _, err := buildStartupProviderSpec(name, entry)
 		if err != nil {
@@ -154,7 +153,7 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if err := providers.Register(name, provider); err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
-		slog.Info("registered remote app provider", "provider", name, "remote", remoteName)
+		slog.Info("registered remote app provider", "provider", name)
 	}
 	return nil
 }
@@ -1213,8 +1212,8 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 	if baseURL := strings.TrimSpace(deps.BaseURL); baseURL != "" {
 		target.BaseEnv["GESTALT_BASE_URL"] = strings.TrimRight(baseURL, "/")
 	}
-	if strings.TrimSpace(deps.DefaultRemoteToken) != "" {
-		target.BaseEnv["GESTALT_DEV_API_PROXY_TOKEN"] = deps.DefaultRemoteToken
+	if strings.TrimSpace(deps.RemoteToken) != "" {
+		target.BaseEnv["GESTALT_DEV_API_PROXY_TOKEN"] = deps.RemoteToken
 	}
 	handle, err := deps.DevSupervisor.StartApp(ctx, target)
 	if err != nil {

@@ -200,9 +200,7 @@ func TestBootstrapAuthorizationProviderStateSkipsRemoteProvider(t *testing.T) {
 	provider := &recordingAuthorizationProvider{}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Remotes: map[string]*config.RemoteConfig{
-				"default": {URL: "https://parent.gestalt.example", Token: "token", Default: true},
-			},
+			Remote: "https://parent.gestalt.example",
 			Providers: config.ServerProvidersConfig{
 				Authorization: "authz",
 			},

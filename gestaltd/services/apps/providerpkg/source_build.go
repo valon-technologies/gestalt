@@ -262,11 +262,14 @@ func runSourcePhase(manifestPath, label, workdir string, command, envOverrides [
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = phaseWorkdir
 	cmd.Env = mergePhaseEnv(sourceBuildEnv(os.Environ(), opts), envOverrides)
-	cmd.Stdout = commandStdout(opts.Output)
-	cmd.Stderr = commandStderr(opts.Output)
+	stdout, stderr, finalize := phaseCommandWriters(opts.Output)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
+		finalize(err)
 		return fmt.Errorf("run %s.command: %w", label, err)
 	}
+	finalize(nil)
 	return nil
 }
 
