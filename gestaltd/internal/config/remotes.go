@@ -188,16 +188,24 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
 	}
 
 	if remote != "" {
-		ensureDefaultRemote(cfg)
 		name := cfg.DefaultRemoteName()
 		if name == "" {
 			name = legacyDefaultRemoteName
 		}
+		entry := cfg.Server.Remotes[name]
+		if entry == nil {
+			entry = &RemoteConfig{}
+			if cfg.Server.Remotes == nil {
+				cfg.Server.Remotes = map[string]*RemoteConfig{}
+			}
+			cfg.Server.Remotes[name] = entry
+		}
+		entry.Default = true
 		url := strings.TrimRight(strings.TrimSpace(remote), "/")
 		if err := validateHTTPOriginURL("server.remotes."+name+".url", url); err != nil {
 			return err
 		}
-		cfg.Server.Remotes[name].URL = url
+		entry.URL = url
 	}
 
 	if len(cfg.Server.Remotes) == 0 {
@@ -240,19 +248,6 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
 	}
 
 	return ValidateRemoteGestaltd(cfg)
-}
-
-func ensureDefaultRemote(cfg *Config) {
-	if cfg.Server.Remotes == nil {
-		cfg.Server.Remotes = map[string]*RemoteConfig{}
-	}
-	if cfg.DefaultRemoteName() == "" {
-		cfg.Server.Remotes[legacyDefaultRemoteName] = &RemoteConfig{Default: true}
-		return
-	}
-	if entry := cfg.Server.Remotes[cfg.DefaultRemoteName()]; entry != nil {
-		entry.Default = true
-	}
 }
 
 func defaultRemoteToken() (string, error) {

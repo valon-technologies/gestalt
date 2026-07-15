@@ -284,6 +284,15 @@ func TestApplyServeRemoteOverrides(t *testing.T) {
 				tokenFlag:  "cli-token",
 				wantToken:  "cli-token",
 			},
+			{
+				name:       "remote flag promotes reserved default",
+				envToken:   "ambient-token",
+				remoteFlag: "https://new.test",
+				remotes: map[string]*RemoteConfig{
+					"default": {URL: "https://old.test", Token: "configured-token"},
+				},
+				wantToken: "configured-token",
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Setenv("GESTALT_API_KEY", tc.envToken)
