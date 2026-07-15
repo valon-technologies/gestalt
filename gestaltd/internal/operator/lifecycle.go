@@ -96,6 +96,7 @@ type StaticValidationOptions struct {
 type Lifecycle struct {
 	configSecretResolver     func(context.Context, *config.Config) error
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
+	sourceCommandOutput      providerpkg.CommandOutput
 	progress                 LifecycleProgress
 	httpClient               *http.Client
 	providerResolver         *providerregistry.Resolver
@@ -177,6 +178,12 @@ func (l *Lifecycle) WithSourceAuthSecretResolver(resolve func(context.Context, *
 
 func (l *Lifecycle) WithProgress(progress LifecycleProgress) *Lifecycle {
 	l.progress = progress
+	return l
+}
+
+// WithSourceCommandOutput controls output from local source install and build commands.
+func (l *Lifecycle) WithSourceCommandOutput(output providerpkg.CommandOutput) *Lifecycle {
+	l.sourceCommandOutput = output
 	return l
 }
 
@@ -1143,7 +1150,6 @@ func (l *Lifecycle) syncAtPaths(configPaths []string, lockfilePath, artifactsDir
 	paths := resolveLifecyclePaths(configPaths, cfg, lockfilePath, artifactsDir)
 	paths.syncCache = syncCache
 	paths.syncMetrics = recorder
-	paths.syncBuildOutput = opts.Observability.BuildOutput
 	if recorder != nil {
 		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.syncCache.dir, opts.CacheDir != "", mode == artifactModeMaterialize && paths.syncCache.dir != "")
 	}
@@ -1651,7 +1657,6 @@ type lifecyclePaths struct {
 	runtimeDir             string
 	syncCache              materializedCache
 	syncMetrics            *SyncMetricsRecorder
-	syncBuildOutput        providerpkg.CommandOutput
 }
 
 func primaryConfigPath(paths []string) string {
@@ -2758,8 +2763,8 @@ func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, s
 	return LockArchive{}, "", false
 }
 
-func prepareLocalSourceInstall(kind, name, manifestPath, destDir string) (*preparedInstall, error) {
-	_, cleanupInstall, commitInstall, err := stageLocalSourceInstall(kind, name, manifestPath, destDir, providerpkg.StageSourcePreparedInstallOptions{})
+func (l *Lifecycle) prepareLocalSourceInstall(kind, name, manifestPath, destDir string) (*preparedInstall, error) {
+	_, cleanupInstall, commitInstall, err := stageLocalSourceInstall(kind, name, manifestPath, destDir, l.sourceStageOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -3034,7 +3039,7 @@ func (l *Lifecycle) resolveLockedProvider(ctx context.Context, cfg *config.Confi
 	}
 	isAppProvider := kind == providermanifestv1.KindApp && destDir == providerDestDir(paths, name)
 	if provider.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(kind, name, provider.SourcePath(), destDir)
+		install, err := l.prepareLocalSourceInstall(kind, name, provider.SourcePath(), destDir)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -3907,7 +3912,7 @@ func (l *Lifecycle) prepareSourceRunProviders(paths lifecyclePaths, cfg *config.
 	if !mode.canMaterialize() || cfg == nil {
 		return nil
 	}
-	opts := providerpkg.SourceBuildOptions{Output: paths.syncBuildOutput}
+	opts := providerpkg.SourceBuildOptions{Output: l.sourceCommandOutput}
 	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
 		if entry == nil || !entry.DevActive {
@@ -3998,7 +4003,7 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 		}
 
 		prepareStart := time.Now()
-		stagedInstall, cleanupStaged, commitStaged, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir, paths.stageOptions())
+		stagedInstall, cleanupStaged, commitStaged, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir, l.sourceStageOptions())
 		prepareDuration := time.Since(prepareStart)
 		if cleanupStaged != nil {
 			defer func() { _ = cleanupStaged() }()
@@ -4193,7 +4198,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			var prepareDuration time.Duration
 			if stagedInstall == nil {
 				prepareStart := time.Now()
-				stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app, paths.stageOptions())
+				stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app, l.sourceStageOptions())
 				prepareDuration = time.Since(prepareStart)
 				if err != nil {
 					return err
@@ -4307,9 +4312,9 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			if stagedInstall == nil {
 				prepareStart := time.Now()
 				if app.HasGitSource() {
-					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, app, paths.stageOptions())
+					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, app, l.sourceStageOptions())
 				} else {
-					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, app.SourcePath(), destDir, paths.stageOptions())
+					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, app.SourcePath(), destDir, l.sourceStageOptions())
 				}
 				prepareDuration = time.Since(prepareStart)
 				if err != nil {

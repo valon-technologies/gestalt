@@ -42,16 +42,6 @@ func TestParseGlobalCLIOutputFlags(t *testing.T) {
 			wantArgs:  "version",
 		},
 		{
-			name:     "sync owns verbose equals form",
-			args:     []string{"sync", "--verbose=false"},
-			wantArgs: "sync --verbose=false",
-		},
-		{
-			name:     "sync owns invalid verbose equals form",
-			args:     []string{"sync", "--verbose=invalid"},
-			wantArgs: "sync --verbose=invalid",
-		},
-		{
 			name:     "value before command",
 			args:     []string{"--config", "--no-progress", "sync"},
 			wantArgs: "--config --no-progress sync",

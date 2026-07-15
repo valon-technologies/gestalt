@@ -401,7 +401,7 @@ func preflightProviderConfigMutation(configPath string, root *yaml.Node, lockfil
 	defer func() { _ = os.RemoveAll(scratchDir) }()
 	scratchArtifactsDir := filepath.Join(scratchDir, "artifacts")
 	scratchLockfilePath := filepath.Join(scratchDir, operator.LockfileName)
-	lock, err := operatorLifecycle().LockAtPaths([]string{tempConfigPath}, scratchLockfilePath, scratchArtifactsDir)
+	lock, err := operatorLifecycleWithCLIOutput().LockAtPaths([]string{tempConfigPath}, scratchLockfilePath, scratchArtifactsDir)
 	if err != nil {
 		return nil, err
 	}
