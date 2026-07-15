@@ -290,7 +290,7 @@ func (l *Lifecycle) prepareGitSourceInstall(ctx context.Context, paths lifecycle
 	if err != nil {
 		return nil, err
 	}
-	install, err := prepareLocalSourceInstall(kind, name, manifestPath, destDir)
+	install, err := l.prepareLocalSourceInstall(kind, name, manifestPath, destDir)
 	if err != nil {
 		return nil, err
 	}

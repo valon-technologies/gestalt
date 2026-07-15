@@ -15,13 +15,12 @@ import (
 )
 
 type SyncObservability struct {
-	Recorder    *SyncMetricsRecorder
-	BuildOutput providerpkg.CommandOutput
+	Recorder *SyncMetricsRecorder
 }
 
-func (paths lifecyclePaths) stageOptions() providerpkg.StageSourcePreparedInstallOptions {
+func (l *Lifecycle) sourceStageOptions() providerpkg.StageSourcePreparedInstallOptions {
 	return providerpkg.StageSourcePreparedInstallOptions{
-		BuildOutput: paths.syncBuildOutput,
+		BuildOutput: l.sourceCommandOutput,
 	}
 }
 

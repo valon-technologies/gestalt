@@ -168,7 +168,7 @@ providers:
 		t.Fatalf("remove prepared indexeddb provider: %v", err)
 	}
 
-	cmd := gestaltdCommand("sync", "--locked", "--verbose", "--output-format=json", "--config", configPath)
+	cmd := gestaltdCommand("sync", "--locked", "--output-format=json", "--config", configPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

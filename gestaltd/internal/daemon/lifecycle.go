@@ -6,6 +6,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 func operatorLifecycle() *operator.Lifecycle {
@@ -17,20 +18,43 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
-func operatorLifecycleWithCLIProgress() *operator.Lifecycle {
-	return operatorLifecycle().WithProgress(newLifecycleProgressReporter(currentCLIReporter()))
+func operatorLifecycleWithCLIProgress(showSourceOutput bool) *operator.Lifecycle {
+	reporter := currentCLIReporter()
+	return operatorLifecycle().
+		WithSourceCommandOutput(sourceCommandOutput(reporter, showSourceOutput)).
+		WithProgress(newLifecycleProgressReporter(reporter))
+}
+
+func operatorLifecycleWithCLIOutput() *operator.Lifecycle {
+	reporter := currentCLIReporter()
+	return operatorLifecycle().WithSourceCommandOutput(sourceCommandOutput(reporter, false))
+}
+
+func sourceCommandOutput(reporter *TerminalReporter, showSuccess bool) providerpkg.CommandOutput {
+	output := reporter.ChildOutput()
+	if (showSuccess || reporter.policy.Verbose) && !reporter.policy.Quiet {
+		return providerpkg.CommandOutput{Stdout: output, Stderr: output}
+	}
+	return providerpkg.CommandOutputCaptureOnFailure(output)
 }
 
 func newLifecycleProgressReporter(reporter *TerminalReporter) operator.LifecycleProgress {
 	if reporter == nil {
 		return nil
 	}
+	var activity *TerminalActivity
 	return func(event operator.LifecycleProgressEvent) {
 		switch event.Status {
 		case operator.LifecycleProgressStarted:
-			reporter.Status(formatLifecycleProgressStart(event))
+			activity = reporter.Start(formatLifecycleProgressStart(event))
 		case operator.LifecycleProgressCompleted, operator.LifecycleProgressNoop:
-			reporter.Status(formatLifecycleProgressComplete(event))
+			message := formatLifecycleProgressComplete(event)
+			if activity != nil {
+				activity.Finish(message)
+				activity = nil
+				return
+			}
+			reporter.Status(message)
 		}
 	}
 }
@@ -77,19 +101,19 @@ func formatLifecycleProgressComplete(event operator.LifecycleProgressEvent) stri
 func lockConfig(configFlags []string, lockfilePath, artifactsDir string, check bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	if check {
-		return operatorLifecycleWithCLIProgress().CheckLockAtPaths(configPaths, lockfilePath, artifactsDir)
+		return operatorLifecycleWithCLIProgress(false).CheckLockAtPaths(configPaths, lockfilePath, artifactsDir)
 	}
-	_, err := operatorLifecycleWithCLIProgress().LockAtPaths(configPaths, lockfilePath, artifactsDir)
+	_, err := operatorLifecycleWithCLIProgress(false).LockAtPaths(configPaths, lockfilePath, artifactsDir)
 	return err
 }
 
 func syncConfig(configFlags []string, lockfilePath, artifactsDir string, check bool) error {
-	return syncConfigOptions(configFlags, lockfilePath, artifactsDir, check, operator.SyncOptions{Parallelism: 1})
+	return syncConfigOptions(configFlags, lockfilePath, artifactsDir, check, operator.SyncOptions{Parallelism: 1}, false)
 }
 
-func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, check bool, opts operator.SyncOptions) error {
+func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, check bool, opts operator.SyncOptions, showSourceOutput bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
-	lc := operatorLifecycleWithCLIProgress()
+	lc := operatorLifecycleWithCLIProgress(showSourceOutput)
 	if check {
 		return lc.CheckSyncAtPathsOptions(configPaths, lockfilePath, artifactsDir, opts)
 	}
@@ -97,7 +121,7 @@ func syncConfigOptions(configFlags []string, lockfilePath, artifactsDir string, 
 }
 
 func loadConfigForExecutionAtPaths(configPaths []string, lockfilePath, artifactsDir string, locked, noSync bool, forcedDevAppKeys ...string) (*config.Config, error) {
-	lc := operatorLifecycleWithCLIProgress().WithDevServeEligible(!locked)
+	lc := operatorLifecycleWithCLIProgress(false).WithDevServeEligible(!locked)
 	if len(forcedDevAppKeys) > 0 {
 		lc = lc.WithForcedDevAppKeys(forcedDevAppKeys)
 	}
@@ -115,9 +139,9 @@ func loadConfigForValidation(configFlags []string, lockfilePath, artifactsDir st
 		err error
 	)
 	if opts.Runtime {
-		cfg, err = operatorLifecycle().LoadForValidationAtPaths(configPaths, lockfilePath, artifactsDir)
+		cfg, err = operatorLifecycleWithCLIOutput().LoadForValidationAtPaths(configPaths, lockfilePath, artifactsDir)
 	} else {
-		cfg, err = operatorLifecycle().LoadForStaticValidationAtPaths(configPaths, lockfilePath, artifactsDir, operator.StaticValidationOptions{Platform: opts.Platform})
+		cfg, err = operatorLifecycleWithCLIOutput().LoadForStaticValidationAtPaths(configPaths, lockfilePath, artifactsDir, operator.StaticValidationOptions{Platform: opts.Platform})
 	}
 	if err != nil {
 		return nil, nil, err

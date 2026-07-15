@@ -72,7 +72,19 @@ func phaseCommandWriters(output CommandOutput) (stdout, stderr io.Writer, finali
 			if err != nil {
 				session.flush()
 			}
+			flushCommandOutput(output.CaptureErrors)
 		}
 	}
-	return commandStdout(output), commandStderr(output), func(error) {}
+	stdout, stderr = commandStdout(output), commandStderr(output)
+	return stdout, stderr, func(error) {
+		flushCommandOutput(stdout, stderr)
+	}
+}
+
+func flushCommandOutput(writers ...io.Writer) {
+	for _, writer := range writers {
+		if flusher, ok := writer.(interface{ Flush() }); ok {
+			flusher.Flush()
+		}
+	}
 }

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -67,8 +68,8 @@ type CLIOutputFlags struct {
 }
 
 // parseGlobalCLIOutputFlags removes shared output flags from the command line.
-// Short -v is deliberately not recognized here: root -v is the legacy version
-// flag, while command-local sync -v remains a sync flag.
+// Root -v remains the legacy version flag. Once sync is selected, its short
+// -v informs the shared output policy while remaining a sync argument.
 func parseGlobalCLIOutputFlags(args []string) (CLIOutputFlags, []string, error) {
 	var flags CLIOutputFlags
 	filtered := make([]string, 0, len(args))
@@ -100,8 +101,18 @@ func parseGlobalCLIOutputFlags(args []string) (CLIOutputFlags, []string, error) 
 		if !strings.HasPrefix(arg, "-") && command == "" {
 			command = arg
 		}
+		if command == "sync" && arg == "-v" {
+			flags.Verbose = true
+			filtered = append(filtered, arg)
+			continue
+		}
 		if name, rawValue, matched := parseCLIOutputBool(arg); matched {
 			if command == "sync" && name == "verbose" {
+				value, err := parseCLIOutputBoolValue(name, rawValue)
+				if err != nil {
+					return flags, nil, err
+				}
+				flags.Verbose = value
 				filtered = append(filtered, arg)
 				continue
 			}
@@ -269,6 +280,13 @@ type TerminalActivity struct {
 	started  time.Time
 }
 
+// terminalOutputWriter serializes line-oriented child-process output with active
+// terminal activity. It keeps child output readable without abandoning progress.
+type terminalOutputWriter struct {
+	reporter *TerminalReporter
+	pending  []byte
+}
+
 // NewTerminalReporter creates a reporter writing to output. Callers should
 // pass os.Stderr for process output and set Interactive from the destination's
 // terminal state.
@@ -361,6 +379,38 @@ func (r *TerminalReporter) Clear() {
 	r.clearActiveLocked()
 }
 
+// ChildOutput returns a writer for subprocess output. Complete lines are
+// printed above any active activity; partial lines are held until Flush.
+func (r *TerminalReporter) ChildOutput() io.Writer {
+	return &terminalOutputWriter{reporter: r}
+}
+
+func (w *terminalOutputWriter) Write(p []byte) (int, error) {
+	w.reporter.mu.Lock()
+	defer w.reporter.mu.Unlock()
+
+	w.pending = append(w.pending, p...)
+	for {
+		end := bytes.IndexByte(w.pending, '\n')
+		if end < 0 {
+			break
+		}
+		w.reporter.writeChildOutputLocked(w.pending[:end+1])
+		w.pending = w.pending[end+1:]
+	}
+	return len(p), nil
+}
+
+func (w *terminalOutputWriter) Flush() {
+	w.reporter.mu.Lock()
+	defer w.reporter.mu.Unlock()
+	if len(w.pending) == 0 {
+		return
+	}
+	w.reporter.writeChildOutputLocked(append(w.pending, '\n'))
+	w.pending = nil
+}
+
 func (r *TerminalReporter) writeNormal(message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -400,6 +450,17 @@ func (r *TerminalReporter) clearActiveLocked() {
 		return
 	}
 	r.finishLocked(r.active, "")
+}
+
+func (r *TerminalReporter) writeChildOutputLocked(line []byte) {
+	active := r.active
+	if active != nil && active.started && r.policy.Interactive && !r.policy.NoProgress && !r.policy.Quiet {
+		r.clearLineLocked(active.message)
+	}
+	_, _ = r.output.Write(line)
+	if active != nil && active.started && r.policy.Interactive && !r.policy.NoProgress && !r.policy.Quiet {
+		r.writeActivityLocked(active)
+	}
 }
 
 func (r *TerminalReporter) writeActivityLocked(state *activityState) {
