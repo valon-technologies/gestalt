@@ -256,6 +256,120 @@ func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
 	}
 }
 
+func TestE2ESyncQuietFailedBuildShowsDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexedDBDir := setupIndexedDBProviderDir(t, dir)
+	buildScriptPath := filepath.Join(indexedDBDir, "build.sh")
+	if err := os.WriteFile(buildScriptPath, []byte("#!/bin/sh\nprintf 'QUIET_FAIL_STDOUT\\n'\nprintf 'QUIET_FAIL_STDERR\\n' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write build script: %v", err)
+	}
+	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
+server:
+  baseUrl: %s
+  encryptionKey: test-e2e-key
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+`, e2eLoopbackBaseURL(18080), artifactsDir, indexedDBManifest, filepath.Join(dir, "gestalt.db"))
+	if err := os.WriteFile(configPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	out, err := gestaltdCommand("lock", "--config", configPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock: %v\n%s", err, out)
+	}
+	if err := os.RemoveAll(filepath.Join(artifactsDir, "indexeddb", "sqlite")); err != nil {
+		t.Fatalf("remove prepared indexeddb provider: %v", err)
+	}
+
+	cmd := gestaltdCommand("--quiet", "sync", "--locked", "--config", configPath)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err == nil {
+		t.Fatalf("gestaltd sync --quiet unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("quiet failed sync stdout = %q, want empty", got)
+	}
+	errOut := stderr.String()
+	for _, want := range []string{"QUIET_FAIL_STDOUT", "QUIET_FAIL_STDERR"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("quiet failed sync stderr = %q, want %q\nstdout:\n%s", errOut, want, stdout.String())
+		}
+	}
+}
+
+func TestE2ESyncQuietJSONFailedBuildShowsDiagnosticsOnStderr(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexedDBDir := setupIndexedDBProviderDir(t, dir)
+	buildScriptPath := filepath.Join(indexedDBDir, "build.sh")
+	if err := os.WriteFile(buildScriptPath, []byte("#!/bin/sh\nprintf 'QUIET_JSON_FAIL_STDOUT\\n'\nprintf 'QUIET_JSON_FAIL_STDERR\\n' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write build script: %v", err)
+	}
+	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v8
+server:
+  baseUrl: %s
+  encryptionKey: test-e2e-key
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+`, e2eLoopbackBaseURL(18080), artifactsDir, indexedDBManifest, filepath.Join(dir, "gestalt.db"))
+	if err := os.WriteFile(configPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	out, err := gestaltdCommand("lock", "--config", configPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock: %v\n%s", err, out)
+	}
+	if err := os.RemoveAll(filepath.Join(artifactsDir, "indexeddb", "sqlite")); err != nil {
+		t.Fatalf("remove prepared indexeddb provider: %v", err)
+	}
+
+	cmd := gestaltdCommand("--quiet", "sync", "--locked", "--output-format=json", "--config", configPath)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err == nil {
+		t.Fatalf("gestaltd sync --quiet --output-format=json unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "" {
+		t.Fatalf("quiet failed JSON sync stdout = %q, want empty\nstderr:\n%s", got, stderr.String())
+	}
+	errOut := stderr.String()
+	for _, want := range []string{"QUIET_JSON_FAIL_STDOUT", "QUIET_JSON_FAIL_STDERR"} {
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("quiet failed JSON sync stderr = %q, want %q\nstdout:\n%s", errOut, want, stdout.String())
+		}
+	}
+}
+
 func TestE2ESyncJSONFailureLeavesStdoutEmpty(t *testing.T) {
 	t.Parallel()
 
