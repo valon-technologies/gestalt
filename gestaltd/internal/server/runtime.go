@@ -70,7 +70,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		authorizationProvider = result.Authorization[authorizationName]
 	}
 	var publicIndexedDB indexeddb.IndexedDB
-	if strings.TrimSpace(cfg.DefaultRemoteName()) == "" && result.Services != nil {
+	if strings.TrimSpace(cfg.Server.Remote) == "" && result.Services != nil {
 		publicIndexedDB = result.Services.DB
 	}
 	baseConfig := Config{
