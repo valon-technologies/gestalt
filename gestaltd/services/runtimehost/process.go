@@ -299,19 +299,6 @@ func (p *providerProcess) Close() error {
 
 	p.closeOnce.Do(func() {
 		var errs []error
-		if p.conn != nil {
-			if err := p.conn.Close(); err != nil {
-				errs = append(errs, fmt.Errorf("close app connection: %w", err))
-			}
-		}
-		for _, hostSrv := range p.hostSrvs {
-			stopGRPCServer(hostSrv, hostServiceShutdownTimeout)
-		}
-		for _, hostLis := range p.hostLiss {
-			if err := hostLis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-				errs = append(errs, fmt.Errorf("close runtime host listener: %w", err))
-			}
-		}
 		if p.cmd != nil && p.cmd.Process != nil {
 			_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
 			select {
@@ -330,6 +317,19 @@ func (p *providerProcess) Close() error {
 						errs = append(errs, fmt.Errorf("wait for killed app process: %w", err))
 					}
 				}
+			}
+		}
+		if p.conn != nil {
+			if err := p.conn.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("close app connection: %w", err))
+			}
+		}
+		for _, hostSrv := range p.hostSrvs {
+			stopGRPCServer(hostSrv, hostServiceShutdownTimeout)
+		}
+		for _, hostLis := range p.hostLiss {
+			if err := hostLis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+				errs = append(errs, fmt.Errorf("close runtime host listener: %w", err))
 			}
 		}
 		if p.proxy != nil {
