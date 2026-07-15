@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -64,6 +65,17 @@ func runProviderCommandResult(pluginDir string, args ...string) ([]byte, error) 
 	cmd := gestaltdCommand(cmdArgs...)
 	cmd.Dir = pluginDir
 	return cmd.CombinedOutput()
+}
+
+func runProviderCommandStreams(pluginDir string, args ...string) ([]byte, []byte, error) {
+	cmdArgs := append([]string{"provider"}, args...)
+	cmd := gestaltdCommand(cmdArgs...)
+	cmd.Dir = pluginDir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
 }
 
 // runProviderPackageAndReleaseCommandResult keeps archive-creation tests focused
