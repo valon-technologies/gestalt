@@ -13,12 +13,21 @@ spec:
   {{- end }}
   {{- $updateStrategy := .Values.updateStrategy | default dict }}
   {{- $strategyType := default "Recreate" $updateStrategy.type }}
+  {{- $rollingUpdate := default dict $updateStrategy.rollingUpdate }}
   strategy:
     type: {{ $strategyType }}
     {{- if eq $strategyType "RollingUpdate" }}
     rollingUpdate:
-      maxUnavailable: {{ default 0 $updateStrategy.rollingUpdate.maxUnavailable }}
-      maxSurge: {{ default 1 $updateStrategy.rollingUpdate.maxSurge }}
+      {{- if hasKey $rollingUpdate "maxUnavailable" }}
+      maxUnavailable: {{ $rollingUpdate.maxUnavailable }}
+      {{- else }}
+      maxUnavailable: 0
+      {{- end }}
+      {{- if hasKey $rollingUpdate "maxSurge" }}
+      maxSurge: {{ $rollingUpdate.maxSurge }}
+      {{- else }}
+      maxSurge: 1
+      {{- end }}
     {{- end }}
   selector:
     matchLabels:
