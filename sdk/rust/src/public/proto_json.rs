@@ -205,6 +205,8 @@ fn format_duration(value: &prost_types::Duration) -> String {
 }
 
 fn parse_duration(text: &str) -> Result<prost_types::Duration, GestaltError> {
+    const MAX_SECONDS: i64 = 315_576_000_000;
+
     let trimmed = text.trim();
     if !trimmed.ends_with('s') {
         return Err(invalid_argument("duration must end with s"));
@@ -218,38 +220,52 @@ fn parse_duration(text: &str) -> Result<prost_types::Duration, GestaltError> {
     if unsigned.is_empty() {
         return Err(invalid_argument("duration must have a value"));
     }
+    if unsigned.contains('.') && !unsigned.chars().all(|ch| ch.is_ascii_digit() || ch == '.') {
+        return Err(invalid_argument("invalid duration format"));
+    }
     let (seconds_part, nanos) = if let Some((whole, fractional)) = unsigned.split_once('.') {
+        if whole.is_empty() || fractional.is_empty() {
+            return Err(invalid_argument("invalid duration format"));
+        }
         if fractional.len() > 9 {
             return Err(invalid_argument(
                 "duration fractional precision exceeds nanoseconds",
             ));
         }
-        let whole: u64 = if whole.is_empty() {
-            0
-        } else {
-            whole.parse().map_err(invalid_argument)?
-        };
-        let frac: u32 = if fractional.is_empty() {
-            0
-        } else {
-            let padded = format!("{fractional:0<9}");
-            padded[..9].parse().map_err(invalid_argument)?
-        };
+        let whole: u64 = whole.parse().map_err(invalid_argument)?;
+        let padded = format!("{fractional:0<9}");
+        let frac: u32 = padded[..9].parse().map_err(invalid_argument)?;
         (whole, frac)
     } else {
+        if !unsigned.chars().all(|ch| ch.is_ascii_digit()) {
+            return Err(invalid_argument("invalid duration format"));
+        }
         (unsigned.parse().map_err(invalid_argument)?, 0u32)
     };
+    if seconds_part > MAX_SECONDS as u64 {
+        return Err(invalid_argument("duration seconds out of range"));
+    }
     let abs_nanos = (seconds_part as i128)
         .checked_mul(1_000_000_000i128)
         .and_then(|v| v.checked_add(i128::from(nanos)))
         .ok_or_else(|| invalid_argument("duration out of range"))?;
     let total_nanos = if negative { -abs_nanos } else { abs_nanos };
+    const MAX_TOTAL_NANOS: i128 = 315_576_000_000_i128 * 1_000_000_000_i128;
+    if total_nanos < -MAX_TOTAL_NANOS || total_nanos > MAX_TOTAL_NANOS {
+        return Err(invalid_argument("duration out of range"));
+    }
     let seconds: i64 = (total_nanos / 1_000_000_000)
         .try_into()
         .map_err(|_| invalid_argument("duration seconds out of range"))?;
     let nanos: i32 = (total_nanos % 1_000_000_000)
         .try_into()
         .map_err(|_| invalid_argument("duration nanos out of range"))?;
+    if nanos < -999_999_999 || nanos > 999_999_999 {
+        return Err(invalid_argument("duration nanos out of range"));
+    }
+    if nanos != 0 && ((seconds < 0) != (nanos < 0)) {
+        return Err(invalid_argument("duration sign mismatch"));
+    }
     Ok(prost_types::Duration { seconds, nanos })
 }
 
@@ -389,5 +405,20 @@ mod tests {
     fn reject_duration_overflow_and_precision() {
         assert!(decode_duration(&serde_json::json!("18446744073709551615s")).is_err());
         assert!(decode_duration(&serde_json::json!("1.1234567890s")).is_err());
+        assert!(decode_duration(&serde_json::json!(".1s")).is_err());
+        assert!(decode_duration(&serde_json::json!("1.s")).is_err());
+        assert!(decode_duration(&serde_json::json!("315576000001s")).is_err());
+        assert!(decode_duration(&serde_json::json!("315576000000.1s")).is_err());
+    }
+
+    #[test]
+    fn accept_valid_duration_boundaries() {
+        let max = decode_duration(&serde_json::json!("315576000000s")).expect("max duration");
+        assert_eq!(max.seconds, 315_576_000_000);
+        assert_eq!(max.nanos, 0);
+
+        let min = decode_duration(&serde_json::json!("-315576000000s")).expect("min duration");
+        assert_eq!(min.seconds, -315_576_000_000);
+        assert_eq!(min.nanos, 0);
     }
 }

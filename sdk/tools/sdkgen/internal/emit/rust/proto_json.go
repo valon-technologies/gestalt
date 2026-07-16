@@ -89,18 +89,14 @@ type wireJSONScalarForm int
 
 const (
 	wireJSONScalarDirect wireJSONScalarForm = iota
-	wireJSONScalarOptionalRef
+	wireJSONScalarOptionalRef // &T from optional fields or oneof inner bindings
 	wireJSONScalarRepeatedElem
+	wireJSONScalarMapValue // &T from map value bindings
 )
 
 func wireJSONScalarExpr(expr string, form wireJSONScalarForm) string {
 	switch form {
-	case wireJSONScalarOptionalRef:
-		if expr == "inner" {
-			return "*" + expr
-		}
-		return expr
-	case wireJSONScalarRepeatedElem:
+	case wireJSONScalarOptionalRef, wireJSONScalarRepeatedElem, wireJSONScalarMapValue:
 		return "*" + expr
 	default:
 		return expr
@@ -139,10 +135,12 @@ func (r *renderer) wireJSONEncodeValue(ref *model.TypeRef, expr string, form wir
 			return fmt.Sprintf("serde_json::json!(%s)", scalar)
 		}
 	case model.KindBytes:
-		if form == wireJSONScalarOptionalRef && expr == "inner" {
+		switch form {
+		case wireJSONScalarOptionalRef, wireJSONScalarRepeatedElem, wireJSONScalarMapValue:
 			return fmt.Sprintf("crate::public::proto_json::encode_bytes(%s)", expr)
+		default:
+			return fmt.Sprintf("crate::public::proto_json::encode_bytes(%s)", wireBytesExpr(expr))
 		}
-		return fmt.Sprintf("crate::public::proto_json::encode_bytes(%s)", wireBytesExpr(expr))
 	case model.KindEnum:
 		val := wireJSONScalarExpr(expr, form)
 		return fmt.Sprintf("{ let v = %s; if let Some(name) = %s { serde_json::Value::String(name.to_string()) } else { serde_json::json!(v) } }",
@@ -152,10 +150,7 @@ func (r *renderer) wireJSONEncodeValue(ref *model.TypeRef, expr string, form wir
 		if msg := r.idx.messages[ref.Message]; msg != nil {
 			fn = r.wireJSONEncodeRef(msg.ProtoFile, ref.Message)
 		}
-		if form == wireJSONScalarOptionalRef && expr == "inner" {
-			return fmt.Sprintf("%s(%s)", fn, expr)
-		}
-		if form == wireJSONScalarRepeatedElem {
+		if form == wireJSONScalarOptionalRef || form == wireJSONScalarRepeatedElem || form == wireJSONScalarMapValue {
 			return fmt.Sprintf("%s(%s)", fn, expr)
 		}
 		return fmt.Sprintf("%s(&%s)", fn, expr)
@@ -243,7 +238,7 @@ func (r *renderer) renderWireJSONEncodeFieldInner(f *model.Field, key, expr stri
 		fmt.Fprintf(&r.body, "    if !%s.is_empty() {\n", expr)
 		r.body.WriteString("        let mut map = serde_json::Map::new();\n")
 		fmt.Fprintf(&r.body, "        for (key, value) in &%s {\n", expr)
-		fmt.Fprintf(&r.body, "            map.insert(%s, %s);\n", r.wireJSONEncodeMapKey(f.MapKey, "key"), r.wireJSONEncodeValue(f.MapValue, "value", wireJSONScalarDirect))
+		fmt.Fprintf(&r.body, "            map.insert(%s, %s);\n", r.wireJSONEncodeMapKey(f.MapKey, "key"), r.wireJSONEncodeValue(f.MapValue, "value", wireJSONScalarMapValue))
 		r.body.WriteString("        }\n")
 		fmt.Fprintf(&r.body, "        object.insert(%q.into(), serde_json::Value::Object(map));\n", key)
 		r.body.WriteString("    }\n")
@@ -393,7 +388,7 @@ func (r *renderer) renderWireJSONEncodeOneof(message *model.Message, o *model.On
 			continue
 		}
 		fmt.Fprintf(&r.body, "            %s::%s(inner) => {\n", wireKind, wireVariant)
-		fmt.Fprintf(&r.body, "                object.insert(%q.into(), %s);\n", f.JSONName, r.wireJSONEncodeValue(fieldToTypeRef(f), "inner", wireJSONScalarDirect))
+		fmt.Fprintf(&r.body, "                object.insert(%q.into(), %s);\n", f.JSONName, r.wireJSONEncodeValue(fieldToTypeRef(f), "inner", wireJSONScalarOptionalRef))
 		r.body.WriteString("            }\n")
 	}
 	r.body.WriteString("        }\n")
@@ -420,7 +415,7 @@ func (r *renderer) renderWireJSONDecodeOneof(message *model.Message, o *model.On
 }
 
 func (r *renderer) wireJSONEncodeMapValue(ref *model.TypeRef, expr string) string {
-	return r.wireJSONEncodeValue(ref, expr, wireJSONScalarDirect)
+	return r.wireJSONEncodeValue(ref, expr, wireJSONScalarMapValue)
 }
 
 func (r *renderer) wireJSONDecodeFieldInner(f *model.Field, valueExpr string) string {
