@@ -25,6 +25,8 @@ pub mod external_credential;
 /// Generated Identity client and native types.
 pub mod identity;
 mod identity_server;
+/// Public gestaltd transport client for external applications.
+pub mod public;
 // The prost wire module is reachable only through the doc-hidden proto
 // escape hatch; its items are not part of the documented surface.
 #[allow(missing_docs)]

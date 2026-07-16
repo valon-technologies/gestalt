@@ -37,6 +37,27 @@ func generatedFileBase(protoFile string) string {
 	return strings.TrimSuffix(path.Base(protoFile), ".proto")
 }
 
+func protoGenImportBase(protoFile string) string {
+	dir := path.Dir(protoFile)
+	base := generatedFileBase(protoFile)
+	if dir == "." {
+		return base
+	}
+	return path.Join(path.Base(dir), base)
+}
+
+func publicRequestTypeName(svc *model.Service, m *model.Method) string {
+	return "Public" + localName(svc.FullName) + m.Name + "Request"
+}
+
+func publicNativeModulePath(protoFile string) string {
+	return "../../" + generatedFileBase(protoFile) + ".ts"
+}
+
+func publicCodecModulePath(protoFile string) string {
+	return "../../internal/codec/" + generatedFileBase(protoFile) + ".ts"
+}
+
 // screamingSnake converts a CamelCase identifier to SCREAMING_SNAKE_CASE,
 // matching the proto naming convention for enum member prefixes:
 // PresignMethod becomes PRESIGN_METHOD.

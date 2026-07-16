@@ -77,6 +77,11 @@ func TestDecodeAppResultFixtureSuiteErrors(t *testing.T) {
 		t.Fatalf("HTTP InvokeError = %+v err=%v, want status=401 with raw body", invokeErr, err)
 	}
 
+	_, err = client.DecodeAppResult("github", "get_issue", 302, invokeDecodeFixture(t, "http_302.json"))
+	if !errors.As(err, &invokeErr) || invokeErr.Status != 302 {
+		t.Fatalf("HTTP 302 InvokeError = %+v err=%v, want status=302", invokeErr, err)
+	}
+
 	_, err = client.DecodeAppResult("github", "get_issue", 200, invokeDecodeFixture(t, "invalid_json.txt"))
 	if !errors.As(err, &invokeErr) || invokeErr.Message != "app invoke response is not valid JSON" || len(invokeErr.RawBody) == 0 {
 		t.Fatalf("invalid JSON InvokeError = %+v err=%v", invokeErr, err)

@@ -1,19 +1,35 @@
 package golang
 
-import _ "embed"
+import (
+	_ "embed"
+	"strings"
+)
 
-// supportFile is the shared public file: the canonical error model. It is
-// emitted once as rpc_support.go.
+// supportFile is the shared error model template. Provider clients keep the
+// gRPC and stream extensions.
 //
 //go:embed rpc_support.go.tmpl
 var supportFile string
 
-// codecSupportFile is the shared codec runtime: the nil-safe wire converters
-// for the well-known types used by the generated codec files. It is emitted
-// once as support_codec.go.
+// codecSupportFile is the shared codec runtime emitted as support_codec.go.
 //
 //go:embed support_codec.go.tmpl
 var codecSupportFile string
+
+const publicRPCSupportFile = `package generated
+
+import gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
+
+type (
+	GestaltError     = gestaltclient.GestaltError
+	GestaltErrorCode = gestaltclient.GestaltErrorCode
+	RpcStatus        = gestaltclient.RpcStatus
+)
+
+func toGestaltError(err error) *GestaltError {
+	return gestaltclient.ToGestaltError(err)
+}
+`
 
 // invokeSupportFile is the JSON operation-envelope decode runtime, emitted as
 // support_invoke.go when any method carries the json_result annotation.
@@ -95,7 +111,7 @@ func statusInvokeError(app, operation string, status int32, body []byte, parsed 
 // through unchanged.
 func DecodeAppResult(app, operation string, status int32, body []byte) (any, error) {
 	parsed, err := parseJSONResultBody(body)
-	if status >= 400 {
+	if !IsOK(status) {
 		return nil, statusInvokeError(app, operation, status, body, parsed, err)
 	}
 	if err != nil {
@@ -228,8 +244,7 @@ func applyInvokeErrorFields(err *InvokeError, parsed any) {
 `
 
 // contextSupportFile is the client option machinery, emitted as
-// support_context.go when any service carries a request context. The fmt verb
-// is the native request context type.
+// support_context.go when any service carries a request context.
 const contextSupportFile = `package client
 
 // ClientOption configures a generated client constructor.
@@ -253,3 +268,5 @@ func applyClientOptions(opts []ClientOption) clientOptions {
 	return options
 }
 `
+
+var publicCodecSupportFile = strings.Replace(codecSupportFile, "package client", "package generated", 1)

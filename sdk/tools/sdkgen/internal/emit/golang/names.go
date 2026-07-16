@@ -217,3 +217,28 @@ func toWireFunc(messageGoName string) string {
 func fromWireFunc(messageGoName string) string {
 	return "FromWire" + messageGoName
 }
+
+func goStringList(values []string) string {
+	if len(values) == 0 {
+		return "nil"
+	}
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = fmt.Sprintf("%q", v)
+	}
+	return "[]string{" + strings.Join(parts, ", ") + "}"
+}
+
+func goFillList(m *model.Method) string {
+	if m.PublicPolicy == nil {
+		return "nil"
+	}
+	return goStringList(m.PublicPolicy.Fill)
+}
+
+func goRejectList(m *model.Method) string {
+	if m.PublicPolicy == nil {
+		return "nil"
+	}
+	return goStringList(m.PublicPolicy.Reject)
+}

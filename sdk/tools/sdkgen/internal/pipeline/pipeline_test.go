@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/toolchain"
 )
 
@@ -114,13 +115,36 @@ func TestEmittersAreDeterministic(t *testing.T) {
 	}
 }
 
+func TestPublicSurfaceMethodCounts(t *testing.T) {
+	t.Parallel()
+	schema := realSchema(t)
+	view := publicsurface.Build(schema)
+
+	if got := publicsurface.GRPCMethodCount(view); got != 2 {
+		t.Errorf("public gRPC methods = %d, want 2", got)
+	}
+	if got := publicsurface.RESTMethodCount(view); got != 2 {
+		t.Errorf("public REST methods = %d, want 2", got)
+	}
+}
+
 func TestEmitterRegistryCoversAllTargets(t *testing.T) {
 	t.Parallel()
 	emitters := Emitters()
-	if len(emitters) != len(emit.AllTargets()) {
-		t.Fatalf("emitters = %d, want %d", len(emitters), len(emit.AllTargets()))
+	want := []emit.Target{
+		emit.TargetTS,
+		emit.TargetPublicTS,
+		emit.TargetPython,
+		emit.TargetPublicPython,
+		emit.TargetGo,
+		emit.TargetPublicGo,
+		emit.TargetRust,
+		emit.TargetPublicRust,
 	}
-	for i, target := range emit.AllTargets() {
+	if len(emitters) != len(want) {
+		t.Fatalf("emitters = %d, want %d", len(emitters), len(want))
+	}
+	for i, target := range want {
 		if emitters[i].Target() != target {
 			t.Errorf("emitter %d = %s, want %s", i, emitters[i].Target(), target)
 		}

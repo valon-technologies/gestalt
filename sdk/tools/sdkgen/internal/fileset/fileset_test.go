@@ -34,7 +34,7 @@ func TestReconcileWritesHeaderedFiles(t *testing.T) {
 	root := t.TempDir()
 	set := newSet(t, map[string]string{"pkg/widget.go": "package pkg\n"})
 
-	report, err := Reconcile(root, set, Slash)
+	report, err := Reconcile(root, set, Slash, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestReconcileWritesHeaderedFiles(t *testing.T) {
 	}
 
 	// A second reconcile is a no-op.
-	report, err = Reconcile(root, set, Slash)
+	report, err = Reconcile(root, set, Slash, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestReconcileRemovesStaleGeneratedOnly(t *testing.T) {
 		"old/gone.py":   "gone = 1\n",
 		"old/stays.txt": "ignored\n",
 	})
-	if _, err := Reconcile(root, first, Hash); err != nil {
+	if _, err := Reconcile(root, first, Hash, nil); err != nil {
 		t.Fatal(err)
 	}
 	// stays.txt is generated this once; overwrite it as handwritten.
@@ -78,7 +78,7 @@ func TestReconcileRemovesStaleGeneratedOnly(t *testing.T) {
 	write(t, root, "notes.md", "handwritten notes\n")
 
 	second := newSet(t, map[string]string{"keep.py": "keep = 1\n"})
-	report, err := Reconcile(root, second, Hash)
+	report, err := Reconcile(root, second, Hash, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +97,10 @@ func TestReconcilePrunesEmptyDirs(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	first := newSet(t, map[string]string{"deep/nested/file.go": "package nested\n"})
-	if _, err := Reconcile(root, first, Slash); err != nil {
+	if _, err := Reconcile(root, first, Slash, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Reconcile(root, New(), Slash); err != nil {
+	if _, err := Reconcile(root, New(), Slash, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "deep")); !os.IsNotExist(err) {
@@ -120,12 +120,12 @@ func TestCheckReportsDriftWithoutMutating(t *testing.T) {
 		"ok.go":       "package ok\n",
 		"modified.go": "package old\n",
 		"stale.go":    "package stale\n",
-	}), Slash); err != nil {
+	}), Slash, nil); err != nil {
 		t.Fatal(err)
 	}
 	write(t, root, "handwritten.go", "package handwritten\n")
 
-	drift, err := Check(root, set, Slash)
+	drift, err := Check(root, set, Slash, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

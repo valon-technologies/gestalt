@@ -5,9 +5,11 @@ package client
 
 import (
 	"errors"
+	// PROVIDER_IMPORT_BEGIN
 	"io"
 
 	"google.golang.org/grpc/status"
+	// PROVIDER_IMPORT_END
 )
 
 // GestaltErrorCode is a canonical SDK error code, drawn from the standard
@@ -63,12 +65,20 @@ func toGestaltError(err error) *GestaltError {
 	if errors.As(err, &gerr) {
 		return gerr
 	}
+	// PROVIDER_GRPC_BEGIN
 	if st, ok := status.FromError(err); ok {
 		return &GestaltError{Code: GestaltErrorCode(st.Code()), Message: st.Message(), cause: err}
 	}
+	// PROVIDER_GRPC_END
 	return &GestaltError{Code: GestaltErrorCodeUnknown, Message: err.Error(), cause: err}
 }
 
+// ToGestaltError converts any transport error to a *GestaltError.
+func ToGestaltError(err error) *GestaltError {
+	return toGestaltError(err)
+}
+
+// PROVIDER_STREAM_BEGIN
 // streamError normalizes stream transport errors: io.EOF marks the normal
 // end of a stream and passes through unchanged; every other error becomes a
 // *GestaltError.
@@ -81,3 +91,5 @@ func streamError(err error) error {
 	}
 	return toGestaltError(err)
 }
+
+// PROVIDER_STREAM_END

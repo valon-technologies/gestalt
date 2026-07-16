@@ -27,15 +27,19 @@ func (*Emitter) HeaderStyle() fileset.CommentStyle { return fileset.Slash }
 
 func (*Emitter) Formatter() *toolchain.Tool { return toolchain.Rustfmt() }
 
+func (*Emitter) StaleScope() func(rel string) bool { return emit.ExcludePrefixScope("public/") }
+
 // index resolves type references during rendering and records which
 // conversion direction each reachable message needs: messages reached from
 // method inputs convert to the wire, messages reached from outputs convert
 // from it.
 type index struct {
 	messages     map[string]*model.Message
+	wireMessages map[string]*model.Message
 	enums        map[string]*model.Enum
 	needToWire   map[string]bool
 	needFromWire map[string]bool
+	needWireJSON map[string]bool
 }
 
 // group is one generated file: every service, message, and enum declared by
@@ -50,9 +54,11 @@ type group struct {
 func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	idx := &index{
 		messages:     map[string]*model.Message{},
+		wireMessages: map[string]*model.Message{},
 		enums:        map[string]*model.Enum{},
 		needToWire:   map[string]bool{},
 		needFromWire: map[string]bool{},
+		needWireJSON: map[string]bool{},
 	}
 	for _, m := range schema.Messages {
 		idx.messages[m.FullName] = m
@@ -72,7 +78,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	codecModules := []string{"support"}
 	for _, g := range groupFiles(services, messages, enums) {
 		outputBase := g.base
-		public := newRenderer(idx, outputBase, g.base, modulePublic)
+		public := newRenderer(idx, outputBase, g.base, modulePublic, false)
 		for _, e := range g.enums {
 			public.renderEnum(e)
 		}
@@ -92,7 +98,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		if len(g.messages) == 0 {
 			continue
 		}
-		codec := newRenderer(idx, outputBase, g.base, moduleCodec)
+		codec := newRenderer(idx, outputBase, g.base, moduleCodec, false)
 		for _, m := range g.messages {
 			codec.renderConversions(m)
 		}
@@ -104,7 +110,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 			supportUses[name] = true
 		}
 	}
-	if err := set.Add("rpc_support.rs", []byte(supportFile)); err != nil {
+	if err := set.Add("rpc_support.rs", []byte(supportFile+"\n\n"+providerRPCSupportFile)); err != nil {
 		return nil, err
 	}
 	for _, svc := range services {

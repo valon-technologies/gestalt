@@ -1,5 +1,4 @@
-//! Shared generated runtime for sdkgen clients: the canonical error model
-//! and the native representation of `google.rpc.Status`.
+//! Shared generated runtime for sdkgen clients: the canonical error model.
 
 /// Canonical SDK error codes, drawn from the standard gRPC status codes.
 pub mod gestalt_error_code {
@@ -37,58 +36,23 @@ pub mod gestalt_error_code {
     pub const UNAUTHENTICATED: i32 = 16;
 }
 
-/// Canonical SDK error: one numeric gRPC status code, a human-readable
-/// message, and the underlying cause. Transport error types never appear in
-/// public client signatures.
+/// Canonical SDK error: one numeric status code and a human-readable message.
+/// Concrete transport adapters map their native errors into this type.
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
 pub struct GestaltError {
-    /// Numeric gRPC status code, one of the gestalt_error_code constants.
+    /// Numeric status code, one of the gestalt_error_code constants.
     pub code: i32,
     /// Human-readable error message.
     pub message: String,
-    // Boxed so the error stays small in every client Result.
-    #[source]
-    source: Option<Box<tonic::Status>>,
 }
 
 impl GestaltError {
-    /// Creates an error with no underlying cause.
+    /// Creates an error with the given code and message.
     pub fn new(code: i32, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
-            source: None,
         }
     }
-}
-
-impl From<tonic::Status> for GestaltError {
-    fn from(status: tonic::Status) -> Self {
-        // tonic reports an expired grpc-timeout as CANCELLED carrying the
-        // TimeoutExpired message; the gRPC spec assigns deadline expiry
-        // DEADLINE_EXCEEDED, so the canonical code is restored here.
-        let timeout_expired = tonic::TimeoutExpired(()).to_string();
-        let code = if status.code() == tonic::Code::Cancelled && status.message() == timeout_expired
-        {
-            gestalt_error_code::DEADLINE_EXCEEDED
-        } else {
-            status.code() as i32
-        };
-        Self {
-            code,
-            message: status.message().to_string(),
-            source: Some(Box::new(status)),
-        }
-    }
-}
-
-/// Native representation of google.rpc.Status carried in response payloads,
-/// mirroring the canonical error model.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct RpcStatus {
-    /// Numeric gRPC status code, one of the gestalt_error_code constants.
-    pub code: i32,
-    /// Human-readable error message.
-    pub message: String,
 }

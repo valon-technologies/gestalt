@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
 // wireImport is the wire-stub package generated files convert through,
@@ -29,13 +30,18 @@ type features struct {
 }
 
 type renderer struct {
-	idx      *index
-	features features
-	body     strings.Builder
+	idx          *index
+	publicClient bool
+	features     features
+	body         strings.Builder
 }
 
 func newRenderer(idx *index) *renderer {
 	return &renderer{idx: idx}
+}
+
+func newPublicRenderer(idx *index) *renderer {
+	return &renderer{idx: idx, publicClient: true}
 }
 
 func (r *renderer) messageType(fullName string) string {
@@ -625,7 +631,7 @@ func (r *renderer) methodRequest(m *model.Method) (param, arg string, prep []str
 		return "", "&emptypb.Empty{}", nil
 	}
 	requestType := r.messageType(m.Input.FullName)
-	if findField(m.Input, "context") != nil {
+	if !r.publicClient && findField(m.Input, "context") != nil {
 		prep = []string{
 			"\tif request.Context == nil && c.context != nil {",
 			"\t\tshallow := *request",
@@ -791,7 +797,14 @@ func (r *renderer) renderOptionsStruct(svcName string, m *model.Method) string {
 	fmt.Fprintf(&r.body, "// %s carries the optional parameters of [%s.%s].\n", name, svcName, m.Name)
 	r.body.WriteString("// A nil options value is equivalent to the zero value.\n")
 	fmt.Fprintf(&r.body, "type %s struct {\n", name)
+	omitted := map[string]bool{}
+	if r.publicClient {
+		omitted = publicsurface.OmittedFields(m)
+	}
 	for _, fieldName := range m.OptionalSignature {
+		if omitted[fieldName] {
+			continue
+		}
 		f := findField(m.Input, fieldName)
 		r.writeDoc("\t", f.Doc)
 		fmt.Fprintf(&r.body, "\t%s %s\n", fieldGoName(f), r.fieldType(f))
@@ -810,9 +823,16 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 	var requestLines []string
 	if len(m.Signature) > 0 || len(m.OptionalSignature) > 0 {
 		requestType := r.messageType(m.Input.FullName)
+		omitted := map[string]bool{}
+		if r.publicClient {
+			omitted = publicsurface.OmittedFields(m)
+		}
 		var decls, fields []string
 		inSignature := false
 		for _, name := range m.Signature {
+			if omitted[name] {
+				continue
+			}
 			inSignature = inSignature || name == "context"
 			f := findField(m.Input, name)
 			param := goParamName(f.JSONName)
@@ -824,14 +844,17 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 			decls = append(decls, "opts *"+optionsType)
 			requestLines = append(requestLines, fmt.Sprintf("\tif opts == nil {\n\t\topts = &%s{}\n\t}\n", optionsType))
 			for _, name := range m.OptionalSignature {
+				if omitted[name] {
+					continue
+				}
 				inSignature = inSignature || name == "context"
 				f := findField(m.Input, name)
 				fields = append(fields, fieldGoName(f)+": opts."+fieldGoName(f))
 			}
 		}
 		// The flattened form has no context parameter, so the literal takes
-		// the client default directly.
-		if ctxF := findField(m.Input, "context"); ctxF != nil && !inSignature {
+		// the client default directly when the field is part of the public API.
+		if ctxF := findField(m.Input, "context"); ctxF != nil && !inSignature && !omitted["context"] {
 			fields = append(fields, fieldGoName(ctxF)+": c.context")
 			prep = nil
 		}
@@ -1106,11 +1129,13 @@ func (r *renderer) renderStreamWrapper(svcName string, m *model.Method) {
 	}
 }
 
-// assemble prepends the package clause and import header derived from the
-// rendered body.
-func (r *renderer) assemble() string {
+// assembleGenerated wraps the renderer body in the generated package.
+func (r *renderer) assembleGenerated() string {
+	return r.assemble()
+}
+
+func (r *renderer) importHeader() string {
 	var b strings.Builder
-	b.WriteString("package client\n\n")
 	var std, ext []string
 	if r.features.context {
 		std = append(std, `"context"`)
@@ -1124,7 +1149,7 @@ func (r *renderer) assemble() string {
 	if r.features.time {
 		std = append(std, `"time"`)
 	}
-	if r.features.host {
+	if r.features.host && !r.publicClient {
 		ext = append(ext, `"github.com/valon-technologies/gestalt/sdk/go/internal/host"`)
 	}
 	if r.features.proto {
@@ -1148,19 +1173,33 @@ func (r *renderer) assemble() string {
 	if r.features.timestamppb {
 		ext = append(ext, `"google.golang.org/protobuf/types/known/timestamppb"`)
 	}
-	if len(std)+len(ext) > 0 {
-		b.WriteString("import (\n")
-		for _, imp := range std {
-			b.WriteString("\t" + imp + "\n")
-		}
-		if len(std) > 0 && len(ext) > 0 {
-			b.WriteString("\n")
-		}
-		for _, imp := range ext {
-			b.WriteString("\t" + imp + "\n")
-		}
-		b.WriteString(")\n\n")
+	if len(std) == 0 && len(ext) == 0 {
+		return ""
 	}
-	b.WriteString(r.body.String())
-	return strings.TrimRight(b.String(), "\n") + "\n"
+	b.WriteString("import (\n")
+	for _, imp := range std {
+		fmt.Fprintf(&b, "\t%s\n", imp)
+	}
+	if len(std) > 0 && len(ext) > 0 {
+		b.WriteString("\n")
+	}
+	for _, imp := range ext {
+		fmt.Fprintf(&b, "\t%s\n", imp)
+	}
+	b.WriteString(")\n\n")
+	return b.String()
+}
+
+// assemble prepends the package clause and import header derived from the
+// rendered body.
+func (r *renderer) assemble() string {
+	pkg := "client"
+	if r.publicClient {
+		pkg = "generated"
+	}
+	out := "package " + pkg + "\n\n" + r.importHeader() + r.body.String()
+	if r.publicClient {
+		return out
+	}
+	return strings.TrimRight(out, "\n") + "\n"
 }

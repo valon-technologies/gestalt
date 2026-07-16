@@ -10,12 +10,15 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/descriptor"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/discover"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/golang"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicgo"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicpython"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicrust"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicts"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/python"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/rust"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/ts"
@@ -53,7 +56,7 @@ func Run(opts Options) error {
 		return err
 	}
 	rustfmtTool := toolchain.Rustfmt()
-	if slices.Contains(opts.Targets, emit.TargetRust) {
+	if emit.IncludesTarget(opts.Targets, emit.TargetRust) {
 		if err := rustfmtTool.Verify(); err != nil {
 			return err
 		}
@@ -116,12 +119,12 @@ func generate(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emi
 		return err
 	}
 	for _, e := range emitters {
-		set, err := EmitFormatted(e, schema, scratch)
+		set, err := EmitFormatted(e, schema, scratch, opts.RepoRoot)
 		if err != nil {
 			return err
 		}
 		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
-		report, err := fileset.Reconcile(root, set, e.HeaderStyle())
+		report, err := fileset.Reconcile(root, set, e.HeaderStyle(), e.StaleScope())
 		if err != nil {
 			return fmt.Errorf("reconcile %s: %w", e.Target(), err)
 		}
@@ -137,12 +140,12 @@ func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.E
 		return err
 	}
 	for _, e := range emitters {
-		set, err := EmitFormatted(e, schema, scratch)
+		set, err := EmitFormatted(e, schema, scratch, opts.RepoRoot)
 		if err != nil {
 			return err
 		}
 		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
-		d, err := fileset.Check(root, set, e.HeaderStyle())
+		d, err := fileset.Check(root, set, e.HeaderStyle(), e.StaleScope())
 		if err != nil {
 			return fmt.Errorf("check %s: %w", e.Target(), err)
 		}
@@ -164,7 +167,7 @@ func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.E
 // contents via a scratch round-trip, so reconcile and check always see final
 // bytes. The generated-by header is injected later, at write time; leading
 // comments are stable under gofmt and rustfmt.
-func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*fileset.FileSet, error) {
+func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch, repoRoot string) (*fileset.FileSet, error) {
 	set, err := e.Emit(schema)
 	if err != nil {
 		return nil, fmt.Errorf("emit %s: %w", e.Target(), err)
@@ -185,8 +188,26 @@ func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*files
 		}
 		args = append(args, abs)
 	}
+	if tool.Name == "ruff" && repoRoot != "" {
+		configPath := filepath.Join(dir, "pyproject.toml")
+		src := filepath.Join(repoRoot, "sdk", "python", "pyproject.toml")
+		if data, readErr := os.ReadFile(src); readErr == nil {
+			if err := os.WriteFile(configPath, data, 0o644); err != nil {
+				return nil, fmt.Errorf("copy pyproject.toml for %s: %w", e.Target(), err)
+			}
+		}
+	}
 	if err := tool.Run(dir, args...); err != nil {
 		return nil, fmt.Errorf("format %s: %w", e.Target(), err)
+	}
+	if tool.Name == "ruff" {
+		lintArgs := []string{"check", "--fix"}
+		for _, f := range set.Files() {
+			lintArgs = append(lintArgs, filepath.Join(dir, filepath.FromSlash(f.Path)))
+		}
+		if err := tool.Run(dir, lintArgs...); err != nil {
+			return nil, fmt.Errorf("lint-fix %s: %w", e.Target(), err)
+		}
 	}
 	formatted := fileset.New()
 	for _, f := range set.Files() {
@@ -203,13 +224,22 @@ func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*files
 
 // Emitters returns every registered emitter in canonical target order.
 func Emitters() []emit.Emitter {
-	return []emit.Emitter{ts.New(), python.New(), golang.New(), rust.New()}
+	return []emit.Emitter{
+		ts.New(),
+		publicts.New(),
+		python.New(),
+		publicpython.New(),
+		golang.New(),
+		publicgo.New(),
+		rust.New(),
+		publicrust.New(),
+	}
 }
 
 func emittersFor(targets []emit.Target) []emit.Emitter {
 	var out []emit.Emitter
 	for _, e := range Emitters() {
-		if slices.Contains(targets, e.Target()) {
+		if emit.IncludesTarget(targets, e.Target()) {
 			out = append(out, e)
 		}
 	}

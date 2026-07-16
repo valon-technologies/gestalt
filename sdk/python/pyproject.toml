@@ -51,6 +51,9 @@ exclude = ["gestalt/_gen"]
 [tool.ruff.lint]
 extend-select = ["I"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["gestalt"]
+
 [tool.vulture]
 paths = ["gestalt", "scripts", "tests"]
 exclude = ["gestalt/_gen/"]

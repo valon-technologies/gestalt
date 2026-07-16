@@ -78,7 +78,7 @@ func statusInvokeError(app, operation string, status int32, body []byte, parsed 
 // through unchanged.
 func DecodeAppResult(app, operation string, status int32, body []byte) (any, error) {
 	parsed, err := parseJSONResultBody(body)
-	if status >= 400 {
+	if !IsOK(status) {
 		return nil, statusInvokeError(app, operation, status, body, parsed, err)
 	}
 	if err != nil {

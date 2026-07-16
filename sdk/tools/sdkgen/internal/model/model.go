@@ -103,11 +103,20 @@ type Service struct {
 type Method struct {
 	Doc           string
 	Name          string
+	FullMethod    string // /package.Service/Method
 	Stream        StreamKind
 	Input         *Message // nil when InputIsEmpty
 	InputIsEmpty  bool     // google.protobuf.Empty request: no public request argument
 	Output        *Message // nil when OutputIsEmpty
 	OutputIsEmpty bool
+
+	// Public marks a method exposed on the public gestaltd surface via
+	// google.api.method_visibility restriction PUBLIC.
+	Public bool
+	// PublicPolicy adapts external requests when Public is true.
+	PublicPolicy *PublicPolicy
+	// HTTP carries the primary google.api.http rule when present.
+	HTTP *HTTPRule
 
 	// Signature lists request fields promoted to parameters, from the
 	// signature annotation. Presence fields come last.
@@ -130,6 +139,21 @@ type Method struct {
 type JsonResult struct {
 	Status string
 	Body   string
+}
+
+// PublicPolicy declares how public callers adapt requests: fill fields are
+// omitted from public request types and derived server-side; reject fields
+// are omitted and rejected when supplied.
+type PublicPolicy struct {
+	Fill   []string
+	Reject []string
+}
+
+// HTTPRule is the supported subset of google.api.http for REST clients.
+type HTTPRule struct {
+	Verb string
+	Path string
+	Body string
 }
 
 // Initial identifies the streamed oneof and its header and chunk variants by

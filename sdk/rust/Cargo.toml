@@ -14,6 +14,8 @@ categories = ["api-bindings", "development-tools"]
 name = "gestalt"
 
 [dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 libc = "0.2"
 prost = "0.14"
 prost-types = "0.14"
