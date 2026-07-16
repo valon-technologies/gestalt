@@ -78,9 +78,6 @@ func (r *renderer) renderWireProtoJSON(m *model.Message, needEncode, needDecode 
 }
 
 func wireBytesExpr(expr string) string {
-	if expr == "inner" {
-		return expr
-	}
 	return "&" + expr
 }
 
@@ -406,10 +403,6 @@ func (r *renderer) renderWireJSONDecodeOneof(message *model.Message, o *model.On
 	}
 	r.body.WriteString("            active\n")
 	r.body.WriteString("        },\n")
-}
-
-func (r *renderer) wireJSONEncodeMapValue(ref *model.TypeRef, expr string) string {
-	return r.wireJSONEncodeValue(ref, expr, wireJSONScalarBorrowed)
 }
 
 func (r *renderer) wireJSONDecodeFieldInner(f *model.Field, valueExpr string) string {

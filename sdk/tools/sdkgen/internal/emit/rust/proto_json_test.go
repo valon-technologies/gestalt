@@ -7,23 +7,44 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
-func TestWireJSONContainerTimestampUsesWKTHelpers(t *testing.T) {
+func TestWireJSONContainerUsesWKTHelpers(t *testing.T) {
 	t.Parallel()
 
 	r := newRenderer(&index{}, "codec/app", "codec/app", modulePublic, true)
-	ref := &model.TypeRef{Kind: model.KindTimestamp}
-
-	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarBorrowed)
-	if strings.Contains(encode, "serde_json::json!") {
-		t.Fatalf("timestamp encode must not use serde_json::json!: %q", encode)
+	cases := []struct {
+		name    string
+		ref     *model.TypeRef
+		encode  string
+		decode  string
+	}{
+		{
+			name:   "timestamp",
+			ref:    &model.TypeRef{Kind: model.KindTimestamp},
+			encode: "encode_timestamp",
+			decode: "decode_timestamp",
+		},
+		{
+			name:   "duration",
+			ref:    &model.TypeRef{Kind: model.KindDuration},
+			encode: "encode_duration",
+			decode: "decode_duration",
+		},
 	}
-	if !strings.Contains(encode, "encode_timestamp") {
-		t.Fatalf("timestamp encode missing encode_timestamp: %q", encode)
-	}
-
-	decode := r.wireJSONDecodeElemResult(ref, "item")
-	if !strings.Contains(decode, "decode_timestamp") {
-		t.Fatalf("timestamp decode missing decode_timestamp: %q", decode)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			encode := r.wireJSONEncodeValue(tc.ref, "item", wireJSONScalarBorrowed)
+			if strings.Contains(encode, "serde_json::json!") {
+				t.Fatalf("%s encode must not use serde_json::json!: %q", tc.name, encode)
+			}
+			if !strings.Contains(encode, tc.encode) {
+				t.Fatalf("%s encode missing %s: %q", tc.name, tc.encode, encode)
+			}
+			decode := r.wireJSONDecodeElemResult(tc.ref, "item")
+			if !strings.Contains(decode, tc.decode) {
+				t.Fatalf("%s decode missing %s: %q", tc.name, tc.decode, decode)
+			}
+		})
 	}
 }
 
@@ -46,25 +67,5 @@ func TestWireJSONEncodeEnumUsesNumericFallback(t *testing.T) {
 	}
 	if !strings.Contains(encode, "serde_json::json!(v)") {
 		t.Fatalf("enum encode missing numeric fallback: %q", encode)
-	}
-}
-
-func TestWireJSONContainerDurationUsesWKTHelpers(t *testing.T) {
-	t.Parallel()
-
-	r := newRenderer(&index{}, "codec/app", "codec/app", modulePublic, true)
-	ref := &model.TypeRef{Kind: model.KindDuration}
-
-	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarBorrowed)
-	if strings.Contains(encode, "serde_json::json!") {
-		t.Fatalf("duration encode must not use serde_json::json!: %q", encode)
-	}
-	if !strings.Contains(encode, "encode_duration") {
-		t.Fatalf("duration encode missing encode_duration: %q", encode)
-	}
-
-	decode := r.wireJSONDecodeElemResult(ref, "item")
-	if !strings.Contains(decode, "decode_duration") {
-		t.Fatalf("duration decode missing decode_duration: %q", decode)
 	}
 }
