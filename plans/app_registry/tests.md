@@ -142,6 +142,16 @@ go test ./internal/bootstrap -run 'TestAppProvider(Restarter|Lifecycle)' -count=
 
 ---
 
+## [PLANNED] Rollout coordination tests
+
+- Concurrent installs for two versions of one app admit only one rollout.
+- Different apps may have active rollouts concurrently.
+- Enrollment freezes the replicas that acknowledged before the cutoff.
+- A rollout completes only after every enrolled replica records `restarted_at`.
+- Missing acknowledgements do not block completion; an acknowledged replica that misses the deadline fails the rollout.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:

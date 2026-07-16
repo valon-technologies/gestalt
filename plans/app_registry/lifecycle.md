@@ -42,6 +42,20 @@ Every replica starts one background catalog controller during `gestaltd serve` s
 
 The controller is **pull-based** and **local**: each replica reads `app_version_change_requests` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
+### Rollout admission and completion
+
+Only one rollout per app may be active across the fleet. `POST …/install` holds the app-scoped install lock while it rejects an existing `enrolling` or `restarting` rollout, validates the candidate, creates the new rollout, and appends its change request. Different apps may roll out concurrently.
+
+Replica membership is discovered rather than configured:
+
+1. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
+2. Replicas join by writing `acknowledged_at` before `enrollment_ends_at`.
+3. After enrollment, the cohort is frozen and the rollout becomes `restarting`.
+4. The rollout completes when every cohort member records `restarted_at`.
+5. The rollout fails if an acknowledged replica does not restart before the deadline.
+
+Replicas that do not acknowledge before enrollment closes are not cohort members and do not block completion. A late replica still converges locally but does not reopen a terminal rollout.
+
 Each pass:
 
 1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
