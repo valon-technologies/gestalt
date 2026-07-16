@@ -18,6 +18,8 @@ Related docs:
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
+| `internal/appregistry` | `poller_test.go` | 11 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_lifecycle_test.go` | 6 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -98,7 +100,45 @@ End-to-end test for fleet install convergence across replicas. Replaces isolated
 4. Poll each replica's `app_instance_materializations` (or a future admin list endpoint) until every replica has an ack row for `(app, version)`.
 5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
 
-**Not in scope for the first cut:** artifact download, provider restart, or mount swap — ack-only convergence.
+**Not in scope for the first cut:** artifact download or mount swap — ack + restart-only convergence.
+
+---
+
+## Catalog restart tests
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry -run TestCatalogPoller -count=1
+go test ./internal/bootstrap -run 'TestAppProvider(Restarter|Lifecycle)' -count=1
+```
+
+### `poller_test.go`
+
+- **`TestCatalogPollerReconcileOnceAcknowledgesAndRestarts`** — with the delay explicitly disabled, one reconcile pass acks, stops, and starts the configured app.
+- **`TestCatalogPollerReconcileOnceWaitsForRestartDelay`** — an unset `RestartDelay` uses the one-minute default and defers start until `stopped_at + RestartDelay`.
+- **`TestCatalogPollerReconcileOncePropagatesRestartErrors`** — start failures leave `restarted_at` unset after `stopped_at` was recorded.
+- **`TestCatalogPollerReconcileOnceRestartsOnceForMultipleVersions`** — multiple unrestarted fleet versions for one app trigger one stop/start cycle and mark every pending row restarted.
+- **`TestCatalogPollerReconcileOnceRetriesStartAfterRecordedStop`** — a later pass resumes at `StartApp` when `stopped_at` is already persisted.
+- **`TestCatalogPollerReconcileOnceDefersRestartUntilProvidersReady`** — ack proceeds while `RestartReady` is open; stop/start wait until startup providers load.
+- **`TestCatalogPollerReconcileOnceDoesNotResetRestartDelayForNewVersion`** — a newly fleet-known version during the restart delay does not stop again or push back `StartApp`.
+- **`TestCatalogPollerReconcileOnceDoesNotConvergeWithoutAppRestarter`** — without `AppRestarter`, ack runs but restart timestamps stay unset.
+- **`TestCatalogPollerReconcileOnceMarksNonLocalAppsConverged`** — non-local apps are acked and marked converged without stop/start.
+- **`TestCatalogPollerReconcileOnceDoesNotConvergeWhenRestartModeFails`** — an unconfigured app is not mistaken for a non-local app and remains pending.
+- **`TestCatalogPollerReconcileOnceReportsEveryFailingApp`** — errors from multiple apps are joined instead of hiding all but one.
+
+### `app_provider_restart_test.go`
+
+- **`TestAppProviderRestarterRestartable`** — only stable, locally managed providers are catalog-restartable; remote and dev-active providers converge without a local restart.
+- **`TestAppProviderRestarterStopAppNoOpsWhenProviderMissing`** — stop succeeds when a config-local app was removed from `ProviderMap` after a failed build.
+- **`TestAppProviderRestarterStartAppRegistersMissingProvider`** — start registers a missing local app and a repeated start is idempotent.
+- **`TestAppProviderRestarterStopRemovesProviderAndStartRestoresIt`** — stop removes the closed provider and start registers a fresh one.
+- **`TestAppProviderRestarterStopQuarantinesProviderWhenCloseFails`** — a provider whose close fails remains absent and subsequent stop attempts preserve the terminal error.
+
+### `app_provider_lifecycle_test.go`
+
+- **`TestAppProviderLifecycleSerializesOneApp`** — lazy activation and restart work for one app cannot overlap.
 
 ---
 

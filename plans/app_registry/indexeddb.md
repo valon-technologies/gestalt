@@ -193,9 +193,9 @@ Used by `POST …/install` before change request write; released on success or f
 
 ---
 
-## Store: `app_instance_materializations` (per-replica ack)
+## Store: `app_instance_materializations` (per-replica convergence)
 
-Records that one gestaltd replica observed a fleet-known `(app, version)` from `app_version_change_requests`.
+Records one replica's acknowledgement and restart progress for a fleet-known `(app, version)`.
 
 Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforced by the `by_instance_app_version` index.
 
@@ -205,7 +205,9 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
   "instance_id": "cloud-run-revision-pod",
   "app": "g-issues",
   "version": "0.0.0-snapshot.gabc123",
-  "acknowledged_at": "2026-07-13T21:00:00Z"
+  "acknowledged_at": "2026-07-13T21:00:00Z",
+  "stopped_at": "2026-07-13T21:00:05Z",
+  "restarted_at": "2026-07-13T21:01:05Z"
 }
 ```
 
@@ -218,6 +220,9 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 | Method | Description |
 |--------|-------------|
 | `HasAcknowledged(ctx, instanceID, app, version)` | Whether this replica already acked the pair. |
+| `Get(ctx, instanceID, app, version)` | Load the per-replica materialization row. |
 | `Acknowledge(ctx, materialization)` | Insert ack row; idempotent if already present. |
+| `MarkStopped(ctx, instanceID, app, version, stoppedAt)` | Record when the app provider was stopped for this fleet version. |
+| `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the app provider restart cycle completed for this fleet version. |
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).

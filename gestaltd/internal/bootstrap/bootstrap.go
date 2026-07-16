@@ -273,6 +273,12 @@ type Result struct {
 	PublicGatewayTransport *providergateway.ProviderGatewayTransport
 	CallerTokenIssuer      *providergateway.CallerTokenIssuer
 	DevSupervisor          *providerdev.Supervisor
+	AppRestarter           interface {
+		Restartable(string) (bool, error)
+		StopApp(context.Context, string) error
+		StartApp(context.Context, string) error
+		AbortRestarts()
+	}
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -1478,36 +1484,43 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
 	result := &Result{
-		Auth:                           prepared.Auth,
-		SelectedAuthProvider:           prepared.SelectedAuthProvider,
-		AuthProviders:                  prepared.AuthProviders,
-		Authorization:                  prepared.Authorization,
-		Services:                       prepared.Services,
-		ExtraIndexedDBs:                prepared.ExtraIndexedDBs,
-		ExtraCaches:                    prepared.ExtraCaches,
-		S3:                             prepared.Deps.S3,
-		ExtraS3s:                       prepared.ExtraS3s,
-		ExtraWorkflows:                 extraWorkflows,
-		ExtraAgents:                    extraAgents,
-		Providers:                      providers,
-		WorkflowControl:                prepared.Deps.WorkflowRuntime,
-		AgentControl:                   prepared.Deps.AgentRuntime,
-		AgentManager:                   prepared.Deps.AgentManager,
-		StartupProvidersReady:          startup.ready(),
-		ProvidersReady:                 deferred.ready(),
-		ConnectionAuth:                 connAuthResolver,
-		ManualConnectionAuth:           manualConnAuthResolver,
-		Invoker:                        sharedInvoker,
-		AppInvocation:                  pluginInvoker,
-		CapabilityLister:               sharedInvoker,
-		AuditSink:                      audit,
-		SecretManager:                  prepared.SecretManager,
-		Telemetry:                      prepared.Telemetry,
-		Runtimes:                       prepared.runtimeRegistry,
-		PublicHostServices:             publicHostServices,
-		PublicGatewayTransport:         publicGatewayTransport,
-		CallerTokenIssuer:              prepared.CallerTokenIssuer,
-		DevSupervisor:                  prepared.Deps.DevSupervisor,
+		Auth:                   prepared.Auth,
+		SelectedAuthProvider:   prepared.SelectedAuthProvider,
+		AuthProviders:          prepared.AuthProviders,
+		Authorization:          prepared.Authorization,
+		Services:               prepared.Services,
+		ExtraIndexedDBs:        prepared.ExtraIndexedDBs,
+		ExtraCaches:            prepared.ExtraCaches,
+		S3:                     prepared.Deps.S3,
+		ExtraS3s:               prepared.ExtraS3s,
+		ExtraWorkflows:         extraWorkflows,
+		ExtraAgents:            extraAgents,
+		Providers:              providers,
+		WorkflowControl:        prepared.Deps.WorkflowRuntime,
+		AgentControl:           prepared.Deps.AgentRuntime,
+		AgentManager:           prepared.Deps.AgentManager,
+		StartupProvidersReady:  startup.ready(),
+		ProvidersReady:         deferred.ready(),
+		ConnectionAuth:         connAuthResolver,
+		ManualConnectionAuth:   manualConnAuthResolver,
+		Invoker:                sharedInvoker,
+		AppInvocation:          pluginInvoker,
+		CapabilityLister:       sharedInvoker,
+		AuditSink:              audit,
+		SecretManager:          prepared.SecretManager,
+		Telemetry:              prepared.Telemetry,
+		Runtimes:               prepared.runtimeRegistry,
+		PublicHostServices:     publicHostServices,
+		PublicGatewayTransport: publicGatewayTransport,
+		CallerTokenIssuer:      prepared.CallerTokenIssuer,
+		DevSupervisor:          prepared.Deps.DevSupervisor,
+		AppRestarter: NewAppProviderRestarter(AppProviderRestarterConfig{
+			Config:     cfg,
+			Deps:       prepared.Deps,
+			Providers:  providers,
+			AuthBuilds: []*preparedProviderBuilds{noopBuilds, updateBuilds},
+			Lifecycles: noopBuilds.lifecycles,
+		}),
 		runtimeRegistry:                prepared.runtimeRegistry,
 		workflowConfigReconcileTasks:   deferredWorkflowConfigReconcileTasks,
 		startupWorkflowConfigReconcile: startupWorkflowConfigReconcile,

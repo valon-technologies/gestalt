@@ -36,6 +36,17 @@ func (s *AppInstanceMaterializationService) HasAcknowledged(ctx context.Context,
 	return true, nil
 }
 
+func (s *AppInstanceMaterializationService) Get(ctx context.Context, instanceID, app, version string) (*core.AppInstanceMaterialization, error) {
+	if s == nil {
+		return nil, fmt.Errorf("get app instance materialization: service is not configured")
+	}
+	rec, err := s.findByInstanceAppVersion(ctx, instanceID, app, version)
+	if err != nil {
+		return nil, fmt.Errorf("get app instance materialization: %w", err)
+	}
+	return recordToAppInstanceMaterialization(rec), nil
+}
+
 func (s *AppInstanceMaterializationService) Acknowledge(ctx context.Context, materialization *core.AppInstanceMaterialization) (*core.AppInstanceMaterialization, error) {
 	if s == nil {
 		return nil, fmt.Errorf("acknowledge app instance materialization: service is not configured")
@@ -82,6 +93,49 @@ func (s *AppInstanceMaterializationService) Acknowledge(ctx context.Context, mat
 	return recordToAppInstanceMaterialization(rec), nil
 }
 
+func (s *AppInstanceMaterializationService) MarkStopped(ctx context.Context, instanceID, app, version string, stoppedAt time.Time) (*core.AppInstanceMaterialization, error) {
+	return s.updateTimestamps(ctx, instanceID, app, version, func(rec idb.Record) idb.Record {
+		if stoppedAt.IsZero() {
+			stoppedAt = time.Now().UTC().Truncate(time.Millisecond)
+		} else {
+			stoppedAt = stoppedAt.UTC().Truncate(time.Millisecond)
+		}
+		rec["stopped_at"] = stoppedAt
+		return rec
+	})
+}
+
+func (s *AppInstanceMaterializationService) MarkRestarted(ctx context.Context, instanceID, app, version string, restartedAt time.Time) (*core.AppInstanceMaterialization, error) {
+	return s.updateTimestamps(ctx, instanceID, app, version, func(rec idb.Record) idb.Record {
+		if restartedAt.IsZero() {
+			restartedAt = time.Now().UTC().Truncate(time.Millisecond)
+		} else {
+			restartedAt = restartedAt.UTC().Truncate(time.Millisecond)
+		}
+		rec["restarted_at"] = restartedAt
+		return rec
+	})
+}
+
+func (s *AppInstanceMaterializationService) updateTimestamps(
+	ctx context.Context,
+	instanceID, app, version string,
+	mutate func(idb.Record) idb.Record,
+) (*core.AppInstanceMaterialization, error) {
+	if s == nil {
+		return nil, fmt.Errorf("update app instance materialization: service is not configured")
+	}
+	rec, err := s.findByInstanceAppVersion(ctx, instanceID, app, version)
+	if err != nil {
+		return nil, fmt.Errorf("update app instance materialization: %w", err)
+	}
+	rec = mutate(rec)
+	if err := s.store.Put(ctx, rec); err != nil {
+		return nil, fmt.Errorf("update app instance materialization: %w", err)
+	}
+	return recordToAppInstanceMaterialization(rec), nil
+}
+
 func (s *AppInstanceMaterializationService) findByInstanceAppVersion(ctx context.Context, instanceID, app, version string) (idb.Record, error) {
 	instanceID = strings.TrimSpace(instanceID)
 	app = strings.TrimSpace(app)
@@ -111,5 +165,7 @@ func recordToAppInstanceMaterialization(rec idb.Record) *core.AppInstanceMateria
 		App:            recString(rec, "app"),
 		Version:        recString(rec, "version"),
 		AcknowledgedAt: recTime(rec, "acknowledged_at"),
+		StoppedAt:      recTime(rec, "stopped_at"),
+		RestartedAt:    recTime(rec, "restarted_at"),
 	}
 }

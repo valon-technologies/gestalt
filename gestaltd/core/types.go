@@ -50,6 +50,8 @@ type AppInstanceMaterialization struct {
 	App            string
 	Version        string
 	AcknowledgedAt time.Time
+	StoppedAt      time.Time
+	RestartedAt    time.Time
 }
 
 type ExternalCredentialGrant struct {
