@@ -172,6 +172,36 @@ func publicSnake(s string) string {
 	return heckSnake(strings.ReplaceAll(s, "GraphQL", "Graphql"))
 }
 
+func methodConstSuffix(name string) string {
+	name = strings.ReplaceAll(name, "GraphQL", "Graphql")
+	var b strings.Builder
+	for i, r := range name {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			prev := rune(name[i-1])
+			if prev >= 'a' && prev <= 'z' {
+				b.WriteByte('_')
+			}
+		}
+		b.WriteRune(r)
+	}
+	return strings.ToUpper(b.String())
+}
+
+func screamingSnake(name string) string {
+	var b strings.Builder
+	for i, r := range name {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			b.WriteByte('_')
+		}
+		if r >= 'A' && r <= 'Z' {
+			b.WriteRune(r + ('a' - 'A'))
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return strings.ToUpper(b.String())
+}
+
 func toWireFunc(messageFullName string) string {
 	return "to_wire_" + publicSnake(localName(messageFullName))
 }
@@ -211,4 +241,52 @@ func wireClientModule(svc *model.Service) string {
 // IndexedDbClient.
 func wireClientType(svc *model.Service) string {
 	return heckUpperCamel(localName(svc.FullName)) + "Client"
+}
+
+// wireFieldDefault renders the prost wire default for a field omitted from the
+// public native request type.
+func wireFieldDefault(f *model.Field) string {
+	switch f.Kind {
+	case model.KindRepeated:
+		return "Vec::new()"
+	case model.KindMap:
+		return "Default::default()"
+	default:
+		ref := fieldRef(f)
+		if f.Presence == model.ExplicitPresence {
+			return "None"
+		}
+		switch ref.Kind {
+		case model.KindMessage:
+			return "None"
+		case model.KindEnum:
+			return "0"
+		case model.KindBytes:
+			return "Vec::new()"
+		case model.KindScalar:
+			switch ref.Scalar {
+			case model.ScalarBool:
+				return "false"
+			case model.ScalarString:
+				return "String::new()"
+			case model.ScalarFloat, model.ScalarDouble:
+				return "0.0"
+			default:
+				return "0"
+			}
+		default:
+			return "Default::default()"
+		}
+	}
+}
+
+func rustStrSlice(values []string) string {
+	if len(values) == 0 {
+		return "&[]"
+	}
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = fmt.Sprintf("%q", v)
+	}
+	return "&[" + strings.Join(parts, ", ") + "]"
 }

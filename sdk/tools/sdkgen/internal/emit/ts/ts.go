@@ -25,6 +25,8 @@ func (*Emitter) HeaderStyle() fileset.CommentStyle { return fileset.Slash }
 
 func (*Emitter) Formatter() *toolchain.Tool { return toolchain.Prettier() }
 
+func (*Emitter) StaleScope() func(rel string) bool { return emit.ExcludePrefixScope("client/") }
+
 // index resolves type references during rendering.
 type index struct {
 	messages map[string]*model.Message

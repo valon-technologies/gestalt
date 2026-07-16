@@ -63,6 +63,9 @@ fn decodes_app_results_per_fixture_suite() {
     let http = decode("http_401.json", 401).expect_err("http error");
     assert_eq!(http.status, Some(401));
 
+    let redirect = decode("http_302.json", 302).expect_err("redirect");
+    assert_eq!(redirect.status, Some(302));
+
     let invalid = decode("invalid_json.txt", 200).expect_err("invalid json");
     assert_eq!(invalid.message, "app invoke response is not valid JSON");
 }
@@ -87,11 +90,15 @@ fn error_for_status_matches_the_http_error_decode() {
     assert_eq!(invalid.message, "app invoke failed with status 500");
     assert!(invalid.body.is_none());
 
-    // Statuses below 400 never error, even when the body carries an error
-    // envelope; envelope decoding belongs to decode_app_result.
     error_for_status("github", "get_issue", 200, &body).expect("2xx passes");
-    error_for_status("github", "get_issue", 302, &body).expect("3xx passes");
-    error_for_status("github", "get_issue", 399, &body).expect("399 passes");
+
+    let redirect = fixture("http_302.json");
+    let redirect_err =
+        error_for_status("github", "get_issue", 302, &redirect).expect_err("3xx fails");
+    assert_eq!(redirect_err.status, Some(302));
+    let decoded_redirect =
+        decode_app_result("github", "get_issue", 302, &redirect).expect_err("decode 302");
+    assert_eq!(decoded_redirect.status, Some(302));
 }
 
 #[test]

@@ -160,7 +160,7 @@ function decodeAppBody(
   status: number,
   body: Uint8Array,
 ): unknown {
-  if (status >= 400) {
+  if (!isOk(status)) {
     throw statusInvokeError(app, operation, status, body);
   }
   let parsed: unknown;

@@ -54,6 +54,7 @@ test("app decode fixture behavior", () => {
   expect(String(decodeAppResult("github", "get_issue", result("primitive_ok.json")))).toBe("ok");
   expect(() => decodeAppResult("github", "get_issue", result("error_envelope.json"))).toThrow(InvokeError);
   expect(() => decodeAppResult("github", "get_issue", result("http_401.json", 401))).toThrow(InvokeError);
+  expect(() => decodeAppResult("github", "get_issue", result("http_302.json", 302))).toThrow(InvokeError);
   expect(() => decodeAppResult("github", "get_issue", result("invalid_json.txt"))).toThrow(InvokeError);
   expectJsonEqual(decodeGraphQLResult("linear", result("graphql_ok.json")), {
     data: { viewer: { id: "user-1" } },
@@ -96,6 +97,14 @@ test("decode errors carry the envelope fields", () => {
     expect(invokeError.status).toBe(401);
     expect(invokeError.code).toBe("unauthorized");
     expect(invokeError.message).toBe("unauthorized");
+  }
+
+  try {
+    decode("http_302.json", 302);
+    throw new Error("expected InvokeError");
+  } catch (error) {
+    expect(error).toBeInstanceOf(InvokeError);
+    expect((error as InvokeError).status).toBe(302);
   }
 
   try {

@@ -12,7 +12,7 @@ App catalog and connection routes use `/api/v1/apps`. The CLI uses the `app` com
 
 Workflow and Agent providers never appear in paths. Mutations carry `provider` or `providerName` in JSON. Reads and deletes pass `provider` or `providerName` as query parameters.
 
-`POST /api/v2/identity/authorize` and `POST /api/v2/identity/token` are unauthenticated. Every other `/api/v2` route requires `Authorization: Bearer <token>`.
+`POST /api/v2/identity/authorize` and `POST /api/v2/identity/token` are unauthenticated. Every other `/api/v2` route requires a `session_token` cookie or an `Authorization: Bearer <token>` header.
 
 App `Invoke` and `InvokeGraphQL` return an outer HTTP 200 with a protobuf-JSON `OperationResult` envelope; the provider's status, headers, and body remain inside that envelope. Gateway, authentication, authorization, routing, and serialization failures use outer non-2xx canonical errors.
 

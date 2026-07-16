@@ -23,44 +23,58 @@ const (
 // assembled after the body renders.
 type features struct {
 	v1           bool                       // the crate::generated::v1 wire alias
+	restMetadata bool                       // public clients import method metadata constants
+	unaryTransport bool                     // public AppClient imports UnaryTransport
 	streamExt    bool                       // tokio_stream::StreamExt for stream mapping
 	supportTypes map[string]bool            // imported from the public rpc_support module
 	supportFns   map[string]bool            // imported from the codec support module
 	invokeUses   map[string]bool            // imported from the public invoke_support module
 	crossPublic  map[string]map[string]bool // public module base -> imported native type names
 	crossCodec   map[string]map[string]bool // codec module base -> imported converter names
+	wireJSONDone map[string]bool            // wire message full names with protobuf JSON helpers
 }
 
 type renderer struct {
-	idx      *index
-	base     string
-	wireBase string
-	kind     moduleKind
-	features features
-	body     strings.Builder
+	idx          *index
+	base         string
+	wireBase     string
+	kind         moduleKind
+	publicClient bool
+	docIntro     string
+	features     features
+	body         strings.Builder
 }
 
-func newRenderer(idx *index, base, wireBase string, kind moduleKind) *renderer {
+func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicClient bool) *renderer {
 	if wireBase == "" {
 		wireBase = base
 	}
 	return &renderer{
-		idx:      idx,
-		base:     base,
-		wireBase: wireBase,
-		kind:     kind,
+		idx:          idx,
+		base:         base,
+		wireBase:     wireBase,
+		kind:         kind,
+		publicClient: publicClient,
 		features: features{
 			supportTypes: map[string]bool{},
 			supportFns:   map[string]bool{},
 			invokeUses:   map[string]bool{},
 			crossPublic:  map[string]map[string]bool{},
 			crossCodec:   map[string]map[string]bool{},
+			wireJSONDone: map[string]bool{},
 		},
 	}
 }
 
 func (r *renderer) publicBase(protoFile string) string {
 	return generatedFileBase(protoFile)
+}
+
+func (r *renderer) gestaltErrorRef() string {
+	if r.publicClient {
+		return "crate::public::generated::rpc_support"
+	}
+	return "crate::rpc_support"
 }
 
 // useType records an import of a public type from the shared rpc_support
@@ -360,7 +374,11 @@ func (r *renderer) renderMessage(m *model.Message) {
 	for _, o := range m.Oneofs {
 		fmt.Fprintf(&r.body, "/// Values of the `%s` oneof in `%s`; the message field is None when unset.\n", o.Name, name)
 		r.body.WriteString("#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]\n")
-		r.body.WriteString("#[derive(Clone, Debug, PartialEq)]\n")
+		if r.publicClient {
+			r.body.WriteString("#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]\n")
+		} else {
+			r.body.WriteString("#[derive(Clone, Debug, PartialEq)]\n")
+		}
 		fmt.Fprintf(&r.body, "pub enum %s {\n", oneofTypeName(m, o))
 		for _, f := range oneofFields(m, o) {
 			r.docComment("    ", f.Doc)
@@ -375,7 +393,12 @@ func (r *renderer) renderMessage(m *model.Message) {
 	}
 	r.docComment("", m.Doc)
 	fmt.Fprintf(&r.body, "/// Native message type for `%s`.\n", m.FullName)
-	r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq)]\n")
+	if r.publicClient {
+		r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]\n")
+		r.body.WriteString("#[serde(rename_all = \"camelCase\")]\n")
+	} else {
+		r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq)]\n")
+	}
 	fmt.Fprintf(&r.body, "pub struct %s {\n", name)
 	for _, f := range m.Fields {
 		if f.OneofIndex >= 0 {
@@ -415,19 +438,54 @@ func (r *renderer) renderConversions(m *model.Message) {
 	}
 
 	if needTo {
+		wireMsg := m
+		if r.publicClient {
+			wireMsg = r.idx.wireMessages[m.FullName]
+			if wireMsg == nil {
+				wireMsg = m
+			}
+		}
+		nativeFields := map[string]*model.Field{}
+		nativeOneofs := map[string]bool{}
+		if r.publicClient {
+			for _, f := range m.Fields {
+				if f.OneofIndex < 0 {
+					nativeFields[f.Name] = f
+				}
+			}
+			for _, o := range m.Oneofs {
+				nativeOneofs[o.Name] = true
+			}
+		}
+
 		fmt.Fprintf(&r.body, "/// Converts a native `%s` to its wire message.\n", name)
 		fmt.Fprintf(&r.body, "pub(crate) fn %s(%s: %s) -> v1::%s {\n", toWireFunc(m.FullName), param, name, wireName)
 		fmt.Fprintf(&r.body, "    v1::%s {\n", wireName)
-		for _, f := range m.Fields {
+		for _, f := range wireMsg.Fields {
 			if f.OneofIndex >= 0 {
 				continue
 			}
 			ident := escapeIdent(f.Name)
-			fmt.Fprintf(&r.body, "        %s: %s,\n", ident, r.fieldToWire(f, "value."+ident))
+			if r.publicClient {
+				if native, ok := nativeFields[f.Name]; ok {
+					fmt.Fprintf(&r.body, "        %s: %s,\n", ident, r.fieldToWire(native, "value."+ident))
+				} else {
+					fmt.Fprintf(&r.body, "        %s: %s,\n", ident, wireFieldDefault(f))
+				}
+			} else {
+				fmt.Fprintf(&r.body, "        %s: %s,\n", ident, r.fieldToWire(f, "value."+ident))
+			}
 		}
-		for _, o := range m.Oneofs {
+		for _, o := range wireMsg.Oneofs {
 			ident := escapeIdent(o.Name)
-			fmt.Fprintf(&r.body, "        %s: value.%s.map(%s),\n", ident, ident, oneofToWireFunc(m, o))
+			if r.publicClient && !nativeOneofs[o.Name] {
+				fmt.Fprintf(&r.body, "        %s: None,\n", ident)
+			} else {
+				fmt.Fprintf(&r.body, "        %s: value.%s.map(%s),\n", ident, ident, oneofToWireFunc(m, o))
+			}
+		}
+		if r.publicClient {
+			r.body.WriteString("        ..Default::default()\n")
 		}
 		r.body.WriteString("    }\n}\n\n")
 	}
@@ -457,6 +515,10 @@ func (r *renderer) renderConversions(m *model.Message) {
 		if needFrom {
 			r.renderOneofFromWire(m, o)
 		}
+	}
+
+	if r.publicClient && r.idx.needWireJSON[m.FullName] {
+		r.ensureWireProtoJSON(m.FullName)
 	}
 }
 
@@ -529,7 +591,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 		newArg = r.hostRef("plain_channel") + "(channel)"
 	}
 
-	ctxField := contextFieldOf(svc)
+	ctxField := r.contextFieldOf(svc)
 	contextInit := ""
 	if ctxField != nil {
 		contextInit = "\n            context: None,"
@@ -598,9 +660,12 @@ func (r *renderer) renderClient(svc *model.Service) {
 	}
 }
 
-// contextFieldOf returns a service's first request context field, which
-// determines whether the client carries a default RequestContext.
-func contextFieldOf(svc *model.Service) *model.Field {
+// contextFieldOf returns a service's first request context field for provider
+// clients, or nil for the public SDK where RequestContext is server-filled.
+func (r *renderer) contextFieldOf(svc *model.Service) *model.Field {
+	if r.publicClient {
+		return nil
+	}
 	for _, m := range svc.Methods {
 		if m.Input == nil {
 			continue
@@ -673,6 +738,8 @@ func structLiteral(m *model.Message, typeName string, inits []string, covered ma
 // return value from the converted `response`.
 type collapsed struct {
 	returnType string
+	errorType  string
+	grpcPrep   []string
 	lines      []string
 }
 
@@ -681,6 +748,35 @@ type collapsed struct {
 func (r *renderer) collapseOutput(m *model.Method) *collapsed {
 	if m.Output == nil {
 		return nil
+	}
+	if r.publicClient {
+		if jr := m.JsonResult; jr != nil {
+			status := findField(m.Output, jr.Status)
+			body := findField(m.Output, jr.Body)
+			appClone, opClone := `String::new()`, `String::new()`
+			if m.Input != nil {
+				if f := findField(m.Input, "app"); f != nil {
+					appClone = fmt.Sprintf("request.%s.clone()", escapeIdent(f.Name))
+				}
+				if f := findField(m.Input, "operation"); f != nil {
+					opClone = fmt.Sprintf("request.%s.clone()", escapeIdent(f.Name))
+				}
+			}
+			return &collapsed{
+				returnType: "serde_json::Value",
+				errorType:  "crate::public::generated::invoke_support::InvokeError",
+				grpcPrep: []string{
+					fmt.Sprintf("        let invoke_context_app = %s;", appClone),
+					fmt.Sprintf("        let invoke_context_operation = %s;", opClone),
+				},
+				lines: []string{
+					fmt.Sprintf(
+						"crate::public::generated::invoke_support::decode_app_result(invoke_context_app.as_str(), invoke_context_operation.as_str(), response.%s, &response.%s).map_err(crate::public::generated::invoke_support::InvokeError::from)",
+						escapeIdent(status.Name), escapeIdent(body.Name),
+					),
+				},
+			}
+		}
 	}
 	if or := m.Output.OptionalResult; or != nil {
 		guard := findField(m.Output, or.Guard)
@@ -1187,6 +1283,11 @@ func (r *renderer) assemble() string {
 	var b strings.Builder
 	if r.kind == moduleCodec {
 		fmt.Fprintf(&b, "//! Generated wire conversions for %s.proto.\n\n", r.base)
+		if r.publicClient {
+			b.WriteString("#![allow(clippy::all, unused_variables, unused_mut, dead_code)]\n\n")
+		}
+	} else if r.docIntro != "" {
+		fmt.Fprintf(&b, "//! %s\n\n", r.docIntro)
 	} else {
 		fmt.Fprintf(&b, "//! Generated native types and clients for %s.proto.\n\n", r.base)
 	}
@@ -1195,22 +1296,48 @@ func (r *renderer) assemble() string {
 	if r.features.v1 {
 		uses = append(uses, "use crate::generated::v1;")
 	}
+	if r.publicClient && r.features.restMetadata {
+		uses = append(uses, "use crate::public::generated::metadata::*;")
+	}
+	if r.publicClient && r.features.unaryTransport {
+		uses = append(uses, "use crate::public::generated::unary_transport::UnaryTransport;")
+	}
 	for _, base := range sortedKeys2(r.features.crossPublic) {
 		names := sortedKeys(r.features.crossPublic[base])
-		uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
+		if r.publicClient {
+			uses = append(uses, fmt.Sprintf("use crate::public::generated::%s::{%s};", base, strings.Join(names, ", ")))
+		} else {
+			uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
+		}
 	}
 	for _, base := range sortedKeys2(r.features.crossCodec) {
 		names := sortedKeys(r.features.crossCodec[base])
-		uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
+		if r.publicClient {
+			uses = append(uses, fmt.Sprintf("use crate::public::generated::codec::%s::{%s};", base, strings.Join(names, ", ")))
+		} else {
+			uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
+		}
 	}
 	if len(r.features.supportFns) > 0 {
-		uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
+		if r.publicClient {
+			uses = append(uses, fmt.Sprintf("use crate::public::generated::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
+		} else {
+			uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
+		}
 	}
 	if len(r.features.supportTypes) > 0 {
-		uses = append(uses, fmt.Sprintf("use crate::rpc_support::{%s};", strings.Join(sortedKeys(r.features.supportTypes), ", ")))
+		rpcPath := "crate::rpc_support"
+		if r.publicClient {
+			rpcPath = "crate::public::generated::rpc_support"
+		}
+		uses = append(uses, fmt.Sprintf("use %s::{%s};", rpcPath, strings.Join(sortedKeys(r.features.supportTypes), ", ")))
 	}
 	if len(r.features.invokeUses) > 0 {
-		uses = append(uses, fmt.Sprintf("use crate::invoke_support::{%s};", strings.Join(sortedKeys(r.features.invokeUses), ", ")))
+		if r.publicClient {
+			uses = append(uses, fmt.Sprintf("use crate::public::generated::invoke_support::{%s};", strings.Join(sortedKeys(r.features.invokeUses), ", ")))
+		} else {
+			uses = append(uses, fmt.Sprintf("use crate::invoke_support::{%s};", strings.Join(sortedKeys(r.features.invokeUses), ", ")))
+		}
 	}
 	if r.features.streamExt {
 		uses = append(uses, "use tokio_stream::StreamExt;")

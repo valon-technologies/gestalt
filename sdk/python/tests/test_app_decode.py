@@ -67,6 +67,10 @@ class AppDecodeTests(unittest.TestCase):
         self.assertEqual(str(http_error.exception), "unauthorized")
         self.assertTrue(http_error.exception.raw_body)
 
+        with self.assertRaises(InvokeError) as redirect:
+            self.decode("http_302.json", 302)
+        self.assertEqual(redirect.exception.status, 302)
+
         with self.assertRaises(InvokeError) as invalid:
             self.decode("invalid_json.txt")
         self.assertEqual(str(invalid.exception), "app invoke response is not valid JSON")
@@ -83,8 +87,9 @@ class AppDecodeTests(unittest.TestCase):
         self.assertIsNone(
             raise_for_status("github", "get_issue", 200, fixture("success_envelope.json"))
         )
-        # Redirect statuses do not raise, mirroring requests.
-        self.assertIsNone(raise_for_status("github", "get_issue", 302, b""))
+        with self.assertRaises(InvokeError) as redirect:
+            raise_for_status("github", "get_issue", 302, fixture("http_302.json"))
+        self.assertEqual(redirect.exception.status, 302)
 
         with self.assertRaises(InvokeError) as http_error:
             raise_for_status("github", "get_issue", 401, fixture("http_401.json"))

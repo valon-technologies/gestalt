@@ -48,7 +48,7 @@ pub fn decode_app_result(
     body: &[u8],
 ) -> Result<Value, Box<InvokeResultError>> {
     let parsed = parse_json_result_body(body);
-    if status >= 400 {
+    if !is_success(status) {
         return Err(http_status_error(app, operation, status, body, parsed));
     }
     let parsed = match parsed {
@@ -111,8 +111,8 @@ pub fn is_success(status: i32) -> bool {
     (200..=299).contains(&status)
 }
 
-/// Returns the payload failure an HTTP-error status (>= 400) decodes to,
-/// mirroring reqwest's `Response::error_for_status`; any other status returns
+/// Returns the payload failure a non-success HTTP status decodes to,
+/// mirroring reqwest's `Response::error_for_status`; success statuses return
 /// Ok. The error carries exactly what [`decode_app_result`] would attach for
 /// the same status and body.
 pub fn error_for_status(
@@ -121,7 +121,7 @@ pub fn error_for_status(
     status: i32,
     body: &[u8],
 ) -> Result<(), Box<InvokeResultError>> {
-    if status < 400 {
+    if is_success(status) {
         return Ok(());
     }
     Err(http_status_error(

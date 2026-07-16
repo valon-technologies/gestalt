@@ -15,15 +15,48 @@ import (
 type Target string
 
 const (
-	TargetTS     Target = "ts"
-	TargetPython Target = "python"
-	TargetGo     Target = "go"
-	TargetRust   Target = "rust"
+	TargetTS           Target = "ts"
+	TargetPython       Target = "python"
+	TargetGo           Target = "go"
+	TargetRust         Target = "rust"
+	TargetPublicTS     Target = "public-ts"
+	TargetPublicPython Target = "public-python"
+	TargetPublicGo     Target = "public-go"
+	TargetPublicRust   Target = "public-rust"
 )
 
-// AllTargets returns every target in canonical order.
+// AllTargets returns every provider target in canonical order.
 func AllTargets() []Target {
 	return []Target{TargetTS, TargetPython, TargetGo, TargetRust}
+}
+
+// baseTarget returns the provider target that owns companion, or "" when t is
+// already a provider target.
+func baseTarget(t Target) Target {
+	switch t {
+	case TargetPublicTS:
+		return TargetTS
+	case TargetPublicPython:
+		return TargetPython
+	case TargetPublicGo:
+		return TargetGo
+	case TargetPublicRust:
+		return TargetRust
+	default:
+		return t
+	}
+}
+
+// IncludesTarget reports whether targets selects t, including when a companion
+// public target is selected via its provider target.
+func IncludesTarget(targets []Target, t Target) bool {
+	want := baseTarget(t)
+	for _, selected := range targets {
+		if baseTarget(selected) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseTargets parses a comma-separated target list, preserving canonical
@@ -74,4 +107,8 @@ type Emitter interface {
 	// Formatter is the pinned formatter run over emitted files, or nil while
 	// the emitter produces no output.
 	Formatter() *toolchain.Tool
+
+	// StaleScope limits which generated files under OutputRoot are eligible for
+	// stale deletion during reconcile. nil means the entire output tree is owned.
+	StaleScope() func(rel string) bool
 }

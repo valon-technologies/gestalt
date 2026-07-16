@@ -26,6 +26,8 @@ func (*Emitter) HeaderStyle() fileset.CommentStyle { return fileset.Hash }
 // Formatter is nil: the emitter renders ruff-clean code directly.
 func (*Emitter) Formatter() *toolchain.Tool { return toolchain.Ruff() }
 
+func (*Emitter) StaleScope() func(rel string) bool { return emit.ExcludePrefixScope("public/") }
+
 // index resolves type references during rendering.
 type index struct {
 	messages map[string]*model.Message
@@ -62,7 +64,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 
 	messages, enums := reachable(idx, services)
 	idx.taken = takenNames(messages, enums)
-	if err := set.Add("rpc_support.py", []byte(supportFile)); err != nil {
+	if err := set.Add("rpc_support.py", []byte(providerSupportFile)); err != nil {
 		return nil, err
 	}
 	if hasJsonResult(services) {

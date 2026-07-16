@@ -78,6 +78,10 @@ func snakeCase(s string) string {
 	return b.String()
 }
 
+func screamingSnake(s string) string {
+	return strings.ToUpper(snakeCase(s))
+}
+
 // pascalCase converts a snake_case identifier to PascalCase: "json_value"
 // becomes "JsonValue".
 func pascalCase(s string) string {
@@ -219,4 +223,15 @@ func toWireFunc(messageFullName string) string {
 
 func fromWireFunc(messageFullName string) string {
 	return "from_wire_" + snakeCase(localName(messageFullName))
+}
+
+func pythonStringTuple(values []string) string {
+	if len(values) == 0 {
+		return "()"
+	}
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = fmt.Sprintf("%q", v)
+	}
+	return "(" + strings.Join(parts, ", ") + ",)"
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
 // maxImportLine is ruff's default line length; from-imports longer than this
@@ -48,15 +49,20 @@ type features struct {
 	crossNative map[string]map[string]bool // public: generated module base -> imported type names
 	codecBases  map[string]bool            // public: codec module bases referenced by the client
 	crossCodec  map[string]bool            // codec: sibling codec module bases referenced
+	metadataMethods map[string]bool        // public client: METHOD_* constants from metadata
+	unaryTransport  bool                   // public client: UnaryTransport from unary_transport
+	jsonFormat      bool                   // public client: google.protobuf.json_format
 }
 
 type renderer struct {
-	idx      *index
-	base     string
-	wireBase string
-	kind     moduleKind
-	features features
-	body     strings.Builder
+	idx          *index
+	base         string
+	wireBase     string
+	kind         moduleKind
+	publicClient bool
+	docIntro     string
+	features     features
+	body         strings.Builder
 }
 
 func newRenderer(idx *index, base, wireBase string, kind moduleKind) *renderer {
@@ -69,12 +75,13 @@ func newRenderer(idx *index, base, wireBase string, kind moduleKind) *renderer {
 		wireBase: wireBase,
 		kind:     kind,
 		features: features{
-			rpcTypes:    map[string]bool{},
-			invokeNames: map[string]bool{},
-			support:     map[string]bool{},
-			crossNative: map[string]map[string]bool{},
-			codecBases:  map[string]bool{},
-			crossCodec:  map[string]bool{},
+			rpcTypes:        map[string]bool{},
+			invokeNames:     map[string]bool{},
+			support:         map[string]bool{},
+			crossNative:     map[string]map[string]bool{},
+			codecBases:      map[string]bool{},
+			crossCodec:      map[string]bool{},
+			metadataMethods: map[string]bool{},
 		},
 	}
 }
@@ -94,6 +101,11 @@ func (r *renderer) useType(name string) {
 func (r *renderer) useInvoke(name string) string {
 	r.features.invokeNames[name] = true
 	return name
+}
+
+// useMetadataMethod records a METHOD_* constant import from metadata.
+func (r *renderer) useMetadataMethod(name string) {
+	r.features.metadataMethods[name] = true
 }
 
 // useConverter records a codec-module import of a well-known-type converter
@@ -587,7 +599,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 	}
 	r.writeDocstring("    ", doc)
 	r.body.WriteString("\n")
-	ctxField := contextFieldOf(svc)
+	ctxField := r.contextFieldOf(svc)
 	if ctxField != nil {
 		ctxType := r.fieldType(ctxField)
 		fmt.Fprintf(&r.body, "    def __init__(self, channel: grpc.Channel, *, context: %s | None = None, timeout: float | None = None) -> None:\n", ctxType)
@@ -757,7 +769,7 @@ func (r *renderer) renderMethod(m *model.Method) {
 	case m.Initial != nil && m.Stream == model.ClientStream:
 		r.renderFramedWrite(m)
 		r.renderFaithfulMethod(m, true)
-	case m.Stream == model.Unary && (len(m.Signature)+len(m.OptionalSignature) > 0 || r.collapseOutput(m) != nil):
+	case m.Stream == model.Unary && (len(r.effectiveOptionalFields(m)) > 0 || r.collapseOutput(m) != nil):
 		r.renderErgonomicUnary(m)
 		// The dual-mode method already accepts the full request, so the
 		// faithful sibling exists only when the response differs.
@@ -794,13 +806,13 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 	case m.InputIsEmpty:
 		// Empty-input methods take no request parameter at all.
 		r.features.emptyPb = true
-	case len(m.Signature)+len(m.OptionalSignature) > 0:
+	case len(r.effectiveOptionalFields(m)) > 0:
 		requestType := r.messageType(m.Input.FullName)
 		r.features.overload = true
 		// Optional-signature fields follow the signature fields as additional
 		// keyword-only parameters; the dual-mode machinery already treats
 		// every keyword argument as optional, so both lists render alike.
-		names := append(append([]string{}, m.Signature...), m.OptionalSignature...)
+		names := r.effectiveOptionalFields(m)
 		var stubDecls, implDecls, guards, args []string
 		for _, name := range names {
 			f := findField(m.Input, name)
@@ -1030,9 +1042,33 @@ func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
 	}
 }
 
+// effectiveOptionalFields returns signature and optional_signature fields,
+// omitting public fill/reject fields for public clients.
+func (r *renderer) effectiveOptionalFields(m *model.Method) []string {
+	names := append(append([]string{}, m.Signature...), m.OptionalSignature...)
+	if !r.publicClient {
+		return names
+	}
+	omitted := publicsurface.OmittedFields(m)
+	if len(omitted) == 0 {
+		return names
+	}
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if !omitted[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // contextFieldOf returns a service's first request context field, which
-// determines whether the client carries a default RequestContext.
-func contextFieldOf(svc *model.Service) *model.Field {
+// determines whether the client carries a default RequestContext. Public
+// clients never carry RequestContext; it is server-filled.
+func (r *renderer) contextFieldOf(svc *model.Service) *model.Field {
+	if r.publicClient {
+		return nil
+	}
 	for _, m := range svc.Methods {
 		if m.Input == nil {
 			continue
@@ -1045,8 +1081,12 @@ func contextFieldOf(svc *model.Service) *model.Field {
 }
 
 // contextLines renders the default-context injection for a request-bearing
-// method, or nil when the request has no context field.
+// method, or nil when the request has no context field. Public clients never
+// inject context; it is server-filled via the public policy.
 func (r *renderer) contextLines(m *model.Method) []string {
+	if r.publicClient {
+		return nil
+	}
 	if m.InputIsEmpty || findField(m.Input, "context") == nil {
 		return nil
 	}
@@ -1055,6 +1095,34 @@ func (r *renderer) contextLines(m *model.Method) []string {
 		"        if request.context is None and self._context is not None:",
 		"            request = replace(request, context=self._context)",
 	}
+}
+
+// genImportDots returns the relative-import prefix for gestalt._gen.v1.
+func (r *renderer) genImportDots() string {
+	if r.publicClient {
+		if r.kind == moduleCodec {
+			return "...."
+		}
+		return "..."
+	}
+	if r.kind == moduleCodec {
+		return ".."
+	}
+	return "."
+}
+
+func (r *renderer) supportImportModule() string {
+	if r.publicClient {
+		return "gestalt.rpc_support"
+	}
+	return ".rpc_support"
+}
+
+func (r *renderer) invokeImportModule() string {
+	if r.publicClient {
+		return "gestalt.invoke_support"
+	}
+	return ".invoke_support"
 }
 
 // writeMethodDoc renders a client method docstring from the proto comment on
@@ -1091,7 +1159,7 @@ func (r *renderer) localImports() string {
 			fmt.Fprintf(&b, "from .. import %s as native\n", r.base)
 		}
 		if r.features.wire {
-			fmt.Fprintf(&b, "from .._gen.v1 import %s_pb2 as _%s_pb2\n", r.wireBase, r.wireBase)
+			fmt.Fprintf(&b, "from %s_gen.v1 import %s_pb2 as _%s_pb2\n", r.genImportDots(), r.wireBase, r.wireBase)
 		}
 		if len(r.features.crossCodec) > 0 {
 			fmt.Fprintf(&b, "from . import %s\n", strings.Join(sortedKeys(r.features.crossCodec), ", "))
@@ -1125,8 +1193,14 @@ func (r *renderer) localImports() string {
 	}
 	if r.features.wireGrpc {
 		locals = append(locals, localImport{
-			module: "._gen.v1",
-			lines:  fmt.Sprintf("from ._gen.v1 import %s_pb2_grpc as _%s_pb2_grpc\n", r.wireBase, r.wireBase),
+			module: r.genImportDots() + "_gen.v1",
+			lines:  fmt.Sprintf("from %s_gen.v1 import %s_pb2_grpc as _%s_pb2_grpc\n", r.genImportDots(), r.wireBase, r.wireBase),
+		})
+	}
+	if r.publicClient && r.features.wire {
+		locals = append(locals, localImport{
+			module: r.genImportDots() + "_gen.v1",
+			lines:  fmt.Sprintf("from %s_gen.v1 import %s_pb2 as _%s_pb2\n", r.genImportDots(), r.wireBase, r.wireBase),
 		})
 	}
 	if r.features.hostService {
@@ -1143,10 +1217,19 @@ func (r *renderer) localImports() string {
 		locals = append(locals, localImport{module: "." + base, lines: fromImport("."+base, sortedKeys(names))})
 	}
 	if len(r.features.invokeNames) > 0 {
-		locals = append(locals, localImport{module: ".invoke_support", lines: fromImport(".invoke_support", sortedKeys(r.features.invokeNames))})
+		locals = append(locals, localImport{module: r.invokeImportModule(), lines: fromImport(r.invokeImportModule(), sortedKeys(r.features.invokeNames))})
+	}
+	if len(r.features.metadataMethods) > 0 {
+		locals = append(locals, localImport{module: ".metadata", lines: fromImport(".metadata", sortedKeys(r.features.metadataMethods))})
+	}
+	if r.features.unaryTransport {
+		b.WriteString("from .unary_transport import UnaryTransport\n")
+	}
+	if r.features.jsonFormat {
+		b.WriteString("from google.protobuf import json_format\n")
 	}
 	if len(r.features.rpcTypes) > 0 {
-		locals = append(locals, localImport{module: ".rpc_support", lines: fromImport(".rpc_support", sortedKeys(r.features.rpcTypes))})
+		locals = append(locals, localImport{module: r.supportImportModule(), lines: fromImport(r.supportImportModule(), sortedKeys(r.features.rpcTypes))})
 	}
 	sort.Slice(locals, func(i, j int) bool { return locals[i].module < locals[j].module })
 	for _, imp := range locals {
@@ -1161,6 +1244,10 @@ func (r *renderer) assemble() string {
 	var b strings.Builder
 	if r.kind == moduleCodec {
 		fmt.Fprintf(&b, "\"\"\"Generated wire codec for %s.proto.\"\"\"\n\n", r.base)
+	} else if r.docIntro != "" {
+		fmt.Fprintf(&b, "\"\"\"%s\"\"\"\n\n", r.docIntro)
+	} else if r.publicClient {
+		fmt.Fprintf(&b, "\"\"\"Generated public gestaltd surface for %s.proto.\"\"\"\n\n", r.base)
 	} else {
 		fmt.Fprintf(&b, "\"\"\"Generated provider SDK surface for %s.proto.\"\"\"\n\n", r.base)
 	}

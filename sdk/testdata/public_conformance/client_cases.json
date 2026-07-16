@@ -1,0 +1,54 @@
+[
+  {
+    "id": "invoke_success",
+    "method": "App.Invoke",
+    "publicRequest": {
+      "app": "example",
+      "operation": "sync",
+      "params": { "ok": true }
+    },
+    "wireRequest": {
+      "app": "example",
+      "operation": "sync",
+      "params": { "ok": true }
+    },
+    "response": {
+      "operationResult": {
+        "status": 200,
+        "headers": {},
+        "bodyBase64": "eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJvayI6dHJ1ZX19"
+      }
+    },
+    "expect": {
+      "result": { "ok": true },
+      "calls": 1
+    }
+  },
+  {
+    "id": "platform_error",
+    "method": "App.Invoke",
+    "publicRequest": {
+      "app": "example",
+      "operation": "sync",
+      "params": {}
+    },
+    "wireRequest": {
+      "app": "example",
+      "operation": "sync",
+      "params": {}
+    },
+    "response": {
+      "gestaltError": {
+        "code": 16,
+        "message": "Not authenticated"
+      }
+    },
+    "expect": {
+      "gestaltError": {
+        "code": 16,
+        "message": "Not authenticated"
+      },
+      "calls": 1
+    }
+  }
+]

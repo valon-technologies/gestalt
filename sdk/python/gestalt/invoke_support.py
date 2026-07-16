@@ -50,12 +50,12 @@ def ok(status: int) -> bool:
 
 
 def raise_for_status(app: str, operation: str, status: int, body: bytes) -> None:
-    """Raise :class:`InvokeError` for an HTTP-error status (400 and above),
-    decoding the result body for the error message and code exactly like
-    :func:`decode_app_result`. Other statuses return None, mirroring the
+    """Raise :class:`InvokeError` for a non-success HTTP status (outside
+    200-299), decoding the result body for the error message and code exactly
+    like :func:`decode_app_result`. Success statuses return None, mirroring the
     requests library's ``Response.raise_for_status``."""
 
-    if status >= 400:
+    if not ok(status):
         raise _http_status_error(app, operation, status, body)
 
 
@@ -94,7 +94,7 @@ def decode_app_result(app: str, operation: str, status: int, body: bytes) -> Any
     HTTP-error statuses raise :class:`InvokeError`, and any other JSON body
     passes through unchanged."""
 
-    if status >= 400:
+    if not ok(status):
         raise _http_status_error(app, operation, status, body)
 
     try:
