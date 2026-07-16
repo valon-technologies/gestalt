@@ -205,52 +205,118 @@ fn format_duration(value: &prost_types::Duration) -> String {
 }
 
 fn parse_duration(text: &str) -> Result<prost_types::Duration, GestaltError> {
-    let trimmed = text.trim();
-    if !trimmed.ends_with('s') {
-        return Err(invalid_argument("duration must end with s"));
+    const MAX_SECONDS: i64 = 315_576_000_000;
+
+    let (seconds, nanos) = parse_duration_components(text)
+        .ok_or_else(|| invalid_argument("invalid duration format"))?;
+    if !(-MAX_SECONDS..=MAX_SECONDS).contains(&seconds) {
+        return Err(invalid_argument("duration seconds out of range"));
     }
-    let body = &trimmed[..trimmed.len() - 1];
-    if body.is_empty() {
-        return Err(invalid_argument("duration must have a value"));
+    if !(-999_999_999..=999_999_999).contains(&nanos) {
+        return Err(invalid_argument("duration nanos out of range"));
     }
-    let negative = body.starts_with('-');
-    let unsigned = if negative { &body[1..] } else { body };
-    if unsigned.is_empty() {
-        return Err(invalid_argument("duration must have a value"));
-    }
-    let (seconds_part, nanos) = if let Some((whole, fractional)) = unsigned.split_once('.') {
-        if fractional.len() > 9 {
-            return Err(invalid_argument(
-                "duration fractional precision exceeds nanoseconds",
-            ));
-        }
-        let whole: u64 = if whole.is_empty() {
-            0
-        } else {
-            whole.parse().map_err(invalid_argument)?
-        };
-        let frac: u32 = if fractional.is_empty() {
-            0
-        } else {
-            let padded = format!("{fractional:0<9}");
-            padded[..9].parse().map_err(invalid_argument)?
-        };
-        (whole, frac)
-    } else {
-        (unsigned.parse().map_err(invalid_argument)?, 0u32)
-    };
-    let abs_nanos = (seconds_part as i128)
-        .checked_mul(1_000_000_000i128)
-        .and_then(|v| v.checked_add(i128::from(nanos)))
-        .ok_or_else(|| invalid_argument("duration out of range"))?;
-    let total_nanos = if negative { -abs_nanos } else { abs_nanos };
-    let seconds: i64 = (total_nanos / 1_000_000_000)
-        .try_into()
-        .map_err(|_| invalid_argument("duration seconds out of range"))?;
-    let nanos: i32 = (total_nanos % 1_000_000_000)
-        .try_into()
-        .map_err(|_| invalid_argument("duration nanos out of range"))?;
     Ok(prost_types::Duration { seconds, nanos })
+}
+
+// parse_duration_components implements the protobuf-go protojson duration grammar.
+fn parse_duration_components(text: &str) -> Option<(i64, i32)> {
+    let b = text.as_bytes();
+    if b.len() < 2 || b[b.len() - 1] != b's' {
+        return None;
+    }
+    let mut b = &b[..b.len() - 1];
+
+    let mut neg = false;
+    match b.first().copied() {
+        Some(b'-') => {
+            neg = true;
+            b = &b[1..];
+        }
+        Some(b'+') => b = &b[1..],
+        _ => {}
+    }
+    if b.is_empty() {
+        return None;
+    }
+
+    let intp;
+    match b[0] {
+        b'0' => {
+            intp = &b[..0];
+            b = &b[1..];
+        }
+        b'1'..=b'9' => {
+            let mut n = 1usize;
+            while n < b.len() && b[n].is_ascii_digit() {
+                n += 1;
+            }
+            intp = &b[..n];
+            b = &b[n..];
+        }
+        b'.' => {
+            intp = &b[..0];
+        }
+        _ => return None,
+    }
+
+    let mut has_frac = false;
+    let mut frac = [b'0'; 9];
+    if !b.is_empty() {
+        if b[0] != b'.' {
+            return None;
+        }
+        b = &b[1..];
+        let mut n = 0usize;
+        while n < b.len() && n < 9 && b[n].is_ascii_digit() {
+            frac[n] = b[n];
+            n += 1;
+        }
+        if n < b.len() {
+            return None;
+        }
+        for digit in &mut frac[n..] {
+            *digit = b'0';
+        }
+        has_frac = true;
+    }
+
+    if intp.is_empty() && !has_frac {
+        return None;
+    }
+
+    let mut seconds = if intp.is_empty() {
+        0
+    } else {
+        std::str::from_utf8(intp).ok()?.parse().ok()?
+    };
+
+    let mut nanos = 0i32;
+    if has_frac {
+        let nanob = trim_left_zero_bytes(&frac);
+        if !nanob.is_empty() {
+            let parsed: i64 = std::str::from_utf8(nanob).ok()?.parse().ok()?;
+            nanos = i32::try_from(parsed).ok()?;
+        }
+    }
+
+    if neg {
+        if seconds > 0 {
+            seconds = -seconds;
+        }
+        if nanos > 0 {
+            nanos = -nanos;
+        }
+    }
+
+    Some((seconds, nanos))
+}
+
+fn trim_left_zero_bytes(bytes: &[u8]) -> &[u8] {
+    let mut start = 0;
+    while start < bytes.len() && bytes[start] == b'0' {
+        start += 1;
+    }
+    &bytes[start..]
 }
 
 fn invalid_argument(message: impl ToString) -> GestaltError {
@@ -366,7 +432,92 @@ mod tests {
     }
 
     #[test]
-    fn negative_duration_round_trip() {
+    fn duration_protojson_parse() {
+        struct Case {
+            input: &'static str,
+            ok: bool,
+            seconds: i64,
+            nanos: i32,
+        }
+
+        let cases = [
+            Case {
+                input: "+3s",
+                ok: true,
+                seconds: 3,
+                nanos: 0,
+            },
+            Case {
+                input: ".5s",
+                ok: true,
+                seconds: 0,
+                nanos: 500_000_000,
+            },
+            Case {
+                input: "-.001s",
+                ok: true,
+                seconds: 0,
+                nanos: -1_000_000,
+            },
+            Case {
+                input: "3.s",
+                ok: true,
+                seconds: 3,
+                nanos: 0,
+            },
+            Case {
+                input: ".1s",
+                ok: true,
+                seconds: 0,
+                nanos: 100_000_000,
+            },
+            Case {
+                input: "1.s",
+                ok: true,
+                seconds: 1,
+                nanos: 0,
+            },
+            Case {
+                input: "01s",
+                ok: false,
+                seconds: 0,
+                nanos: 0,
+            },
+            Case {
+                input: " 3s ",
+                ok: false,
+                seconds: 0,
+                nanos: 0,
+            },
+            Case {
+                input: "315576000001s",
+                ok: false,
+                seconds: 0,
+                nanos: 0,
+            },
+            Case {
+                input: "0.1000000000s",
+                ok: false,
+                seconds: 0,
+                nanos: 0,
+            },
+        ];
+
+        for case in cases {
+            let result = decode_duration(&serde_json::json!(case.input));
+            if case.ok {
+                let decoded = result
+                    .unwrap_or_else(|err| panic!("expected {:?} to parse: {err}", case.input));
+                assert_eq!(decoded.seconds, case.seconds, "{:?}", case.input);
+                assert_eq!(decoded.nanos, case.nanos, "{:?}", case.input);
+            } else {
+                assert!(result.is_err(), "expected {:?} to be rejected", case.input);
+            }
+        }
+    }
+
+    #[test]
+    fn duration_round_trip() {
         let value = prost_types::Duration {
             seconds: -1,
             nanos: -500_000_000,
@@ -376,6 +527,28 @@ mod tests {
         let decoded = decode_duration(&encoded).expect("decode duration");
         assert_eq!(decoded.seconds, -1);
         assert_eq!(decoded.nanos, -500_000_000);
+
+        let subsecond = decode_duration(&serde_json::json!("-0.1s")).expect("decode subsecond");
+        assert_eq!(subsecond.seconds, 0);
+        assert_eq!(subsecond.nanos, -100_000_000);
+        assert_eq!(encode_duration(&subsecond), serde_json::json!("-0.1s"));
+
+        let max = decode_duration(&serde_json::json!("315576000000s")).expect("max duration");
+        assert_eq!(max.seconds, 315_576_000_000);
+        assert_eq!(max.nanos, 0);
+
+        let min = decode_duration(&serde_json::json!("-315576000000s")).expect("min duration");
+        assert_eq!(min.seconds, -315_576_000_000);
+        assert_eq!(min.nanos, 0);
+
+        let max_fractional = prost_types::Duration {
+            seconds: 315_576_000_000,
+            nanos: 100_000_000,
+        };
+        let encoded = encode_duration(&max_fractional);
+        assert_eq!(encoded, serde_json::json!("315576000000.1s"));
+        let decoded = decode_duration(&encoded).expect("decode max fractional");
+        assert_eq!(decoded, max_fractional);
     }
 
     #[test]
@@ -383,11 +556,5 @@ mod tests {
         let encoded = encode_f64(f64::NAN);
         assert_eq!(encoded, serde_json::json!("NaN"));
         assert!(decode_f64(&encoded).expect("decode nan").is_nan());
-    }
-
-    #[test]
-    fn reject_duration_overflow_and_precision() {
-        assert!(decode_duration(&serde_json::json!("18446744073709551615s")).is_err());
-        assert!(decode_duration(&serde_json::json!("1.1234567890s")).is_err());
     }
 }

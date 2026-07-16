@@ -291,7 +291,7 @@ pub(crate) fn encode_wire_operation_result_json(value: &v1::OperationResult) -> 
     if !value.headers.is_empty() {
         let mut map = serde_json::Map::new();
         for (key, value) in &value.headers {
-            map.insert(key.clone(), encode_wire_string_list_json(&value));
+            map.insert(key.clone(), encode_wire_string_list_json(value));
         }
         object.insert("headers".into(), serde_json::Value::Object(map));
     }
