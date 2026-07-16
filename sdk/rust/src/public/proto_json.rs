@@ -263,9 +263,6 @@ fn parse_duration(text: &str) -> Result<prost_types::Duration, GestaltError> {
     if nanos < -999_999_999 || nanos > 999_999_999 {
         return Err(invalid_argument("duration nanos out of range"));
     }
-    if nanos != 0 && ((seconds < 0) != (nanos < 0)) {
-        return Err(invalid_argument("duration sign mismatch"));
-    }
     Ok(prost_types::Duration { seconds, nanos })
 }
 
@@ -392,6 +389,11 @@ mod tests {
         let decoded = decode_duration(&encoded).expect("decode duration");
         assert_eq!(decoded.seconds, -1);
         assert_eq!(decoded.nanos, -500_000_000);
+
+        let subsecond = decode_duration(&serde_json::json!("-0.1s")).expect("decode subsecond");
+        assert_eq!(subsecond.seconds, 0);
+        assert_eq!(subsecond.nanos, -100_000_000);
+        assert_eq!(encode_duration(&subsecond), serde_json::json!("-0.1s"));
     }
 
     #[test]

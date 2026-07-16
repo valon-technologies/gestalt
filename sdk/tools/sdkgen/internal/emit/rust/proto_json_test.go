@@ -13,7 +13,7 @@ func TestWireJSONContainerTimestampUsesWKTHelpers(t *testing.T) {
 	r := newRenderer(&index{}, "codec/app", "codec/app", modulePublic, true)
 	ref := &model.TypeRef{Kind: model.KindTimestamp}
 
-	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarRepeatedElem)
+	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarBorrowed)
 	if strings.Contains(encode, "serde_json::json!") {
 		t.Fatalf("timestamp encode must not use serde_json::json!: %q", encode)
 	}
@@ -40,7 +40,7 @@ func TestWireJSONEncodeEnumUsesNumericFallback(t *testing.T) {
 	}, "codec/app", "codec/app", modulePublic, true)
 	ref := &model.TypeRef{Kind: model.KindEnum, Enum: "test.v1.Status"}
 
-	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarRepeatedElem)
+	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarBorrowed)
 	if strings.Contains(encode, "Value::Null") {
 		t.Fatalf("unknown enum must encode as number, not null: %q", encode)
 	}
@@ -55,7 +55,7 @@ func TestWireJSONContainerDurationUsesWKTHelpers(t *testing.T) {
 	r := newRenderer(&index{}, "codec/app", "codec/app", modulePublic, true)
 	ref := &model.TypeRef{Kind: model.KindDuration}
 
-	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarRepeatedElem)
+	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarBorrowed)
 	if strings.Contains(encode, "serde_json::json!") {
 		t.Fatalf("duration encode must not use serde_json::json!: %q", encode)
 	}
