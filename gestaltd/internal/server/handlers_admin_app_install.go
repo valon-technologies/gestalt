@@ -155,6 +155,8 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 			status = http.StatusNotFound
 		case errors.Is(err, appregistry.ErrInstallVersionLocked):
 			status = http.StatusConflict
+		case errors.Is(err, appregistry.ErrAppRolloutActive):
+			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
 			status = http.StatusBadRequest
 		case errors.Is(err, context.DeadlineExceeded):
@@ -194,7 +196,7 @@ func adminAppInstallationFromCore(installation *core.AppInstallation) adminAppIn
 }
 
 func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
-	if cfg.Services == nil || cfg.Services.AppVersionChangeRequests == nil || cfg.Services.AppVersionInstallLocks == nil {
+	if cfg.Services == nil || cfg.Services.AppVersionChangeRequests == nil || cfg.Services.AppVersionInstallLocks == nil || cfg.Services.AppRollouts == nil {
 		return nil
 	}
 	reader := cfg.AppRegistryReader
@@ -207,5 +209,6 @@ func newAppRegistryInstaller(cfg Config) *appregistry.Installer {
 		Reader:         reader,
 		ChangeRequests: cfg.Services.AppVersionChangeRequests,
 		Locks:          cfg.Services.AppVersionInstallLocks,
+		Rollouts:       cfg.Services.AppRollouts,
 	}
 }

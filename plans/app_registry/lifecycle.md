@@ -22,10 +22,11 @@ Implementation:
 - Catalog poller — `gestaltd/internal/appregistry/poller.go`
 - App provider restarter — `gestaltd/internal/bootstrap/app_provider_restart.go`
 - Change request projections — `gestaltd/internal/coredata/app_version_change_requests_projection.go`
+- Rollout state — `gestaltd/internal/coredata/app_rollouts.go`
 
 ## Startup
 
-`coredata.NewWithOptions` — idempotently create host stores, including `app_version_change_requests` and `app_version_install_locks`. Bootstrap does not write change requests; the store starts empty until an install.
+`coredata.NewWithOptions` — idempotently create host stores, including `app_version_change_requests`, `app_version_install_locks`, and `app_rollouts`. Bootstrap does not write change requests or rollouts; the stores start empty until an install.
 
 When `gestaltd serve` starts:
 

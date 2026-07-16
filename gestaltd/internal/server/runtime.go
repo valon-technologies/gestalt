@@ -429,12 +429,14 @@ func startAppRegistryCatalogPoller(ctx context.Context, result *bootstrap.Result
 	}
 	changeRequests := result.Services.AppVersionChangeRequests
 	materializations := result.Services.AppInstanceMaterializations
-	if changeRequests == nil || materializations == nil {
+	rollouts := result.Services.AppRollouts
+	if changeRequests == nil || materializations == nil || rollouts == nil {
 		return nil
 	}
 	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
 		ChangeRequests:      changeRequests,
 		Materializations:    materializations,
+		Rollouts:            rollouts,
 		AppRestarter:        result.AppRestarter,
 		InstanceID:          appregistry.ResolveInstanceID(),
 		RestartDelay:        restartDelay,

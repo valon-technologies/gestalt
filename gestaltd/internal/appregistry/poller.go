@@ -24,6 +24,7 @@ const (
 type CatalogPoller struct {
 	ChangeRequests      *coredata.AppVersionChangeRequestService
 	Materializations    *coredata.AppInstanceMaterializationService
+	Rollouts            *coredata.AppRolloutService
 	AppRestarter        AppRestarter
 	InstanceID          string
 	Interval            time.Duration
@@ -39,11 +40,13 @@ type CatalogPoller struct {
 	passMu    sync.Mutex
 	mu        sync.Mutex
 	inflight  map[string]struct{}
+	stoppedAt map[string]time.Time
 }
 
 type CatalogPollerConfig struct {
 	ChangeRequests      *coredata.AppVersionChangeRequestService
 	Materializations    *coredata.AppInstanceMaterializationService
+	Rollouts            *coredata.AppRolloutService
 	AppRestarter        AppRestarter
 	InstanceID          string
 	Interval            time.Duration
@@ -57,6 +60,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 	return &CatalogPoller{
 		ChangeRequests:      cfg.ChangeRequests,
 		Materializations:    cfg.Materializations,
+		Rollouts:            cfg.Rollouts,
 		AppRestarter:        cfg.AppRestarter,
 		InstanceID:          strings.TrimSpace(cfg.InstanceID),
 		Interval:            cfg.Interval,
@@ -65,6 +69,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		RestartReady:        cfg.RestartReady,
 		Now:                 cfg.Now,
 		inflight:            make(map[string]struct{}),
+		stoppedAt:           make(map[string]time.Time),
 	}
 }
 
@@ -80,7 +85,7 @@ func ResolveInstanceID() string {
 }
 
 func (p *CatalogPoller) Start(ctx context.Context) {
-	if p == nil || p.ChangeRequests == nil || p.Materializations == nil {
+	if p == nil || p.ChangeRequests == nil || p.Materializations == nil || p.Rollouts == nil {
 		return
 	}
 	p.startOnce.Do(func() {
@@ -146,7 +151,7 @@ func (p *CatalogPoller) ReconcileOnce(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	if p.ChangeRequests == nil || p.Materializations == nil {
+	if p.ChangeRequests == nil || p.Materializations == nil || p.Rollouts == nil {
 		return fmt.Errorf("app registry catalog poller is not configured")
 	}
 	instanceID := strings.TrimSpace(p.InstanceID)
@@ -159,9 +164,27 @@ func (p *CatalogPoller) ReconcileOnce(ctx context.Context) error {
 		return fmt.Errorf("list catalog known versions: %w", err)
 	}
 
+	active, err := p.Rollouts.ListActive(ctx)
+	if err != nil {
+		return fmt.Errorf("list active app rollouts: %w", err)
+	}
+	activeByApp := make(map[string]*core.AppRollout, len(active))
+	for _, rollout := range active {
+		if rollout != nil && strings.TrimSpace(rollout.App) != "" {
+			activeByApp[strings.TrimSpace(rollout.App)] = rollout
+		}
+	}
+
 	var errs []error
-	for appName, installations := range groupInstallationsByApp(known) {
-		if err := p.reconcileApp(ctx, instanceID, appName, installations); err != nil {
+	byApp := groupInstallationsByApp(known)
+	for appName, installations := range byApp {
+		if err := p.reconcileApp(ctx, instanceID, appName, installations, activeByApp[appName]); err != nil {
+			errs = append(errs, err)
+		}
+		delete(activeByApp, appName)
+	}
+	for appName, rollout := range activeByApp {
+		if err := p.reconcileApp(ctx, instanceID, appName, nil, rollout); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -196,15 +219,53 @@ func groupInstallationsByApp(known []*core.AppInstallation) map[string][]*core.A
 	return byApp
 }
 
-func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName string, installations []*core.AppInstallation) error {
+func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName string, installations []*core.AppInstallation, rollout *core.AppRollout) error {
 	appName = strings.TrimSpace(appName)
-	if appName == "" || len(installations) == 0 {
+	if appName == "" {
 		return nil
 	}
 	if !p.beginInflight(appName) {
 		return nil
 	}
 	defer p.endInflight(appName)
+
+	if rollout != nil {
+		version := strings.TrimSpace(rollout.Version)
+		if findInstallation(installations, version) == nil {
+			if !p.now().Before(rollout.Deadline) {
+				if _, err := p.Rollouts.MarkFailed(ctx, appName, version, p.now()); err != nil {
+					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
+				}
+			}
+			return nil
+		}
+		if _, err := p.ensureAcknowledged(ctx, instanceID, appName, version); err != nil {
+			return err
+		}
+		if rollout.State == core.AppRolloutStateEnrolling {
+			if p.now().Before(rollout.EnrollmentEndsAt) {
+				return nil
+			}
+			var err error
+			rollout, err = p.Rollouts.MarkRestarting(ctx, appName, version)
+			if err != nil {
+				return fmt.Errorf("start rollout restart phase for %s@%s: %w", appName, version, err)
+			}
+		}
+		if rollout.State == core.AppRolloutStateRestarting {
+			terminal, err := p.updateRolloutOutcome(ctx, rollout)
+			if err != nil {
+				return err
+			}
+			if terminal {
+				rollout = nil
+			}
+		}
+	}
+
+	if len(installations) == 0 {
+		return nil
+	}
 
 	pending := make([]*core.AppInstallation, 0, len(installations))
 	for _, installation := range installations {
@@ -261,7 +322,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		if err := p.AppRestarter.StopApp(ctx, appName); err != nil {
 			return fmt.Errorf("stop app %s for %s@%s: %w", appName, appName, driverVersion, err)
 		}
-		stoppedAt = p.now()
+		stoppedAt = p.rememberStoppedAt(appName, p.now())
 		slog.Info(
 			"app registry catalog poller stopped app provider",
 			"app", appName,
@@ -288,6 +349,12 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	if err := p.markAllRestarted(ctx, instanceID, appName, pending, restartedAt); err != nil {
 		return err
 	}
+	p.forgetStoppedAt(appName)
+	if rollout != nil && rollout.State == core.AppRolloutStateRestarting {
+		if _, err := p.updateRolloutOutcome(ctx, rollout); err != nil {
+			return err
+		}
+	}
 	slog.Info(
 		"app registry catalog poller restarted app provider",
 		"app", appName,
@@ -297,6 +364,46 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		"restarted_at", restartedAt,
 	)
 	return nil
+}
+
+func findInstallation(installations []*core.AppInstallation, version string) *core.AppInstallation {
+	version = strings.TrimSpace(version)
+	for _, installation := range installations {
+		if installation != nil && strings.TrimSpace(installation.Version) == version {
+			return installation
+		}
+	}
+	return nil
+}
+
+func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.AppRollout) (bool, error) {
+	materializations, err := p.Materializations.ListByAppVersion(ctx, rollout.App, rollout.Version)
+	if err != nil {
+		return false, fmt.Errorf("list rollout cohort for %s@%s: %w", rollout.App, rollout.Version, err)
+	}
+	converged := true
+	for _, materialization := range materializations {
+		if !materialization.AcknowledgedAt.Before(rollout.EnrollmentEndsAt) {
+			continue
+		}
+		if materialization.RestartedAt.IsZero() || materialization.RestartedAt.After(rollout.Deadline) {
+			converged = false
+			break
+		}
+	}
+	if converged {
+		if _, err := p.Rollouts.MarkComplete(ctx, rollout.App, rollout.Version, p.now()); err != nil {
+			return false, fmt.Errorf("complete rollout %s@%s: %w", rollout.App, rollout.Version, err)
+		}
+		return true, nil
+	}
+	if !p.now().Before(rollout.Deadline) {
+		if _, err := p.Rollouts.MarkFailed(ctx, rollout.App, rollout.Version, p.now()); err != nil {
+			return false, fmt.Errorf("fail rollout %s@%s: %w", rollout.App, rollout.Version, err)
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func (p *CatalogPoller) restartReady() bool {
@@ -316,8 +423,7 @@ func (p *CatalogPoller) markCatalogConverged(ctx context.Context, instanceID, ap
 }
 
 func (p *CatalogPoller) earliestStoppedAt(ctx context.Context, instanceID, appName string, pending []*core.AppInstallation) (time.Time, bool, error) {
-	var earliest time.Time
-	found := false
+	earliest, found := p.localStoppedAt(appName)
 	for _, installation := range pending {
 		version := strings.TrimSpace(installation.Version)
 		if version == "" {
@@ -336,6 +442,29 @@ func (p *CatalogPoller) earliestStoppedAt(ctx context.Context, instanceID, appNa
 		}
 	}
 	return earliest, found, nil
+}
+
+func (p *CatalogPoller) localStoppedAt(app string) (time.Time, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	value, ok := p.stoppedAt[app]
+	return value, ok
+}
+
+func (p *CatalogPoller) rememberStoppedAt(app string, value time.Time) time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if existing, ok := p.stoppedAt[app]; ok {
+		return existing
+	}
+	p.stoppedAt[app] = value
+	return value
+}
+
+func (p *CatalogPoller) forgetStoppedAt(app string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.stoppedAt, app)
 }
 
 func (p *CatalogPoller) markPendingStopped(ctx context.Context, instanceID, appName string, pending []*core.AppInstallation, stoppedAt time.Time) error {

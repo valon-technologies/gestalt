@@ -2,8 +2,11 @@ package appregistry
 
 import "errors"
 
-// ErrInstallVersionLocked means another instance is already installing this app version.
-var ErrInstallVersionLocked = errors.New("app version install already in progress")
+// ErrInstallVersionLocked means another instance is admitting a rollout for this app.
+var ErrInstallVersionLocked = errors.New("app rollout admission already in progress")
+
+// ErrAppRolloutActive means the app already has an enrolling or restarting rollout.
+var ErrAppRolloutActive = errors.New("app already has an active rollout")
 
 // ErrAppVersionAlreadyInstalled means the requested app version is already in the catalog.
 var ErrAppVersionAlreadyInstalled = errors.New("app version is already installed")

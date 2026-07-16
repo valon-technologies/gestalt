@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -18,6 +20,7 @@ type recordingAppRestarter struct {
 	startErr       error
 	restartable    map[string]bool
 	restartableErr error
+	afterStop      func()
 }
 
 func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
@@ -37,6 +40,9 @@ func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
 
 func (r *recordingAppRestarter) StopApp(_ context.Context, app string) error {
 	r.stopCalls = append(r.stopCalls, app)
+	if r.stopErr == nil && r.afterStop != nil {
+		r.afterStop()
+	}
 	return r.stopErr
 }
 
@@ -46,6 +52,231 @@ func (r *recordingAppRestarter) StartApp(_ context.Context, app string) error {
 }
 
 func (r *recordingAppRestarter) AbortRestarts() {}
+
+func TestCatalogPollerRolloutEnrollmentAndCompletion(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	clock := start
+	appendRolloutFixture(t, services, "g-issues", "v1", start)
+	createRolloutFixture(t, services, "g-issues", "v1", start)
+	restarter := &recordingAppRestarter{}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return clock },
+	})
+
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("enrollment pass: %v", err)
+	}
+	if len(restarter.stopCalls) != 0 || len(restarter.startCalls) != 0 {
+		t.Fatalf("restart calls during enrollment: stop=%v start=%v", restarter.stopCalls, restarter.startCalls)
+	}
+	rollout, err := services.AppRollouts.Get(context.Background(), "g-issues")
+	if err != nil {
+		t.Fatalf("Get enrolling rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateEnrolling {
+		t.Fatalf("state = %q, want enrolling", rollout.State)
+	}
+
+	clock = start.Add(2 * time.Minute)
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("restart pass: %v", err)
+	}
+	rollout, err = services.AppRollouts.Get(context.Background(), "g-issues")
+	if err != nil {
+		t.Fatalf("Get completed rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateComplete {
+		t.Fatalf("state = %q, want complete", rollout.State)
+	}
+	if len(restarter.stopCalls) != 1 || len(restarter.startCalls) != 1 {
+		t.Fatalf("restart calls: stop=%v start=%v", restarter.stopCalls, restarter.startCalls)
+	}
+}
+
+func TestCatalogPollerRolloutWaitsForEveryEnrolledReplica(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	clock := start
+	appendRolloutFixture(t, services, "g-issues", "v1", start)
+	createRolloutFixture(t, services, "g-issues", "v1", start)
+	if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+		InstanceID:     "replica-b",
+		App:            "g-issues",
+		Version:        "v1",
+		AcknowledgedAt: start.Add(time.Minute),
+	}); err != nil {
+		t.Fatalf("Acknowledge replica-b: %v", err)
+	}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        &recordingAppRestarter{},
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return clock },
+	})
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("enrollment pass: %v", err)
+	}
+	clock = start.Add(2 * time.Minute)
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("replica-a restart pass: %v", err)
+	}
+	rollout, err := services.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get restarting rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateRestarting {
+		t.Fatalf("state = %q, want restarting", rollout.State)
+	}
+	if _, err := services.AppInstanceMaterializations.MarkRestarted(ctx, "replica-b", "g-issues", "v1", clock.Add(time.Second)); err != nil {
+		t.Fatalf("MarkRestarted replica-b: %v", err)
+	}
+	clock = clock.Add(2 * time.Second)
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("completion pass: %v", err)
+	}
+	rollout, err = services.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get completed rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateComplete {
+		t.Fatalf("state = %q, want complete", rollout.State)
+	}
+}
+
+func TestCatalogPollerRolloutFailsWhenEnrolledReplicaMissesDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	clock := start
+	appendRolloutFixture(t, services, "g-issues", "v1", start)
+	createRolloutFixture(t, services, "g-issues", "v1", start)
+	if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+		InstanceID:     "replica-b",
+		App:            "g-issues",
+		Version:        "v1",
+		AcknowledgedAt: start.Add(time.Minute),
+	}); err != nil {
+		t.Fatalf("Acknowledge replica-b: %v", err)
+	}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        &recordingAppRestarter{},
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return clock },
+	})
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("enrollment pass: %v", err)
+	}
+	clock = start.Add(15 * time.Minute)
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("deadline pass: %v", err)
+	}
+	rollout, err := services.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get failed rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateFailed {
+		t.Fatalf("state = %q, want failed", rollout.State)
+	}
+}
+
+func TestCatalogPollerLateReplicaConvergesWithoutReopeningRollout(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	start := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	clock := start
+	appendRolloutFixture(t, services, "g-issues", "v1", start)
+	createRolloutFixture(t, services, "g-issues", "v1", start)
+	firstRestarter := &recordingAppRestarter{}
+	first := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        firstRestarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return clock },
+	})
+	if err := first.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("enrollment pass: %v", err)
+	}
+	clock = start.Add(2 * time.Minute)
+	if err := first.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("completion pass: %v", err)
+	}
+
+	lateRestarter := &recordingAppRestarter{}
+	late := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        lateRestarter,
+		InstanceID:          "replica-b",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return clock },
+	})
+	if err := late.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("late replica pass: %v", err)
+	}
+	if len(lateRestarter.stopCalls) != 1 || len(lateRestarter.startCalls) != 1 {
+		t.Fatalf("late restart calls: stop=%v start=%v", lateRestarter.stopCalls, lateRestarter.startCalls)
+	}
+	rollout, err := services.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get rollout: %v", err)
+	}
+	if rollout.State != core.AppRolloutStateComplete {
+		t.Fatalf("state = %q, want complete", rollout.State)
+	}
+}
+
+func appendRolloutFixture(t *testing.T, services *coredata.Services, app, version string, at time.Time) {
+	t.Helper()
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         app,
+		FromVersion: "previous",
+		ToVersion:   version,
+		Timestamp:   at,
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+}
+
+func createRolloutFixture(t *testing.T, services *coredata.Services, app, version string, at time.Time) {
+	t.Helper()
+	if _, err := services.AppRollouts.Create(context.Background(), &core.AppRollout{
+		App:              app,
+		Version:          version,
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        at,
+		EnrollmentEndsAt: at.Add(2 * time.Minute),
+		Deadline:         at.Add(15 * time.Minute),
+	}); err != nil {
+		t.Fatalf("Create rollout: %v", err)
+	}
+}
 
 func TestCatalogPollerReconcileOnceAcknowledgesAndRestarts(t *testing.T) {
 	t.Parallel()
@@ -67,6 +298,7 @@ func TestCatalogPollerReconcileOnceAcknowledgesAndRestarts(t *testing.T) {
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:      services.AppVersionChangeRequests,
 		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
 		AppRestarter:        restarter,
 		InstanceID:          "replica-a",
 		DisableRestartDelay: true,
@@ -128,6 +360,7 @@ func TestCatalogPollerReconcileOnceWaitsForRestartDelay(t *testing.T) {
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:   services.AppVersionChangeRequests,
 		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
 		AppRestarter:     restarter,
 		InstanceID:       "replica-a",
 		Now:              func() time.Time { return clock },
@@ -160,6 +393,67 @@ func TestCatalogPollerReconcileOnceWaitsForRestartDelay(t *testing.T) {
 	}
 }
 
+func TestCatalogPollerReconcileOncePreservesDelayAfterStoppedAtWriteFailure(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	db, ok := services.DB.(*coretesting.StubIndexedDB)
+	if !ok {
+		t.Fatalf("DB type = %T", services.DB)
+	}
+	start := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	clock := start
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "previous",
+		ToVersion:   "v1",
+		Timestamp:   start,
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	restarter := &recordingAppRestarter{
+		afterStop: func() { db.Err = errors.New("stopped_at write failed") },
+	}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:   services.AppVersionChangeRequests,
+		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
+		AppRestarter:     restarter,
+		InstanceID:       "replica-a",
+		RestartDelay:     time.Minute,
+		Now:              func() time.Time { return clock },
+	})
+
+	if err := poller.ReconcileOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "stopped_at write failed") {
+		t.Fatalf("first ReconcileOnce error = %v", err)
+	}
+	db.Err = nil
+	clock = start.Add(30 * time.Second)
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("retry ReconcileOnce: %v", err)
+	}
+	if len(restarter.stopCalls) != 1 {
+		t.Fatalf("stopCalls = %v, want one stop", restarter.stopCalls)
+	}
+	if len(restarter.startCalls) != 0 {
+		t.Fatalf("startCalls = %v, want none before original delay", restarter.startCalls)
+	}
+	materialization, err := services.AppInstanceMaterializations.Get(context.Background(), "replica-a", "g-issues", "v1")
+	if err != nil {
+		t.Fatalf("Get materialization: %v", err)
+	}
+	if materialization.StoppedAt != start {
+		t.Fatalf("StoppedAt = %v, want %v", materialization.StoppedAt, start)
+	}
+	clock = start.Add(time.Minute)
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("restart ReconcileOnce: %v", err)
+	}
+	if len(restarter.startCalls) != 1 {
+		t.Fatalf("startCalls = %v, want one start", restarter.startCalls)
+	}
+}
+
 func TestCatalogPollerReconcileOncePropagatesRestartErrors(t *testing.T) {
 	t.Parallel()
 
@@ -179,6 +473,7 @@ func TestCatalogPollerReconcileOncePropagatesRestartErrors(t *testing.T) {
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:      services.AppVersionChangeRequests,
 		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
 		AppRestarter:        restarter,
 		InstanceID:          "replica-a",
 		DisableRestartDelay: true,
@@ -231,6 +526,7 @@ func TestCatalogPollerReconcileOnceRestartsOnceForMultipleVersions(t *testing.T)
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:      services.AppVersionChangeRequests,
 		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
 		AppRestarter:        restarter,
 		InstanceID:          "replica-a",
 		DisableRestartDelay: true,
@@ -288,6 +584,7 @@ func TestCatalogPollerReconcileOnceRetriesStartAfterRecordedStop(t *testing.T) {
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:      services.AppVersionChangeRequests,
 		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
 		AppRestarter:        restarter,
 		InstanceID:          "replica-a",
 		DisableRestartDelay: true,
@@ -332,6 +629,7 @@ func TestCatalogPollerReconcileOnceDoesNotResetRestartDelayForNewVersion(t *test
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:   services.AppVersionChangeRequests,
 		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
 		AppRestarter:     restarter,
 		InstanceID:       "replica-a",
 		RestartDelay:     time.Minute,
@@ -404,6 +702,7 @@ func TestCatalogPollerReconcileOnceDefersRestartUntilProvidersReady(t *testing.T
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:      services.AppVersionChangeRequests,
 		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
 		AppRestarter:        restarter,
 		InstanceID:          "replica-a",
 		DisableRestartDelay: true,
@@ -462,6 +761,7 @@ func TestCatalogPollerReconcileOnceDoesNotConvergeWithoutAppRestarter(t *testing
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:      services.AppVersionChangeRequests,
 		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
 		InstanceID:          "replica-a",
 		DisableRestartDelay: true,
 		Now:                 func() time.Time { return now },
@@ -504,6 +804,7 @@ func TestCatalogPollerReconcileOnceMarksNonLocalAppsConverged(t *testing.T) {
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:   services.AppVersionChangeRequests,
 		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
 		AppRestarter:     restarter,
 		InstanceID:       "replica-a",
 		RestartDelay:     time.Minute,
@@ -547,6 +848,7 @@ func TestCatalogPollerReconcileOnceDoesNotConvergeWhenRestartModeFails(t *testin
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:      services.AppVersionChangeRequests,
 		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
 		AppRestarter:        restarter,
 		InstanceID:          "replica-a",
 		DisableRestartDelay: true,
@@ -584,6 +886,7 @@ func TestCatalogPollerReconcileOnceReportsEveryFailingApp(t *testing.T) {
 	poller := NewCatalogPoller(CatalogPollerConfig{
 		ChangeRequests:   services.AppVersionChangeRequests,
 		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
 		AppRestarter:     &recordingAppRestarter{restartableErr: errors.New("restart mode failed")},
 		InstanceID:       "replica-a",
 		Now:              func() time.Time { return now },

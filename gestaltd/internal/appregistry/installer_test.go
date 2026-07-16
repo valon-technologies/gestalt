@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -37,6 +39,7 @@ func TestInstaller_does_not_record_change_request_on_failure(t *testing.T) {
 		Reader:         registrytest.NewReaderForServer(t, registrySrv.URL),
 		ChangeRequests: svc.AppVersionChangeRequests,
 		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
 	}
 
 	_, err = installer.Install(ctx, appregistry.InstallInput{
@@ -76,6 +79,7 @@ func TestInstaller_does_not_materialize_locally(t *testing.T) {
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
 		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
 	}
 
 	_, err := installer.Install(ctx, appregistry.InstallInput{
@@ -113,6 +117,7 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
 		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
 	}
 
 	input := appregistry.InstallInput{
@@ -131,6 +136,58 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 	}
 	if !errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled) {
 		t.Fatalf("install error = %v, want %v", err, appregistry.ErrAppVersionAlreadyInstalled)
+	}
+}
+
+func TestInstaller_creates_one_active_rollout_per_app(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+		Now:            func() time.Time { return now },
+	}
+
+	if _, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+	}); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	rollout, err := svc.AppRollouts.Get(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("Get rollout: %v", err)
+	}
+	if rollout.Version != fixture.Version || rollout.State != core.AppRolloutStateEnrolling {
+		t.Fatalf("rollout = %#v", rollout)
+	}
+	if rollout.EnrollmentEndsAt != now.Add(appregistry.DefaultRolloutEnrollmentWindow) {
+		t.Fatalf("EnrollmentEndsAt = %v", rollout.EnrollmentEndsAt)
+	}
+	if rollout.Deadline != now.Add(appregistry.DefaultRolloutTimeout) {
+		t.Fatalf("Deadline = %v", rollout.Deadline)
+	}
+
+	_, err = installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  "another-version",
+	})
+	if !errors.Is(err, appregistry.ErrAppRolloutActive) {
+		t.Fatalf("second install error = %v, want %v", err, appregistry.ErrAppRolloutActive)
 	}
 }
 
@@ -157,6 +214,7 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
 		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
 	}
 
 	if _, err := installer.Install(ctx, appregistry.InstallInput{

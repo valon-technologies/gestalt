@@ -18,7 +18,8 @@ Related docs:
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
-| `internal/appregistry` | `poller_test.go` | 11 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/appregistry` | `poller_test.go` | 16 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_lifecycle_test.go` | 6 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
@@ -118,6 +119,7 @@ go test ./internal/bootstrap -run 'TestAppProvider(Restarter|Lifecycle)' -count=
 
 - **`TestCatalogPollerReconcileOnceAcknowledgesAndRestarts`** — with the delay explicitly disabled, one reconcile pass acks, stops, and starts the configured app.
 - **`TestCatalogPollerReconcileOnceWaitsForRestartDelay`** — an unset `RestartDelay` uses the one-minute default and defers start until `stopped_at + RestartDelay`.
+- **`TestCatalogPollerReconcileOncePreservesDelayAfterStoppedAtWriteFailure`** — retrying a failed `stopped_at` write preserves the original stop time without stopping again.
 - **`TestCatalogPollerReconcileOncePropagatesRestartErrors`** — start failures leave `restarted_at` unset after `stopped_at` was recorded.
 - **`TestCatalogPollerReconcileOnceRestartsOnceForMultipleVersions`** — multiple unrestarted fleet versions for one app trigger one stop/start cycle and mark every pending row restarted.
 - **`TestCatalogPollerReconcileOnceRetriesStartAfterRecordedStop`** — a later pass resumes at `StartApp` when `stopped_at` is already persisted.
@@ -142,13 +144,18 @@ go test ./internal/bootstrap -run 'TestAppProvider(Restarter|Lifecycle)' -count=
 
 ---
 
-## [PLANNED] Rollout coordination tests
+## Rollout coordination tests
 
-- Concurrent installs for two versions of one app admit only one rollout.
-- Different apps may have active rollouts concurrently.
-- Enrollment freezes the replicas that acknowledged before the cutoff.
-- A rollout completes only after every enrolled replica records `restarted_at`.
-- Missing acknowledgements do not block completion; an acknowledged replica that misses the deadline fails the rollout.
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/coredata -run 'Test(AppRollout|AppInstanceMaterialization|AppVersionInstallLock)' -count=1
+go test ./internal/appregistry -run 'Test(Installer|CatalogPollerRollout)' -count=1
+```
+
+- Install admission and app-scoped lock tests allow one active rollout per app while allowing different apps concurrently.
+- Poller tests cover enrollment, cohort completion, missed deadlines, and late-replica convergence.
 
 ---
 

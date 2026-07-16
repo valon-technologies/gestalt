@@ -54,6 +54,26 @@ type AppInstanceMaterialization struct {
 	RestartedAt    time.Time
 }
 
+type AppRolloutState string
+
+const (
+	AppRolloutStateEnrolling  AppRolloutState = "enrolling"
+	AppRolloutStateRestarting AppRolloutState = "restarting"
+	AppRolloutStateComplete   AppRolloutState = "complete"
+	AppRolloutStateFailed     AppRolloutState = "failed"
+)
+
+type AppRollout struct {
+	App              string
+	Version          string
+	State            AppRolloutState
+	CreatedAt        time.Time
+	EnrollmentEndsAt time.Time
+	Deadline         time.Time
+	CompletedAt      time.Time
+	FailedAt         time.Time
+}
+
 type ExternalCredentialGrant struct {
 	AccessToken       string
 	RefreshToken      string

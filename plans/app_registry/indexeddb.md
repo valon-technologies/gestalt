@@ -58,7 +58,8 @@ App registry stores:
 
 ```text
 app_version_change_requests      ← accepted version changes (append-only)
-app_version_install_locks        ← fleet install lock per (app, version)
+app_version_install_locks        ← install admission lock per app
+app_rollouts                     ← current rollout per app
 app_instance_materializations    ← per-replica ack of fleet-known versions
 ```
 
@@ -76,6 +77,7 @@ Access install services after bootstrap via `Result.Services` / `prepared.Servic
 
 ```text
 Services.AppVersionChangeRequests   ← install prototype
+Services.AppRollouts                ← rollout state
 Services.DB                         ← underlying main-db handle
 ```
 
@@ -218,8 +220,7 @@ States:
 - `complete` — every enrolled replica recorded `restarted_at`.
 - `failed` — the cohort did not converge before the deadline.
 
-A terminal record may be replaced when the next version is admitted. A non-terminal record causes `POST …/install` for the same app to return **409 Conflict**.
-Terminal transitions record `completed_at` or `failed_at`.
+A terminal record may be replaced when the next version is admitted. A non-terminal record causes `POST …/install` for the same app to return **409 Conflict**. Terminal transitions record `completed_at` or `failed_at`.
 
 ### Service API
 
