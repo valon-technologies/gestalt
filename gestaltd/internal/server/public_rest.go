@@ -2,26 +2,13 @@ package server
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
-	gestaltproto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
-	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/grpc/status"
 )
-
-var errRESTResponseWritten = errors.New("rest response written")
-
-// preservedSecurityResponseHeaders are installed by securityHeadersMiddleware and must
-// survive App OperationResult passthrough.
-var preservedSecurityResponseHeaders = []string{
-	"Content-Security-Policy",
-	"X-Content-Type-Options",
-	"X-Frame-Options",
-	"Strict-Transport-Security",
-}
 
 func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Handler, error) {
 	if cfg.Transport == nil || cfg.Invoker == nil {
@@ -34,15 +21,20 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 	if err != nil {
 		return nil, nil, err
 	}
-	mux := runtime.NewServeMux(
-		runtime.WithForwardResponseOption(forwardOperationResult),
-		runtime.WithErrorHandler(publicRESTErrorHandler),
-	)
+	mux := runtime.NewServeMux(runtime.WithErrorHandler(publicRESTErrorHandler))
 	if err := publicrpc.RegisterRESTGateway(context.Background(), mux, conn.ClientConn(), servers); err != nil {
 		conn.Close()
 		return nil, nil, err
 	}
-	return conn, mux, nil
+	return conn, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, err := requestBearerTokenPreferringHeader(r)
+		if err == nil && token != "" {
+			if headerToken, headerErr := requestBearerToken(r); headerErr == nil && headerToken == "" {
+				r.Header.Set("Authorization", "Bearer "+token)
+			}
+		}
+		mux.ServeHTTP(w, r)
+	}), nil
 }
 
 func buildPublicServers(cfg publicGRPCConfig) publicrpc.Servers {
@@ -70,58 +62,14 @@ func buildPublicServers(cfg publicGRPCConfig) publicrpc.Servers {
 	return servers
 }
 
-func forwardOperationResult(_ context.Context, w http.ResponseWriter, resp gproto.Message) error {
-	result, ok := resp.(*gestaltproto.OperationResult)
-	if !ok {
-		return nil
+func publicRESTErrorHandler(_ context.Context, _ *runtime.ServeMux, _ runtime.Marshaler, w http.ResponseWriter, _ *http.Request, err error) {
+	st := status.Convert(err)
+	httpStatus := runtime.HTTPStatusFromCode(st.Code())
+	if httpStatus == 0 {
+		httpStatus = http.StatusInternalServerError
 	}
-	writeProtoOperationResult(w, result)
-	return errRESTResponseWritten
-}
-
-func writeProtoOperationResult(w http.ResponseWriter, result *gestaltproto.OperationResult) {
-	if w == nil || result == nil {
-		return
-	}
-	headers := w.Header()
-	preserved := make(map[string][]string, len(preservedSecurityResponseHeaders))
-	for _, name := range preservedSecurityResponseHeaders {
-		if values := headers.Values(name); len(values) > 0 {
-			preserved[name] = append([]string(nil), values...)
-		}
-	}
-	headers.Del("Content-Type") // grpc-gateway's default response type.
-	for name, values := range result.GetHeaders() {
-		if values == nil {
-			continue
-		}
-		for i, value := range values.GetValues() {
-			if i == 0 {
-				headers.Set(name, value)
-			} else {
-				headers.Add(name, value)
-			}
-		}
-	}
-	for name, values := range preserved {
-		headers.Del(name)
-		for _, value := range values {
-			headers.Add(name, value)
-		}
-	}
-	statusCode := int(result.GetStatus())
-	if statusCode == 0 {
-		statusCode = http.StatusOK
-	}
-	w.WriteHeader(statusCode)
-	if body := result.GetBody(); len(body) > 0 {
-		_, _ = w.Write(body)
-	}
-}
-
-func publicRESTErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, errRESTResponseWritten) {
-		return
-	}
-	runtime.DefaultHTTPErrorHandler(ctx, mux, marshaler, w, r, err)
+	writeJSON(w, httpStatus, apiErrorResponse{
+		Error: st.Message(),
+		Code:  st.Code().String(),
+	})
 }

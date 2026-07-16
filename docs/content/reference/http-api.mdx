@@ -14,7 +14,7 @@ Workflow and Agent providers never appear in paths. Mutations carry `provider` o
 
 `POST /api/v2/identity/authorize` and `POST /api/v2/identity/token` are unauthenticated. Every other `/api/v2` route requires `Authorization: Bearer <token>`.
 
-App `Invoke` and `InvokeGraphQL` forward the provider's raw HTTP status, headers, and body instead of JSON-encoding `OperationResult`.
+App `Invoke` and `InvokeGraphQL` return an outer HTTP 200 with a protobuf-JSON `OperationResult` envelope; the provider's status, headers, and body remain inside that envelope. Gateway, authentication, authorization, routing, and serialization failures use outer non-2xx canonical errors.
 
 | Service | Example routes |
 | --- | --- |
