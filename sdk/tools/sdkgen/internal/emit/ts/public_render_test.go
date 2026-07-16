@@ -34,7 +34,7 @@ func TestRenderPublicConvertersAlwaysEmitWireMessages(t *testing.T) {
 		}},
 	}
 
-	out := renderPublicConverters(view)
+	out := renderPublicConverters(view, ServerPublicImports())
 	if !strings.Contains(out, "export function toWireAppInvokeRequest") {
 		t.Fatalf("missing wire converter:\n%s", out)
 	}
@@ -68,7 +68,7 @@ func TestRenderPublicAppClientAlwaysUsesWireConverter(t *testing.T) {
 		}},
 	}}
 
-	out := renderPublicAppClient(services)
+	out := renderPublicAppClient(services, ServerPublicImports())
 	if !strings.Contains(out, "toWireAppInvokeRequest(request)") {
 		t.Fatalf("app client must call wire converter:\n%s", out)
 	}

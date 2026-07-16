@@ -3,7 +3,7 @@
   "entryPoints": [
     "src/index.ts",
     "src/build.ts",
-    "src/mount.ts",
+    "src/client/index.ts",
     "src/providers/runtime-public.ts",
     "src/schema.ts",
     "src/telemetry.ts",
@@ -22,8 +22,7 @@
     "src/s3.ts",
     "src/secrets.ts",
     "src/test.ts",
-    "src/workflow.ts",
-    "src/vite.js"
+    "src/workflow.ts"
   ],
   "tsconfig": "tsconfig.json",
   "readme": "README.md",

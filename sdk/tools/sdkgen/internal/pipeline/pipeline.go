@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicpython"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicrust"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicts"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publictsweb"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/python"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/rust"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/ts"
@@ -227,6 +228,7 @@ func Emitters() []emit.Emitter {
 	return []emit.Emitter{
 		ts.New(),
 		publicts.New(),
+		publictsweb.New(),
 		python.New(),
 		publicpython.New(),
 		golang.New(),

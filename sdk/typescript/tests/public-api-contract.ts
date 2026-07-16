@@ -7,6 +7,10 @@ import {
   type WorkflowEvent,
 } from "@valon-technologies/gestalt";
 
+// @ts-expect-error mount moved to gestalt-web.
+import { base } from "@valon-technologies/gestalt/mount";
+// @ts-expect-error vite moved to gestalt-web.
+import { gestalt } from "@valon-technologies/gestalt/vite";
 // @ts-expect-error Root package must not expose protocol helper schemas.
 import { StructSchema as RootStructSchema } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protocol helper types.
@@ -157,3 +161,5 @@ void removedInternal_createSecretsService;
 void removedInternal_createProviderService;
 void removedInternal_createRuntimeService;
 void removedInternal_createS3Service;
+void base;
+void gestalt;

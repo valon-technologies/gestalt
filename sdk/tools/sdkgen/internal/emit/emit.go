@@ -20,6 +20,7 @@ const (
 	TargetGo           Target = "go"
 	TargetRust         Target = "rust"
 	TargetPublicTS     Target = "public-ts"
+	TargetPublicTSWeb  Target = "public-ts-web"
 	TargetPublicPython Target = "public-python"
 	TargetPublicGo     Target = "public-go"
 	TargetPublicRust   Target = "public-rust"
@@ -34,7 +35,7 @@ func AllTargets() []Target {
 // already a provider target.
 func baseTarget(t Target) Target {
 	switch t {
-	case TargetPublicTS:
+	case TargetPublicTS, TargetPublicTSWeb:
 		return TargetTS
 	case TargetPublicPython:
 		return TargetPython
