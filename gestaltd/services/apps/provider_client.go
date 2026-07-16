@@ -13,6 +13,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	protobuf "google.golang.org/protobuf/proto"
@@ -207,13 +208,14 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		return nil, err
 	}
 	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
-		Operation:        operation,
-		Params:           msg,
-		Token:            token,
-		ConnectionParams: core.ConnectionParams(ctx),
-		InvocationId:     invocationIDFromContext(ctx),
-		IdempotencyKey:   invocation.IdempotencyKeyFromContext(ctx),
-		Context:          reqCtx,
+		Operation:         operation,
+		Params:            msg,
+		Token:             token,
+		CallerBearerToken: providergateway.CallerTokenFromContext(ctx),
+		ConnectionParams:  core.ConnectionParams(ctx),
+		InvocationId:      invocationIDFromContext(ctx),
+		IdempotencyKey:    invocation.IdempotencyKeyFromContext(ctx),
+		Context:           reqCtx,
 	})
 	if err != nil {
 		return nil, remoteProviderExecuteError(err)

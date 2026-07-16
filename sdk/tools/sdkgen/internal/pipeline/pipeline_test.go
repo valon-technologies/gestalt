@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/toolchain"
 )
 
@@ -111,6 +112,19 @@ func TestEmittersAreDeterministic(t *testing.T) {
 		if !bytes.Equal(renderAll(first, e.HeaderStyle()), renderAll(second, e.HeaderStyle())) {
 			t.Errorf("emitter %s output is not byte-stable", e.Target())
 		}
+	}
+}
+
+func TestPublicSurfaceMethodCounts(t *testing.T) {
+	t.Parallel()
+	schema := realSchema(t)
+	view := publicsurface.Build(schema)
+
+	if got := publicsurface.GRPCMethodCount(view); got != 69 {
+		t.Errorf("public gRPC methods = %d, want 69", got)
+	}
+	if got := publicsurface.RESTMethodCount(view); got != 41 {
+		t.Errorf("public REST methods = %d, want 41", got)
 	}
 }
 

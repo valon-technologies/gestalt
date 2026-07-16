@@ -334,6 +334,7 @@ export function toWireExecuteRequest(
       ? { context: toWireRequestContext(value.context) }
       : {}),
     idempotencyKey: value.idempotencyKey ?? "",
+    callerBearerToken: value.callerBearerToken ?? "",
   });
 }
 
@@ -350,6 +351,7 @@ export function fromWireExecuteRequest(
       ? { context: fromWireRequestContext(value.context) }
       : {}),
     idempotencyKey: value.idempotencyKey,
+    callerBearerToken: value.callerBearerToken,
   };
 }
 

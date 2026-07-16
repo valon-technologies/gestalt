@@ -178,6 +178,11 @@ export interface ExecuteRequest {
   invocationId: string;
   context?: RequestContext;
   idempotencyKey: string;
+  /**
+   * Original caller bearer token for nested Identity grant RPCs. Distinct from
+   * token, which carries the resolved provider connection credential.
+   */
+  callerBearerToken: string;
 }
 
 /**
@@ -597,6 +602,7 @@ export class AppProvider {
       invocationId,
       idempotencyKey,
       connectionParams: {},
+      callerBearerToken: "",
       ...(params !== undefined ? { params } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<ExecuteRequest>;

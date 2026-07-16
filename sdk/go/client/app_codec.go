@@ -325,13 +325,14 @@ func ToWireExecuteRequest(value *ExecuteRequest) *proto.ExecuteRequest {
 		return nil
 	}
 	out := &proto.ExecuteRequest{
-		Operation:        value.Operation,
-		Params:           toWireStruct(value.Params),
-		Token:            value.Token,
-		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
-		Context:          ToWireRequestContext(value.Context),
-		IdempotencyKey:   value.IdempotencyKey,
+		Operation:         value.Operation,
+		Params:            toWireStruct(value.Params),
+		Token:             value.Token,
+		ConnectionParams:  value.ConnectionParams,
+		InvocationId:      value.InvocationId,
+		Context:           ToWireRequestContext(value.Context),
+		IdempotencyKey:    value.IdempotencyKey,
+		CallerBearerToken: value.CallerBearerToken,
 	}
 	return out
 }
@@ -341,13 +342,14 @@ func FromWireExecuteRequest(value *proto.ExecuteRequest) *ExecuteRequest {
 		return nil
 	}
 	out := &ExecuteRequest{
-		Operation:        value.Operation,
-		Params:           fromWireStruct(value.Params),
-		Token:            value.Token,
-		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
-		Context:          FromWireRequestContext(value.Context),
-		IdempotencyKey:   value.IdempotencyKey,
+		Operation:         value.Operation,
+		Params:            fromWireStruct(value.Params),
+		Token:             value.Token,
+		ConnectionParams:  value.ConnectionParams,
+		InvocationId:      value.InvocationId,
+		Context:           FromWireRequestContext(value.Context),
+		IdempotencyKey:    value.IdempotencyKey,
+		CallerBearerToken: value.CallerBearerToken,
 	}
 	return out
 }

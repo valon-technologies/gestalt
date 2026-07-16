@@ -427,6 +427,7 @@ class ExecuteRequest(_message.Message):
     INVOCATION_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    CALLER_BEARER_TOKEN_FIELD_NUMBER: _ClassVar[int]
     operation: str
     params: _struct_pb2.Struct
     token: str
@@ -434,7 +435,8 @@ class ExecuteRequest(_message.Message):
     invocation_id: str
     context: RequestContext
     idempotency_key: str
-    def __init__(self, operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., token: _Optional[str] = ..., connection_params: _Optional[_Mapping[str, str]] = ..., invocation_id: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    caller_bearer_token: str
+    def __init__(self, operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., token: _Optional[str] = ..., connection_params: _Optional[_Mapping[str, str]] = ..., invocation_id: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., caller_bearer_token: _Optional[str] = ...) -> None: ...
 
 class GetSessionCatalogRequest(_message.Message):
     __slots__ = ()

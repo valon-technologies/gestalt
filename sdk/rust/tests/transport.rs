@@ -421,6 +421,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 tool_refs_set: true,
                 ..Default::default()
             }),
+            caller_bearer_token: String::new(),
         })
         .await
         .expect("execute")

@@ -67,12 +67,40 @@ func renderCodecSupport(used map[string]bool) string {
 		add(name)
 	}
 
-	var out []string
+	var fnChunks []string
 	for _, chunk := range strings.Split(strings.TrimRight(codecSupportFile, "\n"), "\n\n") {
-		if m := supportFnPattern.FindStringSubmatch(chunk); m != nil && !keep[m[1]] {
+		if m := supportFnPattern.FindStringSubmatch(chunk); m != nil {
+			if keep[m[1]] {
+				fnChunks = append(fnChunks, chunk)
+			}
 			continue
 		}
-		out = append(out, chunk)
+		if strings.HasPrefix(chunk, "use ") || strings.HasPrefix(chunk, "//!") {
+			continue
+		}
+		fnChunks = append(fnChunks, chunk)
 	}
-	return strings.Join(out, "\n\n") + "\n"
+
+	needsTime := keep["to_wire_timestamp"] || keep["from_wire_timestamp"] ||
+		keep["to_wire_duration"] || keep["from_wire_duration"]
+	needsStatus := keep["to_wire_status"] || keep["from_wire_status"]
+
+	var header strings.Builder
+	header.WriteString("//! Crate-private converters between the well-known wire types and their\n")
+	header.WriteString("//! native representations, shared by the generated codec modules.\n\n")
+	if needsTime {
+		header.WriteString("use std::time::{Duration, SystemTime, UNIX_EPOCH};\n")
+	}
+	if needsStatus {
+		if needsTime {
+			header.WriteByte('\n')
+		}
+		header.WriteString("use crate::generated::google::rpc::Status;\n")
+		header.WriteString("use crate::rpc_support::RpcStatus;\n")
+	}
+	if len(fnChunks) == 0 {
+		return header.String()
+	}
+	header.WriteByte('\n')
+	return header.String() + strings.Join(fnChunks, "\n\n") + "\n"
 }

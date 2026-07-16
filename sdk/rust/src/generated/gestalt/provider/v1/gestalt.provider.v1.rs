@@ -468,6 +468,10 @@ pub struct ExecuteRequest {
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "9")]
     pub idempotency_key: ::prost::alloc::string::String,
+    /// Original caller bearer token for nested Identity grant RPCs. Distinct from
+    /// token, which carries the resolved provider connection credential.
+    #[prost(string, tag = "10")]
+    pub caller_bearer_token: ::prost::alloc::string::String,
 }
 /// GetSessionCatalogRequest asks a provider for request-scoped catalog
 /// extensions.

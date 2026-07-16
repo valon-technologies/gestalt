@@ -37,11 +37,11 @@ func TestRenderIntoTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range emittersFor(targets) {
-		set, err := EmitFormatted(e, schema, scratch)
+		set, err := EmitFormatted(e, schema, scratch, root)
 		if err != nil {
 			t.Fatalf("emit %s: %v", e.Target(), err)
 		}
-		report, err := fileset.Reconcile(filepath.Join(root, filepath.FromSlash(e.OutputRoot())), set, e.HeaderStyle())
+		report, err := fileset.Reconcile(filepath.Join(root, filepath.FromSlash(e.OutputRoot())), set, e.HeaderStyle(), nil)
 		if err != nil {
 			t.Fatalf("reconcile %s: %v", e.Target(), err)
 		}

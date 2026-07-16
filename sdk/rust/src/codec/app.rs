@@ -174,6 +174,7 @@ pub(crate) fn to_wire_execute_request(value: ExecuteRequest) -> v1::ExecuteReque
         invocation_id: value.invocation_id,
         context: value.context.map(to_wire_request_context),
         idempotency_key: value.idempotency_key,
+        caller_bearer_token: value.caller_bearer_token,
     }
 }
 

@@ -244,6 +244,11 @@ pub struct ExecuteRequest {
     pub context: Option<RequestContext>,
     /// The `idempotency_key` field.
     pub idempotency_key: String,
+    /// Original caller bearer token for nested Identity grant RPCs. Distinct from
+    /// token, which carries the resolved provider connection credential.
+    ///
+    /// The `caller_bearer_token` field.
+    pub caller_bearer_token: String,
 }
 
 /// GetSessionCatalogRequest asks a provider for request-scoped catalog

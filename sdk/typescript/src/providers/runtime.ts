@@ -620,6 +620,7 @@ export function createProviderService(
             request.connectionParams,
             request.context,
             request.idempotencyKey,
+            request.callerBearerToken,
           ),
 	        ),
       );
@@ -932,12 +933,14 @@ function providerRequest(
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
   idempotencyKey = "",
+  callerBearerToken = "",
 ): Request {
   const credential = requestContext?.credential;
   const access = requestContext?.access;
   const host = requestContext?.host;
   return attachRequestHelpers({
     token,
+    callerBearerToken: callerBearerToken.trim(),
     connectionParams: {
       ...connectionParams,
     },

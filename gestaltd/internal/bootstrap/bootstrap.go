@@ -1467,7 +1467,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		startupWorkflowConfigReconcile = nil
 	}
 
-	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization, prepared.Services.Users)
+	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization, prepared.Services.Users, prepared.CallerTokenIssuer, prepared.Deps.CallerTokenPublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -2397,6 +2397,8 @@ func buildPublicGatewayTransport(
 	auth core.IdentityProvider,
 	authorization map[string]core.AuthorizationProvider,
 	users providergateway.UserStore,
+	callerTokenIssuer *providergateway.CallerTokenIssuer,
+	callerTokenPublicKey string,
 ) (*providergateway.ProviderGatewayTransport, error) {
 	if auth == nil {
 		return nil, nil
@@ -2409,6 +2411,8 @@ func buildPublicGatewayTransport(
 	transport.SetIdentityProvider(auth)
 	transport.SetUserStore(users)
 	transport.SetPublicMethods(registry)
+	transport.SetCallerTokenIssuer(callerTokenIssuer)
+	transport.SetCallerTokenPublicKey(callerTokenPublicKey)
 	if cfg != nil {
 		if name, _, err := cfg.SelectedAuthorizationProvider(); err == nil && name != "" && authorization != nil {
 			transport.SetAuthorizationProvider(authorization[name])

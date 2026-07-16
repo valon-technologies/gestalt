@@ -8,7 +8,8 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent_provider::{AgentToolRef, agent_tool_ref_from_proto};
 use crate::api::{
-    Access, Credential, HTTPSubjectRequest, Request, Response, Subject, scope_request_context,
+    Access, Credential, HTTPSubjectRequest, Request, Response, Subject, scope_provider_request,
+    scope_request_context,
 };
 use crate::catalog::{catalog_to_proto, object_map};
 use crate::codec::workflow::to_wire_workflow_definition_spec;
@@ -200,8 +201,10 @@ where
     ) -> std::result::Result<GrpcResponse<ProtoOperationResult>, Status> {
         let request = request.into_inner();
         let context = request.context.clone();
-        let result = scope_request_context(
+        let caller_bearer_token = request.caller_bearer_token.clone();
+        let result = scope_provider_request(
             context,
+            caller_bearer_token,
             self.router.execute(
                 Arc::clone(&self.provider),
                 &request.operation,

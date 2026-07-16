@@ -507,7 +507,9 @@ test("Request.authentication forwards the caller bearer token", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const auth = await request("caller-access-token").identity();
+    const req = request("provider-access-token");
+    req.callerBearerToken = "caller-access-token";
+    const auth = await req.identity();
     const response = await auth.userInfo({});
 
     expect(response).toEqual({

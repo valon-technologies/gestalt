@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -21,6 +22,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 
@@ -82,24 +84,50 @@ func externalCredentialsProviderServer(cfg publicGRPCConfig) proto.ExternalCrede
 }
 
 func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTransport) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		origin, ok := publicrpc.PublicOriginFromContext(ctx)
-		if !ok {
-			return nil, status.Error(codes.Unauthenticated, "bearer token is required")
-		}
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		ctx = providergateway.StripClientCallerBearerMetadata(ctx)
 		msg, ok := req.(gproto.Message)
 		if !ok {
 			return nil, status.Error(codes.Internal, "request type mismatch")
 		}
-		p, adapted, err := transport.PreparePublicRequest(ctx, origin.FullMethod, msg)
+		fullMethod := info.FullMethod
+		if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok && strings.TrimSpace(origin.FullMethod) != "" {
+			fullMethod = origin.FullMethod
+		}
+		ctx = publicrpc.WithPublicOrigin(ctx, fullMethod)
+		p, adapted, err := transport.PreparePublicRequest(ctx, fullMethod, msg)
 		if err != nil {
 			return nil, err
 		}
 		if p != nil {
 			ctx = principal.WithPrincipal(ctx, principal.Canonicalized(p))
+			var err error
+			ctx, err = transport.WithInvocationCallerToken(ctx, invokingPrincipalSubjectID(p))
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "%v", err)
+			}
+		}
+		if token := publicBearerTokenFromContext(ctx); token != "" {
+			ctx = providergateway.WithValidatedPublicCallerBearer(ctx, fullMethod, token)
 		}
 		return handler(ctx, adapted)
 	}
+}
+
+func publicBearerTokenFromContext(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	for _, value := range md.Get("authorization") {
+		value = strings.TrimSpace(value)
+		if len(value) > 7 && strings.EqualFold(value[:7], "Bearer ") {
+			if token := strings.TrimSpace(value[7:]); token != "" {
+				return token
+			}
+		}
+	}
+	return ""
 }
 
 func (s *Server) publicGRPCMiddleware(next http.Handler) http.Handler {

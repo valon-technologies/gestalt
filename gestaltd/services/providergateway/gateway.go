@@ -55,6 +55,7 @@ type UserStore interface {
 
 type ProviderGatewayTransport struct {
 	authorization        AuthorizationProvider
+	callerTokenIssuer    *CallerTokenIssuer
 	callerTokenPublicKey string
 	identity             core.IdentityProvider
 	users                UserStore
@@ -78,6 +79,32 @@ func (t *ProviderGatewayTransport) SetCallerTokenPublicKey(publicKey string) {
 		return
 	}
 	t.callerTokenPublicKey = strings.TrimSpace(publicKey)
+}
+
+func (t *ProviderGatewayTransport) SetCallerTokenIssuer(issuer *CallerTokenIssuer) {
+	if t == nil {
+		return
+	}
+	t.callerTokenIssuer = issuer
+}
+
+// WithInvocationCallerToken issues a short-lived provider-gateway caller token
+// for the subject and stores it on ctx. Public invocations use this instead of
+// propagating the caller's reusable bearer credential to app providers.
+func (t *ProviderGatewayTransport) WithInvocationCallerToken(ctx context.Context, subjectID string) (context.Context, error) {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" || t == nil || t.callerTokenIssuer == nil {
+		return ctx, nil
+	}
+	claims, err := GenerateCallerTokenClaims(subjectID, time.Now().UTC())
+	if err != nil {
+		return ctx, fmt.Errorf("provider gateway caller token: %w", err)
+	}
+	token, err := t.callerTokenIssuer.Issue(claims)
+	if err != nil {
+		return ctx, fmt.Errorf("provider gateway caller token: %w", err)
+	}
+	return WithCallerToken(ctx, token), nil
 }
 
 func (t *ProviderGatewayTransport) SetIdentityProvider(identity core.IdentityProvider) {

@@ -98,6 +98,7 @@ type workflowCtxKey struct{}
 type toolRefsCtxKey struct{}
 type agentInvocationCtxKey struct{}
 type internalConnectionAccessCtxKey struct{}
+type callerBearerTokenCtxKey struct{}
 
 type InvocationSurface string
 
@@ -374,6 +375,23 @@ func WithInternalConnectionAccess(ctx context.Context) context.Context {
 func InternalConnectionAccessFromContext(ctx context.Context) bool {
 	allowed, _ := ctx.Value(internalConnectionAccessCtxKey{}).(bool)
 	return allowed
+}
+
+// WithCallerBearerToken stores the validated public caller bearer token for
+// downstream provider Execute requests.
+func WithCallerBearerToken(ctx context.Context, token string) context.Context {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, callerBearerTokenCtxKey{}, token)
+}
+
+// CallerBearerTokenFromContext returns the validated caller bearer token when
+// present.
+func CallerBearerTokenFromContext(ctx context.Context) string {
+	token, _ := ctx.Value(callerBearerTokenCtxKey{}).(string)
+	return strings.TrimSpace(token)
 }
 
 const xForwardedForHeader = "X-Forwarded-For"

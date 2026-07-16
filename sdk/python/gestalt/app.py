@@ -178,6 +178,9 @@ class ExecuteRequest:
     invocation_id: str = ""
     context: RequestContext | None = None
     idempotency_key: str = ""
+    #: Original caller bearer token for nested Identity grant RPCs. Distinct from
+    #: token, which carries the resolved provider connection credential.
+    caller_bearer_token: str = ""
 
 
 @dataclass(frozen=True, slots=True)

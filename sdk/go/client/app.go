@@ -160,6 +160,9 @@ type ExecuteRequest struct {
 	InvocationId     string
 	Context          *RequestContext
 	IdempotencyKey   string
+	// Original caller bearer token for nested Identity grant RPCs. Distinct from
+	// token, which carries the resolved provider connection credential.
+	CallerBearerToken string
 }
 
 // GetSessionCatalogRequest is the native message type for gestalt.provider.v1.GetSessionCatalogRequest.

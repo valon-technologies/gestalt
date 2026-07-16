@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import builtins
+import contextlib
+import contextvars
 import dataclasses
 import json
 import threading
@@ -30,6 +32,8 @@ else:
 
 
 if TYPE_CHECKING:
+    from gestalt.public.client import GestaltGrpcClient
+
     from ._agent import AgentToolRef
     from ._workflow import Workflow, WorkflowRunContext
     from .agent import Agent
@@ -38,6 +42,28 @@ if TYPE_CHECKING:
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
+
+_PLUGIN_REQUEST: contextvars.ContextVar["Request | None"] = contextvars.ContextVar(
+    "gestalt_plugin_request",
+    default=None,
+)
+
+
+def current_plugin_request() -> "Request | None":
+    """Return the active provider handler request, when inside Execute."""
+
+    return _PLUGIN_REQUEST.get()
+
+
+@contextlib.contextmanager
+def plugin_request_scope(request: "Request"):
+    """Bind the active provider request for nested public client calls."""
+
+    token = _PLUGIN_REQUEST.set(request)
+    try:
+        yield
+    finally:
+        _PLUGIN_REQUEST.reset(token)
 
 
 def parse_subject_id(subject_id: str) -> tuple[str, str] | None:
@@ -108,6 +134,7 @@ class Request:
     """Host-provided request context for an operation invocation."""
 
     token: str = ""
+    caller_bearer_token: str = ""
     connection_params: dict[str, str] = dataclasses.field(default_factory=dict)
     subject: Subject = dataclasses.field(default_factory=Subject)
     credential: Credential = dataclasses.field(default_factory=Credential)
@@ -153,6 +180,16 @@ class Request:
         client for this provider process."""
 
         return _shared_authorization_client()
+
+    def gestalt(self) -> "GestaltGrpcClient":
+        """Return a public gRPC client bound to this request's context and caller."""
+
+        from gestalt.public.client import gestalt_from_context
+
+        return gestalt_from_context(
+            context=self.context,
+            caller_bearer_token=self.caller_bearer_token,
+        )
 
     def _native_context(self) -> "RequestContext | None":
         return native_request_context(self.context)

@@ -102,6 +102,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	ctx = withRequestContext(ctx, req.GetContext())
+	ctx = WithIdentityCallContext(ctx, IdentityCallContext{CallerBearerToken: req.GetCallerBearerToken()})
 	ctx = WithIdempotencyKey(ctx, req.GetIdempotencyKey())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
@@ -311,4 +312,10 @@ type requestContextKey struct{}
 func requestContextFromContext(ctx context.Context) *proto.RequestContext {
 	reqCtx, _ := ctx.Value(requestContextKey{}).(*proto.RequestContext)
 	return reqCtx
+}
+
+// RequestContextFromContext returns the wire request context stored on a
+// provider handler context, if any.
+func RequestContextFromContext(ctx context.Context) *proto.RequestContext {
+	return requestContextFromContext(ctx)
 }

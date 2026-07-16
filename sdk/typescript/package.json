@@ -30,6 +30,9 @@
     "./services/secrets": "./src/secrets.ts",
     "./services/test": "./src/test.ts",
     "./services/workflow": "./src/workflow.ts",
+    "./client": "./src/client/index.ts",
+    "./client/rest": "./src/client/rest.ts",
+    "./client/grpc": "./src/client/grpc.ts",
     "./vite": {
       "types": "./src/vite.d.ts",
       "default": "./src/vite.js"

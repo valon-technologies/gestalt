@@ -16,6 +16,7 @@ import {
   parseHostServiceTarget,
   requireHostServiceTarget,
 } from "./host-service.ts";
+import { createBoundGestaltClient } from "./client/bound_gestalt.ts";
 import { Workflow } from "./workflow.ts";
 
 export interface Subject {
@@ -74,6 +75,7 @@ export interface Host {
  */
 export interface Request {
   token: string;
+  callerBearerToken: string;
   connectionParams: Record<string, string>;
   subject: Subject;
   agentSubject: Subject;
@@ -95,6 +97,8 @@ export interface Request {
   agent(options?: { timeoutMs?: number | undefined }): Promise<Agent>;
   /** Returns the generated Workflow client carrying this request's context. */
   workflows(options?: { timeoutMs?: number | undefined }): Promise<Workflow>;
+  /** Returns a bound public Gestalt client over the host-service relay. */
+  gestalt(): Promise<import("./client/types.ts").GestaltGrpcClient>;
 }
 
 /**
@@ -199,8 +203,9 @@ export function request(
   toolRefsSet = false,
   requestContext?: RequestContext,
 ): Request {
-  const req: Omit<Request, "app" | "identity" | "agent" | "workflows"> = {
+  const req: Omit<Request, "app" | "identity" | "agent" | "workflows" | "gestalt"> = {
     token,
+    callerBearerToken: "",
     connectionParams: {
       ...connectionParams,
     },
@@ -249,18 +254,20 @@ export function request(
   return attachRequestHelpers(req);
 }
 
-export function attachRequestHelpers<T extends Omit<Request, "app" | "identity" | "agent" | "workflows">>(
+export function attachRequestHelpers<T extends Omit<Request, "app" | "identity" | "agent" | "workflows" | "gestalt">>(
   input: T,
 ): Request {
   const req = input as unknown as Request;
   req.app = async (options) =>
     App.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
   req.identity = async (options) =>
-    connectIdentity(req.token, options);
+    connectIdentity(req.callerBearerToken, options);
   req.agent = async (options) =>
     Agent.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
   req.workflows = async (options) =>
     Workflow.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
+  req.gestalt = async () =>
+    createBoundGestaltClient(req.__requestContext, req.callerBearerToken);
   return req;
 }
 

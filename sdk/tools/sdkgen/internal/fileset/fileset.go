@@ -105,8 +105,9 @@ type Report struct {
 // Reconcile makes root match set: changed and missing files are written with
 // the generated-by header, and files under root that carry the marker but are
 // no longer in the set are deleted. Files without the marker are never
-// touched, so handwritten siblings are structurally safe.
-func Reconcile(root string, set *FileSet, style CommentStyle) (Report, error) {
+// touched, so handwritten siblings are structurally safe. staleIgnore excludes
+// matching relative paths from stale deletion.
+func Reconcile(root string, set *FileSet, style CommentStyle, staleIgnore func(rel string) bool) (Report, error) {
 	var report Report
 	expected := map[string]bool{}
 	for _, f := range set.Files() {
@@ -126,7 +127,7 @@ func Reconcile(root string, set *FileSet, style CommentStyle) (Report, error) {
 		report.Written = append(report.Written, f.Path)
 	}
 
-	stale, err := generatedFiles(root, func(rel string) bool { return !expected[rel] })
+	stale, err := generatedFiles(root, staleFilter(expected, staleIgnore))
 	if err != nil {
 		return report, err
 	}
@@ -168,7 +169,8 @@ type DriftEntry struct {
 type Drift []DriftEntry
 
 // Check compares the rendered set against root without mutating anything.
-func Check(root string, set *FileSet, style CommentStyle) (Drift, error) {
+// staleIgnore excludes matching relative paths from stale detection.
+func Check(root string, set *FileSet, style CommentStyle, staleIgnore func(rel string) bool) (Drift, error) {
 	var drift Drift
 	expected := map[string]bool{}
 	for _, f := range set.Files() {
@@ -184,7 +186,7 @@ func Check(root string, set *FileSet, style CommentStyle) (Drift, error) {
 			drift = append(drift, DriftEntry{Kind: Modified, Path: f.Path})
 		}
 	}
-	stale, err := generatedFiles(root, func(rel string) bool { return !expected[rel] })
+	stale, err := generatedFiles(root, staleFilter(expected, staleIgnore))
 	if err != nil {
 		return nil, err
 	}
@@ -295,6 +297,18 @@ func SyncDirs(want, got string, ignore func(rel string) bool) error {
 	}
 	pruneEmptyDirs(got, deleted)
 	return nil
+}
+
+func staleFilter(expected map[string]bool, ignore func(rel string) bool) func(rel string) bool {
+	return func(rel string) bool {
+		if expected[rel] {
+			return false
+		}
+		if ignore != nil && ignore(rel) {
+			return false
+		}
+		return true
+	}
 }
 
 // CompareDirs byte-compares the tree under want (a scratch render) against

@@ -277,6 +277,9 @@ message ExecuteRequest {
   string invocation_id = 5;
   RequestContext context = 6;
   string idempotency_key = 9;
+  // Original caller bearer token for nested Identity grant RPCs. Distinct from
+  // token, which carries the resolved provider connection credential.
+  string caller_bearer_token = 10;
 }
 
 // GetSessionCatalogRequest asks a provider for request-scoped catalog

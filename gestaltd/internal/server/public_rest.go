@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
@@ -13,6 +14,11 @@ import (
 )
 
 var errRESTResponseWritten = errors.New("rest response written")
+
+const (
+	gestaltResponseKindHeader          = "X-Gestalt-Response-Kind"
+	gestaltResponseKindOperationResult = "operation-result"
+)
 
 // preservedSecurityResponseHeaders are installed by securityHeadersMiddleware and must
 // survive App OperationResult passthrough.
@@ -42,7 +48,23 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 		conn.Close()
 		return nil, nil, err
 	}
-	return conn, mux, nil
+	return conn, publicRESTSessionBridge(mux), nil
+}
+
+func publicRESTSessionBridge(next http.Handler) http.Handler {
+	if next == nil {
+		return nil
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r != nil && strings.TrimSpace(r.Header.Get("Authorization")) == "" {
+			if c, err := r.Cookie(sessionCookieName); err == nil {
+				if token := strings.TrimSpace(c.Value); token != "" {
+					r.Header.Set("Authorization", "Bearer "+token)
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func buildPublicServers(cfg publicGRPCConfig) publicrpc.Servers {
@@ -92,7 +114,7 @@ func writeProtoOperationResult(w http.ResponseWriter, result *gestaltproto.Opera
 	}
 	headers.Del("Content-Type") // grpc-gateway's default response type.
 	for name, values := range result.GetHeaders() {
-		if values == nil {
+		if values == nil || strings.EqualFold(name, gestaltResponseKindHeader) {
 			continue
 		}
 		for i, value := range values.GetValues() {
@@ -113,6 +135,7 @@ func writeProtoOperationResult(w http.ResponseWriter, result *gestaltproto.Opera
 	if statusCode == 0 {
 		statusCode = http.StatusOK
 	}
+	headers.Set(gestaltResponseKindHeader, gestaltResponseKindOperationResult)
 	w.WriteHeader(statusCode)
 	if body := result.GetBody(); len(body) > 0 {
 		_, _ = w.Write(body)

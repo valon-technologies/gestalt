@@ -11,11 +11,16 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/descriptor"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/discover"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/golang"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicgo"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicpython"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicrust"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicts"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/python"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/rust"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/ts"
@@ -116,19 +121,147 @@ func generate(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emi
 		return err
 	}
 	for _, e := range emitters {
-		set, err := EmitFormatted(e, schema, scratch)
+		set, err := EmitFormatted(e, schema, scratch, opts.RepoRoot)
 		if err != nil {
 			return err
 		}
 		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
-		report, err := fileset.Reconcile(root, set, e.HeaderStyle())
+		report, err := fileset.Reconcile(root, set, e.HeaderStyle(), nestedPublicStaleIgnore(e.Target()))
 		if err != nil {
 			return fmt.Errorf("reconcile %s: %w", e.Target(), err)
 		}
 		_, _ = fmt.Fprintf(opts.Stdout, "sdkgen: %s: %d files emitted, %d written, %d stale removed\n",
 			e.Target(), set.Len(), len(report.Written), len(report.Deleted))
+		switch e.Target() {
+		case emit.TargetTS:
+			if err := generatePublicTS(opts, schema, scratch); err != nil {
+				return err
+			}
+		case emit.TargetGo:
+			if err := generatePublicGo(opts, schema, scratch); err != nil {
+				return err
+			}
+		case emit.TargetPython:
+			if err := generatePublicPython(opts, schema, scratch); err != nil {
+				return err
+			}
+		case emit.TargetRust:
+			if err := generatePublicRust(opts, schema, scratch); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+func generatePublicTS(opts Options, schema *model.Schema, scratch string) error {
+	e := publicts.New()
+	set, err := EmitFormatted(publicTSEmitter{e}, schema, scratch, opts.RepoRoot)
+	if err != nil {
+		return err
+	}
+	root := filepath.Join(opts.RepoRoot, filepath.FromSlash(publicts.OutputRoot))
+	report, err := fileset.Reconcile(root, set, e.HeaderStyle(), nil)
+	if err != nil {
+		return fmt.Errorf("reconcile public-ts: %w", err)
+	}
+	_, _ = fmt.Fprintf(opts.Stdout, "sdkgen: public-ts: %d files emitted, %d written, %d stale removed\n",
+		set.Len(), len(report.Written), len(report.Deleted))
+	return nil
+}
+
+func generatePublicGo(opts Options, schema *model.Schema, scratch string) error {
+	e := publicgo.New()
+	set, err := EmitFormatted(publicGoEmitter{e}, schema, scratch, opts.RepoRoot)
+	if err != nil {
+		return err
+	}
+	root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
+	report, err := fileset.Reconcile(root, set, e.HeaderStyle(), nil)
+	if err != nil {
+		return fmt.Errorf("reconcile public-go: %w", err)
+	}
+	_, _ = fmt.Fprintf(opts.Stdout, "sdkgen: public-go: %d files emitted, %d written, %d stale removed\n",
+		set.Len(), len(report.Written), len(report.Deleted))
+	return nil
+}
+
+func generatePublicPython(opts Options, schema *model.Schema, scratch string) error {
+	e := publicpython.New()
+	set, err := EmitFormatted(publicPythonEmitter{e}, schema, scratch, opts.RepoRoot)
+	if err != nil {
+		return err
+	}
+	root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
+	report, err := fileset.Reconcile(root, set, e.HeaderStyle(), nil)
+	if err != nil {
+		return fmt.Errorf("reconcile public-python: %w", err)
+	}
+	_, _ = fmt.Fprintf(opts.Stdout, "sdkgen: public-python: %d files emitted, %d written, %d stale removed\n",
+		set.Len(), len(report.Written), len(report.Deleted))
+	return nil
+}
+
+func generatePublicRust(opts Options, schema *model.Schema, scratch string) error {
+	e := publicrust.New()
+	set, err := EmitFormatted(publicRustEmitter{e}, schema, scratch, opts.RepoRoot)
+	if err != nil {
+		return err
+	}
+	root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
+	report, err := fileset.Reconcile(root, set, e.HeaderStyle(), nil)
+	if err != nil {
+		return fmt.Errorf("reconcile public-rust: %w", err)
+	}
+	_, _ = fmt.Fprintf(opts.Stdout, "sdkgen: public-rust: %d files emitted, %d written, %d stale removed\n",
+		set.Len(), len(report.Written), len(report.Deleted))
+	return nil
+}
+
+type publicGoEmitter struct{ *publicgo.Emitter }
+
+func (publicGoEmitter) Target() emit.Target { return emit.TargetGo }
+func (e publicGoEmitter) OutputRoot() string { return e.Emitter.OutputRoot() }
+func (e publicGoEmitter) HeaderStyle() fileset.CommentStyle { return e.Emitter.HeaderStyle() }
+func (e publicGoEmitter) Formatter() *toolchain.Tool { return e.Emitter.Formatter() }
+func (e publicGoEmitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
+	return e.Emitter.Emit(schema)
+}
+
+type publicPythonEmitter struct{ *publicpython.Emitter }
+
+func (publicPythonEmitter) Target() emit.Target { return emit.TargetPython }
+func (e publicPythonEmitter) OutputRoot() string { return e.Emitter.OutputRoot() }
+func (e publicPythonEmitter) HeaderStyle() fileset.CommentStyle { return e.Emitter.HeaderStyle() }
+func (e publicPythonEmitter) Formatter() *toolchain.Tool { return e.Emitter.Formatter() }
+func (e publicPythonEmitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
+	return e.Emitter.Emit(schema)
+}
+
+type publicRustEmitter struct{ *publicrust.Emitter }
+
+func (publicRustEmitter) Target() emit.Target { return emit.TargetRust }
+func (e publicRustEmitter) OutputRoot() string { return e.Emitter.OutputRoot() }
+func (e publicRustEmitter) HeaderStyle() fileset.CommentStyle { return e.Emitter.HeaderStyle() }
+func (e publicRustEmitter) Formatter() *toolchain.Tool { return e.Emitter.Formatter() }
+func (e publicRustEmitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
+	return e.Emitter.Emit(schema)
+}
+
+type publicTSEmitter struct {
+	*publicts.Emitter
+}
+
+func (publicTSEmitter) Target() emit.Target { return emit.TargetTS }
+
+func (publicTSEmitter) OutputRoot() string { return publicts.OutputRoot }
+
+func (e publicTSEmitter) HeaderStyle() fileset.CommentStyle { return e.Emitter.HeaderStyle() }
+
+func (e publicTSEmitter) Formatter() *toolchain.Tool { return e.Emitter.Formatter() }
+
+func (e publicTSEmitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
+	return e.Emitter.Emit(schema)
 }
 
 func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.Emitter, schema *model.Schema, scratch string) error {
@@ -137,17 +270,73 @@ func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.E
 		return err
 	}
 	for _, e := range emitters {
-		set, err := EmitFormatted(e, schema, scratch)
+		set, err := EmitFormatted(e, schema, scratch, opts.RepoRoot)
 		if err != nil {
 			return err
 		}
 		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
-		d, err := fileset.Check(root, set, e.HeaderStyle())
+		d, err := fileset.Check(root, set, e.HeaderStyle(), nestedPublicStaleIgnore(e.Target()))
 		if err != nil {
 			return fmt.Errorf("check %s: %w", e.Target(), err)
 		}
 		for _, entry := range d {
 			drift = append(drift, fileset.DriftEntry{Kind: entry.Kind, Path: path.Join(e.OutputRoot(), entry.Path)})
+		}
+		if e.Target() == emit.TargetTS {
+			publicSet, err := EmitFormatted(publicTSEmitter{publicts.New()}, schema, scratch, opts.RepoRoot)
+			if err != nil {
+				return err
+			}
+			publicRoot := filepath.Join(opts.RepoRoot, filepath.FromSlash(publicts.OutputRoot))
+			publicDrift, err := fileset.Check(publicRoot, publicSet, fileset.Slash, nil)
+			if err != nil {
+				return fmt.Errorf("check public-ts: %w", err)
+			}
+			for _, entry := range publicDrift {
+				drift = append(drift, fileset.DriftEntry{Kind: entry.Kind, Path: path.Join(publicts.OutputRoot, entry.Path)})
+			}
+		}
+		if e.Target() == emit.TargetGo {
+			publicSet, err := EmitFormatted(publicGoEmitter{publicgo.New()}, schema, scratch, opts.RepoRoot)
+			if err != nil {
+				return err
+			}
+			publicRoot := filepath.Join(opts.RepoRoot, filepath.FromSlash(publicgo.New().OutputRoot()))
+			publicDrift, err := fileset.Check(publicRoot, publicSet, fileset.Slash, nil)
+			if err != nil {
+				return fmt.Errorf("check public-go: %w", err)
+			}
+			for _, entry := range publicDrift {
+				drift = append(drift, fileset.DriftEntry{Kind: entry.Kind, Path: path.Join(publicgo.New().OutputRoot(), entry.Path)})
+			}
+		}
+		if e.Target() == emit.TargetPython {
+			publicSet, err := EmitFormatted(publicPythonEmitter{publicpython.New()}, schema, scratch, opts.RepoRoot)
+			if err != nil {
+				return err
+			}
+			publicRoot := filepath.Join(opts.RepoRoot, filepath.FromSlash(publicpython.New().OutputRoot()))
+			publicDrift, err := fileset.Check(publicRoot, publicSet, fileset.Hash, nil)
+			if err != nil {
+				return fmt.Errorf("check public-python: %w", err)
+			}
+			for _, entry := range publicDrift {
+				drift = append(drift, fileset.DriftEntry{Kind: entry.Kind, Path: path.Join(publicpython.New().OutputRoot(), entry.Path)})
+			}
+		}
+		if e.Target() == emit.TargetRust {
+			publicSet, err := EmitFormatted(publicRustEmitter{publicrust.New()}, schema, scratch, opts.RepoRoot)
+			if err != nil {
+				return err
+			}
+			publicRoot := filepath.Join(opts.RepoRoot, filepath.FromSlash(publicrust.New().OutputRoot()))
+			publicDrift, err := fileset.Check(publicRoot, publicSet, fileset.Slash, nil)
+			if err != nil {
+				return fmt.Errorf("check public-rust: %w", err)
+			}
+			for _, entry := range publicDrift {
+				drift = append(drift, fileset.DriftEntry{Kind: entry.Kind, Path: path.Join(publicrust.New().OutputRoot(), entry.Path)})
+			}
 		}
 	}
 	if len(drift) == 0 {
@@ -164,7 +353,7 @@ func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.E
 // contents via a scratch round-trip, so reconcile and check always see final
 // bytes. The generated-by header is injected later, at write time; leading
 // comments are stable under gofmt and rustfmt.
-func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*fileset.FileSet, error) {
+func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch, repoRoot string) (*fileset.FileSet, error) {
 	set, err := e.Emit(schema)
 	if err != nil {
 		return nil, fmt.Errorf("emit %s: %w", e.Target(), err)
@@ -185,8 +374,26 @@ func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*files
 		}
 		args = append(args, abs)
 	}
+	if tool.Name == "ruff" && repoRoot != "" {
+		configPath := filepath.Join(dir, "pyproject.toml")
+		src := filepath.Join(repoRoot, "sdk", "python", "pyproject.toml")
+		if data, readErr := os.ReadFile(src); readErr == nil {
+			if err := os.WriteFile(configPath, data, 0o644); err != nil {
+				return nil, fmt.Errorf("copy pyproject.toml for %s: %w", e.Target(), err)
+			}
+		}
+	}
 	if err := tool.Run(dir, args...); err != nil {
 		return nil, fmt.Errorf("format %s: %w", e.Target(), err)
+	}
+	if tool.Name == "ruff" {
+		lintArgs := []string{"check", "--fix"}
+		for _, f := range set.Files() {
+			lintArgs = append(lintArgs, filepath.Join(dir, filepath.FromSlash(f.Path)))
+		}
+		if err := tool.Run(dir, lintArgs...); err != nil {
+			return nil, fmt.Errorf("lint-fix %s: %w", e.Target(), err)
+		}
 	}
 	formatted := fileset.New()
 	for _, f := range set.Files() {
@@ -241,4 +448,25 @@ func methodCount(schema *model.Schema) int {
 		n += len(svc.Methods)
 	}
 	return n
+}
+
+// nestedPublicStaleIgnore returns a filter that keeps nested public-client
+// generated trees out of parent emitter stale detection.
+func nestedPublicStaleIgnore(target emit.Target) func(rel string) bool {
+	var prefix string
+	switch target {
+	case emit.TargetGo:
+		prefix = "publicclient/"
+	case emit.TargetPython:
+		prefix = "public/"
+	case emit.TargetRust:
+		prefix = "public/"
+	case emit.TargetTS:
+		prefix = "client/"
+	default:
+		return nil
+	}
+	return func(rel string) bool {
+		return strings.HasPrefix(rel, prefix)
+	}
 }

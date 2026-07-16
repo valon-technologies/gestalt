@@ -92,6 +92,7 @@ pub struct Request {
 
 tokio::task_local! {
     static REQUEST_CONTEXT: Option<v1::RequestContext>;
+    static CALLER_BEARER_TOKEN: String;
 }
 
 impl Request {
@@ -104,6 +105,13 @@ impl Request {
 /// Returns the host-supplied request context for the currently executing provider handler.
 pub fn current_request_context() -> Option<v1::RequestContext> {
     REQUEST_CONTEXT.try_with(Clone::clone).ok().flatten()
+}
+
+/// Returns the caller bearer token for the currently executing provider handler.
+pub fn current_caller_bearer_token() -> String {
+    CALLER_BEARER_TOKEN
+        .try_with(Clone::clone)
+        .unwrap_or_default()
 }
 
 /// Returns the current ambient request context in the generated clients'
@@ -179,6 +187,14 @@ where
     REQUEST_CONTEXT.scope(context, future).await
 }
 
+/// Runs an async operation with the supplied caller bearer token available to bound clients.
+pub async fn with_caller_bearer_token<F>(token: String, future: F) -> F::Output
+where
+    F: Future,
+{
+    CALLER_BEARER_TOKEN.scope(token, future).await
+}
+
 pub(crate) async fn scope_request_context<F>(
     context: Option<v1::RequestContext>,
     future: F,
@@ -187,6 +203,21 @@ where
     F: Future,
 {
     with_request_context(context, future).await
+}
+
+pub(crate) async fn scope_provider_request<F>(
+    context: Option<v1::RequestContext>,
+    caller_bearer_token: String,
+    future: F,
+) -> F::Output
+where
+    F: Future,
+{
+    with_request_context(
+        context,
+        with_caller_bearer_token(caller_bearer_token, future),
+    )
+    .await
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

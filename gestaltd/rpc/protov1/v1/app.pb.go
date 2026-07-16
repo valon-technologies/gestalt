@@ -2032,8 +2032,11 @@ type ExecuteRequest struct {
 	InvocationId     string                 `protobuf:"bytes,5,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"`
 	Context          *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
 	IdempotencyKey   string                 `protobuf:"bytes,9,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Original caller bearer token for nested Identity grant RPCs. Distinct from
+	// token, which carries the resolved provider connection credential.
+	CallerBearerToken string `protobuf:"bytes,10,opt,name=caller_bearer_token,json=callerBearerToken,proto3" json:"caller_bearer_token,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ExecuteRequest) Reset() {
@@ -2111,6 +2114,13 @@ func (x *ExecuteRequest) GetContext() *RequestContext {
 func (x *ExecuteRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *ExecuteRequest) GetCallerBearerToken() string {
+	if x != nil {
+		return x.CallerBearerToken
 	}
 	return ""
 }
@@ -2549,7 +2559,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x1aResolveHTTPSubjectResponse\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12#\n" +
 	"\rreject_status\x18\x02 \x01(\x05R\frejectStatus\x12%\n" +
-	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xb5\x03\n" +
+	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xe5\x03\n" +
 	"\x0eExecuteRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
@@ -2557,7 +2567,9 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x11connection_params\x18\x04 \x03(\v29.gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
 	"\rinvocation_id\x18\x05 \x01(\tR\finvocationId\x12=\n" +
 	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12'\n" +
-	"\x0fidempotency_key\x18\t \x01(\tR\x0eidempotencyKey\x1aC\n" +
+	"\x0fidempotency_key\x18\t \x01(\tR\x0eidempotencyKey\x12.\n" +
+	"\x13caller_bearer_token\x18\n" +
+	" \x01(\tR\x11callerBearerToken\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xcb\x02\n" +

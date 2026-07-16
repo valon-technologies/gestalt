@@ -23,6 +23,9 @@
     "src/secrets.ts",
     "src/test.ts",
     "src/workflow.ts",
+    "src/client/index.ts",
+    "src/client/rest.ts",
+    "src/client/grpc.ts",
     "src/vite.js"
   ],
   "tsconfig": "tsconfig.json",

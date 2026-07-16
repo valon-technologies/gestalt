@@ -19,7 +19,16 @@ from . import _agent as _agent_native
 from . import _runtime_provider as _runtime_provider_native
 from . import _telemetry
 from . import _workflow as _workflow_native
-from ._api import Access, Credential, Error, Host, Request, Subject, SubjectPermission
+from ._api import (
+    Access,
+    Credential,
+    Error,
+    Host,
+    Request,
+    Subject,
+    SubjectPermission,
+    plugin_request_scope,
+)
 from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
@@ -1419,16 +1428,18 @@ def _provider_servicer(*, app: App) -> Any:
             )
 
         def Execute(self, request: Any, _context: Any) -> Any:
+            plugin_request = _plugin_request(request)
             try:
-                result = app.execute(
-                    request.operation,
-                    _message_to_dict(
-                        field_name="params",
-                        message=request.params,
-                        request=request,
-                    ),
-                    _plugin_request(request),
-                )
+                with plugin_request_scope(plugin_request):
+                    result = app.execute(
+                        request.operation,
+                        _message_to_dict(
+                            field_name="params",
+                            message=request.params,
+                            request=request,
+                        ),
+                        plugin_request,
+                    )
             except Exception as error:
                 traceback.print_exception(error)
                 status = HTTPStatus.INTERNAL_SERVER_ERROR
@@ -1901,6 +1912,7 @@ def _plugin_request(request: Any) -> Request:
     tool_refs, tool_refs_set = _tool_refs_from_proto(request_context)
     return Request(
         token=getattr(request, "token", ""),
+        caller_bearer_token=getattr(request, "caller_bearer_token", ""),
         connection_params=dict(getattr(request, "connection_params", {})),
         subject=_subject_from_proto(request_context, "subject"),
         agent_subject=_subject_from_proto(request_context, "agent_subject"),

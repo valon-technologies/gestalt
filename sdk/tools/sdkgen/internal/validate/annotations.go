@@ -3,6 +3,7 @@ package validate
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -25,7 +26,12 @@ const (
 	extJsonResult     = "gestalt.provider.v1.json_result"
 	extOptionalSig    = "gestalt.provider.v1.optional_signature"
 	extHostBinding    = "gestalt.provider.v1.host_binding"
+	extPublic         = "gestalt.provider.v1.public"
+	extMethodVis      = "google.api.method_visibility"
+	extHTTP           = "google.api.http"
 )
+
+const publicVisibilityRestriction = "PUBLIC"
 
 type annotations struct {
 	resolver *dynamicpb.Types
@@ -83,6 +89,9 @@ func (b *builder) serviceAnnotations(sd protoreflect.ServiceDescriptor, svc *mod
 // methodAnnotations validates and applies method-level annotations.
 func (b *builder) methodAnnotations(md protoreflect.MethodDescriptor, m *model.Method) {
 	exts := b.ann.extensions(md.Options())
+	m.FullMethod = "/" + string(md.Parent().FullName()) + "/" + string(md.Name())
+
+	b.methodPublicAnnotations(md, m, exts)
 
 	if v, ok := exts[extInitial]; ok {
 		header := subField(v, "header")
@@ -185,6 +194,186 @@ func (b *builder) methodAnnotations(md protoreflect.MethodDescriptor, m *model.M
 			}
 		}
 	}
+}
+
+func (b *builder) methodPublicAnnotations(md protoreflect.MethodDescriptor, m *model.Method, exts map[string]protoreflect.Value) {
+	hasPublicPolicy := false
+	if v, ok := exts[extPublic]; ok {
+		hasPublicPolicy = true
+		fill := repeatedStringField(v, "fill")
+		reject := repeatedStringField(v, "reject")
+		fill, reject, err := normalizePublicPolicyFields(m.FullMethod, m.Input, fill, reject)
+		if err != nil {
+			b.add(md, "method", err.Error())
+		} else if len(fill) > 0 || len(reject) > 0 {
+			m.PublicPolicy = &model.PublicPolicy{Fill: fill, Reject: reject}
+		}
+	}
+
+	isPublic := hasPublicVisibility(exts)
+	if hasPublicPolicy && !isPublic {
+		b.add(md, "method", "option (public) requires google.api.method_visibility restriction PUBLIC")
+	}
+	if !isPublic {
+		return
+	}
+	m.Public = true
+
+	if v, ok := exts[extHTTP]; ok {
+		if !m.Public {
+			b.add(md, "method", "google.api.http requires PUBLIC method visibility")
+			return
+		}
+		if m.Stream != model.Unary {
+			b.add(md, "method", "google.api.http requires a unary method")
+			return
+		}
+		rule, err := parseHTTPRule(v)
+		if err != nil {
+			b.add(md, "method", err.Error())
+			return
+		}
+		m.HTTP = rule
+	}
+}
+
+func hasPublicVisibility(exts map[string]protoreflect.Value) bool {
+	v, ok := exts[extMethodVis]
+	if !ok {
+		return false
+	}
+	restriction := subField(v, "restriction")
+	for _, part := range splitCommaList(restriction) {
+		if part == publicVisibilityRestriction {
+			return true
+		}
+	}
+	return false
+}
+
+func repeatedStringField(v protoreflect.Value, name string) []string {
+	msg := v.Message()
+	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
+	if fd == nil {
+		return nil
+	}
+	list := msg.Get(fd).List()
+	out := make([]string, 0, list.Len())
+	for i := 0; i < list.Len(); i++ {
+		out = append(out, list.Get(i).String())
+	}
+	return out
+}
+
+func splitCommaList(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func normalizePublicPolicyFields(fullMethod string, input *model.Message, fill, reject []string) ([]string, []string, error) {
+	normalizedFill, err := normalizePublicFieldList(fullMethod, input, "fill", fill)
+	if err != nil {
+		return nil, nil, err
+	}
+	normalizedReject, err := normalizePublicFieldList(fullMethod, input, "reject", reject)
+	if err != nil {
+		return nil, nil, err
+	}
+	fillSet := make(map[string]struct{}, len(normalizedFill))
+	for _, name := range normalizedFill {
+		fillSet[name] = struct{}{}
+	}
+	for _, name := range normalizedReject {
+		if _, ok := fillSet[name]; ok {
+			return nil, nil, fmt.Errorf("method %q lists field %q in both fill and reject", fullMethod, name)
+		}
+	}
+	return normalizedFill, normalizedReject, nil
+}
+
+func normalizePublicFieldList(fullMethod string, input *model.Message, kind string, names []string) ([]string, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil, fmt.Errorf("method %q has empty %s field name", fullMethod, kind)
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		if input == nil || fieldByName(input, name) == nil {
+			return nil, fmt.Errorf("method %q %s references unknown request field %q", fullMethod, kind, name)
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out, nil
+}
+
+func parseHTTPRule(v protoreflect.Value) (*model.HTTPRule, error) {
+	msg := v.Message()
+	desc := msg.Descriptor()
+
+	additional := desc.Fields().ByName("additional_bindings")
+	if additional != nil && msg.Get(additional).List().Len() > 0 {
+		return nil, fmt.Errorf("google.api.http additional_bindings are not supported")
+	}
+	if custom := desc.Fields().ByName("custom"); custom != nil && msg.Has(custom) {
+		customMsg := msg.Get(custom).Message()
+		if kind := stringField(customMsg, "kind"); kind != "" {
+			return nil, fmt.Errorf("google.api.http custom kind %q is not supported", kind)
+		}
+		return nil, fmt.Errorf("google.api.http custom patterns are not supported")
+	}
+	if responseBody := stringField(msg, "response_body"); responseBody != "" {
+		return nil, fmt.Errorf("google.api.http response_body is not supported")
+	}
+
+	for _, candidate := range []struct {
+		verb string
+		name string
+	}{
+		{"GET", "get"},
+		{"PUT", "put"},
+		{"POST", "post"},
+		{"DELETE", "delete"},
+		{"PATCH", "patch"},
+	} {
+		if path := stringField(msg, candidate.name); path != "" {
+			body := stringField(msg, "body")
+			if body != "" && body != "*" {
+				return nil, fmt.Errorf(
+					"google.api.http body %q is not supported (only \"\" and \"*\" are allowed until all emitters implement named bodies)",
+					body,
+				)
+			}
+			return &model.HTTPRule{
+				Verb: candidate.verb,
+				Path: path,
+				Body: body,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("google.api.http has no supported pattern")
+}
+
+func stringField(msg protoreflect.Message, name string) string {
+	fd := msg.Descriptor().Fields().ByName(protoreflect.Name(name))
+	if fd == nil {
+		return ""
+	}
+	return msg.Get(fd).String()
 }
 
 // messageAnnotations validates and applies message-level annotations.

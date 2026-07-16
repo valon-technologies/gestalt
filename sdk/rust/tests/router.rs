@@ -346,6 +346,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                 ..Default::default()
             }),
             idempotency_key: " tool-call-123 ".to_owned(),
+            caller_bearer_token: String::new(),
         }))
         .await
         .expect("execute greet")

@@ -272,6 +272,7 @@ def to_wire_execute_request(value: native.ExecuteRequest) -> Any:
         if value.context is None
         else to_wire_request_context(value.context),
         idempotency_key=value.idempotency_key,
+        caller_bearer_token=value.caller_bearer_token,
     )
 
 
@@ -286,6 +287,7 @@ def from_wire_execute_request(value: Any) -> native.ExecuteRequest:
         if value.HasField("context")
         else None,
         idempotency_key=value.idempotency_key,
+        caller_bearer_token=value.caller_bearer_token,
     )
 
 
