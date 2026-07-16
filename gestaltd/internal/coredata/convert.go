@@ -94,12 +94,20 @@ func jsonValue(v any) any {
 		if len(value) == 0 {
 			return nil
 		}
-		return value
+		out := make(map[string]any, len(value))
+		for k, v := range value {
+			out[k] = v
+		}
+		return out
 	case map[string]any:
 		if len(value) == 0 {
 			return nil
 		}
-		return value
+		out := make(map[string]any, len(value))
+		for k, v := range value {
+			out[k] = jsonValue(v)
+		}
+		return out
 	default:
 		return v
 	}
