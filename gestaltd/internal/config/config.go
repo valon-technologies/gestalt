@@ -1936,7 +1936,15 @@ type ServerConfig struct {
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
+	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
 	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
+}
+
+// TODO(app-registry-step-9): Remove this temporary rollout configuration after step 9 is complete.
+type ServerAppRegistryConfig struct {
+	// RestartDelay is empty in production for no intentional outage. Early
+	// rollout environments may set a duration such as "1m" for observation.
+	RestartDelay string `yaml:"restartDelay,omitempty"`
 }
 
 type ServerAgentConfig struct{}

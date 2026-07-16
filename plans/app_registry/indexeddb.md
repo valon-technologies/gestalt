@@ -20,11 +20,11 @@ Implementation:
 
 ---
 
-## Source of truth vs projections
+## Accepted changes and projections
 
 | Layer | Store / API | Role |
 |-------|-------------|------|
-| **Source of truth** | `app_version_change_requests` | Append-only fleet change requests per app (`from_version` → `to_version`) |
+| **Stored records** | `app_version_change_requests` | Append-only accepted version changes per app (`from_version` → `to_version`) |
 | **Materialized views** | `ListKnownVersionsByApp`, `ListAllKnownVersions` | Computed in Go from change requests |
 
 **Known versions** — one projected entry per `(app, to_version)` pair from the latest change request for that pair. Failed validation rejects the install HTTP request; no row is written.
@@ -57,8 +57,9 @@ When `SkipSchemaBootstrap` is false (default for a **local** main-db provider), 
 App registry stores:
 
 ```text
-app_version_change_requests      ← source of truth (append-only)
-app_version_install_locks        ← fleet install lock per (app, version)
+app_version_change_requests      ← accepted version changes (append-only)
+app_version_install_locks        ← install admission lock per app
+app_rollouts                     ← current rollout per app
 app_instance_materializations    ← per-replica ack of fleet-known versions
 ```
 
@@ -76,12 +77,13 @@ Access install services after bootstrap via `Result.Services` / `prepared.Servic
 
 ```text
 Services.AppVersionChangeRequests   ← install prototype
+Services.AppRollouts                ← rollout state
 Services.DB                         ← underlying main-db handle
 ```
 
 ---
 
-## Store: `app_version_change_requests` (source of truth)
+## Store: `app_version_change_requests` (accepted version changes)
 
 Append-only fleet requests to move one app from `from_version` to `to_version`. `from_version` is required on every row. The installer resolves it from the latest fleet-known `to_version`, or falls back to the app's pinned version in `config.yaml` / `gestalt.lock.json` when the app has not been installed via the registry yet.
 
@@ -160,15 +162,15 @@ Projection helpers live in `app_version_change_requests_projection.go`.
 
 ---
 
-## Store: `app_version_install_locks` (fleet install lock)
+## Store: `app_version_install_locks` (install admission lock)
 
-Short-lived lock rows that ensure only one `gestaltd` instance installs a given `(app, version)` at a time.
+Short-lived lock rows that serialize install admission for one app across the fleet. The version remains diagnostic metadata, but the lock key is app-scoped so two versions of the same app cannot be admitted concurrently.
 
-Primary key: `id` = `app` + `\x00` + `version`.
+Primary key: `id` = `app`.
 
 ```json
 {
-  "id": "g-issues\u00000.0.0-snapshot.gabc123",
+  "id": "g-issues",
   "app": "g-issues",
   "version": "0.0.0-snapshot.gabc123",
   "holder": "550e8400-e29b-41d4-a716-446655440000",
@@ -186,16 +188,58 @@ Primary key: `id` = `app` + `\x00` + `version`.
 
 | Method | Description |
 |--------|-------------|
-| `Acquire(ctx, app, version, holder, ttl)` | Claim lock; returns `ErrAppVersionInstallLockHeld` if another holder owns a non-expired lock |
+| `Acquire(ctx, app, version, holder, ttl)` | Claim the app-scoped lock; returns `ErrAppVersionInstallLockHeld` if another holder owns a non-expired lock |
 | `Release(ctx, app, version, holder)` | Drop lock when this holder still owns it |
 
-Used by `POST …/install` before change request write; released on success or failure.
+Used by `POST …/install` while it checks rollout admission and appends the change request; released on success or failure.
 
 ---
 
-## Store: `app_instance_materializations` (per-replica ack)
+## Store: `app_rollouts` (current rollout per app)
 
-Records that one gestaltd replica observed a fleet-known `(app, version)` from `app_version_change_requests`.
+Tracks the current fleet rollout for each app. `app_version_change_requests` records accepted version changes; `app_rollouts` records their fleet-wide execution and outcome. The app-scoped primary key allows only one active rollout per app.
+
+Primary key: `id` = `app`.
+
+```json
+{
+  "id": "g-issues",
+  "app": "g-issues",
+  "version": "0.0.0-snapshot.gabc123",
+  "state": "enrolling",
+  "created_at": "2026-07-13T21:00:00Z",
+  "enrollment_ends_at": "2026-07-13T21:02:00Z",
+  "deadline": "2026-07-13T21:15:00Z"
+}
+```
+
+States:
+
+- `enrolling` — replicas may join the rollout by acknowledging it.
+- `restarting` — the acknowledged cohort is frozen and is converging.
+- `complete` — every enrolled replica recorded `restarted_at`.
+- `failed` — the cohort did not converge before the deadline.
+
+A terminal record may be replaced when the next version is admitted. A non-terminal record causes `POST …/install` for the same app to return **409 Conflict**. Terminal transitions record `completed_at` or `failed_at`.
+
+### Service API
+
+`AppRolloutService` (`gestaltd/internal/coredata/app_rollouts.go`):
+
+| Method | Description |
+|--------|-------------|
+| `Get(ctx, app)` | Load the current rollout for one app. |
+| `Create(ctx, rollout)` | Create a rollout when the current record is absent or terminal. |
+| `ListActive(ctx)` | List rollouts in `enrolling` or `restarting`. |
+| `MarkRestarting(ctx, app, version)` | Freeze the acknowledged cohort after enrollment. |
+| `MarkComplete(ctx, app, version, completedAt)` | Record successful cohort convergence. |
+| `MarkFailed(ctx, app, version, failedAt)` | Record that the rollout missed its deadline. |
+
+---
+
+## Store: `app_instance_materializations` (per-replica convergence)
+
+Records one replica's acknowledgement and restart progress for a fleet-known `(app, version)`.
 
 Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforced by the `by_instance_app_version` index.
 
@@ -205,7 +249,9 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
   "instance_id": "cloud-run-revision-pod",
   "app": "g-issues",
   "version": "0.0.0-snapshot.gabc123",
-  "acknowledged_at": "2026-07-13T21:00:00Z"
+  "acknowledged_at": "2026-07-13T21:00:00Z",
+  "stopped_at": "2026-07-13T21:00:05Z",
+  "restarted_at": "2026-07-13T21:01:05Z"
 }
 ```
 
@@ -218,6 +264,10 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 | Method | Description |
 |--------|-------------|
 | `HasAcknowledged(ctx, instanceID, app, version)` | Whether this replica already acked the pair. |
+| `Get(ctx, instanceID, app, version)` | Load the per-replica materialization row. |
 | `Acknowledge(ctx, materialization)` | Insert ack row; idempotent if already present. |
+| `ListByAppVersion(ctx, app, version)` | List the replicas that acknowledged one rollout. |
+| `MarkStopped(ctx, instanceID, app, version, stoppedAt)` | Record when the app provider was stopped for this fleet version. |
+| `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the app provider restart cycle completed for this fleet version. |
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).

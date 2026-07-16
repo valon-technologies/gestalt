@@ -16,6 +16,11 @@ import (
 
 const RegistryInstallSubdir = "registry-installed"
 
+const (
+	DefaultRolloutEnrollmentWindow = 2 * DefaultCatalogPollInterval
+	DefaultRolloutTimeout          = 15 * time.Minute
+)
+
 // installWorkTimeoutBuffer keeps bounded install work inside the lock TTL so
 // another instance cannot steal an expired lock while this attempt is still running.
 const installWorkTimeoutBuffer = 30 * time.Second
@@ -26,6 +31,7 @@ type Installer struct {
 	Reader         *RegistryReader
 	ChangeRequests *coredata.AppVersionChangeRequestService
 	Locks          *coredata.AppVersionInstallLockService
+	Rollouts       *coredata.AppRolloutService
 	Now            func() time.Time
 }
 
@@ -81,12 +87,22 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if i.ChangeRequests == nil {
 		return nil, fmt.Errorf("app version change request service is not configured")
 	}
+	if i.Rollouts == nil {
+		return nil, fmt.Errorf("app rollout service is not configured")
+	}
 	alreadyKnown, err := i.ChangeRequests.HasKnownVersion(installCtx, appName, version)
 	if err != nil {
 		return nil, fmt.Errorf("check known app version: %w", err)
 	}
 	if alreadyKnown {
 		return nil, ErrAppVersionAlreadyInstalled
+	}
+	if current, getErr := i.Rollouts.Get(installCtx, appName); getErr == nil {
+		if current.State == core.AppRolloutStateEnrolling || current.State == core.AppRolloutStateRestarting {
+			return nil, ErrAppRolloutActive
+		}
+	} else if !errors.Is(getErr, core.ErrNotFound) {
+		return nil, fmt.Errorf("check active app rollout: %w", getErr)
 	}
 
 	knownVersions, err := i.ChangeRequests.ListKnownVersionsByApp(installCtx, appName)
@@ -144,6 +160,20 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		InstalledAt:        requestedAt,
 		UpdatedAt:          requestedAt,
 	}
+	_, err = i.Rollouts.Create(installCtx, &core.AppRollout{
+		App:              appName,
+		Version:          version,
+		State:            core.AppRolloutStateEnrolling,
+		CreatedAt:        requestedAt,
+		EnrollmentEndsAt: requestedAt.Add(DefaultRolloutEnrollmentWindow),
+		Deadline:         requestedAt.Add(DefaultRolloutTimeout),
+	})
+	if err != nil {
+		if errors.Is(err, coredata.ErrAppRolloutActive) {
+			return nil, ErrAppRolloutActive
+		}
+		return nil, fmt.Errorf("create app rollout: %w", err)
+	}
 
 	addedRequest, err := i.ChangeRequests.AppendRequest(installCtx, &core.AppVersionChangeRequest{
 		App:         appName,
@@ -154,6 +184,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		Metadata:    coredata.ChangeRequestMetadata(known, ""),
 	})
 	if err != nil {
+		_, _ = i.Rollouts.MarkFailed(context.WithoutCancel(installCtx), appName, version, i.now())
 		return nil, fmt.Errorf("append change request: %w", err)
 	}
 

@@ -58,7 +58,9 @@ type pendingProviderBuild struct {
 
 type preparedProviderBuilds struct {
 	providers      *registry.ProviderMap[core.Provider]
+	lifecycles     *appProviderLifecycles
 	pending        []pendingProviderBuild
+	authMu         sync.RWMutex
 	connAuth       map[string]map[string]OAuthHandler
 	manualConnAuth map[string]map[string]ManualTokenExchanger
 	errs           []error
@@ -88,6 +90,7 @@ func prepareProviderBuilds(
 
 	builds := &preparedProviderBuilds{
 		providers:      &reg.Providers,
+		lifecycles:     &appProviderLifecycles{},
 		connAuth:       connAuth,
 		manualConnAuth: manualConnAuth,
 	}
@@ -162,12 +165,14 @@ func (b *preparedProviderBuilds) partition(categorize func(string, *config.Provi
 	prepErrs := append([]error(nil), b.errs...)
 	noop = &preparedProviderBuilds{
 		providers:      b.providers,
+		lifecycles:     b.lifecycles,
 		connAuth:       make(map[string]map[string]OAuthHandler),
 		manualConnAuth: make(map[string]map[string]ManualTokenExchanger),
 		errs:           prepErrs,
 	}
 	update = &preparedProviderBuilds{
 		providers:      b.providers,
+		lifecycles:     b.lifecycles,
 		connAuth:       make(map[string]map[string]OAuthHandler),
 		manualConnAuth: make(map[string]map[string]ManualTokenExchanger),
 		errs:           prepErrs,
@@ -195,13 +200,13 @@ func (b *preparedProviderBuilds) Start(
 				if b == nil {
 					return nil
 				}
-				return b.connAuth
+				return b.connectionAuthSnapshot()
 			},
 			func() map[string]map[string]ManualTokenExchanger {
 				if b == nil {
 					return nil
 				}
-				return b.manualConnAuth
+				return b.manualConnectionAuthSnapshot()
 			},
 			func() []error {
 				if b == nil {
@@ -212,7 +217,6 @@ func (b *preparedProviderBuilds) Start(
 	}
 
 	buildErrs := append([]error(nil), b.errs...)
-	var connMu sync.Mutex
 	var errMu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -223,6 +227,25 @@ func (b *preparedProviderBuilds) Start(
 		go func(pending pendingProviderBuild) {
 			defer wg.Done()
 			buildCtx := invocation.WithCallerProvider(installCtx, invocation.ProviderKindApp, pending.name)
+			release, err := b.lifecycles.acquire(buildCtx, pending.name)
+			if err != nil {
+				if pending.proxy != nil && b.pendingProxyOwnsProvider(pending) {
+					pending.proxy.fail(err)
+					b.providers.Remove(pending.name)
+				}
+				errMu.Lock()
+				buildErrs = append(buildErrs, fmt.Errorf("integration %q: wait for provider lifecycle: %w", pending.name, err))
+				errMu.Unlock()
+				return
+			}
+			defer release()
+			if pending.proxy != nil {
+				current, getErr := b.providers.Get(pending.name)
+				if getErr != nil || current != pending.proxy {
+					slog.Debug("skipping superseded deferred provider activation", "provider", pending.name)
+					return
+				}
+			}
 			result, err := builder(buildCtx, pending.name, pending.entry, deps)
 			if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
 				if pending.proxy != nil {
@@ -277,16 +300,7 @@ func (b *preparedProviderBuilds) Start(
 					return
 				}
 			}
-			if len(result.ConnectionAuth) > 0 {
-				connMu.Lock()
-				b.connAuth[pending.name] = result.ConnectionAuth
-				connMu.Unlock()
-			}
-			if len(result.ManualConnectionAuth) > 0 {
-				connMu.Lock()
-				b.manualConnAuth[pending.name] = result.ManualConnectionAuth
-				connMu.Unlock()
-			}
+			b.storeConnectionAuth(pending.name, result)
 			if b.onInstalled != nil && pending.sha != "" {
 				b.onInstalled(pending.name, pending.sha)
 			}
@@ -309,11 +323,11 @@ func (b *preparedProviderBuilds) Start(
 
 	resolver := func() map[string]map[string]OAuthHandler {
 		<-ready
-		return b.connAuth
+		return b.connectionAuthSnapshot()
 	}
 	manualResolver := func() map[string]map[string]ManualTokenExchanger {
 		<-ready
-		return b.manualConnAuth
+		return b.manualConnectionAuthSnapshot()
 	}
 	errResolver := func() []error {
 		<-ready
@@ -322,6 +336,47 @@ func (b *preparedProviderBuilds) Start(
 		return append([]error(nil), buildErrs...)
 	}
 	return ready, resolver, manualResolver, errResolver
+}
+
+func (b *preparedProviderBuilds) storeConnectionAuth(name string, result *ProviderBuildResult) {
+	if b == nil || result == nil {
+		return
+	}
+	b.authMu.Lock()
+	defer b.authMu.Unlock()
+	if len(result.ConnectionAuth) == 0 {
+		delete(b.connAuth, name)
+	} else {
+		b.connAuth[name] = result.ConnectionAuth
+	}
+	if len(result.ManualConnectionAuth) == 0 {
+		delete(b.manualConnAuth, name)
+	} else {
+		b.manualConnAuth[name] = result.ManualConnectionAuth
+	}
+}
+
+func (b *preparedProviderBuilds) pendingProxyOwnsProvider(pending pendingProviderBuild) bool {
+	current, err := b.providers.Get(pending.name)
+	return err == nil && current == pending.proxy
+}
+
+func (b *preparedProviderBuilds) connectionAuthSnapshot() map[string]map[string]OAuthHandler {
+	if b == nil {
+		return nil
+	}
+	b.authMu.RLock()
+	defer b.authMu.RUnlock()
+	return maps.Clone(b.connAuth)
+}
+
+func (b *preparedProviderBuilds) manualConnectionAuthSnapshot() map[string]map[string]ManualTokenExchanger {
+	if b == nil {
+		return nil
+	}
+	b.authMu.RLock()
+	defer b.authMu.RUnlock()
+	return maps.Clone(b.manualConnAuth)
 }
 
 func newProviderActivation(

@@ -14,6 +14,7 @@ type Services struct {
 	ManagedSubjects             *ManagedSubjectService
 	AppVersionChangeRequests    *AppVersionChangeRequestService
 	AppVersionInstallLocks      *AppVersionInstallLockService
+	AppRollouts                 *AppRolloutService
 	AppInstanceMaterializations *AppInstanceMaterializationService
 	DB                          indexeddb.IndexedDB
 }
@@ -53,6 +54,9 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		if _, err := ds.CreateObjectStore(ctx, StoreAppVersionInstallLocks, AppVersionInstallLocksSchema); err != nil {
 			return nil, fmt.Errorf("create app_version_install_locks store: %w", err)
 		}
+		if _, err := ds.CreateObjectStore(ctx, StoreAppRollouts, AppRolloutsSchema); err != nil {
+			return nil, fmt.Errorf("create app_rollouts store: %w", err)
+		}
 		if _, err := ds.CreateObjectStore(ctx, StoreAppInstanceMaterializations, AppInstanceMaterializationsSchema); err != nil {
 			return nil, fmt.Errorf("create app_instance_materializations store: %w", err)
 		}
@@ -61,6 +65,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	managedSubjects := NewManagedSubjectService(ds)
 	appVersionChangeRequests := NewAppVersionChangeRequestService(ds)
 	appVersionInstallLocks := NewAppVersionInstallLockService(ds)
+	appRollouts := NewAppRolloutService(ds)
 	appInstanceMaterializations := NewAppInstanceMaterializationService(ds)
 	return &Services{
 		ExternalCredentials:         nil,
@@ -68,6 +73,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		ManagedSubjects:             managedSubjects,
 		AppVersionChangeRequests:    appVersionChangeRequests,
 		AppVersionInstallLocks:      appVersionInstallLocks,
+		AppRollouts:                 appRollouts,
 		AppInstanceMaterializations: appInstanceMaterializations,
 		DB:                          ds,
 	}, nil

@@ -247,6 +247,7 @@ func TestNew(t *testing.T) {
 			coredata.StoreUsers,
 			coredata.StoreAppVersionChangeRequests,
 			coredata.StoreAppVersionInstallLocks,
+			coredata.StoreAppRollouts,
 		} {
 			if _, ok := contexts[store]; !ok {
 				t.Fatalf("NewWithContext did not create store %q", store)

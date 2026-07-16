@@ -23,6 +23,36 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+func TestAppRegistryRestartDelay(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		raw         string
+		want        time.Duration
+		wantDisable bool
+		wantErr     bool
+	}{
+		{name: "production default", wantDisable: true},
+		{name: "early rollout", raw: "1m", want: time.Minute},
+		{name: "explicit zero is invalid", raw: "0s", wantErr: true},
+		{name: "invalid", raw: "later", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &config.Config{}
+			cfg.Server.AppRegistry.RestartDelay = tc.raw
+			got, disabled, err := appRegistryRestartDelay(cfg)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("appRegistryRestartDelay error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if got != tc.want || disabled != tc.wantDisable {
+				t.Fatalf("appRegistryRestartDelay = (%v, %v), want (%v, %v)", got, disabled, tc.want, tc.wantDisable)
+			}
+		})
+	}
+}
+
 func TestHTTPCatalogConnectionMapUsesAPIConnection(t *testing.T) {
 	t.Parallel()
 

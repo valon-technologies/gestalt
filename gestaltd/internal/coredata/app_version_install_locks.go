@@ -30,7 +30,7 @@ func NewAppVersionInstallLockService(ds indexeddb.IndexedDB) *AppVersionInstallL
 	return &AppVersionInstallLockService{store: ds.ObjectStore(StoreAppVersionInstallLocks)}
 }
 
-// Acquire claims the fleet-wide install lock for one app version. The lock expires
+// Acquire claims the fleet-wide install admission lock for one app. The lock expires
 // after ttl so crashed instances do not block installs forever.
 func (s *AppVersionInstallLockService) Acquire(ctx context.Context, app, version, holder string, ttl time.Duration) error {
 	if s == nil {
@@ -51,7 +51,14 @@ func (s *AppVersionInstallLockService) Acquire(ctx context.Context, app, version
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	expiresAt := now.Add(ttl)
-	key := appVersionInstallLockKey(app, version)
+	key := appVersionInstallLockKey(app)
+	owned, err := s.clearStaleAndCheckAppLocks(ctx, key, app, holder, now)
+	if err != nil {
+		return err
+	}
+	if owned {
+		return nil
+	}
 
 	if err := s.tryAddLock(ctx, key, app, version, holder, now, expiresAt); err == nil {
 		return nil
@@ -90,6 +97,32 @@ func (s *AppVersionInstallLockService) Acquire(ctx context.Context, app, version
 	}
 }
 
+// clearStaleAndCheckAppLocks preserves admission safety while databases may
+// still contain version-scoped rows written before locks became app-scoped.
+func (s *AppVersionInstallLockService) clearStaleAndCheckAppLocks(ctx context.Context, key, app, holder string, now time.Time) (bool, error) {
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("acquire app version install lock: list existing: %w", err)
+	}
+	for _, rec := range recs {
+		current := recordToAppVersionInstallLock(rec)
+		if strings.TrimSpace(current.App) != app {
+			continue
+		}
+		recordID := recString(rec, "id")
+		if current.ExpiresAt.After(now) {
+			if recordID == key && current.Holder == holder {
+				return true, nil
+			}
+			return false, ErrAppVersionInstallLockHeld
+		}
+		if err := s.store.Delete(ctx, recordID); err != nil && !errors.Is(err, idb.ErrNotFound) {
+			return false, fmt.Errorf("acquire app version install lock: delete stale: %w", err)
+		}
+	}
+	return false, nil
+}
+
 // Release drops the install lock when the holder still owns it.
 func (s *AppVersionInstallLockService) Release(ctx context.Context, app, version, holder string) error {
 	if s == nil {
@@ -102,7 +135,7 @@ func (s *AppVersionInstallLockService) Release(ctx context.Context, app, version
 		return nil
 	}
 
-	key := appVersionInstallLockKey(app, version)
+	key := appVersionInstallLockKey(app)
 	existing, err := s.store.Get(ctx, key)
 	if errors.Is(err, idb.ErrNotFound) {
 		return nil
@@ -154,8 +187,8 @@ func (s *AppVersionInstallLockService) putLock(ctx context.Context, key, app, ve
 	return nil
 }
 
-func appVersionInstallLockKey(app, version string) string {
-	return strings.TrimSpace(app) + "\x00" + strings.TrimSpace(version)
+func appVersionInstallLockKey(app string) string {
+	return strings.TrimSpace(app)
 }
 
 func recordToAppVersionInstallLock(rec idb.Record) AppVersionInstallLock {

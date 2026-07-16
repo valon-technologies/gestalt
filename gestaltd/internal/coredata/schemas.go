@@ -11,6 +11,7 @@ const (
 	StoreAppSHAs                       = "app_shas"
 	StoreAppVersionChangeRequests      = "app_version_change_requests"
 	StoreAppVersionInstallLocks        = "app_version_install_locks"
+	StoreAppRollouts                   = "app_rollouts"
 	StoreAppInstanceMaterializations   = "app_instance_materializations"
 )
 
@@ -88,6 +89,23 @@ var AppVersionInstallLocksSchema = idb.ObjectStoreOptions{
 	},
 }
 
+var AppRolloutsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_state", KeyPath: []string{"state"}},
+	},
+	Columns: []idb.ColumnDef{
+		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+		{Name: "app", Type: idb.TypeString, NotNull: true, Unique: true},
+		{Name: "version", Type: idb.TypeString, NotNull: true},
+		{Name: "state", Type: idb.TypeString, NotNull: true},
+		{Name: "created_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "enrollment_ends_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "deadline", Type: idb.TypeTime, NotNull: true},
+		{Name: "completed_at", Type: idb.TypeTime},
+		{Name: "failed_at", Type: idb.TypeTime},
+	},
+}
+
 var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_instance", KeyPath: []string{"instance_id"}},
@@ -100,6 +118,8 @@ var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 		{Name: "app", Type: idb.TypeString, NotNull: true},
 		{Name: "version", Type: idb.TypeString, NotNull: true},
 		{Name: "acknowledged_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "stopped_at", Type: idb.TypeTime},
+		{Name: "restarted_at", Type: idb.TypeTime},
 	},
 }
 

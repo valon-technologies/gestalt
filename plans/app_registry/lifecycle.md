@@ -20,11 +20,13 @@ Implementation:
 - Registry fetcher — `gestaltd/internal/appregistry/reader.go`
 - Registry installer — `gestaltd/internal/appregistry/installer.go`
 - Catalog poller — `gestaltd/internal/appregistry/poller.go`
+- App provider restarter — `gestaltd/internal/bootstrap/app_provider_restart.go`
 - Change request projections — `gestaltd/internal/coredata/app_version_change_requests_projection.go`
+- Rollout state — `gestaltd/internal/coredata/app_rollouts.go`
 
 ## Startup
 
-`coredata.NewWithOptions` — idempotently create host stores, including `app_version_change_requests` and `app_version_install_locks`. Bootstrap does not write change requests; the store starts empty until an install.
+`coredata.NewWithOptions` — idempotently create host stores, including `app_version_change_requests`, `app_version_install_locks`, and `app_rollouts`. Bootstrap does not write change requests or rollouts; the stores start empty until an install.
 
 When `gestaltd serve` starts:
 
@@ -37,15 +39,41 @@ Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not b
 
 ## Polling
 
-Every replica runs one background catalog controller after `gestaltd serve` is up: one reconcile pass at startup, then every **1 minute** on a single loop goroutine.
+Every replica starts one background catalog controller during `gestaltd serve` startup: one reconcile pass immediately, then every **1 minute** on a single loop goroutine.
 
 The controller is **pull-based** and **local**: each replica reads `app_version_change_requests` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
-Each pass, for every known `(app, version)` this replica has not yet acknowledged, write a per-instance row in `app_instance_materializations`.
+### Rollout admission and completion
 
-Later steps add download, restart, and binary mount. See [plan.md](./plan.md) steps 9–11.
+Only one rollout per app may be active across the fleet. `POST …/install` holds the app-scoped install lock while it rejects an existing `enrolling` or `restarting` rollout, validates the candidate, creates the new rollout, and appends its change request. Different apps may roll out concurrently.
 
-Skip pairs already acknowledged on this replica. If a reconcile pass is still running when the next tick fires, skip the tick. Use per-`(app, version)` inflight guards within a pass.
+Replica membership is discovered rather than configured:
+
+1. The rollout remains `enrolling` for a bounded window of at least two poll intervals.
+2. Replicas join by writing `acknowledged_at` before `enrollment_ends_at`.
+3. After enrollment, the cohort is frozen and the rollout becomes `restarting`.
+4. The rollout completes when every cohort member records `restarted_at`.
+5. The rollout fails if an acknowledged replica does not restart before the deadline.
+
+Replicas that do not acknowledge before enrollment closes are not cohort members and do not block completion. A late replica still converges locally but does not reopen a terminal rollout.
+
+Each pass:
+
+1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
+2. Group pending versions by app.
+3. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row.
+4. Mark non-restartable apps converged without a local stop/start.
+
+A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
+
+App bootstrapping when `gestaltd` starts and catalog-driven restarts share the same per-app lifecycle lease. `StopApp` holds the lease until `StartApp` completes, preventing concurrent builds or replacements.
+
+Failure and retry behavior:
+
+1. If `Close` fails, the provider stays absent because it may be partially closed. Later polls retain the error; shutdown releases the lease.
+2. If writing `stopped_at` fails after stop, the next poll retries the write without stopping the absent provider again.
+3. If writing `restarted_at` fails after start, the next poll retries the write without rebuilding the running provider.
+4. A version discovered while the app is stopped joins the current cycle and inherits its original `stopped_at`.
 
 ## Runtime
 

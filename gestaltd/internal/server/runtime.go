@@ -51,6 +51,10 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 	if err != nil {
 		return err
 	}
+	restartDelay, disableRestartDelay, err := appRegistryRestartDelay(cfg)
+	if err != nil {
+		return err
+	}
 
 	if cfg.Server.BaseURL != "" {
 		slog.Debug("gestaltd base URL configured",
@@ -130,7 +134,10 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
-	startAppRegistryCatalogPoller(ctx, result)
+	catalogPoller := startAppRegistryCatalogPoller(ctx, result, restartDelay, disableRestartDelay)
+	if catalogPoller != nil {
+		defer catalogPoller.Stop()
+	}
 
 	publicConfig := baseConfig
 	if managementAddr == "" {
@@ -416,18 +423,41 @@ func (h *switchableHandler) Set(handler http.Handler) {
 	h.mu.Unlock()
 }
 
-func startAppRegistryCatalogPoller(ctx context.Context, result *bootstrap.Result) {
+func startAppRegistryCatalogPoller(ctx context.Context, result *bootstrap.Result, restartDelay time.Duration, disableRestartDelay bool) *appregistry.CatalogPoller {
 	if result == nil || result.Services == nil {
-		return
+		return nil
 	}
 	changeRequests := result.Services.AppVersionChangeRequests
 	materializations := result.Services.AppInstanceMaterializations
-	if changeRequests == nil || materializations == nil {
-		return
+	rollouts := result.Services.AppRollouts
+	if changeRequests == nil || materializations == nil || rollouts == nil {
+		return nil
 	}
-	appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
-		ChangeRequests:   changeRequests,
-		Materializations: materializations,
-		InstanceID:       appregistry.ResolveInstanceID(),
-	}).Start(ctx)
+	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
+		ChangeRequests:      changeRequests,
+		Materializations:    materializations,
+		Rollouts:            rollouts,
+		AppRestarter:        result.AppRestarter,
+		InstanceID:          appregistry.ResolveInstanceID(),
+		RestartDelay:        restartDelay,
+		DisableRestartDelay: disableRestartDelay,
+		RestartReady:        result.StartupProvidersReady,
+	})
+	poller.Start(ctx)
+	return poller
+}
+
+func appRegistryRestartDelay(cfg *config.Config) (time.Duration, bool, error) {
+	if cfg == nil {
+		return 0, true, nil
+	}
+	raw := strings.TrimSpace(cfg.Server.AppRegistry.RestartDelay)
+	if raw == "" {
+		return 0, true, nil
+	}
+	delay, err := config.ParseDuration(raw)
+	if err != nil {
+		return 0, false, fmt.Errorf("server.appRegistry.restartDelay: %w", err)
+	}
+	return delay, false, nil
 }
