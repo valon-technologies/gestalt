@@ -128,8 +128,27 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 
 var errInvalidAuthorizationHeader = errors.New("invalid authorization header format")
 
+func requestBearerTokenPreferringHeader(r *http.Request) (string, error) {
+	token, err := requestBearerToken(r)
+	if err == nil && token != "" {
+		return token, nil
+	}
+	if err != nil && !errors.Is(err, errInvalidAuthorizationHeader) {
+		return "", err
+	}
+	if c, err := r.Cookie(sessionCookieName); err == nil {
+		if token := strings.TrimSpace(c.Value); token != "" {
+			return token, nil
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func requestBearerToken(r *http.Request) (string, error) {
-	header := r.Header.Get("Authorization")
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if header == "" {
 		return "", nil
 	}
