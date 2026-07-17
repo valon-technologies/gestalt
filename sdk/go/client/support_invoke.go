@@ -13,12 +13,14 @@ import (
 // status, an error envelope, or an undecodable result body. Transport
 // failures stay *GestaltError; both arrive through the error return of
 // json_result methods.
+//
+// Envelope error.code on the wire maps to Reason.
 type InvokeError struct {
+	GestaltError
 	App       string
 	Operation string
 	Status    int32
-	Code      string
-	Message   string
+	Reason    string
 	Body      any
 	RawBody   []byte
 }
@@ -30,13 +32,21 @@ func (e *InvokeError) Error() string {
 	if e.Message != "" {
 		return e.Message
 	}
-	if e.Code != "" {
-		return e.Code
+	if e.Reason != "" {
+		return e.Reason
 	}
 	if e.Status > 0 {
 		return fmt.Sprintf("app invoke failed with status %d", e.Status)
 	}
 	return "app invoke failed"
+}
+
+// Unwrap exposes the embedded GestaltError for errors.As and errors.Is.
+func (e *InvokeError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return &e.GestaltError
 }
 
 // IsOK reports whether status is an HTTP success status (200-299).
@@ -54,20 +64,49 @@ func RequireOK(app, operation string, status int32, body []byte) error {
 	return statusInvokeError(app, operation, status, body, parsed, err)
 }
 
+func newInvokeError(app, operation string, status int32, message, reason string, body any, rawBody []byte) *InvokeError {
+	code := GestaltErrorCodeUnknown
+	if status > 0 {
+		code = HTTPStatusToGestaltCode(status)
+	} else if reason == "graphql_errors" || message == "app invoke response is not valid JSON" || message == "operation result body is not valid JSON" {
+		code = GestaltErrorCodeInternal
+	}
+	return &InvokeError{
+		GestaltError: GestaltError{
+			Code:    code,
+			Message: message,
+		},
+		App:       app,
+		Operation: operation,
+		Status:    status,
+		Reason:    reason,
+		Body:      body,
+		RawBody:   rawBody,
+	}
+}
+
 // statusInvokeError builds the *InvokeError for an HTTP-error status: the raw
 // body always rides along, and a JSON body additionally carries its parsed
 // form and error envelope fields.
 func statusInvokeError(app, operation string, status int32, body []byte, parsed any, parseErr error) *InvokeError {
-	invokeErr := &InvokeError{
-		App:       app,
-		Operation: operation,
-		Status:    status,
-		Message:   fmt.Sprintf("app invoke failed with status %d", status),
-		RawBody:   body,
-	}
+	invokeErr := newInvokeError(
+		app,
+		operation,
+		status,
+		fmt.Sprintf("app invoke failed with status %d", status),
+		"",
+		nil,
+		body,
+	)
 	if parseErr == nil {
 		invokeErr.Body = parsed
-		applyInvokeErrorFields(invokeErr, parsed)
+		message, reason := extractInvokeErrorFields(parsed)
+		if message != "" {
+			invokeErr.Message = message
+		}
+		if reason != "" {
+			invokeErr.Reason = reason
+		}
 	}
 	return invokeErr
 }
@@ -82,26 +121,25 @@ func DecodeAppResult(app, operation string, status int32, body []byte) (any, err
 		return nil, statusInvokeError(app, operation, status, body, parsed, err)
 	}
 	if err != nil {
-		return nil, &InvokeError{
-			App:       app,
-			Operation: operation,
-			Message:   "app invoke response is not valid JSON",
-			RawBody:   body,
-		}
+		return nil, newInvokeError(
+			app,
+			operation,
+			0,
+			"app invoke response is not valid JSON",
+			"",
+			nil,
+			body,
+		)
 	}
 	if object, ok := parsed.(map[string]any); ok {
 		if statusValue, ok := object["status"].(string); ok {
 			switch statusValue {
 			case "error":
-				invokeErr := &InvokeError{
-					App:       app,
-					Operation: operation,
-					Message:   "app invoke failed",
-					Body:      parsed,
-					RawBody:   body,
+				message, reason := extractInvokeErrorFields(parsed)
+				if message == "" {
+					message = "app invoke failed"
 				}
-				applyInvokeErrorFields(invokeErr, parsed)
-				return nil, invokeErr
+				return nil, newInvokeError(app, operation, 0, message, reason, parsed, body)
 			case "success":
 				if data, ok := object["data"]; ok {
 					return data, nil
@@ -174,37 +212,31 @@ func graphQLErrors(app string, rawBody []byte, value any) error {
 			message = text
 		}
 	}
-	return &InvokeError{
-		App:       app,
-		Operation: "graphql",
-		Code:      "graphql_errors",
-		Message:   message,
-		Body:      value,
-		RawBody:   rawBody,
-	}
+	return newInvokeError(app, "graphql", 0, message, "graphql_errors", value, rawBody)
 }
 
-func applyInvokeErrorFields(err *InvokeError, parsed any) {
+func extractInvokeErrorFields(parsed any) (message, reason string) {
 	object, ok := parsed.(map[string]any)
 	if !ok {
-		return
+		return "", ""
 	}
 	if nested, ok := object["error"].(map[string]any); ok {
-		if message, ok := nested["message"].(string); ok && strings.TrimSpace(message) != "" {
-			err.Message = message
+		if text, ok := nested["message"].(string); ok && strings.TrimSpace(text) != "" {
+			message = text
 		}
 		if code, ok := nested["code"].(string); ok && strings.TrimSpace(code) != "" {
-			err.Code = code
+			reason = code
 		}
 	}
-	if err.Message == "" || err.Message == "app invoke failed" || strings.HasPrefix(err.Message, "app invoke failed with status ") {
-		if message, ok := object["message"].(string); ok && strings.TrimSpace(message) != "" {
-			err.Message = message
+	if message == "" {
+		if text, ok := object["message"].(string); ok && strings.TrimSpace(text) != "" {
+			message = text
 		}
 	}
-	if err.Code == "" {
+	if reason == "" {
 		if code, ok := object["code"].(string); ok && strings.TrimSpace(code) != "" {
-			err.Code = code
+			reason = code
 		}
 	}
+	return message, reason
 }

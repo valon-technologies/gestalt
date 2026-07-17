@@ -56,3 +56,22 @@ impl GestaltError {
         }
     }
 }
+
+/// Maps an HTTP status code to the canonical Gestalt gRPC error code.
+pub fn http_status_to_gestalt_code(status: i32) -> i32 {
+    match status {
+        400 => gestalt_error_code::INVALID_ARGUMENT,
+        401 => gestalt_error_code::UNAUTHENTICATED,
+        403 => gestalt_error_code::PERMISSION_DENIED,
+        404 => gestalt_error_code::NOT_FOUND,
+        409 => gestalt_error_code::ALREADY_EXISTS,
+        412 => gestalt_error_code::FAILED_PRECONDITION,
+        429 => gestalt_error_code::RESOURCE_EXHAUSTED,
+        499 => gestalt_error_code::CANCELLED,
+        500 => gestalt_error_code::INTERNAL,
+        501 => gestalt_error_code::UNIMPLEMENTED,
+        503 => gestalt_error_code::UNAVAILABLE,
+        504 => gestalt_error_code::DEADLINE_EXCEEDED,
+        _ => gestalt_error_code::UNKNOWN,
+    }
+}

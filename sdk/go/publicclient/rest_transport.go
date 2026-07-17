@@ -39,7 +39,7 @@ type gatewayErrorBody struct {
 }
 
 func decodeGatewayError(status int, body []byte) error {
-	code := httpStatusToGestaltCode(status)
+	code := gestaltclient.HTTPStatusToGestaltCode(int32(status))
 	message := fmt.Sprintf("request failed with status %d", status)
 	if len(body) > 0 {
 		var payload gatewayErrorBody
@@ -64,37 +64,6 @@ func codeFromString(raw string) generated.GestaltErrorCode {
 		}
 	}
 	return gestaltclient.GestaltErrorCodeUnknown
-}
-
-func httpStatusToGestaltCode(status int) generated.GestaltErrorCode {
-	switch status {
-	case http.StatusBadRequest:
-		return gestaltclient.GestaltErrorCodeInvalidArgument
-	case http.StatusUnauthorized:
-		return gestaltclient.GestaltErrorCodeUnauthenticated
-	case http.StatusForbidden:
-		return gestaltclient.GestaltErrorCodePermissionDenied
-	case http.StatusNotFound:
-		return gestaltclient.GestaltErrorCodeNotFound
-	case http.StatusConflict:
-		return gestaltclient.GestaltErrorCodeAlreadyExists
-	case http.StatusPreconditionFailed:
-		return gestaltclient.GestaltErrorCodeFailedPrecondition
-	case 429:
-		return gestaltclient.GestaltErrorCodeResourceExhausted
-	case 499:
-		return gestaltclient.GestaltErrorCodeCanceled
-	case http.StatusInternalServerError:
-		return gestaltclient.GestaltErrorCodeInternal
-	case http.StatusNotImplemented:
-		return gestaltclient.GestaltErrorCodeUnimplemented
-	case http.StatusServiceUnavailable:
-		return gestaltclient.GestaltErrorCodeUnavailable
-	case http.StatusGatewayTimeout:
-		return gestaltclient.GestaltErrorCodeDeadlineExceeded
-	default:
-		return gestaltclient.GestaltErrorCodeUnknown
-	}
 }
 
 func (t *restUnaryTransport) Unary(

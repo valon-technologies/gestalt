@@ -1,6 +1,6 @@
 //! Gestalt public transport errors.
 
-use crate::rpc_support::{GestaltError, gestalt_error_code};
+use crate::rpc_support::{GestaltError, gestalt_error_code, http_status_to_gestalt_code};
 
 /// Header name that marks OperationResult passthrough responses.
 pub const RESPONSE_KIND_HEADER: &str = "X-Gestalt-Response-Kind";
@@ -43,6 +43,7 @@ fn extract_gateway_error_message(parsed: &serde_json::Value) -> Option<String> {
 }
 
 fn resolve_gateway_error_code(status: u16, parsed: Option<&serde_json::Value>) -> i32 {
+    let status = status as i32;
     let Some(parsed) = parsed else {
         return http_status_to_gestalt_code(status);
     };
@@ -77,24 +78,6 @@ fn grpc_code_name_to_gestalt_code(name: &str) -> Option<i32> {
         "Unauthenticated" => gestalt_error_code::UNAUTHENTICATED,
         _ => return None,
     })
-}
-
-fn http_status_to_gestalt_code(status: u16) -> i32 {
-    match status {
-        400 => gestalt_error_code::INVALID_ARGUMENT,
-        401 => gestalt_error_code::UNAUTHENTICATED,
-        403 => gestalt_error_code::PERMISSION_DENIED,
-        404 => gestalt_error_code::NOT_FOUND,
-        409 => gestalt_error_code::ALREADY_EXISTS,
-        412 => gestalt_error_code::FAILED_PRECONDITION,
-        429 => gestalt_error_code::RESOURCE_EXHAUSTED,
-        499 => gestalt_error_code::CANCELLED,
-        500 => gestalt_error_code::INTERNAL,
-        501 => gestalt_error_code::UNIMPLEMENTED,
-        503 => gestalt_error_code::UNAVAILABLE,
-        504 => gestalt_error_code::DEADLINE_EXCEEDED,
-        _ => gestalt_error_code::UNKNOWN,
-    }
 }
 
 #[cfg(test)]

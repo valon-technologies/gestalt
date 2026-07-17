@@ -11,6 +11,12 @@ import {
   isOk,
   requireOk,
 } from "../src/invoke_support.ts";
+import {
+  GestaltError,
+  GestaltErrorCode,
+  httpStatusToGestaltCode,
+  toGestaltError,
+} from "../src/rpc_support.ts";
 
 const fixtureRoot = join(import.meta.dir, "..", "..", "testdata", "app_invoke");
 
@@ -79,13 +85,16 @@ test("decode errors carry the envelope fields", () => {
     throw new Error("expected InvokeError");
   } catch (error) {
     expect(error).toBeInstanceOf(InvokeError);
+    expect(error).toBeInstanceOf(GestaltError);
     const invokeError = error as InvokeError;
     expect(invokeError.app).toBe("github");
     expect(invokeError.operation).toBe("get_issue");
     expect(invokeError.status).toBeUndefined();
-    expect(invokeError.code).toBe("missing_credential");
+    expect(invokeError.reason).toBe("missing_credential");
+    expect(invokeError.code).toBe(GestaltErrorCode.Unknown);
     expect(invokeError.message).toBe("missing credential");
     expect(invokeError.rawText()).toBe(fixture("error_envelope.json"));
+    expect(toGestaltError(invokeError)).toBe(invokeError);
   }
 
   try {
@@ -95,7 +104,8 @@ test("decode errors carry the envelope fields", () => {
     expect(error).toBeInstanceOf(InvokeError);
     const invokeError = error as InvokeError;
     expect(invokeError.status).toBe(401);
-    expect(invokeError.code).toBe("unauthorized");
+    expect(invokeError.reason).toBe("unauthorized");
+    expect(invokeError.code).toBe(GestaltErrorCode.Unauthenticated);
     expect(invokeError.message).toBe("unauthorized");
   }
 
@@ -104,7 +114,9 @@ test("decode errors carry the envelope fields", () => {
     throw new Error("expected InvokeError");
   } catch (error) {
     expect(error).toBeInstanceOf(InvokeError);
-    expect((error as InvokeError).status).toBe(302);
+    const invokeError = error as InvokeError;
+    expect(invokeError.status).toBe(302);
+    expect(invokeError.code).toBe(GestaltErrorCode.Unknown);
   }
 
   try {
@@ -112,8 +124,15 @@ test("decode errors carry the envelope fields", () => {
     throw new Error("expected InvokeError");
   } catch (error) {
     expect(error).toBeInstanceOf(InvokeError);
-    expect((error as InvokeError).message).toBe("app invoke response is not valid JSON");
+    const invokeError = error as InvokeError;
+    expect(invokeError.message).toBe("app invoke response is not valid JSON");
+    expect(invokeError.code).toBe(GestaltErrorCode.Internal);
   }
+});
+
+test("httpStatusToGestaltCode maps common HTTP statuses", () => {
+  expect(httpStatusToGestaltCode(401)).toBe(GestaltErrorCode.Unauthenticated);
+  expect(httpStatusToGestaltCode(418)).toBe(GestaltErrorCode.Unknown);
 });
 
 test("isOk reports 2xx statuses only", () => {
@@ -139,7 +158,8 @@ test("requireOk raises the canonical status error", () => {
     expect(invokeError.app).toBe("github");
     expect(invokeError.operation).toBe("get_issue");
     expect(invokeError.status).toBe(401);
-    expect(invokeError.code).toBe("unauthorized");
+    expect(invokeError.reason).toBe("unauthorized");
+    expect(invokeError.code).toBe(GestaltErrorCode.Unauthenticated);
     expect(invokeError.message).toBe("unauthorized");
     expect(invokeError.rawText()).toBe(fixture("http_401.json"));
   }
@@ -178,7 +198,9 @@ test("InvokeError is exported and catchable", () => {
     rawBody: bytes(fixture("http_401.json")),
   });
   expect(error).toBeInstanceOf(Error);
+  expect(error).toBeInstanceOf(GestaltError);
   expect(error).toBeInstanceOf(InvokeError);
   expect(error.status).toBe(401);
+  expect(error.code).toBe(GestaltErrorCode.Unauthenticated);
   expect(error.rawText()).toBe(fixture("http_401.json"));
 });

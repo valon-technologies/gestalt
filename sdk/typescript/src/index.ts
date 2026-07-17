@@ -93,6 +93,14 @@ export {
   requireOk,
 } from "./invoke_support.ts";
 export {
+  GestaltError,
+  GestaltErrorCode,
+  httpStatusToGestaltCode,
+  type DurationMs,
+  type Init,
+  type RpcStatus,
+} from "./rpc_support.ts";
+export {
   Agent,
   agentOutputKindStructured,
   agentOutputKindText,
@@ -101,13 +109,6 @@ export {
   type PreparedAgentWorkspace,
 } from "./agent.ts";
 export { Workflow } from "./workflow-service.ts";
-export {
-  GestaltError,
-  GestaltErrorCode,
-  type DurationMs,
-  type Init,
-  type RpcStatus,
-} from "./rpc_support.ts";
 export {
   Authorization,
   relationshipTargetKindResource,

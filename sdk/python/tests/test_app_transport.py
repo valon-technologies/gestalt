@@ -28,6 +28,7 @@ from gestalt.app import (
     StringList,
     SubjectContext,
 )
+from gestalt.rpc_support import GestaltErrorCode
 
 app_pb2: Any = _app_pb2
 app_pb2_grpc: Any = _app_pb2_grpc
@@ -343,7 +344,8 @@ class AppTransportTests(unittest.TestCase):
 
         self.assertEqual(error.exception.app, "github")
         self.assertEqual(error.exception.operation, "error_envelope")
-        self.assertEqual(error.exception.code, "missing_credential")
+        self.assertEqual(error.exception.reason, "missing_credential")
+        self.assertEqual(error.exception.code, GestaltErrorCode.UNKNOWN)
         self.assertEqual(str(error.exception), "missing credential")
 
     def test_request_app_forwards_empty_context(self) -> None:
