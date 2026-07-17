@@ -442,25 +442,15 @@ func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceI
 		if err != nil {
 			return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
 		}
-		if !materialization.MaterializedAt.IsZero() {
-			recordedPath := strings.TrimSpace(materialization.MaterializedPath)
-			if recordedPath == "" {
-				recordedPath = MaterializedPath(p.AppMaterializer.ArtifactsDir, appName, version)
-			}
-			ready, err := isMaterializedPackage(recordedPath, appName, version)
-			if err != nil {
-				return fmt.Errorf("validate materialized %s@%s: %w", appName, version, err)
-			}
-			if ready {
-				continue
-			}
-		}
-		materializedPath, err := p.AppMaterializer.Materialize(ctx, installation)
+		result, err := p.AppMaterializer.Ensure(ctx, installation)
 		if err != nil {
 			return fmt.Errorf("materialize %s@%s: %w", appName, version, err)
 		}
+		if !result.Changed && !materialization.MaterializedAt.IsZero() && materialization.MaterializedPath == result.Path {
+			continue
+		}
 		materializedAt := p.now()
-		if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, materializedPath, materializedAt); err != nil {
+		if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, result.Path, materializedAt); err != nil {
 			return fmt.Errorf("record materialization for %s@%s: %w", appName, version, err)
 		}
 		slog.Info(
@@ -468,7 +458,7 @@ func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceI
 			"app", appName,
 			"version", version,
 			"instance_id", instanceID,
-			"materialized_path", materializedPath,
+			"materialized_path", result.Path,
 			"materialized_at", materializedAt,
 		)
 	}

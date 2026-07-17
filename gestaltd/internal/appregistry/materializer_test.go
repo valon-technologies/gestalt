@@ -29,14 +29,15 @@ func TestMaterializer_downloads_and_extracts_artifact(t *testing.T) {
 		ArtifactsDir: artifactsDir,
 	}
 
-	destDir, err := materializer.Materialize(ctx, &core.AppInstallation{
+	result, err := materializer.Ensure(ctx, &core.AppInstallation{
 		AppName:  "g-issues",
 		Version:  fixture.Version,
 		Registry: "toolshed",
 	})
 	if err != nil {
-		t.Fatalf("Materialize: %v", err)
+		t.Fatalf("Ensure: %v", err)
 	}
+	destDir := result.Path
 
 	want := appregistry.MaterializedPath(artifactsDir, "g-issues", fixture.Version)
 	if destDir != want {
@@ -67,20 +68,26 @@ func TestMaterializer_skips_when_already_materialized(t *testing.T) {
 		Registry: "toolshed",
 	}
 
-	first, err := materializer.Materialize(ctx, installation)
+	first, err := materializer.Ensure(ctx, installation)
 	if err != nil {
-		t.Fatalf("first Materialize: %v", err)
+		t.Fatalf("first Ensure: %v", err)
+	}
+	if !first.Changed {
+		t.Fatal("first Ensure did not report a changed artifact")
 	}
 
 	badReader := fixture.NewDigestMismatchReader(t, fixture.Version)
 	materializer.Reader = badReader
 
-	second, err := materializer.Materialize(ctx, installation)
+	second, err := materializer.Ensure(ctx, installation)
 	if err != nil {
-		t.Fatalf("second Materialize: %v", err)
+		t.Fatalf("second Ensure: %v", err)
 	}
-	if second != first {
-		t.Fatalf("second destDir = %q, want %q", second, first)
+	if second.Path != first.Path {
+		t.Fatalf("second destDir = %q, want %q", second.Path, first.Path)
+	}
+	if second.Changed {
+		t.Fatal("second Ensure reported an unchanged artifact as changed")
 	}
 }
 
@@ -106,16 +113,16 @@ func TestMaterializer_retries_after_partial_install(t *testing.T) {
 		ArtifactsDir: artifactsDir,
 	}
 
-	got, err := materializer.Materialize(ctx, &core.AppInstallation{
+	result, err := materializer.Ensure(ctx, &core.AppInstallation{
 		AppName:  "g-issues",
 		Version:  fixture.Version,
 		Registry: "toolshed",
 	})
 	if err != nil {
-		t.Fatalf("Materialize: %v", err)
+		t.Fatalf("Ensure: %v", err)
 	}
-	if got != destDir {
-		t.Fatalf("destDir = %q, want %q", got, destDir)
+	if result.Path != destDir {
+		t.Fatalf("destDir = %q, want %q", result.Path, destDir)
 	}
 	if _, err := os.Stat(filepath.Join(destDir, filepath.FromSlash(packageio.InstalledExecutablePath("g-issues", runtime.GOOS)))); err != nil {
 		t.Fatalf("stat installed executable: %v", err)
@@ -142,10 +149,11 @@ func TestMaterializer_retries_when_manifest_version_mismatches(t *testing.T) {
 		Registry: "toolshed",
 	}
 
-	destDir, err := materializer.Materialize(ctx, installation)
+	result, err := materializer.Ensure(ctx, installation)
 	if err != nil {
-		t.Fatalf("first Materialize: %v", err)
+		t.Fatalf("first Ensure: %v", err)
 	}
+	destDir := result.Path
 
 	manifestPath := filepath.Join(destDir, "manifest.yaml")
 	_, manifest, err := packageio.ReadManifestFile(manifestPath)
@@ -161,8 +169,8 @@ func TestMaterializer_retries_when_manifest_version_mismatches(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	if _, err := materializer.Materialize(ctx, installation); err != nil {
-		t.Fatalf("second Materialize: %v", err)
+	if _, err := materializer.Ensure(ctx, installation); err != nil {
+		t.Fatalf("second Ensure: %v", err)
 	}
 	_, manifest, err = packageio.ReadManifestFile(manifestPath)
 	if err != nil {
@@ -188,7 +196,7 @@ func TestMaterializer_rejects_digest_mismatch(t *testing.T) {
 		ArtifactsDir: artifactsDir,
 	}
 
-	_, err := materializer.Materialize(ctx, &core.AppInstallation{
+	_, err := materializer.Ensure(ctx, &core.AppInstallation{
 		AppName:  "g-issues",
 		Version:  fixture.Version,
 		Registry: "toolshed",

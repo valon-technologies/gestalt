@@ -23,54 +23,58 @@ type Materializer struct {
 	ArtifactsDir string
 }
 
+type MaterializationResult struct {
+	Path    string
+	Changed bool
+}
+
 // MaterializedPath returns the on-disk directory for one installed app version.
 func MaterializedPath(artifactsDir, appName, version string) string {
 	return filepath.Join(strings.TrimSpace(artifactsDir), RegistryInstallSubdir, strings.TrimSpace(appName), strings.TrimSpace(version))
 }
 
-// Materialize downloads and extracts the registry artifact for installation when
-// it is not already present on disk.
-func (m *Materializer) Materialize(ctx context.Context, installation *core.AppInstallation) (string, error) {
+// Ensure validates the local artifact and downloads and extracts it when needed.
+func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstallation) (*MaterializationResult, error) {
 	if m == nil {
-		return "", fmt.Errorf("app registry materializer is not configured")
+		return nil, fmt.Errorf("app registry materializer is not configured")
 	}
 	if installation == nil {
-		return "", fmt.Errorf("installation is required")
+		return nil, fmt.Errorf("installation is required")
 	}
 	appName := strings.TrimSpace(installation.AppName)
 	version := strings.TrimSpace(installation.Version)
 	registryName := strings.TrimSpace(installation.Registry)
 	if appName == "" || version == "" {
-		return "", fmt.Errorf("installation app and version are required")
+		return nil, fmt.Errorf("installation app and version are required")
 	}
 	if registryName == "" {
-		return "", fmt.Errorf("installation registry is required")
+		return nil, fmt.Errorf("installation registry is required")
 	}
 	artifactsDir := strings.TrimSpace(m.ArtifactsDir)
 	if artifactsDir == "" {
-		return "", fmt.Errorf("artifacts directory is not configured")
+		return nil, fmt.Errorf("artifacts directory is not configured")
 	}
 
 	destDir := MaterializedPath(artifactsDir, appName, version)
 	if materialized, err := isMaterializedPackage(destDir, appName, version); err != nil {
-		return "", err
+		return nil, err
 	} else if materialized {
-		return destDir, nil
+		return &MaterializationResult{Path: destDir}, nil
 	}
 	if err := removePartialMaterializedPackage(destDir); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	registry, ok := m.Registries[registryName]
 	if !ok {
-		return "", fmt.Errorf("app registry %q not found", registryName)
+		return nil, fmt.Errorf("app registry %q not found", registryName)
 	}
 	if strings.TrimSpace(registry.Kind) != config.AppRegistryKindGCS {
-		return "", fmt.Errorf("unsupported app registry kind")
+		return nil, fmt.Errorf("unsupported app registry kind")
 	}
 	publicRoot, err := registry.PublicURL()
 	if err != nil {
-		return "", fmt.Errorf("app registry public URL is invalid: %w", err)
+		return nil, fmt.Errorf("app registry public URL is invalid: %w", err)
 	}
 
 	reader := m.Reader
@@ -79,35 +83,35 @@ func (m *Materializer) Materialize(ctx context.Context, installation *core.AppIn
 	}
 	entry, err := reader.FetchEntry(ctx, publicRoot, appName, version)
 	if err != nil {
-		return "", fmt.Errorf("fetch app registry entry: %w", err)
+		return nil, fmt.Errorf("fetch app registry entry: %w", err)
 	}
 	if entry.App != appName {
-		return "", fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName)
+		return nil, fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName)
 	}
 	if entry.Version != version {
-		return "", fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version)
+		return nil, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version)
 	}
 
 	platform := providerpkg.CurrentPlatformString()
 	artifact, ok := entry.Artifacts[platform]
 	if !ok {
-		return "", fmt.Errorf("registry entry has no artifact for platform %q", platform)
+		return nil, fmt.Errorf("registry entry has no artifact for platform %q", platform)
 	}
 	artifactURL := strings.TrimSpace(artifact.PublicURL)
 	if artifactURL == "" {
 		artifactURL = strings.TrimSpace(artifact.URL)
 	}
 	if artifactURL == "" {
-		return "", fmt.Errorf("registry entry artifact for platform %q has no download URL", platform)
+		return nil, fmt.Errorf("registry entry artifact for platform %q has no download URL", platform)
 	}
 	expectedSHA := strings.TrimSpace(artifact.SHA256)
 	if expectedSHA == "" {
-		return "", fmt.Errorf("registry entry artifact for platform %q is missing sha256", platform)
+		return nil, fmt.Errorf("registry entry artifact for platform %q is missing sha256", platform)
 	}
 
 	download, err := downloadRegistryArtifact(ctx, reader.client(), artifactURL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer func() {
 		if download.Cleanup != nil {
@@ -115,13 +119,13 @@ func (m *Materializer) Materialize(ctx context.Context, installation *core.AppIn
 		}
 	}()
 	if !strings.EqualFold(strings.TrimSpace(download.SHA256Hex), expectedSHA) {
-		return "", fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA)
+		return nil, fmt.Errorf("artifact digest mismatch: got %s, want %s", download.SHA256Hex, expectedSHA)
 	}
 
 	if err := materializePublishedPackage(ctx, download.LocalPath, destDir, appName); err != nil {
-		return "", fmt.Errorf("materialize app artifact: %w", err)
+		return nil, fmt.Errorf("materialize app artifact: %w", err)
 	}
-	return destDir, nil
+	return &MaterializationResult{Path: destDir, Changed: true}, nil
 }
 
 func isMaterializedPackage(destDir, appName, version string) (bool, error) {
