@@ -52,10 +52,13 @@ func (m *Materializer) Materialize(ctx context.Context, installation *core.AppIn
 	}
 
 	destDir := MaterializedPath(artifactsDir, appName, version)
-	if materialized, err := isMaterializedPackage(destDir); err != nil {
+	if materialized, err := isMaterializedPackage(destDir, appName); err != nil {
 		return "", err
 	} else if materialized {
 		return destDir, nil
+	}
+	if err := removePartialMaterializedPackage(destDir); err != nil {
+		return "", err
 	}
 
 	registry, ok := m.Registries[registryName]
@@ -121,28 +124,38 @@ func (m *Materializer) Materialize(ctx context.Context, installation *core.AppIn
 	return destDir, nil
 }
 
-func isMaterializedPackage(destDir string) (bool, error) {
+func isMaterializedPackage(destDir, appName string) (bool, error) {
 	destDir = strings.TrimSpace(destDir)
 	if destDir == "" {
 		return false, nil
 	}
-	info, err := os.Stat(destDir)
-	if err != nil {
+	if _, err := os.Stat(destDir); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("stat materialized path %s: %w", destDir, err)
 	}
-	if !info.IsDir() {
-		return false, fmt.Errorf("materialized path %s is not a directory", destDir)
-	}
-	if _, err := os.Stat(filepath.Join(destDir, "manifest.yaml")); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("stat materialized manifest %s: %w", destDir, err)
+	if err := operator.ValidateInstalledPublishedPackage(destDir, appName); err != nil {
+		return false, nil
 	}
 	return true, nil
+}
+
+func removePartialMaterializedPackage(destDir string) error {
+	destDir = strings.TrimSpace(destDir)
+	if destDir == "" {
+		return nil
+	}
+	if _, err := os.Stat(destDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat partial materialized path %s: %w", destDir, err)
+	}
+	if err := os.RemoveAll(destDir); err != nil {
+		return fmt.Errorf("remove partial materialized path %s: %w", destDir, err)
+	}
+	return nil
 }
 
 func downloadRegistryArtifact(ctx context.Context, client *http.Client, artifactURL string) (*providerpkg.DownloadResult, error) {

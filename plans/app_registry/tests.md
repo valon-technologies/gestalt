@@ -118,7 +118,8 @@ go test ./internal/appregistry -run 'TestMaterializer|TestCatalogPollerMateriali
 ### `materializer_test.go`
 
 - **`TestMaterializer_downloads_and_extracts_artifact`** — downloads a registry archive and extracts `manifest.yaml` under `{artifactsDir}/registry-installed/{app}/{version}`.
-- **`TestMaterializer_skips_when_already_materialized`** — idempotent when `manifest.yaml` already exists on disk.
+- **`TestMaterializer_skips_when_already_materialized`** — idempotent when a complete install already exists on disk.
+- **`TestMaterializer_retries_after_partial_install`** — removes manifest-only partial trees and re-downloads.
 - **`TestMaterializer_rejects_digest_mismatch`** — rejects archives whose digest does not match the registry entry.
 
 ### `poller_materialize_test.go`

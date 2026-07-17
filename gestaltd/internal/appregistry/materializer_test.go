@@ -4,12 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
 
 func TestMaterializer_downloads_and_extracts_artifact(t *testing.T) {
@@ -79,6 +81,44 @@ func TestMaterializer_skips_when_already_materialized(t *testing.T) {
 	}
 	if second != first {
 		t.Fatalf("second destDir = %q, want %q", second, first)
+	}
+}
+
+func TestMaterializer_retries_after_partial_install(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	fixture := registrytest.NewInstallFixture(t)
+	artifactsDir := t.TempDir()
+	destDir := appregistry.MaterializedPath(artifactsDir, "g-issues", fixture.Version)
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(destDir, "manifest.yaml"), []byte("kind: app\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	materializer := &appregistry.Materializer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		Reader:       fixture.Reader,
+		ArtifactsDir: artifactsDir,
+	}
+
+	got, err := materializer.Materialize(ctx, &core.AppInstallation{
+		AppName:  "g-issues",
+		Version:  fixture.Version,
+		Registry: "toolshed",
+	})
+	if err != nil {
+		t.Fatalf("Materialize: %v", err)
+	}
+	if got != destDir {
+		t.Fatalf("destDir = %q, want %q", got, destDir)
+	}
+	if _, err := os.Stat(filepath.Join(destDir, filepath.FromSlash(packageio.InstalledExecutablePath("g-issues", runtime.GOOS)))); err != nil {
+		t.Fatalf("stat installed executable: %v", err)
 	}
 }
 
