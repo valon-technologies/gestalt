@@ -62,7 +62,7 @@ Each pass:
 
 1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
 2. Group pending versions by app.
-3. Download and extract each pending registry artifact to `{artifactsDir}/registry-installed/{app}/{version}`, recording `materialized_at` and `materialized_path` while the provider is still running.
+3. Download and extract each pending registry artifact to `{artifactsDir}/registry-installed/{app}/{version}`, recording `materialized_at` and `materialized_path` while the provider is still running. Re-validate the recorded path on every pass; if the tree is missing or corrupt, re-download before `StopApp`.
 4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row.
 5. Mark non-restartable apps converged without a local stop/start.
 
