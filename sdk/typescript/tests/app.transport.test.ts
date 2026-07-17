@@ -208,9 +208,11 @@ test("App forwards request context to operation and GraphQL calls", async () => 
       throw new Error("expected InvokeError");
     } catch (error) {
       expect(error).toBeInstanceOf(InvokeError);
+      expect(error).toBeInstanceOf(GestaltError);
       const invokeError = error as InvokeError;
       expect(invokeError.message).toBe("missing credential");
-      expect(invokeError.code).toBe("missing_credential");
+      expect(invokeError.reason).toBe("missing_credential");
+      expect(invokeError.code).toBe(GestaltErrorCode.Unknown);
       expect(invokeError.app).toBe("github");
       expect(invokeError.operation).toBe("fail_envelope");
     }

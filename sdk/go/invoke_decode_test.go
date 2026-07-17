@@ -65,26 +65,48 @@ func TestDecodeAppResultFixtureSuiteErrors(t *testing.T) {
 	if !errors.As(err, &invokeErr) {
 		t.Fatalf("error = %v, want *client.InvokeError", err)
 	}
+	var gestaltErr *client.GestaltError
+	if !errors.As(err, &gestaltErr) {
+		t.Fatalf("error = %v, want embedded *client.GestaltError", err)
+	}
 	if invokeErr.App != "github" || invokeErr.Operation != "get_issue" || invokeErr.Status != 0 {
 		t.Fatalf("error envelope InvokeError = %+v, want app=github operation=get_issue status=0", invokeErr)
 	}
-	if invokeErr.Code != "missing_credential" || invokeErr.Message != "missing credential" {
+	if invokeErr.Reason != "missing_credential" || invokeErr.Message != "missing credential" {
 		t.Fatalf("error envelope InvokeError = %+v, want missing_credential", invokeErr)
+	}
+	if invokeErr.Code != client.GestaltErrorCodeUnknown {
+		t.Fatalf("error envelope code = %v, want Unknown", invokeErr.Code)
 	}
 
 	_, err = client.DecodeAppResult("github", "get_issue", 401, invokeDecodeFixture(t, "http_401.json"))
 	if !errors.As(err, &invokeErr) || invokeErr.Status != 401 || len(invokeErr.RawBody) == 0 {
 		t.Fatalf("HTTP InvokeError = %+v err=%v, want status=401 with raw body", invokeErr, err)
 	}
+	if invokeErr.Reason != "unauthorized" || invokeErr.Code != client.GestaltErrorCodeUnauthenticated {
+		t.Fatalf("HTTP 401 InvokeError = %+v, want unauthorized + Unauthenticated", invokeErr)
+	}
 
 	_, err = client.DecodeAppResult("github", "get_issue", 302, invokeDecodeFixture(t, "http_302.json"))
 	if !errors.As(err, &invokeErr) || invokeErr.Status != 302 {
 		t.Fatalf("HTTP 302 InvokeError = %+v err=%v, want status=302", invokeErr, err)
 	}
+	if invokeErr.Code != client.GestaltErrorCodeUnknown {
+		t.Fatalf("HTTP 302 code = %v, want Unknown", invokeErr.Code)
+	}
 
 	_, err = client.DecodeAppResult("github", "get_issue", 200, invokeDecodeFixture(t, "invalid_json.txt"))
 	if !errors.As(err, &invokeErr) || invokeErr.Message != "app invoke response is not valid JSON" || len(invokeErr.RawBody) == 0 {
 		t.Fatalf("invalid JSON InvokeError = %+v err=%v", invokeErr, err)
+	}
+	if invokeErr.Code != client.GestaltErrorCodeInternal {
+		t.Fatalf("invalid JSON code = %v, want Internal", invokeErr.Code)
+	}
+}
+
+func TestHTTPStatusToGestaltCode(t *testing.T) {
+	if got := client.HTTPStatusToGestaltCode(401); got != client.GestaltErrorCodeUnauthenticated {
+		t.Fatalf("HTTPStatusToGestaltCode(401) = %v, want Unauthenticated", got)
 	}
 }
 
@@ -118,8 +140,11 @@ func TestRequireOK(t *testing.T) {
 	if invokeErr.App != "github" || invokeErr.Operation != "get_issue" || invokeErr.Status != 401 {
 		t.Fatalf("RequireOK(401) InvokeError = %+v, want app=github operation=get_issue status=401", invokeErr)
 	}
-	if invokeErr.Code != "unauthorized" || invokeErr.Message != "unauthorized" || len(invokeErr.RawBody) == 0 {
+	if invokeErr.Reason != "unauthorized" || invokeErr.Message != "unauthorized" || len(invokeErr.RawBody) == 0 {
 		t.Fatalf("RequireOK(401) InvokeError = %+v, want unauthorized envelope fields with raw body", invokeErr)
+	}
+	if invokeErr.Code != client.GestaltErrorCodeUnauthenticated {
+		t.Fatalf("RequireOK(401) code = %v, want Unauthenticated", invokeErr.Code)
 	}
 
 	// RequireOK shares the HTTP-error extraction path with DecodeAppResult:
@@ -158,8 +183,11 @@ func TestDecodeGraphQLResultFixtureSuite(t *testing.T) {
 	if !errors.As(err, &invokeErr) {
 		t.Fatalf("graphql errors = %v, want *client.InvokeError", err)
 	}
-	if invokeErr.Code != "graphql_errors" || invokeErr.Operation != "graphql" || invokeErr.Message != "permission denied" {
-		t.Fatalf("graphql InvokeError = %+v, want code=graphql_errors operation=graphql", invokeErr)
+	if invokeErr.Reason != "graphql_errors" || invokeErr.Operation != "graphql" || invokeErr.Message != "permission denied" {
+		t.Fatalf("graphql InvokeError = %+v, want reason=graphql_errors operation=graphql", invokeErr)
+	}
+	if invokeErr.Code != client.GestaltErrorCodeInternal {
+		t.Fatalf("graphql code = %v, want Internal", invokeErr.Code)
 	}
 
 	if _, err = client.DecodeGraphQLResult("linear", 200, invokeDecodeFixture(t, "graphql_success_envelope_errors.json")); !errors.As(err, &invokeErr) {
@@ -183,7 +211,7 @@ func TestJSONResultAs(t *testing.T) {
 
 	_, err = client.JSONResultAs[issue](client.DecodeAppResult("github", "get_issue", 200, invokeDecodeFixture(t, "error_envelope.json")))
 	var invokeErr *client.InvokeError
-	if !errors.As(err, &invokeErr) || invokeErr.Code != "missing_credential" {
+	if !errors.As(err, &invokeErr) || invokeErr.Reason != "missing_credential" {
 		t.Fatalf("JSONResultAs error passthrough = %v, want missing_credential *client.InvokeError", err)
 	}
 }
