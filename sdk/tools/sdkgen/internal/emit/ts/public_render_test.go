@@ -79,3 +79,87 @@ func TestRenderPublicAppClientAlwaysUsesWireConverter(t *testing.T) {
 		t.Fatalf("app client must import output schema from output proto file:\n%s", out)
 	}
 }
+
+func TestRenderPublicGatewayErrorServerImports(t *testing.T) {
+	t.Parallel()
+
+	out := renderPublicGatewayError(ServerPublicImports())
+	if !strings.Contains(out, `from "../../rpc_support.ts"`) {
+		t.Fatalf("server gateway_error must import package rpc_support:\n%s", out)
+	}
+	if !strings.Contains(out, "export function parseGatewayError") {
+		t.Fatalf("missing parseGatewayError:\n%s", out)
+	}
+	if strings.Contains(out, "__RPC_SUPPORT_IMPORT__") {
+		t.Fatalf("import placeholder must be substituted:\n%s", out)
+	}
+}
+
+func TestRenderPublicGatewayErrorWebImports(t *testing.T) {
+	t.Parallel()
+
+	out := renderPublicGatewayError(WebPublicImports())
+	if !strings.Contains(out, `from "../runtime/rpc_support.ts"`) {
+		t.Fatalf("web gateway_error must import runtime rpc_support:\n%s", out)
+	}
+}
+
+func TestRenderPublicRestRequestMappingUsesPublicMethodMetadata(t *testing.T) {
+	t.Parallel()
+
+	out := renderPublicRestRequestMapping()
+	for _, want := range []string{
+		`from "./methods.ts"`,
+		"export function buildRestPath",
+		"export function buildRestQuery",
+		"export function buildRestBody",
+		`Pick<PublicMethod, "http" | "fill" | "reject">`,
+		"...method.fill, ...method.reject",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in rest_request_mapping:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderPublicUnaryTransportIncludesCallOptions(t *testing.T) {
+	t.Parallel()
+
+	out := renderPublicUnaryTransport()
+	for _, want := range []string{
+		"export interface PublicUnaryCallOptions",
+		"callOptions?: PublicUnaryCallOptions",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in unary_transport:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderPublicTransportSupportServerImports(t *testing.T) {
+	t.Parallel()
+
+	out := renderPublicTransportSupport(ServerPublicImports())
+	for _, want := range []string{
+		`from "../../rpc_support.ts"`,
+		`from "./unary_transport.ts"`,
+		"export function resolveEffectiveAbortSignal",
+		"export async function raceWithAbort",
+		"export function toTransportGestaltError",
+		"export function parseSuccessJson",
+		"export async function readResponseBodyText",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in transport_support:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderPublicTransportSupportWebImports(t *testing.T) {
+	t.Parallel()
+
+	out := renderPublicTransportSupport(WebPublicImports())
+	if !strings.Contains(out, `from "../runtime/rpc_support.ts"`) {
+		t.Fatalf("web transport_support must import runtime rpc_support:\n%s", out)
+	}
+}

@@ -23,18 +23,25 @@ import type {
   PublicAppInvokeRequest,
   PublicAppInvokeGraphQLRequest,
 } from "./types.ts";
-import type { UnaryTransport } from "./unary_transport.ts";
+import type {
+  UnaryTransport,
+  PublicUnaryCallOptions,
+} from "./unary_transport.ts";
 
 export class AppClient {
   constructor(private readonly transport: UnaryTransport) {}
 
-  async invokeRaw(request: PublicAppInvokeRequest): Promise<OperationResult> {
+  async invokeRaw(
+    request: PublicAppInvokeRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<OperationResult> {
     return fromWireOperationResult(
       await this.transport.unary(
         PUBLIC_METHODS.app.invoke,
         toWireAppInvokeRequest(request),
         AppInvokeRequestSchema,
         OperationResultSchema,
+        callOptions,
       ),
     );
   }
@@ -43,13 +50,17 @@ export class AppClient {
    * The result decodes with the standard JSON operation envelope semantics;
    * envelope failures throw InvokeError.
    */
-  async invoke<T = unknown>(request: PublicAppInvokeRequest): Promise<T> {
-    const response = await this.invokeRaw(request);
+  async invoke<T = unknown>(
+    request: PublicAppInvokeRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<T> {
+    const response = await this.invokeRaw(request, callOptions);
     return decodeAppResult<T>(request.app, request.operation, response);
   }
 
   async invokeGraphQL(
     request: PublicAppInvokeGraphQLRequest,
+    callOptions?: PublicUnaryCallOptions,
   ): Promise<OperationResult> {
     return fromWireOperationResult(
       await this.transport.unary(
@@ -57,13 +68,15 @@ export class AppClient {
         toWireAppInvokeGraphQLRequest(request),
         AppInvokeGraphQLRequestSchema,
         OperationResultSchema,
+        callOptions,
       ),
     );
   }
 
   async invokeGraphQLRaw(
     request: PublicAppInvokeGraphQLRequest,
+    callOptions?: PublicUnaryCallOptions,
   ): Promise<OperationResult> {
-    return this.invokeGraphQL(request);
+    return this.invokeGraphQL(request, callOptions);
   }
 }
