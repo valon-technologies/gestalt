@@ -19,11 +19,14 @@ func EmitPublic(schema *model.Schema, imports PublicImports) (*fileset.FileSet, 
 	}
 
 	files := map[string]string{
-		"methods.ts":         renderPublicMethods(plan.Methods),
-		"types.ts":           renderPublicTypes(plan.View, imports),
-		"converters.ts":      renderPublicConverters(plan.View, imports),
-		"unary_transport.ts": renderPublicUnaryTransport(),
-		"app_client.ts":      renderPublicAppClient(plan.Filtered.Services, imports),
+		"methods.ts":              renderPublicMethods(plan.Methods),
+		"types.ts":                renderPublicTypes(plan.View, imports),
+		"converters.ts":           renderPublicConverters(plan.View, imports),
+		"unary_transport.ts":      renderPublicUnaryTransport(),
+		"app_client.ts":           renderPublicAppClient(plan.Filtered.Services, imports),
+		"gateway_error.ts":        renderPublicGatewayError(imports),
+		"rest_request_mapping.ts": renderPublicRestRequestMapping(),
+		"transport_support.ts":    renderPublicTransportSupport(imports),
 	}
 	for path, content := range files {
 		if err := set.Add(path, []byte(content)); err != nil {

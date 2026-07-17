@@ -10,11 +10,17 @@ import type { DescMessage, Message } from "@bufbuild/protobuf";
 
 import type { PublicMethod } from "./methods.ts";
 
+export interface PublicUnaryCallOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 export interface UnaryTransport {
   unary<Output extends Message>(
     method: PublicMethod,
     request: Message,
     inputSchema: DescMessage,
     outputSchema: DescMessage,
+    callOptions?: PublicUnaryCallOptions,
   ): Promise<Output>;
 }

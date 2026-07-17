@@ -294,12 +294,18 @@ import type { DescMessage, Message } from "@bufbuild/protobuf";
 
 import type { PublicMethod } from "./methods.ts";
 
+export interface PublicUnaryCallOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 export interface UnaryTransport {
   unary<Output extends Message>(
     method: PublicMethod,
     request: Message,
     inputSchema: DescMessage,
     outputSchema: DescMessage,
+    callOptions?: PublicUnaryCallOptions,
   ): Promise<Output>;
 }
 `
@@ -366,7 +372,7 @@ func renderPublicAppClient(services []*model.Service, paths PublicImports) strin
 	b.WriteString("} from \"./converters.ts\";\n")
 	b.WriteString("import { PUBLIC_METHODS } from \"./methods.ts\";\n")
 	b.WriteString("import type {\n  " + strings.Join(requestTypes, ",\n  ") + ",\n} from \"./types.ts\";\n")
-	b.WriteString("import type { UnaryTransport } from \"./unary_transport.ts\";\n\n")
+	b.WriteString("import type { UnaryTransport, PublicUnaryCallOptions } from \"./unary_transport.ts\";\n\n")
 
 	b.WriteString("export class AppClient {\n")
 	b.WriteString("  constructor(private readonly transport: UnaryTransport) {}\n\n")
@@ -400,31 +406,32 @@ func renderPublicAppClientMethod(b *strings.Builder, svc *model.Service, m *mode
         %s,
         %s,
         %s,
+        callOptions,
       ),
     );`, fromWire, methodRef, wireExpr, schemaName, outputSchema)
 
 	if m.JsonResult != nil {
-		fmt.Fprintf(b, "  async %sRaw(request: %s): Promise<%s> {\n", methodKey, typeName, outputNative)
+		fmt.Fprintf(b, "  async %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, typeName, outputNative)
 		b.WriteString(rawCall)
 		b.WriteString("  }\n\n")
 
 		if m.Name == "Invoke" {
 			b.WriteString("  /**\n   * The result decodes with the standard JSON operation envelope semantics;\n   * envelope failures throw InvokeError.\n   */\n")
 		}
-		fmt.Fprintf(b, "  async %s<T = unknown>(request: %s): Promise<T> {\n", methodKey, typeName)
+		fmt.Fprintf(b, "  async %s<T = unknown>(request: %s, callOptions?: PublicUnaryCallOptions): Promise<T> {\n", methodKey, typeName)
 		appField := publicJSONResultAppField(m)
-		fmt.Fprintf(b, "    const response = await this.%sRaw(request);\n", methodKey)
+		fmt.Fprintf(b, "    const response = await this.%sRaw(request, callOptions);\n", methodKey)
 		fmt.Fprintf(b, "    return decodeAppResult<T>(request.%s, request.operation, response);\n", appField)
 		b.WriteString("  }\n\n")
 		return
 	}
 
-	fmt.Fprintf(b, "  async %s(request: %s): Promise<%s> {\n", methodKey, typeName, outputNative)
+	fmt.Fprintf(b, "  async %s(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, typeName, outputNative)
 	b.WriteString(rawCall)
 	b.WriteString("  }\n\n")
 
-	fmt.Fprintf(b, "  async %sRaw(request: %s): Promise<%s> {\n", methodKey, typeName, outputNative)
-	fmt.Fprintf(b, "    return this.%s(request);\n", methodKey)
+	fmt.Fprintf(b, "  async %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, typeName, outputNative)
+	fmt.Fprintf(b, "    return this.%s(request, callOptions);\n", methodKey)
 	b.WriteString("  }\n\n")
 }
 
@@ -465,4 +472,24 @@ func sortedPublicKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func renderPublicGatewayError(imports PublicImports) string {
+	return strings.ReplaceAll(
+		gatewayErrorFile,
+		"__RPC_SUPPORT_IMPORT__",
+		imports.supportModuleQuoted("rpc_support.ts"),
+	)
+}
+
+func renderPublicRestRequestMapping() string {
+	return restRequestMappingFile
+}
+
+func renderPublicTransportSupport(imports PublicImports) string {
+	return strings.ReplaceAll(
+		transportSupportFile,
+		"__RPC_SUPPORT_IMPORT__",
+		imports.supportModuleQuoted("rpc_support.ts"),
+	)
 }

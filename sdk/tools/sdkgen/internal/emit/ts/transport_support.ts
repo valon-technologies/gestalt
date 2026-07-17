@@ -1,0 +1,173 @@
+/**
+ * Shared public transport helpers for REST and gRPC adapters.
+ *
+ * @module client/generated/transport_support
+ */
+
+import { fromJson } from "@bufbuild/protobuf";
+import type { DescMessage, JsonValue, Message } from "@bufbuild/protobuf";
+
+import {
+  GestaltError,
+  GestaltErrorCode,
+} from __RPC_SUPPORT_IMPORT__;
+
+import type { PublicUnaryCallOptions } from "./unary_transport.ts";
+
+export function resolveEffectiveAbortSignal(
+  callOptions?: PublicUnaryCallOptions,
+): AbortSignal | undefined {
+  const signal = callOptions?.signal;
+  const timeoutMs = callOptions?.timeoutMs;
+  if (signal && timeoutMs !== undefined && timeoutMs > 0) {
+    return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+  }
+  if (signal) {
+    return signal;
+  }
+  if (timeoutMs !== undefined && timeoutMs > 0) {
+    return AbortSignal.timeout(timeoutMs);
+  }
+  return undefined;
+}
+
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException("request canceled", "AbortError");
+  }
+}
+
+export async function raceWithAbort<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal,
+  options?: { removeListener?: boolean },
+): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException("request canceled", "AbortError");
+  }
+  const controller = new AbortController();
+  const onAbort = () => {
+    controller.abort(signal.reason);
+  };
+  signal.addEventListener("abort", onAbort);
+  if (signal.aborted) {
+    if (options?.removeListener !== false) {
+      signal.removeEventListener("abort", onAbort);
+    }
+    throw signal.reason ?? new DOMException("request canceled", "AbortError");
+  }
+  void promise.catch(() => undefined);
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => {
+            reject(
+              controller.signal.reason ??
+                signal.reason ??
+                new DOMException("request canceled", "AbortError"),
+            );
+          },
+          { once: true },
+        );
+      }),
+    ]);
+  } finally {
+    if (options?.removeListener !== false) {
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+}
+
+export function isAbortLike(error: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) {
+    return true;
+  }
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return true;
+  }
+  if (error instanceof Error) {
+    return error.name === "AbortError" || error.name === "TimeoutError";
+  }
+  return false;
+}
+
+function isDeadlineExceeded(
+  callOptions: PublicUnaryCallOptions | undefined,
+  signal?: AbortSignal,
+): boolean {
+  if (callOptions?.timeoutMs === undefined || callOptions.timeoutMs <= 0) {
+    return false;
+  }
+  if (callOptions.signal?.aborted === true) {
+    return false;
+  }
+  return signal?.aborted === true;
+}
+
+export function toTransportGestaltError(
+  callOptions: PublicUnaryCallOptions | undefined,
+  error: unknown,
+  signal?: AbortSignal,
+): GestaltError {
+  if (error instanceof GestaltError) {
+    return error;
+  }
+  if (isAbortLike(error, signal)) {
+    const err = error instanceof Error ? error : undefined;
+    const timedOut = isDeadlineExceeded(callOptions, signal);
+    const message =
+      err?.message ||
+      (timedOut ? "request deadline exceeded" : "request canceled");
+    return new GestaltError(
+      timedOut ? GestaltErrorCode.DeadlineExceeded : GestaltErrorCode.Canceled,
+      message,
+      { cause: error },
+    );
+  }
+  return new GestaltError(
+    GestaltErrorCode.Unavailable,
+    error instanceof Error ? error.message : String(error),
+    { cause: error },
+  );
+}
+
+export function parseSuccessJson(bodyText: string): JsonValue {
+  if (bodyText.trim() === "") {
+    return {};
+  }
+  try {
+    return JSON.parse(bodyText) as JsonValue;
+  } catch (error) {
+    throw new GestaltError(
+      GestaltErrorCode.Internal,
+      "response body is not valid JSON",
+      { cause: error instanceof Error ? error : undefined },
+    );
+  }
+}
+
+export function parseSuccessMessage<Output extends Message>(
+  responseSchema: DescMessage,
+  parsed: JsonValue,
+): Output {
+  try {
+    return fromJson(responseSchema, parsed) as Output;
+  } catch (error) {
+    throw new GestaltError(
+      GestaltErrorCode.Internal,
+      "response body does not match the expected schema",
+      { cause: error instanceof Error ? error : undefined },
+    );
+  }
+}
+
+export async function readResponseBodyText(response: Response): Promise<string> {
+  const bytes = await response.arrayBuffer();
+  return new TextDecoder().decode(new Uint8Array(bytes));
+}

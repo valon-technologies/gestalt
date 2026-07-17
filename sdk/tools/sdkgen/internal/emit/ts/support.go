@@ -22,3 +22,21 @@ var runtimeFile string
 //
 //go:embed invoke_support.ts
 var invokeSupportFile string
+
+// gatewayErrorFile is the canonical REST gateway error parser, emitted as
+// client/generated/gateway_error.ts with package-local rpc_support imports.
+//
+//go:embed gateway_error.ts
+var gatewayErrorFile string
+
+// restRequestMappingFile is the protobuf-JSON REST request mapper, emitted as
+// client/generated/rest_request_mapping.ts.
+//
+//go:embed rest_request_mapping.ts
+var restRequestMappingFile string
+
+// transportSupportFile is the shared public transport helper runtime, emitted as
+// client/generated/transport_support.ts with package-local rpc_support imports.
+//
+//go:embed transport_support.ts
+var transportSupportFile string
