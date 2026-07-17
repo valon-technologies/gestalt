@@ -12,7 +12,7 @@ import httpx
 from google.protobuf import json_format
 
 from gestalt._gen.v1 import app_pb2
-from gestalt.public.auth import auth_to_provider, bearer, unauthenticated
+from gestalt.public.auth import bearer, unauthenticated
 from gestalt.public.client import create_gestalt_client, rest
 from gestalt.public.generated.app import AppInvokeRequest
 from gestalt.public.generated.metadata import METHOD_APP_INVOKE
@@ -80,7 +80,7 @@ class PublicRestTransportTests(unittest.TestCase):
         client = _RecordingTransport(handler)
         transport = RestUnaryTransport(
             "https://gestalt.test/",
-            auth_to_provider(bearer(lambda: "token-123")),
+            bearer(lambda: "token-123"),
             client=client,
         )
         request = app_pb2.AppInvokeRequest(
@@ -117,7 +117,7 @@ class PublicRestTransportTests(unittest.TestCase):
         gateway_client = _RecordingTransport(gateway_handler)
         gateway_transport = RestUnaryTransport(
             "https://gestalt.test/",
-            auth_to_provider(bearer(lambda: "token")),
+            bearer(lambda: "token"),
             client=gateway_client,
         )
         with self.assertRaises(GestaltError) as caught:
@@ -128,6 +128,28 @@ class PublicRestTransportTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.code, GestaltErrorCode.UNAUTHENTICATED)
         self.assertEqual(caught.exception.message, "unauthorized")
+
+        def string_code_handler(*_args, **_kwargs):
+            return httpx.Response(
+                403,
+                content=json_module.dumps(
+                    {"message": "forbidden", "code": "PermissionDenied"}
+                ).encode(),
+            )
+
+        string_code_transport = RestUnaryTransport(
+            "https://gestalt.test/",
+            bearer(lambda: "token"),
+            client=_RecordingTransport(string_code_handler),
+        )
+        with self.assertRaises(GestaltError) as caught:
+            string_code_transport.unary(
+                METHOD_APP_INVOKE,
+                request,
+                app_pb2.OperationResult,
+            )
+        self.assertEqual(caught.exception.code, GestaltErrorCode.PERMISSION_DENIED)
+        self.assertEqual(caught.exception.message, "forbidden")
 
     def test_bearer_rotation_is_evaluated_per_invocation(self) -> None:
         token = {"value": "first"}
@@ -142,7 +164,7 @@ class PublicRestTransportTests(unittest.TestCase):
 
         transport = RestUnaryTransport(
             "https://gestalt.test/",
-            auth_to_provider(bearer(lambda: token["value"])),
+            bearer(lambda: token["value"]),
             client=_RecordingTransport(handler),
         )
         request = app_pb2.AppInvokeRequest(app="example", operation="sync")
@@ -163,7 +185,7 @@ class PublicRestTransportTests(unittest.TestCase):
 
         transport = RestUnaryTransport(
             "https://gestalt.test/",
-            auth_to_provider(unauthenticated()),
+            unauthenticated(),
             client=_RecordingTransport(handler),
         )
         request = app_pb2.AppInvokeRequest(app="example", operation="sync")

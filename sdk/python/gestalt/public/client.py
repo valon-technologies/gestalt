@@ -5,15 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Literal, overload
+from typing import Literal
+from urllib.parse import urlparse
 
 import grpc as _grpc
-from typing_extensions import Never
 
 from gestalt.public.generated.app_client import AppClient
 
-from .address import normalize_address
-from .auth import Auth, AuthProvider, auth_to_provider
+from .auth import Auth
 from .grpc_transport import GrpcUnaryTransport, grpc_channel_from_address
 from .rest_transport import HttpClient, RestUnaryTransport
 
@@ -51,24 +50,16 @@ class GestaltClient:
         self.close()
 
 
-@overload
-def create_gestalt_client(
-    *,
-    address: str,
-    transport: RestTransport,
-    auth: Auth,
-    httpx_client: HttpClient | None = None,
-) -> Iterator[GestaltClient]: ...
-
-
-@overload
-def create_gestalt_client(
-    *,
-    address: str,
-    transport: GrpcTransport,
-    auth: Auth,
-    channel: _grpc.Channel | None = None,
-) -> Iterator[GestaltClient]: ...
+def _normalize_address(address: str) -> str:
+    trimmed = address.strip()
+    if not trimmed:
+        raise ValueError("address is required")
+    parsed = urlparse(trimmed)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"address must be an absolute URL: {address!r}")
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError(f"address must use http or https: {parsed.scheme!r}")
+    return trimmed.rstrip("/")
 
 
 @contextmanager
@@ -81,42 +72,32 @@ def create_gestalt_client(
     httpx_client: HttpClient | None = None,
 ) -> Iterator[GestaltClient]:
     """Create an external public Gestalt client over REST or gRPC."""
-    normalized = normalize_address(address)
-    provider = auth_to_provider(auth)
+    normalized = _normalize_address(address)
     if transport.kind == "rest":
-        client = _build_rest_client(normalized, provider, httpx_client=httpx_client)
+        rest_transport = RestUnaryTransport(
+            normalized,
+            auth,
+            client=httpx_client,
+        )
+        client = GestaltClient(
+            app=AppClient(rest_transport),
+            _close=rest_transport.close,
+        )
     elif transport.kind == "grpc":
-        client = _build_grpc_client(normalized, provider, channel=channel)
+        owns_channel = channel is None
+        grpc_channel = channel or grpc_channel_from_address(normalized)
+        grpc_transport = GrpcUnaryTransport(
+            grpc_channel,
+            auth,
+            owns_channel=owns_channel,
+        )
+        client = GestaltClient(
+            app=AppClient(grpc_transport),
+            _close=grpc_transport.close,
+        )
     else:
-        unknown: Never = transport
-        raise ValueError(f"unsupported transport: {unknown!r}")
+        raise ValueError(f"unsupported transport: {transport!r}")
     try:
         yield client
     finally:
         client.close()
-
-
-def _build_rest_client(
-    base_url: str,
-    auth: AuthProvider,
-    *,
-    httpx_client: HttpClient | None,
-) -> GestaltClient:
-    transport = RestUnaryTransport(
-        base_url,
-        auth,
-        client=httpx_client,
-    )
-    return GestaltClient(app=AppClient(transport), _close=transport.close)
-
-
-def _build_grpc_client(
-    address: str,
-    auth: AuthProvider,
-    *,
-    channel: _grpc.Channel | None,
-) -> GestaltClient:
-    owns_channel = channel is None
-    grpc_channel = channel or grpc_channel_from_address(address)
-    transport = GrpcUnaryTransport(grpc_channel, auth, owns_channel=owns_channel)
-    return GestaltClient(app=AppClient(transport), _close=transport.close)

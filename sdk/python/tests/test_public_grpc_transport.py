@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import unittest
 from concurrent import futures
+from unittest import mock
 
 import grpc
 
 from gestalt._gen.v1 import app_pb2, app_pb2_grpc
-from gestalt.public.auth import auth_to_provider, bearer
+from gestalt.public.auth import bearer
 from gestalt.public.generated.metadata import METHOD_APP_INVOKE
-from gestalt.public.grpc_transport import GrpcUnaryTransport
+from gestalt.public.grpc_transport import GrpcUnaryTransport, grpc_channel_from_address
 from gestalt.rpc_support import GestaltError, GestaltErrorCode
 
 
@@ -46,7 +47,7 @@ class PublicGrpcTransportTests(unittest.TestCase):
     def test_grpc_transport_sends_bearer_metadata(self) -> None:
         transport = GrpcUnaryTransport(
             self.channel,
-            auth_to_provider(bearer(lambda: "secret")),
+            bearer(lambda: "secret"),
         )
         request = app_pb2.AppInvokeRequest(app="example", operation="sync")
         response = transport.unary(
@@ -59,12 +60,27 @@ class PublicGrpcTransportTests(unittest.TestCase):
     def test_grpc_transport_maps_rpc_errors(self) -> None:
         transport = GrpcUnaryTransport(
             self.channel,
-            auth_to_provider(bearer(lambda: "")),
+            bearer(lambda: ""),
         )
         request = app_pb2.AppInvokeRequest(app="example", operation="sync")
         with self.assertRaises(GestaltError) as caught:
             transport.unary(METHOD_APP_INVOKE, request, app_pb2.OperationResult)
         self.assertEqual(caught.exception.code, GestaltErrorCode.UNAUTHENTICATED)
+
+    def test_external_channel_disables_http_proxy(self) -> None:
+        with (
+            mock.patch(
+                "gestalt.public.grpc_transport.secure_internal_channel"
+            ) as secure,
+            mock.patch(
+                "gestalt.public.grpc_transport.insecure_internal_channel"
+            ) as insecure,
+        ):
+            grpc_channel_from_address("https://valon.tools")
+            secure.assert_called_once_with("valon.tools")
+
+            grpc_channel_from_address("http://localhost:8080")
+            insecure.assert_called_once_with("localhost:8080")
 
 
 if __name__ == "__main__":

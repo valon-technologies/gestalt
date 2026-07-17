@@ -39,9 +39,3 @@ def bearer(token: Callable[[], str]) -> BearerAuth:
 
 def unauthenticated() -> Unauthenticated:
     return Unauthenticated()
-
-
-def auth_to_provider(auth: Auth) -> AuthProvider:
-    if isinstance(auth, BearerAuth):
-        return auth
-    return Unauthenticated()

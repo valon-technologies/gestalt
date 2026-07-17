@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 from urllib.parse import quote, urlencode
 
 from .generated.metadata import Method
-
-_PATH_FIELD_RE = re.compile(r"\{([^}]+)\}")
 
 
 def snake_to_camel(name: str) -> str:

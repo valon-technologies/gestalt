@@ -10,6 +10,7 @@ from google.protobuf.message import Message
 
 from gestalt._codec.support import call_unary
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
+from gestalt._grpc_transport import insecure_internal_channel, secure_internal_channel
 from gestalt.public.generated.metadata import (
     METHOD_APP_INVOKE,
     METHOD_APP_INVOKE_GRAPHQL,
@@ -19,8 +20,6 @@ from gestalt.public.generated.metadata import (
 from .auth import AuthProvider
 
 ResponseT = TypeVar("ResponseT", bound=Message)
-
-_EXTERNAL_CHANNEL_OPTIONS = (("grpc.enable_http_proxy", 0),)
 
 
 class GrpcUnaryTransport:
@@ -36,7 +35,11 @@ class GrpcUnaryTransport:
         self._channel = channel
         self._auth = auth
         self._owns_channel = owns_channel
-        self._stub = _app_pb2_grpc.AppStub(channel)
+        stub = _app_pb2_grpc.AppStub(channel)
+        self._stub_calls = {
+            METHOD_APP_INVOKE.full_method: stub.Invoke,
+            METHOD_APP_INVOKE_GRAPHQL.full_method: stub.InvokeGraphQL,
+        }
 
     def unary(
         self,
@@ -44,29 +47,18 @@ class GrpcUnaryTransport:
         request: Message,
         response_type: type[ResponseT],
     ) -> ResponseT:
-        timeout: float | None = None
+        rpc = self._stub_calls.get(method.full_method)
+        if rpc is None:
+            raise ValueError(f"unknown public gRPC method {method.full_method}")
+
         metadata: list[tuple[str, str]] = []
         authorization = self._auth.authorization_header()
         if authorization:
             metadata.append(("authorization", authorization))
 
-        if method.full_method == METHOD_APP_INVOKE.full_method:
-            return call_unary(
-                lambda: self._stub.Invoke(
-                    request,
-                    timeout=timeout,
-                    metadata=metadata or None,
-                )
-            )
-        if method.full_method == METHOD_APP_INVOKE_GRAPHQL.full_method:
-            return call_unary(
-                lambda: self._stub.InvokeGraphQL(
-                    request,
-                    timeout=timeout,
-                    metadata=metadata or None,
-                )
-            )
-        raise ValueError(f"unknown public gRPC method {method.full_method}")
+        return call_unary(
+            lambda: rpc(request, metadata=metadata or None),
+        )
 
     def close(self) -> None:
         if self._owns_channel:
@@ -77,9 +69,5 @@ def grpc_channel_from_address(address: str) -> grpc.Channel:
     parsed = urlparse(address)
     target = parsed.netloc
     if parsed.scheme == "https":
-        return grpc.secure_channel(
-            target,
-            grpc.ssl_channel_credentials(),
-            options=_EXTERNAL_CHANNEL_OPTIONS,
-        )
-    return grpc.insecure_channel(target, options=_EXTERNAL_CHANNEL_OPTIONS)
+        return secure_internal_channel(target)
+    return insecure_internal_channel(target)
