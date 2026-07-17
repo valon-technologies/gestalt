@@ -6,9 +6,9 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
-// EmitPublic renders the public TypeScript transport client under
-// sdk/typescript/src/client/generated/.
-func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
+// EmitPublic renders the public TypeScript transport client into the caller's
+// package-owned generated directory using the supplied import paths.
+func EmitPublic(schema *model.Schema, imports PublicImports) (*fileset.FileSet, error) {
 	plan, err := publicsurface.PrepareEmit(schema)
 	if err != nil {
 		return nil, err
@@ -20,10 +20,10 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 
 	files := map[string]string{
 		"methods.ts":         renderPublicMethods(plan.Methods),
-		"types.ts":           renderPublicTypes(plan.View),
-		"converters.ts":      renderPublicConverters(plan.View),
+		"types.ts":           renderPublicTypes(plan.View, imports),
+		"converters.ts":      renderPublicConverters(plan.View, imports),
 		"unary_transport.ts": renderPublicUnaryTransport(),
-		"app_client.ts":      renderPublicAppClient(plan.Filtered.Services),
+		"app_client.ts":      renderPublicAppClient(plan.Filtered.Services, imports),
 	}
 	for path, content := range files {
 		if err := set.Add(path, []byte(content)); err != nil {

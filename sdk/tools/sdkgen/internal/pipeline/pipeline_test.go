@@ -134,6 +134,7 @@ func TestEmitterRegistryCoversAllTargets(t *testing.T) {
 	want := []emit.Target{
 		emit.TargetTS,
 		emit.TargetPublicTS,
+		emit.TargetPublicTSWeb,
 		emit.TargetPython,
 		emit.TargetPublicPython,
 		emit.TargetGo,

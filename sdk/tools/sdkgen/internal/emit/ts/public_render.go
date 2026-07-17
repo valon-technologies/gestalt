@@ -104,7 +104,7 @@ func publicStringList(values []string) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-func renderPublicTypes(view *publicsurface.View) string {
+func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
 	var b strings.Builder
 	b.WriteString("/**\n * Public request types with fill and reject fields omitted.\n *\n * @module client/generated/types\n */\n\n")
 
@@ -144,7 +144,7 @@ func renderPublicTypes(view *publicsurface.View) string {
 
 	for _, base := range sortedPublicKeys(imports) {
 		names := sortedPublicKeys(imports[base])
-		fmt.Fprintf(&b, "import type { %s } from \"../../%s.ts\";\n", strings.Join(names, ", "), base)
+		fmt.Fprintf(&b, "import type { %s } from %s;\n", strings.Join(names, ", "), paths.nativeTypeImportQuoted(base))
 	}
 	if len(imports) > 0 {
 		b.WriteString("\n")
@@ -178,7 +178,7 @@ func publicOmittedFieldNames(m *model.Method) []string {
 	return names
 }
 
-func renderPublicConverters(view *publicsurface.View) string {
+func renderPublicConverters(view *publicsurface.View, paths PublicImports) string {
 	var b strings.Builder
 	b.WriteString("/**\n * Public request converters that delegate to the generated codec.\n *\n * @module client/generated/converters\n */\n\n")
 
@@ -240,22 +240,21 @@ func renderPublicConverters(view *publicsurface.View) string {
 
 	for _, protoFile := range sortedPublicKeys(codecImports) {
 		names := sortedPublicKeys(codecImports[protoFile])
-		var imports []string
+		var importNames []string
 		for _, name := range names {
-			imports = append(imports, name+" as codec"+upperFirst(name))
+			importNames = append(importNames, name+" as codec"+upperFirst(name))
 		}
-		fmt.Fprintf(&b, "import {\n  %s,\n} from %q;\n", strings.Join(imports, ",\n  "), publicCodecModulePath(protoFile))
+		fmt.Fprintf(&b, "import {\n  %s,\n} from %q;\n", strings.Join(importNames, ",\n  "), paths.codecModulePath(protoFile))
 	}
 	for _, protoFile := range sortedPublicKeys(nativeImports) {
 		names := sortedPublicKeys(nativeImports[protoFile])
-		fmt.Fprintf(&b, "import type { %s } from %q;\n", strings.Join(names, ", "), publicNativeModulePath(protoFile))
+		fmt.Fprintf(&b, "import type { %s } from %q;\n", strings.Join(names, ", "), paths.nativeModulePath(protoFile))
 	}
 	for _, protoFile := range sortedPublicKeys(wireImports) {
 		names := sortedPublicKeys(wireImports[protoFile])
-		fmt.Fprintf(&b, "import type { %s } from \"../../internal/gen/%s_pb.ts\";\n",
-			strings.Join(names, ", "), protoGenImportBase(protoFile))
+		fmt.Fprintf(&b, "import type { %s } from %s;\n", strings.Join(names, ", "), paths.genModuleQuoted(protoFile))
 	}
-	b.WriteString("import type { Init } from \"../../rpc_support.ts\";\n")
+	b.WriteString("import type { Init } from " + paths.supportModuleQuoted("rpc_support.ts") + ";\n")
 	if len(blocks) > 0 {
 		b.WriteString("import type {\n")
 		for _, typeName := range sortedPublicKeys(typeImports) {
@@ -306,7 +305,7 @@ export interface UnaryTransport {
 `
 }
 
-func renderPublicAppClient(services []*model.Service) string {
+func renderPublicAppClient(services []*model.Service, paths PublicImports) string {
 	var b strings.Builder
 	b.WriteString("/**\n * Transport-neutral App client.\n *\n * @module client/generated/app_client\n */\n\n")
 
@@ -347,19 +346,19 @@ func renderPublicAppClient(services []*model.Service) string {
 	for _, protoFile := range sortedPublicKeys(nativeImports) {
 		names := nativeImports[protoFile]
 		typeNames := sortedPublicKeys(names)
-		fmt.Fprintf(&b, "import type { %s } from %q;\n", strings.Join(typeNames, ", "), publicNativeModulePath(protoFile))
+		fmt.Fprintf(&b, "import type { %s } from %q;\n", strings.Join(typeNames, ", "), paths.nativeModulePath(protoFile))
 	}
 	for _, protoFile := range sortedPublicKeys(codecImports) {
 		names := codecImports[protoFile]
 		funcNames := sortedPublicKeys(names)
-		fmt.Fprintf(&b, "import { %s } from %q;\n", strings.Join(funcNames, ", "), publicCodecModulePath(protoFile))
+		fmt.Fprintf(&b, "import { %s } from %q;\n", strings.Join(funcNames, ", "), paths.codecModulePath(protoFile))
 	}
 	for _, protoFile := range sortedPublicKeys(schemaImports) {
 		names := sortedPublicKeys(schemaImports[protoFile])
-		fmt.Fprintf(&b, "import {\n  %s,\n} from \"../../internal/gen/%s_pb.ts\";\n",
-			strings.Join(names, ",\n  "), protoGenImportBase(protoFile))
+		fmt.Fprintf(&b, "import {\n  %s,\n} from %s;\n",
+			strings.Join(names, ",\n  "), paths.genModuleQuoted(protoFile))
 	}
-	b.WriteString("import { decodeAppResult } from \"../../invoke_support.ts\";\n")
+	b.WriteString("import { decodeAppResult } from " + paths.supportModuleQuoted("invoke_support.ts") + ";\n")
 	b.WriteString("import {\n")
 	for _, name := range sortedPublicKeys(converterImports) {
 		fmt.Fprintf(&b, "  %s,\n", name)

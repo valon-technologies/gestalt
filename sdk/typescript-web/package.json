@@ -1,0 +1,62 @@
+{
+  "name": "@valon-technologies/gestalt-web",
+  "version": "0.0.1-alpha.74",
+  "description": "Browser REST client and Vite integration for Gestalt web apps",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/valon-technologies/gestalt.git"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mount": {
+      "types": "./dist/mount.d.ts",
+      "import": "./dist/mount.js"
+    },
+    "./vite": {
+      "types": "./src/vite.d.ts",
+      "default": "./src/vite.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/vite.js",
+    "src/vite.d.ts",
+    "README.md",
+    "tsconfig.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "sync:runtime": "bun run scripts/sync-web-runtime.ts",
+    "build": "tsup --config tsup.config.ts",
+    "scan:browser-bundle": "bun run scripts/scan-browser-bundle.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run scripts/run-tests.ts",
+    "check": "bun run sync:runtime && bun run build && bun run scan:browser-bundle && bun run test && bun run typecheck"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.11.0",
+    "@connectrpc/connect": "2.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.2",
+    "esbuild": "0.25.9",
+    "tsup": "8.5.0",
+    "typescript": "5.9.3",
+    "vite": "7.0.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.0",
+    "vite": "^5.4.0 || ^6.0.0 || ^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

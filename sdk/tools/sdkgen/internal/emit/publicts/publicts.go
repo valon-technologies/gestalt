@@ -1,5 +1,5 @@
-// Package publicts emits the browser- and Node-compatible public Gestalt
-// transport client under sdk/typescript/src/client/generated/.
+// Package publicts emits the Node-compatible public Gestalt transport client
+// under sdk/typescript/src/client/generated/.
 package publicts
 
 import (
@@ -13,7 +13,7 @@ import (
 // OutputRoot is the repo-relative directory for generated public client files.
 const OutputRoot = "sdk/typescript/src/client/generated"
 
-// Emitter renders the public TypeScript transport client.
+// Emitter renders the public TypeScript transport client for gestalt.
 type Emitter struct{}
 
 func New() *Emitter { return &Emitter{} }
@@ -29,5 +29,5 @@ func (*Emitter) Formatter() *toolchain.Tool { return toolchain.Prettier() }
 func (*Emitter) StaleScope() func(rel string) bool { return nil }
 
 func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
-	return ts.EmitPublic(schema)
+	return ts.EmitPublic(schema, ts.ServerPublicImports())
 }
