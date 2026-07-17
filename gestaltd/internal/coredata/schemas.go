@@ -118,6 +118,8 @@ var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 		{Name: "app", Type: idb.TypeString, NotNull: true},
 		{Name: "version", Type: idb.TypeString, NotNull: true},
 		{Name: "acknowledged_at", Type: idb.TypeTime, NotNull: true},
+		{Name: "materialized_at", Type: idb.TypeTime},
+		{Name: "materialized_path", Type: idb.TypeString},
 		{Name: "stopped_at", Type: idb.TypeTime},
 		{Name: "restarted_at", Type: idb.TypeTime},
 	},

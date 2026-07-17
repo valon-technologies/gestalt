@@ -20,6 +20,7 @@ Implementation:
 - Registry fetcher — `gestaltd/internal/appregistry/reader.go`
 - Registry installer — `gestaltd/internal/appregistry/installer.go`
 - Catalog poller — `gestaltd/internal/appregistry/poller.go`
+- Artifact materializer — `gestaltd/internal/appregistry/materializer.go`
 - App provider restarter — `gestaltd/internal/bootstrap/app_provider_restart.go`
 - Change request projections — `gestaltd/internal/coredata/app_version_change_requests_projection.go`
 - Rollout state — `gestaltd/internal/coredata/app_rollouts.go`
@@ -61,8 +62,9 @@ Each pass:
 
 1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
 2. Group pending versions by app.
-3. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row.
-4. Mark non-restartable apps converged without a local stop/start.
+3. Download and extract each pending registry artifact to `{artifactsDir}/registry-installed/{app}/{version}`, recording `materialized_at` and `materialized_path` while the provider is still running.
+4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row.
+5. Mark non-restartable apps converged without a local stop/start.
 
 A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
 
