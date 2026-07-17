@@ -56,9 +56,7 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	}
 
 	destDir := MaterializedPath(artifactsDir, appName, version)
-	if materialized, err := isMaterializedPackage(destDir, appName, version); err != nil {
-		return nil, err
-	} else if materialized {
+	if installedPackageReady(destDir, appName, version) {
 		return &MaterializationResult{Path: destDir}, nil
 	}
 	if err := removePartialMaterializedPackage(destDir); err != nil {
@@ -99,21 +97,12 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	return &MaterializationResult{Path: destDir, Changed: true}, nil
 }
 
-func isMaterializedPackage(destDir, appName, version string) (bool, error) {
+func installedPackageReady(destDir, appName, version string) bool {
 	destDir = strings.TrimSpace(destDir)
 	if destDir == "" {
-		return false, nil
+		return false
 	}
-	if _, err := os.Stat(destDir); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("stat materialized path %s: %w", destDir, err)
-	}
-	if err := operator.ValidateInstalledPublishedPackage(destDir, appName, version); err == nil {
-		return true, nil
-	}
-	return false, nil
+	return operator.ValidateInstalledPublishedPackage(destDir, appName, version) == nil
 }
 
 func removePartialMaterializedPackage(destDir string) error {
