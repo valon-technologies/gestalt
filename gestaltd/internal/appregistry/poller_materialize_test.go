@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,6 +105,42 @@ func TestCatalogPollerMaterializesBeforeStop(t *testing.T) {
 	}
 	if got := len(restarter.stopCalls); got != 1 || restarter.stopCalls[0] != "g-issues" {
 		t.Fatalf("stopCalls after providers ready = %#v, want [g-issues]", restarter.stopCalls)
+	}
+}
+
+func TestCatalogPollerDoesNotStopWithoutMaterializer(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	if _, err := services.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "previous",
+		ToVersion:   "v1",
+		Timestamp:   now,
+		Metadata:    map[string]any{"registry": "toolshed"},
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+
+	restarter := &recordingAppRestarter{}
+	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return now },
+	})
+
+	err := poller.ReconcileOnce(ctx)
+	if err == nil || !strings.Contains(err.Error(), "app registry materializer is required") {
+		t.Fatalf("ReconcileOnce error = %v, want missing materializer error", err)
+	}
+	if len(restarter.stopCalls) != 0 {
+		t.Fatalf("stopCalls = %v, want none", restarter.stopCalls)
 	}
 }
 

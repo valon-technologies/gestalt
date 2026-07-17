@@ -426,7 +426,15 @@ func (p *CatalogPoller) restartReady() bool {
 }
 
 func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceID string, pending []*core.AppInstallation) error {
-	if p == nil || p.AppMaterializer == nil || len(pending) == 0 {
+	if p == nil || len(pending) == 0 {
+		return nil
+	}
+	if p.AppMaterializer == nil {
+		for _, installation := range pending {
+			if installation != nil && strings.TrimSpace(installation.Registry) != "" {
+				return fmt.Errorf("app registry materializer is required for %s@%s", installation.AppName, installation.Version)
+			}
+		}
 		return nil
 	}
 	for _, installation := range pending {
