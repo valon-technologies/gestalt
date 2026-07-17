@@ -20,6 +20,8 @@ from .auth import AuthProvider
 
 ResponseT = TypeVar("ResponseT", bound=Message)
 
+_EXTERNAL_CHANNEL_OPTIONS = (("grpc.enable_http_proxy", 0),)
+
 
 class GrpcUnaryTransport:
     """gRPC transport implementing the generated UnaryTransport protocol."""
@@ -75,5 +77,9 @@ def grpc_channel_from_address(address: str) -> grpc.Channel:
     parsed = urlparse(address)
     target = parsed.netloc
     if parsed.scheme == "https":
-        return grpc.secure_channel(target, grpc.ssl_channel_credentials())
-    return grpc.insecure_channel(target)
+        return grpc.secure_channel(
+            target,
+            grpc.ssl_channel_credentials(),
+            options=_EXTERNAL_CHANNEL_OPTIONS,
+        )
+    return grpc.insecure_channel(target, options=_EXTERNAL_CHANNEL_OPTIONS)
