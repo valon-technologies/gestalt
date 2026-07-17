@@ -18,7 +18,7 @@ Related docs:
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
-| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 19 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 10 |
+| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 20 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 10 |
 | `internal/appregistry` | `materializer_test.go` | 5 | Unit | step 10 |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_lifecycle_test.go` | 6 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
@@ -126,6 +126,7 @@ go test ./internal/appregistry -run 'TestMaterializer|TestCatalogPollerMateriali
 ### `poller_materialize_test.go`
 
 - **`TestCatalogPollerMaterializesBeforeStop`** — records `materialized_at` and creates the canonical on-disk artifact before `StopApp`, including while `RestartReady` is still open.
+- **`TestCatalogPollerSkipsMaterializationForLegacyNonRegistryVersion`** — allows pre-registry catalog rows to retain restart-only convergence when a materializer is configured.
 - **`TestCatalogPollerRematerializesWhenArtifactMissing`** — re-downloads when IndexedDB shows materialization complete but the on-disk tree was removed.
 
 ---

@@ -48,7 +48,7 @@ type pollerMaterializationHarness struct {
 	poller       *appregistry.CatalogPoller
 }
 
-func newPollerMaterializationHarness(t *testing.T, withMaterializer bool) *pollerMaterializationHarness {
+func newPollerMaterializationHarness(t *testing.T, registry string, withMaterializer bool) *pollerMaterializationHarness {
 	t.Helper()
 	h := &pollerMaterializationHarness{
 		ctx:          context.Background(),
@@ -64,7 +64,7 @@ func newPollerMaterializationHarness(t *testing.T, withMaterializer bool) *polle
 		FromVersion: "previous",
 		ToVersion:   h.fixture.Version,
 		Timestamp:   h.clock,
-		Metadata:    map[string]any{"registry": "toolshed"},
+		Metadata:    map[string]any{"registry": registry},
 	}); err != nil {
 		t.Fatalf("AppendRequest: %v", err)
 	}
@@ -104,7 +104,7 @@ func (h *pollerMaterializationHarness) materialization(t *testing.T) *core.AppIn
 
 func TestCatalogPollerMaterializesBeforeStop(t *testing.T) {
 	t.Parallel()
-	h := newPollerMaterializationHarness(t, true)
+	h := newPollerMaterializationHarness(t, "toolshed", true)
 
 	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
 		t.Fatalf("ReconcileOnce before providers ready: %v", err)
@@ -133,7 +133,7 @@ func TestCatalogPollerMaterializesBeforeStop(t *testing.T) {
 
 func TestCatalogPollerDoesNotStopWithoutMaterializer(t *testing.T) {
 	t.Parallel()
-	h := newPollerMaterializationHarness(t, false)
+	h := newPollerMaterializationHarness(t, "toolshed", false)
 
 	err := h.poller.ReconcileOnce(h.ctx)
 	if err == nil || !strings.Contains(err.Error(), "app registry materializer is required") {
@@ -144,9 +144,25 @@ func TestCatalogPollerDoesNotStopWithoutMaterializer(t *testing.T) {
 	}
 }
 
+func TestCatalogPollerSkipsMaterializationForLegacyNonRegistryVersion(t *testing.T) {
+	t.Parallel()
+	h := newPollerMaterializationHarness(t, "", true)
+	close(h.restartReady)
+
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if got := h.restarter.stopCalls; len(got) != 1 || got[0] != "g-issues" {
+		t.Fatalf("stopCalls = %#v, want [g-issues]", got)
+	}
+	if materializedAt := h.materialization(t).MaterializedAt; !materializedAt.IsZero() {
+		t.Fatalf("MaterializedAt = %v, want zero for non-registry version", materializedAt)
+	}
+}
+
 func TestCatalogPollerRematerializesWhenArtifactMissing(t *testing.T) {
 	t.Parallel()
-	h := newPollerMaterializationHarness(t, true)
+	h := newPollerMaterializationHarness(t, "toolshed", true)
 
 	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
 		t.Fatalf("first ReconcileOnce: %v", err)

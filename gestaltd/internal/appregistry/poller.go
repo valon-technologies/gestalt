@@ -446,6 +446,9 @@ func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceI
 		if appName == "" || version == "" {
 			continue
 		}
+		if strings.TrimSpace(installation.Registry) == "" {
+			continue
+		}
 		materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
 		if err != nil {
 			return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
