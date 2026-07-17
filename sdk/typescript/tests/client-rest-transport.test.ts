@@ -10,7 +10,6 @@ import { authToProvider, bearer, unauthenticated } from "../src/client/auth.ts";
 import { createGestaltClient, rest } from "../src/client/client.ts";
 import { GestaltErrorCode } from "../src/client/errors.ts";
 import { PUBLIC_METHODS } from "../src/client/generated/methods.ts";
-import { buildRestPath } from "../src/client/generated/rest_request_mapping.ts";
 import { createRestUnaryTransport } from "../src/client/rest_transport.ts";
 
 test("REST transport maps protobuf JSON requests and gateway errors", async () => {
@@ -216,12 +215,38 @@ test("createGestaltClient requires and validates address", async () => {
   ).rejects.toThrow(/http or https/);
 });
 
-test("REST path templates use sdkgen path field metadata", () => {
-  const path = buildRestPath(PUBLIC_METHODS.app.invoke.http!, {
-    app: "example",
-    operation: "sync",
+test("REST transport preserves deployment base path prefixes", async () => {
+  const seenUrls: string[] = [];
+  const transport = createRestUnaryTransport({
+    baseUrl: "https://gestalt.test/gestalt",
+    auth: authToProvider(unauthenticated()),
+    fetch: (async (input: RequestInfo | URL) => {
+      seenUrls.push(String(input));
+      return new Response(
+        JSON.stringify({ status: 200, body: "", headers: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch,
   });
-  expect(path).toBe("/api/v2/app/example/operations/sync");
+
+  await transport.unary(
+    PUBLIC_METHODS.app.invoke,
+    create(AppInvokeRequestSchema, {
+      app: "demo",
+      operation: "run",
+      params: {},
+      connection: "",
+      instance: "",
+      idempotencyKey: "",
+      credentialMode: "",
+    }),
+    AppInvokeRequestSchema,
+    OperationResultSchema,
+  );
+
+  expect(seenUrls[0]).toBe(
+    "https://gestalt.test/gestalt/api/v2/app/demo/operations/run",
+  );
 });
 
 test("POST requests append sdkgen query fields", async () => {

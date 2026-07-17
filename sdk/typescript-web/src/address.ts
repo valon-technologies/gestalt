@@ -1,5 +1,5 @@
 /**
- * External gestaltd address normalization and validation.
+ * External gestaltd address normalization and REST URL joining.
  */
 
 export function normalizeAddress(address: string | URL): string {
@@ -10,6 +10,27 @@ export function normalizeAddress(address: string | URL): string {
     );
   }
   return parsed.toString().replace(/\/$/, "");
+}
+
+/**
+ * Join a deployment base URL with a REST path without dropping path prefixes.
+ */
+export function appendRestPath(
+  baseUrl: string,
+  path: string,
+  query?: ReadonlyArray<readonly [string, string]>,
+): string {
+  const parsed = new URL(baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  const basePath = parsed.pathname.replace(/\/$/, "");
+  const restPath = path.startsWith("/") ? path : `/${path}`;
+  parsed.pathname = `${basePath}${restPath}`;
+  parsed.search = "";
+  if (query) {
+    for (const [key, value] of query) {
+      parsed.searchParams.append(key, value);
+    }
+  }
+  return parsed.toString();
 }
 
 function parseAddressString(address: string): URL {

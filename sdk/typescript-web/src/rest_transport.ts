@@ -4,6 +4,7 @@
 
 import type { DescMessage, Message } from "@bufbuild/protobuf";
 
+import { appendRestPath } from "./address.ts";
 import type { Auth } from "./client.ts";
 import type { PublicMethod } from "./client/generated/methods.ts";
 import {
@@ -64,18 +65,17 @@ export function createRestUnaryTransport(
       const signal = resolveEffectiveAbortSignal(callOptions);
 
       try {
-        const prepared = prepareRestRequest(method, requestSchema, request);
-        const url = new URL(prepared.path, baseUrl);
-        for (const [key, value] of prepared.query) {
-          url.searchParams.append(key, value);
-        }
-
         throwIfAborted(signal);
+
+        const prepared = prepareRestRequest(method, requestSchema, request);
+        const target = appendRestPath(baseUrl, prepared.path, prepared.query);
 
         const headers = new Headers({
           Accept: "application/json",
-          "Content-Type": "application/json",
         });
+        if (prepared.body !== undefined) {
+          headers.set("Content-Type", "application/json");
+        }
         const authorization = await raceWithAbort(
           resolveAuthorization(options.auth),
           signal,
@@ -95,12 +95,19 @@ export function createRestUnaryTransport(
           init.body = JSON.stringify(prepared.body);
         }
 
-        const response = await fetchImpl(url, init);
-        const body = new Uint8Array(await response.arrayBuffer());
+        const response = await raceWithAbort(
+          fetchImpl(target, init),
+          signal,
+        );
+
+        const bytes = new Uint8Array(
+          await raceWithAbort(response.arrayBuffer(), signal),
+        );
+
         return decodeRestResponse<Output>(method, responseSchema, {
           status: response.status,
           headers: responseHeaderPairs(response),
-          body,
+          body: bytes,
         });
       } catch (error) {
         throw toTransportGestaltError(callOptions, error, signal);

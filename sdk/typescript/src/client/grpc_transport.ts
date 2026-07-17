@@ -44,21 +44,11 @@ export async function createGrpcUnaryTransport(
     "@connectrpc/connect-node"
   );
   const sessionManager = new Http2SessionManager(options.baseUrl);
-  let transport: ConnectGrpcTransport | undefined;
-  let appClient: AppServiceClient | undefined;
-
-  const getAppClient = (): AppServiceClient => {
-    if (!appClient) {
-      if (!transport) {
-        transport = createGrpcTransport({
-          baseUrl: options.baseUrl,
-          sessionManager,
-        });
-      }
-      appClient = createClient(App, transport);
-    }
-    return appClient;
-  };
+  const transport: ConnectGrpcTransport = createGrpcTransport({
+    baseUrl: options.baseUrl,
+    sessionManager,
+  });
+  const appClient: AppServiceClient = createClient(App, transport);
 
   return {
     async unary<Output extends Message>(
@@ -90,7 +80,7 @@ export async function createGrpcUnaryTransport(
 
       try {
         return await dispatchGrpcUnary<Output>(
-          getAppClient(),
+          appClient,
           method,
           request,
           requestOptions,
@@ -105,8 +95,6 @@ export async function createGrpcUnaryTransport(
 
     async close(): Promise<void> {
       sessionManager.abort();
-      transport = undefined;
-      appClient = undefined;
     },
   };
 }

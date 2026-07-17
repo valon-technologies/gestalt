@@ -17,7 +17,7 @@ import (
 var connectPublicAppConns host.ConnPool
 
 // GestaltFromContext returns a gRPC client bound to the host-service relay.
-// It injects the provider request context and caller bearer token from ctx.
+// It injects the provider request context and validated identity metadata from ctx.
 // Bound access accepts no public address or auth configuration.
 func GestaltFromContext(ctx context.Context) (*Client, error) {
 	reqCtx := gestalt.RequestContextFromContext(ctx)
@@ -69,10 +69,15 @@ func (c *boundClientConn) NewStream(
 }
 
 func appendOutboundCallerBearer(ctx context.Context) context.Context {
+	if token := strings.TrimSpace(
+		gestalt.IdentityCallContextFromContext(ctx).CallerBearerToken,
+	); token != "" {
+		return gestalt.AppendIdentityCallMetadata(ctx)
+	}
 	if token := strings.TrimSpace(gestalt.CallerBearerTokenFromIncomingContext(ctx)); token != "" {
 		return metadata.AppendToOutgoingContext(ctx, gestalt.CallerBearerTokenMetadataKey, token)
 	}
-	return gestalt.AppendIdentityCallMetadata(ctx)
+	return ctx
 }
 
 func injectRequestContext(req any, boundCtx *proto.RequestContext) {

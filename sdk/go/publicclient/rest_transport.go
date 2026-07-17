@@ -39,6 +39,13 @@ func (t *restUnaryTransport) Unary(
 			Message: "publicclient: REST transport is nil",
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		code := gestaltclient.GestaltErrorCodeCanceled
+		if err == context.DeadlineExceeded {
+			code = gestaltclient.GestaltErrorCodeDeadlineExceeded
+		}
+		return &generated.GestaltError{Code: code, Message: err.Error()}
+	}
 
 	prepared, err := generated.PrepareRESTRequest(method, request)
 	if err != nil {

@@ -362,13 +362,47 @@ test("REST path templates use sdkgen path field metadata", () => {
 
 test("REST body omits fill and reject metadata fields", () => {
   const body = buildRestBody(PUBLIC_METHODS.app.invoke, {
-      app: "example",
-      operation: "sync",
-      params: { ok: true },
-      context: { subject: "user" },
-      runAs: "admin",
-    }) as Record<string, unknown>;
+    app: "example",
+    operation: "sync",
+    params: { ok: true },
+    context: { subject: "user" },
+    runAs: "admin",
+  }) as Record<string, unknown>;
   expect(body).toEqual({ params: { ok: true } });
+});
+
+test("REST transport preserves deployment base path prefixes", async () => {
+  const seenUrls: string[] = [];
+  const transport = createRestUnaryTransport({
+    baseUrl: "https://gestalt.test/gestalt",
+    auth: unauthenticated(),
+    fetch: (async (input: RequestInfo | URL) => {
+      seenUrls.push(String(input));
+      return new Response(
+        JSON.stringify({ status: 200, body: "", headers: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch,
+  });
+
+  await transport.unary(
+    PUBLIC_METHODS.app.invoke,
+    create(AppInvokeRequestSchema, {
+      app: "demo",
+      operation: "run",
+      params: {},
+      connection: "",
+      instance: "",
+      idempotencyKey: "",
+      credentialMode: "",
+    }),
+    AppInvokeRequestSchema,
+    OperationResultSchema,
+  );
+
+  expect(seenUrls[0]).toBe(
+    "https://gestalt.test/gestalt/api/v2/app/demo/operations/run",
+  );
 });
 
 test("bearer provider is not awaited after cancellation", async () => {
