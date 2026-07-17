@@ -40,13 +40,19 @@ import type {
   SubjectSet,
   SubjectSetType,
 } from "../../authorization.ts";
-import { fromWireTimestamp, toWireTimestamp } from "./support.ts";
+import {
+  fromWireTimestamp,
+  sanitizeJsonObject,
+  toWireTimestamp,
+} from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
 
 export function toWireAction(value: Init<Action>): wire.Action {
   return create(wire.ActionSchema, {
     name: value.name ?? "",
-    ...(value.properties !== undefined ? { properties: value.properties } : {}),
+    ...(value.properties !== undefined
+      ? { properties: sanitizeJsonObject(value.properties) }
+      : {}),
   });
 }
 
@@ -504,7 +510,9 @@ export function toWireRelationship(
     ...(value.tuple !== undefined
       ? { tuple: toWireRelationshipTuple(value.tuple) }
       : {}),
-    ...(value.properties !== undefined ? { properties: value.properties } : {}),
+    ...(value.properties !== undefined
+      ? { properties: sanitizeJsonObject(value.properties) }
+      : {}),
     sourceLayer: (value.sourceLayer ?? 0) as wire.SourceLayer,
   });
 }
@@ -633,7 +641,9 @@ export function toWireResource(value: Init<Resource>): wire.Resource {
   return create(wire.ResourceSchema, {
     type: value.type ?? "",
     id: value.id ?? "",
-    ...(value.properties !== undefined ? { properties: value.properties } : {}),
+    ...(value.properties !== undefined
+      ? { properties: sanitizeJsonObject(value.properties) }
+      : {}),
   });
 }
 
@@ -731,7 +741,9 @@ export function toWireSubject(value: Init<Subject>): wire.Subject {
   return create(wire.SubjectSchema, {
     type: value.type ?? "",
     id: value.id ?? "",
-    ...(value.properties !== undefined ? { properties: value.properties } : {}),
+    ...(value.properties !== undefined
+      ? { properties: sanitizeJsonObject(value.properties) }
+      : {}),
   });
 }
 

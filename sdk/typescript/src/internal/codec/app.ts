@@ -34,7 +34,7 @@ import type {
   SubjectContext,
   SubjectPermissionContext,
 } from "../../app.ts";
-import { fromWireValue, toWireValue } from "./support.ts";
+import { fromWireValue, sanitizeJsonObject, toWireValue } from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
 
 export function toWireAccessContext(
@@ -115,7 +115,9 @@ export function toWireAppInvokeGraphQLRequest(
   return create(wire.AppInvokeGraphQLRequestSchema, {
     app: value.app ?? "",
     document: value.document ?? "",
-    ...(value.variables !== undefined ? { variables: value.variables } : {}),
+    ...(value.variables !== undefined
+      ? { variables: sanitizeJsonObject(value.variables) }
+      : {}),
     connection: value.connection ?? "",
     instance: value.instance ?? "",
     idempotencyKey: value.idempotencyKey ?? "",
@@ -147,7 +149,9 @@ export function toWireAppInvokeRequest(
   return create(wire.AppInvokeRequestSchema, {
     app: value.app ?? "",
     operation: value.operation ?? "",
-    ...(value.params !== undefined ? { params: value.params } : {}),
+    ...(value.params !== undefined
+      ? { params: sanitizeJsonObject(value.params) }
+      : {}),
     connection: value.connection ?? "",
     instance: value.instance ?? "",
     idempotencyKey: value.idempotencyKey ?? "",
@@ -326,7 +330,9 @@ export function toWireExecuteRequest(
 ): wire.ExecuteRequest {
   return create(wire.ExecuteRequestSchema, {
     operation: value.operation ?? "",
-    ...(value.params !== undefined ? { params: value.params } : {}),
+    ...(value.params !== undefined
+      ? { params: sanitizeJsonObject(value.params) }
+      : {}),
     token: value.token ?? "",
     connectionParams: value.connectionParams ?? {},
     invocationId: value.invocationId ?? "",
@@ -419,7 +425,9 @@ export function toWireHTTPSubjectRequest(
         toWireStringList(item),
       ]),
     ),
-    ...(value.params !== undefined ? { params: value.params } : {}),
+    ...(value.params !== undefined
+      ? { params: sanitizeJsonObject(value.params) }
+      : {}),
     rawBody: value.rawBody ?? new Uint8Array(),
     securityScheme: value.securityScheme ?? "",
     verifiedSubject: value.verifiedSubject ?? "",
@@ -642,7 +650,9 @@ export function toWireRequestContext(
     ...(value.access !== undefined
       ? { access: toWireAccessContext(value.access) }
       : {}),
-    ...(value.workflow !== undefined ? { workflow: value.workflow } : {}),
+    ...(value.workflow !== undefined
+      ? { workflow: sanitizeJsonObject(value.workflow) }
+      : {}),
     ...(value.host !== undefined
       ? { host: toWireHostContext(value.host) }
       : {}),
@@ -778,7 +788,9 @@ export function toWireStartProviderRequest(
 ): wire.StartProviderRequest {
   return create(wire.StartProviderRequestSchema, {
     name: value.name ?? "",
-    ...(value.config !== undefined ? { config: value.config } : {}),
+    ...(value.config !== undefined
+      ? { config: sanitizeJsonObject(value.config) }
+      : {}),
     protocolVersion: value.protocolVersion ?? 0,
   });
 }
