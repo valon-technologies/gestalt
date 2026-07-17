@@ -2,10 +2,12 @@
 
 use serde_json::Value;
 
-use crate::rpc_support::GestaltError;
+use crate::rpc_support::{GestaltError, gestalt_error_code, http_status_to_gestalt_code};
 
 /// Decoded app invocation payload failure: an HTTP-error status, an error
 /// envelope, or an undecodable result body.
+///
+/// Envelope `error.code` on the wire maps to [`InvokeResultError::reason`].
 #[derive(Clone, Debug, thiserror::Error)]
 #[error("{message}")]
 pub struct InvokeResultError {
@@ -16,13 +18,29 @@ pub struct InvokeResultError {
     /// The HTTP status when the result carried one.
     pub status: Option<u16>,
     /// The error envelope's code when present.
-    pub code: Option<String>,
+    pub reason: Option<String>,
     /// The failure message.
     pub message: String,
     /// The decoded result body when it parsed as JSON.
     pub body: Option<Box<Value>>,
     /// The raw result body bytes.
     pub raw_body: Vec<u8>,
+}
+
+impl InvokeResultError {
+    /// Returns the canonical Gestalt gRPC error code for this payload failure.
+    pub fn gestalt_code(&self) -> i32 {
+        if let Some(status) = self.status {
+            return http_status_to_gestalt_code(status as i32);
+        }
+        if self.reason.as_deref() == Some("graphql_errors")
+            || self.message == "app invoke response is not valid JSON"
+            || self.message == "operation result body is not valid JSON"
+        {
+            return gestalt_error_code::INTERNAL;
+        }
+        gestalt_error_code::UNKNOWN
+    }
 }
 
 /// Failure of a `json_result` method: the transport failed, or the decoded
@@ -58,7 +76,7 @@ pub fn decode_app_result(
                 app: app.to_string(),
                 operation: operation.to_string(),
                 status: None,
-                code: None,
+                reason: None,
                 message: "app invoke response is not valid JSON".to_string(),
                 body: None,
                 raw_body: body.to_vec(),
@@ -71,7 +89,7 @@ pub fn decode_app_result(
                 app: app.to_string(),
                 operation: operation.to_string(),
                 status: None,
-                code: None,
+                reason: None,
                 message: "app invoke failed".to_string(),
                 body: None,
                 raw_body: body.to_vec(),
@@ -147,7 +165,7 @@ fn http_status_error(
         app: app.to_string(),
         operation: operation.to_string(),
         status: u16::try_from(status).ok(),
-        code: None,
+        reason: None,
         message: format!("app invoke failed with status {status}"),
         body: None,
         raw_body: body.to_vec(),
@@ -184,7 +202,7 @@ fn graphql_errors(app: &str, raw_body: &[u8], value: &Value) -> Result<(), Box<I
         app: app.to_string(),
         operation: "graphql".to_string(),
         status: None,
-        code: Some("graphql_errors".to_string()),
+        reason: Some("graphql_errors".to_string()),
         message,
         body: Some(Box::new(value.clone())),
         raw_body: raw_body.to_vec(),
@@ -197,7 +215,7 @@ fn apply_invoke_error_fields(error: &mut InvokeResultError, parsed: &Value) {
         .and_then(|value| value.get("message"))
         .and_then(Value::as_str)
         .filter(|text| !text.trim().is_empty());
-    let nested_code = nested
+    let nested_reason = nested
         .and_then(|value| value.get("code"))
         .and_then(Value::as_str)
         .filter(|text| !text.trim().is_empty());
@@ -205,14 +223,14 @@ fn apply_invoke_error_fields(error: &mut InvokeResultError, parsed: &Value) {
         .get("message")
         .and_then(Value::as_str)
         .filter(|text| !text.trim().is_empty());
-    let top_code = parsed
+    let top_reason = parsed
         .get("code")
         .and_then(Value::as_str)
         .filter(|text| !text.trim().is_empty());
     if let Some(message) = nested_message.or(top_message) {
         error.message = message.to_string();
     }
-    if let Some(code) = nested_code.or(top_code) {
-        error.code = Some(code.to_string());
+    if let Some(reason) = nested_reason.or(top_reason) {
+        error.reason = Some(reason.to_string());
     }
 }

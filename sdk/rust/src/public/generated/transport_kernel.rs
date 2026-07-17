@@ -77,7 +77,7 @@ pub fn decode_rest_response(
             ));
         }
         synthesize_operation_result_json(response.status, &response.body, &response.headers)
-    } else if response.status >= 400 {
+    } else if response.status >= 400 || !is_rest_success_status(response.status) {
         return Err(parse_gateway_error(response.status, &response.body));
     } else if response.body.iter().all(|b| b.is_ascii_whitespace()) {
         Value::Object(Map::new())
@@ -274,7 +274,10 @@ fn append_query_params(out: &mut Vec<(String, String)>, prefix: &str, value: &Va
             }
         }
         Value::Object(nested) => {
-            for (key, nested_value) in nested {
+            let mut keys: Vec<&String> = nested.keys().collect();
+            keys.sort();
+            for key in keys {
+                let nested_value = &nested[key];
                 let nested_prefix = if prefix.is_empty() {
                     key.clone()
                 } else {
@@ -433,6 +436,10 @@ fn snake_to_screaming(name: &str) -> String {
         out.push(ch.to_ascii_uppercase());
     }
     out
+}
+
+fn is_rest_success_status(status: u16) -> bool {
+    (200..300).contains(&status)
 }
 
 fn http_status_to_gestalt_code(status: u16) -> i32 {

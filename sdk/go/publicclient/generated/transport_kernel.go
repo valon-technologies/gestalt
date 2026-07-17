@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -98,7 +99,7 @@ func DecodeRESTResponse(method Method, response proto.Message, raw RawRESTRespon
 		}
 		return nil
 	}
-	if raw.Status >= 400 {
+	if raw.Status >= 400 || !isRESTSuccessStatus(raw.Status) {
 		return ParseGatewayError(raw.Status, raw.Body)
 	}
 	if len(strings.TrimSpace(string(raw.Body))) == 0 {
@@ -262,7 +263,13 @@ func appendQueryParams(out *[]QueryParam, prefix string, value any) {
 			appendQueryParams(out, prefix, item)
 		}
 	case map[string]any:
-		for key, nested := range typed {
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			nested := typed[key]
 			nestedPrefix := key
 			if prefix != "" {
 				nestedPrefix = prefix + "." + key
@@ -448,6 +455,10 @@ func gestaltCodeFromNormalized(normalized string) (GestaltErrorCode, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func isRESTSuccessStatus(status int) bool {
+	return status >= 200 && status < 300
 }
 
 func httpStatusToGestaltCode(status int) GestaltErrorCode {

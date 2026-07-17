@@ -30,6 +30,7 @@ export {
 export {
   GestaltError,
   GestaltErrorCode,
+  httpStatusToGestaltCode,
   toGestaltError,
 } from "./client/runtime/rpc_support.ts";
 export { InvokeError } from "./client/runtime/invoke_support.ts";

@@ -3,6 +3,7 @@
 //! suite is the normative spec of the envelope semantics across all four
 //! SDK languages.
 
+use gestalt::rpc_support::gestalt_error_code;
 use gestalt::{decode_app_result, decode_graphql_result, error_for_status, is_success};
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -59,15 +60,21 @@ fn decodes_app_results_per_fixture_suite() {
     assert_eq!(envelope.app, "github");
     assert_eq!(envelope.operation, "get_issue");
     assert!(envelope.status.is_none());
+    assert_eq!(envelope.reason.as_deref(), Some("missing_credential"));
+    assert_eq!(envelope.gestalt_code(), gestalt_error_code::UNKNOWN);
 
     let http = decode("http_401.json", 401).expect_err("http error");
     assert_eq!(http.status, Some(401));
+    assert_eq!(http.reason.as_deref(), Some("unauthorized"));
+    assert_eq!(http.gestalt_code(), gestalt_error_code::UNAUTHENTICATED);
 
     let redirect = decode("http_302.json", 302).expect_err("redirect");
     assert_eq!(redirect.status, Some(302));
+    assert_eq!(redirect.gestalt_code(), gestalt_error_code::UNKNOWN);
 
     let invalid = decode("invalid_json.txt", 200).expect_err("invalid json");
     assert_eq!(invalid.message, "app invoke response is not valid JSON");
+    assert_eq!(invalid.gestalt_code(), gestalt_error_code::INTERNAL);
 }
 
 #[test]
@@ -79,8 +86,9 @@ fn error_for_status_matches_the_http_error_decode() {
     assert_eq!(err.app, decoded.app);
     assert_eq!(err.operation, decoded.operation);
     assert_eq!(err.status, Some(401));
-    assert_eq!(err.code.as_deref(), Some("unauthorized"));
+    assert_eq!(err.reason.as_deref(), Some("unauthorized"));
     assert_eq!(err.message, "unauthorized");
+    assert_eq!(err.gestalt_code(), gestalt_error_code::UNAUTHENTICATED);
     assert_eq!(err.body, decoded.body);
     assert_eq!(err.raw_body, decoded.raw_body);
 
@@ -126,8 +134,23 @@ fn decodes_graphql_results_per_fixture_suite() {
     );
 
     let errors = decode("graphql_errors.json").expect_err("errors array");
-    assert_eq!(errors.code.as_deref(), Some("graphql_errors"));
+    assert_eq!(errors.reason.as_deref(), Some("graphql_errors"));
     assert_eq!(errors.operation, "graphql");
+    assert_eq!(errors.gestalt_code(), gestalt_error_code::INTERNAL);
 
     decode("graphql_success_envelope_errors.json").expect_err("errors behind success envelope");
+}
+
+#[test]
+fn operation_result_json_classifies_invalid_body_as_internal() {
+    use gestalt::OperationResult;
+
+    let result = OperationResult {
+        status: 200,
+        headers: Default::default(),
+        body: b"not-json".to_vec(),
+    };
+    let err = result.json().expect_err("invalid json body");
+    assert_eq!(err.message, "operation result body is not valid JSON");
+    assert_eq!(err.gestalt_code(), gestalt_error_code::INTERNAL);
 }

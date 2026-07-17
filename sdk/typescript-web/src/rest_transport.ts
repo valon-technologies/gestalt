@@ -27,6 +27,26 @@ export interface RestUnaryTransportOptions {
   fetch?: typeof fetch;
 }
 
+function responseHeaderPairs(
+  response: Response,
+): readonly (readonly [string, string])[] {
+  const pairs: [string, string][] = [];
+  const setCookies =
+    typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [];
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie" && setCookies.length > 0) {
+      return;
+    }
+    pairs.push([key, value]);
+  });
+  for (const cookie of setCookies) {
+    pairs.push(["set-cookie", cookie]);
+  }
+  return pairs;
+}
+
 export function createRestUnaryTransport(
   options: RestUnaryTransportOptions,
 ): UnaryTransport {
@@ -41,15 +61,15 @@ export function createRestUnaryTransport(
       responseSchema: DescMessage,
       callOptions?: PublicUnaryCallOptions,
     ): Promise<Output> {
-      const prepared = prepareRestRequest(method, requestSchema, request);
-      const url = new URL(prepared.path, baseUrl);
-      for (const [key, value] of prepared.query) {
-        url.searchParams.append(key, value);
-      }
-
       const signal = resolveEffectiveAbortSignal(callOptions);
 
       try {
+        const prepared = prepareRestRequest(method, requestSchema, request);
+        const url = new URL(prepared.path, baseUrl);
+        for (const [key, value] of prepared.query) {
+          url.searchParams.append(key, value);
+        }
+
         throwIfAborted(signal);
 
         const headers = new Headers({
@@ -77,14 +97,9 @@ export function createRestUnaryTransport(
 
         const response = await fetchImpl(url, init);
         const body = new Uint8Array(await response.arrayBuffer());
-        const headerEntries: Array<[string, string]> = [];
-        response.headers.forEach((value, key) => {
-          headerEntries.push([key, value]);
-        });
-
         return decodeRestResponse<Output>(method, responseSchema, {
           status: response.status,
-          headers: headerEntries,
+          headers: responseHeaderPairs(response),
           body,
         });
       } catch (error) {

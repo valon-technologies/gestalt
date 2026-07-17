@@ -62,6 +62,7 @@ import {
 import {
   fromWireTimestamp,
   fromWireValue,
+  sanitizeJsonObject,
   toWireTimestamp,
   toWireValue,
 } from "./support.ts";
@@ -94,8 +95,12 @@ export function toWireAgentInteraction(
     state: (value.state ?? 0) as wire.AgentInteractionState,
     title: value.title ?? "",
     prompt: value.prompt ?? "",
-    ...(value.request !== undefined ? { request: value.request } : {}),
-    ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
+    ...(value.request !== undefined
+      ? { request: sanitizeJsonObject(value.request) }
+      : {}),
+    ...(value.resolution !== undefined
+      ? { resolution: sanitizeJsonObject(value.resolution) }
+      : {}),
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
       : {}),
@@ -136,7 +141,9 @@ export function toWireAgentMessage(
     role: value.role ?? "",
     text: value.text ?? "",
     parts: (value.parts ?? []).map(toWireAgentMessagePart),
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
   });
 }
 
@@ -155,7 +162,9 @@ export function toWireAgentMessagePart(
   return create(wire.AgentMessagePartSchema, {
     type: (value.type ?? 0) as wire.AgentMessagePartType,
     text: value.text ?? "",
-    ...(value.json !== undefined ? { json: value.json } : {}),
+    ...(value.json !== undefined
+      ? { json: sanitizeJsonObject(value.json) }
+      : {}),
     ...(value.toolCall !== undefined
       ? { toolCall: toWireAgentMessagePartToolCall(value.toolCall) }
       : {}),
@@ -211,7 +220,9 @@ export function toWireAgentMessagePartToolCall(
   return create(wire.AgentMessagePartToolCallSchema, {
     id: value.id ?? "",
     toolId: value.toolId ?? "",
-    ...(value.arguments !== undefined ? { arguments: value.arguments } : {}),
+    ...(value.arguments !== undefined
+      ? { arguments: sanitizeJsonObject(value.arguments) }
+      : {}),
   });
 }
 
@@ -232,7 +243,9 @@ export function toWireAgentMessagePartToolResult(
     toolCallId: value.toolCallId ?? "",
     status: value.status ?? 0,
     content: value.content ?? "",
-    ...(value.output !== undefined ? { output: value.output } : {}),
+    ...(value.output !== undefined
+      ? { output: sanitizeJsonObject(value.output) }
+      : {}),
   });
 }
 
@@ -346,7 +359,9 @@ export function toWireAgentSession(
     model: value.model ?? "",
     clientRef: value.clientRef ?? "",
     state: (value.state ?? 0) as wire.AgentSessionState,
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
     createdBySubjectId: value.createdBySubjectId ?? "",
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
@@ -451,7 +466,9 @@ export function toWireAgentStructuredOutput(
   value: Init<AgentStructuredOutput>,
 ): wire.AgentStructuredOutput {
   return create(wire.AgentStructuredOutputSchema, {
-    ...(value.schema !== undefined ? { schema: value.schema } : {}),
+    ...(value.schema !== undefined
+      ? { schema: sanitizeJsonObject(value.schema) }
+      : {}),
   });
 }
 
@@ -655,7 +672,9 @@ export function toWireAgentTurnEvent(
     type: value.type ?? "",
     source: value.source ?? "",
     visibility: value.visibility ?? "",
-    ...(value.data !== undefined ? { data: value.data } : {}),
+    ...(value.data !== undefined
+      ? { data: sanitizeJsonObject(value.data) }
+      : {}),
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
       : {}),
@@ -690,7 +709,9 @@ export function toWireAgentTurnStructuredOutput(
 ): wire.AgentTurnStructuredOutput {
   return create(wire.AgentTurnStructuredOutputSchema, {
     text: value.text ?? "",
-    ...(value.value !== undefined ? { value: value.value } : {}),
+    ...(value.value !== undefined
+      ? { value: sanitizeJsonObject(value.value) }
+      : {}),
   });
 }
 
@@ -792,7 +813,9 @@ export function toWireCreateAgentProviderSessionRequest(
     idempotencyKey: value.idempotencyKey ?? "",
     model: value.model ?? "",
     clientRef: value.clientRef ?? "",
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
     ...(value.sessionStart !== undefined
       ? { sessionStart: toWireAgentSessionStartConfig(value.sessionStart) }
       : {}),
@@ -856,10 +879,12 @@ export function toWireCreateAgentProviderTurnRequest(
     idempotencyKey: value.idempotencyKey ?? "",
     model: value.model ?? "",
     messages: (value.messages ?? []).map(toWireAgentMessage),
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
     executionRef: value.executionRef ?? "",
     ...(value.modelOptions !== undefined
-      ? { modelOptions: value.modelOptions }
+      ? { modelOptions: sanitizeJsonObject(value.modelOptions) }
       : {}),
     timeoutSeconds: value.timeoutSeconds ?? 0,
     ...(value.output !== undefined
@@ -1224,7 +1249,9 @@ export function toWireResolveAgentProviderInteractionRequest(
 ): wire.ResolveAgentProviderInteractionRequest {
   return create(wire.ResolveAgentProviderInteractionRequestSchema, {
     interactionId: value.interactionId ?? "",
-    ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
+    ...(value.resolution !== undefined
+      ? { resolution: sanitizeJsonObject(value.resolution) }
+      : {}),
     turnId: value.turnId ?? "",
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
@@ -1254,7 +1281,9 @@ export function toWireUpdateAgentProviderSessionRequest(
     sessionId: value.sessionId ?? "",
     clientRef: value.clientRef ?? "",
     state: (value.state ?? 0) as wire.AgentSessionState,
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),

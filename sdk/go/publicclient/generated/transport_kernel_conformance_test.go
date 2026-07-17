@@ -60,6 +60,15 @@ func loadTransportKernelCases(t *testing.T) []transportKernelCase {
 	return cases
 }
 
+func TestFixtureCasesAreCovered(t *testing.T) {
+	t.Parallel()
+	for _, tc := range loadTransportKernelCases(t) {
+		if tc.ExpectPrepare == nil && tc.ExpectDecode == nil && tc.ExpectGatewayError == nil && tc.ExpectGestaltError == nil {
+			t.Fatalf("case %q has no expectations", tc.ID)
+		}
+	}
+}
+
 func TestPrepareCasesFromFixture(t *testing.T) {
 	t.Parallel()
 	for _, tc := range loadTransportKernelCases(t) {
@@ -79,8 +88,8 @@ func TestPrepareCasesFromFixture(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildRESTBody: %v", err)
 			}
-			if tc.ExpectPrepare.Verb != "POST" {
-				t.Fatalf("verb = POST want %q", tc.ExpectPrepare.Verb)
+			if method.HTTPVerb != tc.ExpectPrepare.Verb {
+				t.Fatalf("method verb = %q want fixture %q", method.HTTPVerb, tc.ExpectPrepare.Verb)
 			}
 			if path != tc.ExpectPrepare.Path {
 				t.Fatalf("path = %q want %q", path, tc.ExpectPrepare.Path)

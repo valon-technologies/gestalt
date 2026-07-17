@@ -7,6 +7,7 @@
 import {
   GestaltError,
   GestaltErrorCode,
+  httpStatusToGestaltCode,
   type GestaltErrorCode as GestaltErrorCodeType,
 } from __RPC_SUPPORT_IMPORT__;
 
@@ -150,36 +151,5 @@ function gestaltCodeFromNormalized(
       return GestaltErrorCode.Unauthenticated;
     default:
       return undefined;
-  }
-}
-
-function httpStatusToGestaltCode(status: number): GestaltErrorCodeType {
-  switch (status) {
-    case 400:
-      return GestaltErrorCode.InvalidArgument;
-    case 401:
-      return GestaltErrorCode.Unauthenticated;
-    case 403:
-      return GestaltErrorCode.PermissionDenied;
-    case 404:
-      return GestaltErrorCode.NotFound;
-    case 409:
-      return GestaltErrorCode.AlreadyExists;
-    case 412:
-      return GestaltErrorCode.FailedPrecondition;
-    case 429:
-      return GestaltErrorCode.ResourceExhausted;
-    case 499:
-      return GestaltErrorCode.Canceled;
-    case 500:
-      return GestaltErrorCode.Internal;
-    case 501:
-      return GestaltErrorCode.Unimplemented;
-    case 503:
-      return GestaltErrorCode.Unavailable;
-    case 504:
-      return GestaltErrorCode.DeadlineExceeded;
-    default:
-      return GestaltErrorCode.Unknown;
   }
 }

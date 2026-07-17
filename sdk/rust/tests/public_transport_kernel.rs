@@ -90,6 +90,17 @@ fn load_cases() -> Vec<TransportKernelCase> {
 }
 
 #[test]
+fn fixture_cases_are_covered() {
+    for case in load_cases() {
+        let covered = case.expect_prepare.is_some()
+            || case.expect_decode.is_some()
+            || case.expect_gateway_error.is_some()
+            || case.expect_gestalt_error.is_some();
+        assert!(covered, "case {} has no expectations", case.id);
+    }
+}
+
+#[test]
 fn prepare_cases_from_fixture() {
     for case in load_cases() {
         let Some(ref expect) = case.expect_prepare else {

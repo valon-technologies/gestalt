@@ -78,6 +78,39 @@ func ToGestaltError(err error) *GestaltError {
 	return toGestaltError(err)
 }
 
+// HTTPStatusToGestaltCode maps an HTTP status code to the canonical Gestalt
+// gRPC error code.
+func HTTPStatusToGestaltCode(status int32) GestaltErrorCode {
+	switch status {
+	case 400:
+		return GestaltErrorCodeInvalidArgument
+	case 401:
+		return GestaltErrorCodeUnauthenticated
+	case 403:
+		return GestaltErrorCodePermissionDenied
+	case 404:
+		return GestaltErrorCodeNotFound
+	case 409:
+		return GestaltErrorCodeAlreadyExists
+	case 412:
+		return GestaltErrorCodeFailedPrecondition
+	case 429:
+		return GestaltErrorCodeResourceExhausted
+	case 499:
+		return GestaltErrorCodeCanceled
+	case 500:
+		return GestaltErrorCodeInternal
+	case 501:
+		return GestaltErrorCodeUnimplemented
+	case 503:
+		return GestaltErrorCodeUnavailable
+	case 504:
+		return GestaltErrorCodeDeadlineExceeded
+	default:
+		return GestaltErrorCodeUnknown
+	}
+}
+
 // PROVIDER_STREAM_BEGIN
 // streamError normalizes stream transport errors: io.EOF marks the normal
 // end of a stream and passes through unchanged; every other error becomes a

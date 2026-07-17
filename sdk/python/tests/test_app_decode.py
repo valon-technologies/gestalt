@@ -16,6 +16,11 @@ from gestalt.invoke_support import (
     ok,
     raise_for_status,
 )
+from gestalt.rpc_support import (
+    GestaltError,
+    GestaltErrorCode,
+    http_status_to_gestalt_code,
+)
 
 FIXTURE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "testdata" / "app_invoke"
 
@@ -54,26 +59,36 @@ class AppDecodeTests(unittest.TestCase):
     def test_app_decode_errors(self) -> None:
         with self.assertRaises(InvokeError) as envelope:
             self.decode("error_envelope.json")
+        self.assertIsInstance(envelope.exception, GestaltError)
         self.assertEqual(envelope.exception.app, "github")
         self.assertEqual(envelope.exception.operation, "get_issue")
         self.assertIsNone(envelope.exception.status)
-        self.assertEqual(envelope.exception.code, "missing_credential")
+        self.assertEqual(envelope.exception.reason, "missing_credential")
+        self.assertEqual(envelope.exception.code, GestaltErrorCode.UNKNOWN)
         self.assertEqual(str(envelope.exception), "missing credential")
 
         with self.assertRaises(InvokeError) as http_error:
             self.decode("http_401.json", 401)
         self.assertEqual(http_error.exception.status, 401)
-        self.assertEqual(http_error.exception.code, "unauthorized")
+        self.assertEqual(http_error.exception.reason, "unauthorized")
+        self.assertEqual(http_error.exception.code, GestaltErrorCode.UNAUTHENTICATED)
         self.assertEqual(str(http_error.exception), "unauthorized")
         self.assertTrue(http_error.exception.raw_body)
 
         with self.assertRaises(InvokeError) as redirect:
             self.decode("http_302.json", 302)
         self.assertEqual(redirect.exception.status, 302)
+        self.assertEqual(redirect.exception.code, GestaltErrorCode.UNKNOWN)
 
         with self.assertRaises(InvokeError) as invalid:
             self.decode("invalid_json.txt")
         self.assertEqual(str(invalid.exception), "app invoke response is not valid JSON")
+        self.assertEqual(invalid.exception.code, GestaltErrorCode.INTERNAL)
+
+    def test_http_status_to_gestalt_code(self) -> None:
+        self.assertEqual(
+            http_status_to_gestalt_code(401), GestaltErrorCode.UNAUTHENTICATED
+        )
 
     def test_ok_boundaries(self) -> None:
         self.assertFalse(ok(199))
@@ -96,14 +111,15 @@ class AppDecodeTests(unittest.TestCase):
         self.assertEqual(http_error.exception.app, "github")
         self.assertEqual(http_error.exception.operation, "get_issue")
         self.assertEqual(http_error.exception.status, 401)
-        self.assertEqual(http_error.exception.code, "unauthorized")
+        self.assertEqual(http_error.exception.reason, "unauthorized")
+        self.assertEqual(http_error.exception.code, GestaltErrorCode.UNAUTHENTICATED)
         self.assertEqual(str(http_error.exception), "unauthorized")
         self.assertTrue(http_error.exception.raw_body)
 
         with self.assertRaises(InvokeError) as opaque:
             raise_for_status("github", "get_issue", 503, fixture("invalid_json.txt"))
         self.assertEqual(opaque.exception.status, 503)
-        self.assertIsNone(opaque.exception.code)
+        self.assertIsNone(opaque.exception.reason)
         self.assertEqual(str(opaque.exception), "app invoke failed with status 503")
 
     def test_graphql_errors(self) -> None:
@@ -117,14 +133,15 @@ class AppDecodeTests(unittest.TestCase):
         )
         with self.assertRaises(InvokeError) as error:
             decode_graphql_result("linear", 200, fixture("graphql_errors.json"))
-        self.assertEqual(error.exception.code, "graphql_errors")
+        self.assertEqual(error.exception.reason, "graphql_errors")
         self.assertEqual(error.exception.operation, "graphql")
+        self.assertEqual(error.exception.code, GestaltErrorCode.INTERNAL)
         self.assertEqual(str(error.exception), "permission denied")
         with self.assertRaises(InvokeError) as envelope_error:
             decode_graphql_result(
                 "linear", 200, fixture("graphql_success_envelope_errors.json")
             )
-        self.assertEqual(envelope_error.exception.code, "graphql_errors")
+        self.assertEqual(envelope_error.exception.reason, "graphql_errors")
 
     def test_top_level_reexports(self) -> None:
         import gestalt

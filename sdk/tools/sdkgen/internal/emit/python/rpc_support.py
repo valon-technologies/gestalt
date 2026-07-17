@@ -50,3 +50,22 @@ class GestaltError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def http_status_to_gestalt_code(status: int) -> int:
+    """Map an HTTP status code to the canonical Gestalt gRPC error code."""
+    mapping = {
+        400: GestaltErrorCode.INVALID_ARGUMENT,
+        401: GestaltErrorCode.UNAUTHENTICATED,
+        403: GestaltErrorCode.PERMISSION_DENIED,
+        404: GestaltErrorCode.NOT_FOUND,
+        409: GestaltErrorCode.ALREADY_EXISTS,
+        412: GestaltErrorCode.FAILED_PRECONDITION,
+        429: GestaltErrorCode.RESOURCE_EXHAUSTED,
+        499: GestaltErrorCode.CANCELED,
+        500: GestaltErrorCode.INTERNAL,
+        501: GestaltErrorCode.UNIMPLEMENTED,
+        503: GestaltErrorCode.UNAVAILABLE,
+        504: GestaltErrorCode.DEADLINE_EXCEEDED,
+    }
+    return mapping.get(status, GestaltErrorCode.UNKNOWN)

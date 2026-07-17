@@ -27,6 +27,12 @@ import {
 const RESPONSE_KIND_HEADER = "X-Gestalt-Response-Kind";
 const RESPONSE_KIND_OPERATION_RESULT = "operation-result";
 
+function toInvalidArgument(error: unknown): GestaltError {
+  const message =
+    error instanceof Error ? error.message : "invalid REST request mapping";
+  return new GestaltError(GestaltErrorCode.InvalidArgument, message);
+}
+
 export interface PreparedRestRequest {
   readonly verb: "GET" | "PUT" | "POST" | "PATCH" | "DELETE";
   readonly path: string;
@@ -56,8 +62,18 @@ export function prepareRestRequest(
     string,
     JsonValue
   >;
-  const path = buildRestPath(http, requestJson);
-  const queryParams = buildRestQuery(http, requestJson);
+  let path: string;
+  try {
+    path = buildRestPath(http, requestJson);
+  } catch (error) {
+    throw toInvalidArgument(error);
+  }
+  let queryParams: URLSearchParams;
+  try {
+    queryParams = buildRestQuery(http, requestJson);
+  } catch (error) {
+    throw toInvalidArgument(error);
+  }
   const query = [...queryParams.entries()] as readonly (readonly [
     string,
     string,
@@ -87,7 +103,7 @@ export function decodeRestResponse<Output extends Message>(
       response.body,
       response.headers,
     );
-  } else if (response.status >= 400) {
+  } else if (response.status >= 400 || !isRestSuccessStatus(response.status)) {
     throw parseGatewayError(
       response.status,
       new TextDecoder().decode(response.body),
@@ -107,7 +123,9 @@ export function decodeRestResponse<Output extends Message>(
     }
   }
   try {
-    return fromJson(responseSchema, responseJson) as Output;
+    return fromJson(responseSchema, responseJson, {
+      ignoreUnknownFields: true,
+    }) as Output;
   } catch (error) {
     throw new GestaltError(
       GestaltErrorCode.Internal,
@@ -157,6 +175,10 @@ function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(bytes[i]!);
   }
   return btoa(binary);
+}
+
+function isRestSuccessStatus(status: number): boolean {
+  return status >= 200 && status < 300;
 }
 
 function isWhitespaceOnly(bytes: Uint8Array): boolean {

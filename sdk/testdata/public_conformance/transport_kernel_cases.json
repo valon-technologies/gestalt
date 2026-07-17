@@ -83,8 +83,8 @@
       "verb": "POST",
       "path": "/api/v2/app/example/operations/sync",
       "query": [
-        ["filter.status", "open"],
-        ["filter.nested.x", "1"]
+        ["filter.nested.x", "1"],
+        ["filter.status", "open"]
       ],
       "body": { "params": {} }
     }
@@ -270,5 +270,29 @@
       "bodyText": "{\"status\":\"not-a-number\"}"
     },
     "expectGestaltError": { "code": 13 }
+  },
+  {
+    "id": "success_unknown_response_field",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [],
+      "bodyText": "{\"status\":200,\"body\":\"\",\"headers\":{},\"extraFutureField\":\"ignored\"}"
+    },
+    "expectDecode": {
+      "status": 200,
+      "bodyBase64": "",
+      "headerKeys": []
+    }
+  },
+  {
+    "id": "unmarked_redirect_status",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 302,
+      "headers": [],
+      "bodyText": ""
+    },
+    "expectGestaltError": { "code": 2 }
   }
 ]

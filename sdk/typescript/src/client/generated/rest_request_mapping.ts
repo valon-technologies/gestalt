@@ -102,8 +102,12 @@ export function appendQueryParams(
     return;
   }
   if (typeof value === "object") {
-    for (const [key, nested] of Object.entries(value)) {
-      appendQueryParams(params, prefix ? `${prefix}.${key}` : key, nested);
+    for (const key of Object.keys(value).sort()) {
+      appendQueryParams(
+        params,
+        prefix ? `${prefix}.${key}` : key,
+        (value as Record<string, JsonValue>)[key]!,
+      );
     }
     return;
   }

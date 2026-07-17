@@ -68,6 +68,7 @@ import {
 import {
   fromWireTimestamp,
   fromWireValue,
+  sanitizeJsonObject,
   toWireTimestamp,
   toWireValue,
 } from "./support.ts";
@@ -480,7 +481,9 @@ export function toWireSignalOrStartWorkflowProviderRunRequest(
       : {}),
     provider: value.provider ?? "",
     definitionId: value.definitionId ?? "",
-    ...(value.input !== undefined ? { input: value.input } : {}),
+    ...(value.input !== undefined
+      ? { input: sanitizeJsonObject(value.input) }
+      : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
@@ -571,7 +574,9 @@ export function toWireStartWorkflowProviderRunRequest(
     workflowKey: value.workflowKey ?? "",
     provider: value.provider ?? "",
     definitionId: value.definitionId ?? "",
-    ...(value.input !== undefined ? { input: value.input } : {}),
+    ...(value.input !== undefined
+      ? { input: sanitizeJsonObject(value.input) }
+      : {}),
     expectedDefinitionGeneration: value.expectedDefinitionGeneration ?? 0n,
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
@@ -669,7 +674,9 @@ export function toWireWorkflowAgentMessage(
     ...(value.text !== undefined
       ? { text: toWireWorkflowText(value.text) }
       : {}),
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
   });
 }
 
@@ -784,7 +791,9 @@ export function toWireWorkflowEvent(
     subject: value.subject ?? "",
     ...(value.time !== undefined ? { time: toWireTimestamp(value.time) } : {}),
     datacontenttype: value.datacontenttype ?? "",
-    ...(value.data !== undefined ? { data: value.data } : {}),
+    ...(value.data !== undefined
+      ? { data: sanitizeJsonObject(value.data) }
+      : {}),
     extensions: Object.fromEntries(
       Object.entries(value.extensions ?? {}).map(([key, item]) => [
         key,
@@ -960,7 +969,9 @@ export function toWireWorkflowRun(value: Init<WorkflowRun>): wire.WorkflowRun {
     provider: value.provider ?? "",
     definitionId: value.definitionId ?? "",
     runAs: value.runAs ?? "",
-    ...(value.input !== undefined ? { input: value.input } : {}),
+    ...(value.input !== undefined
+      ? { input: sanitizeJsonObject(value.input) }
+      : {}),
     definitionGeneration: value.definitionGeneration ?? 0n,
     currentStepId: value.currentStepId ?? "",
     steps: (value.steps ?? []).map(toWireWorkflowStepExecution),
@@ -1009,7 +1020,9 @@ export function toWireWorkflowRunEvent(
     runId: value.runId ?? "",
     stepId: value.stepId ?? "",
     type: value.type ?? "",
-    ...(value.data !== undefined ? { data: value.data } : {}),
+    ...(value.data !== undefined
+      ? { data: sanitizeJsonObject(value.data) }
+      : {}),
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
       : {}),
@@ -1141,8 +1154,12 @@ export function toWireWorkflowSignal(
   return create(wire.WorkflowSignalSchema, {
     id: value.id ?? "",
     name: value.name ?? "",
-    ...(value.payload !== undefined ? { payload: value.payload } : {}),
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.payload !== undefined
+      ? { payload: sanitizeJsonObject(value.payload) }
+      : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
       : {}),
@@ -1182,7 +1199,9 @@ export function toWireWorkflowStep(
       ? { when: toWireWorkflowStepWhen(value.when) }
       : {}),
     timeoutSeconds: value.timeoutSeconds ?? 0,
-    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+    ...(value.metadata !== undefined
+      ? { metadata: sanitizeJsonObject(value.metadata) }
+      : {}),
     action: toWireWorkflowStepAction(value.action ?? { case: undefined }),
   });
 }
@@ -1250,7 +1269,7 @@ export function toWireWorkflowStepAgentTurn(
       ? { output: toWireAgentOutput(value.output) }
       : {}),
     ...(value.modelOptions !== undefined
-      ? { modelOptions: value.modelOptions }
+      ? { modelOptions: sanitizeJsonObject(value.modelOptions) }
       : {}),
   });
 }

@@ -47,6 +47,19 @@ class PublicTransportKernelTests(unittest.TestCase):
       "a=1&b=2",
     )
 
+  def test_fixture_cases_are_covered(self) -> None:
+    for case in self.cases:
+      if not any(
+        case.get(key)
+        for key in (
+          "expectPrepare",
+          "expectDecode",
+          "expectGatewayError",
+          "expectGestaltError",
+        )
+      ):
+        self.fail(f"case {case['id']} has no expectations")
+
   def test_prepare_cases_from_fixture(self) -> None:
     for case in self.cases:
       expect = case.get("expectPrepare")
@@ -57,7 +70,7 @@ class PublicTransportKernelTests(unittest.TestCase):
       path = build_rest_path(method, request)
       query = tuple(build_rest_query(method, request))
       body = build_rest_body(method, request)
-      self.assertEqual(expect["verb"], "POST", case["id"])
+      self.assertEqual(method.http_verb, expect["verb"], case["id"])
       self.assertEqual(path, expect["path"], case["id"])
       self.assertEqual(list(query), [tuple(pair) for pair in expect["query"]], case["id"])
       if expect["body"] is None:

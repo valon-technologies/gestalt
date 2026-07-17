@@ -99,6 +99,17 @@ function methodForPrepareCase(tc: FixtureCase): PublicMethod {
 }
 
 describe("transport kernel fixture", () => {
+  it("covers every fixture case", () => {
+    for (const tc of cases) {
+      const covered =
+        tc.expectPrepare !== undefined ||
+        tc.expectDecode !== undefined ||
+        tc.expectGatewayError !== undefined ||
+        tc.expectGestaltError !== undefined;
+      expect(covered).toBe(true);
+    }
+  });
+
   for (const tc of cases) {
     if (tc.expectPrepare && tc.request) {
       it(`prepare: ${tc.id}`, () => {
@@ -108,7 +119,7 @@ describe("transport kernel fixture", () => {
         const path = buildRestPath(http, request);
         const query = [...buildRestQuery(http, request).entries()];
         const body = buildRestBody(method, request);
-        expect(tc.expectPrepare!.verb).toBe("POST");
+        expect(http.verb).toBe(tc.expectPrepare!.verb as typeof http.verb);
         expect(path).toBe(tc.expectPrepare!.path);
         expect(query).toEqual(tc.expectPrepare!.query);
         if (tc.expectPrepare!.body === null) {

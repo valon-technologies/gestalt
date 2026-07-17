@@ -7,6 +7,7 @@
 pub mod app;
 pub mod app_client;
 pub mod codec;
+pub mod grpc_dispatch;
 pub mod invoke_support;
 pub mod metadata;
 pub mod rpc_support;

@@ -109,7 +109,7 @@ def decode_rest_response(
             response.body,
             response.headers,
         )
-    elif response.status >= 400:
+    elif response.status >= 400 or not _is_rest_success_status(response.status):
         raise parse_gateway_error(response.status, response.body)
     elif not response.body.strip():
         response_json: dict[str, Any] = {}
@@ -135,13 +135,17 @@ def decode_rest_response(
 
     message = response_type()
     try:
-        json_format.ParseDict(response_json, message)
+        json_format.ParseDict(response_json, message, ignore_unknown_fields=True)
     except Exception as err:
         raise GestaltError(
             GestaltErrorCode.INTERNAL,
             f"response does not match expected schema: {err}",
         ) from err
     return message
+
+
+def _is_rest_success_status(status: int) -> bool:
+    return 200 <= status < 300
 
 
 def parse_gateway_error(status: int, body: bytes) -> GestaltError:
@@ -243,7 +247,8 @@ def append_query_params(
             pairs.append((prefix, _format_query_scalar(item)))
         return
     if isinstance(value, dict):
-        for key, nested in value.items():
+        for key in sorted(value):
+            nested = value[key]
             nested_prefix = f"{prefix}.{key}" if prefix else key
             append_query_params(pairs, nested_prefix, nested)
         return
