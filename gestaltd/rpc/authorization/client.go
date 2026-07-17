@@ -148,7 +148,6 @@ func (c *Client) invoke(ctx context.Context, operation string, in gproto.Message
 		ServiceName:    proto.Authorization_ServiceDesc.ServiceName,
 		Operation:      operation,
 		RequestContext: providergateway.RequestContextFromContext(ctx),
-		CallerToken:    providergateway.CallerTokenFromContext(ctx),
 		Payload:        payload,
 	}, func(ctx context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
 		msg, err := call(ctx)

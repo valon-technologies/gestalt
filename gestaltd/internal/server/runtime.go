@@ -96,7 +96,6 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 		AuditSink:            result.AuditSink,
 		Services:             result.Services,
 		Providers:            result.Providers,
-		CallerTokenIssuer:    result.CallerTokenIssuer,
 		Agent:                result.AgentControl,
 		AgentManager:         result.AgentManager,
 		Workflow:             result.WorkflowControl,

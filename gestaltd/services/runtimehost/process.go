@@ -33,19 +33,20 @@ const (
 )
 
 type ProcessConfig struct {
-	Command      string
-	Args         []string
-	Workdir      string
-	Env          map[string]string
-	Egress       egress.Policy
-	HostBinary   string
-	Cleanup      func()
-	HostServices []HostService
-	SocketDir    string
-	ProviderName string
-	Telemetry    metricutil.TelemetryProviders
-	Stdout       io.Writer
-	Stderr       io.Writer
+	Command           string
+	Args              []string
+	Workdir           string
+	Env               map[string]string
+	Egress            egress.Policy
+	HostBinary        string
+	Cleanup           func()
+	HostServices      []HostService
+	GRPCServerOptions []grpc.ServerOption
+	SocketDir         string
+	ProviderName      string
+	Telemetry         metricutil.TelemetryProviders
+	Stdout            io.Writer
+	Stderr            io.Writer
 }
 
 type HostService struct {
@@ -176,7 +177,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 			}
 			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
-		srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, unifiedHostService(), cfg.Telemetry)...)))
+		srv := grpc.NewServer(hostServiceServerOptions(cfg.GRPCServerOptions, grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, unifiedHostService(), cfg.Telemetry)...)))...)
 		for _, hostService := range activeHostServices {
 			hostService.Register(srv)
 		}

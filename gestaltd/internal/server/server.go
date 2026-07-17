@@ -22,6 +22,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	"github.com/valon-technologies/gestalt/server/services/hostserviceingress"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -104,7 +105,6 @@ type Server struct {
 	workflowProviderName   string
 	agentRuns              agentmanager.Service
 	providers              *registry.ProviderMap[core.Provider]
-	callerTokenIssuer      *providergateway.CallerTokenIssuer
 	workflow               bootstrap.WorkflowControl
 	pluginRuntimes         bootstrap.RuntimeInspector
 	resolver               *principal.Resolver
@@ -172,7 +172,6 @@ type Config struct {
 	AuditSink              core.AuditSink
 	Services               *coredata.Services
 	Providers              *registry.ProviderMap[core.Provider]
-	CallerTokenIssuer      *providergateway.CallerTokenIssuer
 	Agent                  bootstrap.AgentControl
 	AgentManager           agentmanager.Service
 	Workflow               bootstrap.WorkflowControl
@@ -335,6 +334,7 @@ func New(cfg Config) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("init host service relay tokens: %w", err)
 		}
+		hostServiceRelayTokens.SetCapabilityIngressDecorator(hostserviceingress.ApplyCapability)
 		egressProxyTokens, err = egressproxy.NewTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init egress proxy tokens: %w", err)
@@ -362,7 +362,6 @@ func New(cfg Config) (*Server, error) {
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		providers:              cfg.Providers,
-		callerTokenIssuer:      cfg.CallerTokenIssuer,
 		workflow:               cfg.Workflow,
 		pluginRuntimes:         cfg.Runtimes,
 		resolver:               resolver,

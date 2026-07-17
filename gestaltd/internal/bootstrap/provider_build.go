@@ -1228,7 +1228,13 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		}),
 		appservice.WithHostContext(deps.BaseURL),
 		appservice.WithCallerProvider(invocation.ProviderKindApp, name),
+		appservice.WithRuntimeSessionID(sessionID),
 	}
+	tokenManager, err := configuredHostServiceRelayTokenManager(deps)
+	if err != nil {
+		return nil, fmt.Errorf("init host service relay tokens: %w", err)
+	}
+	opts = append(opts, appservice.WithRelayTokenManager(tokenManager))
 	prov, err := appservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
 	if err != nil {
 		_ = conn.Close()
@@ -1251,10 +1257,15 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 	if err != nil {
 		return nil, err
 	}
+	tokenManager, err := configuredHostServiceRelayTokenManager(deps)
+	if err != nil {
+		return nil, fmt.Errorf("dev app %q: %w", name, err)
+	}
 	prepared, err := runtimehost.PrepareExternalProviderSockets(runtimehost.ProcessConfig{
-		ProviderName: name,
-		HostServices: hostServices,
-		Telemetry:    deps.Telemetry,
+		ProviderName:      name,
+		HostServices:      hostServices,
+		Telemetry:         deps.Telemetry,
+		GRPCServerOptions: hostServiceRelayGRPCServerOptions(tokenManager),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("dev app %q: prepare provider sockets: %w", name, err)
@@ -1314,6 +1325,8 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 		appservice.WithCloser(closer),
 		appservice.WithHostContext(deps.BaseURL),
 		appservice.WithCallerProvider(invocation.ProviderKindApp, name),
+		appservice.WithRuntimeSessionID(runtimehost.DevProviderSessionID(name)),
+		appservice.WithRelayTokenManager(tokenManager),
 	}
 	prov, err := appservice.NewRemote(ctx, proto.NewAppProviderClient(conn), spec, pluginConfig, opts...)
 	if err != nil {

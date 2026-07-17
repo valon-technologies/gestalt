@@ -9,6 +9,8 @@ export const ENV_HOST_SERVICES = "GESTALT_HOST_SERVICES";
 export const HOST_SERVICE_RELAY_TOKEN_HEADER =
   "x-gestalt-host-service-relay-token";
 export const HOST_SERVICE_BINDING_HEADER = "x-gestalt-host-binding";
+export const TRUSTED_CALLER_SUBJECT_METADATA_KEY =
+  "x-gestalt-caller-proof-subject";
 
 export type HostServiceTransportOptions = {
   baseUrl: string;
@@ -112,14 +114,18 @@ export function createHostServiceGrpcTransport(
 
 export function requireHostServiceTarget(
   serviceName: string,
+  options?: { anyOf?: readonly string[] },
 ): { target: string; token: string } {
   const configured = process.env[ENV_HOST_SERVICES];
   if (configured) {
-    const allowed = configured
-      .split(",")
-      .map((name) => name.trim())
-      .filter(Boolean);
-    if (!allowed.includes(serviceName)) {
+    const allowed = new Set(
+      configured
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    );
+    const required = options?.anyOf ?? [serviceName];
+    if (!required.some((name) => allowed.has(name))) {
       throw new Error(
         `${serviceName}: host service is not configured (${ENV_HOST_SERVICES}=${configured})`,
       );

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -92,14 +91,7 @@ func (s *Server) listAuthorizationActiveModelResourceTypes(w http.ResponseWriter
 }
 
 func (s *Server) authorizationHTTPContext(w http.ResponseWriter, r *http.Request) (context.Context, bool) {
-	ctx := invocation.WithEntry(r.Context(), invocation.EntryHTTP)
-	ctx, err := s.withProviderGatewayCallerToken(ctx, PrincipalFromContext(r.Context()))
-	if err != nil {
-		slog.ErrorContext(r.Context(), "issue authorization provider gateway caller token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to prepare authorization context")
-		return nil, false
-	}
-	return ctx, true
+	return invocation.WithEntry(r.Context(), invocation.EntryHTTP), true
 }
 
 func (s *Server) requireAuthorizationProvider(w http.ResponseWriter) bool {

@@ -75,7 +75,7 @@ func PrepareExternalProviderSockets(cfg ProcessConfig) (*PreparedProviderSockets
 		}
 		return nil, fmt.Errorf("listen on host socket: %w", err)
 	}
-	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, unifiedHostService(), cfg.Telemetry)...)))
+	srv := grpc.NewServer(hostServiceServerOptions(cfg.GRPCServerOptions, grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, unifiedHostService(), cfg.Telemetry)...)))...)
 	for _, hostService := range activeHostServices {
 		hostService.Register(srv)
 	}

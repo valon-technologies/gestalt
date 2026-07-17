@@ -118,10 +118,17 @@ func (s *Server) publicHostServiceHandlerEntry(service runtimehost.PublicHostSer
 	}, true
 }
 
+func (s *Server) hostServiceGRPCOptions(opts ...grpc.ServerOption) []grpc.ServerOption {
+	if s != nil && s.hostServiceRelayTokens != nil {
+		opts = append(opts, s.hostServiceRelayTokens.HostServiceGRPCServerOptions()...)
+	}
+	return opts
+}
+
 func (s *Server) cachedPublicHostServiceHandler(service runtimehost.PublicHostService) http.Handler {
 	registrationID := service.RegistrationID()
 	if registrationID == 0 {
-		srv := grpc.NewServer()
+		srv := grpc.NewServer(s.hostServiceGRPCOptions()...)
 		service.Service.Register(srv)
 		return http.HandlerFunc(srv.ServeHTTP)
 	}
@@ -133,7 +140,7 @@ func (s *Server) cachedPublicHostServiceHandler(service runtimehost.PublicHostSe
 	}
 	s.hostServiceMu.Unlock()
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(s.hostServiceGRPCOptions()...)
 	service.Service.Register(srv)
 	handler := http.HandlerFunc(srv.ServeHTTP)
 

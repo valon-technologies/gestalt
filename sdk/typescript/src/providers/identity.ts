@@ -10,6 +10,7 @@ export const CALLER_BEARER_TOKEN_METADATA_KEY =
  */
 export interface IdentityCallContext {
   callerBearerToken: string;
+  callerProofSubjectId?: string | undefined;
 }
 
 /**

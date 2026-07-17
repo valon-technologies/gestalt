@@ -2,10 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/x509"
-	"encoding/pem"
 	"reflect"
 	"strconv"
 	"testing"
@@ -16,6 +12,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
@@ -289,44 +286,6 @@ config:
 	t.Fatalf("authorization host services = %#v, want indexeddb host service", capturedHostServices)
 }
 
-func TestBuildAuthorizationProviderPassesCallerTokenPublicKeyDep(t *testing.T) {
-	t.Parallel()
-
-	var runtimeConfig yaml.Node
-	if err := yaml.Unmarshal([]byte(`
-command: /bin/true
-`), &runtimeConfig); err != nil {
-		t.Fatalf("decode runtime config: %v", err)
-	}
-	var capturedPublicKey string
-	factories := &FactoryRegistry{
-		Authorization: func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps Deps) (providerdrivers.AuthorizationBuildResult, error) {
-			capturedPublicKey = deps.CallerTokenPublicKey
-			provider := &recordingAuthorizationProvider{}
-			return providerdrivers.AuthorizationBuildResult{Raw: provider, Guarded: provider}, nil
-		},
-	}
-	cfg := &config.Config{
-		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "indexeddb"}},
-		Providers: config.ProvidersConfig{
-			Authorization: map[string]*config.ProviderEntry{
-				"indexeddb": {Config: *runtimeConfig.Content[0]},
-			},
-		},
-	}
-	deps := Deps{
-		CallerTokenPublicKey: "public-key-pem",
-	}
-
-	_, err := buildAuthorizationProviders(context.Background(), cfg, factories, deps)
-	if err != nil {
-		t.Fatalf("buildAuthorizationProviders: %v", err)
-	}
-	if capturedPublicKey != "public-key-pem" {
-		t.Fatalf("CallerTokenPublicKey = %q, want public-key-pem", capturedPublicKey)
-	}
-}
-
 func TestBootstrapAuthorizationProviderStateAuthorizesProviderGatewayRequests(t *testing.T) {
 	t.Parallel()
 
@@ -362,77 +321,29 @@ func TestBootstrapAuthorizationProviderStateAuthorizesProviderGatewayRequests(t 
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 
-	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
-	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
-	if err != nil {
-		t.Fatalf("NewCallerTokenIssuer: %v", err)
-	}
 	transport := providergateway.NewProviderGatewayTransport()
 	transport.SetAuthorizationProvider(provider)
-	transport.SetCallerTokenPublicKey(publicKeyPEM)
 
-	allowedToken := issueProviderGatewayCallerToken(t, issuer, "user:alice")
-	if _, err := transport.Invoke(context.Background(), providergateway.ProviderGatewayRequest{
+	allowedCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:alice"})
+	if _, err := transport.Invoke(allowedCtx, providergateway.ProviderGatewayRequest{
 		ProviderID:   "github",
 		ProviderKind: providergateway.ProviderKindAuthorization,
 		Operation:    "sync",
-		CallerToken:  allowedToken,
 	}, func(_ context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
 		return providergateway.ProviderGatewayResponse{}, nil
 	}); err != nil {
 		t.Fatalf("Invoke allowed: %v", err)
 	}
 
-	deniedToken := issueProviderGatewayCallerToken(t, issuer, "user:bob")
-	if _, err := transport.Invoke(context.Background(), providergateway.ProviderGatewayRequest{
+	deniedCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:bob"})
+	if _, err := transport.Invoke(deniedCtx, providergateway.ProviderGatewayRequest{
 		ProviderID:   "github",
 		ProviderKind: providergateway.ProviderKindAuthorization,
 		Operation:    "sync",
-		CallerToken:  deniedToken,
 	}, func(_ context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
 		return providergateway.ProviderGatewayResponse{}, nil
-	}); err != nil {
-		t.Fatalf("Invoke denied in shadow mode: %v", err)
-	}
-}
-
-func TestResolveCallerTokenPublicKey(t *testing.T) {
-	t.Parallel()
-
-	got, err := resolveCallerTokenPublicKey(context.Background(), &coretesting.StubSecretManager{
-		Secrets: map[string]string{
-			callerTokenPublicKeySecretName: " public-key-pem ",
-		},
-	})
-	if err != nil {
-		t.Fatalf("resolveCallerTokenPublicKey: %v", err)
-	}
-	if got != "public-key-pem" {
-		t.Fatalf("public key = %q, want public-key-pem", got)
-	}
-
-	missing, err := resolveCallerTokenPublicKey(context.Background(), &coretesting.StubSecretManager{})
-	if err != nil {
-		t.Fatalf("resolveCallerTokenPublicKey missing: %v", err)
-	}
-	if missing != "" {
-		t.Fatalf("missing public key = %q, want empty", missing)
-	}
-}
-
-func TestResolveCallerTokenPrivateKey(t *testing.T) {
-	t.Parallel()
-
-	got, err := resolveCallerTokenPrivateKey(context.Background(), &coretesting.StubSecretManager{
-		Secrets: map[string]string{
-			callerTokenPrivateKeySecretName: " private-key-pem ",
-		},
-	})
-	if err != nil {
-		t.Fatalf("resolveCallerTokenPrivateKey: %v", err)
-	}
-	if got != "private-key-pem" {
-		t.Fatalf("private key = %q, want private-key-pem", got)
+	}); err == nil {
+		t.Fatal("Invoke denied: expected unauthorized error")
 	}
 }
 
@@ -614,38 +525,6 @@ func (p *statefulAuthorizationProvider) ListActiveModelResourceTypes(context.Con
 func (p *statefulAuthorizationProvider) Ping(context.Context) error { return nil }
 
 func (p *statefulAuthorizationProvider) Close() error { return nil }
-
-func issueProviderGatewayCallerToken(t testing.TB, issuer *providergateway.CallerTokenIssuer, subjectID string) string {
-	t.Helper()
-	claims, err := providergateway.GenerateCallerTokenClaims(subjectID, time.Now())
-	if err != nil {
-		t.Fatalf("GenerateCallerTokenClaims: %v", err)
-	}
-	token, err := issuer.Issue(claims)
-	if err != nil {
-		t.Fatalf("Issue: %v", err)
-	}
-	return token
-}
-
-func testProviderGatewayCallerTokenKeyPair(t testing.TB) (string, string) {
-	t.Helper()
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
-	}
-	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	if err != nil {
-		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
-	}
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		t.Fatalf("MarshalPKIXPublicKey: %v", err)
-	}
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
-	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
-	return string(privateKeyPEM), string(publicKeyPEM)
-}
 
 func TestProviderAuthorizationKindsSkipsDedicatedAppResourceTypes(t *testing.T) {
 	t.Parallel()

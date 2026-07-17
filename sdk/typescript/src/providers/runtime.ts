@@ -91,6 +91,7 @@ import {
   type Subject,
   type SubjectPermission,
 } from "../api.ts";
+import { closeRequestGestaltScope } from "../bound-gestalt-scope.ts";
 import {
   AgentProvider,
   createAgentProviderService,
@@ -101,6 +102,10 @@ import { agentToolRefFromProto } from "../agent-conversions.ts";
 import { fromWireRequestContext } from "../internal/codec/app.ts";
 import type { RequestContext as WireRequestContext } from "../internal/gen/v1/app_pb.ts";
 import type { RequestContext } from "../app.ts";
+import {
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+  TRUSTED_CALLER_SUBJECT_METADATA_KEY,
+} from "../host-service.ts";
 import {
   IdentityProvider,
   CALLER_BEARER_TOKEN_METADATA_KEY,
@@ -610,19 +615,25 @@ export function createProviderService(
         protocolVersion: CURRENT_PROTOCOL_VERSION,
       });
     },
-    async execute(request: ExecuteRequest) {
-      return operationResultToProto(
-	        await provider.execute(
-	          request.operation,
-	          objectFromUnknown(request.params),
-          providerRequest(
-            request.token,
-            request.connectionParams,
-            request.context,
-            request.idempotencyKey,
-          ),
-	        ),
+    async execute(request: ExecuteRequest, context: HandlerContext) {
+      const providerReq = providerRequest(
+        request.token,
+        request.connectionParams,
+        request.context,
+        request.idempotencyKey,
+        context,
       );
+      try {
+        return operationResultToProto(
+          await provider.execute(
+            request.operation,
+            objectFromUnknown(request.params),
+            providerReq,
+          ),
+        );
+      } finally {
+        closeRequestGestaltScope(providerReq);
+      }
     },
     async resolveHTTPSubject(request: ProtoResolveHTTPSubjectRequest) {
       let subject;
@@ -653,21 +664,24 @@ export function createProviderService(
           }
         : {});
     },
-    async getSessionCatalog(request: GetSessionCatalogRequest) {
+    async getSessionCatalog(request: GetSessionCatalogRequest, context: HandlerContext) {
+      const providerReq = providerRequest(
+        request.token,
+        request.connectionParams,
+        request.context,
+        "",
+        context,
+      );
       let catalog: Catalog | Record<string, unknown> | null | undefined;
       try {
-        catalog = await provider.catalogForRequest(
-          providerRequest(
-            request.token,
-            request.connectionParams,
-            request.context,
-          ),
-        );
+        catalog = await provider.catalogForRequest(providerReq);
       } catch (error) {
         throw new ConnectError(
           `session catalog: ${errorMessage(error)}`,
           Code.Unknown,
         );
+      } finally {
+        closeRequestGestaltScope(providerReq);
       }
       if (!catalog) {
         throw new ConnectError(
@@ -816,6 +830,11 @@ export function createIdentityService(
 }
 
 function authCallContextFromHandler(context: HandlerContext): IdentityCallContext {
+  const trustedCallerSubjectId =
+    context.requestHeader.get(TRUSTED_CALLER_SUBJECT_METADATA_KEY)?.trim() ?? "";
+  if (trustedCallerSubjectId) {
+    return { callerBearerToken: "", callerProofSubjectId: trustedCallerSubjectId };
+  }
   return {
     callerBearerToken:
       context.requestHeader.get(CALLER_BEARER_TOKEN_METADATA_KEY) ?? "",
@@ -932,10 +951,13 @@ function providerRequest(
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
   idempotencyKey = "",
+  rpc?: HandlerContext,
 ): Request {
   const credential = requestContext?.credential;
   const access = requestContext?.access;
   const host = requestContext?.host;
+  const invocationCapability =
+    rpc?.requestHeader.get(HOST_SERVICE_RELAY_TOKEN_HEADER)?.trim() ?? "";
   return attachRequestHelpers({
     token,
     connectionParams: {
@@ -965,7 +987,7 @@ function providerRequest(
       ? undefined
       : fromWireRequestContext(requestContext),
     idempotencyKey: idempotencyKey.trim(),
-  });
+  }, invocationCapability);
 }
 
 function providerSubject(subject?: ProtoSubjectContext): Subject {

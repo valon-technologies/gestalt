@@ -15,7 +15,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -188,21 +187,15 @@ func TestAuthorizationAPIGetActiveModelRef(t *testing.T) {
 	}
 }
 
-func TestAuthorizationAPIAddsProviderGatewayCallerToken(t *testing.T) {
+func TestAuthorizationAPIPropagatesAuthenticatedPrincipal(t *testing.T) {
 	authz := &authorizationAPITestProvider{}
 	svc := testutil.NewStubServices(t)
 	user := seedUser(t, svc, "authorization-user@test.local")
 	plaintext := scopedTestBearerToken(user.ID, "")
-	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
-	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
-	if err != nil {
-		t.Fatalf("NewCallerTokenIssuer: %v", err)
-	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Authorization = authz
-		cfg.CallerTokenIssuer = issuer
 		cfg.Services = svc
 	})
 	defer ts.Close()
@@ -222,19 +215,12 @@ func TestAuthorizationAPIAddsProviderGatewayCallerToken(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
 	}
-	if authz.callerToken == "" {
-		t.Fatal("authorization provider did not receive caller token")
+	wantSubjectID := principal.UserSubjectID(user.ID)
+	if authz.subjectID != wantSubjectID {
+		t.Fatalf("SubjectID = %q, want %q", authz.subjectID, wantSubjectID)
 	}
 	if authz.entry != invocation.EntryHTTP {
 		t.Fatalf("entry = %q, want %q", authz.entry, invocation.EntryHTTP)
-	}
-	claims, err := providergateway.Verify(authz.callerToken, publicKeyPEM)
-	if err != nil {
-		t.Fatalf("Verify caller token: %v", err)
-	}
-	wantSubjectID := principal.UserSubjectID(user.ID)
-	if claims.SubjectID != wantSubjectID {
-		t.Fatalf("SubjectID = %q, want %q", claims.SubjectID, wantSubjectID)
 	}
 }
 
@@ -295,7 +281,7 @@ type authorizationAPITestProvider struct {
 	checkAccessDenied        bool
 	listRelationshipsRequest *proto.ListRelationshipsRequest
 	listResourceTypesRequest *proto.ListActiveModelResourceTypesRequest
-	callerToken              string
+	subjectID                string
 	entry                    invocation.Entry
 }
 
@@ -332,7 +318,9 @@ func (p *authorizationAPITestProvider) DeleteRelationship(_ context.Context, req
 }
 
 func (p *authorizationAPITestProvider) GetActiveModelRef(ctx context.Context) (*proto.GetActiveModelRefResponse, error) {
-	p.callerToken = providergateway.CallerTokenFromContext(ctx)
+	if caller := principal.FromContext(ctx); caller != nil {
+		p.subjectID = caller.SubjectID
+	}
 	p.entry = invocation.EntryFromContext(ctx)
 	return &proto.GetActiveModelRefResponse{
 		Model: &proto.AuthorizationModelRef{

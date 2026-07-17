@@ -181,7 +181,12 @@ func MergeRequestContext(existing, fallback *proto.RequestContext) *proto.Reques
 	return merged
 }
 
-func ProviderRequestContextFromProto(reqCtx *proto.RequestContext, expectedKind invocation.ProviderKind, expectedName string) (ProviderRequestContext, error) {
+func ProviderRequestContextFromProto(
+	ctx context.Context,
+	reqCtx *proto.RequestContext,
+	expectedKind invocation.ProviderKind,
+	expectedName string,
+) (ProviderRequestContext, error) {
 	if reqCtx == nil {
 		return ProviderRequestContext{}, status.Error(codes.FailedPrecondition, "request context is required")
 	}
@@ -198,10 +203,11 @@ func ProviderRequestContextFromProto(reqCtx *proto.RequestContext, expectedKind 
 		return ProviderRequestContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match serving provider %q", callerName, expected)
 	}
 
+	trustedPrincipal := principalFromRequestContext(ctx, reqCtx)
 	out := ProviderRequestContext{
 		callerName:   callerName,
 		callerKind:   callerKind,
-		principal:    PrincipalFromSubjectContext(reqCtx.GetSubject()),
+		principal:    trustedPrincipal,
 		agentSubject: agentwire.RunAsSubjectFromProto(reqCtx.GetAgentSubject()),
 		requestMeta:  requestMetaFromProviderRequestContext(reqCtx.GetRequestMeta()),
 		credential: invocation.CredentialContext{
@@ -343,8 +349,21 @@ func SubjectIDFromRequestContext(reqCtx *proto.RequestContext) string {
 	return ""
 }
 
-// PrincipalFromSubjectContext reconstructs the trusted caller principal carried
-// on provider request context.
+func principalFromRequestContext(ctx context.Context, reqCtx *proto.RequestContext) *principal.Principal {
+	if p := principal.FromContext(ctx); p != nil {
+		if canonical := principal.Canonicalized(p); canonical != nil && strings.TrimSpace(canonical.SubjectID) != "" {
+			return canonical
+		}
+	}
+	if reqCtx == nil {
+		return nil
+	}
+	return PrincipalFromSubjectContext(reqCtx.GetSubject())
+}
+
+// PrincipalFromSubjectContext reconstructs the caller principal carried on
+// provider request context. Prefer principalFromRequestContext when middleware
+// has already verified the caller token.
 func PrincipalFromSubjectContext(subject *proto.SubjectContext) *principal.Principal {
 	if subject == nil {
 		return nil

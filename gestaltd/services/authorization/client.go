@@ -18,17 +18,18 @@ import (
 )
 
 type ExecConfig struct {
-	Command      string
-	Args         []string
-	Workdir      string
-	Env          map[string]string
-	Config       map[string]any
-	Egress       egress.Policy
-	HostBinary   string
-	Cleanup      func()
-	HostServices []runtimehost.HostService
-	Name         string
-	Transport    providergateway.Transport
+	Command                string
+	Args                   []string
+	Workdir                string
+	Env                    map[string]string
+	Config                 map[string]any
+	Egress                 egress.Policy
+	HostBinary             string
+	Cleanup                func()
+	HostServices           []runtimehost.HostService
+	Name                   string
+	Transport              providergateway.Transport
+	HostServiceGRPCOptions []grpc.ServerOption
 }
 
 type remoteAuthorizationProvider struct {
@@ -48,15 +49,16 @@ type Executable struct {
 
 func StartExecutable(ctx context.Context, cfg ExecConfig) (*Executable, error) {
 	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
-		Command:      cfg.Command,
-		Args:         cfg.Args,
-		Workdir:      cfg.Workdir,
-		Env:          cfg.Env,
-		Egress:       cfg.Egress,
-		HostBinary:   cfg.HostBinary,
-		Cleanup:      cfg.Cleanup,
-		HostServices: cfg.HostServices,
-		ProviderName: cfg.Name,
+		Command:           cfg.Command,
+		Args:              cfg.Args,
+		Workdir:           cfg.Workdir,
+		Env:               cfg.Env,
+		Egress:            cfg.Egress,
+		HostBinary:        cfg.HostBinary,
+		Cleanup:           cfg.Cleanup,
+		HostServices:      cfg.HostServices,
+		ProviderName:      cfg.Name,
+		GRPCServerOptions: cfg.HostServiceGRPCOptions,
 	})
 	if err != nil {
 		return nil, err

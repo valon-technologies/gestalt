@@ -28,7 +28,7 @@ func TestProviderRequestContextRestoreDoesNotTrustAgentInternalConnectionAccess(
 			InternalConnectionAccess: true,
 		},
 	}
-	providerCtx, err := ProviderRequestContextFromProto(reqCtx, "", "")
+	providerCtx, err := ProviderRequestContextFromProto(context.Background(), reqCtx, "", "")
 	if err != nil {
 		t.Fatalf("ProviderRequestContextFromProto: %v", err)
 	}

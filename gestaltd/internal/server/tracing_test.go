@@ -46,7 +46,7 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) {
 	ds := testutil.NewStubServices(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithTracerProvider(tp))
 
-	srv, err := server.New(server.Config{
+	cfg := server.Config{
 		Auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
 			if token != "session-token" {
 				return nil, core.ErrNotFound
@@ -58,7 +58,8 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) {
 		Invoker:        broker,
 		StateSecret:    []byte("0123456789abcdef0123456789abcdef"),
 		TracerProvider: tp,
-	})
+	}
+	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}
@@ -144,14 +145,15 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) {
 	ds := testutil.NewStubServices(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithTracerProvider(tp))
 
-	srv, err := server.New(server.Config{
+	cfg := server.Config{
 		SelectedAuthProvider: "none",
 		Services:             ds,
 		Providers:            providers,
 		Invoker:              broker,
 		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
 		TracerProvider:       tp,
-	})
+	}
+	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}

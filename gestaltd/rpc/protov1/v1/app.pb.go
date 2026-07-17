@@ -2413,7 +2413,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\aheaders\x18\x03 \x03(\v21.gestalt.provider.v1.OperationResult.HeadersEntryR\aheaders\x1a[\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
-	"\x05value\x18\x02 \x01(\v2\x1f.gestalt.provider.v1.StringListR\x05value:\x028\x01\"\x92\x03\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.gestalt.provider.v1.StringListR\x05value:\x028\x01\"\xb0\x03\n" +
 	"\x10AppInvokeRequest\x12\x10\n" +
 	"\x03app\x18\x02 \x01(\tR\x03app\x12\x1c\n" +
 	"\toperation\x18\x03 \x01(\tR\toperation\x12/\n" +
@@ -2426,7 +2426,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0fcredential_mode\x18\t \x01(\tR\x0ecredentialMode\x12=\n" +
 	"\acontext\x18\v \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12:\n" +
 	"\x06run_as\x18\f \x01(\v2#.gestalt.provider.v1.SubjectContextR\x05runAsJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\vR\bworkflow\"\xa8\x02\n" +
+	"\x10\vJ\x04\b\r\x10\x0eR\bworkflowR\x16delegated_caller_proof\"\xc6\x02\n" +
 	"\x17AppInvokeGraphQLRequest\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1a\n" +
 	"\bdocument\x18\x02 \x01(\tR\bdocument\x125\n" +
@@ -2436,7 +2436,8 @@ const file_v1_app_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12'\n" +
 	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x12=\n" +
-	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x06\x10\a\"\xc8\x01\n" +
+	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x06\x10\aJ\x04\b\t\x10\n" +
+	"R\x16delegated_caller_proof\"\xc8\x01\n" +
 	"\x0eSubjectContext\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x12!\n" +
@@ -2549,7 +2550,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x1aResolveHTTPSubjectResponse\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12#\n" +
 	"\rreject_status\x18\x02 \x01(\x05R\frejectStatus\x12%\n" +
-	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xb5\x03\n" +
+	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xdb\x03\n" +
 	"\x0eExecuteRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
@@ -2560,7 +2561,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\t \x01(\tR\x0eidempotencyKey\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xcb\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\tJ\x04\b\v\x10\fR\x10invocation_tokenR\fcaller_proof\"\xcb\x02\n" +
 	"\x18GetSessionCatalogRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12p\n" +
 	"\x11connection_params\x18\x02 \x03(\v2C.gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +

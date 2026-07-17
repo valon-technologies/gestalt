@@ -1,22 +1,15 @@
 /**
  * Common request and response types shared across authored Gestalt providers.
  */
-import type { Interceptor } from "@connectrpc/connect";
-
 import {
-  CALLER_BEARER_TOKEN_METADATA_KEY,
-} from "./providers/identity.ts";
+  type BoundGestalt,
+  type RequestGestaltOptions,
+} from "./bound-gestalt.ts";
+import {
+  attachRequestGestaltScope,
+} from "./bound-gestalt-scope.ts";
+import type { App, RequestContext } from "./app.ts";
 import type { AgentToolRef } from "./providers/agent.ts";
-import { Agent } from "./agent.ts";
-import { App, type RequestContext } from "./app.ts";
-import { Identity } from "./identity.ts";
-import {
-  createHostServiceGrpcTransport,
-  hostServiceMetadataInterceptors,
-  parseHostServiceTarget,
-  requireHostServiceTarget,
-} from "./host-service.ts";
-import { Workflow } from "./workflow.ts";
 
 export interface Subject {
   id: string;
@@ -87,14 +80,8 @@ export interface Request {
   toolRefs: AgentToolRef[];
   toolRefsSet: boolean;
   __requestContext?: RequestContext | undefined;
-  /** Returns the generated App client carrying this request's context. */
-  app(options?: { timeoutMs?: number | undefined }): Promise<App>;
-  /** Returns the generated Identity client scoped to this request's caller. */
-  identity(options?: { timeoutMs?: number | undefined }): Promise<Identity>;
-  /** Returns the generated Agent client carrying this request's context. */
-  agent(options?: { timeoutMs?: number | undefined }): Promise<Agent>;
-  /** Returns the generated Workflow client carrying this request's context. */
-  workflows(options?: { timeoutMs?: number | undefined }): Promise<Workflow>;
+  /** Returns the bound Gestalt client for nested host-service calls. */
+  gestalt(options?: RequestGestaltOptions): Promise<BoundGestalt>;
 }
 
 /**
@@ -199,7 +186,7 @@ export function request(
   toolRefsSet = false,
   requestContext?: RequestContext,
 ): Request {
-  const req: Omit<Request, "app" | "identity" | "agent" | "workflows"> = {
+  const req: Omit<Request, "gestalt"> = {
     token,
     connectionParams: {
       ...connectionParams,
@@ -246,50 +233,16 @@ export function request(
     __requestContext: requestContext,
     idempotencyKey: idempotencyKey.trim(),
   };
-  return attachRequestHelpers(req);
+  return attachRequestHelpers(req, "");
 }
 
-export function attachRequestHelpers<T extends Omit<Request, "app" | "identity" | "agent" | "workflows">>(
+export function attachRequestHelpers<T extends Omit<Request, "gestalt">>(
   input: T,
+  capability: string,
 ): Request {
   const req = input as unknown as Request;
-  req.app = async (options) =>
-    App.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
-  req.identity = async (options) =>
-    connectIdentity(req.token, options);
-  req.agent = async (options) =>
-    Agent.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
-  req.workflows = async (options) =>
-    Workflow.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
+  attachRequestGestaltScope(req, capability);
   return req;
-}
-
-function connectIdentity(
-  callerBearerToken: string,
-  options?: { timeoutMs?: number | undefined },
-): Identity {
-  const { target, token } = requireHostServiceTarget("identity");
-  const transport = createHostServiceGrpcTransport(
-    parseHostServiceTarget("identity", target),
-    [
-      ...hostServiceMetadataInterceptors(token, ""),
-      ...callerBearerTokenMetadataInterceptors(callerBearerToken),
-    ],
-  );
-  return new Identity(transport, options);
-}
-
-function callerBearerTokenMetadataInterceptors(token: string): Interceptor[] {
-  const normalizedToken = token.trim();
-  if (!normalizedToken) {
-    return [];
-  }
-  return [
-    (next) => async (req) => {
-      req.header.set(CALLER_BEARER_TOKEN_METADATA_KEY, normalizedToken);
-      return await next(req);
-    },
-  ];
 }
 
 export function cloneSubjectInput<T extends SubjectInput | Subject>(subject: T): T {

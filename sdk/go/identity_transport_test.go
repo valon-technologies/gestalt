@@ -95,7 +95,8 @@ func (p *fullIdentityProvider) Introspect(_ context.Context, req *gestalt.Intros
 
 func (p *fullIdentityProvider) UserInfo(ctx context.Context, _ *gestalt.UserInfoRequest) (*gestalt.UserInfoResponse, error) {
 	call := gestalt.IdentityCallContextFromContext(ctx)
-	if call.CallerBearerToken != "valid-token" {
+	if call.CallerBearerToken != "valid-token" &&
+		call.CallerSubjectID != "user:user@example.test" {
 		return nil, status.Error(codes.NotFound, "userinfo not found")
 	}
 	return &gestalt.UserInfoResponse{
@@ -315,6 +316,25 @@ func TestIdentityProviderRoundTrip(t *testing.T) {
 	}
 	if userInfoResp.GetName() != "Test User" {
 		t.Fatalf("userinfo name = %q, want %q", userInfoResp.GetName(), "Test User")
+	}
+
+	forgedSubjectCtx := metadata.AppendToOutgoingContext(rpcCtx, gestalt.TrustedCallerSubjectMetadataKey, "user:user@example.test")
+	forgedSubjectUserInfo, err := authClient.UserInfo(forgedSubjectCtx, &proto.UserInfoRequest{})
+	if err != nil {
+		t.Fatalf("UserInfo(trusted caller subject metadata): %v", err)
+	}
+	if forgedSubjectUserInfo.GetSubjectId() != "user:user@example.test" {
+		t.Fatalf("userinfo(trusted caller subject metadata) subject_id = %q, want %q", forgedSubjectUserInfo.GetSubjectId(), "user:user@example.test")
+	}
+
+	verifiedProofCtx := gestalt.WithTrustedCallerSubject(rpcCtx, "user:user@example.test")
+	verifiedProofCtx = gestalt.AuthCallContextFromIncoming(verifiedProofCtx)
+	proofSubjectUserInfo, err := provider.UserInfo(verifiedProofCtx, &gestalt.UserInfoRequest{})
+	if err != nil {
+		t.Fatalf("UserInfo(validated caller proof): %v", err)
+	}
+	if proofSubjectUserInfo.SubjectID != "user:user@example.test" {
+		t.Fatalf("userinfo(validated caller proof) subject_id = %q, want %q", proofSubjectUserInfo.SubjectID, "user:user@example.test")
 	}
 
 	_, err = authClient.RevokeGrant(grantCtx, &proto.RevokeGrantRequest{GrantId: "grant-1"})

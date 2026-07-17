@@ -13,11 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const CallerTokenPublicKeyEnv = "GESTALTD_CALLER_TOKEN_ED25519_PUBLIC_KEY"
-
 type AuthorizationDeps struct {
-	Transport            providergateway.Transport
-	CallerTokenPublicKey string
+	Transport providergateway.Transport
 }
 
 type AuthorizationBuildResult struct {
@@ -30,7 +27,6 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 	if err := node.Decode(&cfg); err != nil {
 		return AuthorizationBuildResult{}, fmt.Errorf("authorization provider: parsing config: %w", err)
 	}
-	cfg.Env = authorizationEnvWithCallerTokenPublicKey(cfg.Env, deps.CallerTokenPublicKey)
 	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindAuthorization,
 		Subject:              "authorization provider",
@@ -73,7 +69,6 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 
 	gatewayTransport := providergateway.NewProviderGatewayTransport()
 	gatewayTransport.SetAuthorizationProvider(raw)
-	gatewayTransport.SetCallerTokenPublicKey(deps.CallerTokenPublicKey)
 
 	execCfg.Transport = gatewayTransport
 	guarded, err := authorizationservice.NewFromExecutable(exec, execCfg)
@@ -86,16 +81,4 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		Raw:     raw,
 		Guarded: guarded,
 	}, nil
-}
-
-func authorizationEnvWithCallerTokenPublicKey(env map[string]string, publicKey string) map[string]string {
-	if publicKey == "" || env[CallerTokenPublicKeyEnv] != "" {
-		return env
-	}
-	next := make(map[string]string, len(env)+1)
-	for key, value := range env {
-		next[key] = value
-	}
-	next[CallerTokenPublicKeyEnv] = publicKey
-	return next
 }

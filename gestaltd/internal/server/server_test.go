@@ -4,16 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log/slog"
@@ -66,7 +62,6 @@ import (
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/ui"
@@ -101,6 +96,28 @@ func testProviderKindsFromAppDefs(apps map[string]*config.ProviderEntry) map[str
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
 	t.Helper()
 	return newTestHTTPServer(t, httptest.NewServer, opts...)
+}
+
+func relayTestMetadata(relayToken string) metadata.MD {
+	return metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken)
+}
+
+func mintRelayTestInvocationCapability(t testing.TB, tokenManager *runtimehost.HostServiceRelayTokenManager, service, methodPrefix string) string {
+	t.Helper()
+	if tokenManager == nil {
+		t.Fatal("relay token manager is required")
+	}
+	capability, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+		AppName:      "support",
+		SessionID:    "relay-session",
+		Service:      service,
+		MethodPrefix: methodPrefix,
+		Caller:       &runtimehost.PrincipalClaims{SubjectID: "user:relay-test"},
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+	return capability
 }
 
 func newTestHTTPServer(t *testing.T, start func(http.Handler) *httptest.Server, opts ...func(*server.Config)) *httptest.Server {
@@ -698,22 +715,24 @@ func (i *relayTestInvoker) snapshots() []relayTestInvokerCall {
 	return out
 }
 
-type callerTokenRecordingInvoker struct {
-	mu          sync.Mutex
-	callerToken string
+type principalRecordingInvoker struct {
+	mu        sync.Mutex
+	subjectID string
 }
 
-func (i *callerTokenRecordingInvoker) Invoke(ctx context.Context, _ *principal.Principal, _, _, _ string, _ map[string]any) (*core.OperationResult, error) {
+func (i *principalRecordingInvoker) Invoke(ctx context.Context, _ *principal.Principal, _, _, _ string, _ map[string]any) (*core.OperationResult, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.callerToken = providergateway.CallerTokenFromContext(ctx)
+	if p := principal.FromContext(ctx); p != nil {
+		i.subjectID = p.SubjectID
+	}
 	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 }
 
-func (i *callerTokenRecordingInvoker) token() string {
+func (i *principalRecordingInvoker) subjectIDValue() string {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return i.callerToken
+	return i.subjectID
 }
 
 func relayAppRequestContext() *proto.RequestContext {
@@ -835,7 +854,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(token))
 
 	resp, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
 	if err != nil {
@@ -853,7 +872,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 
 	secondCtx, secondCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer secondCancel()
-	secondCtx = metadata.NewOutgoingContext(secondCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	secondCtx = metadata.NewOutgoingContext(secondCtx, relayTestMetadata(token))
 	if _, err := proto.NewCacheClient(conn).Get(secondCtx, &proto.CacheGetRequest{Key: "again"}); err != nil {
 		t.Fatalf("second Cache.Get via relay: %v", err)
 	}
@@ -864,7 +883,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	sessionVerifier.setActive("session-1", false)
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
-	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	staleCtx = metadata.NewOutgoingContext(staleCtx, relayTestMetadata(token))
 	_, err = proto.NewCacheClient(conn).Get(staleCtx, &proto.CacheGetRequest{Key: "stale"})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
 		t.Fatalf("Cache.Get stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
@@ -877,7 +896,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	registration.Unregister()
 	unregisteredCtx, unregisteredCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer unregisteredCancel()
-	unregisteredCtx = metadata.NewOutgoingContext(unregisteredCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	unregisteredCtx = metadata.NewOutgoingContext(unregisteredCtx, relayTestMetadata(token))
 	_, err = proto.NewCacheClient(conn).Get(unregisteredCtx, &proto.CacheGetRequest{Key: "unregistered"})
 	if grpcstatus.Code(err) != codes.Unavailable {
 		t.Fatalf("Cache.Get unregistered provider code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
@@ -930,7 +949,7 @@ func TestHostServiceRelayProxiesGRPCRequestsOnManagementProfile(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(token))
 	resp, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "management"})
 	if err != nil {
 		t.Fatalf("Cache.Get via management relay: %v", err)
@@ -996,7 +1015,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 	defer func() { _ = conn.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(token))
 	if _, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "selected"}); err != nil {
 		t.Fatalf("Cache.Get via duplicate relay: %v", err)
 	}
@@ -1020,7 +1039,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 	}
 	session1Ctx, session1Cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer session1Cancel()
-	session1Ctx = metadata.NewOutgoingContext(session1Ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, session1Token))
+	session1Ctx = metadata.NewOutgoingContext(session1Ctx, relayTestMetadata(session1Token))
 	if _, err := proto.NewCacheClient(conn).Get(session1Ctx, &proto.CacheGetRequest{Key: "still-active"}); err != nil {
 		t.Fatalf("Cache.Get via remaining duplicate relay: %v", err)
 	}
@@ -1030,7 +1049,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 
 	removedCtx, removedCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer removedCancel()
-	removedCtx = metadata.NewOutgoingContext(removedCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	removedCtx = metadata.NewOutgoingContext(removedCtx, relayTestMetadata(token))
 	_, err = proto.NewCacheClient(conn).Get(removedCtx, &proto.CacheGetRequest{Key: "removed"})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
 		t.Fatalf("Cache.Get removed duplicate code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
@@ -1086,7 +1105,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(token))
 	if _, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "active"}); err != nil {
 		t.Fatalf("Cache.Get via relay: %v", err)
 	}
@@ -1094,7 +1113,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 	registration.Unregister()
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
-	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	staleCtx = metadata.NewOutgoingContext(staleCtx, relayTestMetadata(token))
 	_, err = proto.NewCacheClient(conn).Get(staleCtx, &proto.CacheGetRequest{Key: "stale"})
 	if grpcstatus.Code(err) != codes.Unavailable {
 		t.Fatalf("Cache.Get unregistered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
@@ -1139,6 +1158,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		SessionID:    "relay-session",
 		Service:      "app",
 		MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
+		Caller:       &runtimehost.PrincipalClaims{SubjectID: "user:relay-test"},
 		TTL:          time.Minute,
 	})
 	if err != nil {
@@ -1148,7 +1168,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(relayToken))
 	_, err = proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
 		Context:        relayAppRequestContext(),
 		App:            "slack",
@@ -1166,7 +1186,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	sessionVerifier.setActive("relay-session", false)
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
-	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+	staleCtx = metadata.NewOutgoingContext(staleCtx, relayTestMetadata(relayToken))
 	_, err = proto.NewAppClient(conn).Invoke(staleCtx, &proto.AppInvokeRequest{
 		Context:   relayAppRequestContext(),
 		App:       "slack",
@@ -1263,6 +1283,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 				SessionID:    "session-1",
 				Service:      tc.service,
 				MethodPrefix: tc.methodPrefix,
+				Caller:       &runtimehost.PrincipalClaims{SubjectID: "user:relay-test"},
 				TTL:          time.Minute,
 			})
 			if err != nil {
@@ -1273,7 +1294,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			defer func() { _ = conn.Close() }()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+			ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(relayToken))
 			tc.call(t, ctx, conn)
 			if got := calls.Load(); got != 1 {
 				t.Fatalf("registered handler calls = %d, want 1", got)
@@ -1282,7 +1303,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			sessionVerifier.setActive("session-1", false)
 			staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer staleCancel()
-			staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+			staleCtx = metadata.NewOutgoingContext(staleCtx, relayTestMetadata(relayToken))
 			switch tc.service {
 			case "workflow":
 				_, err = proto.NewWorkflowClient(conn).GetDefinition(staleCtx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
@@ -1325,6 +1346,7 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 		SessionID:    "relay-session",
 		Service:      "app",
 		MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
+		Caller:       &runtimehost.PrincipalClaims{SubjectID: "user:relay-test"},
 		TTL:          time.Minute,
 	})
 	if err != nil {
@@ -1335,7 +1357,7 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(relayToken))
 	_, err = proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{})
 	if grpcstatus.Code(err) != codes.Unavailable {
 		t.Fatalf("AppInvocation.Invoke without registered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
@@ -1414,7 +1436,7 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(token))
 
 	_, err = proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
 	if grpcstatus.Code(err) != codes.PermissionDenied {
@@ -1464,7 +1486,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, relayTestMetadata(token))
 
 	recordValue, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "task-1", "value": "ship-it"})
 	if err != nil {
@@ -2044,12 +2066,13 @@ func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
 		reg := registry.New()
 		return &reg.Providers
 	}()
-	_, err := server.New(server.Config{
+	cfg := server.Config{
 		Auth:      &coretesting.StubAuthProvider{N: "google"},
 		Services:  svc,
 		Providers: providers,
 		Invoker:   invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials),
-	})
+	}
+	_, err := server.New(cfg)
 	if err == nil {
 		t.Fatal("expected error when auth is enabled without state secret")
 	}
@@ -2070,13 +2093,14 @@ func TestNewServerRequiresExternalCredentialsProvider(t *testing.T) {
 		return &reg.Providers
 	}()
 
-	_, err = server.New(server.Config{
+	cfg := server.Config{
 		Auth:        &coretesting.StubAuthProvider{N: "none"},
 		Services:    svc,
 		Providers:   providers,
 		Invoker:     invocation.NewBroker(providers, svc.Users, nil),
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
-	})
+	}
+	_, err = server.New(cfg)
 	if err == nil {
 		t.Fatal("expected error when external credentials provider is missing")
 	}
@@ -15115,7 +15139,7 @@ func TestAPITokenScopes_EmptyScopesAllowAll(t *testing.T) {
 	}
 }
 
-func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
+func TestExecuteOperationPropagatesPrincipal(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubIntegrationWithOps{
@@ -15126,20 +15150,12 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	user := seedUser(t, svc, "cli-user@test.local")
 	plaintext := scopedTestBearerToken(user.ID, "")
-	invoker := &callerTokenRecordingInvoker{}
-	now := time.Now().UTC()
-	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
-	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
-	if err != nil {
-		t.Fatalf("NewCallerTokenIssuer: %v", err)
-	}
+	invoker := &principalRecordingInvoker{}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Invoker = invoker
-		cfg.Now = func() time.Time { return now }
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.CallerTokenIssuer = issuer
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -15155,42 +15171,9 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	token := invoker.token()
-	if token == "" {
-		t.Fatalf("expected provider gateway caller token")
+	if got := invoker.subjectIDValue(); got != principal.UserSubjectID(user.ID) {
+		t.Fatalf("SubjectID = %q, want %q", got, principal.UserSubjectID(user.ID))
 	}
-	claims, err := providergateway.Verify(token, publicKeyPEM)
-	if err != nil {
-		t.Fatalf("Verify caller token: %v", err)
-	}
-	if claims.SubjectID != principal.UserSubjectID(user.ID) {
-		t.Fatalf("SubjectID = %q, want %q", claims.SubjectID, principal.UserSubjectID(user.ID))
-	}
-	if claims.IssuedAt != now.Unix() {
-		t.Fatalf("IssuedAt = %d, want %d", claims.IssuedAt, now.Unix())
-	}
-	if claims.ExpiresAt != now.Add(5*time.Minute).Unix() {
-		t.Fatalf("ExpiresAt = %d, want %d", claims.ExpiresAt, now.Add(5*time.Minute).Unix())
-	}
-}
-
-func testProviderGatewayCallerTokenKeyPair(t testing.TB) (string, string) {
-	t.Helper()
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
-	}
-	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	if err != nil {
-		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
-	}
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		t.Fatalf("MarshalPKIXPublicKey: %v", err)
-	}
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
-	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
-	return string(privateKeyPEM), string(publicKeyPEM)
 }
 
 func TestCreateAPIToken_InvalidScope(t *testing.T) {

@@ -24,7 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -828,12 +827,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	})
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 	ctx = invocation.WithEntry(ctx, invocation.EntryHTTP)
-	ctx, err = s.withProviderGatewayCallerToken(ctx, p)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "issue provider gateway caller token", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to prepare invocation context")
-		return
-	}
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
 	if err != nil {
@@ -842,22 +835,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOperationResult(w, result)
-}
-
-func (s *Server) withProviderGatewayCallerToken(ctx context.Context, p *principal.Principal) (context.Context, error) {
-	subjectID := invokingPrincipalSubjectID(p)
-	if subjectID == "" || s.callerTokenIssuer == nil {
-		return ctx, nil
-	}
-	claims, err := providergateway.GenerateCallerTokenClaims(subjectID, s.now())
-	if err != nil {
-		return ctx, fmt.Errorf("provider gateway caller token: %w", err)
-	}
-	token, err := s.callerTokenIssuer.Issue(claims)
-	if err != nil {
-		return ctx, fmt.Errorf("provider gateway caller token: %w", err)
-	}
-	return providergateway.WithCallerToken(ctx, token), nil
 }
 
 func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, providerName, operationName string, err error) {

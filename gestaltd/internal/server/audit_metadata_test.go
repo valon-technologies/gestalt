@@ -40,7 +40,7 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
-	srv, err := server.New(server.Config{
+	cfg := server.Config{
 		Auth: coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
 			if token != "session-token" {
 				return nil, core.ErrNotFound
@@ -52,7 +52,8 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 		Providers:   providers,
 		Invoker:     guarded,
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
-	})
+	}
+	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}
@@ -129,13 +130,14 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
-	srv, err := server.New(server.Config{
+	cfg := server.Config{
 		SelectedAuthProvider: "none",
 		Services:             svc,
 		Providers:            providers,
 		Invoker:              guarded,
 		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
-	})
+	}
+	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}

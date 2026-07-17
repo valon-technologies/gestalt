@@ -63,7 +63,7 @@ func (s *authServer) UserInfo(ctx context.Context, req *proto.UserInfoRequest) (
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	ctx = s.authCallContext(ctx)
+	ctx = AuthCallContextFromIncoming(ctx)
 	resp, err := s.auth.UserInfo(ctx, userInfoRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("userinfo", err)
@@ -75,7 +75,7 @@ func (s *authServer) UserInfo(ctx context.Context, req *proto.UserInfoRequest) (
 }
 
 func (s *authServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
-	ctx = s.authCallContext(ctx)
+	ctx = AuthCallContextFromIncoming(ctx)
 	resp, err := s.auth.ListGrants(ctx, &ListGrantsRequest{})
 	if err != nil {
 		return nil, providerRPCError("list grants", err)
@@ -90,7 +90,7 @@ func (s *authServer) GetGrant(ctx context.Context, req *proto.GetGrantRequest) (
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	ctx = s.authCallContext(ctx)
+	ctx = AuthCallContextFromIncoming(ctx)
 	resp, err := s.auth.GetGrant(ctx, getGrantRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("get grant", err)
@@ -105,18 +105,10 @@ func (s *authServer) RevokeGrant(ctx context.Context, req *proto.RevokeGrantRequ
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	ctx = s.authCallContext(ctx)
+	ctx = AuthCallContextFromIncoming(ctx)
 	_, err := s.auth.RevokeGrant(ctx, revokeGrantRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("revoke grant", err)
 	}
 	return &proto.RevokeGrantResponse{}, nil
-}
-
-func (s *authServer) authCallContext(ctx context.Context) context.Context {
-	token := CallerBearerTokenFromIncomingContext(ctx)
-	if token == "" {
-		return ctx
-	}
-	return WithIdentityCallContext(ctx, IdentityCallContext{CallerBearerToken: token})
 }

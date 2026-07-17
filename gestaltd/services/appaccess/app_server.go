@@ -156,7 +156,7 @@ type requestInvocationContext struct {
 }
 
 func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, targetOperation, rawConnection, rawInstance, rawCredentialMode string, requestRunAs *proto.SubjectContext) (requestInvocationContext, error) {
-	callCtx, err := s.requestContext(reqCtx)
+	callCtx, err := s.requestContext(ctx, reqCtx)
 	if err != nil {
 		return requestInvocationContext{}, err
 	}
@@ -212,7 +212,7 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.R
 }
 
 func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, surface string) (requestInvocationContext, error) {
-	callCtx, err := s.requestContext(reqCtx)
+	callCtx, err := s.requestContext(ctx, reqCtx)
 	if err != nil {
 		return requestInvocationContext{}, err
 	}
@@ -244,7 +244,7 @@ func rejectRequestRunAsForSpecialCallers(callCtx requestInvocationContext, reque
 	return nil
 }
 
-func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocationContext, error) {
+func (s *AppServer) requestContext(ctx context.Context, reqCtx *proto.RequestContext) (requestInvocationContext, error) {
 	if reqCtx == nil {
 		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "request context is required")
 	}
@@ -270,7 +270,7 @@ func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocat
 	return requestInvocationContext{
 		callerName:         callerName,
 		callerProviderKind: callerKind,
-		principal:          PrincipalFromSubjectContext(reqCtx.GetSubject()),
+		principal:          principalFromRequestContext(ctx, reqCtx),
 		credential:         credentialFromRequestContext(reqCtx),
 		workflow:           workflowFromRequestContext(reqCtx),
 		agent:              agent,
