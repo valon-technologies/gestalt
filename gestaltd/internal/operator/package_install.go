@@ -80,11 +80,12 @@ func ValidateInstalledPublishedPackage(destDir, configuredName, expectedVersion 
 
 func validateInstalledPackageLayout(destDir, configuredName, expectedVersion string, manifest *providermanifestv1.Manifest) error {
 	expectedVersion = strings.TrimSpace(expectedVersion)
-	if expectedVersion != "" {
-		manifestVersion := strings.TrimSpace(manifest.Version)
-		if manifestVersion != expectedVersion {
-			return fmt.Errorf("installed manifest version %q does not match expected version %q", manifestVersion, expectedVersion)
-		}
+	if expectedVersion == "" {
+		return fmt.Errorf("expected version is required")
+	}
+	manifestVersion := strings.TrimSpace(manifest.Version)
+	if manifestVersion != expectedVersion {
+		return fmt.Errorf("installed manifest version %q does not match expected version %q", manifestVersion, expectedVersion)
 	}
 
 	if isAssetOnly(manifest) {
