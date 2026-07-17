@@ -7,6 +7,11 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
+// RequestContextFromContext returns the host-attached wire request context.
+func RequestContextFromContext(ctx context.Context) *proto.RequestContext {
+	return requestContextFromContext(ctx)
+}
+
 // AppFromContext returns the generated app-invocation client carrying the
 // current provider request's context as the client default. It dials the
 // "app" host service advertised through the GESTALT_HOST_SERVICE_SOCKET
