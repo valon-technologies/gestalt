@@ -125,6 +125,7 @@ go test ./internal/appregistry -run 'TestMaterializer|TestCatalogPollerMateriali
 ### `poller_materialize_test.go`
 
 - **`TestCatalogPollerMaterializesBeforeStop`** — records `materialized_at` and on-disk artifact path before `StopApp`, including while `RestartReady` is still open.
+- **`TestCatalogPollerRematerializesWhenArtifactMissing`** — re-downloads when IndexedDB shows materialization complete but the on-disk tree was removed.
 
 ---
 

@@ -443,7 +443,17 @@ func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceI
 			return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
 		}
 		if !materialization.MaterializedAt.IsZero() {
-			continue
+			recordedPath := strings.TrimSpace(materialization.MaterializedPath)
+			if recordedPath == "" {
+				recordedPath = MaterializedPath(p.AppMaterializer.ArtifactsDir, appName, version)
+			}
+			ready, err := isMaterializedPackage(recordedPath, appName)
+			if err != nil {
+				return fmt.Errorf("validate materialized %s@%s: %w", appName, version, err)
+			}
+			if ready {
+				continue
+			}
 		}
 		materializedPath, err := p.AppMaterializer.Materialize(ctx, installation)
 		if err != nil {

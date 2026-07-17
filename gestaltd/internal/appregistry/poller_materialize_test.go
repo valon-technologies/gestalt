@@ -106,3 +106,94 @@ func TestCatalogPollerMaterializesBeforeStop(t *testing.T) {
 		t.Fatalf("stopCalls after providers ready = %#v, want [g-issues]", restarter.stopCalls)
 	}
 }
+
+func TestCatalogPollerRematerializesWhenArtifactMissing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	artifactsDir := t.TempDir()
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	restartReady := make(chan struct{})
+
+	if _, err := services.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "0.0.0-snapshot.gdeadbeef",
+		ToVersion:   fixture.Version,
+		Timestamp:   now,
+		Metadata: map[string]any{
+			"registry": "toolshed",
+		},
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+
+	restarter := &recordingAppRestarter{}
+	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
+		ChangeRequests:   services.AppVersionChangeRequests,
+		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
+		AppMaterializer: &appregistry.Materializer{
+			Registries: map[string]config.AppRegistryConfig{
+				"toolshed": fixture.Registry,
+			},
+			Reader:       fixture.Reader,
+			ArtifactsDir: artifactsDir,
+		},
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		RestartReady:        restartReady,
+		Now:                 func() time.Time { return now },
+	})
+
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("first ReconcileOnce: %v", err)
+	}
+	wantPath := appregistry.MaterializedPath(artifactsDir, "g-issues", fixture.Version)
+	if err := os.RemoveAll(wantPath); err != nil {
+		t.Fatalf("RemoveAll materialized path: %v", err)
+	}
+
+	later := now.Add(time.Minute)
+	poller = appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
+		ChangeRequests:   services.AppVersionChangeRequests,
+		Materializations: services.AppInstanceMaterializations,
+		Rollouts:         services.AppRollouts,
+		AppMaterializer: &appregistry.Materializer{
+			Registries: map[string]config.AppRegistryConfig{
+				"toolshed": fixture.Registry,
+			},
+			Reader:       fixture.Reader,
+			ArtifactsDir: artifactsDir,
+		},
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		RestartReady:        restartReady,
+		Now:                 func() time.Time { return later },
+	})
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("second ReconcileOnce after artifact removal: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(wantPath, "manifest.yaml")); err != nil {
+		t.Fatalf("stat rematerialized manifest: %v", err)
+	}
+
+	materialization, err := services.AppInstanceMaterializations.Get(ctx, "replica-a", "g-issues", fixture.Version)
+	if err != nil {
+		t.Fatalf("Get materialization: %v", err)
+	}
+	if materialization.MaterializedAt != later {
+		t.Fatalf("MaterializedAt = %v, want %v", materialization.MaterializedAt, later)
+	}
+
+	close(restartReady)
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce after providers ready: %v", err)
+	}
+	if got := len(restarter.stopCalls); got != 1 {
+		t.Fatalf("stopCalls = %d, want 1", got)
+	}
+}
