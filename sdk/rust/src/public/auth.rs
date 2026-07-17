@@ -6,11 +6,6 @@ use std::sync::{Arc, RwLock};
 pub trait Auth: Send + Sync {
     /// Returns an `Authorization` header value when credentials are present.
     fn authorization_header(&self) -> Option<String>;
-
-    /// Returns additional gRPC metadata entries to attach to every request.
-    fn extra_metadata(&self) -> Vec<(&'static str, String)> {
-        Vec::new()
-    }
 }
 
 /// Bearer token authentication for REST and gRPC.
@@ -47,12 +42,14 @@ impl BearerAuth {
 
 impl Auth for BearerAuth {
     fn authorization_header(&self) -> Option<String> {
-        let token = (self.provider)().trim().to_string();
+        let mut token = (self.provider)().trim().to_string();
         if token.is_empty() {
-            None
-        } else {
-            Some(format!("Bearer {token}"))
+            return None;
         }
+        if let Some(rest) = token.strip_prefix("Bearer ") {
+            token = rest.to_string();
+        }
+        Some(format!("Bearer {token}"))
     }
 }
 
@@ -64,14 +61,4 @@ impl Auth for NoAuth {
     fn authorization_header(&self) -> Option<String> {
         None
     }
-}
-
-/// Creates bearer auth from a token or provider.
-pub fn bearer(token: impl Into<String>) -> BearerAuth {
-    BearerAuth::new(token)
-}
-
-/// Creates unauthenticated auth.
-pub fn unauthenticated() -> NoAuth {
-    NoAuth
 }

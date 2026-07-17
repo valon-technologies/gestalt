@@ -3,11 +3,11 @@
 use std::sync::{Arc, RwLock};
 
 use base64::Engine;
-use gestalt::public::auth::{Auth, BearerAuth, NoAuth, bearer};
+use gestalt::public::auth::{Auth, BearerAuth, NoAuth};
 use gestalt::public::client::{Transport, create_gestalt_client};
 use gestalt::public::generated::app::AppInvokeRequest;
+use gestalt::public::generated::app_client::AppClient;
 use gestalt::public::rest_transport::RestTransport;
-use gestalt::public::{self, generated::app_client::AppClient};
 use gestalt::rpc_support::gestalt_error_code;
 use serde_json::json;
 use wiremock::matchers::{method, path};
@@ -59,7 +59,7 @@ async fn rest_transport_invoke_success() {
 
     let client = AppClient::new(RestTransport::new(
         server.uri(),
-        Arc::new(bearer("test-token")),
+        Arc::new(BearerAuth::new("test-token")),
     ));
     let result = client
         .invoke(AppInvokeRequest {
@@ -79,8 +79,8 @@ async fn rest_transport_platform_error() {
     Mock::given(method("POST"))
         .and(path("/api/v2/app/example/operations/sync"))
         .respond_with(ResponseTemplate::new(401).set_body_json(json!({
-            "code": 16,
-            "message": "Not authenticated"
+            "code": "Unauthenticated",
+            "error": "Not authenticated"
         })))
         .mount(&server)
         .await;
@@ -116,10 +116,10 @@ async fn create_rest_client_factory() {
         .mount(&server)
         .await;
 
-    let client = create_gestalt_client(server.uri(), bearer("token"), Transport::Rest)
+    let client = create_gestalt_client(server.uri(), BearerAuth::new("token"), Transport::Rest)
         .await
         .expect("client");
-    let public::client::GestaltClient::Rest(app) = client else {
+    let gestalt::public::client::GestaltClient::Rest(app) = client else {
         panic!("expected REST client");
     };
     let result = app

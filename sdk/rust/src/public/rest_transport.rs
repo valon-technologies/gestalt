@@ -15,7 +15,7 @@ use crate::public::generated::metadata::Method;
 use crate::public::generated::rpc_support::GestaltError;
 use crate::public::generated::unary_transport::UnaryTransport;
 use crate::public::rest_mapping::{
-    build_body_map, build_query_pairs, encode_query_string, path_param_names, substitute_path,
+    build_body_map, build_query_pairs, encode_query_string, substitute_path,
 };
 use crate::rpc_support::gestalt_error_code;
 use prost::Message;
@@ -32,13 +32,23 @@ impl RestTransport {
     /// Creates a REST transport rooted at `base_url`.
     pub fn new(base_url: impl Into<String>, auth: Arc<dyn Auth>) -> Self {
         Self {
-            base_url: base_url.into().trim_end_matches('/').to_string(),
+            base_url: base_url.into(),
             auth,
             client: Client::builder()
                 .use_rustls_tls()
                 .build()
                 .expect("reqwest client"),
         }
+    }
+
+    /// Applies a per-request timeout to the underlying HTTP client.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.client = Client::builder()
+            .use_rustls_tls()
+            .timeout(timeout)
+            .build()
+            .expect("reqwest client");
+        self
     }
 }
 
@@ -71,6 +81,7 @@ impl UnaryTransport for RestTransport {
         let client = self.client.clone();
         let http_verb = method.http_verb.to_string();
         let http_path = method.http_path.to_string();
+        let path_fields = method.http_path_fields.to_vec();
         let full_method = method.full_method.to_string();
         let request_bytes = request.encode_to_vec();
 
@@ -85,8 +96,7 @@ impl UnaryTransport for RestTransport {
             }
 
             let request_json = encode(&request_bytes)?;
-            let path_params = path_param_names(&http_path);
-            let path = substitute_path(&http_path, &request_json)?;
+            let path = substitute_path(&http_path, &request_json, &path_fields)?;
             let mut url = Url::parse(&format!("{base_url}{path}")).map_err(|err| {
                 GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
             })?;
@@ -103,20 +113,25 @@ impl UnaryTransport for RestTransport {
                 );
             }
 
-            let http_method = http_verb.parse().unwrap_or(reqwest::Method::POST);
+            let http_method: reqwest::Method = http_verb.parse().map_err(|_| {
+                GestaltError::new(
+                    gestalt_error_code::INVALID_ARGUMENT,
+                    format!("unsupported HTTP verb {http_verb}"),
+                )
+            })?;
             let mut builder = client
                 .request(http_method.clone(), url.clone())
                 .headers(headers.clone());
             if http_verb == "GET" || http_verb == "DELETE" {
                 if let Some(object) = request_json.as_object() {
-                    let query = build_query_pairs(object, &path_params);
+                    let query = build_query_pairs(object, &path_fields);
                     if !query.is_empty() {
                         url.set_query(Some(&encode_query_string(&query)));
                         builder = client.request(http_method, url).headers(headers);
                     }
                 }
             } else if let Some(object) = request_json.as_object() {
-                let body = build_body_map(object, &path_params);
+                let body = build_body_map(object, &path_fields);
                 builder = builder.json(&Value::Object(body));
             }
 
@@ -124,7 +139,7 @@ impl UnaryTransport for RestTransport {
                 if err.is_timeout() {
                     GestaltError::new(gestalt_error_code::DEADLINE_EXCEEDED, err.to_string())
                 } else if err.is_request() {
-                    GestaltError::new(gestalt_error_code::CANCELLED, err.to_string())
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
                 } else {
                     GestaltError::new(gestalt_error_code::UNAVAILABLE, err.to_string())
                 }
@@ -138,7 +153,7 @@ impl UnaryTransport for RestTransport {
             let response_json = if is_operation_result(&response_headers) {
                 fill_operation_result_json(status.as_u16() as i32, &body, &response_headers)
             } else if status.as_u16() >= 400 {
-                return Err(parse_gateway_error(status.as_u16(), &body).into());
+                return Err(parse_gateway_error(status.as_u16(), &body));
             } else if body.is_empty() {
                 Value::Object(Map::new())
             } else {
@@ -152,18 +167,6 @@ impl UnaryTransport for RestTransport {
                 .map_err(|err| GestaltError::new(gestalt_error_code::INTERNAL, err.to_string()))?;
             Ok(())
         }
-    }
-}
-
-impl RestTransport {
-    /// Applies a per-request timeout to the underlying HTTP client.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.client = Client::builder()
-            .use_rustls_tls()
-            .timeout(timeout)
-            .build()
-            .expect("reqwest client");
-        self
     }
 }
 

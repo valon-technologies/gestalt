@@ -13,7 +13,7 @@ use crate::rpc_support::gestalt_error_code;
 /// Bound clients derive trusted runtime context from the provider environment
 /// and accept no external authentication options.
 pub async fn gestalt_from_context() -> Result<GestaltClient, GestaltError> {
-    let _request_context = current_request_context().ok_or_else(|| {
+    current_request_context().ok_or_else(|| {
         GestaltError::new(
             gestalt_error_code::FAILED_PRECONDITION,
             "gestalt_from_context must be called from a provider request scope",
@@ -21,5 +21,5 @@ pub async fn gestalt_from_context() -> Result<GestaltClient, GestaltError> {
     })?;
     let channel = connect_host_service("app", "").await?;
     let transport = GrpcTransport::from_host_service(channel);
-    Ok(GestaltClient::Grpc(AppClient::new(transport)))
+    Ok(GestaltClient::Grpc(Box::new(AppClient::new(transport))))
 }

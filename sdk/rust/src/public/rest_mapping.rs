@@ -2,59 +2,34 @@
 
 use serde_json::{Map, Value};
 
+use crate::public::generated::metadata::PublicField;
 use crate::rpc_support::{GestaltError, gestalt_error_code};
 
-/// Converts a snake_case field name to lowerCamelCase.
-pub fn snake_to_camel(name: &str) -> String {
-    let mut parts = name.split('_');
-    let Some(first) = parts.next() else {
-        return name.to_string();
-    };
-    let mut out = first.to_string();
-    for part in parts {
-        if part.is_empty() {
-            continue;
-        }
-        let mut chars = part.chars();
-        if let Some(initial) = chars.next() {
-            out.push(initial.to_ascii_uppercase());
-            out.push_str(chars.as_str());
-        }
-    }
-    out
-}
-
-/// Resolves a path parameter from protobuf JSON using snake_case or camelCase keys.
-pub fn resolve_path_value<'a>(
-    request: &'a Map<String, Value>,
-    field_name: &str,
-) -> Option<&'a Value> {
-    request
-        .get(field_name)
-        .or_else(|| request.get(&snake_to_camel(field_name)))
-}
-
 /// Substitutes `{param}` placeholders in an HTTP path template.
-pub fn substitute_path(pattern: &str, request: &Value) -> Result<String, GestaltError> {
+pub fn substitute_path(
+    pattern: &str,
+    request: &Value,
+    path_fields: &[PublicField],
+) -> Result<String, GestaltError> {
     let Some(object) = request.as_object() else {
         return Ok(pattern.to_string());
     };
     let mut out = pattern.to_string();
-    for placeholder in path_param_names(pattern) {
-        let token = format!("{{{placeholder}}}");
-        if !out.contains(&token) {
-            continue;
-        }
-        let value = resolve_path_value(object, &placeholder).ok_or_else(|| {
-            GestaltError::new(
-                gestalt_error_code::INVALID_ARGUMENT,
-                format!("missing path parameter {placeholder}"),
-            )
-        })?;
+    for field in path_fields {
+        let token = format!("{{{}}}", field.name);
+        let value = object
+            .get(field.json_name)
+            .or_else(|| object.get(field.name))
+            .ok_or_else(|| {
+                GestaltError::new(
+                    gestalt_error_code::INVALID_ARGUMENT,
+                    format!("missing path parameter {}", field.name),
+                )
+            })?;
         let segment = scalar_to_string(value).ok_or_else(|| {
             GestaltError::new(
                 gestalt_error_code::INVALID_ARGUMENT,
-                format!("unsupported path parameter type for {placeholder}"),
+                format!("unsupported path parameter type for {}", field.name),
             )
         })?;
         out = out.replace(&token, &urlencoding::encode(&segment));
@@ -62,53 +37,41 @@ pub fn substitute_path(pattern: &str, request: &Value) -> Result<String, Gestalt
     Ok(out)
 }
 
-/// Returns path parameter names from an HTTP path template.
-pub fn path_param_names(pattern: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    let mut rest = pattern;
-    while let Some(start) = rest.find('{') {
-        let after = &rest[start + 1..];
-        if let Some(end) = after.find('}') {
-            names.push(after[..end].to_string());
-            rest = &after[end + 1..];
-        } else {
-            break;
-        }
-    }
-    names
+fn is_path_field(field: &str, path_fields: &[PublicField]) -> bool {
+    path_fields
+        .iter()
+        .any(|path_field| path_field.name == field || path_field.json_name == field)
 }
 
-fn is_path_field(field: &str, path_params: &[String]) -> bool {
-    path_params
+fn retained_fields<'a>(
+    request: &'a Map<String, Value>,
+    path_fields: &[PublicField],
+) -> impl Iterator<Item = (&'a String, &'a Value)> {
+    request
         .iter()
-        .any(|name| name == field || snake_to_camel(name) == field)
+        .filter(move |(key, value)| !value.is_null() && !is_path_field(key, path_fields))
 }
 
 /// Builds query-string pairs from a protobuf JSON request object.
 pub fn build_query_pairs(
     request: &Map<String, Value>,
-    path_params: &[String],
+    path_fields: &[PublicField],
 ) -> Vec<(String, String)> {
     let mut pairs = Vec::new();
-    for (key, value) in request {
-        if value.is_null() || is_path_field(key, path_params) {
-            continue;
-        }
+    for (key, value) in retained_fields(request, path_fields) {
         encode_query_value(key, value, &mut pairs);
     }
     pairs
 }
 
 /// Builds the JSON request body for REST calls.
-pub fn build_body_map(request: &Map<String, Value>, path_params: &[String]) -> Map<String, Value> {
-    let mut body = Map::new();
-    for (key, value) in request {
-        if value.is_null() || is_path_field(key, path_params) {
-            continue;
-        }
-        body.insert(key.clone(), value.clone());
-    }
-    body
+pub fn build_body_map(
+    request: &Map<String, Value>,
+    path_fields: &[PublicField],
+) -> Map<String, Value> {
+    retained_fields(request, path_fields)
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
 }
 
 fn encode_query_value(key: &str, value: &Value, out: &mut Vec<(String, String)>) {
