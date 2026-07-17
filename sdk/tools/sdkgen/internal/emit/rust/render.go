@@ -29,6 +29,7 @@ type features struct {
 	supportTypes map[string]bool            // imported from the public rpc_support module
 	supportFns   map[string]bool            // imported from the codec support module
 	invokeUses   map[string]bool            // imported from the public invoke_support module
+	prostTypes   bool                       // google.protobuf.Empty via prost_types
 	crossPublic  map[string]map[string]bool // public module base -> imported native type names
 	crossCodec   map[string]map[string]bool // codec module base -> imported converter names
 	wireJSONDone map[string]bool            // wire message full names with protobuf JSON helpers
@@ -1341,6 +1342,13 @@ func (r *renderer) assemble() string {
 	}
 	if r.features.streamExt {
 		uses = append(uses, "use tokio_stream::StreamExt;")
+	}
+	if r.features.prostTypes {
+		if r.publicClient {
+			uses = append(uses, "use crate::public::generated::metadata::Empty;")
+		} else {
+			uses = append(uses, "use prost_types::Empty;")
+		}
 	}
 	sort.Strings(uses)
 	for _, u := range uses {

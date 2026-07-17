@@ -4,14 +4,20 @@
  * Loaded lazily so REST-only callers do not initialize HTTP/2 dependencies.
  */
 
-import type { DescMessage, Message } from "@bufbuild/protobuf";
-import { createClient, type Client } from "@connectrpc/connect";
+import type { DescMessage, DescService, Message } from "@bufbuild/protobuf";
+import { createClient, type Client, type Transport } from "@connectrpc/connect";
 
+import { Agent } from "../internal/gen/v1/agent_pb.ts";
 import { App } from "../internal/gen/v1/app_pb.ts";
+import { Authorization } from "../internal/gen/v1/authorization_pb.ts";
+import { ExternalCredentials } from "../internal/gen/v1/external_credential_pb.ts";
+import { Identity } from "../internal/gen/v1/identity_pb.ts";
+import { IndexedDB } from "../internal/gen/v1/indexeddb_pb.ts";
+import { Workflow } from "../internal/gen/v1/workflow_pb.ts";
 
 import type { AuthProvider } from "./auth.ts";
 import { toGestaltError } from "./errors.ts";
-import { PUBLIC_METHODS, type PublicMethod } from "./generated/methods.ts";
+import type { PublicMethod } from "./generated/methods.ts";
 import {
   isAbortLike,
   raceWithAbort,
@@ -29,7 +35,18 @@ export interface GrpcUnaryTransportOptions {
   auth: AuthProvider;
 }
 
-type AppServiceClient = Client<typeof App>;
+const PUBLIC_SERVICES = {
+  Agent,
+  App,
+  Authorization,
+  ExternalCredentials,
+  Identity,
+  IndexedDB,
+  Workflow,
+} as const satisfies Record<string, DescService>;
+
+type PublicServiceName = keyof typeof PUBLIC_SERVICES;
+type PublicServiceClient<S extends DescService> = Client<S>;
 
 type ConnectGrpcTransport = ReturnType<
   typeof import("@connectrpc/connect-node").createGrpcTransport
@@ -43,19 +60,25 @@ export async function createGrpcUnaryTransport(
   );
   const sessionManager = new Http2SessionManager(options.baseUrl);
   let transport: ConnectGrpcTransport | undefined;
-  let appClient: AppServiceClient | undefined;
+  const clients = new Map<PublicServiceName, PublicServiceClient<DescService>>();
 
-  const getAppClient = (): AppServiceClient => {
-    if (!appClient) {
-      if (!transport) {
-        transport = createGrpcTransport({
-          baseUrl: options.baseUrl,
-          sessionManager,
-        });
-      }
-      appClient = createClient(App, transport);
+  const getClient = <S extends DescService>(
+    serviceName: PublicServiceName,
+    service: S,
+  ): PublicServiceClient<S> => {
+    const existing = clients.get(serviceName);
+    if (existing) {
+      return existing as PublicServiceClient<S>;
     }
-    return appClient;
+    if (!transport) {
+      transport = createGrpcTransport({
+        baseUrl: options.baseUrl,
+        sessionManager,
+      });
+    }
+    const client = createClient(service, transport);
+    clients.set(serviceName, client as PublicServiceClient<DescService>);
+    return client;
   };
 
   return {
@@ -86,21 +109,25 @@ export async function createGrpcUnaryTransport(
           : {}),
       };
 
-      try {
-        const client = getAppClient();
-        if (method.grpcPath === PUBLIC_METHODS.app.invoke.grpcPath) {
-          return (await client.invoke(
-            request as Parameters<AppServiceClient["invoke"]>[0],
-            requestOptions,
-          )) as unknown as Output;
-        }
-        if (method.grpcPath === PUBLIC_METHODS.app.invokeGraphQL.grpcPath) {
-          return (await client.invokeGraphQL(
-            request as Parameters<AppServiceClient["invokeGraphQL"]>[0],
-            requestOptions,
-          )) as unknown as Output;
-        }
+      const serviceName = method.service as PublicServiceName;
+      const service = PUBLIC_SERVICES[serviceName];
+      if (!service) {
+        throw new Error(`unknown public gRPC service ${method.service}`);
+      }
+
+      const client = getClient(serviceName, service);
+      const rpcName = lowerFirst(method.method);
+      const rpc = (client as Record<string, unknown>)[rpcName];
+      if (typeof rpc !== "function") {
         throw new Error(`unknown public gRPC method ${method.grpcPath}`);
+      }
+
+      try {
+        return (await (rpc as (req: Message, opts: object) => Promise<Output>).call(
+          client,
+          request,
+          requestOptions,
+        )) as Output;
       } catch (error) {
         if (isAbortLike(error, signal)) {
           throw toTransportGestaltError(callOptions, error, signal);
@@ -112,7 +139,14 @@ export async function createGrpcUnaryTransport(
     async close(): Promise<void> {
       sessionManager.abort();
       transport = undefined;
-      appClient = undefined;
+      clients.clear();
     },
   };
+}
+
+function lowerFirst(value: string): string {
+  if (value === "") {
+    return value;
+  }
+  return value[0]!.toLowerCase() + value.slice(1);
 }

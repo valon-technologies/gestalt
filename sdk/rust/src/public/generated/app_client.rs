@@ -2,14 +2,253 @@
 
 //! Generated transport-neutral App client for the public gestaltd surface.
 
+use crate::public::generated::agent::{
+    AgentSession, AgentTurn, CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
+    CreateAgentProviderTurnRequest, GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
+    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
+    ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
+    UpdateAgentProviderSessionRequest,
+};
 use crate::public::generated::app::{AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult};
+use crate::public::generated::authorization::{
+    AddRelationshipRequest, AddRelationshipResponse, CheckAccessManyRequest,
+    CheckAccessManyResponse, CheckAccessRequest, CheckAccessResponse, DeleteRelationshipRequest,
+    DeleteRelationshipResponse, GetActiveModelRefResponse, ListActiveModelResourceTypesRequest,
+    ListActiveModelResourceTypesResponse, ListRelationshipsRequest, ListRelationshipsResponse,
+    SetActiveModelRequest, SetActiveModelResponse, SetAuthorizationStateRequest,
+    SetAuthorizationStateResponse,
+};
+use crate::public::generated::codec::agent::{
+    from_wire_agent_session, from_wire_agent_turn, from_wire_list_agent_provider_sessions_response,
+    from_wire_list_agent_provider_turn_events_response,
+    from_wire_list_agent_provider_turns_response, to_wire_cancel_agent_provider_turn_request,
+    to_wire_create_agent_provider_session_request, to_wire_create_agent_provider_turn_request,
+    to_wire_get_agent_provider_session_request, to_wire_get_agent_provider_turn_request,
+    to_wire_list_agent_provider_sessions_request, to_wire_list_agent_provider_turn_events_request,
+    to_wire_list_agent_provider_turns_request, to_wire_update_agent_provider_session_request,
+};
 use crate::public::generated::codec::app::{
     from_wire_operation_result, to_wire_app_invoke_graphql_request, to_wire_app_invoke_request,
 };
-use crate::public::generated::invoke_support::{InvokeError, decode_app_result};
+use crate::public::generated::codec::authorization::{
+    from_wire_add_relationship_response, from_wire_check_access_many_response,
+    from_wire_check_access_response, from_wire_delete_relationship_response,
+    from_wire_get_active_model_ref_response, from_wire_list_active_model_resource_types_response,
+    from_wire_list_relationships_response, from_wire_set_active_model_response,
+    from_wire_set_authorization_state_response, to_wire_add_relationship_request,
+    to_wire_check_access_many_request, to_wire_check_access_request,
+    to_wire_delete_relationship_request, to_wire_list_active_model_resource_types_request,
+    to_wire_list_relationships_request, to_wire_set_active_model_request,
+    to_wire_set_authorization_state_request,
+};
+use crate::public::generated::codec::external_credential::{
+    from_wire_exchange_external_credential_response, from_wire_external_credential,
+    from_wire_list_external_credentials_response, from_wire_resolve_external_credential_response,
+    to_wire_create_external_credential_request, to_wire_delete_external_credential_request,
+    to_wire_exchange_external_credential_request, to_wire_get_external_credential_request,
+    to_wire_list_external_credentials_request, to_wire_resolve_external_credential_request,
+    to_wire_upsert_external_credential_request,
+    to_wire_validate_external_credential_config_request,
+};
+use crate::public::generated::codec::identity::{
+    from_wire_authorize_response, from_wire_get_grant_response, from_wire_introspect_response,
+    from_wire_list_grants_response, from_wire_revoke_grant_response, from_wire_token_response,
+    from_wire_user_info_response, to_wire_authorize_request, to_wire_get_grant_request,
+    to_wire_introspect_request, to_wire_list_grants_request, to_wire_revoke_grant_request,
+    to_wire_token_request, to_wire_user_info_request,
+};
+use crate::public::generated::codec::indexeddb::{
+    from_wire_count_response, from_wire_delete_response, from_wire_key_response,
+    from_wire_keys_response, from_wire_record_response, from_wire_records_response,
+    to_wire_create_index_request, to_wire_create_object_store_request,
+    to_wire_delete_index_request, to_wire_delete_object_store_request, to_wire_index_query_request,
+    to_wire_object_store_name_request, to_wire_object_store_range_request,
+    to_wire_object_store_request, to_wire_record_request,
+};
+use crate::public::generated::codec::workflow::{
+    from_wire_get_workflow_provider_run_events_response,
+    from_wire_get_workflow_provider_run_output_response,
+    from_wire_list_workflow_provider_definitions_response,
+    from_wire_list_workflow_provider_runs_response, from_wire_signal_workflow_run_response,
+    from_wire_workflow_definition, from_wire_workflow_run,
+    to_wire_apply_workflow_provider_definition_request,
+    to_wire_cancel_workflow_provider_run_request,
+    to_wire_delete_workflow_provider_definition_request,
+    to_wire_get_workflow_provider_definition_request,
+    to_wire_get_workflow_provider_run_events_request,
+    to_wire_get_workflow_provider_run_output_request, to_wire_get_workflow_provider_run_request,
+    to_wire_list_workflow_provider_definitions_request,
+    to_wire_list_workflow_provider_runs_request,
+    to_wire_set_workflow_provider_activation_paused_request,
+    to_wire_set_workflow_provider_definition_paused_request,
+    to_wire_signal_or_start_workflow_provider_run_request,
+    to_wire_signal_workflow_provider_run_request, to_wire_start_workflow_provider_run_request,
+};
+use crate::public::generated::external_credential::{
+    CreateExternalCredentialRequest, DeleteExternalCredentialRequest,
+    ExchangeExternalCredentialRequest, ExchangeExternalCredentialResponse, ExternalCredential,
+    GetExternalCredentialRequest, ListExternalCredentialsRequest, ListExternalCredentialsResponse,
+    ResolveExternalCredentialRequest, ResolveExternalCredentialResponse,
+    UpsertExternalCredentialRequest, ValidateExternalCredentialConfigRequest,
+};
+use crate::public::generated::identity::{
+    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
+    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
+    RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
+};
+use crate::public::generated::indexeddb::{
+    CountResponse, CreateIndexRequest, CreateObjectStoreRequest, DeleteIndexRequest,
+    DeleteObjectStoreRequest, DeleteResponse, IndexQueryRequest, KeyResponse, KeysResponse,
+    ObjectStoreNameRequest, ObjectStoreRangeRequest, ObjectStoreRequest, RecordRequest,
+    RecordResponse, RecordsResponse,
+};
+use crate::public::generated::invoke_support::{
+    InvokeError, decode_app_result, decode_graphql_result,
+};
+use crate::public::generated::metadata::Empty;
 use crate::public::generated::metadata::*;
 use crate::public::generated::rpc_support::GestaltError;
 use crate::public::generated::unary_transport::UnaryTransport;
+use crate::public::generated::workflow::{
+    ApplyWorkflowProviderDefinitionRequest, CancelWorkflowProviderRunRequest,
+    DeleteWorkflowProviderDefinitionRequest, GetWorkflowProviderDefinitionRequest,
+    GetWorkflowProviderRunEventsRequest, GetWorkflowProviderRunEventsResponse,
+    GetWorkflowProviderRunOutputRequest, GetWorkflowProviderRunOutputResponse,
+    GetWorkflowProviderRunRequest, ListWorkflowProviderDefinitionsRequest,
+    ListWorkflowProviderDefinitionsResponse, ListWorkflowProviderRunsRequest,
+    ListWorkflowProviderRunsResponse, SetWorkflowProviderActivationPausedRequest,
+    SetWorkflowProviderDefinitionPausedRequest, SignalOrStartWorkflowProviderRunRequest,
+    SignalWorkflowProviderRunRequest, SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
+    WorkflowDefinition, WorkflowRun,
+};
+
+/// Transport-neutral client for the public gestaltd App surface.
+pub struct AgentClient<T: UnaryTransport> {
+    transport: T,
+}
+
+impl<T: UnaryTransport> AgentClient<T> {
+    /// Creates a client over the given unary transport.
+    pub fn new(transport: T) -> Self {
+        Self { transport }
+    }
+}
+
+impl<T: UnaryTransport> AgentClient<T> {
+    pub async fn create_session(
+        &self,
+        request: CreateAgentProviderSessionRequest,
+    ) -> Result<AgentSession, GestaltError> {
+        let wire = to_wire_create_agent_provider_session_request(request);
+        let mut wire_response = crate::generated::v1::AgentSession::default();
+        self.transport
+            .unary(&METHOD_AGENT_CREATE_SESSION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_session(wire_response))
+    }
+
+    pub async fn get_session(
+        &self,
+        request: GetAgentProviderSessionRequest,
+    ) -> Result<AgentSession, GestaltError> {
+        let wire = to_wire_get_agent_provider_session_request(request);
+        let mut wire_response = crate::generated::v1::AgentSession::default();
+        self.transport
+            .unary(&METHOD_AGENT_GET_SESSION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_session(wire_response))
+    }
+
+    pub async fn list_sessions(
+        &self,
+        request: ListAgentProviderSessionsRequest,
+    ) -> Result<ListAgentProviderSessionsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_sessions_request(request);
+        let mut wire_response = crate::generated::v1::ListAgentProviderSessionsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_SESSIONS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_agent_provider_sessions_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn update_session(
+        &self,
+        request: UpdateAgentProviderSessionRequest,
+    ) -> Result<AgentSession, GestaltError> {
+        let wire = to_wire_update_agent_provider_session_request(request);
+        let mut wire_response = crate::generated::v1::AgentSession::default();
+        self.transport
+            .unary(&METHOD_AGENT_UPDATE_SESSION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_session(wire_response))
+    }
+
+    pub async fn create_turn(
+        &self,
+        request: CreateAgentProviderTurnRequest,
+    ) -> Result<AgentTurn, GestaltError> {
+        let wire = to_wire_create_agent_provider_turn_request(request);
+        let mut wire_response = crate::generated::v1::AgentTurn::default();
+        self.transport
+            .unary(&METHOD_AGENT_CREATE_TURN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_turn(wire_response))
+    }
+
+    pub async fn get_turn(
+        &self,
+        request: GetAgentProviderTurnRequest,
+    ) -> Result<AgentTurn, GestaltError> {
+        let wire = to_wire_get_agent_provider_turn_request(request);
+        let mut wire_response = crate::generated::v1::AgentTurn::default();
+        self.transport
+            .unary(&METHOD_AGENT_GET_TURN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_turn(wire_response))
+    }
+
+    pub async fn list_turns(
+        &self,
+        request: ListAgentProviderTurnsRequest,
+    ) -> Result<ListAgentProviderTurnsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_turns_request(request);
+        let mut wire_response = crate::generated::v1::ListAgentProviderTurnsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_TURNS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_agent_provider_turns_response(wire_response))
+    }
+
+    pub async fn cancel_turn(
+        &self,
+        request: CancelAgentProviderTurnRequest,
+    ) -> Result<AgentTurn, GestaltError> {
+        let wire = to_wire_cancel_agent_provider_turn_request(request);
+        let mut wire_response = crate::generated::v1::AgentTurn::default();
+        self.transport
+            .unary(&METHOD_AGENT_CANCEL_TURN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_turn(wire_response))
+    }
+
+    pub async fn list_turn_events(
+        &self,
+        request: ListAgentProviderTurnEventsRequest,
+    ) -> Result<ListAgentProviderTurnEventsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_turn_events_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListAgentProviderTurnEventsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_TURN_EVENTS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_agent_provider_turn_events_response(
+            wire_response,
+        ))
+    }
+}
 
 /// Transport-neutral client for the public gestaltd App surface.
 pub struct AppClient<T: UnaryTransport> {
@@ -21,7 +260,9 @@ impl<T: UnaryTransport> AppClient<T> {
     pub fn new(transport: T) -> Self {
         Self { transport }
     }
+}
 
+impl<T: UnaryTransport> AppClient<T> {
     pub async fn invoke_raw(
         &self,
         request: AppInvokeRequest,
@@ -60,5 +301,873 @@ impl<T: UnaryTransport> AppClient<T> {
             .unary(&METHOD_APP_INVOKE_GRAPHQL, &wire, &mut wire_response)
             .await?;
         Ok(from_wire_operation_result(wire_response))
+    }
+
+    /// `invoke_graphql_raw` is an alias for [`Self::invoke_graphql`].
+    pub async fn invoke_graphql_raw(
+        &self,
+        request: AppInvokeGraphQLRequest,
+    ) -> Result<OperationResult, GestaltError> {
+        self.invoke_graphql(request).await
+    }
+
+    pub async fn invoke_graphql_decoded(
+        &self,
+        request: AppInvokeGraphQLRequest,
+    ) -> Result<serde_json::Value, InvokeError> {
+        let invoke_app = request.app.clone();
+        let response = self.invoke_graphql(request).await?;
+        decode_graphql_result(invoke_app.as_str(), response.status, &response.body)
+            .map_err(InvokeError::from)
+    }
+}
+
+/// Transport-neutral client for the public gestaltd App surface.
+pub struct AuthorizationClient<T: UnaryTransport> {
+    transport: T,
+}
+
+impl<T: UnaryTransport> AuthorizationClient<T> {
+    /// Creates a client over the given unary transport.
+    pub fn new(transport: T) -> Self {
+        Self { transport }
+    }
+}
+
+impl<T: UnaryTransport> AuthorizationClient<T> {
+    pub async fn check_access(
+        &self,
+        request: CheckAccessRequest,
+    ) -> Result<CheckAccessResponse, GestaltError> {
+        let wire = to_wire_check_access_request(request);
+        let mut wire_response = crate::generated::v1::CheckAccessResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_CHECK_ACCESS,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_check_access_response(wire_response))
+    }
+
+    pub async fn check_access_many(
+        &self,
+        request: CheckAccessManyRequest,
+    ) -> Result<CheckAccessManyResponse, GestaltError> {
+        let wire = to_wire_check_access_many_request(request);
+        let mut wire_response = crate::generated::v1::CheckAccessManyResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_CHECK_ACCESS_MANY,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_check_access_many_response(wire_response))
+    }
+
+    pub async fn list_relationships(
+        &self,
+        request: ListRelationshipsRequest,
+    ) -> Result<ListRelationshipsResponse, GestaltError> {
+        let wire = to_wire_list_relationships_request(request);
+        let mut wire_response = crate::generated::v1::ListRelationshipsResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_LIST_RELATIONSHIPS,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_list_relationships_response(wire_response))
+    }
+
+    pub async fn add_relationship(
+        &self,
+        request: AddRelationshipRequest,
+    ) -> Result<AddRelationshipResponse, GestaltError> {
+        let wire = to_wire_add_relationship_request(request);
+        let mut wire_response = crate::generated::v1::AddRelationshipResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_ADD_RELATIONSHIP,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_add_relationship_response(wire_response))
+    }
+
+    pub async fn delete_relationship(
+        &self,
+        request: DeleteRelationshipRequest,
+    ) -> Result<DeleteRelationshipResponse, GestaltError> {
+        let wire = to_wire_delete_relationship_request(request);
+        let mut wire_response = crate::generated::v1::DeleteRelationshipResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_DELETE_RELATIONSHIP,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_delete_relationship_response(wire_response))
+    }
+
+    pub async fn set_authorization_state(
+        &self,
+        request: SetAuthorizationStateRequest,
+    ) -> Result<SetAuthorizationStateResponse, GestaltError> {
+        let wire = to_wire_set_authorization_state_request(request);
+        let mut wire_response = crate::generated::v1::SetAuthorizationStateResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_set_authorization_state_response(wire_response))
+    }
+
+    pub async fn get_active_model_ref(&self) -> Result<GetActiveModelRefResponse, GestaltError> {
+        let wire = Empty::default();
+        let mut wire_response = crate::generated::v1::GetActiveModelRefResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_GET_ACTIVE_MODEL_REF,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_get_active_model_ref_response(wire_response))
+    }
+
+    pub async fn set_active_model(
+        &self,
+        request: SetActiveModelRequest,
+    ) -> Result<SetActiveModelResponse, GestaltError> {
+        let wire = to_wire_set_active_model_request(request);
+        let mut wire_response = crate::generated::v1::SetActiveModelResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_SET_ACTIVE_MODEL,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_set_active_model_response(wire_response))
+    }
+
+    pub async fn list_active_model_resource_types(
+        &self,
+        request: ListActiveModelResourceTypesRequest,
+    ) -> Result<ListActiveModelResourceTypesResponse, GestaltError> {
+        let wire = to_wire_list_active_model_resource_types_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListActiveModelResourceTypesResponse::default();
+        self.transport
+            .unary(
+                &METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_list_active_model_resource_types_response(
+            wire_response,
+        ))
+    }
+}
+
+/// Transport-neutral client for the public gestaltd App surface.
+pub struct ExternalCredentialsClient<T: UnaryTransport> {
+    transport: T,
+}
+
+impl<T: UnaryTransport> ExternalCredentialsClient<T> {
+    /// Creates a client over the given unary transport.
+    pub fn new(transport: T) -> Self {
+        Self { transport }
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredentialsClient<T> {
+    pub async fn create_credential(
+        &self,
+        request: CreateExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_create_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub async fn upsert_credential(
+        &self,
+        request: UpsertExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_upsert_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub async fn get_credential(
+        &self,
+        request: GetExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_get_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub async fn list_credentials(
+        &self,
+        request: ListExternalCredentialsRequest,
+    ) -> Result<ListExternalCredentialsResponse, GestaltError> {
+        let wire = to_wire_list_external_credentials_request(request);
+        let mut wire_response = crate::generated::v1::ListExternalCredentialsResponse::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_list_external_credentials_response(wire_response))
+    }
+
+    pub async fn delete_credential(
+        &self,
+        request: DeleteExternalCredentialRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_external_credential_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn validate_credential_config(
+        &self,
+        request: ValidateExternalCredentialConfigRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_validate_external_credential_config_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_VALIDATE_CREDENTIAL_CONFIG,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn resolve_credential(
+        &self,
+        request: ResolveExternalCredentialRequest,
+    ) -> Result<ResolveExternalCredentialResponse, GestaltError> {
+        let wire = to_wire_resolve_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ResolveExternalCredentialResponse::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_resolve_external_credential_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn exchange_credential(
+        &self,
+        request: ExchangeExternalCredentialRequest,
+    ) -> Result<ExchangeExternalCredentialResponse, GestaltError> {
+        let wire = to_wire_exchange_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExchangeExternalCredentialResponse::default();
+        self.transport
+            .unary(
+                &METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_exchange_external_credential_response(
+            wire_response,
+        ))
+    }
+}
+
+/// Transport-neutral client for the public gestaltd App surface.
+pub struct IdentityClient<T: UnaryTransport> {
+    transport: T,
+}
+
+impl<T: UnaryTransport> IdentityClient<T> {
+    /// Creates a client over the given unary transport.
+    pub fn new(transport: T) -> Self {
+        Self { transport }
+    }
+}
+
+impl<T: UnaryTransport> IdentityClient<T> {
+    pub async fn authorize(
+        &self,
+        request: AuthorizeRequest,
+    ) -> Result<AuthorizeResponse, GestaltError> {
+        let wire = to_wire_authorize_request(request);
+        let mut wire_response = crate::generated::v1::AuthorizeResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_AUTHORIZE, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_authorize_response(wire_response))
+    }
+
+    pub async fn token(&self, request: TokenRequest) -> Result<TokenResponse, GestaltError> {
+        let wire = to_wire_token_request(request);
+        let mut wire_response = crate::generated::v1::TokenResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_TOKEN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_token_response(wire_response))
+    }
+
+    pub async fn introspect(
+        &self,
+        request: IntrospectRequest,
+    ) -> Result<IntrospectResponse, GestaltError> {
+        let wire = to_wire_introspect_request(request);
+        let mut wire_response = crate::generated::v1::IntrospectResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_INTROSPECT, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_introspect_response(wire_response))
+    }
+
+    pub async fn user_info(
+        &self,
+        request: UserInfoRequest,
+    ) -> Result<UserInfoResponse, GestaltError> {
+        let wire = to_wire_user_info_request(request);
+        let mut wire_response = crate::generated::v1::UserInfoResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_USER_INFO, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_user_info_response(wire_response))
+    }
+
+    pub async fn list_grants(
+        &self,
+        request: ListGrantsRequest,
+    ) -> Result<ListGrantsResponse, GestaltError> {
+        let wire = to_wire_list_grants_request(request);
+        let mut wire_response = crate::generated::v1::ListGrantsResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_LIST_GRANTS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_grants_response(wire_response))
+    }
+
+    pub async fn get_grant(
+        &self,
+        request: GetGrantRequest,
+    ) -> Result<GetGrantResponse, GestaltError> {
+        let wire = to_wire_get_grant_request(request);
+        let mut wire_response = crate::generated::v1::GetGrantResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_GET_GRANT, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_get_grant_response(wire_response))
+    }
+
+    pub async fn revoke_grant(
+        &self,
+        request: RevokeGrantRequest,
+    ) -> Result<RevokeGrantResponse, GestaltError> {
+        let wire = to_wire_revoke_grant_request(request);
+        let mut wire_response = crate::generated::v1::RevokeGrantResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_REVOKE_GRANT, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_revoke_grant_response(wire_response))
+    }
+}
+
+/// Transport-neutral client for the public gestaltd App surface.
+pub struct IndexedDBClient<T: UnaryTransport> {
+    transport: T,
+}
+
+impl<T: UnaryTransport> IndexedDBClient<T> {
+    /// Creates a client over the given unary transport.
+    pub fn new(transport: T) -> Self {
+        Self { transport }
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::GrpcCapable> IndexedDBClient<T> {
+    pub async fn create_object_store(
+        &self,
+        request: CreateObjectStoreRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_create_object_store_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(
+                &METHOD_INDEXED_D_B_CREATE_OBJECT_STORE,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_object_store(
+        &self,
+        request: DeleteObjectStoreRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_object_store_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(
+                &METHOD_INDEXED_D_B_DELETE_OBJECT_STORE,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn create_index(&self, request: CreateIndexRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_create_index_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_CREATE_INDEX, &wire, &mut wire_response)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_index(&self, request: DeleteIndexRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_index_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_DELETE_INDEX, &wire, &mut wire_response)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get(&self, request: ObjectStoreRequest) -> Result<RecordResponse, GestaltError> {
+        let wire = to_wire_object_store_request(request);
+        let mut wire_response = crate::generated::v1::RecordResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_record_response(wire_response))
+    }
+
+    pub async fn get_key(&self, request: ObjectStoreRequest) -> Result<KeyResponse, GestaltError> {
+        let wire = to_wire_object_store_request(request);
+        let mut wire_response = crate::generated::v1::KeyResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET_KEY, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_key_response(wire_response))
+    }
+
+    pub async fn add(&self, request: RecordRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_record_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_ADD, &wire, &mut wire_response)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn put(&self, request: RecordRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_record_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_PUT, &wire, &mut wire_response)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete(&self, request: ObjectStoreRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_object_store_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_DELETE, &wire, &mut wire_response)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn clear(&self, request: ObjectStoreNameRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_object_store_name_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_CLEAR, &wire, &mut wire_response)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn get_all(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<RecordsResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::RecordsResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET_ALL, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_records_response(wire_response))
+    }
+
+    pub async fn get_all_keys(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<KeysResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::KeysResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET_ALL_KEYS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_keys_response(wire_response))
+    }
+
+    pub async fn count(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<CountResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::CountResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_COUNT, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_count_response(wire_response))
+    }
+
+    pub async fn delete_range(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<DeleteResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::DeleteResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_DELETE_RANGE, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_delete_response(wire_response))
+    }
+
+    pub async fn index_get(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<RecordResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::RecordResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_GET, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_record_response(wire_response))
+    }
+
+    pub async fn index_get_key(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<KeyResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::KeyResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_GET_KEY, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_key_response(wire_response))
+    }
+
+    pub async fn index_get_all(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<RecordsResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::RecordsResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_GET_ALL, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_records_response(wire_response))
+    }
+
+    pub async fn index_get_all_keys(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<KeysResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::KeysResponse::default();
+        self.transport
+            .unary(
+                &METHOD_INDEXED_D_B_INDEX_GET_ALL_KEYS,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_keys_response(wire_response))
+    }
+
+    pub async fn index_count(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<CountResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::CountResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_COUNT, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_count_response(wire_response))
+    }
+
+    pub async fn index_delete(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<DeleteResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::DeleteResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_DELETE, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_delete_response(wire_response))
+    }
+}
+
+/// Transport-neutral client for the public gestaltd App surface.
+pub struct WorkflowClient<T: UnaryTransport> {
+    transport: T,
+}
+
+impl<T: UnaryTransport> WorkflowClient<T> {
+    /// Creates a client over the given unary transport.
+    pub fn new(transport: T) -> Self {
+        Self { transport }
+    }
+}
+
+impl<T: UnaryTransport> WorkflowClient<T> {
+    pub async fn apply_definition(
+        &self,
+        request: ApplyWorkflowProviderDefinitionRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_apply_workflow_provider_definition_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_APPLY_DEFINITION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub async fn get_definition(
+        &self,
+        request: GetWorkflowProviderDefinitionRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_get_workflow_provider_definition_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_DEFINITION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub async fn list_definitions(
+        &self,
+        request: ListWorkflowProviderDefinitionsRequest,
+    ) -> Result<ListWorkflowProviderDefinitionsResponse, GestaltError> {
+        let wire = to_wire_list_workflow_provider_definitions_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListWorkflowProviderDefinitionsResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_LIST_DEFINITIONS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_workflow_provider_definitions_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn set_definition_paused(
+        &self,
+        request: SetWorkflowProviderDefinitionPausedRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_set_workflow_provider_definition_paused_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport
+            .unary(
+                &METHOD_WORKFLOW_SET_DEFINITION_PAUSED,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub async fn set_activation_paused(
+        &self,
+        request: SetWorkflowProviderActivationPausedRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_set_workflow_provider_activation_paused_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport
+            .unary(
+                &METHOD_WORKFLOW_SET_ACTIVATION_PAUSED,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub async fn delete_definition(
+        &self,
+        request: DeleteWorkflowProviderDefinitionRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_workflow_provider_definition_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(
+                &METHOD_WORKFLOW_DELETE_DEFINITION,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn start_run(
+        &self,
+        request: StartWorkflowProviderRunRequest,
+    ) -> Result<WorkflowRun, GestaltError> {
+        let wire = to_wire_start_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowRun::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_START_RUN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_workflow_run(wire_response))
+    }
+
+    pub async fn list_runs(
+        &self,
+        request: ListWorkflowProviderRunsRequest,
+    ) -> Result<ListWorkflowProviderRunsResponse, GestaltError> {
+        let wire = to_wire_list_workflow_provider_runs_request(request);
+        let mut wire_response = crate::generated::v1::ListWorkflowProviderRunsResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_LIST_RUNS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_workflow_provider_runs_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn get_run(
+        &self,
+        request: GetWorkflowProviderRunRequest,
+    ) -> Result<WorkflowRun, GestaltError> {
+        let wire = to_wire_get_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowRun::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_RUN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_workflow_run(wire_response))
+    }
+
+    pub async fn get_run_events(
+        &self,
+        request: GetWorkflowProviderRunEventsRequest,
+    ) -> Result<GetWorkflowProviderRunEventsResponse, GestaltError> {
+        let wire = to_wire_get_workflow_provider_run_events_request(request);
+        let mut wire_response =
+            crate::generated::v1::GetWorkflowProviderRunEventsResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_RUN_EVENTS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_get_workflow_provider_run_events_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn get_run_output(
+        &self,
+        request: GetWorkflowProviderRunOutputRequest,
+    ) -> Result<GetWorkflowProviderRunOutputResponse, GestaltError> {
+        let wire = to_wire_get_workflow_provider_run_output_request(request);
+        let mut wire_response =
+            crate::generated::v1::GetWorkflowProviderRunOutputResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_RUN_OUTPUT, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_get_workflow_provider_run_output_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn cancel_run(
+        &self,
+        request: CancelWorkflowProviderRunRequest,
+    ) -> Result<WorkflowRun, GestaltError> {
+        let wire = to_wire_cancel_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowRun::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_CANCEL_RUN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_workflow_run(wire_response))
+    }
+
+    pub async fn signal_run(
+        &self,
+        request: SignalWorkflowProviderRunRequest,
+    ) -> Result<SignalWorkflowRunResponse, GestaltError> {
+        let wire = to_wire_signal_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::SignalWorkflowRunResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_SIGNAL_RUN, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_signal_workflow_run_response(wire_response))
+    }
+
+    pub async fn signal_or_start_run(
+        &self,
+        request: SignalOrStartWorkflowProviderRunRequest,
+    ) -> Result<SignalWorkflowRunResponse, GestaltError> {
+        let wire = to_wire_signal_or_start_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::SignalWorkflowRunResponse::default();
+        self.transport
+            .unary(
+                &METHOD_WORKFLOW_SIGNAL_OR_START_RUN,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_signal_workflow_run_response(wire_response))
     }
 }

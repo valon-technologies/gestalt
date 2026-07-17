@@ -77,6 +77,12 @@ func (t *restUnaryTransport) Unary(
 			Message: "publicclient: REST transport is nil",
 		}
 	}
+	if method.HTTPVerb == "" || method.HTTPPath == "" {
+		return &generated.GestaltError{
+			Code:    gestaltclient.GestaltErrorCodeInvalidArgument,
+			Message: fmt.Sprintf("publicclient: method %s has no REST binding", method.FullMethod),
+		}
+	}
 
 	requestMap, err := messageToJSONMap(request)
 	if err != nil {

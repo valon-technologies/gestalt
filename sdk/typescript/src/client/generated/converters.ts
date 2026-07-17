@@ -7,22 +7,297 @@
  */
 
 import {
+  toWireCancelAgentProviderTurnRequest as codecToWireCancelAgentProviderTurnRequest,
+  toWireCreateAgentProviderSessionRequest as codecToWireCreateAgentProviderSessionRequest,
+  toWireCreateAgentProviderTurnRequest as codecToWireCreateAgentProviderTurnRequest,
+  toWireGetAgentProviderSessionRequest as codecToWireGetAgentProviderSessionRequest,
+  toWireGetAgentProviderTurnRequest as codecToWireGetAgentProviderTurnRequest,
+  toWireListAgentProviderSessionsRequest as codecToWireListAgentProviderSessionsRequest,
+  toWireListAgentProviderTurnEventsRequest as codecToWireListAgentProviderTurnEventsRequest,
+  toWireListAgentProviderTurnsRequest as codecToWireListAgentProviderTurnsRequest,
+  toWireUpdateAgentProviderSessionRequest as codecToWireUpdateAgentProviderSessionRequest,
+} from "../../internal/codec/agent.ts";
+import {
   toWireAppInvokeGraphQLRequest as codecToWireAppInvokeGraphQLRequest,
   toWireAppInvokeRequest as codecToWireAppInvokeRequest,
 } from "../../internal/codec/app.ts";
+import {
+  toWireAddRelationshipRequest as codecToWireAddRelationshipRequest,
+  toWireCheckAccessManyRequest as codecToWireCheckAccessManyRequest,
+  toWireCheckAccessRequest as codecToWireCheckAccessRequest,
+  toWireDeleteRelationshipRequest as codecToWireDeleteRelationshipRequest,
+  toWireListActiveModelResourceTypesRequest as codecToWireListActiveModelResourceTypesRequest,
+  toWireListRelationshipsRequest as codecToWireListRelationshipsRequest,
+  toWireSetActiveModelRequest as codecToWireSetActiveModelRequest,
+  toWireSetAuthorizationStateRequest as codecToWireSetAuthorizationStateRequest,
+} from "../../internal/codec/authorization.ts";
+import {
+  toWireCreateExternalCredentialRequest as codecToWireCreateExternalCredentialRequest,
+  toWireDeleteExternalCredentialRequest as codecToWireDeleteExternalCredentialRequest,
+  toWireExchangeExternalCredentialRequest as codecToWireExchangeExternalCredentialRequest,
+  toWireGetExternalCredentialRequest as codecToWireGetExternalCredentialRequest,
+  toWireListExternalCredentialsRequest as codecToWireListExternalCredentialsRequest,
+  toWireResolveExternalCredentialRequest as codecToWireResolveExternalCredentialRequest,
+  toWireUpsertExternalCredentialRequest as codecToWireUpsertExternalCredentialRequest,
+  toWireValidateExternalCredentialConfigRequest as codecToWireValidateExternalCredentialConfigRequest,
+} from "../../internal/codec/external_credential.ts";
+import {
+  toWireAuthorizeRequest as codecToWireAuthorizeRequest,
+  toWireGetGrantRequest as codecToWireGetGrantRequest,
+  toWireIntrospectRequest as codecToWireIntrospectRequest,
+  toWireListGrantsRequest as codecToWireListGrantsRequest,
+  toWireRevokeGrantRequest as codecToWireRevokeGrantRequest,
+  toWireTokenRequest as codecToWireTokenRequest,
+  toWireUserInfoRequest as codecToWireUserInfoRequest,
+} from "../../internal/codec/identity.ts";
+import {
+  toWireCreateIndexRequest as codecToWireCreateIndexRequest,
+  toWireCreateObjectStoreRequest as codecToWireCreateObjectStoreRequest,
+  toWireDeleteIndexRequest as codecToWireDeleteIndexRequest,
+  toWireDeleteObjectStoreRequest as codecToWireDeleteObjectStoreRequest,
+  toWireIndexQueryRequest as codecToWireIndexQueryRequest,
+  toWireObjectStoreNameRequest as codecToWireObjectStoreNameRequest,
+  toWireObjectStoreRangeRequest as codecToWireObjectStoreRangeRequest,
+  toWireObjectStoreRequest as codecToWireObjectStoreRequest,
+  toWireRecordRequest as codecToWireRecordRequest,
+} from "../../internal/codec/indexeddb.ts";
+import {
+  toWireApplyWorkflowProviderDefinitionRequest as codecToWireApplyWorkflowProviderDefinitionRequest,
+  toWireCancelWorkflowProviderRunRequest as codecToWireCancelWorkflowProviderRunRequest,
+  toWireDeleteWorkflowProviderDefinitionRequest as codecToWireDeleteWorkflowProviderDefinitionRequest,
+  toWireGetWorkflowProviderDefinitionRequest as codecToWireGetWorkflowProviderDefinitionRequest,
+  toWireGetWorkflowProviderRunEventsRequest as codecToWireGetWorkflowProviderRunEventsRequest,
+  toWireGetWorkflowProviderRunOutputRequest as codecToWireGetWorkflowProviderRunOutputRequest,
+  toWireGetWorkflowProviderRunRequest as codecToWireGetWorkflowProviderRunRequest,
+  toWireListWorkflowProviderDefinitionsRequest as codecToWireListWorkflowProviderDefinitionsRequest,
+  toWireListWorkflowProviderRunsRequest as codecToWireListWorkflowProviderRunsRequest,
+  toWireSetWorkflowProviderActivationPausedRequest as codecToWireSetWorkflowProviderActivationPausedRequest,
+  toWireSetWorkflowProviderDefinitionPausedRequest as codecToWireSetWorkflowProviderDefinitionPausedRequest,
+  toWireSignalOrStartWorkflowProviderRunRequest as codecToWireSignalOrStartWorkflowProviderRunRequest,
+  toWireSignalWorkflowProviderRunRequest as codecToWireSignalWorkflowProviderRunRequest,
+  toWireStartWorkflowProviderRunRequest as codecToWireStartWorkflowProviderRunRequest,
+} from "../../internal/codec/workflow.ts";
+import type {
+  CancelAgentProviderTurnRequest as NativeCancelAgentProviderTurnRequest,
+  CreateAgentProviderSessionRequest as NativeCreateAgentProviderSessionRequest,
+  CreateAgentProviderTurnRequest as NativeCreateAgentProviderTurnRequest,
+  GetAgentProviderSessionRequest as NativeGetAgentProviderSessionRequest,
+  GetAgentProviderTurnRequest as NativeGetAgentProviderTurnRequest,
+  ListAgentProviderSessionsRequest as NativeListAgentProviderSessionsRequest,
+  ListAgentProviderTurnEventsRequest as NativeListAgentProviderTurnEventsRequest,
+  ListAgentProviderTurnsRequest as NativeListAgentProviderTurnsRequest,
+  UpdateAgentProviderSessionRequest as NativeUpdateAgentProviderSessionRequest,
+} from "../../agent.ts";
 import type {
   AppInvokeGraphQLRequest as NativeAppInvokeGraphQLRequest,
   AppInvokeRequest as NativeAppInvokeRequest,
 } from "../../app.ts";
 import type {
+  AddRelationshipRequest as NativeAddRelationshipRequest,
+  CheckAccessManyRequest as NativeCheckAccessManyRequest,
+  CheckAccessRequest as NativeCheckAccessRequest,
+  DeleteRelationshipRequest as NativeDeleteRelationshipRequest,
+  ListActiveModelResourceTypesRequest as NativeListActiveModelResourceTypesRequest,
+  ListRelationshipsRequest as NativeListRelationshipsRequest,
+  SetActiveModelRequest as NativeSetActiveModelRequest,
+  SetAuthorizationStateRequest as NativeSetAuthorizationStateRequest,
+} from "../../authorization.ts";
+import type {
+  CreateExternalCredentialRequest as NativeCreateExternalCredentialRequest,
+  DeleteExternalCredentialRequest as NativeDeleteExternalCredentialRequest,
+  ExchangeExternalCredentialRequest as NativeExchangeExternalCredentialRequest,
+  GetExternalCredentialRequest as NativeGetExternalCredentialRequest,
+  ListExternalCredentialsRequest as NativeListExternalCredentialsRequest,
+  ResolveExternalCredentialRequest as NativeResolveExternalCredentialRequest,
+  UpsertExternalCredentialRequest as NativeUpsertExternalCredentialRequest,
+  ValidateExternalCredentialConfigRequest as NativeValidateExternalCredentialConfigRequest,
+} from "../../external_credential.ts";
+import type {
+  AuthorizeRequest as NativeAuthorizeRequest,
+  GetGrantRequest as NativeGetGrantRequest,
+  IntrospectRequest as NativeIntrospectRequest,
+  ListGrantsRequest as NativeListGrantsRequest,
+  RevokeGrantRequest as NativeRevokeGrantRequest,
+  TokenRequest as NativeTokenRequest,
+  UserInfoRequest as NativeUserInfoRequest,
+} from "../../identity.ts";
+import type {
+  CreateIndexRequest as NativeCreateIndexRequest,
+  CreateObjectStoreRequest as NativeCreateObjectStoreRequest,
+  DeleteIndexRequest as NativeDeleteIndexRequest,
+  DeleteObjectStoreRequest as NativeDeleteObjectStoreRequest,
+  IndexQueryRequest as NativeIndexQueryRequest,
+  ObjectStoreNameRequest as NativeObjectStoreNameRequest,
+  ObjectStoreRangeRequest as NativeObjectStoreRangeRequest,
+  ObjectStoreRequest as NativeObjectStoreRequest,
+  RecordRequest as NativeRecordRequest,
+} from "../../indexeddb.ts";
+import type {
+  ApplyWorkflowProviderDefinitionRequest as NativeApplyWorkflowProviderDefinitionRequest,
+  CancelWorkflowProviderRunRequest as NativeCancelWorkflowProviderRunRequest,
+  DeleteWorkflowProviderDefinitionRequest as NativeDeleteWorkflowProviderDefinitionRequest,
+  GetWorkflowProviderDefinitionRequest as NativeGetWorkflowProviderDefinitionRequest,
+  GetWorkflowProviderRunEventsRequest as NativeGetWorkflowProviderRunEventsRequest,
+  GetWorkflowProviderRunOutputRequest as NativeGetWorkflowProviderRunOutputRequest,
+  GetWorkflowProviderRunRequest as NativeGetWorkflowProviderRunRequest,
+  ListWorkflowProviderDefinitionsRequest as NativeListWorkflowProviderDefinitionsRequest,
+  ListWorkflowProviderRunsRequest as NativeListWorkflowProviderRunsRequest,
+  SetWorkflowProviderActivationPausedRequest as NativeSetWorkflowProviderActivationPausedRequest,
+  SetWorkflowProviderDefinitionPausedRequest as NativeSetWorkflowProviderDefinitionPausedRequest,
+  SignalOrStartWorkflowProviderRunRequest as NativeSignalOrStartWorkflowProviderRunRequest,
+  SignalWorkflowProviderRunRequest as NativeSignalWorkflowProviderRunRequest,
+  StartWorkflowProviderRunRequest as NativeStartWorkflowProviderRunRequest,
+} from "../../workflow.ts";
+import type {
+  CancelAgentProviderTurnRequest,
+  CreateAgentProviderSessionRequest,
+  CreateAgentProviderTurnRequest,
+  GetAgentProviderSessionRequest,
+  GetAgentProviderTurnRequest,
+  ListAgentProviderSessionsRequest,
+  ListAgentProviderTurnEventsRequest,
+  ListAgentProviderTurnsRequest,
+  UpdateAgentProviderSessionRequest,
+} from "../../internal/gen/v1/agent_pb.ts";
+import type {
   AppInvokeGraphQLRequest,
   AppInvokeRequest,
 } from "../../internal/gen/v1/app_pb.ts";
+import type {
+  AddRelationshipRequest,
+  CheckAccessManyRequest,
+  CheckAccessRequest,
+  DeleteRelationshipRequest,
+  ListActiveModelResourceTypesRequest,
+  ListRelationshipsRequest,
+  SetActiveModelRequest,
+  SetAuthorizationStateRequest,
+} from "../../internal/gen/v1/authorization_pb.ts";
+import type {
+  CreateExternalCredentialRequest,
+  DeleteExternalCredentialRequest,
+  ExchangeExternalCredentialRequest,
+  GetExternalCredentialRequest,
+  ListExternalCredentialsRequest,
+  ResolveExternalCredentialRequest,
+  UpsertExternalCredentialRequest,
+  ValidateExternalCredentialConfigRequest,
+} from "../../internal/gen/v1/external_credential_pb.ts";
+import type {
+  AuthorizeRequest,
+  GetGrantRequest,
+  IntrospectRequest,
+  ListGrantsRequest,
+  RevokeGrantRequest,
+  TokenRequest,
+  UserInfoRequest,
+} from "../../internal/gen/v1/identity_pb.ts";
+import type {
+  CreateIndexRequest,
+  CreateObjectStoreRequest,
+  DeleteIndexRequest,
+  DeleteObjectStoreRequest,
+  IndexQueryRequest,
+  ObjectStoreNameRequest,
+  ObjectStoreRangeRequest,
+  ObjectStoreRequest,
+  RecordRequest,
+} from "../../internal/gen/v1/indexeddb_pb.ts";
+import type {
+  ApplyWorkflowProviderDefinitionRequest,
+  CancelWorkflowProviderRunRequest,
+  DeleteWorkflowProviderDefinitionRequest,
+  GetWorkflowProviderDefinitionRequest,
+  GetWorkflowProviderRunEventsRequest,
+  GetWorkflowProviderRunOutputRequest,
+  GetWorkflowProviderRunRequest,
+  ListWorkflowProviderDefinitionsRequest,
+  ListWorkflowProviderRunsRequest,
+  SetWorkflowProviderActivationPausedRequest,
+  SetWorkflowProviderDefinitionPausedRequest,
+  SignalOrStartWorkflowProviderRunRequest,
+  SignalWorkflowProviderRunRequest,
+  StartWorkflowProviderRunRequest,
+} from "../../internal/gen/v1/workflow_pb.ts";
 import type { Init } from "../../rpc_support.ts";
 import type {
+  PublicAgentCancelTurnRequest,
+  PublicAgentCreateSessionRequest,
+  PublicAgentCreateTurnRequest,
+  PublicAgentGetSessionRequest,
+  PublicAgentGetTurnRequest,
+  PublicAgentListSessionsRequest,
+  PublicAgentListTurnEventsRequest,
+  PublicAgentListTurnsRequest,
+  PublicAgentUpdateSessionRequest,
   PublicAppInvokeGraphQLRequest,
   PublicAppInvokeRequest,
+  PublicAuthorizationAddRelationshipRequest,
+  PublicAuthorizationCheckAccessManyRequest,
+  PublicAuthorizationCheckAccessRequest,
+  PublicAuthorizationDeleteRelationshipRequest,
+  PublicAuthorizationListActiveModelResourceTypesRequest,
+  PublicAuthorizationListRelationshipsRequest,
+  PublicAuthorizationSetActiveModelRequest,
+  PublicAuthorizationSetAuthorizationStateRequest,
+  PublicExternalCredentialsCreateCredentialRequest,
+  PublicExternalCredentialsDeleteCredentialRequest,
+  PublicExternalCredentialsExchangeCredentialRequest,
+  PublicExternalCredentialsGetCredentialRequest,
+  PublicExternalCredentialsListCredentialsRequest,
+  PublicExternalCredentialsResolveCredentialRequest,
+  PublicExternalCredentialsUpsertCredentialRequest,
+  PublicExternalCredentialsValidateCredentialConfigRequest,
+  PublicIdentityAuthorizeRequest,
+  PublicIdentityGetGrantRequest,
+  PublicIdentityIntrospectRequest,
+  PublicIdentityListGrantsRequest,
+  PublicIdentityRevokeGrantRequest,
+  PublicIdentityTokenRequest,
+  PublicIdentityUserInfoRequest,
+  PublicIndexedDBAddRequest,
+  PublicIndexedDBClearRequest,
+  PublicIndexedDBCountRequest,
+  PublicIndexedDBCreateIndexRequest,
+  PublicIndexedDBCreateObjectStoreRequest,
+  PublicIndexedDBDeleteIndexRequest,
+  PublicIndexedDBDeleteObjectStoreRequest,
+  PublicIndexedDBDeleteRangeRequest,
+  PublicIndexedDBDeleteRequest,
+  PublicIndexedDBGetAllKeysRequest,
+  PublicIndexedDBGetAllRequest,
+  PublicIndexedDBGetKeyRequest,
+  PublicIndexedDBGetRequest,
+  PublicIndexedDBIndexCountRequest,
+  PublicIndexedDBIndexDeleteRequest,
+  PublicIndexedDBIndexGetAllKeysRequest,
+  PublicIndexedDBIndexGetAllRequest,
+  PublicIndexedDBIndexGetKeyRequest,
+  PublicIndexedDBIndexGetRequest,
+  PublicIndexedDBPutRequest,
+  PublicWorkflowApplyDefinitionRequest,
+  PublicWorkflowCancelRunRequest,
+  PublicWorkflowDeleteDefinitionRequest,
+  PublicWorkflowGetDefinitionRequest,
+  PublicWorkflowGetRunEventsRequest,
+  PublicWorkflowGetRunOutputRequest,
+  PublicWorkflowGetRunRequest,
+  PublicWorkflowListDefinitionsRequest,
+  PublicWorkflowListRunsRequest,
+  PublicWorkflowSetActivationPausedRequest,
+  PublicWorkflowSetDefinitionPausedRequest,
+  PublicWorkflowSignalOrStartRunRequest,
+  PublicWorkflowSignalRunRequest,
+  PublicWorkflowStartRunRequest,
 } from "./types.ts";
+
+export function toWireAddRelationshipRequest(
+  request: PublicAuthorizationAddRelationshipRequest,
+): AddRelationshipRequest {
+  return codecToWireAddRelationshipRequest(
+    request as Init<NativeAddRelationshipRequest>,
+  );
+}
 
 export function toWireAppInvokeGraphQLRequest(
   request: PublicAppInvokeGraphQLRequest,
@@ -36,4 +311,433 @@ export function toWireAppInvokeRequest(
   request: PublicAppInvokeRequest,
 ): AppInvokeRequest {
   return codecToWireAppInvokeRequest(request as Init<NativeAppInvokeRequest>);
+}
+
+export function toWireApplyWorkflowProviderDefinitionRequest(
+  request: PublicWorkflowApplyDefinitionRequest,
+): ApplyWorkflowProviderDefinitionRequest {
+  return codecToWireApplyWorkflowProviderDefinitionRequest(
+    request as Init<NativeApplyWorkflowProviderDefinitionRequest>,
+  );
+}
+
+export function toWireAuthorizeRequest(
+  request: PublicIdentityAuthorizeRequest,
+): AuthorizeRequest {
+  return codecToWireAuthorizeRequest(request as Init<NativeAuthorizeRequest>);
+}
+
+export function toWireCancelAgentProviderTurnRequest(
+  request: PublicAgentCancelTurnRequest,
+): CancelAgentProviderTurnRequest {
+  return codecToWireCancelAgentProviderTurnRequest(
+    request as Init<NativeCancelAgentProviderTurnRequest>,
+  );
+}
+
+export function toWireCancelWorkflowProviderRunRequest(
+  request: PublicWorkflowCancelRunRequest,
+): CancelWorkflowProviderRunRequest {
+  return codecToWireCancelWorkflowProviderRunRequest(
+    request as Init<NativeCancelWorkflowProviderRunRequest>,
+  );
+}
+
+export function toWireCheckAccessManyRequest(
+  request: PublicAuthorizationCheckAccessManyRequest,
+): CheckAccessManyRequest {
+  return codecToWireCheckAccessManyRequest(
+    request as Init<NativeCheckAccessManyRequest>,
+  );
+}
+
+export function toWireCheckAccessRequest(
+  request: PublicAuthorizationCheckAccessRequest,
+): CheckAccessRequest {
+  return codecToWireCheckAccessRequest(
+    request as Init<NativeCheckAccessRequest>,
+  );
+}
+
+export function toWireCreateAgentProviderSessionRequest(
+  request: PublicAgentCreateSessionRequest,
+): CreateAgentProviderSessionRequest {
+  return codecToWireCreateAgentProviderSessionRequest(
+    request as Init<NativeCreateAgentProviderSessionRequest>,
+  );
+}
+
+export function toWireCreateAgentProviderTurnRequest(
+  request: PublicAgentCreateTurnRequest,
+): CreateAgentProviderTurnRequest {
+  return codecToWireCreateAgentProviderTurnRequest(
+    request as Init<NativeCreateAgentProviderTurnRequest>,
+  );
+}
+
+export function toWireCreateExternalCredentialRequest(
+  request: PublicExternalCredentialsCreateCredentialRequest,
+): CreateExternalCredentialRequest {
+  return codecToWireCreateExternalCredentialRequest(
+    request as Init<NativeCreateExternalCredentialRequest>,
+  );
+}
+
+export function toWireCreateIndexRequest(
+  request: PublicIndexedDBCreateIndexRequest,
+): CreateIndexRequest {
+  return codecToWireCreateIndexRequest(
+    request as Init<NativeCreateIndexRequest>,
+  );
+}
+
+export function toWireCreateObjectStoreRequest(
+  request: PublicIndexedDBCreateObjectStoreRequest,
+): CreateObjectStoreRequest {
+  return codecToWireCreateObjectStoreRequest(
+    request as Init<NativeCreateObjectStoreRequest>,
+  );
+}
+
+export function toWireDeleteExternalCredentialRequest(
+  request: PublicExternalCredentialsDeleteCredentialRequest,
+): DeleteExternalCredentialRequest {
+  return codecToWireDeleteExternalCredentialRequest(
+    request as Init<NativeDeleteExternalCredentialRequest>,
+  );
+}
+
+export function toWireDeleteIndexRequest(
+  request: PublicIndexedDBDeleteIndexRequest,
+): DeleteIndexRequest {
+  return codecToWireDeleteIndexRequest(
+    request as Init<NativeDeleteIndexRequest>,
+  );
+}
+
+export function toWireDeleteObjectStoreRequest(
+  request: PublicIndexedDBDeleteObjectStoreRequest,
+): DeleteObjectStoreRequest {
+  return codecToWireDeleteObjectStoreRequest(
+    request as Init<NativeDeleteObjectStoreRequest>,
+  );
+}
+
+export function toWireDeleteRelationshipRequest(
+  request: PublicAuthorizationDeleteRelationshipRequest,
+): DeleteRelationshipRequest {
+  return codecToWireDeleteRelationshipRequest(
+    request as Init<NativeDeleteRelationshipRequest>,
+  );
+}
+
+export function toWireDeleteWorkflowProviderDefinitionRequest(
+  request: PublicWorkflowDeleteDefinitionRequest,
+): DeleteWorkflowProviderDefinitionRequest {
+  return codecToWireDeleteWorkflowProviderDefinitionRequest(
+    request as Init<NativeDeleteWorkflowProviderDefinitionRequest>,
+  );
+}
+
+export function toWireExchangeExternalCredentialRequest(
+  request: PublicExternalCredentialsExchangeCredentialRequest,
+): ExchangeExternalCredentialRequest {
+  return codecToWireExchangeExternalCredentialRequest(
+    request as Init<NativeExchangeExternalCredentialRequest>,
+  );
+}
+
+export function toWireGetAgentProviderSessionRequest(
+  request: PublicAgentGetSessionRequest,
+): GetAgentProviderSessionRequest {
+  return codecToWireGetAgentProviderSessionRequest(
+    request as Init<NativeGetAgentProviderSessionRequest>,
+  );
+}
+
+export function toWireGetAgentProviderTurnRequest(
+  request: PublicAgentGetTurnRequest,
+): GetAgentProviderTurnRequest {
+  return codecToWireGetAgentProviderTurnRequest(
+    request as Init<NativeGetAgentProviderTurnRequest>,
+  );
+}
+
+export function toWireGetExternalCredentialRequest(
+  request: PublicExternalCredentialsGetCredentialRequest,
+): GetExternalCredentialRequest {
+  return codecToWireGetExternalCredentialRequest(
+    request as Init<NativeGetExternalCredentialRequest>,
+  );
+}
+
+export function toWireGetGrantRequest(
+  request: PublicIdentityGetGrantRequest,
+): GetGrantRequest {
+  return codecToWireGetGrantRequest(request as Init<NativeGetGrantRequest>);
+}
+
+export function toWireGetWorkflowProviderDefinitionRequest(
+  request: PublicWorkflowGetDefinitionRequest,
+): GetWorkflowProviderDefinitionRequest {
+  return codecToWireGetWorkflowProviderDefinitionRequest(
+    request as Init<NativeGetWorkflowProviderDefinitionRequest>,
+  );
+}
+
+export function toWireGetWorkflowProviderRunEventsRequest(
+  request: PublicWorkflowGetRunEventsRequest,
+): GetWorkflowProviderRunEventsRequest {
+  return codecToWireGetWorkflowProviderRunEventsRequest(
+    request as Init<NativeGetWorkflowProviderRunEventsRequest>,
+  );
+}
+
+export function toWireGetWorkflowProviderRunOutputRequest(
+  request: PublicWorkflowGetRunOutputRequest,
+): GetWorkflowProviderRunOutputRequest {
+  return codecToWireGetWorkflowProviderRunOutputRequest(
+    request as Init<NativeGetWorkflowProviderRunOutputRequest>,
+  );
+}
+
+export function toWireGetWorkflowProviderRunRequest(
+  request: PublicWorkflowGetRunRequest,
+): GetWorkflowProviderRunRequest {
+  return codecToWireGetWorkflowProviderRunRequest(
+    request as Init<NativeGetWorkflowProviderRunRequest>,
+  );
+}
+
+export function toWireIndexQueryRequest(
+  request:
+    | PublicIndexedDBIndexCountRequest
+    | PublicIndexedDBIndexDeleteRequest
+    | PublicIndexedDBIndexGetAllKeysRequest
+    | PublicIndexedDBIndexGetAllRequest
+    | PublicIndexedDBIndexGetKeyRequest
+    | PublicIndexedDBIndexGetRequest,
+): IndexQueryRequest {
+  return codecToWireIndexQueryRequest(request as Init<NativeIndexQueryRequest>);
+}
+
+export function toWireIntrospectRequest(
+  request: PublicIdentityIntrospectRequest,
+): IntrospectRequest {
+  return codecToWireIntrospectRequest(request as Init<NativeIntrospectRequest>);
+}
+
+export function toWireListActiveModelResourceTypesRequest(
+  request: PublicAuthorizationListActiveModelResourceTypesRequest,
+): ListActiveModelResourceTypesRequest {
+  return codecToWireListActiveModelResourceTypesRequest(
+    request as Init<NativeListActiveModelResourceTypesRequest>,
+  );
+}
+
+export function toWireListAgentProviderSessionsRequest(
+  request: PublicAgentListSessionsRequest,
+): ListAgentProviderSessionsRequest {
+  return codecToWireListAgentProviderSessionsRequest(
+    request as Init<NativeListAgentProviderSessionsRequest>,
+  );
+}
+
+export function toWireListAgentProviderTurnEventsRequest(
+  request: PublicAgentListTurnEventsRequest,
+): ListAgentProviderTurnEventsRequest {
+  return codecToWireListAgentProviderTurnEventsRequest(
+    request as Init<NativeListAgentProviderTurnEventsRequest>,
+  );
+}
+
+export function toWireListAgentProviderTurnsRequest(
+  request: PublicAgentListTurnsRequest,
+): ListAgentProviderTurnsRequest {
+  return codecToWireListAgentProviderTurnsRequest(
+    request as Init<NativeListAgentProviderTurnsRequest>,
+  );
+}
+
+export function toWireListExternalCredentialsRequest(
+  request: PublicExternalCredentialsListCredentialsRequest,
+): ListExternalCredentialsRequest {
+  return codecToWireListExternalCredentialsRequest(
+    request as Init<NativeListExternalCredentialsRequest>,
+  );
+}
+
+export function toWireListGrantsRequest(
+  request: PublicIdentityListGrantsRequest,
+): ListGrantsRequest {
+  return codecToWireListGrantsRequest(request as Init<NativeListGrantsRequest>);
+}
+
+export function toWireListRelationshipsRequest(
+  request: PublicAuthorizationListRelationshipsRequest,
+): ListRelationshipsRequest {
+  return codecToWireListRelationshipsRequest(
+    request as Init<NativeListRelationshipsRequest>,
+  );
+}
+
+export function toWireListWorkflowProviderDefinitionsRequest(
+  request: PublicWorkflowListDefinitionsRequest,
+): ListWorkflowProviderDefinitionsRequest {
+  return codecToWireListWorkflowProviderDefinitionsRequest(
+    request as Init<NativeListWorkflowProviderDefinitionsRequest>,
+  );
+}
+
+export function toWireListWorkflowProviderRunsRequest(
+  request: PublicWorkflowListRunsRequest,
+): ListWorkflowProviderRunsRequest {
+  return codecToWireListWorkflowProviderRunsRequest(
+    request as Init<NativeListWorkflowProviderRunsRequest>,
+  );
+}
+
+export function toWireObjectStoreNameRequest(
+  request: PublicIndexedDBClearRequest,
+): ObjectStoreNameRequest {
+  return codecToWireObjectStoreNameRequest(
+    request as Init<NativeObjectStoreNameRequest>,
+  );
+}
+
+export function toWireObjectStoreRangeRequest(
+  request:
+    | PublicIndexedDBCountRequest
+    | PublicIndexedDBDeleteRangeRequest
+    | PublicIndexedDBGetAllKeysRequest
+    | PublicIndexedDBGetAllRequest,
+): ObjectStoreRangeRequest {
+  return codecToWireObjectStoreRangeRequest(
+    request as Init<NativeObjectStoreRangeRequest>,
+  );
+}
+
+export function toWireObjectStoreRequest(
+  request:
+    | PublicIndexedDBDeleteRequest
+    | PublicIndexedDBGetKeyRequest
+    | PublicIndexedDBGetRequest,
+): ObjectStoreRequest {
+  return codecToWireObjectStoreRequest(
+    request as Init<NativeObjectStoreRequest>,
+  );
+}
+
+export function toWireRecordRequest(
+  request: PublicIndexedDBAddRequest | PublicIndexedDBPutRequest,
+): RecordRequest {
+  return codecToWireRecordRequest(request as Init<NativeRecordRequest>);
+}
+
+export function toWireResolveExternalCredentialRequest(
+  request: PublicExternalCredentialsResolveCredentialRequest,
+): ResolveExternalCredentialRequest {
+  return codecToWireResolveExternalCredentialRequest(
+    request as Init<NativeResolveExternalCredentialRequest>,
+  );
+}
+
+export function toWireRevokeGrantRequest(
+  request: PublicIdentityRevokeGrantRequest,
+): RevokeGrantRequest {
+  return codecToWireRevokeGrantRequest(
+    request as Init<NativeRevokeGrantRequest>,
+  );
+}
+
+export function toWireSetActiveModelRequest(
+  request: PublicAuthorizationSetActiveModelRequest,
+): SetActiveModelRequest {
+  return codecToWireSetActiveModelRequest(
+    request as Init<NativeSetActiveModelRequest>,
+  );
+}
+
+export function toWireSetAuthorizationStateRequest(
+  request: PublicAuthorizationSetAuthorizationStateRequest,
+): SetAuthorizationStateRequest {
+  return codecToWireSetAuthorizationStateRequest(
+    request as Init<NativeSetAuthorizationStateRequest>,
+  );
+}
+
+export function toWireSetWorkflowProviderActivationPausedRequest(
+  request: PublicWorkflowSetActivationPausedRequest,
+): SetWorkflowProviderActivationPausedRequest {
+  return codecToWireSetWorkflowProviderActivationPausedRequest(
+    request as Init<NativeSetWorkflowProviderActivationPausedRequest>,
+  );
+}
+
+export function toWireSetWorkflowProviderDefinitionPausedRequest(
+  request: PublicWorkflowSetDefinitionPausedRequest,
+): SetWorkflowProviderDefinitionPausedRequest {
+  return codecToWireSetWorkflowProviderDefinitionPausedRequest(
+    request as Init<NativeSetWorkflowProviderDefinitionPausedRequest>,
+  );
+}
+
+export function toWireSignalOrStartWorkflowProviderRunRequest(
+  request: PublicWorkflowSignalOrStartRunRequest,
+): SignalOrStartWorkflowProviderRunRequest {
+  return codecToWireSignalOrStartWorkflowProviderRunRequest(
+    request as Init<NativeSignalOrStartWorkflowProviderRunRequest>,
+  );
+}
+
+export function toWireSignalWorkflowProviderRunRequest(
+  request: PublicWorkflowSignalRunRequest,
+): SignalWorkflowProviderRunRequest {
+  return codecToWireSignalWorkflowProviderRunRequest(
+    request as Init<NativeSignalWorkflowProviderRunRequest>,
+  );
+}
+
+export function toWireStartWorkflowProviderRunRequest(
+  request: PublicWorkflowStartRunRequest,
+): StartWorkflowProviderRunRequest {
+  return codecToWireStartWorkflowProviderRunRequest(
+    request as Init<NativeStartWorkflowProviderRunRequest>,
+  );
+}
+
+export function toWireTokenRequest(
+  request: PublicIdentityTokenRequest,
+): TokenRequest {
+  return codecToWireTokenRequest(request as Init<NativeTokenRequest>);
+}
+
+export function toWireUpdateAgentProviderSessionRequest(
+  request: PublicAgentUpdateSessionRequest,
+): UpdateAgentProviderSessionRequest {
+  return codecToWireUpdateAgentProviderSessionRequest(
+    request as Init<NativeUpdateAgentProviderSessionRequest>,
+  );
+}
+
+export function toWireUpsertExternalCredentialRequest(
+  request: PublicExternalCredentialsUpsertCredentialRequest,
+): UpsertExternalCredentialRequest {
+  return codecToWireUpsertExternalCredentialRequest(
+    request as Init<NativeUpsertExternalCredentialRequest>,
+  );
+}
+
+export function toWireUserInfoRequest(
+  request: PublicIdentityUserInfoRequest,
+): UserInfoRequest {
+  return codecToWireUserInfoRequest(request as Init<NativeUserInfoRequest>);
+}
+
+export function toWireValidateExternalCredentialConfigRequest(
+  request: PublicExternalCredentialsValidateCredentialConfigRequest,
+): ValidateExternalCredentialConfigRequest {
+  return codecToWireValidateExternalCredentialConfigRequest(
+    request as Init<NativeValidateExternalCredentialConfigRequest>,
+  );
 }

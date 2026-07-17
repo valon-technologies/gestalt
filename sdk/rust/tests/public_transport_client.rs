@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use base64::Engine;
 use gestalt::public::auth::{Auth, BearerAuth, NoAuth};
-use gestalt::public::client::{Transport, create_gestalt_client};
+use gestalt::public::client::create_rest_gestalt_client;
 use gestalt::public::generated::app::AppInvokeRequest;
 use gestalt::public::generated::app_client::AppClient;
 use gestalt::public::rest_transport::RestTransport;
@@ -15,7 +15,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
 async fn create_client_requires_address() {
-    let result = create_gestalt_client("", NoAuth, Transport::Rest).await;
+    let result = create_rest_gestalt_client("", NoAuth).await;
     let Err(err) = result else {
         panic!("expected empty address to fail");
     };
@@ -116,13 +116,11 @@ async fn create_rest_client_factory() {
         .mount(&server)
         .await;
 
-    let client = create_gestalt_client(server.uri(), BearerAuth::new("token"), Transport::Rest)
+    let client = create_rest_gestalt_client(server.uri(), BearerAuth::new("token"))
         .await
         .expect("client");
-    let gestalt::public::client::GestaltClient::Rest(app) = client else {
-        panic!("expected REST client");
-    };
-    let result = app
+    let result = client
+        .app
         .invoke(AppInvokeRequest {
             app: "example".to_string(),
             operation: "sync".to_string(),
@@ -131,6 +129,128 @@ async fn create_rest_client_factory() {
         .await
         .expect("invoke");
     assert_eq!(result, json!({"ok": true}));
+}
+
+#[path = "../src/generated.rs"]
+mod generated;
+
+#[tokio::test]
+async fn grpc_transport_invoke_success() {
+    use generated::v1::app_server::{App, AppServer};
+    use generated::v1::{AppInvokeGraphQlRequest, AppInvokeRequest, OperationResult};
+    use gestalt::public::grpc_transport::GrpcTransport;
+    use tokio_stream::wrappers::TcpListenerStream;
+    use tonic::transport::Server;
+    use tonic::{Request, Response, Status};
+
+    struct StubApp;
+
+    #[tonic::async_trait]
+    impl App for StubApp {
+        async fn invoke(
+            &self,
+            _request: Request<AppInvokeRequest>,
+        ) -> Result<Response<OperationResult>, Status> {
+            Ok(Response::new(OperationResult {
+                status: 200,
+                body: br#"{"status":"success","data":{"ok":true}}"#.to_vec(),
+                ..Default::default()
+            }))
+        }
+
+        async fn invoke_graph_ql(
+            &self,
+            _request: Request<AppInvokeGraphQlRequest>,
+        ) -> Result<Response<OperationResult>, Status> {
+            Err(Status::unimplemented("unused"))
+        }
+    }
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("addr");
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(AppServer::new(StubApp))
+            .serve_with_incoming(TcpListenerStream::new(listener))
+            .await
+            .expect("serve");
+    });
+
+    let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}"))
+        .expect("endpoint")
+        .connect()
+        .await
+        .expect("connect");
+    let client = AppClient::new(GrpcTransport::new(channel, Arc::new(NoAuth)));
+    let result = client
+        .invoke(gestalt::public::generated::app::AppInvokeRequest {
+            app: "example".to_string(),
+            operation: "sync".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("invoke");
+    assert_eq!(result, json!({"ok": true}));
+}
+
+#[tokio::test]
+async fn rest_transport_rejects_grpc_only_method() {
+    use gestalt::public::generated::metadata::Empty;
+    use gestalt::public::generated::metadata::METHOD_INDEXED_D_B_GET;
+    use gestalt::public::generated::unary_transport::UnaryTransport;
+
+    let transport = RestTransport::new("http://example.com".to_string(), Arc::new(NoAuth));
+    let mut response = Empty::default();
+    let err = transport
+        .unary(&METHOD_INDEXED_D_B_GET, &Empty::default(), &mut response)
+        .await
+        .expect_err("grpc-only method");
+    assert_eq!(err.code, gestalt_error_code::INVALID_ARGUMENT);
+}
+
+#[tokio::test]
+async fn agent_get_session_uses_rest_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v2/agent/sessions/sess-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"session": {}})))
+        .mount(&server)
+        .await;
+
+    let client = create_rest_gestalt_client(server.uri(), NoAuth)
+        .await
+        .expect("client");
+    client
+        .agent
+        .get_session(
+            gestalt::public::generated::agent::GetAgentProviderSessionRequest {
+                session_id: "sess-1".to_string(),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("get session");
+}
+
+#[tokio::test]
+async fn authorization_get_active_model_ref_empty_input() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v2/authorization/models/active"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .mount(&server)
+        .await;
+
+    let client = create_rest_gestalt_client(server.uri(), NoAuth)
+        .await
+        .expect("client");
+    client
+        .authorization
+        .get_active_model_ref()
+        .await
+        .expect("get active model ref");
 }
 
 #[tokio::test]

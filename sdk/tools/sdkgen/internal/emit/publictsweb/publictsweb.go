@@ -7,6 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/ts"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/toolchain"
 )
 
@@ -29,5 +30,9 @@ func (*Emitter) Formatter() *toolchain.Tool { return toolchain.Prettier() }
 func (*Emitter) StaleScope() func(rel string) bool { return nil }
 
 func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
-	return ts.EmitPublic(schema, ts.WebPublicImports())
+	plan, err := publicsurface.PrepareRESTEmit(schema)
+	if err != nil {
+		return nil, err
+	}
+	return ts.EmitPublicPlan(plan, ts.WebPublicImports())
 }

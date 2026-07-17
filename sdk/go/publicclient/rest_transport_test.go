@@ -147,36 +147,32 @@ func TestUnauthenticatedOmitsAuthorizationHeader(t *testing.T) {
 }
 
 func TestNewRequiresValidAddress(t *testing.T) {
-	_, err := publicclient.New(publicclient.Options{
-		Address:   "",
-		Transport: publicclient.REST(),
-		Auth:      publicclient.Unauthenticated(),
+	_, err := publicclient.NewREST(publicclient.AddressOptions{
+		Address: "",
+		Auth:    publicclient.Unauthenticated(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "address is required") {
 		t.Fatalf("error = %v", err)
 	}
 
-	_, err = publicclient.New(publicclient.Options{
-		Address:   "not-a-url",
-		Transport: publicclient.REST(),
-		Auth:      publicclient.Unauthenticated(),
+	_, err = publicclient.NewREST(publicclient.AddressOptions{
+		Address: "not-a-url",
+		Auth:    publicclient.Unauthenticated(),
 	})
 	if err == nil {
 		t.Fatal("expected invalid address error")
 	}
 
-	_, err = publicclient.New(publicclient.Options{
-		Transport: publicclient.GRPC(),
-		Auth:      publicclient.Unauthenticated(),
+	_, err = publicclient.NewGRPC(publicclient.AddressOptions{
+		Auth: publicclient.Unauthenticated(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "address is required") {
 		t.Fatalf("gRPC error = %v", err)
 	}
 
-	_, err = publicclient.New(publicclient.Options{
-		Address:   "ftp://example.com",
-		Transport: publicclient.GRPC(),
-		Auth:      publicclient.Unauthenticated(),
+	_, err = publicclient.NewGRPC(publicclient.AddressOptions{
+		Address: "ftp://example.com",
+		Auth:    publicclient.Unauthenticated(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "unsupported address scheme") {
 		t.Fatalf("unsupported scheme error = %v", err)

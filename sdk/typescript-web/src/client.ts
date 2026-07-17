@@ -7,7 +7,11 @@
 import type { JsonObject } from "@bufbuild/protobuf";
 
 import { normalizeAddress } from "./address.ts";
+import { AgentClient } from "./client/generated/agent_client.ts";
 import { AppClient } from "./client/generated/app_client.ts";
+import { AuthorizationClient } from "./client/generated/authorization_client.ts";
+import { IdentityClient } from "./client/generated/identity_client.ts";
+import { WorkflowClient } from "./client/generated/workflow_client.ts";
 import type { PublicAppInvokeRequest } from "./client/generated/types.ts";
 import type {
   PublicUnaryCallOptions,
@@ -40,6 +44,10 @@ export interface ClientOptions {
 export interface GestaltClient {
   readonly address: string;
   readonly app: AppClient;
+  readonly agent: AgentClient;
+  readonly workflow: WorkflowClient;
+  readonly identity: IdentityClient;
+  readonly authorization: AuthorizationClient;
 }
 
 /** App-scoped invoke params: bind the app name once, pass only operation + params. */
@@ -79,15 +87,18 @@ export function unauthenticated(): Unauthenticated {
 
 export function createGestaltClient(options: ClientOptions): GestaltClient {
   const address = resolveAddress(options.address);
+  const transport = createRestUnaryTransport({
+    baseUrl: address,
+    auth: options.auth,
+    ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+  });
   return {
     address,
-    app: new AppClient(
-      createRestUnaryTransport({
-        baseUrl: address,
-        auth: options.auth,
-        ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
-      }),
-    ),
+    app: new AppClient(transport),
+    agent: new AgentClient(transport),
+    workflow: new WorkflowClient(transport),
+    identity: new IdentityClient(transport),
+    authorization: new AuthorizationClient(transport),
   };
 }
 

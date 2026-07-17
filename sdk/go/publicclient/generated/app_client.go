@@ -14,7 +14,7 @@ type AppClient struct {
 	transport UnaryTransport
 }
 
-// NewAppClient creates an AppClient over the given transport.
+// NewAppClient creates a AppClient over the given transport.
 func NewAppClient(transport UnaryTransport) *AppClient {
 	return &AppClient{transport: transport}
 }
@@ -49,3 +49,22 @@ func (c *AppClient) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQL
 func (c *AppClient) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {
 	return c.InvokeGraphQL(ctx, request)
 }
+
+func (c *AppClient) InvokeGraphQLDecoded(ctx context.Context, request *AppInvokeGraphQLRequest) (any, error) {
+	out, err := c.InvokeGraphQL(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return gestaltclient.DecodeGraphQLResult(request.App, out.Status, out.Body)
+}
+
+// AppClientREST exposes only REST-backed methods for App.
+type AppClientREST interface {
+	InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*OperationResult, error)
+	Invoke(ctx context.Context, request *AppInvokeRequest) (any, error)
+	InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error)
+	InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error)
+	InvokeGraphQLDecoded(ctx context.Context, request *AppInvokeGraphQLRequest) (any, error)
+}
+
+var _ AppClientREST = (*AppClient)(nil)

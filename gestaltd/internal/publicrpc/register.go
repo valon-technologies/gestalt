@@ -71,7 +71,8 @@ func RegisterPublicServer(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDes
 }
 
 // RegisterRESTGateway registers generated /api/v2 handlers that dispatch through
-// conn. IndexedDB and ExternalCredentials are intentionally excluded.
+// conn. IndexedDB and ExternalCredentials are intentionally excluded because
+// they have no registerREST handler.
 func RegisterRESTGateway(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn, servers Servers) error {
 	if mux == nil || conn == nil {
 		return nil

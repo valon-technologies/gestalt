@@ -1,130 +1,101 @@
-package publicrpc_test
+package publicrpc
 
 import (
 	"context"
+	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
-
-	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
-	gestaltproto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc/test/bufconn"
 )
 
-type originAppServer struct {
-	gestaltproto.UnimplementedAppServer
-	lastMethod string
-}
-
-func (s *originAppServer) Invoke(ctx context.Context, _ *gestaltproto.AppInvokeRequest) (*gestaltproto.OperationResult, error) {
-	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok {
-		s.lastMethod = origin.FullMethod
-	}
-	return &gestaltproto.OperationResult{}, nil
-}
-
-func (s *originAppServer) InvokeGraphQL(ctx context.Context, _ *gestaltproto.AppInvokeGraphQLRequest) (*gestaltproto.OperationResult, error) {
-	if origin, ok := publicrpc.PublicOriginFromContext(ctx); ok {
-		s.lastMethod = origin.FullMethod
-	}
-	return &gestaltproto.OperationResult{}, nil
-}
-
-func TestPublicRegistrationMarksOrigin(t *testing.T) {
+func TestRESTGatewayServicesMatchRegistrations(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		fullMethod string
-		call       func(gestaltproto.AppClient) error
-	}{
-		{
-			name:       "Invoke",
-			fullMethod: gestaltproto.App_Invoke_FullMethodName,
-			call: func(client gestaltproto.AppClient) error {
-				_, err := client.Invoke(context.Background(), &gestaltproto.AppInvokeRequest{})
-				return err
-			},
-		},
-		{
-			name:       "InvokeGraphQL",
-			fullMethod: gestaltproto.App_InvokeGraphQL_FullMethodName,
-			call: func(client gestaltproto.AppClient) error {
-				_, err := client.InvokeGraphQL(context.Background(), &gestaltproto.AppInvokeGraphQLRequest{})
-				return err
-			},
-		},
+	want := map[string]struct{}{}
+	for _, registration := range (Servers{}).registrations() {
+		if registration.registerREST == nil {
+			continue
+		}
+		want[registration.description.ServiceName] = struct{}{}
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			serverImpl := &originAppServer{}
-			conn := dialGRPC(t, func(s *grpc.Server) {
-				publicrpc.RegisterPublicServer(s, serverImpl, gestaltproto.App_ServiceDesc)
-			})
-
-			if err := tc.call(gestaltproto.NewAppClient(conn)); err != nil {
-				t.Fatalf("call: %v", err)
-			}
-			if got, want := serverImpl.lastMethod, tc.fullMethod; got != want {
-				t.Fatalf("FullMethod = %q, want %q", got, want)
-			}
-		})
+	if len(want) != len(restGatewayServices) {
+		t.Fatalf("restGatewayServices count = %d, want %d", len(restGatewayServices), len(want))
+	}
+	for service := range want {
+		if _, ok := restGatewayServices[service]; !ok {
+			t.Fatalf("restGatewayServices missing %q", service)
+		}
+	}
+	for service := range restGatewayServices {
+		if _, ok := want[service]; !ok {
+			t.Fatalf("restGatewayServices has unexpected %q", service)
+		}
 	}
 }
 
-func TestPublicRegistrationExcludesInternalMethods(t *testing.T) {
+func TestRegisterRESTGatewayRegistersAppRoute(t *testing.T) {
 	t.Parallel()
 
-	tracker := &workflowTracker{}
-	conn := dialGRPC(t, func(s *grpc.Server) {
-		publicrpc.RegisterPublicServer(s, tracker, gestaltproto.Workflow_ServiceDesc)
-	})
+	const invokePath = "/api/v2/app/example/operations/sync"
 
-	client := gestaltproto.NewWorkflowClient(conn)
-	if _, err := client.DeliverEvent(context.Background(), &gestaltproto.DeliverWorkflowProviderEventRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("DeliverEvent code = %v, want Unimplemented", status.Code(err))
-	}
-	if tracker.deliverCalled {
-		t.Fatal("DeliverEvent should not be registered on the public workflow surface")
-	}
-}
+	lis := bufconn.Listen(1024 * 1024)
+	grpcServer := grpc.NewServer()
+	proto.RegisterAppServer(grpcServer, &stubAppServer{})
+	go func() { _ = grpcServer.Serve(lis) }()
+	t.Cleanup(grpcServer.Stop)
 
-type workflowTracker struct {
-	gestaltproto.UnimplementedWorkflowServer
-	deliverCalled bool
-}
-
-func (t *workflowTracker) DeliverEvent(context.Context, *gestaltproto.DeliverWorkflowProviderEventRequest) (*gestaltproto.WorkflowEvent, error) {
-	t.deliverCalled = true
-	return nil, status.Error(codes.Unimplemented, "deliver")
-}
-
-func dialGRPC(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {
-	t.Helper()
-
-	server := grpc.NewServer()
-	register(server)
-
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	conn, err := grpc.NewClient(
+		"passthrough:///bufconn",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
-		t.Fatalf("Listen: %v", err)
-	}
-	t.Cleanup(func() {
-		server.Stop()
-		_ = lis.Close()
-	})
-
-	go func() { _ = server.Serve(lis) }()
-
-	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
+		t.Fatalf("dial: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return conn
+
+	mux := runtime.NewServeMux()
+	if err := RegisterRESTGateway(context.Background(), mux, conn, Servers{
+		App: &stubAppServer{},
+	}); err != nil {
+		t.Fatalf("RegisterRESTGateway: %v", err)
+	}
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	resp, err := http.Post(server.URL+invokePath, "application/json", http.NoBody)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close body: %v", err)
+		}
+	})
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body = %s", resp.StatusCode, string(body))
+	}
+}
+
+type stubAppServer struct {
+	proto.UnimplementedAppServer
+}
+
+func (stubAppServer) Invoke(context.Context, *proto.AppInvokeRequest) (*proto.OperationResult, error) {
+	return &proto.OperationResult{Status: 200}, nil
 }

@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
-from gestalt.invoke_support import decode_app_result
+from gestalt.invoke_support import decode_app_result, decode_graphql_result
 
 from ..._gen.v1 import app_pb2 as _app_pb2
 from ._codec import app as _app_codec
@@ -45,3 +45,24 @@ class AppClient:
             _app_pb2.OperationResult,
         )
         return _app_codec.from_wire_operation_result(wire_response)
+
+    def invoke_graphql_raw(self, request: AppInvokeGraphQLRequest) -> OperationResult:
+        """Alias for invoke_graphql."""
+        return self.invoke_graphql(request)
+
+    def invoke_graphql_decoded(self, request: AppInvokeGraphQLRequest) -> Any:
+        """The result decodes with GraphQL envelope semantics; envelope failures raise InvokeError."""
+        response = self.invoke_graphql(request)
+        return decode_graphql_result(request.app, response.status, response.body)
+
+
+class AppClientREST(Protocol):
+    """REST-backed methods for the public gestalt.provider.v1.App surface."""
+
+    def invoke_raw(self, request: AppInvokeRequest) -> OperationResult: ...
+    def invoke(self, request: AppInvokeRequest) -> Any: ...
+    def invoke_graphql(self, request: AppInvokeGraphQLRequest) -> OperationResult: ...
+    def invoke_graphql_raw(
+        self, request: AppInvokeGraphQLRequest
+    ) -> OperationResult: ...
+    def invoke_graphql_decoded(self, request: AppInvokeGraphQLRequest) -> Any: ...

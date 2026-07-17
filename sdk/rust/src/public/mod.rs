@@ -11,7 +11,10 @@ pub mod rest_mapping;
 pub mod rest_transport;
 
 pub use auth::{Auth, BearerAuth, NoAuth};
-pub use bound::gestalt_from_context;
-pub use client::{GestaltClient, Transport, create_gestalt_client, grpc, rest};
+pub use bound::{BoundGestaltClient, gestalt_from_context};
+pub use client::{
+    GestaltClient, GrpcGestaltClient, RestGestaltClient, Transport, create_gestalt_client,
+    create_grpc_gestalt_client, create_rest_gestalt_client, grpc, rest,
+};
 pub use grpc_transport::{GrpcTransport, dial_public_grpc};
 pub use rest_transport::RestTransport;

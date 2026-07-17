@@ -28,89 +28,200 @@ import (
 ` + r.body.String()
 }
 
-func (r *renderer) renderAppClient(services []*model.Service) {
-	r.body.WriteString("// AppClient is the transport-neutral client for the public App surface.\n")
-	r.body.WriteString("type AppClient struct {\n")
+func (r *renderer) renderServiceClient(svc *model.Service) {
+	if len(svc.Methods) > 0 {
+		r.features.context = true
+		r.features.proto = true
+	}
+	clientName := localName(svc.FullName) + "Client"
+	r.body.WriteString("// " + clientName + " is the transport-neutral client for the public " + svc.Name + " surface.\n")
+	fmt.Fprintf(&r.body, "type %s struct {\n", clientName)
 	r.body.WriteString("\ttransport UnaryTransport\n")
 	r.body.WriteString("}\n\n")
-	r.body.WriteString("// NewAppClient creates an AppClient over the given transport.\n")
-	r.body.WriteString("func NewAppClient(transport UnaryTransport) *AppClient {\n")
-	r.body.WriteString("\treturn &AppClient{transport: transport}\n")
+	fmt.Fprintf(&r.body, "// New%s creates a %s over the given transport.\n", clientName, clientName)
+	fmt.Fprintf(&r.body, "func New%s(transport UnaryTransport) *%s {\n", clientName, clientName)
+	fmt.Fprintf(&r.body, "\treturn &%s{transport: transport}\n", clientName)
 	r.body.WriteString("}\n\n")
 
-	for _, svc := range services {
-		wireName := localName(svc.FullName)
-		for _, m := range svc.Methods {
-			r.renderAppClientMethod(wireName, m)
-		}
+	wireName := localName(svc.FullName)
+	for _, m := range svc.Methods {
+		r.renderServiceClientMethod(clientName, wireName, m)
 	}
+	r.renderServiceRESTClientInterface(svc, clientName)
 }
 
-func (r *renderer) renderAppClientMethod(wireName string, m *model.Method) {
+func (r *renderer) renderServiceClientMethod(clientName, wireName string, m *model.Method) {
 	constName := fmt.Sprintf("Method%s%s", wireName, m.Name)
-	requestType := r.messageType(m.Input.FullName)
-	responseType := r.messageType(m.Output.FullName)
 
 	if m.JsonResult != nil {
-		r.renderAppClientUnaryMethod(m, constName, requestType, responseType, m.Name+"Raw")
-		r.renderAppClientDecodedMethod(m, requestType)
+		r.renderServiceClientUnaryMethod(clientName, m, constName, m.Name+"Raw")
+		r.renderServiceClientDecodedMethod(clientName, m)
 		return
 	}
 
-	r.renderAppClientUnaryMethod(m, constName, requestType, responseType, m.Name)
-	fmt.Fprintf(&r.body, "// %sRaw is an alias for %s.\n", m.Name, m.Name)
-	fmt.Fprintf(&r.body, "func (c *AppClient) %sRaw(ctx context.Context, request *%s) (*%s, error) {\n",
-		m.Name, requestType, responseType)
-	fmt.Fprintf(&r.body, "\treturn c.%s(ctx, request)\n}\n\n", m.Name)
+	if m.Name == "InvokeGraphQL" {
+		r.renderServiceClientUnaryMethod(clientName, m, constName, m.Name)
+		r.renderInvokeGraphQLRawAlias(clientName, m)
+		r.renderInvokeGraphQLDecodedMethod(clientName, m)
+		return
+	}
+
+	r.renderServiceClientUnaryMethod(clientName, m, constName, m.Name)
 }
 
-func (r *renderer) renderAppClientUnaryMethod(
-	m *model.Method,
-	constName, requestType, responseType, methodName string,
-) {
-	toWire := toWireFunc(requestType)
-	fromWire := fromWireFunc(responseType)
+func (r *renderer) renderServiceClientMethodSignature(clientName string, m *model.Method, methodName string) {
+	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context", clientName, methodName)
+	if !m.InputIsEmpty {
+		fmt.Fprintf(&r.body, ", request *%s", r.messageType(m.Input.FullName))
+	}
+	if m.OutputIsEmpty {
+		fmt.Fprintf(&r.body, ") error")
+		return
+	}
+	fmt.Fprintf(&r.body, ") (*%s, error)", r.messageType(m.Output.FullName))
+}
 
-	fmt.Fprintf(&r.body, "func (c *AppClient) %s(ctx context.Context, request *%s) (*%s, error) {\n",
-		methodName, requestType, responseType)
-	fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWire)
+func (r *renderer) renderServiceClientUnaryMethod(
+	clientName string,
+	m *model.Method,
+	constName, methodName string,
+) {
+	r.renderServiceClientMethodSignature(clientName, m, methodName)
+	r.body.WriteString(" {\n")
+	if m.InputIsEmpty || m.OutputIsEmpty {
+		r.features.emptypb = true
+	}
+	if !m.InputIsEmpty {
+		fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWireFunc(r.messageType(m.Input.FullName)))
+	} else {
+		r.body.WriteString("\twire := &emptypb.Empty{}\n")
+	}
+	if m.OutputIsEmpty {
+		fmt.Fprintf(&r.body, "\tout := &emptypb.Empty{}\n")
+		fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, wire, out); err != nil {\n", constName)
+		r.body.WriteString("\t\treturn toGestaltError(err)\n\t}\n")
+		r.body.WriteString("\treturn nil\n}\n\n")
+		return
+	}
 	fmt.Fprintf(&r.body, "\tout := &%s{}\n", wireMessage(m.Output.FullName))
 	fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, wire, out); err != nil {\n", constName)
 	r.body.WriteString("\t\treturn nil, toGestaltError(err)\n\t}\n")
-	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n}\n\n", fromWire)
+	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n}\n\n", fromWireFunc(r.messageType(m.Output.FullName)))
 }
 
-func (r *renderer) renderAppClientDecodedMethod(m *model.Method, requestType string) {
+func (r *renderer) renderServiceClientDecodedMethod(clientName string, m *model.Method) {
+	if m.InputIsEmpty || m.OutputIsEmpty || m.JsonResult == nil {
+		return
+	}
+	r.features.gestaltclient = true
+	requestType := r.messageType(m.Input.FullName)
 	status := findField(m.Output, m.JsonResult.Status)
 	body := findField(m.Output, m.JsonResult.Body)
 	appExpr := jsonResultContext(m, "app")
+	opExpr := jsonResultContext(m, "operation")
 
-	fmt.Fprintf(&r.body, "func (c *AppClient) %s(ctx context.Context, request *%s) (any, error) {\n",
-		m.Name, requestType)
+	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context, request *%s) (any, error) {\n",
+		clientName, m.Name, requestType)
 	fmt.Fprintf(&r.body, "\tout, err := c.%sRaw(ctx, request)\n", m.Name)
 	r.body.WriteString("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
-	if m.Name == "InvokeGraphQL" {
-		fmt.Fprintf(&r.body, "\treturn gestaltclient.DecodeGraphQLResult(%s, out.%s, out.%s)\n",
-			appExpr, fieldGoName(status), fieldGoName(body))
-	} else {
-		opExpr := jsonResultContext(m, "operation")
-		fmt.Fprintf(&r.body, "\treturn gestaltclient.DecodeAppResult(%s, %s, out.%s, out.%s)\n",
-			appExpr, opExpr, fieldGoName(status), fieldGoName(body))
-	}
+	fmt.Fprintf(&r.body, "\treturn gestaltclient.DecodeAppResult(%s, %s, out.%s, out.%s)\n",
+		appExpr, opExpr, fieldGoName(status), fieldGoName(body))
 	r.body.WriteString("}\n\n")
 }
 
-func (r *renderer) assembleAppClient() string {
-	return fmt.Sprintf(`package generated
+func (r *renderer) renderInvokeGraphQLRawAlias(clientName string, m *model.Method) {
+	if m.InputIsEmpty || m.OutputIsEmpty {
+		return
+	}
+	requestType := r.messageType(m.Input.FullName)
+	outputType := r.messageType(m.Output.FullName)
+	r.body.WriteString("// InvokeGraphQLRaw is an alias for InvokeGraphQL.\n")
+	fmt.Fprintf(&r.body, "func (c *%s) InvokeGraphQLRaw(ctx context.Context, request *%s) (*%s, error) {\n",
+		clientName, requestType, outputType)
+	r.body.WriteString("\treturn c.InvokeGraphQL(ctx, request)\n}\n\n")
+}
 
-import (
-	"context"
+func (r *renderer) renderInvokeGraphQLDecodedMethod(clientName string, m *model.Method) {
+	if m.InputIsEmpty || m.OutputIsEmpty {
+		return
+	}
+	r.features.gestaltclient = true
+	requestType := r.messageType(m.Input.FullName)
+	status := findField(m.Output, "status")
+	body := findField(m.Output, "body")
+	appExpr := jsonResultContext(m, "app")
 
-	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
-	%s
-)
+	fmt.Fprintf(&r.body, "func (c *%s) InvokeGraphQLDecoded(ctx context.Context, request *%s) (any, error) {\n",
+		clientName, requestType)
+	r.body.WriteString("\tout, err := c.InvokeGraphQL(ctx, request)\n")
+	r.body.WriteString("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
+	fmt.Fprintf(&r.body, "\treturn gestaltclient.DecodeGraphQLResult(%s, out.%s, out.%s)\n",
+		appExpr, fieldGoName(status), fieldGoName(body))
+	r.body.WriteString("}\n\n")
+}
 
-`, wireImport) + r.body.String()
+func (r *renderer) renderServiceRESTClientInterface(svc *model.Service, clientName string) {
+	ifaceName := clientName + "REST"
+	var restMethods []*model.Method
+	for _, m := range svc.Methods {
+		if m.HTTP != nil {
+			restMethods = append(restMethods, m)
+		}
+	}
+	if len(restMethods) == 0 {
+		return
+	}
+	fmt.Fprintf(&r.body, "// %s exposes only REST-backed methods for %s.\n", ifaceName, svc.Name)
+	fmt.Fprintf(&r.body, "type %s interface {\n", ifaceName)
+	for _, m := range restMethods {
+		r.renderRESTInterfaceMethods(m, ifaceName)
+	}
+	r.body.WriteString("}\n\n")
+	fmt.Fprintf(&r.body, "var _ %s = (*%s)(nil)\n\n", ifaceName, clientName)
+}
+
+func (r *renderer) renderRESTInterfaceMethods(m *model.Method, ifaceName string) {
+	_ = ifaceName
+	if m.JsonResult != nil {
+		r.writeRESTInterfaceMethodSignature(m, m.Name+"Raw")
+		r.writeRESTInterfaceMethodSignatureDecoded(m, m.Name)
+		return
+	}
+	if m.Name == "InvokeGraphQL" {
+		r.writeRESTInterfaceMethodSignature(m, m.Name)
+		r.writeRESTInterfaceMethodSignature(m, m.Name+"Raw")
+		r.writeRESTInterfaceMethodSignatureDecoded(m, m.Name+"Decoded")
+		return
+	}
+	r.writeRESTInterfaceMethodSignature(m, m.Name)
+}
+
+func (r *renderer) writeRESTInterfaceMethodSignature(m *model.Method, methodName string) {
+	fmt.Fprintf(&r.body, "\t%s(ctx context.Context", methodName)
+	if !m.InputIsEmpty {
+		fmt.Fprintf(&r.body, ", request *%s", r.messageType(m.Input.FullName))
+	}
+	if m.OutputIsEmpty {
+		r.body.WriteString(") error\n")
+		return
+	}
+	if methodName == m.Name+"Decoded" || (m.JsonResult != nil && methodName == m.Name) {
+		r.body.WriteString(") (any, error)\n")
+		return
+	}
+	fmt.Fprintf(&r.body, ") (*%s, error)\n", r.messageType(m.Output.FullName))
+}
+
+func (r *renderer) writeRESTInterfaceMethodSignatureDecoded(m *model.Method, methodName string) {
+	fmt.Fprintf(&r.body, "\t%s(ctx context.Context", methodName)
+	if !m.InputIsEmpty {
+		fmt.Fprintf(&r.body, ", request *%s", r.messageType(m.Input.FullName))
+	}
+	r.body.WriteString(") (any, error)\n")
+}
+
+func (r *renderer) assembleServiceClient() string {
+	return r.assemble()
 }
 
 func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {

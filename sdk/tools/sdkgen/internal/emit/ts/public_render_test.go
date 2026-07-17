@@ -139,7 +139,7 @@ func TestRenderPublicConvertersAlwaysEmitWireMessages(t *testing.T) {
 	}
 }
 
-func TestRenderPublicAppClientAlwaysUsesWireConverter(t *testing.T) {
+func TestRenderPublicServiceClientAlwaysUsesWireConverter(t *testing.T) {
 	t.Parallel()
 
 	services := []*model.Service{{
@@ -161,7 +161,7 @@ func TestRenderPublicAppClientAlwaysUsesWireConverter(t *testing.T) {
 		}},
 	}}
 
-	out := renderPublicAppClient(services, ServerPublicImports())
+	out := renderPublicServiceClient(services[0], ServerPublicImports())
 	if !strings.Contains(out, "toWireAppInvokeRequest(request)") {
 		t.Fatalf("app client must call wire converter:\n%s", out)
 	}

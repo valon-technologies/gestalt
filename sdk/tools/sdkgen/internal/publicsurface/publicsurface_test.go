@@ -100,20 +100,24 @@ func TestBuildAppOnlySurface(t *testing.T) {
 	// Drop the unsupported stream before building the view for structure checks.
 	schema.Services[0].Methods = schema.Services[0].Methods[:3]
 
+	if err := publicsurface.Validate(schema); err != nil {
+		t.Fatalf("Validate() after dropping stream: %v", err)
+	}
+
 	view := publicsurface.Build(schema)
-	if len(view.Services) != 1 {
-		t.Fatalf("services = %d, want 1", len(view.Services))
+	if len(view.Services) != 2 {
+		t.Fatalf("services = %d, want 2", len(view.Services))
 	}
 	if view.Services[0].Name != publicsurface.AppServiceName {
-		t.Fatalf("service = %q, want %q", view.Services[0].Name, publicsurface.AppServiceName)
+		t.Fatalf("first service = %q, want %q", view.Services[0].Name, publicsurface.AppServiceName)
 	}
 
 	methods, err := publicsurface.ParseMethods(schema, view)
 	if err != nil {
 		t.Fatalf("ParseMethods: %v", err)
 	}
-	if len(methods) != 3 {
-		t.Fatalf("methods = %d, want 3", len(methods))
+	if len(methods) != 4 {
+		t.Fatalf("methods = %d, want 4", len(methods))
 	}
 
 	var invoke, invokeGraphQL, grpcOnly *publicsurface.PublicMethod
@@ -131,11 +135,11 @@ func TestBuildAppOnlySurface(t *testing.T) {
 		t.Fatalf("methods = %+v, want Invoke, InvokeGraphQL, GrpcOnly", methodNames(methods))
 	}
 
-	if got := publicsurface.GRPCMethodCount(view); got != 3 {
-		t.Fatalf("gRPC methods = %d, want 3", got)
+	if got := publicsurface.GRPCMethodCount(view); got != 4 {
+		t.Fatalf("gRPC methods = %d, want 4", got)
 	}
-	if got := publicsurface.RESTMethodCount(view); got != 2 {
-		t.Fatalf("REST methods = %d, want 2", got)
+	if got := publicsurface.RESTMethodCount(view); got != 3 {
+		t.Fatalf("REST methods = %d, want 3", got)
 	}
 
 	if invoke.REST == nil || invokeGraphQL.REST == nil {

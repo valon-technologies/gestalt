@@ -351,3 +351,1176 @@ export interface SubjectPermissionContext {
   operations: string[];
   allOperations: boolean;
 }
+
+export const AgentExecutionStatus = {
+  UNSPECIFIED: 0,
+  PENDING: 1,
+  RUNNING: 2,
+  SUCCEEDED: 3,
+  FAILED: 4,
+  CANCELED: 5,
+  WAITING_FOR_INPUT: 6,
+} as const;
+
+export type AgentExecutionStatus = number;
+
+export const AgentInteractionState = {
+  UNSPECIFIED: 0,
+  PENDING: 1,
+  RESOLVED: 2,
+  CANCELED: 3,
+} as const;
+
+export type AgentInteractionState = number;
+
+export const AgentInteractionType = {
+  UNSPECIFIED: 0,
+  APPROVAL: 1,
+  CLARIFICATION: 2,
+  INPUT: 3,
+} as const;
+
+export type AgentInteractionType = number;
+
+export const AgentMessagePartType = {
+  UNSPECIFIED: 0,
+  TEXT: 1,
+  JSON: 2,
+  TOOL_CALL: 3,
+  TOOL_RESULT: 4,
+  IMAGE_REF: 5,
+} as const;
+
+export type AgentMessagePartType = number;
+
+export const AgentSessionState = {
+  UNSPECIFIED: 0,
+  ACTIVE: 1,
+  ARCHIVED: 2,
+} as const;
+
+export type AgentSessionState = number;
+
+export const AgentToolSourceMode = {
+  UNSPECIFIED: 0,
+  CATALOG: 2,
+  NONE: 3,
+} as const;
+
+export type AgentToolSourceMode = number;
+
+export interface AgentCatalogToolConfig {
+  refs: AgentToolRef[];
+  tools: ListedAgentTool[];
+}
+
+export interface AgentInteraction {
+  id: string;
+  type: AgentInteractionType;
+  state: AgentInteractionState;
+  title: string;
+  prompt: string;
+  request?: JsonObject;
+  resolution?: JsonObject;
+  createdAt?: Date;
+  resolvedAt?: Date;
+  turnId: string;
+  sessionId: string;
+}
+
+export interface AgentMessage {
+  role: string;
+  text: string;
+  parts: AgentMessagePart[];
+  metadata?: JsonObject;
+}
+
+export interface AgentMessagePart {
+  type: AgentMessagePartType;
+  text: string;
+  json?: JsonObject;
+  toolCall?: AgentMessagePartToolCall;
+  toolResult?: AgentMessagePartToolResult;
+  imageRef?: AgentMessagePartImageRef;
+}
+
+export interface AgentMessagePartImageRef {
+  uri: string;
+  mimeType: string;
+}
+
+export interface AgentMessagePartToolCall {
+  id: string;
+  toolId: string;
+  arguments?: JsonObject;
+}
+
+export interface AgentMessagePartToolResult {
+  toolCallId: string;
+  status: number;
+  content: string;
+  output?: JsonObject;
+}
+
+export interface AgentNoTools {}
+
+export type AgentOutputKind =
+  | { case: "text"; value: AgentTextOutput }
+  | { case: "structured"; value: AgentStructuredOutput }
+  | { case: undefined; value?: undefined };
+
+export interface AgentOutput {
+  kind: AgentOutputKind;
+}
+
+export interface AgentProviderCapabilities {
+  streamingText: boolean;
+  toolCalls: boolean;
+  parallelToolCalls: boolean;
+  interactions: boolean;
+  resumableTurns: boolean;
+  reasoningSummaries: boolean;
+  /**
+   * Provider list APIs can apply non-zero limits and summary projections without
+   * hydrating every source record. Providers that set this must order sessions
+   * and turns by the relevant newest-first recency fields before applying limit.
+   */
+  boundedListHydration: boolean;
+  supportedToolSources: AgentToolSourceMode[];
+  supportsSessionStart: boolean;
+  supportsPreparedWorkspace: boolean;
+}
+
+export interface AgentSession {
+  id: string;
+  providerName: string;
+  model: string;
+  clientRef: string;
+  state: AgentSessionState;
+  metadata?: JsonObject;
+  createdBySubjectId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  lastTurnAt?: Date;
+}
+
+export interface AgentSessionStartConfig {
+  hooks: AgentSessionStartHook[];
+}
+
+export interface AgentSessionStartHook {
+  id: string;
+  type: string;
+  command: string[];
+  cwd: string;
+  timeout: string;
+  env: { [key: string]: string };
+  output?: AgentSessionStartHookOutput;
+}
+
+export interface AgentSessionStartHookOutput {
+  additionalContext: boolean;
+  metadata: boolean;
+}
+
+export interface AgentStructuredOutput {
+  schema?: JsonObject;
+}
+
+export interface AgentTextOutput {}
+
+export type AgentToolConfigSource =
+  | { case: "none"; value: AgentNoTools }
+  | { case: "catalog"; value: AgentCatalogToolConfig }
+  | { case: undefined; value?: undefined };
+
+export interface AgentToolConfig {
+  source: AgentToolConfigSource;
+}
+
+export type AgentTurnOutput =
+  | { case: "text"; value: AgentTurnTextOutput }
+  | { case: "structured"; value: AgentTurnStructuredOutput }
+  | { case: undefined; value?: undefined };
+
+export interface AgentTurn {
+  id: string;
+  sessionId: string;
+  providerName: string;
+  model: string;
+  status: AgentExecutionStatus;
+  messages: AgentMessage[];
+  statusMessage: string;
+  createdBySubjectId: string;
+  createdAt?: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  executionRef: string;
+  output: AgentTurnOutput;
+}
+
+export interface AgentTurnDisplay {
+  kind: string;
+  phase: string;
+  text: string;
+  label: string;
+  ref: string;
+  parentRef: string;
+  input?: JsonValue;
+  output?: JsonValue;
+  error?: JsonValue;
+  action: string;
+  format: string;
+  language: string;
+}
+
+export interface AgentTurnEvent {
+  id: string;
+  turnId: string;
+  seq: bigint;
+  type: string;
+  source: string;
+  visibility: string;
+  data?: JsonObject;
+  createdAt?: Date;
+  display?: AgentTurnDisplay;
+}
+
+export interface AgentTurnStructuredOutput {
+  text: string;
+  value?: JsonObject;
+}
+
+export interface AgentTurnTextOutput {
+  text: string;
+}
+
+export interface AgentWorkspace {
+  checkouts: AgentWorkspaceGitCheckout[];
+  cwd: string;
+}
+
+export interface AgentWorkspaceGitCheckout {
+  url: string;
+  ref: string;
+  path: string;
+}
+
+export interface CancelAgentProviderTurnRequest {
+  turnId: string;
+  reason: string;
+  context?: RequestContext;
+  providerName: string;
+  sessionId: string;
+}
+
+export interface CreateAgentProviderSessionRequest {
+  /**
+   * The provider mints the session id returned on AgentSession. Creation is
+   * idempotent on idempotency_key scoped per caller (context.subject.id):
+   * a replayed key returns the existing session, an empty key always creates.
+   * Idempotency is scoped to the provider's session store.
+   */
+  idempotencyKey: string;
+  model: string;
+  clientRef: string;
+  metadata?: JsonObject;
+  sessionStart?: AgentSessionStartConfig;
+  preparedWorkspace?: PreparedAgentWorkspace;
+  providerName: string;
+  workspace?: AgentWorkspace;
+  context?: RequestContext;
+  tools?: AgentToolConfig;
+}
+
+export interface CreateAgentProviderTurnRequest {
+  turnId: string;
+  sessionId: string;
+  idempotencyKey: string;
+  model: string;
+  messages: AgentMessage[];
+  metadata?: JsonObject;
+  executionRef: string;
+  modelOptions?: JsonObject;
+  /**
+   * Optional provider-owned turn execution budget, in seconds.
+   * If unset or zero, the provider chooses its own execution timeout. This does
+   * not control the CreateTurn RPC deadline.
+   */
+  timeoutSeconds: number;
+  output?: AgentOutput;
+  context?: RequestContext;
+  providerName: string;
+}
+
+export interface GetAgentProviderCapabilitiesRequest {}
+
+export interface GetAgentProviderInteractionRequest {
+  interactionId: string;
+  context?: RequestContext;
+}
+
+export interface GetAgentProviderSessionRequest {
+  sessionId: string;
+  context?: RequestContext;
+  providerName: string;
+}
+
+export interface GetAgentProviderTurnRequest {
+  turnId: string;
+  context?: RequestContext;
+  providerName: string;
+  sessionId: string;
+}
+
+export interface ListAgentProviderInteractionsRequest {
+  turnId: string;
+  context?: RequestContext;
+  providerName: string;
+}
+
+export interface ListAgentProviderInteractionsResponse {
+  interactions: AgentInteraction[];
+}
+
+export interface ListAgentProviderSessionsRequest {
+  sessionIds: string[];
+  state: AgentSessionState;
+  /**
+   * When non-zero and bounded_list_hydration is supported, cap results after
+   * ordering sessions newest-first by last_turn_at, updated_at, then created_at.
+   */
+  limit: number;
+  /**
+   * When true and bounded_list_hydration is supported, omit heavy fields such as
+   * metadata unless exact session_ids require direct lookup.
+   */
+  summaryOnly: boolean;
+  providerName: string;
+  context?: RequestContext;
+}
+
+export interface ListAgentProviderSessionsResponse {
+  sessions: AgentSession[];
+}
+
+export interface ListAgentProviderTurnEventsRequest {
+  turnId: string;
+  afterSeq: bigint;
+  limit: number;
+  context?: RequestContext;
+  providerName: string;
+  sessionId: string;
+}
+
+export interface ListAgentProviderTurnEventsResponse {
+  events: AgentTurnEvent[];
+}
+
+export interface ListAgentProviderTurnsRequest {
+  sessionId: string;
+  turnIds: string[];
+  status: AgentExecutionStatus;
+  /**
+   * When non-zero and bounded_list_hydration is supported, cap results after
+   * ordering turns newest-first by created_at.
+   */
+  limit: number;
+  /**
+   * When true and bounded_list_hydration is supported, omit heavy fields such as
+   * messages, output text, and structured output unless exact turn_ids require
+   * direct lookup.
+   */
+  summaryOnly: boolean;
+  context?: RequestContext;
+  providerName: string;
+}
+
+export interface ListAgentProviderTurnsResponse {
+  turns: AgentTurn[];
+}
+
+export interface ListedAgentTool {
+  id: string;
+  mcpName: string;
+  title: string;
+  description: string;
+  inputSchema: string;
+  outputSchema: string;
+  annotations?: OperationAnnotations;
+  ref?: AgentToolRef;
+  tags: string[];
+  searchText: string;
+}
+
+export interface PreparedAgentWorkspace {
+  root: string;
+  cwd: string;
+}
+
+export interface ResolveAgentProviderInteractionRequest {
+  interactionId: string;
+  resolution?: JsonObject;
+  turnId: string;
+  context?: RequestContext;
+  providerName: string;
+}
+
+export interface UpdateAgentProviderSessionRequest {
+  sessionId: string;
+  clientRef: string;
+  state: AgentSessionState;
+  metadata?: JsonObject;
+  context?: RequestContext;
+  providerName: string;
+}
+
+export const WorkflowRunStatus = {
+  UNSPECIFIED: 0,
+  PENDING: 1,
+  RUNNING: 2,
+  SUCCEEDED: 3,
+  FAILED: 4,
+  CANCELED: 5,
+} as const;
+
+export type WorkflowRunStatus = number;
+
+export const WorkflowStepStatus = {
+  UNSPECIFIED: 0,
+  PENDING: 1,
+  RUNNING: 2,
+  SKIPPED: 3,
+  SUCCEEDED: 4,
+  FAILED: 5,
+  UNKNOWN: 6,
+} as const;
+
+export type WorkflowStepStatus = number;
+
+export interface ApplyWorkflowProviderDefinitionRequest {
+  provider: string;
+  spec?: WorkflowDefinitionSpec;
+  idempotencyKey: string;
+  context?: RequestContext;
+}
+
+export interface BoundWorkflowTarget {
+  steps: WorkflowStep[];
+}
+
+export interface CancelWorkflowProviderRunRequest {
+  runId: string;
+  reason: string;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface DeleteWorkflowProviderDefinitionRequest {
+  definitionId: string;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface DeliverWorkflowProviderEventRequest {
+  provider: string;
+  event?: WorkflowEvent;
+  context?: RequestContext;
+}
+
+export interface GetWorkflowProviderDefinitionRequest {
+  definitionId: string;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface GetWorkflowProviderRunEventsRequest {
+  runId: string;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface GetWorkflowProviderRunEventsResponse {
+  events: WorkflowRunEvent[];
+}
+
+export interface GetWorkflowProviderRunOutputRequest {
+  runId: string;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface GetWorkflowProviderRunOutputResponse {
+  output?: JsonValue;
+}
+
+export interface GetWorkflowProviderRunRequest {
+  runId: string;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface ListWorkflowProviderDefinitionsRequest {
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface ListWorkflowProviderDefinitionsResponse {
+  definitions: WorkflowDefinition[];
+}
+
+export interface ListWorkflowProviderRunsRequest {
+  pageSize: number;
+  pageToken: string;
+  status: WorkflowRunStatus;
+  targetApp: string;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface ListWorkflowProviderRunsResponse {
+  runs: WorkflowRun[];
+  nextPageToken: string;
+}
+
+export interface SetWorkflowProviderActivationPausedRequest {
+  definitionId: string;
+  activationId: string;
+  paused: boolean;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface SetWorkflowProviderDefinitionPausedRequest {
+  definitionId: string;
+  paused: boolean;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface SignalOrStartWorkflowProviderRunRequest {
+  workflowKey: string;
+  idempotencyKey: string;
+  signal?: WorkflowSignal;
+  provider: string;
+  definitionId: string;
+  input?: JsonObject;
+  expectedDefinitionGeneration: bigint;
+  context?: RequestContext;
+}
+
+export interface SignalWorkflowProviderRunRequest {
+  runId: string;
+  signal?: WorkflowSignal;
+  context?: RequestContext;
+  provider: string;
+}
+
+export interface SignalWorkflowRunResponse {
+  run?: WorkflowRun;
+  signal?: WorkflowSignal;
+  startedRun: boolean;
+  workflowKey: string;
+}
+
+export interface StartWorkflowProviderRunRequest {
+  idempotencyKey: string;
+  workflowKey: string;
+  provider: string;
+  definitionId: string;
+  input?: JsonObject;
+  expectedDefinitionGeneration: bigint;
+  context?: RequestContext;
+}
+
+export type WorkflowActivationTrigger =
+  | { case: "schedule"; value: WorkflowScheduleActivation }
+  | { case: "event"; value: WorkflowEventActivation }
+  | { case: undefined; value?: undefined };
+
+export interface WorkflowActivation {
+  id: string;
+  input?: WorkflowValue;
+  paused: boolean;
+  trigger: WorkflowActivationTrigger;
+}
+
+export interface WorkflowAgentMessage {
+  role: string;
+  text?: WorkflowText;
+  metadata?: JsonObject;
+}
+
+export interface WorkflowArray {
+  values: WorkflowValue[];
+}
+
+export interface WorkflowDefinition {
+  id: string;
+  generation: bigint;
+  target?: BoundWorkflowTarget;
+  activations: WorkflowActivation[];
+  paused: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+  provider: string;
+  runAs: string;
+}
+
+export interface WorkflowDefinitionSpec {
+  id: string;
+  target?: BoundWorkflowTarget;
+  activations: WorkflowActivation[];
+  paused: boolean;
+  runAs: string;
+}
+
+export interface WorkflowEvent {
+  id: string;
+  source: string;
+  specVersion: string;
+  type: string;
+  subject: string;
+  time?: Date;
+  datacontenttype: string;
+  data?: JsonObject;
+  extensions: { [key: string]: JsonValue };
+}
+
+export interface WorkflowEventActivation {
+  match?: WorkflowEventMatch;
+}
+
+export interface WorkflowEventMatch {
+  type: string;
+  source: string;
+  subject: string;
+}
+
+export interface WorkflowEventTriggerInvocation {
+  activationId: string;
+  event?: WorkflowEvent;
+}
+
+export interface WorkflowManualTrigger {}
+
+export interface WorkflowObject {
+  fields: { [key: string]: WorkflowValue };
+}
+
+export interface WorkflowPathSource {
+  path: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  status: WorkflowRunStatus;
+  target?: BoundWorkflowTarget;
+  trigger?: WorkflowRunTrigger;
+  createdAt?: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  statusMessage: string;
+  output?: JsonValue;
+  workflowKey: string;
+  provider: string;
+  definitionId: string;
+  runAs: string;
+  input?: JsonObject;
+  definitionGeneration: bigint;
+  currentStepId: string;
+  steps: WorkflowStepExecution[];
+}
+
+export interface WorkflowRunEvent {
+  id: string;
+  runId: string;
+  stepId: string;
+  type: string;
+  data?: JsonObject;
+  createdAt?: Date;
+}
+
+export type WorkflowRunTriggerKind =
+  | { case: "manual"; value: WorkflowManualTrigger }
+  | { case: "schedule"; value: WorkflowScheduleTrigger }
+  | { case: "event"; value: WorkflowEventTriggerInvocation }
+  | { case: undefined; value?: undefined };
+
+export interface WorkflowRunTrigger {
+  kind: WorkflowRunTriggerKind;
+}
+
+export interface WorkflowScheduleActivation {
+  cron: string;
+  timezone: string;
+}
+
+export interface WorkflowScheduleTrigger {
+  activationId: string;
+  scheduledFor?: Date;
+}
+
+export interface WorkflowSignal {
+  id: string;
+  name: string;
+  payload?: JsonObject;
+  metadata?: JsonObject;
+  createdAt?: Date;
+  idempotencyKey: string;
+  sequence: bigint;
+}
+
+export type WorkflowStepAction =
+  | { case: "app"; value: WorkflowStepAppCall }
+  | { case: "agent"; value: WorkflowStepAgentTurn }
+  | { case: undefined; value?: undefined };
+
+export interface WorkflowStep {
+  id: string;
+  inputs: { [key: string]: WorkflowValue };
+  when?: WorkflowStepWhen;
+  timeoutSeconds: number;
+  metadata?: JsonObject;
+  action: WorkflowStepAction;
+}
+
+export interface WorkflowStepAgentTurn {
+  provider: string;
+  model: string;
+  sessionKey: string;
+  prompt?: WorkflowText;
+  messages: WorkflowAgentMessage[];
+  tools: AgentToolRef[];
+  output?: AgentOutput;
+  modelOptions?: JsonObject;
+}
+
+export interface WorkflowStepAppCall {
+  name: string;
+  operation: string;
+  input?: WorkflowValue;
+  connection: string;
+  instance: string;
+  credentialMode: string;
+}
+
+export interface WorkflowStepAttempt {
+  id: string;
+  status: WorkflowStepStatus;
+  idempotencyKey: string;
+  input?: JsonValue;
+  output?: JsonValue;
+  statusMessage: string;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface WorkflowStepExecution {
+  stepId: string;
+  status: WorkflowStepStatus;
+  attempts: WorkflowStepAttempt[];
+  input?: JsonValue;
+  output?: JsonValue;
+  statusMessage: string;
+  skipReason: string;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface WorkflowStepInputSource {
+  stepId: string;
+  path: string;
+}
+
+export interface WorkflowStepOutputSource {
+  stepId: string;
+  path: string;
+}
+
+export interface WorkflowStepWhen {
+  value?: WorkflowValue;
+  equals?: JsonValue;
+}
+
+export interface WorkflowText {
+  template: string;
+}
+
+export type WorkflowValueKind =
+  | { case: "literal"; value: JsonValue }
+  | { case: "object"; value: WorkflowObject }
+  | { case: "array"; value: WorkflowArray }
+  | { case: "template"; value: WorkflowText }
+  | { case: "input"; value: WorkflowPathSource }
+  | { case: "signal"; value: WorkflowPathSource }
+  | { case: "stepOutput"; value: WorkflowStepOutputSource }
+  | { case: "stepInput"; value: WorkflowStepInputSource }
+  | { case: undefined; value?: undefined };
+
+export interface WorkflowValue {
+  kind: WorkflowValueKind;
+}
+
+/**
+ * AuthorizeRequest models RFC 6749 authorization endpoint parameters.
+ */
+export interface AuthorizeRequest {
+  /**
+   * response_type is typically "code".
+   */
+  responseType: string;
+  clientId: string;
+  redirectUri: string;
+  scope: string;
+  state: string;
+}
+
+/**
+ * AuthorizeResponse returns the HTTP Location redirect URI containing RFC 6749
+ * response parameters.
+ */
+export interface AuthorizeResponse {
+  redirectUri: string;
+}
+
+/**
+ * GetGrantRequest retrieves one API-token grant by ID.
+ */
+export interface GetGrantRequest {
+  grantId: string;
+}
+
+/**
+ * GetGrantResponse returns OIDF-shaped grant details.
+ */
+export interface GetGrantResponse {
+  scopes: GrantScope[];
+  createdAt: bigint;
+  expiresAt: bigint;
+}
+
+/**
+ * GrantScope describes one authorized scope and optional resources.
+ */
+export interface GrantScope {
+  scope: string;
+  resource: string[];
+}
+
+/**
+ * IntrospectRequest models RFC 7662 token introspection parameters.
+ */
+export interface IntrospectRequest {
+  token: string;
+  /**
+   * token_type_hint is "access_token" or "refresh_token".
+   */
+  tokenTypeHint: string;
+}
+
+/**
+ * IntrospectResponse models RFC 7662 token introspection response fields.
+ * subject must be a canonical Gestalt subject ID, for example a user: subject
+ * using a stable user identifier or verified email. It must not be a raw
+ * upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+ * that grant.
+ */
+export interface IntrospectResponse {
+  active: boolean;
+  subject: string;
+  scope: string;
+  clientId: string;
+  audience: string[];
+}
+
+/**
+ * ListGrantsRequest lists API-token grant IDs visible to the caller.
+ */
+export interface ListGrantsRequest {}
+
+/**
+ * ListGrantsResponse returns caller-visible API-token grant IDs created via
+ * token exchange. It must not include transient login or session grants.
+ */
+export interface ListGrantsResponse {
+  grantIds: string[];
+}
+
+/**
+ * RevokeGrantRequest revokes one caller-visible API-token grant by ID.
+ */
+export interface RevokeGrantRequest {
+  grantId: string;
+}
+
+/**
+ * RevokeGrantResponse acknowledges grant revocation.
+ */
+export interface RevokeGrantResponse {}
+
+/**
+ * TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
+ * exchange inputs.
+ */
+export interface TokenRequest {
+  /**
+   * grant_type is "authorization_code" or
+   * "urn:ietf:params:oauth:grant-type:token-exchange".
+   */
+  grantType: string;
+  code: string;
+  redirectUri: string;
+  clientId: string;
+  /**
+   * state correlates authorization-code exchanges with Authorize.
+   */
+  state: string;
+  /**
+   * scope is the requested scope for issued tokens.
+   */
+  scope: string;
+  /**
+   * subject_token is the bearer token being exchanged per RFC 8693.
+   */
+  subjectToken: string;
+  /**
+   * subject_token_type is the RFC 8693 token type for subject_token.
+   */
+  subjectTokenType: string;
+  /**
+   * expires_in is a Gestalt request-side extension for the desired access-token
+   * lifetime in seconds. The provider MAY clamp or default it; expires_in in
+   * TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
+   * default.
+   */
+  expiresIn: bigint;
+}
+
+/**
+ * TokenResponse models RFC 6749 token endpoint response fields.
+ */
+export interface TokenResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: bigint;
+  refreshToken: string;
+  scope: string;
+  /**
+   * grant_id is the OIDF Grant Management extension when available.
+   */
+  grantId: string;
+}
+
+/**
+ * UserInfoRequest is intentionally empty. The caller bearer token is supplied
+ * through provider-call metadata, analogous to OIDC Authorization: Bearer.
+ */
+export interface UserInfoRequest {}
+
+/**
+ * UserInfoResponse models profile claims about the authenticated end user.
+ */
+export interface UserInfoResponse {
+  subjectId: string;
+  email: string;
+  name: string;
+}
+
+export const RelationshipTargetType = {
+  UNSPECIFIED: 0,
+  SUBJECT: 1,
+  RESOURCE: 2,
+  SUBJECT_SET: 3,
+} as const;
+
+export type RelationshipTargetType = number;
+
+export const SourceLayer = {
+  UNSPECIFIED: 0,
+  STATIC_CONFIG: 1,
+  RUNTIME: 2,
+} as const;
+
+export type SourceLayer = number;
+
+export interface Action {
+  name: string;
+  properties?: JsonObject;
+}
+
+export interface AddRelationshipRequest {
+  relationship?: Relationship;
+}
+
+export interface AddRelationshipResponse {
+  relationship?: Relationship;
+}
+
+export interface AuthorizationModel {
+  id: string;
+  version: string;
+  resourceTypes: AuthorizationModelResourceType[];
+}
+
+export interface AuthorizationModelRef {
+  id: string;
+  version: string;
+  createdAt?: Date;
+}
+
+export interface AuthorizationModelResourceType {
+  name: string;
+  relations: ModelRelation[];
+  actions: ModelAction[];
+  sourceLayer: SourceLayer;
+  defaultRole: string;
+}
+
+export interface AuthorizationModelResourceTypeFilter {
+  name: string;
+  sourceLayer: SourceLayer;
+}
+
+export interface CheckAccessManyRequest {
+  requests: CheckAccessRequest[];
+}
+
+export interface CheckAccessManyResponse {
+  decisions: CheckAccessResponse[];
+}
+
+export interface CheckAccessRequest {
+  subject?: Subject;
+  action?: Action;
+  resource?: Resource;
+}
+
+export interface CheckAccessResponse {
+  allowed: boolean;
+  modelId: string;
+}
+
+export interface DeleteRelationshipRequest {
+  relationshipTuple?: RelationshipTuple;
+}
+
+export interface DeleteRelationshipResponse {}
+
+export interface GetActiveModelRefResponse {
+  model?: AuthorizationModelRef;
+}
+
+export interface ListActiveModelResourceTypesRequest {
+  filter?: AuthorizationModelResourceTypeFilter;
+  pageSize: number;
+  pageToken: string;
+}
+
+export interface ListActiveModelResourceTypesResponse {
+  resourceTypes: AuthorizationModelResourceType[];
+  nextPageToken: string;
+  modelId: string;
+}
+
+export interface ListRelationshipsRequest {
+  filter?: RelationshipFilter;
+  pageSize: number;
+  pageToken: string;
+}
+
+export interface ListRelationshipsResponse {
+  relationships: Relationship[];
+  nextPageToken: string;
+}
+
+export interface ModelAction {
+  name: string;
+  relations: string[];
+}
+
+export type ModelAllowedTargetKind =
+  | { case: "subjectType"; value: string }
+  | { case: "resourceType"; value: string }
+  | { case: "subjectSetType"; value: SubjectSetType }
+  | { case: undefined; value?: undefined };
+
+export interface ModelAllowedTarget {
+  kind: ModelAllowedTargetKind;
+}
+
+export interface ModelRelation {
+  name: string;
+  allowedTargets: ModelAllowedTarget[];
+}
+
+export interface Relationship {
+  tuple?: RelationshipTuple;
+  properties?: JsonObject;
+  sourceLayer: SourceLayer;
+}
+
+export interface RelationshipFilter {
+  target?: RelationshipTarget;
+  relation: string;
+  resource?: Resource;
+  targetType: RelationshipTargetType;
+  targetEntityType: string;
+  resourceType: string;
+  sourceLayer: SourceLayer;
+}
+
+export type RelationshipTargetKind =
+  | { case: "subject"; value: Subject }
+  | { case: "resource"; value: Resource }
+  | { case: "subjectSet"; value: SubjectSet }
+  | { case: undefined; value?: undefined };
+
+export interface RelationshipTarget {
+  kind: RelationshipTargetKind;
+}
+
+export interface RelationshipTuple {
+  target?: RelationshipTarget;
+  relation: string;
+  resource?: Resource;
+}
+
+export interface Resource {
+  type: string;
+  id: string;
+  properties?: JsonObject;
+}
+
+export interface SetActiveModelRequest {
+  model?: AuthorizationModel;
+}
+
+export interface SetActiveModelResponse {
+  model?: AuthorizationModelRef;
+}
+
+export interface SetAuthorizationStateRequest {
+  model?: AuthorizationModel;
+  relationships: Relationship[];
+}
+
+export interface SetAuthorizationStateResponse {
+  activeModel?: AuthorizationModelRef;
+}
+
+export interface Subject {
+  type: string;
+  id: string;
+  properties?: JsonObject;
+}
+
+export interface SubjectSet {
+  resource?: Resource;
+  relation: string;
+}
+
+export interface SubjectSetType {
+  resourceType: string;
+  relation: string;
+}
