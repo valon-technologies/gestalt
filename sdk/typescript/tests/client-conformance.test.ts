@@ -13,6 +13,7 @@ import {
   OperationResultSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import { create } from "@bufbuild/protobuf";
+import type { JsonObject } from "@bufbuild/protobuf";
 import { PUBLIC_METHODS } from "../src/client/generated/methods.ts";
 
 const fixtureRoot = join(import.meta.dir, "..", "..", "testdata", "public_conformance");
@@ -89,7 +90,7 @@ test("REST transport surfaces platform errors from gateway responses", async () 
   const request = create(AppInvokeRequestSchema, {
     app: platformCase.publicRequest.app,
     operation: platformCase.publicRequest.operation,
-    params: platformCase.publicRequest.params ?? {},
+    params: (platformCase.publicRequest.params ?? {}) as unknown as JsonObject,
     connection: "",
     instance: "",
     idempotencyKey: "",

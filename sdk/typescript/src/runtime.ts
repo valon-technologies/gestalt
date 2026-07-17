@@ -6,7 +6,6 @@
  * @module services/runtime
  */
 
-import type { JsonObject } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
@@ -19,7 +18,7 @@ import {
   toWireConfigureProviderRequest,
 } from "./internal/codec/runtime.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
-import type { Init } from "./rpc_support.ts";
+import type { Init, JsonObjectInput } from "./rpc_support.ts";
 
 export const ProviderKind = {
   UNSPECIFIED: 0,
@@ -46,7 +45,7 @@ export type ProviderKind = number;
  */
 export interface ConfigureProviderRequest {
   name: string;
-  config?: JsonObject;
+  config?: JsonObjectInput;
   protocolVersion: number;
 }
 
@@ -115,7 +114,7 @@ export class ProviderLifecycle {
   async configureProvider(
     name: string,
     protocolVersion: number,
-    config?: JsonObject,
+    config?: JsonObjectInput,
   ): Promise<number> {
     const request = {
       name,

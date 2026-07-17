@@ -1,6 +1,5 @@
 import { create } from "@bufbuild/protobuf";
 import { expect, test } from "bun:test";
-import type { JsonObject } from "@bufbuild/protobuf";
 
 import {
   AppInvokeRequestSchema,
@@ -603,7 +602,7 @@ test("REST transport omits undefined optional params from sparse JSON bodies", a
       nested: { keep: true, drop: undefined },
       cursor: undefined,
       page: 1,
-    } as unknown as JsonObject,
+    },
   });
 
   expect(JSON.parse(bodies[0] ?? "{}")).toEqual({

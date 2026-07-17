@@ -6,7 +6,6 @@
  * @module services/workflow
  */
 
-import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
@@ -46,7 +45,7 @@ import {
   toWireStartWorkflowProviderRunRequest,
 } from "./internal/codec/workflow.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
-import type { Init } from "./rpc_support.ts";
+import type { Init, JsonInput, JsonObjectInput } from "./rpc_support.ts";
 
 export const WorkflowRunStatus = {
   UNSPECIFIED: 0,
@@ -124,7 +123,7 @@ export interface GetWorkflowProviderRunOutputRequest {
 }
 
 export interface GetWorkflowProviderRunOutputResponse {
-  output?: JsonValue;
+  output?: JsonInput;
 }
 
 export interface GetWorkflowProviderRunRequest {
@@ -177,7 +176,7 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   signal?: WorkflowSignal;
   provider: string;
   definitionId: string;
-  input?: JsonObject;
+  input?: JsonObjectInput;
   expectedDefinitionGeneration: bigint;
   context?: RequestContext;
 }
@@ -201,7 +200,7 @@ export interface StartWorkflowProviderRunRequest {
   workflowKey: string;
   provider: string;
   definitionId: string;
-  input?: JsonObject;
+  input?: JsonObjectInput;
   expectedDefinitionGeneration: bigint;
   context?: RequestContext;
 }
@@ -233,7 +232,7 @@ export interface WorkflowActivation {
 export interface WorkflowAgentMessage {
   role: string;
   text?: WorkflowText;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
 }
 
 export interface WorkflowArray {
@@ -268,8 +267,8 @@ export interface WorkflowEvent {
   subject: string;
   time?: Date;
   datacontenttype: string;
-  data?: JsonObject;
-  extensions: { [key: string]: JsonValue };
+  data?: JsonObjectInput;
+  extensions: { [key: string]: JsonInput };
 }
 
 export interface WorkflowEventActivation {
@@ -306,12 +305,12 @@ export interface WorkflowRun {
   startedAt?: Date;
   completedAt?: Date;
   statusMessage: string;
-  output?: JsonValue;
+  output?: JsonInput;
   workflowKey: string;
   provider: string;
   definitionId: string;
   runAs: string;
-  input?: JsonObject;
+  input?: JsonObjectInput;
   definitionGeneration: bigint;
   currentStepId: string;
   steps: WorkflowStepExecution[];
@@ -322,7 +321,7 @@ export interface WorkflowRunEvent {
   runId: string;
   stepId: string;
   type: string;
-  data?: JsonObject;
+  data?: JsonObjectInput;
   createdAt?: Date;
 }
 
@@ -367,8 +366,8 @@ export interface WorkflowScheduleTrigger {
 export interface WorkflowSignal {
   id: string;
   name: string;
-  payload?: JsonObject;
-  metadata?: JsonObject;
+  payload?: JsonObjectInput;
+  metadata?: JsonObjectInput;
   createdAt?: Date;
   idempotencyKey: string;
   sequence: bigint;
@@ -396,7 +395,7 @@ export interface WorkflowStep {
   inputs: { [key: string]: WorkflowValue };
   when?: WorkflowStepWhen;
   timeoutSeconds: number;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   action: WorkflowStepAction;
 }
 
@@ -408,7 +407,7 @@ export interface WorkflowStepAgentTurn {
   messages: WorkflowAgentMessage[];
   tools: AgentToolRef[];
   output?: AgentOutput;
-  modelOptions?: JsonObject;
+  modelOptions?: JsonObjectInput;
 }
 
 export interface WorkflowStepAppCall {
@@ -424,8 +423,8 @@ export interface WorkflowStepAttempt {
   id: string;
   status: WorkflowStepStatus;
   idempotencyKey: string;
-  input?: JsonValue;
-  output?: JsonValue;
+  input?: JsonInput;
+  output?: JsonInput;
   statusMessage: string;
   startedAt?: Date;
   completedAt?: Date;
@@ -435,8 +434,8 @@ export interface WorkflowStepExecution {
   stepId: string;
   status: WorkflowStepStatus;
   attempts: WorkflowStepAttempt[];
-  input?: JsonValue;
-  output?: JsonValue;
+  input?: JsonInput;
+  output?: JsonInput;
   statusMessage: string;
   skipReason: string;
   startedAt?: Date;
@@ -455,7 +454,7 @@ export interface WorkflowStepOutputSource {
 
 export interface WorkflowStepWhen {
   value?: WorkflowValue;
-  equals?: JsonValue;
+  equals?: JsonInput;
 }
 
 export interface WorkflowText {
@@ -463,7 +462,7 @@ export interface WorkflowText {
 }
 
 export type WorkflowValueKind =
-  | { case: "literal"; value: JsonValue }
+  | { case: "literal"; value: JsonInput }
   | { case: "object"; value: WorkflowObject }
   | { case: "array"; value: WorkflowArray }
   | { case: "template"; value: WorkflowText }
@@ -473,7 +472,7 @@ export type WorkflowValueKind =
   | { case: "stepInput"; value: WorkflowStepInputSource }
   | { case: undefined; value?: undefined };
 
-export function workflowValueKindLiteral(value: JsonValue): WorkflowValueKind {
+export function workflowValueKindLiteral(value: JsonInput): WorkflowValueKind {
   return { case: "literal", value };
 }
 
@@ -803,7 +802,7 @@ export class Workflow {
     provider: string,
     definitionId: string,
     expectedDefinitionGeneration: bigint,
-    input?: JsonObject,
+    input?: JsonObjectInput,
   ): Promise<WorkflowRun> {
     const request = {
       idempotencyKey,
@@ -973,7 +972,7 @@ export class Workflow {
   async getRunOutput(
     provider: string,
     runId: string,
-  ): Promise<JsonValue | undefined> {
+  ): Promise<JsonInput | undefined> {
     const request = {
       provider,
       runId,
@@ -1103,7 +1102,7 @@ export class Workflow {
     definitionId: string,
     expectedDefinitionGeneration: bigint,
     signal?: Init<WorkflowSignal>,
-    input?: JsonObject,
+    input?: JsonObjectInput,
   ): Promise<SignalWorkflowRunResponse> {
     const request = {
       workflowKey,

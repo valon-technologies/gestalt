@@ -11,7 +11,14 @@ import type { Duration, Timestamp, Value } from "@bufbuild/protobuf/wkt";
 import { StatusSchema } from "../gen/google/rpc/status_pb.ts";
 import type { Status } from "../gen/google/rpc/status_pb.ts";
 import { GestaltError, GestaltErrorCode, toGestaltError } from "../../rpc_support.ts";
-import type { ByteStream, DurationMs, Init, RpcStatus } from "../../rpc_support.ts";
+import type {
+  ByteStream,
+  DurationMs,
+  Init,
+  JsonInput,
+  JsonObjectInput,
+  RpcStatus,
+} from "../../rpc_support.ts";
 
 // callOptions converts a client-level timeout into per-call options for a
 // unary call, or undefined when no timeout is configured.
@@ -120,7 +127,7 @@ export function fromWireTimestamp(value: Timestamp): Date {
  * properties are omitted recursively so callers can pass sparse Init objects
  * (for example pagination cursors) without producing invalid wire values.
  */
-export function sanitizeJsonObject(value: Init<JsonObject>): JsonObject {
+export function sanitizeJsonObject(value: Init<JsonObjectInput>): JsonObject {
   const out: JsonObject = {};
   for (const [key, entry] of Object.entries(value)) {
     if (entry !== undefined) {
@@ -134,7 +141,7 @@ export function sanitizeJsonObject(value: Init<JsonObject>): JsonObject {
  * Normalizes JSON before protobuf Value encoding. Undefined object properties
  * are omitted recursively; undefined array elements become null.
  */
-export function sanitizeJsonValue(value: Init<JsonValue>): JsonValue {
+export function sanitizeJsonValue(value: Init<JsonInput>): JsonValue {
   if (value === undefined) {
     return null;
   }
@@ -162,7 +169,7 @@ export function sanitizeJsonValue(value: Init<JsonValue>): JsonValue {
   return out;
 }
 
-export function toWireValue(value: Init<JsonValue>): Value {
+export function toWireValue(value: Init<JsonInput>): Value {
   return fromJson(ValueSchema, sanitizeJsonValue(value));
 }
 

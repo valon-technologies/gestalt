@@ -14,6 +14,24 @@ import { ConnectError } from "@connectrpc/connect";
 export type DurationMs = number;
 
 /**
+ * Native object accepted at SDK public boundaries before protobuf Struct
+ * encoding.
+ */
+export type JsonObjectInput = object;
+
+/**
+ * Native JSON value accepted at SDK public boundaries before protobuf Value
+ * encoding.
+ */
+export type JsonInput =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly unknown[]
+  | object;
+
+/**
  * The native representation of an empty oneof variant: an object with no
  * fields.
  */

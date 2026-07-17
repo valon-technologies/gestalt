@@ -26,7 +26,7 @@ export {
   type BoundAppInvokeRequest,
   type ClientOptions,
   type GestaltClient,
-  type JsonObject,
+  type JsonObjectInput,
   type SessionAuth,
   type Unauthenticated,
 } from "./client.ts";

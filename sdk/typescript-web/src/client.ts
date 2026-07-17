@@ -4,8 +4,6 @@
  * @module client
  */
 
-import type { JsonObject } from "@bufbuild/protobuf";
-
 import { normalizeAddress } from "./address.ts";
 import { AgentClient } from "./client/generated/agent_client.ts";
 import { AppClient } from "./client/generated/app_client.ts";
@@ -71,7 +69,7 @@ export function bindApp(client: GestaltClient, app: string): BoundAppClient {
   };
 }
 
-export type { JsonObject };
+export type { JsonObjectInput } from "./client/runtime/rpc_support.ts";
 
 export function session(): SessionAuth {
   return { kind: "session" };
