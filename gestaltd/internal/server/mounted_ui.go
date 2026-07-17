@@ -226,7 +226,7 @@ func (s *Server) authorizeMountedResource(
 		return nil, false
 	}
 
-	access, allowed, err := s.authorizeMountedAppAccess(r.Context(), p, mounted)
+	access, allowed, err := s.authorizeMountedAppAccess(principal.WithPrincipal(r.Context(), p), p, mounted)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to authorize app access")
 		return nil, false

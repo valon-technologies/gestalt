@@ -179,7 +179,6 @@ spec:
               readOnly: true
             - name: gestaltd-state
               mountPath: /etc/gestaltd-state
-              readOnly: true
             {{- else }}
             - name: config
               mountPath: /etc/gestaltd/config.yaml

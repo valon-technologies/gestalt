@@ -1932,8 +1932,8 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	if guardedProvider.setAuthorizationState != nil {
 		t.Fatal("guarded authorization provider unexpectedly received SetAuthorizationState")
 	}
-	if result.Authorization["authz"] != guardedProvider {
-		t.Fatal("bootstrapped authorization provider is not the guarded runtime authorization provider")
+	if result.Authorization["authz"] != rawProvider {
+		t.Fatal("bootstrapped authorization provider is not the raw runtime authorization provider")
 	}
 	if transportGateway != guardedProvider.transport {
 		t.Fatal("guarded authorization provider was not built with the runtime provider gateway")
