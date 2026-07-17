@@ -119,12 +119,62 @@ func TestPublicSurfaceMethodCounts(t *testing.T) {
 	t.Parallel()
 	schema := realSchema(t)
 	view := publicsurface.Build(schema)
-
-	if got := publicsurface.GRPCMethodCount(view); got != 2 {
-		t.Errorf("public gRPC methods = %d, want 2", got)
+	plan, err := publicsurface.PrepareEmit(schema)
+	if err != nil {
+		t.Fatalf("PrepareEmit: %v", err)
 	}
-	if got := publicsurface.RESTMethodCount(view); got != 2 {
-		t.Errorf("public REST methods = %d, want 2", got)
+
+	if got := len(view.Services); got != 7 {
+		t.Errorf("public services = %d, want 7", got)
+	}
+	if got := publicsurface.GRPCMethodCount(view); got != 69 {
+		t.Errorf("public gRPC methods = %d, want 69", got)
+	}
+	if got := publicsurface.RESTMethodCount(view); got != 41 {
+		t.Errorf("public REST methods = %d, want 41", got)
+	}
+	if got := len(view.Messages); got != 190 {
+		t.Errorf("gRPC messages before omission = %d, want 190", got)
+	}
+	if got := len(plan.GRPCReachableMessages); got != 182 {
+		t.Errorf("gRPC projected messages = %d, want 182", got)
+	}
+	if got := len(plan.GRPCReachableEnums); got != 7 {
+		t.Errorf("gRPC enums = %d, want 7", got)
+	}
+	enums := map[string]*model.Enum{}
+	for _, e := range schema.Enums {
+		enums[e.FullName] = e
+	}
+	restServices := make([]*model.Service, 0, len(view.Services))
+	for _, svc := range view.Services {
+		var methods []*model.Method
+		for _, m := range svc.PublicMethods {
+			if m.HTTP != nil {
+				methods = append(methods, m)
+			}
+		}
+		if len(methods) > 0 {
+			restServices = append(restServices, &model.Service{
+				FullName: svc.FullName,
+				Name:     svc.Name,
+				Methods:  methods,
+			})
+		}
+	}
+	restMessages := map[string]*model.Message{}
+	for _, m := range schema.Messages {
+		restMessages[m.FullName] = m
+	}
+	restReachable, restEnums := publicsurface.Reachable(restMessages, enums, restServices)
+	if got := len(restReachable); got != 148 {
+		t.Errorf("REST messages before omission = %d, want 148", got)
+	}
+	if got := len(plan.RESTReachableMessages); got != 140 {
+		t.Errorf("REST projected messages = %d, want 140", got)
+	}
+	if got := len(restEnums); got != 7 {
+		t.Errorf("REST enums = %d, want 7", got)
 	}
 }
 

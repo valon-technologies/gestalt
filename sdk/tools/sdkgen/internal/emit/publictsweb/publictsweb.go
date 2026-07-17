@@ -32,5 +32,6 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	return ts.EmitPublicWithOptions(schema, ts.PublicEmitOptions{
 		Imports:             ts.WebPublicImports(),
 		IncludeGrpcDispatch: false,
+		RESTOnly:            true,
 	})
 }

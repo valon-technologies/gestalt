@@ -25,6 +25,132 @@ type PublicField struct {
 	JSONName string
 }
 
+var MethodAgentCancelTurn = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "CancelTurn",
+	FullMethod:                "/gestalt.provider.v1.Agent/CancelTurn",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}, PublicField{Name: "turn_id", JSONName: "turnId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentCreateSession = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "CreateSession",
+	FullMethod:                "/gestalt.provider.v1.Agent/CreateSession",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/agent/sessions",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentCreateTurn = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "CreateTurn",
+	FullMethod:                "/gestalt.provider.v1.Agent/CreateTurn",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/agent/sessions/{session_id}/turns",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentGetSession = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "GetSession",
+	FullMethod:                "/gestalt.provider.v1.Agent/GetSession",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/agent/sessions/{session_id}",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentGetTurn = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "GetTurn",
+	FullMethod:                "/gestalt.provider.v1.Agent/GetTurn",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/agent/sessions/{session_id}/turns/{turn_id}",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}, PublicField{Name: "turn_id", JSONName: "turnId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentListSessions = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "ListSessions",
+	FullMethod:                "/gestalt.provider.v1.Agent/ListSessions",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/agent/sessions",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           []PublicField{PublicField{Name: "session_ids", JSONName: "sessionIds"}, PublicField{Name: "state", JSONName: "state"}, PublicField{Name: "limit", JSONName: "limit"}, PublicField{Name: "summary_only", JSONName: "summaryOnly"}, PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentListTurnEvents = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "ListTurnEvents",
+	FullMethod:                "/gestalt.provider.v1.Agent/ListTurnEvents",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/agent/sessions/{session_id}/turns/{turn_id}/events",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}, PublicField{Name: "turn_id", JSONName: "turnId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "after_seq", JSONName: "afterSeq"}, PublicField{Name: "limit", JSONName: "limit"}, PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentListTurns = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "ListTurns",
+	FullMethod:                "/gestalt.provider.v1.Agent/ListTurns",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/agent/sessions/{session_id}/turns",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "turn_ids", JSONName: "turnIds"}, PublicField{Name: "status", JSONName: "status"}, PublicField{Name: "limit", JSONName: "limit"}, PublicField{Name: "summary_only", JSONName: "summaryOnly"}, PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAgentUpdateSession = Method{
+	Service:                   "gestalt.provider.v1.Agent",
+	Name:                      "UpdateSession",
+	FullMethod:                "/gestalt.provider.v1.Agent/UpdateSession",
+	HTTPVerb:                  "PATCH",
+	HTTPPath:                  "/api/v2/agent/sessions/{session_id}",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
 var MethodAppInvoke = Method{
 	Service:                   "gestalt.provider.v1.App",
 	Name:                      "Invoke",
@@ -51,4 +177,676 @@ var MethodAppInvokeGraphQL = Method{
 	Fill:                      []string{"context"},
 	Reject:                    nil,
 	ResponseIsOperationResult: true,
+}
+
+var MethodAuthorizationAddRelationship = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "AddRelationship",
+	FullMethod:                "/gestalt.provider.v1.Authorization/AddRelationship",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/authorization/relationships",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationCheckAccess = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "CheckAccess",
+	FullMethod:                "/gestalt.provider.v1.Authorization/CheckAccess",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/authorization/access:check",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationCheckAccessMany = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "CheckAccessMany",
+	FullMethod:                "/gestalt.provider.v1.Authorization/CheckAccessMany",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/authorization/access:checkMany",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationDeleteRelationship = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "DeleteRelationship",
+	FullMethod:                "/gestalt.provider.v1.Authorization/DeleteRelationship",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/authorization/relationships:delete",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationGetActiveModelRef = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "GetActiveModelRef",
+	FullMethod:                "/gestalt.provider.v1.Authorization/GetActiveModelRef",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/authorization/models/active",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationListActiveModelResourceTypes = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "ListActiveModelResourceTypes",
+	FullMethod:                "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/authorization/models/active/resource-types",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           []PublicField{PublicField{Name: "filter", JSONName: "filter"}, PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}},
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationListRelationships = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "ListRelationships",
+	FullMethod:                "/gestalt.provider.v1.Authorization/ListRelationships",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/authorization/relationships",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           []PublicField{PublicField{Name: "filter", JSONName: "filter"}, PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}},
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationSetActiveModel = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "SetActiveModel",
+	FullMethod:                "/gestalt.provider.v1.Authorization/SetActiveModel",
+	HTTPVerb:                  "PUT",
+	HTTPPath:                  "/api/v2/authorization/models/active",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodAuthorizationSetAuthorizationState = Method{
+	Service:                   "gestalt.provider.v1.Authorization",
+	Name:                      "SetAuthorizationState",
+	FullMethod:                "/gestalt.provider.v1.Authorization/SetAuthorizationState",
+	HTTPVerb:                  "PUT",
+	HTTPPath:                  "/api/v2/authorization/state",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsCreateCredential = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "CreateCredential",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/CreateCredential",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsDeleteCredential = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "DeleteCredential",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/DeleteCredential",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsExchangeCredential = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "ExchangeCredential",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/ExchangeCredential",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsGetCredential = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "GetCredential",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/GetCredential",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsListCredentials = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "ListCredentials",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/ListCredentials",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsResolveCredential = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "ResolveCredential",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/ResolveCredential",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsUpsertCredential = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "UpsertCredential",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/UpsertCredential",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodExternalCredentialsValidateCredentialConfig = Method{
+	Service:                   "gestalt.provider.v1.ExternalCredentials",
+	Name:                      "ValidateCredentialConfig",
+	FullMethod:                "/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIdentityAuthorize = Method{
+	Service:                   "gestalt.provider.v1.Identity",
+	Name:                      "Authorize",
+	FullMethod:                "/gestalt.provider.v1.Identity/Authorize",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/identity/authorize",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIdentityGetGrant = Method{
+	Service:                   "gestalt.provider.v1.Identity",
+	Name:                      "GetGrant",
+	FullMethod:                "/gestalt.provider.v1.Identity/GetGrant",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/identity/grants/{grant_id}",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "grant_id", JSONName: "grantId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIdentityIntrospect = Method{
+	Service:                   "gestalt.provider.v1.Identity",
+	Name:                      "Introspect",
+	FullMethod:                "/gestalt.provider.v1.Identity/Introspect",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/identity/introspect",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIdentityListGrants = Method{
+	Service:                   "gestalt.provider.v1.Identity",
+	Name:                      "ListGrants",
+	FullMethod:                "/gestalt.provider.v1.Identity/ListGrants",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/identity/grants",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIdentityRevokeGrant = Method{
+	Service:                   "gestalt.provider.v1.Identity",
+	Name:                      "RevokeGrant",
+	FullMethod:                "/gestalt.provider.v1.Identity/RevokeGrant",
+	HTTPVerb:                  "DELETE",
+	HTTPPath:                  "/api/v2/identity/grants/{grant_id}",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "grant_id", JSONName: "grantId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIdentityToken = Method{
+	Service:                   "gestalt.provider.v1.Identity",
+	Name:                      "Token",
+	FullMethod:                "/gestalt.provider.v1.Identity/Token",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/identity/token",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIdentityUserInfo = Method{
+	Service:                   "gestalt.provider.v1.Identity",
+	Name:                      "UserInfo",
+	FullMethod:                "/gestalt.provider.v1.Identity/UserInfo",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/identity/userinfo",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBAdd = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "Add",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/Add",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBClear = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "Clear",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/Clear",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBCount = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "Count",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/Count",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBCreateIndex = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "CreateIndex",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/CreateIndex",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBCreateObjectStore = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "CreateObjectStore",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/CreateObjectStore",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBDelete = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "Delete",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/Delete",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBDeleteIndex = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "DeleteIndex",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/DeleteIndex",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBDeleteObjectStore = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "DeleteObjectStore",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/DeleteObjectStore",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBDeleteRange = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "DeleteRange",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/DeleteRange",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBGet = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "Get",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/Get",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBGetAll = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "GetAll",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/GetAll",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBGetAllKeys = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "GetAllKeys",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/GetAllKeys",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBGetKey = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "GetKey",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/GetKey",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBIndexCount = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "IndexCount",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/IndexCount",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBIndexDelete = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "IndexDelete",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/IndexDelete",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBIndexGet = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "IndexGet",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/IndexGet",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBIndexGetAll = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "IndexGetAll",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/IndexGetAll",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBIndexGetAllKeys = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "IndexGetAllKeys",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBIndexGetKey = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "IndexGetKey",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/IndexGetKey",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodIndexedDBPut = Method{
+	Service:                   "gestalt.provider.v1.IndexedDB",
+	Name:                      "Put",
+	FullMethod:                "/gestalt.provider.v1.IndexedDB/Put",
+	Fill:                      nil,
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowApplyDefinition = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "ApplyDefinition",
+	FullMethod:                "/gestalt.provider.v1.Workflow/ApplyDefinition",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/workflow/definitions:apply",
+	HTTPBody:                  "*",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowCancelRun = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "CancelRun",
+	FullMethod:                "/gestalt.provider.v1.Workflow/CancelRun",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/workflow/runs/{run_id}:cancel",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowDeleteDefinition = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "DeleteDefinition",
+	FullMethod:                "/gestalt.provider.v1.Workflow/DeleteDefinition",
+	HTTPVerb:                  "DELETE",
+	HTTPPath:                  "/api/v2/workflow/definitions/{definition_id}",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowGetDefinition = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "GetDefinition",
+	FullMethod:                "/gestalt.provider.v1.Workflow/GetDefinition",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/workflow/definitions/{definition_id}",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowGetRun = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "GetRun",
+	FullMethod:                "/gestalt.provider.v1.Workflow/GetRun",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/workflow/runs/{run_id}",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowGetRunEvents = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "GetRunEvents",
+	FullMethod:                "/gestalt.provider.v1.Workflow/GetRunEvents",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/workflow/runs/{run_id}/events",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowGetRunOutput = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "GetRunOutput",
+	FullMethod:                "/gestalt.provider.v1.Workflow/GetRunOutput",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/workflow/runs/{run_id}/output",
+	HTTPBody:                  "",
+	HTTPPathFields:            []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowListDefinitions = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "ListDefinitions",
+	FullMethod:                "/gestalt.provider.v1.Workflow/ListDefinitions",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/workflow/definitions",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowListRuns = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "ListRuns",
+	FullMethod:                "/gestalt.provider.v1.Workflow/ListRuns",
+	HTTPVerb:                  "GET",
+	HTTPPath:                  "/api/v2/workflow/runs",
+	HTTPBody:                  "",
+	HTTPPathFields:            nil,
+	HTTPQueryFields:           []PublicField{PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}, PublicField{Name: "status", JSONName: "status"}, PublicField{Name: "target_app", JSONName: "targetApp"}, PublicField{Name: "provider", JSONName: "provider"}},
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowSetActivationPaused = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "SetActivationPaused",
+	FullMethod:                "/gestalt.provider.v1.Workflow/SetActivationPaused",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}, PublicField{Name: "activation_id", JSONName: "activationId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowSetDefinitionPaused = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "SetDefinitionPaused",
+	FullMethod:                "/gestalt.provider.v1.Workflow/SetDefinitionPaused",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/workflow/definitions/{definition_id}:setPaused",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowSignalOrStartRun = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "SignalOrStartRun",
+	FullMethod:                "/gestalt.provider.v1.Workflow/SignalOrStartRun",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/workflow/definitions/{definition_id}:signalOrStart",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowSignalRun = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "SignalRun",
+	FullMethod:                "/gestalt.provider.v1.Workflow/SignalRun",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/workflow/runs/{run_id}:signal",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
+}
+
+var MethodWorkflowStartRun = Method{
+	Service:                   "gestalt.provider.v1.Workflow",
+	Name:                      "StartRun",
+	FullMethod:                "/gestalt.provider.v1.Workflow/StartRun",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/workflow/definitions/{definition_id}/runs",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: false,
 }

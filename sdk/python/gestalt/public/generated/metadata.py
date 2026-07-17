@@ -28,6 +28,157 @@ class PublicField:
     json_name: str
 
 
+METHOD_AGENT_CANCEL_TURN = Method(
+    service="gestalt.provider.v1.Agent",
+    name="CancelTurn",
+    full_method="/gestalt.provider.v1.Agent/CancelTurn",
+    http_verb="POST",
+    http_path="/api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel",
+    http_body="*",
+    http_path_fields=(
+        PublicField(name="session_id", json_name="sessionId"),
+        PublicField(name="turn_id", json_name="turnId"),
+    ),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_CREATE_SESSION = Method(
+    service="gestalt.provider.v1.Agent",
+    name="CreateSession",
+    full_method="/gestalt.provider.v1.Agent/CreateSession",
+    http_verb="POST",
+    http_path="/api/v2/agent/sessions",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_CREATE_TURN = Method(
+    service="gestalt.provider.v1.Agent",
+    name="CreateTurn",
+    full_method="/gestalt.provider.v1.Agent/CreateTurn",
+    http_verb="POST",
+    http_path="/api/v2/agent/sessions/{session_id}/turns",
+    http_body="*",
+    http_path_fields=(PublicField(name="session_id", json_name="sessionId"),),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_GET_SESSION = Method(
+    service="gestalt.provider.v1.Agent",
+    name="GetSession",
+    full_method="/gestalt.provider.v1.Agent/GetSession",
+    http_verb="GET",
+    http_path="/api/v2/agent/sessions/{session_id}",
+    http_body="",
+    http_path_fields=(PublicField(name="session_id", json_name="sessionId"),),
+    http_query_fields=(PublicField(name="provider_name", json_name="providerName"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_GET_TURN = Method(
+    service="gestalt.provider.v1.Agent",
+    name="GetTurn",
+    full_method="/gestalt.provider.v1.Agent/GetTurn",
+    http_verb="GET",
+    http_path="/api/v2/agent/sessions/{session_id}/turns/{turn_id}",
+    http_body="",
+    http_path_fields=(
+        PublicField(name="session_id", json_name="sessionId"),
+        PublicField(name="turn_id", json_name="turnId"),
+    ),
+    http_query_fields=(PublicField(name="provider_name", json_name="providerName"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_LIST_SESSIONS = Method(
+    service="gestalt.provider.v1.Agent",
+    name="ListSessions",
+    full_method="/gestalt.provider.v1.Agent/ListSessions",
+    http_verb="GET",
+    http_path="/api/v2/agent/sessions",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(
+        PublicField(name="session_ids", json_name="sessionIds"),
+        PublicField(name="state", json_name="state"),
+        PublicField(name="limit", json_name="limit"),
+        PublicField(name="summary_only", json_name="summaryOnly"),
+        PublicField(name="provider_name", json_name="providerName"),
+    ),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_LIST_TURN_EVENTS = Method(
+    service="gestalt.provider.v1.Agent",
+    name="ListTurnEvents",
+    full_method="/gestalt.provider.v1.Agent/ListTurnEvents",
+    http_verb="GET",
+    http_path="/api/v2/agent/sessions/{session_id}/turns/{turn_id}/events",
+    http_body="",
+    http_path_fields=(
+        PublicField(name="session_id", json_name="sessionId"),
+        PublicField(name="turn_id", json_name="turnId"),
+    ),
+    http_query_fields=(
+        PublicField(name="after_seq", json_name="afterSeq"),
+        PublicField(name="limit", json_name="limit"),
+        PublicField(name="provider_name", json_name="providerName"),
+    ),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_LIST_TURNS = Method(
+    service="gestalt.provider.v1.Agent",
+    name="ListTurns",
+    full_method="/gestalt.provider.v1.Agent/ListTurns",
+    http_verb="GET",
+    http_path="/api/v2/agent/sessions/{session_id}/turns",
+    http_body="",
+    http_path_fields=(PublicField(name="session_id", json_name="sessionId"),),
+    http_query_fields=(
+        PublicField(name="turn_ids", json_name="turnIds"),
+        PublicField(name="status", json_name="status"),
+        PublicField(name="limit", json_name="limit"),
+        PublicField(name="summary_only", json_name="summaryOnly"),
+        PublicField(name="provider_name", json_name="providerName"),
+    ),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AGENT_UPDATE_SESSION = Method(
+    service="gestalt.provider.v1.Agent",
+    name="UpdateSession",
+    full_method="/gestalt.provider.v1.Agent/UpdateSession",
+    http_verb="PATCH",
+    http_path="/api/v2/agent/sessions/{session_id}",
+    http_body="*",
+    http_path_fields=(PublicField(name="session_id", json_name="sessionId"),),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
 METHOD_APP_INVOKE = Method(
     service="gestalt.provider.v1.App",
     name="Invoke",
@@ -57,4 +208,693 @@ METHOD_APP_INVOKE_GRAPHQL = Method(
     fill=("context",),
     reject=(),
     response_is_operation_result=True,
+)
+
+METHOD_AUTHORIZATION_ADD_RELATIONSHIP = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="AddRelationship",
+    full_method="/gestalt.provider.v1.Authorization/AddRelationship",
+    http_verb="POST",
+    http_path="/api/v2/authorization/relationships",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_CHECK_ACCESS = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="CheckAccess",
+    full_method="/gestalt.provider.v1.Authorization/CheckAccess",
+    http_verb="POST",
+    http_path="/api/v2/authorization/access:check",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_CHECK_ACCESS_MANY = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="CheckAccessMany",
+    full_method="/gestalt.provider.v1.Authorization/CheckAccessMany",
+    http_verb="POST",
+    http_path="/api/v2/authorization/access:checkMany",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_DELETE_RELATIONSHIP = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="DeleteRelationship",
+    full_method="/gestalt.provider.v1.Authorization/DeleteRelationship",
+    http_verb="POST",
+    http_path="/api/v2/authorization/relationships:delete",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_GET_ACTIVE_MODEL_REF = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="GetActiveModelRef",
+    full_method="/gestalt.provider.v1.Authorization/GetActiveModelRef",
+    http_verb="GET",
+    http_path="/api/v2/authorization/models/active",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="ListActiveModelResourceTypes",
+    full_method="/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes",
+    http_verb="GET",
+    http_path="/api/v2/authorization/models/active/resource-types",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(
+        PublicField(name="filter", json_name="filter"),
+        PublicField(name="page_size", json_name="pageSize"),
+        PublicField(name="page_token", json_name="pageToken"),
+    ),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_LIST_RELATIONSHIPS = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="ListRelationships",
+    full_method="/gestalt.provider.v1.Authorization/ListRelationships",
+    http_verb="GET",
+    http_path="/api/v2/authorization/relationships",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(
+        PublicField(name="filter", json_name="filter"),
+        PublicField(name="page_size", json_name="pageSize"),
+        PublicField(name="page_token", json_name="pageToken"),
+    ),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_SET_ACTIVE_MODEL = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="SetActiveModel",
+    full_method="/gestalt.provider.v1.Authorization/SetActiveModel",
+    http_verb="PUT",
+    http_path="/api/v2/authorization/models/active",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE = Method(
+    service="gestalt.provider.v1.Authorization",
+    name="SetAuthorizationState",
+    full_method="/gestalt.provider.v1.Authorization/SetAuthorizationState",
+    http_verb="PUT",
+    http_path="/api/v2/authorization/state",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="CreateCredential",
+    full_method="/gestalt.provider.v1.ExternalCredentials/CreateCredential",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="DeleteCredential",
+    full_method="/gestalt.provider.v1.ExternalCredentials/DeleteCredential",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="ExchangeCredential",
+    full_method="/gestalt.provider.v1.ExternalCredentials/ExchangeCredential",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="GetCredential",
+    full_method="/gestalt.provider.v1.ExternalCredentials/GetCredential",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="ListCredentials",
+    full_method="/gestalt.provider.v1.ExternalCredentials/ListCredentials",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="ResolveCredential",
+    full_method="/gestalt.provider.v1.ExternalCredentials/ResolveCredential",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="UpsertCredential",
+    full_method="/gestalt.provider.v1.ExternalCredentials/UpsertCredential",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_EXTERNAL_CREDENTIALS_VALIDATE_CREDENTIAL_CONFIG = Method(
+    service="gestalt.provider.v1.ExternalCredentials",
+    name="ValidateCredentialConfig",
+    full_method="/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_IDENTITY_AUTHORIZE = Method(
+    service="gestalt.provider.v1.Identity",
+    name="Authorize",
+    full_method="/gestalt.provider.v1.Identity/Authorize",
+    http_verb="POST",
+    http_path="/api/v2/identity/authorize",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_IDENTITY_GET_GRANT = Method(
+    service="gestalt.provider.v1.Identity",
+    name="GetGrant",
+    full_method="/gestalt.provider.v1.Identity/GetGrant",
+    http_verb="GET",
+    http_path="/api/v2/identity/grants/{grant_id}",
+    http_body="",
+    http_path_fields=(PublicField(name="grant_id", json_name="grantId"),),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_IDENTITY_INTROSPECT = Method(
+    service="gestalt.provider.v1.Identity",
+    name="Introspect",
+    full_method="/gestalt.provider.v1.Identity/Introspect",
+    http_verb="POST",
+    http_path="/api/v2/identity/introspect",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_IDENTITY_LIST_GRANTS = Method(
+    service="gestalt.provider.v1.Identity",
+    name="ListGrants",
+    full_method="/gestalt.provider.v1.Identity/ListGrants",
+    http_verb="GET",
+    http_path="/api/v2/identity/grants",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_IDENTITY_REVOKE_GRANT = Method(
+    service="gestalt.provider.v1.Identity",
+    name="RevokeGrant",
+    full_method="/gestalt.provider.v1.Identity/RevokeGrant",
+    http_verb="DELETE",
+    http_path="/api/v2/identity/grants/{grant_id}",
+    http_body="",
+    http_path_fields=(PublicField(name="grant_id", json_name="grantId"),),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_IDENTITY_TOKEN = Method(
+    service="gestalt.provider.v1.Identity",
+    name="Token",
+    full_method="/gestalt.provider.v1.Identity/Token",
+    http_verb="POST",
+    http_path="/api/v2/identity/token",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_IDENTITY_USER_INFO = Method(
+    service="gestalt.provider.v1.Identity",
+    name="UserInfo",
+    full_method="/gestalt.provider.v1.Identity/UserInfo",
+    http_verb="GET",
+    http_path="/api/v2/identity/userinfo",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_ADD = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="Add",
+    full_method="/gestalt.provider.v1.IndexedDB/Add",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_CLEAR = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="Clear",
+    full_method="/gestalt.provider.v1.IndexedDB/Clear",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_COUNT = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="Count",
+    full_method="/gestalt.provider.v1.IndexedDB/Count",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_CREATE_INDEX = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="CreateIndex",
+    full_method="/gestalt.provider.v1.IndexedDB/CreateIndex",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_CREATE_OBJECT_STORE = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="CreateObjectStore",
+    full_method="/gestalt.provider.v1.IndexedDB/CreateObjectStore",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_DELETE = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="Delete",
+    full_method="/gestalt.provider.v1.IndexedDB/Delete",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_DELETE_INDEX = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="DeleteIndex",
+    full_method="/gestalt.provider.v1.IndexedDB/DeleteIndex",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_DELETE_OBJECT_STORE = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="DeleteObjectStore",
+    full_method="/gestalt.provider.v1.IndexedDB/DeleteObjectStore",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_DELETE_RANGE = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="DeleteRange",
+    full_method="/gestalt.provider.v1.IndexedDB/DeleteRange",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_GET = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="Get",
+    full_method="/gestalt.provider.v1.IndexedDB/Get",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_GET_ALL = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="GetAll",
+    full_method="/gestalt.provider.v1.IndexedDB/GetAll",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_GET_ALL_KEYS = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="GetAllKeys",
+    full_method="/gestalt.provider.v1.IndexedDB/GetAllKeys",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_GET_KEY = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="GetKey",
+    full_method="/gestalt.provider.v1.IndexedDB/GetKey",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_INDEX_COUNT = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="IndexCount",
+    full_method="/gestalt.provider.v1.IndexedDB/IndexCount",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_INDEX_DELETE = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="IndexDelete",
+    full_method="/gestalt.provider.v1.IndexedDB/IndexDelete",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_INDEX_GET = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="IndexGet",
+    full_method="/gestalt.provider.v1.IndexedDB/IndexGet",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_INDEX_GET_ALL = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="IndexGetAll",
+    full_method="/gestalt.provider.v1.IndexedDB/IndexGetAll",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_INDEX_GET_ALL_KEYS = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="IndexGetAllKeys",
+    full_method="/gestalt.provider.v1.IndexedDB/IndexGetAllKeys",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_INDEX_GET_KEY = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="IndexGetKey",
+    full_method="/gestalt.provider.v1.IndexedDB/IndexGetKey",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_INDEXED_DB_PUT = Method(
+    service="gestalt.provider.v1.IndexedDB",
+    name="Put",
+    full_method="/gestalt.provider.v1.IndexedDB/Put",
+    fill=(),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_APPLY_DEFINITION = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="ApplyDefinition",
+    full_method="/gestalt.provider.v1.Workflow/ApplyDefinition",
+    http_verb="POST",
+    http_path="/api/v2/workflow/definitions:apply",
+    http_body="*",
+    http_path_fields=(),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_CANCEL_RUN = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="CancelRun",
+    full_method="/gestalt.provider.v1.Workflow/CancelRun",
+    http_verb="POST",
+    http_path="/api/v2/workflow/runs/{run_id}:cancel",
+    http_body="*",
+    http_path_fields=(PublicField(name="run_id", json_name="runId"),),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_DELETE_DEFINITION = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="DeleteDefinition",
+    full_method="/gestalt.provider.v1.Workflow/DeleteDefinition",
+    http_verb="DELETE",
+    http_path="/api/v2/workflow/definitions/{definition_id}",
+    http_body="",
+    http_path_fields=(PublicField(name="definition_id", json_name="definitionId"),),
+    http_query_fields=(PublicField(name="provider", json_name="provider"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_GET_DEFINITION = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="GetDefinition",
+    full_method="/gestalt.provider.v1.Workflow/GetDefinition",
+    http_verb="GET",
+    http_path="/api/v2/workflow/definitions/{definition_id}",
+    http_body="",
+    http_path_fields=(PublicField(name="definition_id", json_name="definitionId"),),
+    http_query_fields=(PublicField(name="provider", json_name="provider"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_GET_RUN = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="GetRun",
+    full_method="/gestalt.provider.v1.Workflow/GetRun",
+    http_verb="GET",
+    http_path="/api/v2/workflow/runs/{run_id}",
+    http_body="",
+    http_path_fields=(PublicField(name="run_id", json_name="runId"),),
+    http_query_fields=(PublicField(name="provider", json_name="provider"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_GET_RUN_EVENTS = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="GetRunEvents",
+    full_method="/gestalt.provider.v1.Workflow/GetRunEvents",
+    http_verb="GET",
+    http_path="/api/v2/workflow/runs/{run_id}/events",
+    http_body="",
+    http_path_fields=(PublicField(name="run_id", json_name="runId"),),
+    http_query_fields=(PublicField(name="provider", json_name="provider"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_GET_RUN_OUTPUT = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="GetRunOutput",
+    full_method="/gestalt.provider.v1.Workflow/GetRunOutput",
+    http_verb="GET",
+    http_path="/api/v2/workflow/runs/{run_id}/output",
+    http_body="",
+    http_path_fields=(PublicField(name="run_id", json_name="runId"),),
+    http_query_fields=(PublicField(name="provider", json_name="provider"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_LIST_DEFINITIONS = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="ListDefinitions",
+    full_method="/gestalt.provider.v1.Workflow/ListDefinitions",
+    http_verb="GET",
+    http_path="/api/v2/workflow/definitions",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(PublicField(name="provider", json_name="provider"),),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_LIST_RUNS = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="ListRuns",
+    full_method="/gestalt.provider.v1.Workflow/ListRuns",
+    http_verb="GET",
+    http_path="/api/v2/workflow/runs",
+    http_body="",
+    http_path_fields=(),
+    http_query_fields=(
+        PublicField(name="page_size", json_name="pageSize"),
+        PublicField(name="page_token", json_name="pageToken"),
+        PublicField(name="status", json_name="status"),
+        PublicField(name="target_app", json_name="targetApp"),
+        PublicField(name="provider", json_name="provider"),
+    ),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_SET_ACTIVATION_PAUSED = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="SetActivationPaused",
+    full_method="/gestalt.provider.v1.Workflow/SetActivationPaused",
+    http_verb="POST",
+    http_path="/api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused",
+    http_body="*",
+    http_path_fields=(
+        PublicField(name="definition_id", json_name="definitionId"),
+        PublicField(name="activation_id", json_name="activationId"),
+    ),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_SET_DEFINITION_PAUSED = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="SetDefinitionPaused",
+    full_method="/gestalt.provider.v1.Workflow/SetDefinitionPaused",
+    http_verb="POST",
+    http_path="/api/v2/workflow/definitions/{definition_id}:setPaused",
+    http_body="*",
+    http_path_fields=(PublicField(name="definition_id", json_name="definitionId"),),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_SIGNAL_OR_START_RUN = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="SignalOrStartRun",
+    full_method="/gestalt.provider.v1.Workflow/SignalOrStartRun",
+    http_verb="POST",
+    http_path="/api/v2/workflow/definitions/{definition_id}:signalOrStart",
+    http_body="*",
+    http_path_fields=(PublicField(name="definition_id", json_name="definitionId"),),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_SIGNAL_RUN = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="SignalRun",
+    full_method="/gestalt.provider.v1.Workflow/SignalRun",
+    http_verb="POST",
+    http_path="/api/v2/workflow/runs/{run_id}:signal",
+    http_body="*",
+    http_path_fields=(PublicField(name="run_id", json_name="runId"),),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
+)
+
+METHOD_WORKFLOW_START_RUN = Method(
+    service="gestalt.provider.v1.Workflow",
+    name="StartRun",
+    full_method="/gestalt.provider.v1.Workflow/StartRun",
+    http_verb="POST",
+    http_path="/api/v2/workflow/definitions/{definition_id}/runs",
+    http_body="*",
+    http_path_fields=(PublicField(name="definition_id", json_name="definitionId"),),
+    http_query_fields=(),
+    fill=("context",),
+    reject=(),
+    response_is_operation_result=False,
 )

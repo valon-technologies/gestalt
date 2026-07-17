@@ -10,6 +10,7 @@ import (
 type PublicEmitOptions struct {
 	Imports             PublicImports
 	IncludeGrpcDispatch bool
+	RESTOnly            bool
 }
 
 // EmitPublic renders the public TypeScript transport client into the caller's
@@ -32,16 +33,25 @@ func EmitPublicWithOptions(schema *model.Schema, opts PublicEmitOptions) (*files
 		return set, nil
 	}
 
+	services := plan.Filtered.Services
+	methods := plan.Methods
+	projectionView := plan.View
+	if opts.RESTOnly {
+		services = plan.REST.Services
+		methods = plan.RESTMethods
+		projectionView = publicsurface.RESTClientView(plan.View)
+	}
+
 	files := map[string]string{
-		"methods.ts":              renderPublicMethods(plan.Methods),
-		"types.ts":                renderPublicTypes(plan.View, opts.Imports),
-		"converters.ts":           renderPublicConverters(plan.View, opts.Imports),
+		"methods.ts":              renderPublicMethods(methods),
+		"types.ts":                renderPublicTypes(projectionView, opts.Imports),
+		"converters.ts":           renderPublicConverters(projectionView, opts.Imports),
 		"gateway_error.ts":        renderPublicGatewayError(opts.Imports),
 		"rest_request_mapping.ts": renderPublicRestRequestMapping(),
 		"transport_support.ts":    renderPublicTransportSupport(opts.Imports),
 		"transport_kernel.ts":     renderPublicTransportKernel(opts.Imports),
 		"unary_transport.ts":      renderPublicUnaryTransport(),
-		"app_client.ts":           renderPublicAppClient(plan.Filtered.Services, opts.Imports),
+		"app_client.ts":           renderPublicAppClient(services, opts.Imports),
 	}
 	if opts.IncludeGrpcDispatch {
 		files["grpc_dispatch.ts"] = renderPublicGrpcDispatch(plan.Filtered.Services, opts.Imports)

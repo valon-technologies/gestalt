@@ -73,7 +73,7 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 	}
 	requestType := r.messageType(m.Input.FullName)
 	outputType := r.messageType(m.Output.FullName)
-	wireOutputType := r.wireModule() + "." + localName(m.Output.FullName)
+	wireOutputType := r.wireRef(m.Output.ProtoFile, localName(m.Output.FullName))
 	toWire := r.codecRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 	fromWire := r.codecRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
 	r.useMetadataMethod(constName)

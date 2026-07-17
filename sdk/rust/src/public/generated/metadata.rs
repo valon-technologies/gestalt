@@ -8,9 +8,83 @@ use prost::Message as _;
 use serde_json::Value;
 
 use crate::generated::v1;
+use crate::public::generated::codec::agent::{
+    decode_wire_agent_session_json, decode_wire_agent_turn_json,
+    decode_wire_list_agent_provider_sessions_response_json,
+    decode_wire_list_agent_provider_turn_events_response_json,
+    decode_wire_list_agent_provider_turns_response_json,
+    encode_wire_cancel_agent_provider_turn_request_json,
+    encode_wire_create_agent_provider_session_request_json,
+    encode_wire_create_agent_provider_turn_request_json,
+    encode_wire_get_agent_provider_session_request_json,
+    encode_wire_get_agent_provider_turn_request_json,
+    encode_wire_list_agent_provider_sessions_request_json,
+    encode_wire_list_agent_provider_turn_events_request_json,
+    encode_wire_list_agent_provider_turns_request_json,
+    encode_wire_update_agent_provider_session_request_json,
+};
 use crate::public::generated::codec::app::{
     decode_wire_operation_result_json, encode_wire_app_invoke_graphql_request_json,
     encode_wire_app_invoke_request_json,
+};
+use crate::public::generated::codec::authorization::{
+    decode_wire_add_relationship_response_json, decode_wire_check_access_many_response_json,
+    decode_wire_check_access_response_json, decode_wire_delete_relationship_response_json,
+    decode_wire_list_active_model_resource_types_response_json,
+    decode_wire_list_relationships_response_json, decode_wire_set_active_model_response_json,
+    decode_wire_set_authorization_state_response_json, encode_wire_add_relationship_request_json,
+    encode_wire_check_access_many_request_json, encode_wire_check_access_request_json,
+    encode_wire_delete_relationship_request_json,
+    encode_wire_list_active_model_resource_types_request_json,
+    encode_wire_list_relationships_request_json, encode_wire_set_active_model_request_json,
+    encode_wire_set_authorization_state_request_json,
+};
+use crate::public::generated::codec::external_credential::{
+    decode_wire_exchange_external_credential_response_json, decode_wire_external_credential_json,
+    decode_wire_list_external_credentials_response_json,
+    decode_wire_resolve_external_credential_response_json,
+    encode_wire_create_external_credential_request_json,
+    encode_wire_exchange_external_credential_request_json,
+    encode_wire_get_external_credential_request_json,
+    encode_wire_list_external_credentials_request_json,
+    encode_wire_resolve_external_credential_request_json,
+    encode_wire_upsert_external_credential_request_json,
+};
+use crate::public::generated::codec::identity::{
+    decode_wire_authorize_response_json, decode_wire_get_grant_response_json,
+    decode_wire_introspect_response_json, decode_wire_list_grants_response_json,
+    decode_wire_revoke_grant_response_json, decode_wire_token_response_json,
+    decode_wire_user_info_response_json, encode_wire_authorize_request_json,
+    encode_wire_get_grant_request_json, encode_wire_introspect_request_json,
+    encode_wire_list_grants_request_json, encode_wire_revoke_grant_request_json,
+    encode_wire_token_request_json, encode_wire_user_info_request_json,
+};
+use crate::public::generated::codec::indexeddb::{
+    decode_wire_count_response_json, decode_wire_delete_response_json,
+    decode_wire_key_response_json, decode_wire_keys_response_json,
+    decode_wire_record_response_json, decode_wire_records_response_json,
+    encode_wire_index_query_request_json, encode_wire_object_store_range_request_json,
+    encode_wire_object_store_request_json,
+};
+use crate::public::generated::codec::workflow::{
+    decode_wire_get_workflow_provider_run_events_response_json,
+    decode_wire_get_workflow_provider_run_output_response_json,
+    decode_wire_list_workflow_provider_definitions_response_json,
+    decode_wire_list_workflow_provider_runs_response_json,
+    decode_wire_signal_workflow_run_response_json, decode_wire_workflow_definition_json,
+    decode_wire_workflow_run_json, encode_wire_apply_workflow_provider_definition_request_json,
+    encode_wire_cancel_workflow_provider_run_request_json,
+    encode_wire_get_workflow_provider_definition_request_json,
+    encode_wire_get_workflow_provider_run_events_request_json,
+    encode_wire_get_workflow_provider_run_output_request_json,
+    encode_wire_get_workflow_provider_run_request_json,
+    encode_wire_list_workflow_provider_definitions_request_json,
+    encode_wire_list_workflow_provider_runs_request_json,
+    encode_wire_set_workflow_provider_activation_paused_request_json,
+    encode_wire_set_workflow_provider_definition_paused_request_json,
+    encode_wire_signal_or_start_workflow_provider_run_request_json,
+    encode_wire_signal_workflow_provider_run_request_json,
+    encode_wire_start_workflow_provider_run_request_json,
 };
 use crate::public::generated::rpc_support::{GestaltError, gestalt_error_code};
 
@@ -43,6 +117,111 @@ pub struct PublicField {
     pub json_name: &'static str,
 }
 
+fn encode_cancel_turn_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CancelAgentProviderTurnRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_cancel_agent_provider_turn_request_json(&wire))
+}
+
+fn decode_cancel_turn_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_agent_turn_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_create_session_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CreateAgentProviderSessionRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_create_agent_provider_session_request_json(
+        &wire,
+    ))
+}
+
+fn decode_create_session_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_agent_session_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_create_turn_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CreateAgentProviderTurnRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_create_agent_provider_turn_request_json(&wire))
+}
+
+fn decode_create_turn_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_agent_turn_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_session_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetAgentProviderSessionRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_agent_provider_session_request_json(&wire))
+}
+
+fn decode_get_session_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_agent_session_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_turn_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetAgentProviderTurnRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_agent_provider_turn_request_json(&wire))
+}
+
+fn decode_get_turn_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_agent_turn_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_sessions_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListAgentProviderSessionsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_agent_provider_sessions_request_json(&wire))
+}
+
+fn decode_list_sessions_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_agent_provider_sessions_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_turn_events_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListAgentProviderTurnEventsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_agent_provider_turn_events_request_json(
+        &wire,
+    ))
+}
+
+fn decode_list_turn_events_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_agent_provider_turn_events_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_turns_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListAgentProviderTurnsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_agent_provider_turns_request_json(&wire))
+}
+
+fn decode_list_turns_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_agent_provider_turns_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_update_session_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::UpdateAgentProviderSessionRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_update_agent_provider_session_request_json(
+        &wire,
+    ))
+}
+
+fn decode_update_session_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_agent_session_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
 fn encode_invoke_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
     let wire = v1::AppInvokeRequest::decode(bytes)
         .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
@@ -64,6 +243,772 @@ fn decode_invoke_graphql_response_json(value: &Value) -> Result<Vec<u8>, Gestalt
     let wire = decode_wire_operation_result_json(value)?;
     Ok(wire.encode_to_vec())
 }
+
+fn encode_add_relationship_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::AddRelationshipRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_add_relationship_request_json(&wire))
+}
+
+fn decode_add_relationship_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_add_relationship_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_check_access_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CheckAccessRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_check_access_request_json(&wire))
+}
+
+fn decode_check_access_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_check_access_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_check_access_many_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CheckAccessManyRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_check_access_many_request_json(&wire))
+}
+
+fn decode_check_access_many_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_check_access_many_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_delete_relationship_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::DeleteRelationshipRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_delete_relationship_request_json(&wire))
+}
+
+fn decode_delete_relationship_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_delete_relationship_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_active_model_resource_types_request_json(
+    bytes: &[u8],
+) -> Result<Value, GestaltError> {
+    let wire = v1::ListActiveModelResourceTypesRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_active_model_resource_types_request_json(
+        &wire,
+    ))
+}
+
+fn decode_list_active_model_resource_types_response_json(
+    value: &Value,
+) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_active_model_resource_types_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_relationships_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListRelationshipsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_relationships_request_json(&wire))
+}
+
+fn decode_list_relationships_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_relationships_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_set_active_model_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::SetActiveModelRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_set_active_model_request_json(&wire))
+}
+
+fn decode_set_active_model_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_set_active_model_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_set_authorization_state_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::SetAuthorizationStateRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_set_authorization_state_request_json(&wire))
+}
+
+fn decode_set_authorization_state_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_set_authorization_state_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_create_credential_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CreateExternalCredentialRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_create_external_credential_request_json(&wire))
+}
+
+fn decode_create_credential_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_external_credential_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_exchange_credential_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ExchangeExternalCredentialRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_exchange_external_credential_request_json(&wire))
+}
+
+fn decode_exchange_credential_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_exchange_external_credential_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_credential_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetExternalCredentialRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_external_credential_request_json(&wire))
+}
+
+fn decode_get_credential_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_external_credential_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_credentials_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListExternalCredentialsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_external_credentials_request_json(&wire))
+}
+
+fn decode_list_credentials_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_external_credentials_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_resolve_credential_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ResolveExternalCredentialRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_resolve_external_credential_request_json(&wire))
+}
+
+fn decode_resolve_credential_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_resolve_external_credential_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_upsert_credential_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::UpsertExternalCredentialRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_upsert_external_credential_request_json(&wire))
+}
+
+fn decode_upsert_credential_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_external_credential_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_authorize_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::AuthorizeRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_authorize_request_json(&wire))
+}
+
+fn decode_authorize_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_authorize_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_grant_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetGrantRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_grant_request_json(&wire))
+}
+
+fn decode_get_grant_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_get_grant_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_introspect_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::IntrospectRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_introspect_request_json(&wire))
+}
+
+fn decode_introspect_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_introspect_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_grants_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListGrantsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_grants_request_json(&wire))
+}
+
+fn decode_list_grants_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_grants_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_revoke_grant_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::RevokeGrantRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_revoke_grant_request_json(&wire))
+}
+
+fn decode_revoke_grant_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_revoke_grant_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_token_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::TokenRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_token_request_json(&wire))
+}
+
+fn decode_token_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_token_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_user_info_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::UserInfoRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_user_info_request_json(&wire))
+}
+
+fn decode_user_info_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_user_info_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_count_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ObjectStoreRangeRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_object_store_range_request_json(&wire))
+}
+
+fn decode_count_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_count_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_delete_range_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ObjectStoreRangeRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_object_store_range_request_json(&wire))
+}
+
+fn decode_delete_range_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_delete_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ObjectStoreRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_object_store_request_json(&wire))
+}
+
+fn decode_get_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_record_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_all_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ObjectStoreRangeRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_object_store_range_request_json(&wire))
+}
+
+fn decode_get_all_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_records_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_all_keys_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ObjectStoreRangeRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_object_store_range_request_json(&wire))
+}
+
+fn decode_get_all_keys_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_keys_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_key_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ObjectStoreRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_object_store_request_json(&wire))
+}
+
+fn decode_get_key_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_key_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_index_count_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::IndexQueryRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_index_query_request_json(&wire))
+}
+
+fn decode_index_count_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_count_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_index_delete_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::IndexQueryRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_index_query_request_json(&wire))
+}
+
+fn decode_index_delete_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_delete_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_index_get_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::IndexQueryRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_index_query_request_json(&wire))
+}
+
+fn decode_index_get_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_record_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_index_get_all_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::IndexQueryRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_index_query_request_json(&wire))
+}
+
+fn decode_index_get_all_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_records_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_index_get_all_keys_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::IndexQueryRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_index_query_request_json(&wire))
+}
+
+fn decode_index_get_all_keys_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_keys_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_index_get_key_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::IndexQueryRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_index_query_request_json(&wire))
+}
+
+fn decode_index_get_key_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_key_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_apply_definition_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ApplyWorkflowProviderDefinitionRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_apply_workflow_provider_definition_request_json(
+        &wire,
+    ))
+}
+
+fn decode_apply_definition_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_workflow_definition_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_cancel_run_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CancelWorkflowProviderRunRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_cancel_workflow_provider_run_request_json(&wire))
+}
+
+fn decode_cancel_run_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_workflow_run_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_definition_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetWorkflowProviderDefinitionRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_workflow_provider_definition_request_json(
+        &wire,
+    ))
+}
+
+fn decode_get_definition_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_workflow_definition_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_run_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetWorkflowProviderRunRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_workflow_provider_run_request_json(&wire))
+}
+
+fn decode_get_run_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_workflow_run_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_run_events_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetWorkflowProviderRunEventsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_workflow_provider_run_events_request_json(
+        &wire,
+    ))
+}
+
+fn decode_get_run_events_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_get_workflow_provider_run_events_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_get_run_output_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::GetWorkflowProviderRunOutputRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_get_workflow_provider_run_output_request_json(
+        &wire,
+    ))
+}
+
+fn decode_get_run_output_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_get_workflow_provider_run_output_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_definitions_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListWorkflowProviderDefinitionsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_workflow_provider_definitions_request_json(
+        &wire,
+    ))
+}
+
+fn decode_list_definitions_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_workflow_provider_definitions_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_runs_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListWorkflowProviderRunsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_workflow_provider_runs_request_json(&wire))
+}
+
+fn decode_list_runs_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_workflow_provider_runs_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_set_activation_paused_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::SetWorkflowProviderActivationPausedRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_set_workflow_provider_activation_paused_request_json(&wire))
+}
+
+fn decode_set_activation_paused_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_workflow_definition_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_set_definition_paused_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::SetWorkflowProviderDefinitionPausedRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_set_workflow_provider_definition_paused_request_json(&wire))
+}
+
+fn decode_set_definition_paused_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_workflow_definition_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_signal_or_start_run_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::SignalOrStartWorkflowProviderRunRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_signal_or_start_workflow_provider_run_request_json(&wire))
+}
+
+fn decode_signal_or_start_run_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_signal_workflow_run_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_signal_run_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::SignalWorkflowProviderRunRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_signal_workflow_provider_run_request_json(&wire))
+}
+
+fn decode_signal_run_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_signal_workflow_run_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_start_run_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::StartWorkflowProviderRunRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_start_workflow_provider_run_request_json(&wire))
+}
+
+fn decode_start_run_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_workflow_run_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+pub const METHOD_AGENT_CANCEL_TURN: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "CancelTurn",
+    full_method: "/gestalt.provider.v1.Agent/CancelTurn",
+    http_verb: "POST",
+    http_path: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel",
+    http_body: "*",
+    http_path_fields: &[
+        PublicField {
+            name: "session_id",
+            json_name: "sessionId",
+        },
+        PublicField {
+            name: "turn_id",
+            json_name: "turnId",
+        },
+    ],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_cancel_turn_request_json),
+    decode_response_json: Some(decode_cancel_turn_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_CREATE_SESSION: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "CreateSession",
+    full_method: "/gestalt.provider.v1.Agent/CreateSession",
+    http_verb: "POST",
+    http_path: "/api/v2/agent/sessions",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_create_session_request_json),
+    decode_response_json: Some(decode_create_session_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_CREATE_TURN: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "CreateTurn",
+    full_method: "/gestalt.provider.v1.Agent/CreateTurn",
+    http_verb: "POST",
+    http_path: "/api/v2/agent/sessions/{session_id}/turns",
+    http_body: "*",
+    http_path_fields: &[PublicField {
+        name: "session_id",
+        json_name: "sessionId",
+    }],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_create_turn_request_json),
+    decode_response_json: Some(decode_create_turn_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_GET_SESSION: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "GetSession",
+    full_method: "/gestalt.provider.v1.Agent/GetSession",
+    http_verb: "GET",
+    http_path: "/api/v2/agent/sessions/{session_id}",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "session_id",
+        json_name: "sessionId",
+    }],
+    http_query_fields: &[PublicField {
+        name: "provider_name",
+        json_name: "providerName",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_get_session_request_json),
+    decode_response_json: Some(decode_get_session_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_GET_TURN: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "GetTurn",
+    full_method: "/gestalt.provider.v1.Agent/GetTurn",
+    http_verb: "GET",
+    http_path: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}",
+    http_body: "",
+    http_path_fields: &[
+        PublicField {
+            name: "session_id",
+            json_name: "sessionId",
+        },
+        PublicField {
+            name: "turn_id",
+            json_name: "turnId",
+        },
+    ],
+    http_query_fields: &[PublicField {
+        name: "provider_name",
+        json_name: "providerName",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_get_turn_request_json),
+    decode_response_json: Some(decode_get_turn_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_LIST_SESSIONS: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "ListSessions",
+    full_method: "/gestalt.provider.v1.Agent/ListSessions",
+    http_verb: "GET",
+    http_path: "/api/v2/agent/sessions",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[
+        PublicField {
+            name: "session_ids",
+            json_name: "sessionIds",
+        },
+        PublicField {
+            name: "state",
+            json_name: "state",
+        },
+        PublicField {
+            name: "limit",
+            json_name: "limit",
+        },
+        PublicField {
+            name: "summary_only",
+            json_name: "summaryOnly",
+        },
+        PublicField {
+            name: "provider_name",
+            json_name: "providerName",
+        },
+    ],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_list_sessions_request_json),
+    decode_response_json: Some(decode_list_sessions_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_LIST_TURN_EVENTS: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "ListTurnEvents",
+    full_method: "/gestalt.provider.v1.Agent/ListTurnEvents",
+    http_verb: "GET",
+    http_path: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}/events",
+    http_body: "",
+    http_path_fields: &[
+        PublicField {
+            name: "session_id",
+            json_name: "sessionId",
+        },
+        PublicField {
+            name: "turn_id",
+            json_name: "turnId",
+        },
+    ],
+    http_query_fields: &[
+        PublicField {
+            name: "after_seq",
+            json_name: "afterSeq",
+        },
+        PublicField {
+            name: "limit",
+            json_name: "limit",
+        },
+        PublicField {
+            name: "provider_name",
+            json_name: "providerName",
+        },
+    ],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_list_turn_events_request_json),
+    decode_response_json: Some(decode_list_turn_events_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_LIST_TURNS: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "ListTurns",
+    full_method: "/gestalt.provider.v1.Agent/ListTurns",
+    http_verb: "GET",
+    http_path: "/api/v2/agent/sessions/{session_id}/turns",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "session_id",
+        json_name: "sessionId",
+    }],
+    http_query_fields: &[
+        PublicField {
+            name: "turn_ids",
+            json_name: "turnIds",
+        },
+        PublicField {
+            name: "status",
+            json_name: "status",
+        },
+        PublicField {
+            name: "limit",
+            json_name: "limit",
+        },
+        PublicField {
+            name: "summary_only",
+            json_name: "summaryOnly",
+        },
+        PublicField {
+            name: "provider_name",
+            json_name: "providerName",
+        },
+    ],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_list_turns_request_json),
+    decode_response_json: Some(decode_list_turns_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AGENT_UPDATE_SESSION: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "UpdateSession",
+    full_method: "/gestalt.provider.v1.Agent/UpdateSession",
+    http_verb: "PATCH",
+    http_path: "/api/v2/agent/sessions/{session_id}",
+    http_body: "*",
+    http_path_fields: &[PublicField {
+        name: "session_id",
+        json_name: "sessionId",
+    }],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_update_session_request_json),
+    decode_response_json: Some(decode_update_session_response_json),
+    response_is_operation_result: false,
+};
 
 pub const METHOD_APP_INVOKE: Method = Method {
     service: "gestalt.provider.v1.App",
@@ -107,4 +1052,1042 @@ pub const METHOD_APP_INVOKE_GRAPHQL: Method = Method {
     encode_request_json: Some(encode_invoke_graphql_request_json),
     decode_response_json: Some(decode_invoke_graphql_response_json),
     response_is_operation_result: true,
+};
+
+pub const METHOD_AUTHORIZATION_ADD_RELATIONSHIP: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "AddRelationship",
+    full_method: "/gestalt.provider.v1.Authorization/AddRelationship",
+    http_verb: "POST",
+    http_path: "/api/v2/authorization/relationships",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_add_relationship_request_json),
+    decode_response_json: Some(decode_add_relationship_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_CHECK_ACCESS: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "CheckAccess",
+    full_method: "/gestalt.provider.v1.Authorization/CheckAccess",
+    http_verb: "POST",
+    http_path: "/api/v2/authorization/access:check",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_check_access_request_json),
+    decode_response_json: Some(decode_check_access_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_CHECK_ACCESS_MANY: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "CheckAccessMany",
+    full_method: "/gestalt.provider.v1.Authorization/CheckAccessMany",
+    http_verb: "POST",
+    http_path: "/api/v2/authorization/access:checkMany",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_check_access_many_request_json),
+    decode_response_json: Some(decode_check_access_many_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_DELETE_RELATIONSHIP: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "DeleteRelationship",
+    full_method: "/gestalt.provider.v1.Authorization/DeleteRelationship",
+    http_verb: "POST",
+    http_path: "/api/v2/authorization/relationships:delete",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_delete_relationship_request_json),
+    decode_response_json: Some(decode_delete_relationship_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_GET_ACTIVE_MODEL_REF: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "GetActiveModelRef",
+    full_method: "/gestalt.provider.v1.Authorization/GetActiveModelRef",
+    http_verb: "GET",
+    http_path: "/api/v2/authorization/models/active",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "ListActiveModelResourceTypes",
+    full_method: "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes",
+    http_verb: "GET",
+    http_path: "/api/v2/authorization/models/active/resource-types",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[
+        PublicField {
+            name: "filter",
+            json_name: "filter",
+        },
+        PublicField {
+            name: "page_size",
+            json_name: "pageSize",
+        },
+        PublicField {
+            name: "page_token",
+            json_name: "pageToken",
+        },
+    ],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_list_active_model_resource_types_request_json),
+    decode_response_json: Some(decode_list_active_model_resource_types_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_LIST_RELATIONSHIPS: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "ListRelationships",
+    full_method: "/gestalt.provider.v1.Authorization/ListRelationships",
+    http_verb: "GET",
+    http_path: "/api/v2/authorization/relationships",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[
+        PublicField {
+            name: "filter",
+            json_name: "filter",
+        },
+        PublicField {
+            name: "page_size",
+            json_name: "pageSize",
+        },
+        PublicField {
+            name: "page_token",
+            json_name: "pageToken",
+        },
+    ],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_list_relationships_request_json),
+    decode_response_json: Some(decode_list_relationships_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_SET_ACTIVE_MODEL: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "SetActiveModel",
+    full_method: "/gestalt.provider.v1.Authorization/SetActiveModel",
+    http_verb: "PUT",
+    http_path: "/api/v2/authorization/models/active",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_set_active_model_request_json),
+    decode_response_json: Some(decode_set_active_model_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE: Method = Method {
+    service: "gestalt.provider.v1.Authorization",
+    name: "SetAuthorizationState",
+    full_method: "/gestalt.provider.v1.Authorization/SetAuthorizationState",
+    http_verb: "PUT",
+    http_path: "/api/v2/authorization/state",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_set_authorization_state_request_json),
+    decode_response_json: Some(decode_set_authorization_state_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "CreateCredential",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/CreateCredential",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_create_credential_request_json),
+    decode_response_json: Some(decode_create_credential_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "DeleteCredential",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/DeleteCredential",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "ExchangeCredential",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/ExchangeCredential",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_exchange_credential_request_json),
+    decode_response_json: Some(decode_exchange_credential_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "GetCredential",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/GetCredential",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_get_credential_request_json),
+    decode_response_json: Some(decode_get_credential_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "ListCredentials",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/ListCredentials",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_list_credentials_request_json),
+    decode_response_json: Some(decode_list_credentials_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "ResolveCredential",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/ResolveCredential",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_resolve_credential_request_json),
+    decode_response_json: Some(decode_resolve_credential_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "UpsertCredential",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/UpsertCredential",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_upsert_credential_request_json),
+    decode_response_json: Some(decode_upsert_credential_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_EXTERNAL_CREDENTIALS_VALIDATE_CREDENTIAL_CONFIG: Method = Method {
+    service: "gestalt.provider.v1.ExternalCredentials",
+    name: "ValidateCredentialConfig",
+    full_method: "/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_IDENTITY_AUTHORIZE: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "Authorize",
+    full_method: "/gestalt.provider.v1.Identity/Authorize",
+    http_verb: "POST",
+    http_path: "/api/v2/identity/authorize",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_authorize_request_json),
+    decode_response_json: Some(decode_authorize_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_IDENTITY_GET_GRANT: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "GetGrant",
+    full_method: "/gestalt.provider.v1.Identity/GetGrant",
+    http_verb: "GET",
+    http_path: "/api/v2/identity/grants/{grant_id}",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "grant_id",
+        json_name: "grantId",
+    }],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_get_grant_request_json),
+    decode_response_json: Some(decode_get_grant_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_IDENTITY_INTROSPECT: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "Introspect",
+    full_method: "/gestalt.provider.v1.Identity/Introspect",
+    http_verb: "POST",
+    http_path: "/api/v2/identity/introspect",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_introspect_request_json),
+    decode_response_json: Some(decode_introspect_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_IDENTITY_LIST_GRANTS: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "ListGrants",
+    full_method: "/gestalt.provider.v1.Identity/ListGrants",
+    http_verb: "GET",
+    http_path: "/api/v2/identity/grants",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_list_grants_request_json),
+    decode_response_json: Some(decode_list_grants_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_IDENTITY_REVOKE_GRANT: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "RevokeGrant",
+    full_method: "/gestalt.provider.v1.Identity/RevokeGrant",
+    http_verb: "DELETE",
+    http_path: "/api/v2/identity/grants/{grant_id}",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "grant_id",
+        json_name: "grantId",
+    }],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_revoke_grant_request_json),
+    decode_response_json: Some(decode_revoke_grant_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_IDENTITY_TOKEN: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "Token",
+    full_method: "/gestalt.provider.v1.Identity/Token",
+    http_verb: "POST",
+    http_path: "/api/v2/identity/token",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_token_request_json),
+    decode_response_json: Some(decode_token_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_IDENTITY_USER_INFO: Method = Method {
+    service: "gestalt.provider.v1.Identity",
+    name: "UserInfo",
+    full_method: "/gestalt.provider.v1.Identity/UserInfo",
+    http_verb: "GET",
+    http_path: "/api/v2/identity/userinfo",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_user_info_request_json),
+    decode_response_json: Some(decode_user_info_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_ADD: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "Add",
+    full_method: "/gestalt.provider.v1.IndexedDB/Add",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_CLEAR: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "Clear",
+    full_method: "/gestalt.provider.v1.IndexedDB/Clear",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_COUNT: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "Count",
+    full_method: "/gestalt.provider.v1.IndexedDB/Count",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_count_request_json),
+    decode_response_json: Some(decode_count_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_CREATE_INDEX: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "CreateIndex",
+    full_method: "/gestalt.provider.v1.IndexedDB/CreateIndex",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_CREATE_OBJECT_STORE: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "CreateObjectStore",
+    full_method: "/gestalt.provider.v1.IndexedDB/CreateObjectStore",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_DELETE: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "Delete",
+    full_method: "/gestalt.provider.v1.IndexedDB/Delete",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_DELETE_INDEX: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "DeleteIndex",
+    full_method: "/gestalt.provider.v1.IndexedDB/DeleteIndex",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_DELETE_OBJECT_STORE: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "DeleteObjectStore",
+    full_method: "/gestalt.provider.v1.IndexedDB/DeleteObjectStore",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_DELETE_RANGE: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "DeleteRange",
+    full_method: "/gestalt.provider.v1.IndexedDB/DeleteRange",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_delete_range_request_json),
+    decode_response_json: Some(decode_delete_range_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_GET: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "Get",
+    full_method: "/gestalt.provider.v1.IndexedDB/Get",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_get_request_json),
+    decode_response_json: Some(decode_get_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_GET_ALL: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "GetAll",
+    full_method: "/gestalt.provider.v1.IndexedDB/GetAll",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_get_all_request_json),
+    decode_response_json: Some(decode_get_all_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_GET_ALL_KEYS: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "GetAllKeys",
+    full_method: "/gestalt.provider.v1.IndexedDB/GetAllKeys",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_get_all_keys_request_json),
+    decode_response_json: Some(decode_get_all_keys_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_GET_KEY: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "GetKey",
+    full_method: "/gestalt.provider.v1.IndexedDB/GetKey",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_get_key_request_json),
+    decode_response_json: Some(decode_get_key_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_INDEX_COUNT: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "IndexCount",
+    full_method: "/gestalt.provider.v1.IndexedDB/IndexCount",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_index_count_request_json),
+    decode_response_json: Some(decode_index_count_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_INDEX_DELETE: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "IndexDelete",
+    full_method: "/gestalt.provider.v1.IndexedDB/IndexDelete",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_index_delete_request_json),
+    decode_response_json: Some(decode_index_delete_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_INDEX_GET: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "IndexGet",
+    full_method: "/gestalt.provider.v1.IndexedDB/IndexGet",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_index_get_request_json),
+    decode_response_json: Some(decode_index_get_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_INDEX_GET_ALL: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "IndexGetAll",
+    full_method: "/gestalt.provider.v1.IndexedDB/IndexGetAll",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_index_get_all_request_json),
+    decode_response_json: Some(decode_index_get_all_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_INDEX_GET_ALL_KEYS: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "IndexGetAllKeys",
+    full_method: "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_index_get_all_keys_request_json),
+    decode_response_json: Some(decode_index_get_all_keys_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_INDEX_GET_KEY: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "IndexGetKey",
+    full_method: "/gestalt.provider.v1.IndexedDB/IndexGetKey",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_index_get_key_request_json),
+    decode_response_json: Some(decode_index_get_key_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_INDEXED_D_B_PUT: Method = Method {
+    service: "gestalt.provider.v1.IndexedDB",
+    name: "Put",
+    full_method: "/gestalt.provider.v1.IndexedDB/Put",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_APPLY_DEFINITION: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "ApplyDefinition",
+    full_method: "/gestalt.provider.v1.Workflow/ApplyDefinition",
+    http_verb: "POST",
+    http_path: "/api/v2/workflow/definitions:apply",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_apply_definition_request_json),
+    decode_response_json: Some(decode_apply_definition_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_CANCEL_RUN: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "CancelRun",
+    full_method: "/gestalt.provider.v1.Workflow/CancelRun",
+    http_verb: "POST",
+    http_path: "/api/v2/workflow/runs/{run_id}:cancel",
+    http_body: "*",
+    http_path_fields: &[PublicField {
+        name: "run_id",
+        json_name: "runId",
+    }],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_cancel_run_request_json),
+    decode_response_json: Some(decode_cancel_run_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_DELETE_DEFINITION: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "DeleteDefinition",
+    full_method: "/gestalt.provider.v1.Workflow/DeleteDefinition",
+    http_verb: "DELETE",
+    http_path: "/api/v2/workflow/definitions/{definition_id}",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "definition_id",
+        json_name: "definitionId",
+    }],
+    http_query_fields: &[PublicField {
+        name: "provider",
+        json_name: "provider",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: None,
+    decode_response_json: None,
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_GET_DEFINITION: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "GetDefinition",
+    full_method: "/gestalt.provider.v1.Workflow/GetDefinition",
+    http_verb: "GET",
+    http_path: "/api/v2/workflow/definitions/{definition_id}",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "definition_id",
+        json_name: "definitionId",
+    }],
+    http_query_fields: &[PublicField {
+        name: "provider",
+        json_name: "provider",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_get_definition_request_json),
+    decode_response_json: Some(decode_get_definition_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_GET_RUN: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "GetRun",
+    full_method: "/gestalt.provider.v1.Workflow/GetRun",
+    http_verb: "GET",
+    http_path: "/api/v2/workflow/runs/{run_id}",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "run_id",
+        json_name: "runId",
+    }],
+    http_query_fields: &[PublicField {
+        name: "provider",
+        json_name: "provider",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_get_run_request_json),
+    decode_response_json: Some(decode_get_run_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_GET_RUN_EVENTS: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "GetRunEvents",
+    full_method: "/gestalt.provider.v1.Workflow/GetRunEvents",
+    http_verb: "GET",
+    http_path: "/api/v2/workflow/runs/{run_id}/events",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "run_id",
+        json_name: "runId",
+    }],
+    http_query_fields: &[PublicField {
+        name: "provider",
+        json_name: "provider",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_get_run_events_request_json),
+    decode_response_json: Some(decode_get_run_events_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_GET_RUN_OUTPUT: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "GetRunOutput",
+    full_method: "/gestalt.provider.v1.Workflow/GetRunOutput",
+    http_verb: "GET",
+    http_path: "/api/v2/workflow/runs/{run_id}/output",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "run_id",
+        json_name: "runId",
+    }],
+    http_query_fields: &[PublicField {
+        name: "provider",
+        json_name: "provider",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_get_run_output_request_json),
+    decode_response_json: Some(decode_get_run_output_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_LIST_DEFINITIONS: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "ListDefinitions",
+    full_method: "/gestalt.provider.v1.Workflow/ListDefinitions",
+    http_verb: "GET",
+    http_path: "/api/v2/workflow/definitions",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[PublicField {
+        name: "provider",
+        json_name: "provider",
+    }],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_list_definitions_request_json),
+    decode_response_json: Some(decode_list_definitions_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_LIST_RUNS: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "ListRuns",
+    full_method: "/gestalt.provider.v1.Workflow/ListRuns",
+    http_verb: "GET",
+    http_path: "/api/v2/workflow/runs",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[
+        PublicField {
+            name: "page_size",
+            json_name: "pageSize",
+        },
+        PublicField {
+            name: "page_token",
+            json_name: "pageToken",
+        },
+        PublicField {
+            name: "status",
+            json_name: "status",
+        },
+        PublicField {
+            name: "target_app",
+            json_name: "targetApp",
+        },
+        PublicField {
+            name: "provider",
+            json_name: "provider",
+        },
+    ],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_list_runs_request_json),
+    decode_response_json: Some(decode_list_runs_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_SET_ACTIVATION_PAUSED: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "SetActivationPaused",
+    full_method: "/gestalt.provider.v1.Workflow/SetActivationPaused",
+    http_verb: "POST",
+    http_path: "/api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused",
+    http_body: "*",
+    http_path_fields: &[
+        PublicField {
+            name: "definition_id",
+            json_name: "definitionId",
+        },
+        PublicField {
+            name: "activation_id",
+            json_name: "activationId",
+        },
+    ],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_set_activation_paused_request_json),
+    decode_response_json: Some(decode_set_activation_paused_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_SET_DEFINITION_PAUSED: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "SetDefinitionPaused",
+    full_method: "/gestalt.provider.v1.Workflow/SetDefinitionPaused",
+    http_verb: "POST",
+    http_path: "/api/v2/workflow/definitions/{definition_id}:setPaused",
+    http_body: "*",
+    http_path_fields: &[PublicField {
+        name: "definition_id",
+        json_name: "definitionId",
+    }],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_set_definition_paused_request_json),
+    decode_response_json: Some(decode_set_definition_paused_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_SIGNAL_OR_START_RUN: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "SignalOrStartRun",
+    full_method: "/gestalt.provider.v1.Workflow/SignalOrStartRun",
+    http_verb: "POST",
+    http_path: "/api/v2/workflow/definitions/{definition_id}:signalOrStart",
+    http_body: "*",
+    http_path_fields: &[PublicField {
+        name: "definition_id",
+        json_name: "definitionId",
+    }],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_signal_or_start_run_request_json),
+    decode_response_json: Some(decode_signal_or_start_run_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_SIGNAL_RUN: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "SignalRun",
+    full_method: "/gestalt.provider.v1.Workflow/SignalRun",
+    http_verb: "POST",
+    http_path: "/api/v2/workflow/runs/{run_id}:signal",
+    http_body: "*",
+    http_path_fields: &[PublicField {
+        name: "run_id",
+        json_name: "runId",
+    }],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_signal_run_request_json),
+    decode_response_json: Some(decode_signal_run_response_json),
+    response_is_operation_result: false,
+};
+
+pub const METHOD_WORKFLOW_START_RUN: Method = Method {
+    service: "gestalt.provider.v1.Workflow",
+    name: "StartRun",
+    full_method: "/gestalt.provider.v1.Workflow/StartRun",
+    http_verb: "POST",
+    http_path: "/api/v2/workflow/definitions/{definition_id}/runs",
+    http_body: "*",
+    http_path_fields: &[PublicField {
+        name: "definition_id",
+        json_name: "definitionId",
+    }],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_start_run_request_json),
+    decode_response_json: Some(decode_start_run_response_json),
+    response_is_operation_result: false,
 };

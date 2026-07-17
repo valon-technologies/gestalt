@@ -119,6 +119,9 @@ func generate(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emi
 	if err := wire.Generate(bufTool, rustfmtTool, opts.RepoRoot, scratch, opts.Targets); err != nil {
 		return err
 	}
+	if err := reconcileContractReport(opts.RepoRoot, schema); err != nil {
+		return err
+	}
 	for _, e := range emitters {
 		set, err := EmitFormatted(e, schema, scratch, opts.RepoRoot)
 		if err != nil {
@@ -137,6 +140,10 @@ func generate(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emi
 
 func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.Emitter, schema *model.Schema, scratch string) error {
 	drift, err := wire.Check(bufTool, rustfmtTool, opts.RepoRoot, scratch, opts.Targets)
+	if err != nil {
+		return err
+	}
+	drift, err = appendContractDrift(opts.RepoRoot, schema, drift)
 	if err != nil {
 		return err
 	}

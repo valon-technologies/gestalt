@@ -79,6 +79,7 @@ jobs:
               ".github/workflows/cd.yml"
               ".github/workflows/validate-gestaltd.yml"
               ".github/workflows/resolve-gestaltd-ref.yml"
+              "sdk/testdata/public_conformance/surface_v1.json"
             )
             validate_path_prefixes=(
               "gestaltd/"

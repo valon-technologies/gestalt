@@ -5,15 +5,12 @@
  */
 
 import type { DescMessage, Message } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
-
-import { App } from "../internal/gen/v1/app_pb.ts";
 
 import type { AuthProvider } from "./auth.ts";
 import { toGestaltError } from "./errors.ts";
 import {
+  createPublicGrpcClients,
   dispatchGrpcUnary,
-  type AppServiceClient,
 } from "./generated/grpc_dispatch.ts";
 import type { PublicMethod } from "./generated/methods.ts";
 import {
@@ -48,7 +45,7 @@ export async function createGrpcUnaryTransport(
     baseUrl: options.baseUrl,
     sessionManager,
   });
-  const appClient: AppServiceClient = createClient(App, transport);
+  const appClient = createPublicGrpcClients(transport);
 
   return {
     async unary<Output extends Message>(

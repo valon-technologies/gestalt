@@ -16,10 +16,27 @@ import (
 
 var connectPublicAppConns host.ConnPool
 
-// GestaltFromContext returns a gRPC client bound to the host-service relay.
+// BoundClient is the App-only public client for provider host-service access.
+type BoundClient struct {
+	App *generated.AppClient
+
+	transport interface {
+		Close() error
+	}
+}
+
+// Close releases transport resources when the client owns them.
+func (c *BoundClient) Close() error {
+	if c == nil || c.transport == nil {
+		return nil
+	}
+	return c.transport.Close()
+}
+
+// GestaltFromContext returns an App-only gRPC client bound to the host-service relay.
 // It injects the provider request context and validated identity metadata from ctx.
 // Bound access accepts no public address or auth configuration.
-func GestaltFromContext(ctx context.Context) (*Client, error) {
+func GestaltFromContext(ctx context.Context) (*BoundClient, error) {
 	reqCtx := gestalt.RequestContextFromContext(ctx)
 
 	target, token, err := host.Target("app")
@@ -35,7 +52,7 @@ func GestaltFromContext(ctx context.Context) (*Client, error) {
 		RequestContext:      reqCtx,
 	}
 	grpcT := &grpcUnaryTransport{conn: wrapped}
-	return &Client{
+	return &BoundClient{
 		App:       generated.NewAppClient(grpcT),
 		transport: grpcT,
 	}, nil

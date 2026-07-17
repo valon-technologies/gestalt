@@ -1,0 +1,110 @@
+[
+  {
+    "id": "app_invoke_decoded",
+    "method": "App.Invoke",
+    "transport": "rest",
+    "publicRequest": {
+      "app": "example",
+      "operation": "sync",
+      "params": { "ok": true }
+    },
+    "notes": "Public params omit server-filled context; wire encodes path fields."
+  },
+  {
+    "id": "agent_list_sessions_fill",
+    "method": "Agent.ListSessions",
+    "transport": "rest",
+    "publicRequest": {
+      "sessionIds": ["s1"],
+      "limit": 10
+    },
+    "notes": "context is server-filled and omitted from public request."
+  },
+  {
+    "id": "authorization_list_relationships_pagination",
+    "method": "Authorization.ListRelationships",
+    "transport": "rest",
+    "publicRequest": {
+      "pageSize": 25,
+      "pageToken": "abc"
+    },
+    "notes": "Pagination query fields map to REST query parameters."
+  },
+  {
+    "id": "authorization_get_active_model_empty_input",
+    "method": "Authorization.GetActiveModelRef",
+    "transport": "grpc",
+    "publicRequest": {},
+    "inputEmpty": true,
+    "notes": "Empty google.protobuf.Empty input uses unit/void request."
+  },
+  {
+    "id": "workflow_delete_definition",
+    "method": "Workflow.DeleteDefinition",
+    "transport": "rest",
+    "publicRequest": {
+      "definitionId": "definition-1",
+      "provider": "test-provider"
+    },
+    "outputEmpty": true,
+    "notes": "DELETE with query provider and Empty output."
+  },
+  {
+    "id": "external_credentials_list_unwrap",
+    "method": "ExternalCredentials.ListCredentials",
+    "transport": "grpc",
+    "publicRequest": {
+      "provider": "test-provider"
+    },
+    "unwrap": "credentials",
+    "notes": "gRPC-only method unwraps repeated credentials field."
+  },
+  {
+    "id": "external_credentials_delete_empty_output",
+    "method": "ExternalCredentials.DeleteCredential",
+    "transport": "grpc",
+    "publicRequest": {
+      "provider": "test-provider",
+      "credentialId": "cred-1"
+    },
+    "outputEmpty": true,
+    "notes": "Empty output after successful delete."
+  },
+  {
+    "id": "indexeddb_get_all_optional_count",
+    "method": "IndexedDB.GetAll",
+    "transport": "grpc",
+    "publicRequest": {
+      "database": "db",
+      "store": "store"
+    },
+    "optionalResult": "count",
+    "notes": "Optional count field may be absent in public result."
+  },
+  {
+    "id": "indexeddb_clear_empty_output",
+    "method": "IndexedDB.Clear",
+    "transport": "grpc",
+    "publicRequest": {
+      "database": "db",
+      "store": "store"
+    },
+    "outputEmpty": true,
+    "notes": "Clear returns Empty on success."
+  },
+  {
+    "id": "transport_error",
+    "method": "App.Invoke",
+    "transport": "rest",
+    "publicRequest": {
+      "app": "example",
+      "operation": "sync",
+      "params": {}
+    },
+    "expectGestaltError": {
+      "code": 16,
+      "message": "Not authenticated"
+    },
+    "notes": "Canonical GestaltError mapping for platform failures."
+  }
+]

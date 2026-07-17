@@ -6,16 +6,44 @@
  * @module client/generated/grpc_dispatch
  */
 
-import type { Client } from "@connectrpc/connect";
-import type { DescMessage, Message } from "@bufbuild/protobuf";
+import { createClient, type Client, type Transport } from "@connectrpc/connect";
+import type { Message } from "@bufbuild/protobuf";
 
+import { Agent } from "../../internal/gen/v1/agent_pb.ts";
 import { App } from "../../internal/gen/v1/app_pb.ts";
+import { Authorization } from "../../internal/gen/v1/authorization_pb.ts";
+import { ExternalCredentials } from "../../internal/gen/v1/external_credential_pb.ts";
+import { Identity } from "../../internal/gen/v1/identity_pb.ts";
+import { IndexedDB } from "../../internal/gen/v1/indexeddb_pb.ts";
+import { Workflow } from "../../internal/gen/v1/workflow_pb.ts";
 
 import { GestaltError, GestaltErrorCode } from "../../rpc_support.ts";
 
 import { PUBLIC_METHODS, type PublicMethod } from "./methods.ts";
 
-export type AppServiceClient = Client<typeof App>;
+export interface PublicGrpcClients {
+  readonly agent: Client<typeof Agent>;
+  readonly app: Client<typeof App>;
+  readonly authorization: Client<typeof Authorization>;
+  readonly externalCredentials: Client<typeof ExternalCredentials>;
+  readonly identity: Client<typeof Identity>;
+  readonly indexedDB: Client<typeof IndexedDB>;
+  readonly workflow: Client<typeof Workflow>;
+}
+
+export function createPublicGrpcClients(
+  transport: Transport,
+): PublicGrpcClients {
+  return {
+    agent: createClient(Agent, transport),
+    app: createClient(App, transport),
+    authorization: createClient(Authorization, transport),
+    externalCredentials: createClient(ExternalCredentials, transport),
+    identity: createClient(Identity, transport),
+    indexedDB: createClient(IndexedDB, transport),
+    workflow: createClient(Workflow, transport),
+  };
+}
 
 export interface GrpcUnaryRequestOptions {
   signal?: AbortSignal;
@@ -23,20 +51,391 @@ export interface GrpcUnaryRequestOptions {
 }
 
 export async function dispatchGrpcUnary<Output extends Message>(
-  client: AppServiceClient,
+  clients: PublicGrpcClients,
   method: PublicMethod,
   request: Message,
   requestOptions?: GrpcUnaryRequestOptions,
 ): Promise<Output> {
   switch (method.grpcPath) {
+    case PUBLIC_METHODS.agent.cancelTurn.grpcPath:
+      return (await clients.agent.cancelTurn(
+        request as Parameters<Client<typeof Agent>["cancelTurn"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.createSession.grpcPath:
+      return (await clients.agent.createSession(
+        request as Parameters<Client<typeof Agent>["createSession"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.createTurn.grpcPath:
+      return (await clients.agent.createTurn(
+        request as Parameters<Client<typeof Agent>["createTurn"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.getSession.grpcPath:
+      return (await clients.agent.getSession(
+        request as Parameters<Client<typeof Agent>["getSession"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.getTurn.grpcPath:
+      return (await clients.agent.getTurn(
+        request as Parameters<Client<typeof Agent>["getTurn"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.listSessions.grpcPath:
+      return (await clients.agent.listSessions(
+        request as Parameters<Client<typeof Agent>["listSessions"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.listTurnEvents.grpcPath:
+      return (await clients.agent.listTurnEvents(
+        request as Parameters<Client<typeof Agent>["listTurnEvents"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.listTurns.grpcPath:
+      return (await clients.agent.listTurns(
+        request as Parameters<Client<typeof Agent>["listTurns"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.agent.updateSession.grpcPath:
+      return (await clients.agent.updateSession(
+        request as Parameters<Client<typeof Agent>["updateSession"]>[0],
+        requestOptions,
+      )) as unknown as Output;
     case PUBLIC_METHODS.app.invoke.grpcPath:
-      return (await client.invoke(
-        request as Parameters<AppServiceClient["invoke"]>[0],
+      return (await clients.app.invoke(
+        request as Parameters<Client<typeof App>["invoke"]>[0],
         requestOptions,
       )) as unknown as Output;
     case PUBLIC_METHODS.app.invokeGraphQL.grpcPath:
-      return (await client.invokeGraphQL(
-        request as Parameters<AppServiceClient["invokeGraphQL"]>[0],
+      return (await clients.app.invokeGraphQL(
+        request as Parameters<Client<typeof App>["invokeGraphQL"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.addRelationship.grpcPath:
+      return (await clients.authorization.addRelationship(
+        request as Parameters<
+          Client<typeof Authorization>["addRelationship"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.checkAccess.grpcPath:
+      return (await clients.authorization.checkAccess(
+        request as Parameters<Client<typeof Authorization>["checkAccess"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.checkAccessMany.grpcPath:
+      return (await clients.authorization.checkAccessMany(
+        request as Parameters<
+          Client<typeof Authorization>["checkAccessMany"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.deleteRelationship.grpcPath:
+      return (await clients.authorization.deleteRelationship(
+        request as Parameters<
+          Client<typeof Authorization>["deleteRelationship"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.getActiveModelRef.grpcPath:
+      return (await clients.authorization.getActiveModelRef(
+        request as Parameters<
+          Client<typeof Authorization>["getActiveModelRef"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.listActiveModelResourceTypes.grpcPath:
+      return (await clients.authorization.listActiveModelResourceTypes(
+        request as Parameters<
+          Client<typeof Authorization>["listActiveModelResourceTypes"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.listRelationships.grpcPath:
+      return (await clients.authorization.listRelationships(
+        request as Parameters<
+          Client<typeof Authorization>["listRelationships"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.setActiveModel.grpcPath:
+      return (await clients.authorization.setActiveModel(
+        request as Parameters<
+          Client<typeof Authorization>["setActiveModel"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.authorization.setAuthorizationState.grpcPath:
+      return (await clients.authorization.setAuthorizationState(
+        request as Parameters<
+          Client<typeof Authorization>["setAuthorizationState"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.createCredential.grpcPath:
+      return (await clients.externalCredentials.createCredential(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["createCredential"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.deleteCredential.grpcPath:
+      return (await clients.externalCredentials.deleteCredential(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["deleteCredential"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.exchangeCredential.grpcPath:
+      return (await clients.externalCredentials.exchangeCredential(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["exchangeCredential"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.getCredential.grpcPath:
+      return (await clients.externalCredentials.getCredential(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["getCredential"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.listCredentials.grpcPath:
+      return (await clients.externalCredentials.listCredentials(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["listCredentials"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.resolveCredential.grpcPath:
+      return (await clients.externalCredentials.resolveCredential(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["resolveCredential"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.upsertCredential.grpcPath:
+      return (await clients.externalCredentials.upsertCredential(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["upsertCredential"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.externalCredentials.validateCredentialConfig.grpcPath:
+      return (await clients.externalCredentials.validateCredentialConfig(
+        request as Parameters<
+          Client<typeof ExternalCredentials>["validateCredentialConfig"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.identity.authorize.grpcPath:
+      return (await clients.identity.authorize(
+        request as Parameters<Client<typeof Identity>["authorize"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.identity.getGrant.grpcPath:
+      return (await clients.identity.getGrant(
+        request as Parameters<Client<typeof Identity>["getGrant"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.identity.introspect.grpcPath:
+      return (await clients.identity.introspect(
+        request as Parameters<Client<typeof Identity>["introspect"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.identity.listGrants.grpcPath:
+      return (await clients.identity.listGrants(
+        request as Parameters<Client<typeof Identity>["listGrants"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.identity.revokeGrant.grpcPath:
+      return (await clients.identity.revokeGrant(
+        request as Parameters<Client<typeof Identity>["revokeGrant"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.identity.token.grpcPath:
+      return (await clients.identity.token(
+        request as Parameters<Client<typeof Identity>["token"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.identity.userInfo.grpcPath:
+      return (await clients.identity.userInfo(
+        request as Parameters<Client<typeof Identity>["userInfo"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.add.grpcPath:
+      return (await clients.indexedDB.add(
+        request as Parameters<Client<typeof IndexedDB>["add"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.clear.grpcPath:
+      return (await clients.indexedDB.clear(
+        request as Parameters<Client<typeof IndexedDB>["clear"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.count.grpcPath:
+      return (await clients.indexedDB.count(
+        request as Parameters<Client<typeof IndexedDB>["count"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.createIndex.grpcPath:
+      return (await clients.indexedDB.createIndex(
+        request as Parameters<Client<typeof IndexedDB>["createIndex"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.createObjectStore.grpcPath:
+      return (await clients.indexedDB.createObjectStore(
+        request as Parameters<Client<typeof IndexedDB>["createObjectStore"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.delete.grpcPath:
+      return (await clients.indexedDB.delete(
+        request as Parameters<Client<typeof IndexedDB>["delete"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.deleteIndex.grpcPath:
+      return (await clients.indexedDB.deleteIndex(
+        request as Parameters<Client<typeof IndexedDB>["deleteIndex"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.deleteObjectStore.grpcPath:
+      return (await clients.indexedDB.deleteObjectStore(
+        request as Parameters<Client<typeof IndexedDB>["deleteObjectStore"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.deleteRange.grpcPath:
+      return (await clients.indexedDB.deleteRange(
+        request as Parameters<Client<typeof IndexedDB>["deleteRange"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.get.grpcPath:
+      return (await clients.indexedDB.get(
+        request as Parameters<Client<typeof IndexedDB>["get"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.getAll.grpcPath:
+      return (await clients.indexedDB.getAll(
+        request as Parameters<Client<typeof IndexedDB>["getAll"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.getAllKeys.grpcPath:
+      return (await clients.indexedDB.getAllKeys(
+        request as Parameters<Client<typeof IndexedDB>["getAllKeys"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.getKey.grpcPath:
+      return (await clients.indexedDB.getKey(
+        request as Parameters<Client<typeof IndexedDB>["getKey"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.indexCount.grpcPath:
+      return (await clients.indexedDB.indexCount(
+        request as Parameters<Client<typeof IndexedDB>["indexCount"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.indexDelete.grpcPath:
+      return (await clients.indexedDB.indexDelete(
+        request as Parameters<Client<typeof IndexedDB>["indexDelete"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.indexGet.grpcPath:
+      return (await clients.indexedDB.indexGet(
+        request as Parameters<Client<typeof IndexedDB>["indexGet"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.indexGetAll.grpcPath:
+      return (await clients.indexedDB.indexGetAll(
+        request as Parameters<Client<typeof IndexedDB>["indexGetAll"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.indexGetAllKeys.grpcPath:
+      return (await clients.indexedDB.indexGetAllKeys(
+        request as Parameters<Client<typeof IndexedDB>["indexGetAllKeys"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.indexGetKey.grpcPath:
+      return (await clients.indexedDB.indexGetKey(
+        request as Parameters<Client<typeof IndexedDB>["indexGetKey"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.indexedDB.put.grpcPath:
+      return (await clients.indexedDB.put(
+        request as Parameters<Client<typeof IndexedDB>["put"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.applyDefinition.grpcPath:
+      return (await clients.workflow.applyDefinition(
+        request as Parameters<Client<typeof Workflow>["applyDefinition"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.cancelRun.grpcPath:
+      return (await clients.workflow.cancelRun(
+        request as Parameters<Client<typeof Workflow>["cancelRun"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.deleteDefinition.grpcPath:
+      return (await clients.workflow.deleteDefinition(
+        request as Parameters<Client<typeof Workflow>["deleteDefinition"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.getDefinition.grpcPath:
+      return (await clients.workflow.getDefinition(
+        request as Parameters<Client<typeof Workflow>["getDefinition"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.getRun.grpcPath:
+      return (await clients.workflow.getRun(
+        request as Parameters<Client<typeof Workflow>["getRun"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.getRunEvents.grpcPath:
+      return (await clients.workflow.getRunEvents(
+        request as Parameters<Client<typeof Workflow>["getRunEvents"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.getRunOutput.grpcPath:
+      return (await clients.workflow.getRunOutput(
+        request as Parameters<Client<typeof Workflow>["getRunOutput"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.listDefinitions.grpcPath:
+      return (await clients.workflow.listDefinitions(
+        request as Parameters<Client<typeof Workflow>["listDefinitions"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.listRuns.grpcPath:
+      return (await clients.workflow.listRuns(
+        request as Parameters<Client<typeof Workflow>["listRuns"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.setActivationPaused.grpcPath:
+      return (await clients.workflow.setActivationPaused(
+        request as Parameters<
+          Client<typeof Workflow>["setActivationPaused"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.setDefinitionPaused.grpcPath:
+      return (await clients.workflow.setDefinitionPaused(
+        request as Parameters<
+          Client<typeof Workflow>["setDefinitionPaused"]
+        >[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.signalOrStartRun.grpcPath:
+      return (await clients.workflow.signalOrStartRun(
+        request as Parameters<Client<typeof Workflow>["signalOrStartRun"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.signalRun.grpcPath:
+      return (await clients.workflow.signalRun(
+        request as Parameters<Client<typeof Workflow>["signalRun"]>[0],
+        requestOptions,
+      )) as unknown as Output;
+    case PUBLIC_METHODS.workflow.startRun.grpcPath:
+      return (await clients.workflow.startRun(
+        request as Parameters<Client<typeof Workflow>["startRun"]>[0],
         requestOptions,
       )) as unknown as Output;
     default:

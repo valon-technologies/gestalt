@@ -5,8 +5,13 @@
  */
 
 import { normalizeAddress } from "./address.ts";
-import { AppClient } from "./client/generated/app_client.ts";
-import type { UnaryTransport } from "./client/generated/unary_transport.ts";
+import {
+  AgentClient,
+  AppClient,
+  AuthorizationClient,
+  IdentityClient,
+  WorkflowClient,
+} from "./client/generated/app_client.ts";
 import { createRestUnaryTransport } from "./rest_transport.ts";
 
 export interface SessionAuth {
@@ -34,6 +39,10 @@ export interface ClientOptions {
 export interface GestaltClient {
   readonly address: string;
   readonly app: AppClient;
+  readonly agent: AgentClient;
+  readonly authorization: AuthorizationClient;
+  readonly identity: IdentityClient;
+  readonly workflow: WorkflowClient;
 }
 
 export function session(): SessionAuth {
@@ -50,15 +59,18 @@ export function unauthenticated(): Unauthenticated {
 
 export function createGestaltClient(options: ClientOptions): GestaltClient {
   const address = resolveAddress(options.address);
+  const transport = createRestUnaryTransport({
+    baseUrl: address,
+    auth: options.auth,
+    ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+  });
   return {
     address,
-    app: new AppClient(
-      createRestUnaryTransport({
-        baseUrl: address,
-        auth: options.auth,
-        ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
-      }),
-    ),
+    app: new AppClient(transport),
+    agent: new AgentClient(transport),
+    authorization: new AuthorizationClient(transport),
+    identity: new IdentityClient(transport),
+    workflow: new WorkflowClient(transport),
   };
 }
 

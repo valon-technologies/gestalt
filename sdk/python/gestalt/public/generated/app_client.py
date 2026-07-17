@@ -8,11 +8,284 @@ from typing import Any
 
 from gestalt.invoke_support import decode_app_result
 
+from ..._gen.v1 import agent_pb2 as _agent_pb2
 from ..._gen.v1 import app_pb2 as _app_pb2
+from ..._gen.v1 import authorization_pb2 as _authorization_pb2
+from ..._gen.v1 import external_credential_pb2 as _external_credential_pb2
+from ..._gen.v1 import identity_pb2 as _identity_pb2
+from ..._gen.v1 import indexeddb_pb2 as _indexeddb_pb2
+from ..._gen.v1 import workflow_pb2 as _workflow_pb2
+from ._codec import agent as _agent_codec
 from ._codec import app as _app_codec
+from ._codec import authorization as _authorization_codec
+from ._codec import external_credential as _external_credential_codec
+from ._codec import identity as _identity_codec
+from ._codec import indexeddb as _indexeddb_codec
+from ._codec import workflow as _workflow_codec
+from .agent import (
+    AgentSession,
+    AgentTurn,
+    CancelAgentProviderTurnRequest,
+    CreateAgentProviderSessionRequest,
+    CreateAgentProviderTurnRequest,
+    GetAgentProviderSessionRequest,
+    GetAgentProviderTurnRequest,
+    ListAgentProviderSessionsRequest,
+    ListAgentProviderSessionsResponse,
+    ListAgentProviderTurnEventsRequest,
+    ListAgentProviderTurnEventsResponse,
+    ListAgentProviderTurnsRequest,
+    ListAgentProviderTurnsResponse,
+    UpdateAgentProviderSessionRequest,
+)
 from .app import AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult
-from .metadata import METHOD_APP_INVOKE, METHOD_APP_INVOKE_GRAPHQL
+from .authorization import (
+    AddRelationshipRequest,
+    AddRelationshipResponse,
+    CheckAccessManyRequest,
+    CheckAccessManyResponse,
+    CheckAccessRequest,
+    CheckAccessResponse,
+    DeleteRelationshipRequest,
+    DeleteRelationshipResponse,
+    ListActiveModelResourceTypesRequest,
+    ListActiveModelResourceTypesResponse,
+    ListRelationshipsRequest,
+    ListRelationshipsResponse,
+    SetActiveModelRequest,
+    SetActiveModelResponse,
+    SetAuthorizationStateRequest,
+    SetAuthorizationStateResponse,
+)
+from .external_credential import (
+    CreateExternalCredentialRequest,
+    ExchangeExternalCredentialRequest,
+    ExchangeExternalCredentialResponse,
+    ExternalCredential,
+    GetExternalCredentialRequest,
+    ListExternalCredentialsRequest,
+    ListExternalCredentialsResponse,
+    ResolveExternalCredentialRequest,
+    ResolveExternalCredentialResponse,
+    UpsertExternalCredentialRequest,
+)
+from .identity import (
+    AuthorizeRequest,
+    AuthorizeResponse,
+    GetGrantRequest,
+    GetGrantResponse,
+    IntrospectRequest,
+    IntrospectResponse,
+    ListGrantsRequest,
+    ListGrantsResponse,
+    RevokeGrantRequest,
+    RevokeGrantResponse,
+    TokenRequest,
+    TokenResponse,
+    UserInfoRequest,
+    UserInfoResponse,
+)
+from .indexeddb import (
+    CountResponse,
+    DeleteResponse,
+    IndexQueryRequest,
+    KeyResponse,
+    KeysResponse,
+    ObjectStoreRangeRequest,
+    ObjectStoreRequest,
+    RecordResponse,
+    RecordsResponse,
+)
+from .metadata import (
+    METHOD_AGENT_CANCEL_TURN,
+    METHOD_AGENT_CREATE_SESSION,
+    METHOD_AGENT_CREATE_TURN,
+    METHOD_AGENT_GET_SESSION,
+    METHOD_AGENT_GET_TURN,
+    METHOD_AGENT_LIST_SESSIONS,
+    METHOD_AGENT_LIST_TURN_EVENTS,
+    METHOD_AGENT_LIST_TURNS,
+    METHOD_AGENT_UPDATE_SESSION,
+    METHOD_APP_INVOKE,
+    METHOD_APP_INVOKE_GRAPHQL,
+    METHOD_AUTHORIZATION_ADD_RELATIONSHIP,
+    METHOD_AUTHORIZATION_CHECK_ACCESS,
+    METHOD_AUTHORIZATION_CHECK_ACCESS_MANY,
+    METHOD_AUTHORIZATION_DELETE_RELATIONSHIP,
+    METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES,
+    METHOD_AUTHORIZATION_LIST_RELATIONSHIPS,
+    METHOD_AUTHORIZATION_SET_ACTIVE_MODEL,
+    METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE,
+    METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
+    METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
+    METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
+    METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS,
+    METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL,
+    METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL,
+    METHOD_IDENTITY_AUTHORIZE,
+    METHOD_IDENTITY_GET_GRANT,
+    METHOD_IDENTITY_INTROSPECT,
+    METHOD_IDENTITY_LIST_GRANTS,
+    METHOD_IDENTITY_REVOKE_GRANT,
+    METHOD_IDENTITY_TOKEN,
+    METHOD_IDENTITY_USER_INFO,
+    METHOD_INDEXED_DB_COUNT,
+    METHOD_INDEXED_DB_DELETE_RANGE,
+    METHOD_INDEXED_DB_GET,
+    METHOD_INDEXED_DB_GET_ALL,
+    METHOD_INDEXED_DB_GET_ALL_KEYS,
+    METHOD_INDEXED_DB_GET_KEY,
+    METHOD_INDEXED_DB_INDEX_COUNT,
+    METHOD_INDEXED_DB_INDEX_DELETE,
+    METHOD_INDEXED_DB_INDEX_GET,
+    METHOD_INDEXED_DB_INDEX_GET_ALL,
+    METHOD_INDEXED_DB_INDEX_GET_ALL_KEYS,
+    METHOD_INDEXED_DB_INDEX_GET_KEY,
+    METHOD_WORKFLOW_APPLY_DEFINITION,
+    METHOD_WORKFLOW_CANCEL_RUN,
+    METHOD_WORKFLOW_GET_DEFINITION,
+    METHOD_WORKFLOW_GET_RUN,
+    METHOD_WORKFLOW_GET_RUN_EVENTS,
+    METHOD_WORKFLOW_GET_RUN_OUTPUT,
+    METHOD_WORKFLOW_LIST_DEFINITIONS,
+    METHOD_WORKFLOW_LIST_RUNS,
+    METHOD_WORKFLOW_SET_ACTIVATION_PAUSED,
+    METHOD_WORKFLOW_SET_DEFINITION_PAUSED,
+    METHOD_WORKFLOW_SIGNAL_OR_START_RUN,
+    METHOD_WORKFLOW_SIGNAL_RUN,
+    METHOD_WORKFLOW_START_RUN,
+)
 from .unary_transport import UnaryTransport
+from .workflow import (
+    ApplyWorkflowProviderDefinitionRequest,
+    CancelWorkflowProviderRunRequest,
+    GetWorkflowProviderDefinitionRequest,
+    GetWorkflowProviderRunEventsRequest,
+    GetWorkflowProviderRunEventsResponse,
+    GetWorkflowProviderRunOutputRequest,
+    GetWorkflowProviderRunOutputResponse,
+    GetWorkflowProviderRunRequest,
+    ListWorkflowProviderDefinitionsRequest,
+    ListWorkflowProviderDefinitionsResponse,
+    ListWorkflowProviderRunsRequest,
+    ListWorkflowProviderRunsResponse,
+    SetWorkflowProviderActivationPausedRequest,
+    SetWorkflowProviderDefinitionPausedRequest,
+    SignalOrStartWorkflowProviderRunRequest,
+    SignalWorkflowProviderRunRequest,
+    SignalWorkflowRunResponse,
+    StartWorkflowProviderRunRequest,
+    WorkflowDefinition,
+    WorkflowRun,
+)
+
+
+class AgentClient:
+    """Agent is the authoritative agent data boundary. Read RPCs for
+    sessions, turns, turn events, and interactions should use provider-owned
+    control-plane state and should not require a live execution sandbox,
+    pod-level transport, or cached tunnel.
+
+    Transport-neutral client for the public gestalt.provider.v1.Agent surface.
+    """
+
+    def __init__(self, transport: UnaryTransport) -> None:
+        self._transport = transport
+
+    def cancel_turn(self, request: CancelAgentProviderTurnRequest) -> AgentTurn:
+        wire = _agent_codec.to_wire_cancel_agent_provider_turn_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_CANCEL_TURN,
+            wire,
+            _agent_pb2.AgentTurn,
+        )
+        return _agent_codec.from_wire_agent_turn(wire_response)
+
+    def create_session(
+        self, request: CreateAgentProviderSessionRequest
+    ) -> AgentSession:
+        wire = _agent_codec.to_wire_create_agent_provider_session_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_CREATE_SESSION,
+            wire,
+            _agent_pb2.AgentSession,
+        )
+        return _agent_codec.from_wire_agent_session(wire_response)
+
+    def create_turn(self, request: CreateAgentProviderTurnRequest) -> AgentTurn:
+        wire = _agent_codec.to_wire_create_agent_provider_turn_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_CREATE_TURN,
+            wire,
+            _agent_pb2.AgentTurn,
+        )
+        return _agent_codec.from_wire_agent_turn(wire_response)
+
+    def get_session(self, request: GetAgentProviderSessionRequest) -> AgentSession:
+        wire = _agent_codec.to_wire_get_agent_provider_session_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_GET_SESSION,
+            wire,
+            _agent_pb2.AgentSession,
+        )
+        return _agent_codec.from_wire_agent_session(wire_response)
+
+    def get_turn(self, request: GetAgentProviderTurnRequest) -> AgentTurn:
+        wire = _agent_codec.to_wire_get_agent_provider_turn_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_GET_TURN,
+            wire,
+            _agent_pb2.AgentTurn,
+        )
+        return _agent_codec.from_wire_agent_turn(wire_response)
+
+    def list_sessions(
+        self, request: ListAgentProviderSessionsRequest
+    ) -> ListAgentProviderSessionsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_sessions_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_LIST_SESSIONS,
+            wire,
+            _agent_pb2.ListAgentProviderSessionsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_sessions_response(
+            wire_response
+        )
+
+    def list_turn_events(
+        self, request: ListAgentProviderTurnEventsRequest
+    ) -> ListAgentProviderTurnEventsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_turn_events_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_LIST_TURN_EVENTS,
+            wire,
+            _agent_pb2.ListAgentProviderTurnEventsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_turn_events_response(
+            wire_response
+        )
+
+    def list_turns(
+        self, request: ListAgentProviderTurnsRequest
+    ) -> ListAgentProviderTurnsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_turns_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_LIST_TURNS,
+            wire,
+            _agent_pb2.ListAgentProviderTurnsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_turns_response(wire_response)
+
+    def update_session(
+        self, request: UpdateAgentProviderSessionRequest
+    ) -> AgentSession:
+        wire = _agent_codec.to_wire_update_agent_provider_session_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_UPDATE_SESSION,
+            wire,
+            _agent_pb2.AgentSession,
+        )
+        return _agent_codec.from_wire_agent_session(wire_response)
 
 
 class AppClient:
@@ -45,3 +318,554 @@ class AppClient:
             _app_pb2.OperationResult,
         )
         return _app_codec.from_wire_operation_result(wire_response)
+
+
+class AuthorizationClient:
+    """Transport-neutral client for the public gestalt.provider.v1.Authorization surface."""
+
+    def __init__(self, transport: UnaryTransport) -> None:
+        self._transport = transport
+
+    def add_relationship(
+        self, request: AddRelationshipRequest
+    ) -> AddRelationshipResponse:
+        wire = _authorization_codec.to_wire_add_relationship_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_ADD_RELATIONSHIP,
+            wire,
+            _authorization_pb2.AddRelationshipResponse,
+        )
+        return _authorization_codec.from_wire_add_relationship_response(wire_response)
+
+    def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
+        wire = _authorization_codec.to_wire_check_access_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_CHECK_ACCESS,
+            wire,
+            _authorization_pb2.CheckAccessResponse,
+        )
+        return _authorization_codec.from_wire_check_access_response(wire_response)
+
+    def check_access_many(
+        self, request: CheckAccessManyRequest
+    ) -> CheckAccessManyResponse:
+        wire = _authorization_codec.to_wire_check_access_many_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_CHECK_ACCESS_MANY,
+            wire,
+            _authorization_pb2.CheckAccessManyResponse,
+        )
+        return _authorization_codec.from_wire_check_access_many_response(wire_response)
+
+    def delete_relationship(
+        self, request: DeleteRelationshipRequest
+    ) -> DeleteRelationshipResponse:
+        wire = _authorization_codec.to_wire_delete_relationship_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_DELETE_RELATIONSHIP,
+            wire,
+            _authorization_pb2.DeleteRelationshipResponse,
+        )
+        return _authorization_codec.from_wire_delete_relationship_response(
+            wire_response
+        )
+
+    def list_active_model_resource_types(
+        self, request: ListActiveModelResourceTypesRequest
+    ) -> ListActiveModelResourceTypesResponse:
+        wire = _authorization_codec.to_wire_list_active_model_resource_types_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES,
+            wire,
+            _authorization_pb2.ListActiveModelResourceTypesResponse,
+        )
+        return _authorization_codec.from_wire_list_active_model_resource_types_response(
+            wire_response
+        )
+
+    def list_relationships(
+        self, request: ListRelationshipsRequest
+    ) -> ListRelationshipsResponse:
+        wire = _authorization_codec.to_wire_list_relationships_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_LIST_RELATIONSHIPS,
+            wire,
+            _authorization_pb2.ListRelationshipsResponse,
+        )
+        return _authorization_codec.from_wire_list_relationships_response(wire_response)
+
+    def set_active_model(
+        self, request: SetActiveModelRequest
+    ) -> SetActiveModelResponse:
+        wire = _authorization_codec.to_wire_set_active_model_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_SET_ACTIVE_MODEL,
+            wire,
+            _authorization_pb2.SetActiveModelResponse,
+        )
+        return _authorization_codec.from_wire_set_active_model_response(wire_response)
+
+    def set_authorization_state(
+        self, request: SetAuthorizationStateRequest
+    ) -> SetAuthorizationStateResponse:
+        wire = _authorization_codec.to_wire_set_authorization_state_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE,
+            wire,
+            _authorization_pb2.SetAuthorizationStateResponse,
+        )
+        return _authorization_codec.from_wire_set_authorization_state_response(
+            wire_response
+        )
+
+
+class ExternalCredentialsClient:
+    """Transport-neutral client for the public gestalt.provider.v1.ExternalCredentials surface."""
+
+    def __init__(self, transport: UnaryTransport) -> None:
+        self._transport = transport
+
+    def create_credential(
+        self, request: CreateExternalCredentialRequest
+    ) -> ExternalCredential:
+        wire = _external_credential_codec.to_wire_create_external_credential_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExternalCredential,
+        )
+        return _external_credential_codec.from_wire_external_credential(wire_response)
+
+    def exchange_credential(
+        self, request: ExchangeExternalCredentialRequest
+    ) -> ExchangeExternalCredentialResponse:
+        wire = _external_credential_codec.to_wire_exchange_external_credential_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExchangeExternalCredentialResponse,
+        )
+        return (
+            _external_credential_codec.from_wire_exchange_external_credential_response(
+                wire_response
+            )
+        )
+
+    def get_credential(
+        self, request: GetExternalCredentialRequest
+    ) -> ExternalCredential:
+        wire = _external_credential_codec.to_wire_get_external_credential_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExternalCredential,
+        )
+        return _external_credential_codec.from_wire_external_credential(wire_response)
+
+    def list_credentials(
+        self, request: ListExternalCredentialsRequest
+    ) -> ListExternalCredentialsResponse:
+        wire = _external_credential_codec.to_wire_list_external_credentials_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS,
+            wire,
+            _external_credential_pb2.ListExternalCredentialsResponse,
+        )
+        return _external_credential_codec.from_wire_list_external_credentials_response(
+            wire_response
+        )
+
+    def resolve_credential(
+        self, request: ResolveExternalCredentialRequest
+    ) -> ResolveExternalCredentialResponse:
+        wire = _external_credential_codec.to_wire_resolve_external_credential_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ResolveExternalCredentialResponse,
+        )
+        return (
+            _external_credential_codec.from_wire_resolve_external_credential_response(
+                wire_response
+            )
+        )
+
+    def upsert_credential(
+        self, request: UpsertExternalCredentialRequest
+    ) -> ExternalCredential:
+        wire = _external_credential_codec.to_wire_upsert_external_credential_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExternalCredential,
+        )
+        return _external_credential_codec.from_wire_external_credential(wire_response)
+
+
+class IdentityClient:
+    """Identity models the shared Gestalt authentication protocol.
+
+    Transport-neutral client for the public gestalt.provider.v1.Identity surface.
+    """
+
+    def __init__(self, transport: UnaryTransport) -> None:
+        self._transport = transport
+
+    def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse:
+        wire = _identity_codec.to_wire_authorize_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_AUTHORIZE,
+            wire,
+            _identity_pb2.AuthorizeResponse,
+        )
+        return _identity_codec.from_wire_authorize_response(wire_response)
+
+    def get_grant(self, request: GetGrantRequest) -> GetGrantResponse:
+        wire = _identity_codec.to_wire_get_grant_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_GET_GRANT,
+            wire,
+            _identity_pb2.GetGrantResponse,
+        )
+        return _identity_codec.from_wire_get_grant_response(wire_response)
+
+    def introspect(self, request: IntrospectRequest) -> IntrospectResponse:
+        wire = _identity_codec.to_wire_introspect_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_INTROSPECT,
+            wire,
+            _identity_pb2.IntrospectResponse,
+        )
+        return _identity_codec.from_wire_introspect_response(wire_response)
+
+    def list_grants(self, request: ListGrantsRequest) -> ListGrantsResponse:
+        wire = _identity_codec.to_wire_list_grants_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_LIST_GRANTS,
+            wire,
+            _identity_pb2.ListGrantsResponse,
+        )
+        return _identity_codec.from_wire_list_grants_response(wire_response)
+
+    def revoke_grant(self, request: RevokeGrantRequest) -> RevokeGrantResponse:
+        wire = _identity_codec.to_wire_revoke_grant_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_REVOKE_GRANT,
+            wire,
+            _identity_pb2.RevokeGrantResponse,
+        )
+        return _identity_codec.from_wire_revoke_grant_response(wire_response)
+
+    def token(self, request: TokenRequest) -> TokenResponse:
+        wire = _identity_codec.to_wire_token_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_TOKEN,
+            wire,
+            _identity_pb2.TokenResponse,
+        )
+        return _identity_codec.from_wire_token_response(wire_response)
+
+    def user_info(self, request: UserInfoRequest) -> UserInfoResponse:
+        wire = _identity_codec.to_wire_user_info_request(request)
+        wire_response = self._transport.unary(
+            METHOD_IDENTITY_USER_INFO,
+            wire,
+            _identity_pb2.UserInfoResponse,
+        )
+        return _identity_codec.from_wire_user_info_response(wire_response)
+
+
+class IndexedDBClient:
+    """IndexedDB models the shared Gestalt IndexedDB-provider protocol.
+
+    Transport-neutral client for the public gestalt.provider.v1.IndexedDB surface.
+    """
+
+    def __init__(self, transport: UnaryTransport) -> None:
+        self._transport = transport
+
+    def count(self, request: ObjectStoreRangeRequest) -> CountResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_COUNT,
+            wire,
+            _indexeddb_pb2.CountResponse,
+        )
+        return _indexeddb_codec.from_wire_count_response(wire_response)
+
+    def delete_range(self, request: ObjectStoreRangeRequest) -> DeleteResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_DELETE_RANGE,
+            wire,
+            _indexeddb_pb2.DeleteResponse,
+        )
+        return _indexeddb_codec.from_wire_delete_response(wire_response)
+
+    def get(self, request: ObjectStoreRequest) -> RecordResponse:
+        """Primary key CRUD"""
+        wire = _indexeddb_codec.to_wire_object_store_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_GET,
+            wire,
+            _indexeddb_pb2.RecordResponse,
+        )
+        return _indexeddb_codec.from_wire_record_response(wire_response)
+
+    def get_all(self, request: ObjectStoreRangeRequest) -> RecordsResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_GET_ALL,
+            wire,
+            _indexeddb_pb2.RecordsResponse,
+        )
+        return _indexeddb_codec.from_wire_records_response(wire_response)
+
+    def get_all_keys(self, request: ObjectStoreRangeRequest) -> KeysResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_GET_ALL_KEYS,
+            wire,
+            _indexeddb_pb2.KeysResponse,
+        )
+        return _indexeddb_codec.from_wire_keys_response(wire_response)
+
+    def get_key(self, request: ObjectStoreRequest) -> KeyResponse:
+        wire = _indexeddb_codec.to_wire_object_store_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_GET_KEY,
+            wire,
+            _indexeddb_pb2.KeyResponse,
+        )
+        return _indexeddb_codec.from_wire_key_response(wire_response)
+
+    def index_count(self, request: IndexQueryRequest) -> CountResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_COUNT,
+            wire,
+            _indexeddb_pb2.CountResponse,
+        )
+        return _indexeddb_codec.from_wire_count_response(wire_response)
+
+    def index_delete(self, request: IndexQueryRequest) -> DeleteResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_DELETE,
+            wire,
+            _indexeddb_pb2.DeleteResponse,
+        )
+        return _indexeddb_codec.from_wire_delete_response(wire_response)
+
+    def index_get(self, request: IndexQueryRequest) -> RecordResponse:
+        """Index queries"""
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET,
+            wire,
+            _indexeddb_pb2.RecordResponse,
+        )
+        return _indexeddb_codec.from_wire_record_response(wire_response)
+
+    def index_get_all(self, request: IndexQueryRequest) -> RecordsResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET_ALL,
+            wire,
+            _indexeddb_pb2.RecordsResponse,
+        )
+        return _indexeddb_codec.from_wire_records_response(wire_response)
+
+    def index_get_all_keys(self, request: IndexQueryRequest) -> KeysResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET_ALL_KEYS,
+            wire,
+            _indexeddb_pb2.KeysResponse,
+        )
+        return _indexeddb_codec.from_wire_keys_response(wire_response)
+
+    def index_get_key(self, request: IndexQueryRequest) -> KeyResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET_KEY,
+            wire,
+            _indexeddb_pb2.KeyResponse,
+        )
+        return _indexeddb_codec.from_wire_key_response(wire_response)
+
+
+class WorkflowClient:
+    """Transport-neutral client for the public gestalt.provider.v1.Workflow surface."""
+
+    def __init__(self, transport: UnaryTransport) -> None:
+        self._transport = transport
+
+    def apply_definition(
+        self, request: ApplyWorkflowProviderDefinitionRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_apply_workflow_provider_definition_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_APPLY_DEFINITION,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    def cancel_run(self, request: CancelWorkflowProviderRunRequest) -> WorkflowRun:
+        wire = _workflow_codec.to_wire_cancel_workflow_provider_run_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_CANCEL_RUN,
+            wire,
+            _workflow_pb2.WorkflowRun,
+        )
+        return _workflow_codec.from_wire_workflow_run(wire_response)
+
+    def get_definition(
+        self, request: GetWorkflowProviderDefinitionRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_get_workflow_provider_definition_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_GET_DEFINITION,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    def get_run(self, request: GetWorkflowProviderRunRequest) -> WorkflowRun:
+        wire = _workflow_codec.to_wire_get_workflow_provider_run_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_GET_RUN,
+            wire,
+            _workflow_pb2.WorkflowRun,
+        )
+        return _workflow_codec.from_wire_workflow_run(wire_response)
+
+    def get_run_events(
+        self, request: GetWorkflowProviderRunEventsRequest
+    ) -> GetWorkflowProviderRunEventsResponse:
+        wire = _workflow_codec.to_wire_get_workflow_provider_run_events_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_GET_RUN_EVENTS,
+            wire,
+            _workflow_pb2.GetWorkflowProviderRunEventsResponse,
+        )
+        return _workflow_codec.from_wire_get_workflow_provider_run_events_response(
+            wire_response
+        )
+
+    def get_run_output(
+        self, request: GetWorkflowProviderRunOutputRequest
+    ) -> GetWorkflowProviderRunOutputResponse:
+        wire = _workflow_codec.to_wire_get_workflow_provider_run_output_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_GET_RUN_OUTPUT,
+            wire,
+            _workflow_pb2.GetWorkflowProviderRunOutputResponse,
+        )
+        return _workflow_codec.from_wire_get_workflow_provider_run_output_response(
+            wire_response
+        )
+
+    def list_definitions(
+        self, request: ListWorkflowProviderDefinitionsRequest
+    ) -> ListWorkflowProviderDefinitionsResponse:
+        wire = _workflow_codec.to_wire_list_workflow_provider_definitions_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_LIST_DEFINITIONS,
+            wire,
+            _workflow_pb2.ListWorkflowProviderDefinitionsResponse,
+        )
+        return _workflow_codec.from_wire_list_workflow_provider_definitions_response(
+            wire_response
+        )
+
+    def list_runs(
+        self, request: ListWorkflowProviderRunsRequest
+    ) -> ListWorkflowProviderRunsResponse:
+        wire = _workflow_codec.to_wire_list_workflow_provider_runs_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_LIST_RUNS,
+            wire,
+            _workflow_pb2.ListWorkflowProviderRunsResponse,
+        )
+        return _workflow_codec.from_wire_list_workflow_provider_runs_response(
+            wire_response
+        )
+
+    def set_activation_paused(
+        self, request: SetWorkflowProviderActivationPausedRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_set_workflow_provider_activation_paused_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_SET_ACTIVATION_PAUSED,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    def set_definition_paused(
+        self, request: SetWorkflowProviderDefinitionPausedRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_set_workflow_provider_definition_paused_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_SET_DEFINITION_PAUSED,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    def signal_or_start_run(
+        self, request: SignalOrStartWorkflowProviderRunRequest
+    ) -> SignalWorkflowRunResponse:
+        wire = _workflow_codec.to_wire_signal_or_start_workflow_provider_run_request(
+            request
+        )
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_SIGNAL_OR_START_RUN,
+            wire,
+            _workflow_pb2.SignalWorkflowRunResponse,
+        )
+        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+
+    def signal_run(
+        self, request: SignalWorkflowProviderRunRequest
+    ) -> SignalWorkflowRunResponse:
+        wire = _workflow_codec.to_wire_signal_workflow_provider_run_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_SIGNAL_RUN,
+            wire,
+            _workflow_pb2.SignalWorkflowRunResponse,
+        )
+        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+
+    def start_run(self, request: StartWorkflowProviderRunRequest) -> WorkflowRun:
+        wire = _workflow_codec.to_wire_start_workflow_provider_run_request(request)
+        wire_response = self._transport.unary(
+            METHOD_WORKFLOW_START_RUN,
+            wire,
+            _workflow_pb2.WorkflowRun,
+        )
+        return _workflow_codec.from_wire_workflow_run(wire_response)

@@ -2,6 +2,19 @@
 
 package generated
 
+// AgentToolRef is the native message type for gestalt.provider.v1.AgentToolRef.
+type AgentToolRef struct {
+	App            string
+	Operation      string
+	Connection     string
+	Instance       string
+	Title          string
+	Description    string
+	CredentialMode string
+	System         string
+	RunAs          *SubjectContext
+}
+
 // AppInvokeGraphQLRequest is the native message type for gestalt.provider.v1.AppInvokeGraphQLRequest.
 //
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
@@ -28,6 +41,17 @@ type AppInvokeRequest struct {
 	CredentialMode string
 }
 
+// OperationAnnotations is the native message type for gestalt.provider.v1.OperationAnnotations.
+//
+// OperationAnnotations carries optional host hints about how an operation
+// behaves.
+type OperationAnnotations struct {
+	ReadOnlyHint    *bool
+	IdempotentHint  *bool
+	DestructiveHint *bool
+	OpenWorldHint   *bool
+}
+
 // OperationResult is the native message type for gestalt.provider.v1.OperationResult.
 //
 // OperationResult is the serialized result returned from an Execute call.
@@ -42,4 +66,22 @@ type OperationResult struct {
 // StringList is a helper map value for repeated HTTP header and query values.
 type StringList struct {
 	Values []string
+}
+
+// SubjectContext is the native message type for gestalt.provider.v1.SubjectContext.
+//
+// SubjectContext identifies the caller that initiated an operation.
+type SubjectContext struct {
+	Id          string
+	Email       string
+	DisplayName string
+	Scopes      []string
+	Permissions []*SubjectPermissionContext
+}
+
+// SubjectPermissionContext is the native message type for gestalt.provider.v1.SubjectPermissionContext.
+type SubjectPermissionContext struct {
+	App           string
+	Operations    []string
+	AllOperations bool
 }

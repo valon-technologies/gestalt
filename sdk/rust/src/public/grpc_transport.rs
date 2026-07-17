@@ -20,13 +20,44 @@ use crate::rpc_support::gestalt_error_code;
 pub(crate) type AuthChannel =
     tonic::service::interceptor::InterceptedService<Channel, AuthInterceptor>;
 
+/// tonic clients for every public gRPC service.
 #[derive(Clone)]
-pub(crate) enum AppGrpcClient {
-    Public(v1::app_client::AppClient<AuthChannel>),
-    Bound(v1::app_client::AppClient<HostServiceChannel>),
+#[allow(missing_docs)]
+pub(crate) struct PublicGrpcClients {
+    pub agent: v1::agent_client::AgentClient<AuthChannel>,
+    pub app: v1::app_client::AppClient<AuthChannel>,
+    pub authorization: v1::authorization_client::AuthorizationClient<AuthChannel>,
+    pub external_credentials:
+        v1::external_credentials_client::ExternalCredentialsClient<AuthChannel>,
+    pub identity: v1::identity_client::IdentityClient<AuthChannel>,
+    pub indexed_db: v1::indexed_db_client::IndexedDbClient<AuthChannel>,
+    pub workflow: v1::workflow_client::WorkflowClient<AuthChannel>,
 }
 
-/// gRPC transport implementing [`UnaryTransport`] for the public App surface.
+impl PublicGrpcClients {
+    pub(crate) fn new(channel: Channel, auth: Arc<dyn Auth>) -> Self {
+        let ch = auth_channel(channel, auth);
+        Self {
+            agent: v1::agent_client::AgentClient::new(ch.clone()),
+            app: v1::app_client::AppClient::new(ch.clone()),
+            authorization: v1::authorization_client::AuthorizationClient::new(ch.clone()),
+            external_credentials: v1::external_credentials_client::ExternalCredentialsClient::new(
+                ch.clone(),
+            ),
+            identity: v1::identity_client::IdentityClient::new(ch.clone()),
+            indexed_db: v1::indexed_db_client::IndexedDbClient::new(ch.clone()),
+            workflow: v1::workflow_client::WorkflowClient::new(ch),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum AppGrpcClient {
+    Public(Box<PublicGrpcClients>),
+    Bound(Box<v1::app_client::AppClient<HostServiceChannel>>),
+}
+
+/// gRPC transport implementing [`UnaryTransport`] for the public surface.
 #[derive(Clone)]
 pub struct GrpcTransport {
     client: AppGrpcClient,
@@ -36,15 +67,15 @@ pub struct GrpcTransport {
 impl GrpcTransport {
     /// Creates a gRPC transport over an established public channel.
     pub fn new(channel: Channel, auth: Arc<dyn Auth>) -> Self {
-        Self::from_client(AppGrpcClient::Public(v1::app_client::AppClient::new(
-            auth_channel(channel, auth),
-        )))
+        Self::from_client(AppGrpcClient::Public(Box::new(PublicGrpcClients::new(
+            channel, auth,
+        ))))
     }
 
     /// Creates a gRPC transport over the provider host-service relay.
     pub(crate) fn from_host_service(channel: HostServiceChannel) -> Self {
-        Self::from_client(AppGrpcClient::Bound(v1::app_client::AppClient::new(
-            channel,
+        Self::from_client(AppGrpcClient::Bound(Box::new(
+            v1::app_client::AppClient::new(channel),
         )))
     }
 
@@ -119,11 +150,9 @@ impl Interceptor for AuthInterceptor {
         if let Some(authorization) = self.auth.authorization_header() {
             request.metadata_mut().insert(
                 "authorization",
-                authorization.parse().map_err(
-                    |err: tonic::metadata::errors::InvalidMetadataValue| {
-                        Status::invalid_argument(err.to_string())
-                    },
-                )?,
+                authorization
+                    .parse()
+                    .map_err(|_| Status::invalid_argument("invalid authorization header"))?,
             );
         }
         Ok(request)

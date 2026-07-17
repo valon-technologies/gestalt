@@ -66,7 +66,7 @@ func TestClientCasesInvokeRESTMetadata(t *testing.T) {
 	}
 
 	view := publicsurface.Build(schema)
-	methods, err := publicsurface.ParseMethods(schema, view)
+	methods, err := publicsurface.ParseMethods(schema, view, publicsurface.ProjectionGRPC)
 	if err != nil {
 		t.Fatalf("ParseMethods: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestParseMethodsRejectsMalformedPathTemplate(t *testing.T) {
 					}},
 				}},
 			}
-			if _, err := publicsurface.ParseMethods(schema, publicsurface.Build(schema)); err == nil {
+			if _, err := publicsurface.ParseMethods(schema, publicsurface.Build(schema), publicsurface.ProjectionGRPC); err == nil {
 				t.Fatalf("ParseMethods(%q) = nil, want error", path)
 			}
 		})

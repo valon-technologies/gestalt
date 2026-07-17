@@ -37,6 +37,26 @@ describe("extractNativeTypes", () => {
     expect(output).not.toContain("ServerOnly");
   });
 
+  test("preserves sibling type-only imports for cross-service native types", () => {
+    const source = [
+      'import type { JsonObject } from "@bufbuild/protobuf";',
+      'import { type AgentToolRef, type RequestContext } from "./app.ts";',
+      "export interface AgentCatalogToolConfig {",
+      "  refs: AgentToolRef[];",
+      "  context?: RequestContext;",
+      "}",
+      "export class Agent {}",
+      "",
+    ].join("\n");
+
+    const output = extractNativeTypes(source);
+
+    expect(output).toContain('from "./app.ts"');
+    expect(output).toContain("AgentToolRef");
+    expect(output).toContain("AgentCatalogToolConfig");
+    expect(output).not.toContain("export class Agent");
+  });
+
   test("extracts interfaces and skips runtime exports from app.ts", () => {
     const source = readFileSync(appSourcePath, "utf8");
     const output = extractNativeTypes(source);

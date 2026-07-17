@@ -17,7 +17,7 @@ from gestalt._grpc_transport import (
 from gestalt.public.generated.app_client import AppClient
 
 from .auth import unauthenticated
-from .client import GestaltClient
+from .client import BoundGestaltClient
 from .grpc_transport import GrpcUnaryTransport
 
 CALLER_BEARER_TOKEN_METADATA_KEY = "x-gestalt-caller-bearer-token"
@@ -27,7 +27,7 @@ def gestalt_from_request(
     request: Any,
     *,
     caller_bearer_token: str = "",
-) -> GestaltClient:
+) -> BoundGestaltClient:
     """Return a bound public client for provider-originated relay calls."""
     target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "").strip()
     if not target:
@@ -45,7 +45,7 @@ def gestalt_from_request(
         ),
     )
     transport = GrpcUnaryTransport(channel, unauthenticated(), owns_channel=True)
-    return GestaltClient(app=AppClient(transport), _close=transport.close)
+    return BoundGestaltClient(app=AppClient(transport), _close=transport.close)
 
 
 class _BoundRequestInterceptor(grpc.UnaryUnaryClientInterceptor):

@@ -10,7 +10,7 @@ use tonic::Request;
 use crate::generated::v1;
 use crate::public::generated::metadata::Method;
 use crate::public::generated::rpc_support::GestaltError;
-use crate::public::grpc_transport::AppGrpcClient;
+use crate::public::grpc_transport::{AppGrpcClient, PublicGrpcClients};
 use crate::rpc_support::gestalt_error_code;
 
 pub(crate) async fn dispatch_unary(
@@ -19,7 +19,174 @@ pub(crate) async fn dispatch_unary(
     request_bytes: &[u8],
     timeout: Option<Duration>,
 ) -> Result<Vec<u8>, GestaltError> {
-    let tonic_response = match method.full_method {
+    match client {
+        AppGrpcClient::Public(clients) => {
+            dispatch_public_unary(clients.as_mut(), method, request_bytes, timeout).await
+        }
+        AppGrpcClient::Bound(app) => {
+            dispatch_bound_unary(app.as_mut(), method, request_bytes, timeout).await
+        }
+    }
+}
+
+pub(crate) async fn dispatch_public_unary(
+    clients: &mut PublicGrpcClients,
+    method: &Method,
+    request_bytes: &[u8],
+    timeout: Option<Duration>,
+) -> Result<Vec<u8>, GestaltError> {
+    match method.full_method {
+        "/gestalt.provider.v1.Agent/CancelTurn" => {
+            let wire =
+                v1::CancelAgentProviderTurnRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .cancel_turn(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/CreateSession" => {
+            let wire =
+                v1::CreateAgentProviderSessionRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .create_session(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/CreateTurn" => {
+            let wire =
+                v1::CreateAgentProviderTurnRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .create_turn(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/GetSession" => {
+            let wire =
+                v1::GetAgentProviderSessionRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .get_session(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/GetTurn" => {
+            let wire = v1::GetAgentProviderTurnRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .get_turn(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/ListSessions" => {
+            let wire =
+                v1::ListAgentProviderSessionsRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .list_sessions(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/ListTurnEvents" => {
+            let wire =
+                v1::ListAgentProviderTurnEventsRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .list_turn_events(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/ListTurns" => {
+            let wire = v1::ListAgentProviderTurnsRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .list_turns(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Agent/UpdateSession" => {
+            let wire =
+                v1::UpdateAgentProviderSessionRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .agent
+                .update_session(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
         "/gestalt.provider.v1.App/Invoke" => {
             let wire = v1::AppInvokeRequest::decode(request_bytes).map_err(|err| {
                 GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
@@ -28,12 +195,13 @@ pub(crate) async fn dispatch_unary(
             if let Some(timeout) = timeout {
                 tonic_request.set_timeout(timeout);
             }
-            match client {
-                AppGrpcClient::Public(c) => c.invoke(tonic_request).await,
-                AppGrpcClient::Bound(c) => c.invoke(tonic_request).await,
-            }
-            .map_err(GestaltError::from)?
-            .into_inner()
+            let response = clients
+                .app
+                .invoke(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
         }
         "/gestalt.provider.v1.App/InvokeGraphQL" => {
             let wire = v1::AppInvokeGraphQlRequest::decode(request_bytes).map_err(|err| {
@@ -43,19 +211,994 @@ pub(crate) async fn dispatch_unary(
             if let Some(timeout) = timeout {
                 tonic_request.set_timeout(timeout);
             }
-            match client {
-                AppGrpcClient::Public(c) => c.invoke_graph_ql(tonic_request).await,
-                AppGrpcClient::Bound(c) => c.invoke_graph_ql(tonic_request).await,
+            let response = clients
+                .app
+                .invoke_graph_ql(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Authorization/AddRelationship" => {
+            let wire = v1::AddRelationshipRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
             }
-            .map_err(GestaltError::from)?
-            .into_inner()
+            let response = clients
+                .authorization
+                .add_relationship(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
         }
-        _ => {
-            return Err(GestaltError::new(
-                gestalt_error_code::UNIMPLEMENTED,
-                format!("unsupported public gRPC method {}", method.full_method),
-            ));
+        "/gestalt.provider.v1.Authorization/CheckAccess" => {
+            let wire = v1::CheckAccessRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .check_access(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
         }
-    };
-    Ok(tonic_response.encode_to_vec())
+        "/gestalt.provider.v1.Authorization/CheckAccessMany" => {
+            let wire = v1::CheckAccessManyRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .check_access_many(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Authorization/DeleteRelationship" => {
+            let wire = v1::DeleteRelationshipRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .delete_relationship(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Authorization/GetActiveModelRef" => {
+            let mut tonic_request = Request::new(());
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .get_active_model_ref(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes" => {
+            let wire =
+                v1::ListActiveModelResourceTypesRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .list_active_model_resource_types(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Authorization/ListRelationships" => {
+            let wire = v1::ListRelationshipsRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .list_relationships(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Authorization/SetActiveModel" => {
+            let wire = v1::SetActiveModelRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .set_active_model(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Authorization/SetAuthorizationState" => {
+            let wire = v1::SetAuthorizationStateRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .authorization
+                .set_authorization_state(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/CreateCredential" => {
+            let wire =
+                v1::CreateExternalCredentialRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .external_credentials
+                .create_credential(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/DeleteCredential" => {
+            let wire =
+                v1::DeleteExternalCredentialRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .external_credentials
+                .delete_credential(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/ExchangeCredential" => {
+            let wire =
+                v1::ExchangeExternalCredentialRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .external_credentials
+                .exchange_credential(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/GetCredential" => {
+            let wire = v1::GetExternalCredentialRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .external_credentials
+                .get_credential(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/ListCredentials" => {
+            let wire =
+                v1::ListExternalCredentialsRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .external_credentials
+                .list_credentials(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/ResolveCredential" => {
+            let wire =
+                v1::ResolveExternalCredentialRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .external_credentials
+                .resolve_credential(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/UpsertCredential" => {
+            let wire =
+                v1::UpsertExternalCredentialRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .external_credentials
+                .upsert_credential(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig" => {
+            let wire = v1::ValidateExternalCredentialConfigRequest::decode(request_bytes).map_err(
+                |err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()),
+            )?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .external_credentials
+                .validate_credential_config(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.Identity/Authorize" => {
+            let wire = v1::AuthorizeRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .identity
+                .authorize(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Identity/GetGrant" => {
+            let wire = v1::GetGrantRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .identity
+                .get_grant(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Identity/Introspect" => {
+            let wire = v1::IntrospectRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .identity
+                .introspect(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Identity/ListGrants" => {
+            let wire = v1::ListGrantsRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .identity
+                .list_grants(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Identity/RevokeGrant" => {
+            let wire = v1::RevokeGrantRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .identity
+                .revoke_grant(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Identity/Token" => {
+            let wire = v1::TokenRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .identity
+                .token(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Identity/UserInfo" => {
+            let wire = v1::UserInfoRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .identity
+                .user_info(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/Add" => {
+            let wire = v1::RecordRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .add(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.IndexedDB/Clear" => {
+            let wire = v1::ObjectStoreNameRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .clear(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.IndexedDB/Count" => {
+            let wire = v1::ObjectStoreRangeRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .count(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/CreateIndex" => {
+            let wire = v1::CreateIndexRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .create_index(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.IndexedDB/CreateObjectStore" => {
+            let wire = v1::CreateObjectStoreRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .create_object_store(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.IndexedDB/Delete" => {
+            let wire = v1::ObjectStoreRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .delete(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.IndexedDB/DeleteIndex" => {
+            let wire = v1::DeleteIndexRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .delete_index(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.IndexedDB/DeleteObjectStore" => {
+            let wire = v1::DeleteObjectStoreRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .delete_object_store(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.IndexedDB/DeleteRange" => {
+            let wire = v1::ObjectStoreRangeRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .delete_range(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/Get" => {
+            let wire = v1::ObjectStoreRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .get(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/GetAll" => {
+            let wire = v1::ObjectStoreRangeRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .get_all(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/GetAllKeys" => {
+            let wire = v1::ObjectStoreRangeRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .get_all_keys(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/GetKey" => {
+            let wire = v1::ObjectStoreRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .get_key(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/IndexCount" => {
+            let wire = v1::IndexQueryRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .index_count(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/IndexDelete" => {
+            let wire = v1::IndexQueryRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .index_delete(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/IndexGet" => {
+            let wire = v1::IndexQueryRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .index_get(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/IndexGetAll" => {
+            let wire = v1::IndexQueryRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .index_get_all(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys" => {
+            let wire = v1::IndexQueryRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .index_get_all_keys(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/IndexGetKey" => {
+            let wire = v1::IndexQueryRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .indexed_db
+                .index_get_key(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.IndexedDB/Put" => {
+            let wire = v1::RecordRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .indexed_db
+                .put(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.Workflow/ApplyDefinition" => {
+            let wire = v1::ApplyWorkflowProviderDefinitionRequest::decode(request_bytes).map_err(
+                |err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()),
+            )?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .apply_definition(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/CancelRun" => {
+            let wire =
+                v1::CancelWorkflowProviderRunRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .cancel_run(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/DeleteDefinition" => {
+            let wire = v1::DeleteWorkflowProviderDefinitionRequest::decode(request_bytes).map_err(
+                |err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()),
+            )?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            clients
+                .workflow
+                .delete_definition(tonic_request)
+                .await
+                .map_err(GestaltError::from)?;
+            Ok(Vec::new())
+        }
+        "/gestalt.provider.v1.Workflow/GetDefinition" => {
+            let wire =
+                v1::GetWorkflowProviderDefinitionRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .get_definition(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/GetRun" => {
+            let wire = v1::GetWorkflowProviderRunRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .get_run(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/GetRunEvents" => {
+            let wire =
+                v1::GetWorkflowProviderRunEventsRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .get_run_events(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/GetRunOutput" => {
+            let wire =
+                v1::GetWorkflowProviderRunOutputRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .get_run_output(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/ListDefinitions" => {
+            let wire = v1::ListWorkflowProviderDefinitionsRequest::decode(request_bytes).map_err(
+                |err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()),
+            )?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .list_definitions(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/ListRuns" => {
+            let wire =
+                v1::ListWorkflowProviderRunsRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .list_runs(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/SetActivationPaused" => {
+            let wire = v1::SetWorkflowProviderActivationPausedRequest::decode(request_bytes)
+                .map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .set_activation_paused(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/SetDefinitionPaused" => {
+            let wire = v1::SetWorkflowProviderDefinitionPausedRequest::decode(request_bytes)
+                .map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .set_definition_paused(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/SignalOrStartRun" => {
+            let wire = v1::SignalOrStartWorkflowProviderRunRequest::decode(request_bytes).map_err(
+                |err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()),
+            )?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .signal_or_start_run(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/SignalRun" => {
+            let wire =
+                v1::SignalWorkflowProviderRunRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .signal_run(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.Workflow/StartRun" => {
+            let wire =
+                v1::StartWorkflowProviderRunRequest::decode(request_bytes).map_err(|err| {
+                    GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+                })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = clients
+                .workflow
+                .start_run(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        _ => Err(GestaltError::new(
+            gestalt_error_code::UNIMPLEMENTED,
+            format!("unsupported public gRPC method {}", method.full_method),
+        )),
+    }
+}
+
+async fn dispatch_bound_unary(
+    app: &mut v1::app_client::AppClient<crate::codec::host_service::HostServiceChannel>,
+    method: &Method,
+    request_bytes: &[u8],
+    timeout: Option<Duration>,
+) -> Result<Vec<u8>, GestaltError> {
+    match method.full_method {
+        "/gestalt.provider.v1.App/Invoke" => {
+            let wire = v1::AppInvokeRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = app
+                .invoke(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        "/gestalt.provider.v1.App/InvokeGraphQL" => {
+            let wire = v1::AppInvokeGraphQlRequest::decode(request_bytes).map_err(|err| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(wire);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+            let response = app
+                .invoke_graph_ql(tonic_request)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner();
+            Ok(response.encode_to_vec())
+        }
+        _ => Err(GestaltError::new(
+            gestalt_error_code::UNIMPLEMENTED,
+            format!(
+                "unsupported bound public gRPC method {}",
+                method.full_method
+            ),
+        )),
+    }
 }

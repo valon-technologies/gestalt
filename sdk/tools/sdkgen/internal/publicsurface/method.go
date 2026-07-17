@@ -57,15 +57,17 @@ func ResponseIsOperationResult(pm PublicMethod) bool {
 	return pm.Output != nil && pm.Output.FullName == operationResultMessage
 }
 
-// PublicMethod is the parsed public App method used by every language emitter.
+// PublicMethod is the parsed public method used by every language emitter.
 type PublicMethod struct {
 	Service    string
 	Method     string
 	FullMethod string
 
-	Input  *model.Message
-	Output *model.Message
-	REST   *RESTRule // nil means gRPC-only
+	Input         *model.Message
+	Output        *model.Message
+	InputIsEmpty  bool
+	OutputIsEmpty bool
+	REST          *RESTRule // nil means gRPC-only
 
 	ServerFilled []PublicField
 	Rejected     []PublicField
@@ -75,13 +77,16 @@ type PublicMethod struct {
 var pathSegmentPattern = regexp.MustCompile(`\{([^}/]+)\}`)
 
 // ParseMethods builds the public method model from a validated view.
-func ParseMethods(schema *model.Schema, view *View) ([]PublicMethod, error) {
+func ParseMethods(schema *model.Schema, view *View, projection Projection) ([]PublicMethod, error) {
 	if view == nil {
 		return nil, nil
 	}
 	var out []PublicMethod
 	for _, svc := range view.Services {
 		for _, m := range svc.PublicMethods {
+			if projection == ProjectionREST && m.HTTP == nil {
+				continue
+			}
 			pm, err := parseMethod(schema, svc.Service, m)
 			if err != nil {
 				return nil, err
@@ -94,12 +99,14 @@ func ParseMethods(schema *model.Schema, view *View) ([]PublicMethod, error) {
 
 func parseMethod(schema *model.Schema, svc *model.Service, m *model.Method) (PublicMethod, error) {
 	pm := PublicMethod{
-		Service:    svc.FullName,
-		Method:     m.Name,
-		FullMethod: m.FullMethod,
-		Input:      m.Input,
-		Output:     m.Output,
-		JSONResult: m.JsonResult,
+		Service:       svc.FullName,
+		Method:        m.Name,
+		FullMethod:    m.FullMethod,
+		Input:         m.Input,
+		Output:        m.Output,
+		InputIsEmpty:  m.InputIsEmpty,
+		OutputIsEmpty: m.OutputIsEmpty,
+		JSONResult:    m.JsonResult,
 	}
 	if m.PublicPolicy != nil {
 		for _, name := range m.PublicPolicy.Fill {

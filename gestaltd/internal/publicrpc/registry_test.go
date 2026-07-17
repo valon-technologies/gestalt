@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/bufbuild/protocompile"
-	"google.golang.org/genproto/googleapis/api/annotations"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
@@ -17,113 +15,14 @@ import (
 
 func TestRegistryDiscoversPublicMethods(t *testing.T) {
 	t.Parallel()
-
-	files, err := publicrpc.GeneratedFiles()
+	contract := loadSurfaceContract(t)
+	public, err := publicrpc.NewGeneratedRegistry()
 	if err != nil {
-		t.Fatalf("GeneratedFiles: %v", err)
+		t.Fatalf("NewGeneratedRegistry: %v", err)
 	}
-	public, err := publicrpc.NewRegistry(files)
-	if err != nil {
-		t.Fatalf("NewRegistry: %v", err)
+	if got, want := len(public.Methods()), contract.Counts.GRPCUnaryMethods; got != want {
+		t.Fatalf("public methods = %d, want %d", got, want)
 	}
-
-	var got []string
-	files.RangeFiles(func(file protoreflect.FileDescriptor) bool {
-		if file.Package() != "gestalt.provider.v1" {
-			return true
-		}
-		services := file.Services()
-		for i := 0; i < services.Len(); i++ {
-			methods := services.Get(i).Methods()
-			for j := 0; j < methods.Len(); j++ {
-				method := methods.Get(j)
-				options := method.Options()
-				if !gproto.HasExtension(options, annotations.E_Http) {
-					continue
-				}
-				fullMethod := "/" + string(method.Parent().FullName()) + "/" + string(method.Name())
-				if _, ok := public.Lookup(fullMethod); !ok {
-					t.Fatalf("REST-bound method %s is not public", fullMethod)
-				}
-				rule := gproto.GetExtension(options, annotations.E_Http).(*annotations.HttpRule)
-				if len(rule.GetAdditionalBindings()) != 0 {
-					t.Fatalf("REST-bound method %s has additional bindings", fullMethod)
-				}
-				verb, path := httpRule(t, rule)
-				got = append(got, verb+" "+path+" "+fullMethod)
-			}
-		}
-		return true
-	})
-
-	want := strings.Split(strings.TrimSpace(`
-POST /api/v2/app/{app}/operations/{operation} /gestalt.provider.v1.App/Invoke
-POST /api/v2/app/{app}/graphql /gestalt.provider.v1.App/InvokeGraphQL
-POST /api/v2/agent/sessions /gestalt.provider.v1.Agent/CreateSession
-GET /api/v2/agent/sessions /gestalt.provider.v1.Agent/ListSessions
-GET /api/v2/agent/sessions/{session_id} /gestalt.provider.v1.Agent/GetSession
-PATCH /api/v2/agent/sessions/{session_id} /gestalt.provider.v1.Agent/UpdateSession
-POST /api/v2/agent/sessions/{session_id}/turns /gestalt.provider.v1.Agent/CreateTurn
-GET /api/v2/agent/sessions/{session_id}/turns /gestalt.provider.v1.Agent/ListTurns
-GET /api/v2/agent/sessions/{session_id}/turns/{turn_id} /gestalt.provider.v1.Agent/GetTurn
-POST /api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel /gestalt.provider.v1.Agent/CancelTurn
-GET /api/v2/agent/sessions/{session_id}/turns/{turn_id}/events /gestalt.provider.v1.Agent/ListTurnEvents
-POST /api/v2/workflow/definitions:apply /gestalt.provider.v1.Workflow/ApplyDefinition
-GET /api/v2/workflow/definitions /gestalt.provider.v1.Workflow/ListDefinitions
-GET /api/v2/workflow/definitions/{definition_id} /gestalt.provider.v1.Workflow/GetDefinition
-DELETE /api/v2/workflow/definitions/{definition_id} /gestalt.provider.v1.Workflow/DeleteDefinition
-POST /api/v2/workflow/definitions/{definition_id}:setPaused /gestalt.provider.v1.Workflow/SetDefinitionPaused
-POST /api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused /gestalt.provider.v1.Workflow/SetActivationPaused
-POST /api/v2/workflow/definitions/{definition_id}/runs /gestalt.provider.v1.Workflow/StartRun
-POST /api/v2/workflow/definitions/{definition_id}:signalOrStart /gestalt.provider.v1.Workflow/SignalOrStartRun
-GET /api/v2/workflow/runs /gestalt.provider.v1.Workflow/ListRuns
-GET /api/v2/workflow/runs/{run_id} /gestalt.provider.v1.Workflow/GetRun
-GET /api/v2/workflow/runs/{run_id}/events /gestalt.provider.v1.Workflow/GetRunEvents
-GET /api/v2/workflow/runs/{run_id}/output /gestalt.provider.v1.Workflow/GetRunOutput
-POST /api/v2/workflow/runs/{run_id}:cancel /gestalt.provider.v1.Workflow/CancelRun
-POST /api/v2/workflow/runs/{run_id}:signal /gestalt.provider.v1.Workflow/SignalRun
-POST /api/v2/authorization/access:check /gestalt.provider.v1.Authorization/CheckAccess
-POST /api/v2/authorization/access:checkMany /gestalt.provider.v1.Authorization/CheckAccessMany
-GET /api/v2/authorization/relationships /gestalt.provider.v1.Authorization/ListRelationships
-POST /api/v2/authorization/relationships /gestalt.provider.v1.Authorization/AddRelationship
-POST /api/v2/authorization/relationships:delete /gestalt.provider.v1.Authorization/DeleteRelationship
-PUT /api/v2/authorization/state /gestalt.provider.v1.Authorization/SetAuthorizationState
-GET /api/v2/authorization/models/active /gestalt.provider.v1.Authorization/GetActiveModelRef
-PUT /api/v2/authorization/models/active /gestalt.provider.v1.Authorization/SetActiveModel
-GET /api/v2/authorization/models/active/resource-types /gestalt.provider.v1.Authorization/ListActiveModelResourceTypes
-POST /api/v2/identity/authorize /gestalt.provider.v1.Identity/Authorize
-POST /api/v2/identity/token /gestalt.provider.v1.Identity/Token
-POST /api/v2/identity/introspect /gestalt.provider.v1.Identity/Introspect
-GET /api/v2/identity/userinfo /gestalt.provider.v1.Identity/UserInfo
-GET /api/v2/identity/grants /gestalt.provider.v1.Identity/ListGrants
-GET /api/v2/identity/grants/{grant_id} /gestalt.provider.v1.Identity/GetGrant
-DELETE /api/v2/identity/grants/{grant_id} /gestalt.provider.v1.Identity/RevokeGrant
-`), "\n")
-	slices.Sort(got)
-	slices.Sort(want)
-	if !slices.Equal(got, want) {
-		t.Fatalf("REST contract:\n got: %s\nwant: %s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-}
-
-func httpRule(t *testing.T, rule *annotations.HttpRule) (string, string) {
-	t.Helper()
-	for _, candidate := range []struct {
-		verb string
-		path string
-	}{
-		{"GET", rule.GetGet()},
-		{"PUT", rule.GetPut()},
-		{"POST", rule.GetPost()},
-		{"DELETE", rule.GetDelete()},
-		{"PATCH", rule.GetPatch()},
-	} {
-		if candidate.path != "" {
-			return candidate.verb, candidate.path
-		}
-	}
-	t.Fatalf("HTTP rule has no supported pattern: %v", rule)
-	return "", ""
 }
 
 func TestRegistryDoesNotExposeInternalMethods(t *testing.T) {

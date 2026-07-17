@@ -18,10 +18,7 @@ func ServerPublicImports() PublicImports {
 
 // WebPublicImports returns import paths for @valon-technologies/gestalt-web.
 func WebPublicImports() PublicImports {
-	return PublicImports{
-		SupportPrefix:     "../runtime",
-		FixedNativeModule: "native-types.ts",
-	}
+	return PublicImports{SupportPrefix: "../runtime"}
 }
 
 func (i PublicImports) nativeModulePath(protoFile string) string {

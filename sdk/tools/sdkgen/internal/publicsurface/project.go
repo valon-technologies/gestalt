@@ -7,9 +7,22 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
-// Project returns the public App schema: only services in view, public methods
-// only, with server-filled and rejected request fields omitted from messages.
+// ProjectGRPC returns the full public gRPC schema projection.
+func ProjectGRPC(full *model.Schema, view *View) (*model.Schema, error) {
+	return project(full, view, ProjectionGRPC)
+}
+
+// ProjectREST returns the REST-capable public schema projection.
+func ProjectREST(full *model.Schema, view *View) (*model.Schema, error) {
+	return project(full, RESTClientView(view), ProjectionREST)
+}
+
+// Project returns the public gRPC schema projection.
 func Project(full *model.Schema, view *View) (*model.Schema, error) {
+	return ProjectGRPC(full, view)
+}
+
+func project(full *model.Schema, view *View, projection Projection) (*model.Schema, error) {
 	if full == nil || view == nil {
 		return &model.Schema{}, nil
 	}
@@ -20,15 +33,21 @@ func Project(full *model.Schema, view *View) (*model.Schema, error) {
 
 	var services []*model.Service
 	for _, svc := range view.Services {
-		methods := make([]*model.Method, len(svc.PublicMethods))
-		for i, m := range svc.PublicMethods {
+		var methods []*model.Method
+		for _, m := range svc.PublicMethods {
+			if projection == ProjectionREST && m.HTTP == nil {
+				continue
+			}
 			cloned := *m
-			if m.Input != nil {
+			if m.Input != nil && !m.InputIsEmpty {
 				if omitted := OmittedFields(m); len(omitted) > 0 {
 					cloned.Input = CloneMessageOmitting(m.Input, omitted)
 				}
 			}
-			methods[i] = &cloned
+			methods = append(methods, &cloned)
+		}
+		if len(methods) == 0 {
+			continue
 		}
 		services = append(services, &model.Service{
 			Doc:         svc.Doc,
@@ -40,8 +59,18 @@ func Project(full *model.Schema, view *View) (*model.Schema, error) {
 		})
 	}
 
-	messages := make([]*model.Message, 0, len(view.Messages))
-	for _, m := range view.Messages {
+	msgIndex := map[string]*model.Message{}
+	enumIndex := map[string]*model.Enum{}
+	for _, m := range full.Messages {
+		msgIndex[m.FullName] = m
+	}
+	for _, e := range full.Enums {
+		enumIndex[e.FullName] = e
+	}
+	reachableMessages, reachableEnums := Reachable(msgIndex, enumIndex, services)
+
+	messages := make([]*model.Message, 0, len(reachableMessages))
+	for _, m := range reachableMessages {
 		if omitted := omitByInput[m.FullName]; len(omitted) > 0 {
 			messages = append(messages, CloneMessageOmitting(m, omitted))
 			continue
@@ -52,7 +81,7 @@ func Project(full *model.Schema, view *View) (*model.Schema, error) {
 	return &model.Schema{
 		Services: services,
 		Messages: messages,
-		Enums:    append([]*model.Enum(nil), view.Enums...),
+		Enums:    append([]*model.Enum(nil), reachableEnums...),
 	}, nil
 }
 

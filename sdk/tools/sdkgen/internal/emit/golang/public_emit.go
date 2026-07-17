@@ -1,6 +1,8 @@
 package golang
 
 import (
+	"fmt"
+
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
@@ -48,29 +50,34 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		return nil, err
 	}
 
-	types := newPublicRenderer(idx)
-	for _, e := range plan.ReachableEnums {
-		types.renderEnum(e)
-	}
-	for _, m := range plan.ReachableMessages {
-		types.renderMessage(m)
-	}
-	if err := set.Add("generated/app.go", []byte(types.assembleGenerated())); err != nil {
-		return nil, err
-	}
-
-	client := newPublicRenderer(idx)
-	client.renderAppClient(plan.Filtered.Services)
-	if err := set.Add("generated/app_client.go", []byte(client.assembleAppClient())); err != nil {
-		return nil, err
-	}
-
-	if len(plan.ReachableMessages) > 0 {
-		codec := newPublicRenderer(idx)
-		for _, m := range plan.ReachableMessages {
-			codec.renderConversions(m)
+	for _, g := range groupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
+		types := newPublicRenderer(idx)
+		for _, e := range g.enums {
+			types.renderEnum(e)
 		}
-		if err := set.Add("generated/app_codec.go", []byte(codec.assembleGenerated())); err != nil {
+		for _, m := range g.messages {
+			types.renderMessage(m)
+		}
+		if err := set.Add("generated/"+g.base+".go", []byte(types.assembleGenerated())); err != nil {
+			return nil, err
+		}
+
+		if len(g.messages) > 0 {
+			codec := newPublicRenderer(idx)
+			for _, m := range g.messages {
+				codec.renderConversions(m)
+			}
+			if err := set.Add("generated/"+g.base+"_codec.go", []byte(codec.assembleGenerated())); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for _, svc := range plan.Filtered.Services {
+		client := newPublicRenderer(idx)
+		client.renderServiceClient(svc)
+		file := fmt.Sprintf("generated/%s_client.go", generatedFileBase(svc.ProtoFile))
+		if err := set.Add(file, []byte(client.assembleServiceClient())); err != nil {
 			return nil, err
 		}
 	}

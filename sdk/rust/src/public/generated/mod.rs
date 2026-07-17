@@ -4,12 +4,18 @@
 
 #![allow(missing_docs)]
 
+pub mod agent;
 pub mod app;
 pub mod app_client;
+pub mod authorization;
 pub mod codec;
+pub mod external_credential;
 pub mod grpc_dispatch;
+pub mod identity;
+pub mod indexeddb;
 pub mod invoke_support;
 pub mod metadata;
 pub mod rpc_support;
 pub mod transport_kernel;
 pub mod unary_transport;
+pub mod workflow;

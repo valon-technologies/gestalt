@@ -6,17 +6,21 @@ import { extractNativeTypes } from "./extract-native-types.ts";
 const gestaltSrcRoot = join(import.meta.dir, "..", "..", "typescript", "src");
 const webRuntimeRoot = join(import.meta.dir, "..", "src", "client", "runtime");
 
+const restServiceModules = [
+  "app",
+  "agent",
+  "authorization",
+  "identity",
+  "workflow",
+] as const;
+
 const runtimePaths = [
   "invoke_support.ts",
   "rpc_support.ts",
-  "internal/codec/app.ts",
-  "internal/codec/support.ts",
   "internal/gen",
+  ...restServiceModules.map((base) => `internal/codec/${base}.ts`),
+  "internal/codec/support.ts",
 ] as const;
-
-function patchRuntimeImports(source: string): string {
-  return source.replaceAll("../../app.ts", "../../native-types.ts");
-}
 
 rmSync(webRuntimeRoot, { recursive: true, force: true });
 mkdirSync(webRuntimeRoot, { recursive: true });
@@ -29,8 +33,14 @@ for (const relativePath of runtimePaths) {
     continue;
   }
   mkdirSync(dirname(targetPath), { recursive: true });
-  writeFileSync(targetPath, patchRuntimeImports(readFileSync(sourcePath, "utf8")));
+  writeFileSync(targetPath, readFileSync(sourcePath, "utf8"));
 }
 
-const appSource = readFileSync(join(gestaltSrcRoot, "app.ts"), "utf8");
-writeFileSync(join(webRuntimeRoot, "native-types.ts"), extractNativeTypes(appSource));
+for (const base of restServiceModules) {
+  const sourcePath = join(gestaltSrcRoot, `${base}.ts`);
+  const targetPath = join(webRuntimeRoot, `${base}.ts`);
+  writeFileSync(
+    targetPath,
+    extractNativeTypes(readFileSync(sourcePath, "utf8")),
+  );
+}

@@ -26,6 +26,7 @@ type CommentStyle int
 const (
 	Slash CommentStyle = iota // //
 	Hash                      // #
+	JSON                      // _generated field in JSON files
 )
 
 // Header returns the generated-by header for a style, including the blank
@@ -35,6 +36,8 @@ func Header(style CommentStyle) []byte {
 	switch style {
 	case Hash:
 		return []byte("# " + Marker + "\n\n")
+	case JSON:
+		return nil
 	default:
 		return []byte("// " + Marker + "\n\n")
 	}
@@ -156,8 +159,10 @@ func (k DriftKind) String() string {
 		return "modified"
 	case Missing:
 		return "missing"
-	default:
+	case Stale:
 		return "stale"
+	default:
+		return "unknown"
 	}
 }
 

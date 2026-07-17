@@ -201,7 +201,7 @@ func renderGrpcDispatch(services []*model.Service) string {
 	b.WriteString("use crate::generated::v1;\n")
 	b.WriteString("use crate::public::generated::metadata::Method;\n")
 	b.WriteString("use crate::public::generated::rpc_support::GestaltError;\n")
-	b.WriteString("use crate::public::grpc_transport::AppGrpcClient;\n")
+	b.WriteString("use crate::public::grpc_transport::{AppGrpcClient, PublicGrpcClients};\n")
 	b.WriteString("use crate::rpc_support::gestalt_error_code;\n\n")
 	b.WriteString("pub(crate) async fn dispatch_unary(\n")
 	b.WriteString("    client: &mut AppGrpcClient,\n")
@@ -209,9 +209,77 @@ func renderGrpcDispatch(services []*model.Service) string {
 	b.WriteString("    request_bytes: &[u8],\n")
 	b.WriteString("    timeout: Option<Duration>,\n")
 	b.WriteString(") -> Result<Vec<u8>, GestaltError> {\n")
-	b.WriteString("    let tonic_response = match method.full_method {\n")
+	b.WriteString("    match client {\n")
+	b.WriteString("        AppGrpcClient::Public(clients) => {\n")
+	b.WriteString("            dispatch_public_unary(clients.as_mut(), method, request_bytes, timeout).await\n")
+	b.WriteString("        }\n")
+	b.WriteString("        AppGrpcClient::Bound(app) => {\n")
+	b.WriteString("            dispatch_bound_unary(app.as_mut(), method, request_bytes, timeout).await\n")
+	b.WriteString("        }\n")
+	b.WriteString("    }\n")
+	b.WriteString("}\n\n")
+	b.WriteString("pub(crate) async fn dispatch_public_unary(\n")
+	b.WriteString("    clients: &mut PublicGrpcClients,\n")
+	b.WriteString("    method: &Method,\n")
+	b.WriteString("    request_bytes: &[u8],\n")
+	b.WriteString("    timeout: Option<Duration>,\n")
+	b.WriteString(") -> Result<Vec<u8>, GestaltError> {\n")
+	b.WriteString("    match method.full_method {\n")
 
 	for _, svc := range services {
+		clientField := publicRustClientField(svc.Name)
+		for _, m := range svc.Methods {
+			if m.Stream != model.Unary {
+				continue
+			}
+			clientMethod := escapeIdent(heckSnake(m.Name))
+			fmt.Fprintf(&b, "        %q => {\n", m.FullMethod)
+			if m.InputIsEmpty {
+				b.WriteString("            let mut tonic_request = Request::new(());\n")
+			} else if m.Input != nil {
+				wireInput := wireTypeName(m.Input.FullName)
+				fmt.Fprintf(&b, "            let wire = v1::%s::decode(request_bytes).map_err(|err| {\n", wireInput)
+				b.WriteString("                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())\n")
+				b.WriteString("            })?;\n")
+				b.WriteString("            let mut tonic_request = Request::new(wire);\n")
+			} else {
+				b.WriteString("        }\n")
+				continue
+			}
+			b.WriteString("            if let Some(timeout) = timeout {\n")
+			b.WriteString("                tonic_request.set_timeout(timeout);\n")
+			b.WriteString("            }\n")
+			if m.OutputIsEmpty {
+				fmt.Fprintf(&b, "            clients.%s.%s(tonic_request).await.map_err(GestaltError::from)?;\n", clientField, clientMethod)
+				b.WriteString("            Ok(Vec::new())\n")
+			} else if m.Output != nil {
+				fmt.Fprintf(&b, "            let response = clients.%s.%s(tonic_request).await.map_err(GestaltError::from)?.into_inner();\n", clientField, clientMethod)
+				b.WriteString("            Ok(response.encode_to_vec())\n")
+			} else {
+				b.WriteString("            Err(GestaltError::new(gestalt_error_code::INTERNAL, \"missing output type\"))\n")
+			}
+			b.WriteString("        }\n")
+		}
+	}
+
+	b.WriteString("        _ => Err(GestaltError::new(\n")
+	b.WriteString("            gestalt_error_code::UNIMPLEMENTED,\n")
+	b.WriteString("            format!(\"unsupported public gRPC method {}\", method.full_method),\n")
+	b.WriteString("        )),\n")
+	b.WriteString("    }\n")
+	b.WriteString("}\n\n")
+
+	b.WriteString("async fn dispatch_bound_unary(\n")
+	b.WriteString("    app: &mut v1::app_client::AppClient<crate::codec::host_service::HostServiceChannel>,\n")
+	b.WriteString("    method: &Method,\n")
+	b.WriteString("    request_bytes: &[u8],\n")
+	b.WriteString("    timeout: Option<Duration>,\n")
+	b.WriteString(") -> Result<Vec<u8>, GestaltError> {\n")
+	b.WriteString("    match method.full_method {\n")
+	for _, svc := range services {
+		if svc.Name != "App" {
+			continue
+		}
 		for _, m := range svc.Methods {
 			if m.Stream != model.Unary || m.Input == nil || m.Output == nil {
 				continue
@@ -226,26 +294,29 @@ func renderGrpcDispatch(services []*model.Service) string {
 			b.WriteString("            if let Some(timeout) = timeout {\n")
 			b.WriteString("                tonic_request.set_timeout(timeout);\n")
 			b.WriteString("            }\n")
-			b.WriteString("            match client {\n")
-			fmt.Fprintf(&b, "                AppGrpcClient::Public(c) => c.%s(tonic_request).await,\n", clientMethod)
-			fmt.Fprintf(&b, "                AppGrpcClient::Bound(c) => c.%s(tonic_request).await,\n", clientMethod)
-			b.WriteString("            }\n")
-			b.WriteString("            .map_err(GestaltError::from)?\n")
-			b.WriteString("            .into_inner()\n")
+			fmt.Fprintf(&b, "            let response = app.%s(tonic_request).await.map_err(GestaltError::from)?.into_inner();\n", clientMethod)
+			b.WriteString("            Ok(response.encode_to_vec())\n")
 			b.WriteString("        }\n")
 		}
 	}
-
-	b.WriteString("        _ => {\n")
-	b.WriteString("            return Err(GestaltError::new(\n")
-	b.WriteString("                gestalt_error_code::UNIMPLEMENTED,\n")
-	b.WriteString("                format!(\"unsupported public gRPC method {}\", method.full_method),\n")
-	b.WriteString("            ));\n")
-	b.WriteString("        }\n")
-	b.WriteString("    };\n")
-	b.WriteString("    Ok(tonic_response.encode_to_vec())\n")
+	b.WriteString("        _ => Err(GestaltError::new(\n")
+	b.WriteString("            gestalt_error_code::UNIMPLEMENTED,\n")
+	b.WriteString("            format!(\"unsupported bound public gRPC method {}\", method.full_method),\n")
+	b.WriteString("        )),\n")
+	b.WriteString("    }\n")
 	b.WriteString("}\n")
 	return b.String()
+}
+
+func publicRustClientField(serviceName string) string {
+	switch serviceName {
+	case "ExternalCredentials":
+		return "external_credentials"
+	case "IndexedDB":
+		return "indexed_db"
+	default:
+		return strings.ToLower(serviceName[:1]) + serviceName[1:]
+	}
 }
 
 func markConversionNeeds(idx *index, services []*model.Service) {

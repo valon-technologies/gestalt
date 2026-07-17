@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
-func TestBuildAppOnlySurface(t *testing.T) {
+func TestBuildPublicSurface(t *testing.T) {
 	t.Parallel()
 
 	invokeInput := &model.Message{
@@ -101,19 +101,22 @@ func TestBuildAppOnlySurface(t *testing.T) {
 	schema.Services[0].Methods = schema.Services[0].Methods[:3]
 
 	view := publicsurface.Build(schema)
-	if len(view.Services) != 1 {
-		t.Fatalf("services = %d, want 1", len(view.Services))
+	if len(view.Services) != 2 {
+		t.Fatalf("services = %d, want 2 (App and Identity)", len(view.Services))
 	}
-	if view.Services[0].Name != publicsurface.AppServiceName {
-		t.Fatalf("service = %q, want %q", view.Services[0].Name, publicsurface.AppServiceName)
+	if view.Services[0].Name != "App" && view.Services[1].Name != "App" {
+		t.Fatalf("services = %+v, want App included", serviceNames(view))
+	}
+	if view.Services[0].Name != "Identity" && view.Services[1].Name != "Identity" {
+		t.Fatalf("services = %+v, want Identity included", serviceNames(view))
 	}
 
-	methods, err := publicsurface.ParseMethods(schema, view)
+	methods, err := publicsurface.ParseMethods(schema, view, publicsurface.ProjectionGRPC)
 	if err != nil {
 		t.Fatalf("ParseMethods: %v", err)
 	}
-	if len(methods) != 3 {
-		t.Fatalf("methods = %d, want 3", len(methods))
+	if len(methods) != 4 {
+		t.Fatalf("methods = %d, want 4 (3 App + 1 Identity)", len(methods))
 	}
 
 	var invoke, invokeGraphQL, grpcOnly *publicsurface.PublicMethod
@@ -131,11 +134,11 @@ func TestBuildAppOnlySurface(t *testing.T) {
 		t.Fatalf("methods = %+v, want Invoke, InvokeGraphQL, GrpcOnly", methodNames(methods))
 	}
 
-	if got := publicsurface.GRPCMethodCount(view); got != 3 {
-		t.Fatalf("gRPC methods = %d, want 3", got)
+	if got := publicsurface.GRPCMethodCount(view); got != 4 {
+		t.Fatalf("gRPC methods = %d, want 4", got)
 	}
-	if got := publicsurface.RESTMethodCount(view); got != 2 {
-		t.Fatalf("REST methods = %d, want 2", got)
+	if got := publicsurface.RESTMethodCount(view); got != 3 {
+		t.Fatalf("REST methods = %d, want 3", got)
 	}
 
 	if invoke.REST == nil || invokeGraphQL.REST == nil {
@@ -167,7 +170,7 @@ func TestBuildAppOnlySurface(t *testing.T) {
 			HTTP:       &model.HTTPRule{Verb: "GET", Path: "/api/v2/projects/{name=projects/*}"},
 		}},
 	}}
-	if _, err := publicsurface.ParseMethods(&complexSchema, publicsurface.Build(&complexSchema)); err == nil {
+	if _, err := publicsurface.ParseMethods(&complexSchema, publicsurface.Build(&complexSchema), publicsurface.ProjectionGRPC); err == nil {
 		t.Fatal("ParseMethods: want complex path binding error")
 	}
 
@@ -183,7 +186,7 @@ func TestBuildAppOnlySurface(t *testing.T) {
 			HTTP:       &model.HTTPRule{Verb: "GET", Path: "/api/v2/app/{missing}"},
 		}},
 	}}
-	if _, err := publicsurface.ParseMethods(&unknownSchema, publicsurface.Build(&unknownSchema)); err == nil {
+	if _, err := publicsurface.ParseMethods(&unknownSchema, publicsurface.Build(&unknownSchema), publicsurface.ProjectionGRPC); err == nil {
 		t.Fatal("ParseMethods: want unknown path field error")
 	}
 
@@ -191,7 +194,21 @@ func TestBuildAppOnlySurface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Project: %v", err)
 	}
-	invokeMsg := projected.Services[0].Methods[0].Input
+	var invokeMsg *model.Message
+	for _, svc := range projected.Services {
+		if svc.Name != "App" {
+			continue
+		}
+		for _, m := range svc.Methods {
+			if m.Name == "Invoke" {
+				invokeMsg = m.Input
+				break
+			}
+		}
+	}
+	if invokeMsg == nil {
+		t.Fatal("projected Invoke input not found")
+	}
 	for _, omitted := range []string{"context", "run_as"} {
 		if fieldByName(invokeMsg, omitted) != nil {
 			t.Fatalf("projected Invoke still has field %q", omitted)
@@ -272,6 +289,14 @@ func TestProjectRejectsEmptyVsNonemptyInputPolicies(t *testing.T) {
 	if _, err := publicsurface.Project(schema, view); err == nil {
 		t.Fatal("Project() error = nil, want conflict")
 	}
+}
+
+func serviceNames(view *publicsurface.View) []string {
+	out := make([]string, len(view.Services))
+	for i, svc := range view.Services {
+		out[i] = svc.Name
+	}
+	return out
 }
 
 func methodNames(methods []publicsurface.PublicMethod) []string {

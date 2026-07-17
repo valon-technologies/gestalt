@@ -33,7 +33,7 @@ import type {
   StringList,
   SubjectContext,
   SubjectPermissionContext,
-} from "../../native-types.ts";
+} from "../../app.ts";
 import { fromWireValue, sanitizeJsonObject, toWireValue } from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
 

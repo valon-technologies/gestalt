@@ -7,9 +7,100 @@
  */
 
 import type {
+  CancelAgentProviderTurnRequest,
+  CreateAgentProviderSessionRequest,
+  CreateAgentProviderTurnRequest,
+  GetAgentProviderSessionRequest,
+  GetAgentProviderTurnRequest,
+  ListAgentProviderSessionsRequest,
+  ListAgentProviderTurnEventsRequest,
+  ListAgentProviderTurnsRequest,
+  UpdateAgentProviderSessionRequest,
+} from "../runtime/agent.ts";
+import type {
   AppInvokeGraphQLRequest,
   AppInvokeRequest,
-} from "../runtime/native-types.ts";
+} from "../runtime/app.ts";
+import type {
+  AddRelationshipRequest,
+  CheckAccessManyRequest,
+  CheckAccessRequest,
+  DeleteRelationshipRequest,
+  ListActiveModelResourceTypesRequest,
+  ListRelationshipsRequest,
+  SetActiveModelRequest,
+  SetAuthorizationStateRequest,
+} from "../runtime/authorization.ts";
+import type {
+  AuthorizeRequest,
+  GetGrantRequest,
+  IntrospectRequest,
+  ListGrantsRequest,
+  RevokeGrantRequest,
+  TokenRequest,
+  UserInfoRequest,
+} from "../runtime/identity.ts";
+import type {
+  ApplyWorkflowProviderDefinitionRequest,
+  CancelWorkflowProviderRunRequest,
+  DeleteWorkflowProviderDefinitionRequest,
+  GetWorkflowProviderDefinitionRequest,
+  GetWorkflowProviderRunEventsRequest,
+  GetWorkflowProviderRunOutputRequest,
+  GetWorkflowProviderRunRequest,
+  ListWorkflowProviderDefinitionsRequest,
+  ListWorkflowProviderRunsRequest,
+  SetWorkflowProviderActivationPausedRequest,
+  SetWorkflowProviderDefinitionPausedRequest,
+  SignalOrStartWorkflowProviderRunRequest,
+  SignalWorkflowProviderRunRequest,
+  StartWorkflowProviderRunRequest,
+} from "../runtime/workflow.ts";
+
+export type PublicAgentCancelTurnRequest = Omit<
+  CancelAgentProviderTurnRequest,
+  "context"
+>;
+
+export type PublicAgentCreateSessionRequest = Omit<
+  CreateAgentProviderSessionRequest,
+  "context"
+>;
+
+export type PublicAgentCreateTurnRequest = Omit<
+  CreateAgentProviderTurnRequest,
+  "context"
+>;
+
+export type PublicAgentGetSessionRequest = Omit<
+  GetAgentProviderSessionRequest,
+  "context"
+>;
+
+export type PublicAgentGetTurnRequest = Omit<
+  GetAgentProviderTurnRequest,
+  "context"
+>;
+
+export type PublicAgentListSessionsRequest = Omit<
+  ListAgentProviderSessionsRequest,
+  "context"
+>;
+
+export type PublicAgentListTurnEventsRequest = Omit<
+  ListAgentProviderTurnEventsRequest,
+  "context"
+>;
+
+export type PublicAgentListTurnsRequest = Omit<
+  ListAgentProviderTurnsRequest,
+  "context"
+>;
+
+export type PublicAgentUpdateSessionRequest = Omit<
+  UpdateAgentProviderSessionRequest,
+  "context"
+>;
 
 export type PublicAppInvokeRequest = Omit<
   AppInvokeRequest,
@@ -18,5 +109,109 @@ export type PublicAppInvokeRequest = Omit<
 
 export type PublicAppInvokeGraphQLRequest = Omit<
   AppInvokeGraphQLRequest,
+  "context"
+>;
+
+export type PublicAuthorizationAddRelationshipRequest = AddRelationshipRequest;
+
+export type PublicAuthorizationCheckAccessRequest = CheckAccessRequest;
+
+export type PublicAuthorizationCheckAccessManyRequest = CheckAccessManyRequest;
+
+export type PublicAuthorizationDeleteRelationshipRequest =
+  DeleteRelationshipRequest;
+
+export type PublicAuthorizationListActiveModelResourceTypesRequest =
+  ListActiveModelResourceTypesRequest;
+
+export type PublicAuthorizationListRelationshipsRequest =
+  ListRelationshipsRequest;
+
+export type PublicAuthorizationSetActiveModelRequest = SetActiveModelRequest;
+
+export type PublicAuthorizationSetAuthorizationStateRequest =
+  SetAuthorizationStateRequest;
+
+export type PublicIdentityAuthorizeRequest = AuthorizeRequest;
+
+export type PublicIdentityGetGrantRequest = GetGrantRequest;
+
+export type PublicIdentityIntrospectRequest = IntrospectRequest;
+
+export type PublicIdentityListGrantsRequest = ListGrantsRequest;
+
+export type PublicIdentityRevokeGrantRequest = RevokeGrantRequest;
+
+export type PublicIdentityTokenRequest = TokenRequest;
+
+export type PublicIdentityUserInfoRequest = UserInfoRequest;
+
+export type PublicWorkflowApplyDefinitionRequest = Omit<
+  ApplyWorkflowProviderDefinitionRequest,
+  "context"
+>;
+
+export type PublicWorkflowCancelRunRequest = Omit<
+  CancelWorkflowProviderRunRequest,
+  "context"
+>;
+
+export type PublicWorkflowDeleteDefinitionRequest = Omit<
+  DeleteWorkflowProviderDefinitionRequest,
+  "context"
+>;
+
+export type PublicWorkflowGetDefinitionRequest = Omit<
+  GetWorkflowProviderDefinitionRequest,
+  "context"
+>;
+
+export type PublicWorkflowGetRunRequest = Omit<
+  GetWorkflowProviderRunRequest,
+  "context"
+>;
+
+export type PublicWorkflowGetRunEventsRequest = Omit<
+  GetWorkflowProviderRunEventsRequest,
+  "context"
+>;
+
+export type PublicWorkflowGetRunOutputRequest = Omit<
+  GetWorkflowProviderRunOutputRequest,
+  "context"
+>;
+
+export type PublicWorkflowListDefinitionsRequest = Omit<
+  ListWorkflowProviderDefinitionsRequest,
+  "context"
+>;
+
+export type PublicWorkflowListRunsRequest = Omit<
+  ListWorkflowProviderRunsRequest,
+  "context"
+>;
+
+export type PublicWorkflowSetActivationPausedRequest = Omit<
+  SetWorkflowProviderActivationPausedRequest,
+  "context"
+>;
+
+export type PublicWorkflowSetDefinitionPausedRequest = Omit<
+  SetWorkflowProviderDefinitionPausedRequest,
+  "context"
+>;
+
+export type PublicWorkflowSignalOrStartRunRequest = Omit<
+  SignalOrStartWorkflowProviderRunRequest,
+  "context"
+>;
+
+export type PublicWorkflowSignalRunRequest = Omit<
+  SignalWorkflowProviderRunRequest,
+  "context"
+>;
+
+export type PublicWorkflowStartRunRequest = Omit<
+  StartWorkflowProviderRunRequest,
   "context"
 >;

@@ -1,8 +1,10 @@
 package publicrpc
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"google.golang.org/genproto/googleapis/api/visibility"
@@ -84,6 +86,23 @@ func (r *Registry) Lookup(fullMethod string) (PublicMethodPolicy, bool) {
 	}
 	policy, ok := r.methods[fullMethod]
 	return policy, ok
+}
+
+// Methods returns a sorted copy of every registered public method policy.
+func (r *Registry) Methods() []PublicMethodPolicy {
+	if r == nil {
+		return nil
+	}
+	methods := make([]PublicMethodPolicy, 0, len(r.methods))
+	for _, method := range r.methods {
+		method.Fill = slices.Clone(method.Fill)
+		method.Reject = slices.Clone(method.Reject)
+		methods = append(methods, method)
+	}
+	slices.SortFunc(methods, func(a, b PublicMethodPolicy) int {
+		return cmp.Compare(a.FullMethod, b.FullMethod)
+	})
+	return methods
 }
 
 func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool, error) {

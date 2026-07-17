@@ -2,6 +2,30 @@
 
 //! Generated native types and clients for app.proto.
 
+/// Native message type for `gestalt.provider.v1.AgentToolRef`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentToolRef {
+    /// The `app` field.
+    pub app: String,
+    /// The `operation` field.
+    pub operation: String,
+    /// The `connection` field.
+    pub connection: String,
+    /// The `instance` field.
+    pub instance: String,
+    /// The `title` field.
+    pub title: String,
+    /// The `description` field.
+    pub description: String,
+    /// The `credential_mode` field.
+    pub credential_mode: String,
+    /// The `system` field.
+    pub system: String,
+    /// The `run_as` field; None when unset.
+    pub run_as: Option<SubjectContext>,
+}
+
 /// AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 /// through Gestalt.
 ///
@@ -45,6 +69,23 @@ pub struct AppInvokeRequest {
     pub credential_mode: String,
 }
 
+/// OperationAnnotations carries optional host hints about how an operation
+/// behaves.
+///
+/// Native message type for `gestalt.provider.v1.OperationAnnotations`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationAnnotations {
+    /// The `read_only_hint` field; None when unset.
+    pub read_only_hint: Option<bool>,
+    /// The `idempotent_hint` field; None when unset.
+    pub idempotent_hint: Option<bool>,
+    /// The `destructive_hint` field; None when unset.
+    pub destructive_hint: Option<bool>,
+    /// The `open_world_hint` field; None when unset.
+    pub open_world_hint: Option<bool>,
+}
+
 /// OperationResult is the serialized result returned from an Execute call.
 ///
 /// Native message type for `gestalt.provider.v1.OperationResult`.
@@ -67,4 +108,34 @@ pub struct OperationResult {
 pub struct StringList {
     /// The `values` field.
     pub values: Vec<String>,
+}
+
+/// SubjectContext identifies the caller that initiated an operation.
+///
+/// Native message type for `gestalt.provider.v1.SubjectContext`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubjectContext {
+    /// The `id` field.
+    pub id: String,
+    /// The `email` field.
+    pub email: String,
+    /// The `display_name` field.
+    pub display_name: String,
+    /// The `scopes` field.
+    pub scopes: Vec<String>,
+    /// The `permissions` field.
+    pub permissions: Vec<SubjectPermissionContext>,
+}
+
+/// Native message type for `gestalt.provider.v1.SubjectPermissionContext`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubjectPermissionContext {
+    /// The `app` field.
+    pub app: String,
+    /// The `operations` field.
+    pub operations: Vec<String>,
+    /// The `all_operations` field.
+    pub all_operations: bool,
 }

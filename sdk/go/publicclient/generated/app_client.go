@@ -9,12 +9,12 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-// AppClient is the transport-neutral client for the public App surface.
+// AppClient is the transport-neutral client for the public gestalt.provider.v1.App surface.
 type AppClient struct {
 	transport UnaryTransport
 }
 
-// NewAppClient creates an AppClient over the given transport.
+// NewAppClient creates a AppClient over the given transport.
 func NewAppClient(transport UnaryTransport) *AppClient {
 	return &AppClient{transport: transport}
 }
@@ -43,9 +43,4 @@ func (c *AppClient) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQL
 		return nil, toGestaltError(err)
 	}
 	return FromWireOperationResult(out), nil
-}
-
-// InvokeGraphQLRaw is an alias for InvokeGraphQL.
-func (c *AppClient) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {
-	return c.InvokeGraphQL(ctx, request)
 }

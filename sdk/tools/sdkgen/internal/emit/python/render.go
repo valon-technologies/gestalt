@@ -49,6 +49,7 @@ type features struct {
 	crossNative map[string]map[string]bool // public: generated module base -> imported type names
 	codecBases  map[string]bool            // public: codec module bases referenced by the client
 	crossCodec  map[string]bool            // codec: sibling codec module bases referenced
+	crossWire   map[string]bool            // public client: sibling pb2 module bases referenced
 	metadataMethods map[string]bool        // public client: METHOD_* constants from metadata
 	unaryTransport  bool                   // public client: UnaryTransport from unary_transport
 	jsonFormat      bool                   // public client: google.protobuf.json_format
@@ -81,6 +82,7 @@ func newRenderer(idx *index, base, wireBase string, kind moduleKind) *renderer {
 			crossNative:     map[string]map[string]bool{},
 			codecBases:      map[string]bool{},
 			crossCodec:      map[string]bool{},
+			crossWire:       map[string]bool{},
 			metadataMethods: map[string]bool{},
 		},
 	}
@@ -132,6 +134,18 @@ func (r *renderer) wireModule() string {
 
 func (r *renderer) wireGrpcModule() string {
 	return "_" + r.wireBase + "_pb2_grpc"
+}
+
+// wireRef qualifies a pb2 message type, importing sibling wire modules when the
+// renderer's primary wireBase differs from the message's proto file.
+func (r *renderer) wireRef(protoFile, name string) string {
+	base := r.publicBase(protoFile)
+	r.features.wire = true
+	if base == r.wireBase {
+		return r.wireModule() + "." + name
+	}
+	r.features.crossWire[base] = true
+	return "_" + base + "_pb2." + name
 }
 
 // crossRef records a public-module import of a native type from another
@@ -1201,6 +1215,15 @@ func (r *renderer) localImports() string {
 		locals = append(locals, localImport{
 			module: r.genImportDots() + "_gen.v1",
 			lines:  fmt.Sprintf("from %s_gen.v1 import %s_pb2 as _%s_pb2\n", r.genImportDots(), r.wireBase, r.wireBase),
+		})
+	}
+	for _, base := range sortedKeys(r.features.crossWire) {
+		if base == r.wireBase {
+			continue
+		}
+		locals = append(locals, localImport{
+			module: r.genImportDots() + "_gen.v1",
+			lines:  fmt.Sprintf("from %s_gen.v1 import %s_pb2 as _%s_pb2\n", r.genImportDots(), base, base),
 		})
 	}
 	if r.features.hostService {

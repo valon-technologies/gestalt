@@ -315,7 +315,9 @@ export interface UnaryTransport {
 
 func renderPublicAppClient(services []*model.Service, paths PublicImports) string {
 	var b strings.Builder
-	b.WriteString("/**\n * Transport-neutral App client.\n *\n * @module client/generated/app_client\n */\n\n")
+	b.WriteString("/**\n * Transport-neutral public service clients.\n *\n * @module client/generated/app_client\n */\n\n")
+	b.WriteString("import { create } from \"@bufbuild/protobuf\";\n")
+	b.WriteString("import { EmptySchema } from \"@bufbuild/protobuf/wkt\";\n\n")
 
 	schemaImports := map[string]map[string]bool{}
 	nativeImports := map[string]map[string]bool{}
@@ -325,29 +327,36 @@ func renderPublicAppClient(services []*model.Service, paths PublicImports) strin
 
 	for _, svc := range services {
 		for _, m := range svc.Methods {
-			if m.Input == nil || m.Output == nil {
+			if !m.InputIsEmpty && m.Input == nil {
 				continue
 			}
-			inputNative := localName(m.Input.FullName)
-			outputNative := localName(m.Output.FullName)
-			if schemaImports[m.Input.ProtoFile] == nil {
-				schemaImports[m.Input.ProtoFile] = map[string]bool{}
+			if !m.OutputIsEmpty && m.Output == nil {
+				continue
 			}
-			schemaImports[m.Input.ProtoFile][inputNative+"Schema"] = true
-			if schemaImports[m.Output.ProtoFile] == nil {
-				schemaImports[m.Output.ProtoFile] = map[string]bool{}
+			if !m.InputIsEmpty && m.Input != nil {
+				inputNative := localName(m.Input.FullName)
+				if schemaImports[m.Input.ProtoFile] == nil {
+					schemaImports[m.Input.ProtoFile] = map[string]bool{}
+				}
+				schemaImports[m.Input.ProtoFile][inputNative+"Schema"] = true
+				requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
+				converterImports["toWire"+inputNative] = true
 			}
-			schemaImports[m.Output.ProtoFile][outputNative+"Schema"] = true
-			if nativeImports[m.Output.ProtoFile] == nil {
-				nativeImports[m.Output.ProtoFile] = map[string]bool{}
+			if !m.OutputIsEmpty && m.Output != nil {
+				outputNative := localName(m.Output.FullName)
+				if schemaImports[m.Output.ProtoFile] == nil {
+					schemaImports[m.Output.ProtoFile] = map[string]bool{}
+				}
+				schemaImports[m.Output.ProtoFile][outputNative+"Schema"] = true
+				if nativeImports[m.Output.ProtoFile] == nil {
+					nativeImports[m.Output.ProtoFile] = map[string]bool{}
+				}
+				nativeImports[m.Output.ProtoFile][outputNative] = true
+				if codecImports[m.Output.ProtoFile] == nil {
+					codecImports[m.Output.ProtoFile] = map[string]bool{}
+				}
+				codecImports[m.Output.ProtoFile]["fromWire"+outputNative] = true
 			}
-			nativeImports[m.Output.ProtoFile][outputNative] = true
-			if codecImports[m.Output.ProtoFile] == nil {
-				codecImports[m.Output.ProtoFile] = map[string]bool{}
-			}
-			codecImports[m.Output.ProtoFile]["fromWire"+outputNative] = true
-			requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
-			converterImports["toWire"+inputNative] = true
 		}
 	}
 
@@ -376,19 +385,27 @@ func renderPublicAppClient(services []*model.Service, paths PublicImports) strin
 	b.WriteString("import type {\n  " + strings.Join(requestTypes, ",\n  ") + ",\n} from \"./types.ts\";\n")
 	b.WriteString("import type { UnaryTransport, PublicUnaryCallOptions } from \"./unary_transport.ts\";\n\n")
 
-	b.WriteString("export class AppClient {\n")
-	b.WriteString("  constructor(private readonly transport: UnaryTransport) {}\n\n")
 	for _, svc := range services {
+		fmt.Fprintf(&b, "export class %sClient {\n", svc.Name)
+		b.WriteString("  constructor(private readonly transport: UnaryTransport) {}\n\n")
 		serviceKey := lowerFirst(svc.Name)
 		for _, m := range svc.Methods {
 			renderPublicAppClientMethod(&b, svc, m, serviceKey)
 		}
+		b.WriteString("}\n\n")
 	}
-	b.WriteString("}\n")
-	return b.String()
+	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 
 func renderPublicAppClientMethod(b *strings.Builder, svc *model.Service, m *model.Method, serviceKey string) {
+	if m.OutputIsEmpty {
+		renderPublicEmptyOutputMethod(b, svc, m, serviceKey)
+		return
+	}
+	if m.InputIsEmpty {
+		renderPublicEmptyInputMethod(b, svc, m, serviceKey)
+		return
+	}
 	if m.Input == nil || m.Output == nil {
 		return
 	}
@@ -435,6 +452,35 @@ func renderPublicAppClientMethod(b *strings.Builder, svc *model.Service, m *mode
 	fmt.Fprintf(b, "  async %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, typeName, outputNative)
 	fmt.Fprintf(b, "    return this.%s(request, callOptions);\n", methodKey)
 	b.WriteString("  }\n\n")
+}
+
+func renderPublicEmptyOutputMethod(b *strings.Builder, svc *model.Service, m *model.Method, serviceKey string) {
+	methodKey := lowerFirst(m.Name)
+	methodRef := fmt.Sprintf("PUBLIC_METHODS.%s.%s", serviceKey, methodKey)
+	if m.InputIsEmpty {
+		fmt.Fprintf(b, "  async %s(callOptions?: PublicUnaryCallOptions): Promise<void> {\n", methodKey)
+		fmt.Fprintf(b, "    await this.transport.unary(%s, create(EmptySchema), EmptySchema, EmptySchema, callOptions);\n", methodRef)
+	} else if m.Input != nil {
+		typeName := publicRequestTypeName(svc, m)
+		inputNative := localName(m.Input.FullName)
+		fmt.Fprintf(b, "  async %s(request: %s, callOptions?: PublicUnaryCallOptions): Promise<void> {\n", methodKey, typeName)
+		fmt.Fprintf(b, "    await this.transport.unary(%s, toWire%s(request), %sSchema, EmptySchema, callOptions);\n",
+			methodRef, inputNative, inputNative)
+	}
+	b.WriteString("  }\n\n")
+}
+
+func renderPublicEmptyInputMethod(b *strings.Builder, svc *model.Service, m *model.Method, serviceKey string) {
+	if m.Output == nil {
+		return
+	}
+	methodKey := lowerFirst(m.Name)
+	methodRef := fmt.Sprintf("PUBLIC_METHODS.%s.%s", serviceKey, methodKey)
+	outputNative := localName(m.Output.FullName)
+	fmt.Fprintf(b, "  async %s(callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, outputNative)
+	fmt.Fprintf(b, "    return fromWire%s(\n", outputNative)
+	fmt.Fprintf(b, "      await this.transport.unary(%s, create(EmptySchema), EmptySchema, %sSchema, callOptions),\n", methodRef, outputNative)
+	b.WriteString("    );\n  }\n\n")
 }
 
 func publicWireRequestExpr(m *model.Method) string {
@@ -507,39 +553,63 @@ func renderPublicTransportKernel(imports PublicImports) string {
 func renderPublicGrpcDispatch(services []*model.Service, imports PublicImports) string {
 	var b strings.Builder
 	b.WriteString("/**\n * Generated gRPC method dispatcher for Connect clients.\n *\n * @module client/generated/grpc_dispatch\n */\n\n")
-	b.WriteString("import type { Client } from \"@connectrpc/connect\";\n")
-	b.WriteString("import type { DescMessage, Message } from \"@bufbuild/protobuf\";\n\n")
+	b.WriteString("import { createClient, type Client, type Transport } from \"@connectrpc/connect\";\n")
+	b.WriteString("import type { Message } from \"@bufbuild/protobuf\";\n\n")
 
-	var appProto string
+	protoFiles := map[string]bool{}
 	for _, svc := range services {
-		if svc.Name != publicsurface.AppServiceName {
-			continue
-		}
 		for _, m := range svc.Methods {
-			if m.Input != nil {
-				appProto = m.Input.ProtoFile
-				break
+			if m.Input != nil && m.Input.ProtoFile != "" {
+				protoFiles[m.Input.ProtoFile] = true
+			} else if m.Output != nil && m.Output.ProtoFile != "" {
+				protoFiles[m.Output.ProtoFile] = true
 			}
 		}
 	}
-	if appProto == "" {
-		return b.String()
+	var protoList []string
+	for pf := range protoFiles {
+		protoList = append(protoList, pf)
 	}
-
-	wireName := localName(services[0].FullName)
-	fmt.Fprintf(&b, "import { %s } from %s;\n\n", wireName, imports.genModuleQuoted(appProto))
-	b.WriteString("import {\n  GestaltError,\n  GestaltErrorCode,\n} from ")
+	sort.Strings(protoList)
+	for _, pf := range protoList {
+		wireName := serviceWireNameForProto(services, pf)
+		if wireName == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "import { %s } from %s;\n", wireName, imports.genModuleQuoted(pf))
+	}
+	b.WriteString("\nimport {\n  GestaltError,\n  GestaltErrorCode,\n} from ")
 	b.WriteString(imports.supportModuleQuoted("rpc_support.ts"))
 	b.WriteString(";\n\n")
 	b.WriteString("import { PUBLIC_METHODS, type PublicMethod } from \"./methods.ts\";\n\n")
-	fmt.Fprintf(&b, "export type %sServiceClient = Client<typeof %s>;\n\n", wireName, wireName)
+
+	b.WriteString("export interface PublicGrpcClients {\n")
+	for _, svc := range services {
+		wireName := localName(svc.FullName)
+		fmt.Fprintf(&b, "  readonly %s: Client<typeof %s>;\n", lowerFirst(svc.Name), wireName)
+	}
+	b.WriteString("}\n\n")
+
+	b.WriteString("export function createPublicGrpcClients(transport: Transport): PublicGrpcClients {\n")
+	b.WriteString("  return {\n")
+	for i, svc := range services {
+		wireName := localName(svc.FullName)
+		key := lowerFirst(svc.Name)
+		comma := ","
+		if i == len(services)-1 {
+			comma = ""
+		}
+		fmt.Fprintf(&b, "    %s: createClient(%s, transport)%s\n", key, wireName, comma)
+	}
+	b.WriteString("  };\n}\n\n")
+
 	b.WriteString("export interface GrpcUnaryRequestOptions {\n")
 	b.WriteString("  signal?: AbortSignal;\n")
 	b.WriteString("  headers?: Record<string, string>;\n")
 	b.WriteString("}\n\n")
+
 	b.WriteString("export async function dispatchGrpcUnary<Output extends Message>(\n")
-	b.WriteString("  client: ")
-	fmt.Fprintf(&b, "%sServiceClient,\n", wireName)
+	b.WriteString("  clients: PublicGrpcClients,\n")
 	b.WriteString("  method: PublicMethod,\n")
 	b.WriteString("  request: Message,\n")
 	b.WriteString("  requestOptions?: GrpcUnaryRequestOptions,\n")
@@ -547,7 +617,8 @@ func renderPublicGrpcDispatch(services []*model.Service, imports PublicImports) 
 	b.WriteString("  switch (method.grpcPath) {\n")
 
 	for _, svc := range services {
-		serviceKey := lowerFirst(publicsurface.ServiceLocalName(svc.FullName))
+		serviceKey := lowerFirst(svc.Name)
+		wireName := localName(svc.FullName)
 		for _, m := range svc.Methods {
 			if m.Stream != model.Unary {
 				continue
@@ -555,9 +626,10 @@ func renderPublicGrpcDispatch(services []*model.Service, imports PublicImports) 
 			clientMethod := lowerFirst(m.Name)
 			fmt.Fprintf(
 				&b,
-				"    case PUBLIC_METHODS.%s.%s.grpcPath:\n      return (await client.%s(\n        request as Parameters<%sServiceClient[%q]>[0],\n        requestOptions,\n      )) as unknown as Output;\n",
+				"    case PUBLIC_METHODS.%s.%s.grpcPath:\n      return (await clients.%s.%s(\n        request as Parameters<Client<typeof %s>[%q]>[0],\n        requestOptions,\n      )) as unknown as Output;\n",
 				serviceKey,
 				clientMethod,
+				serviceKey,
 				clientMethod,
 				wireName,
 				clientMethod,
@@ -573,4 +645,13 @@ func renderPublicGrpcDispatch(services []*model.Service, imports PublicImports) 
 	b.WriteString("  }\n")
 	b.WriteString("}\n")
 	return b.String()
+}
+
+func serviceWireNameForProto(services []*model.Service, protoFile string) string {
+	for _, svc := range services {
+		if svc.ProtoFile == protoFile {
+			return localName(svc.FullName)
+		}
+	}
+	return ""
 }

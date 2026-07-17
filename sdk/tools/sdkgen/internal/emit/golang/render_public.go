@@ -28,51 +28,130 @@ import (
 ` + r.body.String()
 }
 
-func (r *renderer) renderAppClient(services []*model.Service) {
-	r.body.WriteString("// AppClient is the transport-neutral client for the public App surface.\n")
-	r.body.WriteString("type AppClient struct {\n")
-	r.body.WriteString("\ttransport UnaryTransport\n")
-	r.body.WriteString("}\n\n")
-	r.body.WriteString("// NewAppClient creates an AppClient over the given transport.\n")
-	r.body.WriteString("func NewAppClient(transport UnaryTransport) *AppClient {\n")
-	r.body.WriteString("\treturn &AppClient{transport: transport}\n")
-	r.body.WriteString("}\n\n")
+func (r *renderer) renderServiceClient(svc *model.Service) {
+	clientName := svc.Name + "Client"
+	r.features.context = true
+	if needsEmptyPB(svc) {
+		r.features.emptypb = true
+	}
+	fmt.Fprintf(&r.body, "// %s is the transport-neutral client for the public %s surface.\n", clientName, svc.FullName)
+	fmt.Fprintf(&r.body, "type %s struct {\n\ttransport UnaryTransport\n}\n\n", clientName)
+	fmt.Fprintf(&r.body, "// New%s creates a %s over the given transport.\n", clientName, clientName)
+	fmt.Fprintf(&r.body, "func New%s(transport UnaryTransport) *%s {\n", clientName, clientName)
+	fmt.Fprintf(&r.body, "\treturn &%s{transport: transport}\n}\n\n", clientName)
 
-	for _, svc := range services {
-		wireName := localName(svc.FullName)
-		for _, m := range svc.Methods {
-			r.renderAppClientMethod(wireName, m)
-		}
+	wireName := localName(svc.FullName)
+	for _, m := range svc.Methods {
+		r.renderServiceClientMethod(clientName, wireName, m)
 	}
 }
 
-func (r *renderer) renderAppClientMethod(wireName string, m *model.Method) {
-	constName := fmt.Sprintf("Method%s%s", wireName, m.Name)
-	requestType := r.messageType(m.Input.FullName)
-	responseType := r.messageType(m.Output.FullName)
+func needsEmptyPB(svc *model.Service) bool {
+	for _, m := range svc.Methods {
+		if m.InputIsEmpty || m.OutputIsEmpty {
+			return true
+		}
+	}
+	return false
+}
 
-	if m.JsonResult != nil {
-		r.renderAppClientUnaryMethod(m, constName, requestType, responseType, m.Name+"Raw")
-		r.renderAppClientDecodedMethod(m, requestType)
+func (r *renderer) renderServiceClientMethod(clientName, wireName string, m *model.Method) {
+	constName := fmt.Sprintf("Method%s%s", wireName, m.Name)
+	collapse := r.collapseOutput(m)
+
+	if m.JsonResult != nil && m.Input != nil && m.Output != nil {
+		requestType := r.messageType(m.Input.FullName)
+		responseType := r.messageType(m.Output.FullName)
+		r.renderServiceClientUnaryMethod(clientName, m, constName, requestType, responseType, m.Name+"Raw")
+		r.renderServiceClientDecodedMethod(clientName, m, requestType)
 		return
 	}
 
-	r.renderAppClientUnaryMethod(m, constName, requestType, responseType, m.Name)
-	fmt.Fprintf(&r.body, "// %sRaw is an alias for %s.\n", m.Name, m.Name)
-	fmt.Fprintf(&r.body, "func (c *AppClient) %sRaw(ctx context.Context, request *%s) (*%s, error) {\n",
-		m.Name, requestType, responseType)
-	fmt.Fprintf(&r.body, "\treturn c.%s(ctx, request)\n}\n\n", m.Name)
+	if m.OutputIsEmpty {
+		r.renderServiceClientEmptyOutput(clientName, m, constName)
+		return
+	}
+	if m.InputIsEmpty {
+		r.renderServiceClientEmptyInput(clientName, m, constName, collapse)
+		return
+	}
+	if m.Input == nil || m.Output == nil {
+		return
+	}
+
+	requestType := r.messageType(m.Input.FullName)
+	responseType := r.messageType(m.Output.FullName)
+	if collapse != nil {
+		r.renderServiceClientCollapsedMethod(clientName, m, constName, requestType, collapse)
+		return
+	}
+	r.renderServiceClientUnaryMethod(clientName, m, constName, requestType, responseType, m.Name)
 }
 
-func (r *renderer) renderAppClientUnaryMethod(
+func (r *renderer) renderServiceClientEmptyOutput(clientName string, m *model.Method, constName string) {
+	recv := fmt.Sprintf("func (c *%s) %s", clientName, m.Name)
+	if m.InputIsEmpty {
+		fmt.Fprintf(&r.body, "%s(ctx context.Context) error {\n", recv)
+		fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, &emptypb.Empty{}, &emptypb.Empty{}); err != nil {\n", constName)
+	} else if m.Input != nil {
+		requestType := r.messageType(m.Input.FullName)
+		fmt.Fprintf(&r.body, "%s(ctx context.Context, request *%s) error {\n", recv, requestType)
+		fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWireFunc(requestType))
+		fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, wire, &emptypb.Empty{}); err != nil {\n", constName)
+	}
+	r.body.WriteString("\t\treturn toGestaltError(err)\n\t}\n\treturn nil\n}\n\n")
+}
+
+func (r *renderer) renderServiceClientEmptyInput(clientName string, m *model.Method, constName string, collapse *collapsed) {
+	if m.Output == nil {
+		return
+	}
+	responseType := r.messageType(m.Output.FullName)
+	fromWire := fromWireFunc(responseType)
+	recv := fmt.Sprintf("func (c *%s) %s", clientName, m.Name)
+	if collapse != nil {
+		fmt.Fprintf(&r.body, "%s(ctx context.Context) (%s, error) {\n", recv, strings.Join(collapse.types, ", "))
+		fmt.Fprintf(&r.body, "\tout := &%s{}\n", wireMessage(m.Output.FullName))
+		fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, &emptypb.Empty{}, out); err != nil {\n", constName)
+		r.body.WriteString("\t\treturn " + strings.Join(collapse.zero, ", ") + ", toGestaltError(err)\n\t}\n")
+		fmt.Fprintf(&r.body, "\tresponse := out\n")
+		for _, line := range collapse.lines {
+			r.body.WriteString("\t" + line + "\n")
+		}
+		r.body.WriteString("}\n\n")
+		return
+	}
+	fmt.Fprintf(&r.body, "%s(ctx context.Context) (*%s, error) {\n", recv, responseType)
+	fmt.Fprintf(&r.body, "\tout := &%s{}\n", wireMessage(m.Output.FullName))
+	fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, &emptypb.Empty{}, out); err != nil {\n", constName)
+	r.body.WriteString("\t\treturn nil, toGestaltError(err)\n\t}\n")
+	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n}\n\n", fromWire)
+}
+
+func (r *renderer) renderServiceClientCollapsedMethod(clientName string, m *model.Method, constName, requestType string, collapse *collapsed) {
+	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context, request *%s) (%s, error) {\n",
+		clientName, m.Name, requestType, strings.Join(collapse.types, ", "))
+	fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWireFunc(requestType))
+	fmt.Fprintf(&r.body, "\tout := &%s{}\n", wireMessage(m.Output.FullName))
+	fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, wire, out); err != nil {\n", constName)
+	r.body.WriteString("\t\treturn " + strings.Join(collapse.zero, ", ") + ", toGestaltError(err)\n\t}\n")
+	fmt.Fprintf(&r.body, "\tresponse := out\n")
+	for _, line := range collapse.lines {
+		r.body.WriteString("\t" + line + "\n")
+	}
+	r.body.WriteString("}\n\n")
+}
+
+func (r *renderer) renderServiceClientUnaryMethod(
+	clientName string,
 	m *model.Method,
 	constName, requestType, responseType, methodName string,
 ) {
 	toWire := toWireFunc(requestType)
 	fromWire := fromWireFunc(responseType)
 
-	fmt.Fprintf(&r.body, "func (c *AppClient) %s(ctx context.Context, request *%s) (*%s, error) {\n",
-		methodName, requestType, responseType)
+	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context, request *%s) (*%s, error) {\n",
+		clientName, methodName, requestType, responseType)
 	fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWire)
 	fmt.Fprintf(&r.body, "\tout := &%s{}\n", wireMessage(m.Output.FullName))
 	fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, wire, out); err != nil {\n", constName)
@@ -80,13 +159,13 @@ func (r *renderer) renderAppClientUnaryMethod(
 	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n}\n\n", fromWire)
 }
 
-func (r *renderer) renderAppClientDecodedMethod(m *model.Method, requestType string) {
+func (r *renderer) renderServiceClientDecodedMethod(clientName string, m *model.Method, requestType string) {
 	status := findField(m.Output, m.JsonResult.Status)
 	body := findField(m.Output, m.JsonResult.Body)
 	appExpr := jsonResultContext(m, "app")
 
-	fmt.Fprintf(&r.body, "func (c *AppClient) %s(ctx context.Context, request *%s) (any, error) {\n",
-		m.Name, requestType)
+	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context, request *%s) (any, error) {\n",
+		clientName, m.Name, requestType)
 	fmt.Fprintf(&r.body, "\tout, err := c.%sRaw(ctx, request)\n", m.Name)
 	r.body.WriteString("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
 	if m.Name == "InvokeGraphQL" {
@@ -100,17 +179,16 @@ func (r *renderer) renderAppClientDecodedMethod(m *model.Method, requestType str
 	r.body.WriteString("}\n\n")
 }
 
-func (r *renderer) assembleAppClient() string {
-	return fmt.Sprintf(`package generated
-
-import (
-	"context"
-
-	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
-	%s
-)
-
-`, wireImport) + r.body.String()
+func (r *renderer) assembleServiceClient() string {
+	imports := "import (\n\t\"context\"\n\n"
+	if strings.Contains(r.body.String(), "gestaltclient.") {
+		imports += "\tgestaltclient \"github.com/valon-technologies/gestalt/sdk/go/client\"\n"
+	}
+	if strings.Contains(r.body.String(), "emptypb.") {
+		imports += "\t\"google.golang.org/protobuf/types/known/emptypb\"\n"
+	}
+	imports += "\t" + wireImport + "\n)\n\n"
+	return fmt.Sprintf("package generated\n\n%s%s", imports, r.body.String())
 }
 
 func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {

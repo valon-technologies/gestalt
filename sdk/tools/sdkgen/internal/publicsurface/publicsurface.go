@@ -3,11 +3,10 @@
 package publicsurface
 
 import (
+	"sort"
+
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
-
-// AppServiceName is the only public service generated in SDK-2.
-const AppServiceName = "App"
 
 // View is the public client projection of a schema.
 type View struct {
@@ -22,7 +21,7 @@ type Service struct {
 	PublicMethods []*model.Method
 }
 
-// Build constructs the public view, retaining only PUBLIC methods on App.
+// Build constructs the public view from every unary PUBLIC method.
 func Build(schema *model.Schema) *View {
 	if schema == nil {
 		return &View{}
@@ -38,9 +37,6 @@ func Build(schema *model.Schema) *View {
 
 	var services []*Service
 	for _, svc := range schema.Services {
-		if svc.Name != AppServiceName {
-			continue
-		}
 		var publicMethods []*model.Method
 		for _, m := range svc.Methods {
 			if !m.Public || m.Stream != model.Unary {
@@ -51,11 +47,17 @@ func Build(schema *model.Schema) *View {
 		if len(publicMethods) == 0 {
 			continue
 		}
+		sort.Slice(publicMethods, func(i, j int) bool {
+			return publicMethods[i].FullMethod < publicMethods[j].FullMethod
+		})
 		services = append(services, &Service{
 			Service:       svc,
 			PublicMethods: publicMethods,
 		})
 	}
+	sort.Slice(services, func(i, j int) bool {
+		return services[i].FullName < services[j].FullName
+	})
 
 	projected := &model.Schema{Services: make([]*model.Service, 0, len(services))}
 	for _, svc := range services {
