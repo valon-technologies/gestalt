@@ -1,5 +1,3 @@
-//! Protobuf-JSON encoding helpers for the public REST transport.
-
 #![allow(dead_code)]
 
 use std::time::{Duration, UNIX_EPOCH};
