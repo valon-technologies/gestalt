@@ -75,7 +75,10 @@ func ValidateInstalledPublishedPackage(destDir, configuredName, expectedVersion 
 		return err
 	}
 	manifest = packageio.ResolveManifestLocalReferences(manifest, manifestPath)
+	return validateInstalledPackageLayout(destDir, configuredName, expectedVersion, manifest)
+}
 
+func validateInstalledPackageLayout(destDir, configuredName, expectedVersion string, manifest *providermanifestv1.Manifest) error {
 	expectedVersion = strings.TrimSpace(expectedVersion)
 	if expectedVersion != "" {
 		manifestVersion := strings.TrimSpace(manifest.Version)
@@ -91,6 +94,17 @@ func ValidateInstalledPublishedPackage(destDir, configuredName, expectedVersion 
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
 		if _, err := os.Stat(assetRoot); err != nil {
 			return fmt.Errorf("installed asset root is missing: %w", err)
+		}
+		return nil
+	}
+
+	if !manifestNeedsExecutableArtifact(manifest) {
+		executablePath, err := executablePathForManifest(destDir, manifest)
+		if err != nil {
+			return err
+		}
+		if executablePath != "" {
+			return fmt.Errorf("manifest-backed package unexpectedly defines executable %s", executablePath)
 		}
 		return nil
 	}
@@ -181,12 +195,16 @@ func installPackageAs(ctx context.Context, packagePath, destDir, configuredName 
 			manifestPath = filepath.Join(destDir, packageio.ManifestFile)
 		}
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
-		return &installedPackage{
+		installed := &installedPackage{
 			Root:         destDir,
 			ManifestPath: manifestPath,
 			AssetRoot:    assetRoot,
 			Manifest:     manifest,
-		}, nil
+		}
+		if err := validateInstalledPackageLayout(destDir, configuredName, manifest.Version, manifest); err != nil {
+			return nil, err
+		}
+		return installed, nil
 	}
 
 	var artifact *providermanifestv1.Artifact
@@ -239,12 +257,16 @@ func installPackageAs(ctx context.Context, packagePath, destDir, configuredName 
 		return nil, err
 	}
 
-	return &installedPackage{
+	installed := &installedPackage{
 		Root:           destDir,
 		ManifestPath:   manifestPath,
 		ExecutablePath: executablePath,
 		Manifest:       manifest,
-	}, nil
+	}
+	if err := validateInstalledPackageLayout(destDir, configuredName, manifest.Version, manifest); err != nil {
+		return nil, err
+	}
+	return installed, nil
 }
 
 func executablePathForManifest(root string, manifest *providermanifestv1.Manifest) (string, error) {
