@@ -267,9 +267,15 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 		_ = conn.Close()
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	relayCtx := invocation.WithAgentInvocationContext(context.Background(), invocation.AgentInvocationContext{
+		SessionID: "session-1",
+	})
+
+	ctx, cancel := context.WithTimeout(relayCtx, 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		runtimehost.HostServiceRelayTokenHeader, token,
+	))
 
 	resp, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
 	if err != nil {

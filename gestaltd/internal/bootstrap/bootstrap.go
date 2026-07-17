@@ -191,7 +191,6 @@ type Deps struct {
 	HostServiceTLSCAPEM     string
 	Telemetry               core.TelemetryProvider
 	ProviderTransport       providergateway.Transport
-	CallerTokenPublicKey    string
 	DevSupervisor           *providerdev.Supervisor
 	RemoteClients           *remote.ClientSet
 	RemoteToken             string
@@ -211,11 +210,6 @@ type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostSer
 type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (runtimeprovider.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
-
-const (
-	callerTokenPrivateKeySecretName = "gestaltd-caller-token-ed25519-private-key"
-	callerTokenPublicKeySecretName  = "gestaltd-caller-token-ed25519-public-key"
-)
 
 type FactoryRegistry struct {
 	Auth                AuthFactory
@@ -271,7 +265,6 @@ type Result struct {
 	Runtimes               RuntimeInspector
 	PublicHostServices     *runtimehost.PublicHostServiceRegistry
 	PublicGatewayTransport *providergateway.ProviderGatewayTransport
-	CallerTokenIssuer      *providergateway.CallerTokenIssuer
 	DevSupervisor          *providerdev.Supervisor
 	AppRestarter           interface {
 		Restartable(string) (bool, error)
@@ -772,7 +765,6 @@ type preparedCore struct {
 	WorkflowManager      *lazyWorkflowManager
 	AgentManager         *lazyAgentManager
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -1078,6 +1070,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 
+	providerTransport := providergateway.DirectTransport{}
+	deps.ProviderTransport = providerTransport
+
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
 		return nil, err
@@ -1085,24 +1080,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	auth := authProviders[selectedAuthName]
 	deps.Authentication = auth
 
-	callerTokenPrivateKey, err := resolveCallerTokenPrivateKey(ctx, sm)
-	if err != nil {
-		_ = closeAuthProviders(authProviders)
-		return nil, err
-	}
-	callerTokenIssuer, err := providergateway.NewCallerTokenIssuer(callerTokenPrivateKey)
-	if err != nil {
-		_ = closeAuthProviders(authProviders)
-		return nil, fmt.Errorf("bootstrap: caller token private key: %w", err)
-	}
-	providerTransport := providergateway.DirectTransport{}
-	deps.ProviderTransport = providerTransport
-	callerTokenPublicKey, err := resolveCallerTokenPublicKey(ctx, sm)
-	if err != nil {
-		_ = closeAuthProviders(authProviders)
-		return nil, err
-	}
-	deps.CallerTokenPublicKey = callerTokenPublicKey
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1166,7 +1143,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		WorkflowManager:      workflowManager,
 		AgentManager:         agentManager,
 		PublicHostServices:   publicHostServices,
-		CallerTokenIssuer:    callerTokenIssuer,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1473,7 +1449,12 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		startupWorkflowConfigReconcile = nil
 	}
 
-	publicGatewayTransport, err := buildPublicGatewayTransport(cfg, prepared.Auth, prepared.Authorization, prepared.Services.Users)
+	publicGatewayTransport, err := buildPublicGatewayTransport(
+		cfg,
+		prepared.Auth,
+		prepared.Authorization,
+		prepared.Services.Users,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1512,7 +1493,6 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		Runtimes:               prepared.runtimeRegistry,
 		PublicHostServices:     publicHostServices,
 		PublicGatewayTransport: publicGatewayTransport,
-		CallerTokenIssuer:      prepared.CallerTokenIssuer,
 		DevSupervisor:          prepared.Deps.DevSupervisor,
 		AppRestarter: NewAppProviderRestarter(AppProviderRestarterConfig{
 			Config:     cfg,
@@ -2189,32 +2169,6 @@ func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, na
 		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
 	return provider, nil
-}
-
-func resolveCallerTokenPrivateKey(ctx context.Context, sm core.SecretManager) (string, error) {
-	return resolveCallerTokenKey(ctx, sm, callerTokenPrivateKeySecretName)
-}
-
-func resolveCallerTokenPublicKey(ctx context.Context, sm core.SecretManager) (string, error) {
-	return resolveCallerTokenKey(ctx, sm, callerTokenPublicKeySecretName)
-}
-
-func resolveCallerTokenKey(ctx context.Context, sm core.SecretManager, name string) (string, error) {
-	if sm == nil {
-		return "", nil
-	}
-	value, err := sm.GetSecret(ctx, name)
-	if err != nil {
-		if errors.Is(err, core.ErrSecretNotFound) {
-			return "", nil
-		}
-		return "", fmt.Errorf("bootstrap: resolve %s: %w", name, err)
-	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", fmt.Errorf("bootstrap: secret %q resolved to empty value", name)
-	}
-	return value, nil
 }
 
 func buildIndexedDB(cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (indexeddb.IndexedDB, error) {

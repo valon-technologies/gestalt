@@ -31,10 +31,18 @@ func ContextWithMeta(ctx context.Context, meta *InvocationMeta) context.Context 
 func ensureMeta(ctx context.Context) (context.Context, *InvocationMeta) {
 	meta := MetaFromContext(ctx)
 	if meta != nil {
+		if strings.TrimSpace(meta.RequestID) == "" {
+			meta.RequestID = uuid.NewString()
+		}
 		return ctx, meta
 	}
 	meta = &InvocationMeta{RequestID: uuid.NewString()}
 	return ContextWithMeta(ctx, meta), meta
+}
+
+// EnsureMeta guarantees invocation metadata exists before caller proofs are minted.
+func EnsureMeta(ctx context.Context) (context.Context, *InvocationMeta) {
+	return ensureMeta(ctx)
 }
 
 type requestMetaCtxKey struct{}

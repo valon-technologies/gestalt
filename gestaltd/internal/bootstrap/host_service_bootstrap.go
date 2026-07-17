@@ -20,6 +20,7 @@ import (
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
+	"github.com/valon-technologies/gestalt/server/services/hostserviceingress"
 	identityservice "github.com/valon-technologies/gestalt/server/services/identity"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -27,6 +28,25 @@ import (
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 )
+
+func configuredHostServiceRelayTokenManager(deps Deps) (*runtimehost.HostServiceRelayTokenManager, error) {
+	if len(deps.EncryptionKey) == 0 {
+		return nil, fmt.Errorf("server.encryptionKey is required for host-service capabilities")
+	}
+	manager, err := runtimehost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
+	if err != nil {
+		return nil, err
+	}
+	manager.SetCapabilityIngressDecorator(hostserviceingress.ApplyCapability)
+	return manager, nil
+}
+
+func hostServiceRelayGRPCServerOptions(manager *runtimehost.HostServiceRelayTokenManager) []grpc.ServerOption {
+	if manager == nil {
+		return nil
+	}
+	return manager.HostServiceGRPCServerOptions()
+}
 
 const (
 	runtimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour

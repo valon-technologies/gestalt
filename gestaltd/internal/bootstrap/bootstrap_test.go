@@ -2,13 +2,9 @@ package bootstrap_test
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
@@ -40,6 +36,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	"github.com/valon-technologies/gestalt/server/services/hostserviceingress"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
@@ -88,8 +85,17 @@ func stubAuthFactory(name string) bootstrap.AuthFactory {
 
 func stubSecretManagerFactory() bootstrap.SecretManagerFactory {
 	return func(yaml.Node) (core.SecretManager, error) {
-		return &coretesting.StubSecretManager{}, nil
+		return &coretesting.StubSecretManager{
+			Secrets: bootstrapStubSecrets(nil),
+		}, nil
 	}
+}
+
+func bootstrapStubSecrets(secrets map[string]string) map[string]string {
+	if secrets == nil {
+		return map[string]string{}
+	}
+	return secrets
 }
 
 func stubTelemetryFactory() bootstrap.TelemetryFactory {
@@ -594,6 +600,7 @@ func (p *recordingAgentProvider) CancelTurnRequests() []*proto.CancelAgentProvid
 type callbackAgentProvider struct {
 	*recordingAgentProvider
 	started                *runtimehost.StartedHostServices
+	relayTokenManager      *runtimehost.HostServiceRelayTokenManager
 	toolBodies             []string
 	sessionToolRefs        map[string]*proto.AgentToolRef
 	resolveInteractionHook func(context.Context, *proto.ResolveAgentProviderInteractionRequest) error
@@ -624,9 +631,13 @@ func (p *callbackSessionCatalogIntegration) CatalogForRequest(context.Context, s
 	return p.sessionCatalog, nil
 }
 
-func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callbackAgentProvider, error) {
+func newCallbackAgentProvider(started *runtimehost.StartedHostServices, encryptionKey []byte) (*callbackAgentProvider, error) {
 	if started == nil {
 		return nil, fmt.Errorf("started host services are required")
+	}
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(encryptionKey)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(started.SocketBinding().SocketPath) == "" {
 		return nil, fmt.Errorf("host service socket binding is missing")
@@ -634,7 +645,21 @@ func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callba
 	return &callbackAgentProvider{
 		recordingAgentProvider: newRecordingAgentProvider(),
 		started:                started,
+		relayTokenManager:      tokenManager,
 	}, nil
+}
+
+func relayTokenHostServiceOptions(encryptionKey []byte) []runtimehost.HostServicesOption {
+	manager, err := runtimehost.NewHostServiceRelayTokenManager(encryptionKey)
+	if err != nil {
+		panic(err)
+	}
+	manager.SetCapabilityIngressDecorator(hostserviceingress.ApplyCapability)
+	opts := manager.HostServiceGRPCServerOptions()
+	if len(opts) == 0 {
+		return nil
+	}
+	return []runtimehost.HostServicesOption{runtimehost.WithHostServicesGRPCServerOptions(opts...)}
 }
 
 func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
@@ -722,7 +747,17 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 			cleanupPendingTurn()
 			return nil, fmt.Errorf("session catalog tool ref is missing")
 		}
-		resp, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+		capability, err := p.relayTokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+			Service:      "app",
+			MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
+			Caller:       &runtimehost.PrincipalClaims{SubjectID: callerSubjectID},
+		})
+		if err != nil {
+			cleanupPendingTurn()
+			return nil, err
+		}
+		invokeCtx := metadata.AppendToOutgoingContext(ctx, runtimehost.HostServiceRelayTokenHeader, capability)
+		resp, err := proto.NewAppClient(conn).Invoke(invokeCtx, &proto.AppInvokeRequest{
 			App:            strings.TrimSpace(toolRef.GetApp()),
 			Operation:      strings.TrimSpace(toolRef.GetOperation()),
 			Connection:     core.ResolveConnectionAlias(strings.TrimSpace(toolRef.GetConnection())),
@@ -1531,19 +1566,6 @@ func transportSecretRef(name string) string {
 	})
 }
 
-func bootstrapCallerTokenPrivateKey(t testing.TB) string {
-	t.Helper()
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
-	}
-	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	if err != nil {
-		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
-	}
-	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes}))
-}
-
 func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
 	t.Parallel()
 
@@ -1875,11 +1897,7 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	var built []*bootstrapTransportRecordingAuthorizationProvider
 	factories := validFactories()
 	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-		return &coretesting.StubSecretManager{
-			Secrets: map[string]string{
-				"gestaltd-caller-token-ed25519-private-key": bootstrapCallerTokenPrivateKey(t),
-			},
-		}, nil
+		return &coretesting.StubSecretManager{Secrets: map[string]string{}}, nil
 	}
 	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
 		raw := &bootstrapTransportRecordingAuthorizationProvider{transport: deps.ProviderTransport}
@@ -1907,9 +1925,6 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	transportGateway, ok := guardedProvider.transport.(*providergateway.ProviderGatewayTransport)
 	if !ok {
 		t.Fatalf("guarded authorization provider transport = %T, want *providergateway.ProviderGatewayTransport", guardedProvider.transport)
-	}
-	if result.CallerTokenIssuer == nil {
-		t.Fatal("CallerTokenIssuer is nil")
 	}
 	if rawProvider.setAuthorizationState == nil {
 		t.Fatal("raw authorization provider did not receive SetAuthorizationState")
@@ -2063,7 +2078,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 	seen := make(map[string]struct{}, len(cfg.Providers.Agent))
 	providerHostServices := make(map[string][]string, len(cfg.Providers.Agent))
 	var seenMu sync.Mutex
-	factories.Agent = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
 		}
@@ -2188,12 +2203,12 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	)
 
 	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -2487,12 +2502,12 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 	)
 
 	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -2605,12 +2620,12 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -2725,12 +2740,12 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -2831,12 +2846,12 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -2922,12 +2937,12 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -3012,12 +3027,12 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -3085,12 +3100,12 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices, relayTokenHostServiceOptions(deps.EncryptionKey)...)
 		if err != nil {
 			return nil, err
 		}
-		value, err := newCallbackAgentProvider(started)
+		value, err := newCallbackAgentProvider(started, deps.EncryptionKey)
 		if err != nil {
 			_ = started.Close()
 			return nil, err
@@ -5617,7 +5632,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		factories := validFactories()
 		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
+				Secrets: bootstrapStubSecrets(map[string]string{"enc-key": "resolved-passphrase"}),
 			}, nil
 		}
 		factories.Auth = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.IdentityProvider, error) {
@@ -5675,7 +5690,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		factories := validFactories()
 		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"empty-secret": ""},
+				Secrets: bootstrapStubSecrets(map[string]string{"empty-secret": ""}),
 			}, nil
 		}
 
@@ -5697,7 +5712,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		factories := validFactories()
 		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"auth-secret": "resolved-auth-secret"},
+				Secrets: bootstrapStubSecrets(map[string]string{"auth-secret": "resolved-auth-secret"}),
 			}, nil
 		}
 
@@ -5743,7 +5758,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		factories := validFactories()
 		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"indexeddb-dsn": "mysql://resolved-dsn"},
+				Secrets: bootstrapStubSecrets(map[string]string{"indexeddb-dsn": "mysql://resolved-dsn"}),
 			}, nil
 		}
 
@@ -5788,7 +5803,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		factories := validFactories()
 		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"s3-token": "resolved-s3-token"},
+				Secrets: bootstrapStubSecrets(map[string]string{"s3-token": "resolved-s3-token"}),
 			}, nil
 		}
 
@@ -5917,7 +5932,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		factories := validFactories()
 		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
+				Secrets: bootstrapStubSecrets(map[string]string{"enc-key": "resolved-passphrase"}),
 			}, nil
 		}
 

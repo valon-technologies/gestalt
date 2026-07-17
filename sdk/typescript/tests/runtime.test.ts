@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import { create, fromBinary, toJson } from "@bufbuild/protobuf";
 import { EmptySchema, ValueSchema } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError } from "@connectrpc/connect";
-import { expect, test } from "bun:test";
+import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
+import { expect, spyOn, test } from "bun:test";
 
 import {
   AuthorizeRequestSchema,
@@ -85,6 +85,8 @@ import {
   defineS3Provider,
   defineWorkflow,
 } from "../src/index.ts";
+import * as hostService from "../src/host-service.ts";
+import { HOST_SERVICE_RELAY_TOKEN_HEADER } from "../src/host-service.ts";
 import {
   boundWorkflowTargetToProto,
   workflowDefinitionSpecToProto,
@@ -645,6 +647,99 @@ test("integration provider service exposes metadata, configure, execute, and ses
     "Session Hello ops user:user-123 subject viewer",
   );
 
+});
+
+test("integration provider closes gestalt transport scope after execute and session catalog", async () => {
+  const previousSocket = process.env[hostService.ENV_HOST_SERVICE_SOCKET];
+  const previousServices = process.env[hostService.ENV_HOST_SERVICES];
+  let transportCreations = 0;
+  let transportCloses = 0;
+  const createTransport = spyOn(
+    hostService,
+    "createHostServiceGrpcTransport",
+  ).mockImplementation(() => {
+    transportCreations += 1;
+    return {
+      close: () => {
+        transportCloses += 1;
+      },
+    } as hostService.HostServiceGrpcTransport;
+  });
+
+  try {
+    process.env[hostService.ENV_HOST_SERVICE_SOCKET] = "tcp://127.0.0.1:9";
+    process.env[hostService.ENV_HOST_SERVICES] = "app,identity,agent,workflow";
+
+    const gestaltApp = defineApp({
+      async sessionCatalog(request) {
+        await request.gestalt({ service: "identity" });
+        return {
+          name: "session-catalog",
+          operations: [],
+        };
+      },
+      operations: [
+        {
+          id: "gestalt-twice",
+          async handler(_input, request) {
+            await request.gestalt();
+            await request.gestalt({ service: "identity" });
+            return { ok: true };
+          },
+        },
+      ],
+    });
+    const service = createProviderService(gestaltApp);
+    const relayContext = {
+      requestHeader: {
+        get: (name: string) =>
+          name === HOST_SERVICE_RELAY_TOKEN_HEADER
+            ? "invocation-capability-token"
+            : undefined,
+      },
+    } as HandlerContext;
+
+    await (service.startProvider as any)(
+      create(StartProviderRequestSchema, {
+        name: "gestalt-scope-provider",
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      }),
+    );
+
+    const executeResult = await (service.execute as any)(
+      create(ExecuteRequestSchema, {
+        operation: "gestalt-twice",
+      }),
+      relayContext,
+    );
+    expect(jsonBody(executeResult.body)).toEqual({ ok: true });
+    expect(transportCreations).toBe(1);
+    expect(transportCloses).toBe(1);
+
+    transportCreations = 0;
+    transportCloses = 0;
+
+    await (service.getSessionCatalog as any)(
+      create(GetSessionCatalogRequestSchema, {
+        token: "token-123",
+      }),
+      relayContext,
+    );
+    expect(transportCreations).toBe(1);
+    expect(transportCloses).toBe(1);
+  } finally {
+    createTransport.mockRestore();
+    if (previousSocket === undefined) {
+      delete process.env[hostService.ENV_HOST_SERVICE_SOCKET];
+    } else {
+      process.env[hostService.ENV_HOST_SERVICE_SOCKET] = previousSocket;
+    }
+    if (previousServices === undefined) {
+      delete process.env[hostService.ENV_HOST_SERVICES];
+    } else {
+      process.env[hostService.ENV_HOST_SERVICES] = previousServices;
+    }
+  }
 });
 
 test("integration provider service labels metadata failures", async () => {

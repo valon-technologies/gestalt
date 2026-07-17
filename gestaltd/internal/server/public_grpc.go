@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
@@ -21,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 
@@ -82,7 +85,7 @@ func externalCredentialsProviderServer(cfg publicGRPCConfig) proto.ExternalCrede
 }
 
 func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTransport) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		origin, ok := publicrpc.PublicOriginFromContext(ctx)
 		if !ok {
 			return nil, status.Error(codes.Unauthenticated, "bearer token is required")
@@ -96,9 +99,15 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 			return nil, err
 		}
 		if p != nil {
-			ctx = principal.WithPrincipal(ctx, principal.Canonicalized(p))
+			ctx = stripInternalIdentityMetadata(ctx)
+			canonical := principal.Canonicalized(p)
+			ctx = principal.WithPrincipal(ctx, canonical)
+			if subjectID := strings.TrimSpace(canonical.SubjectID); subjectID != "" {
+				ctx = gestalt.WithTrustedCallerSubject(ctx, subjectID)
+			}
+			return handler(ctx, adapted)
 		}
-		return handler(ctx, adapted)
+		return handler(stripInternalIdentityMetadata(ctx), adapted)
 	}
 }
 
@@ -118,4 +127,17 @@ func (s *Server) publicGRPCMiddleware(next http.Handler) http.Handler {
 		}
 		s.publicGRPCHandler.ServeHTTP(w, r)
 	})
+}
+
+func stripInternalIdentityMetadata(ctx context.Context) context.Context {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ctx
+	}
+	if len(md.Get(gestalt.TrustedCallerSubjectMetadataKey)) == 0 {
+		return ctx
+	}
+	copied := md.Copy()
+	copied.Delete(gestalt.TrustedCallerSubjectMetadataKey)
+	return metadata.NewIncomingContext(ctx, copied)
 }

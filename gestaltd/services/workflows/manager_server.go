@@ -73,7 +73,7 @@ func requiredWorkflowProviderName(name string) (string, error) {
 }
 
 func (s *ProviderServer) authorizeWorkflowRequest(ctx context.Context, req workflowProviderAuthRequest, action, agentSystemOperation string) (workflowManagerAuthContext, *principal.Principal, string, error) {
-	authCtx, err := s.requestContext(req)
+	authCtx, err := s.requestContext(ctx, req)
 	if err != nil {
 		return workflowManagerAuthContext{}, nil, "", err
 	}
@@ -543,9 +543,9 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	return out, nil
 }
 
-func (s *ProviderServer) requestContext(req workflowProviderAuthRequest) (workflowManagerAuthContext, error) {
+func (s *ProviderServer) requestContext(ctx context.Context, req workflowProviderAuthRequest) (workflowManagerAuthContext, error) {
 	raw := req.GetContext()
-	authCtx, err := appaccessservice.ProviderRequestContextFromProto(raw, "", "")
+	authCtx, err := appaccessservice.ProviderRequestContextFromProto(ctx, raw, "", "")
 	if err != nil {
 		return workflowManagerAuthContext{}, err
 	}

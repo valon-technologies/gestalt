@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/services/hostserviceingress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 )
@@ -21,17 +22,21 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		target, err := s.hostServiceRelayTokens.ResolveToken(token)
+		capability, err := s.hostServiceRelayTokens.ResolveToken(token)
 		if err != nil {
 			writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-token")
 			return
 		}
-		if !hostServiceRelayMethodAllowed(r.URL.Path, target.MethodPrefix) {
+		if !runtimehost.HostServiceRelayMethodAllowed(r.URL.Path, capability.MethodPrefix) {
 			writeGRPCTrailersOnly(w, codes.PermissionDenied, "host-service-relay-method-not-allowed")
 			return
 		}
+		if runtimehost.CallerCapabilityRequiredMethod(r.URL.Path) && capability.Caller == nil {
+			writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-token")
+			return
+		}
 
-		handler, err := s.unifiedHostServiceHandler(r.Context(), target, r.URL.Path)
+		handler, err := s.unifiedHostServiceHandler(r.Context(), capability, r.URL.Path)
 		if err != nil {
 			writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
 			return
@@ -40,7 +45,11 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 			writeGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
 			return
 		}
-		relayReq := r.Clone(r.Context())
+
+		ctx := r.Context()
+		ctx = hostserviceingress.ApplyCapability(ctx, capability)
+
+		relayReq := r.Clone(ctx)
 		relayReq.Header = r.Header.Clone()
 		relayReq.Header.Del(runtimehost.HostServiceRelayTokenHeader)
 		handler.ServeHTTP(w, relayReq)
@@ -60,20 +69,6 @@ func isGRPCRequest(r *http.Request) bool {
 	}
 	contentType := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
 	return strings.HasPrefix(contentType, "application/grpc")
-}
-
-func hostServiceRelayMethodAllowed(path, methodPrefix string) bool {
-	methodPrefix = strings.TrimSpace(methodPrefix)
-	if methodPrefix == "" {
-		return true
-	}
-	if path == methodPrefix {
-		return true
-	}
-	if strings.HasSuffix(methodPrefix, "/") {
-		return strings.HasPrefix(path, methodPrefix)
-	}
-	return strings.HasPrefix(path, methodPrefix+"/")
 }
 
 func writeGRPCTrailersOnly(w http.ResponseWriter, code codes.Code, message string) {

@@ -37,7 +37,6 @@ type ProviderGatewayRequest struct {
 	ServiceName    string
 	Operation      string
 	RequestContext *RequestContext
-	CallerToken    string
 	Payload        []byte
 }
 

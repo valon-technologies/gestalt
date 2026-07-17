@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc"
 	gproto "google.golang.org/protobuf/proto"
@@ -21,7 +22,7 @@ func TestClientCheckAccessInvokesProviderGatewayBeforeGRPC(t *testing.T) {
 		ProviderID: "authz",
 	}, gateway)
 
-	ctx := providergateway.WithCallerToken(context.Background(), "caller-token")
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:checked"})
 	resp, err := client.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject:  &proto.Subject{Type: "subject", Id: "user:checked"},
 		Action:   &proto.Action{Name: "view"},
@@ -49,9 +50,6 @@ func TestClientCheckAccessInvokesProviderGatewayBeforeGRPC(t *testing.T) {
 	}
 	if got.Operation != "CheckAccess" {
 		t.Fatalf("Operation = %q", got.Operation)
-	}
-	if got.CallerToken != "caller-token" {
-		t.Fatalf("CallerToken = %q, want caller-token", got.CallerToken)
 	}
 	var payload proto.CheckAccessRequest
 	if err := gproto.Unmarshal(got.Payload, &payload); err != nil {

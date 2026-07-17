@@ -40,8 +40,15 @@ type StartedHostServices struct {
 type HostServicesOption func(*hostServicesConfig)
 
 type hostServicesConfig struct {
-	providerName string
-	telemetry    metricutil.TelemetryProviders
+	providerName      string
+	telemetry         metricutil.TelemetryProviders
+	grpcServerOptions []grpc.ServerOption
+}
+
+func WithHostServicesGRPCServerOptions(opts ...grpc.ServerOption) HostServicesOption {
+	return func(cfg *hostServicesConfig) {
+		cfg.grpcServerOptions = append(cfg.grpcServerOptions, opts...)
+	}
 }
 
 func WithHostServicesProviderName(name string) HostServicesOption {
@@ -86,7 +93,7 @@ func StartHostServices(services []HostService, opts ...HostServicesOption) (*Sta
 		}
 		return nil, fmt.Errorf("listen on host socket: %w", err)
 	}
-	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.providerName, unifiedHostService(), cfg.telemetry)...)))
+	srv := grpc.NewServer(hostServiceServerOptions(cfg.grpcServerOptions, grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.providerName, unifiedHostService(), cfg.telemetry)...)))...)
 	for _, service := range active {
 		service.Register(srv)
 		started.serviceNames = append(started.serviceNames, hostServiceMetricName(service))

@@ -18,10 +18,15 @@ import {
   UserInfoResponseSchema,
 } from "../src/internal/gen/v1/identity_pb.ts";
 import {
-  App,
-  CALLER_BEARER_TOKEN_METADATA_KEY,
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
+  ENV_HOST_SERVICES,
+} from "../src/host-service.ts";
+import {
+  attachRequestHelpers,
+} from "../src/api.ts";
+import { App } from "../src/app.ts";
+import {
   GestaltError,
   GestaltErrorCode,
   InvokeError,
@@ -458,15 +463,16 @@ test("App honors tcp target env and relay token env", async () => {
   }
 });
 
-test("Request.app creates an app client", async () => {
+test("Request.gestalt requires an invocation capability", async () => {
   const req = request();
-  await expect(req.app()).rejects.toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
+  await expect(req.gestalt()).rejects.toThrow("gestalt: invocation capability is required");
 });
 
-test("Request.authentication forwards the caller bearer token", async () => {
+test("Request.gestalt forwards the invocation capability", async () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
-  const seenHeaders: Array<{ relayToken: string; callerToken: string }> = [];
+  const previousServices = process.env[ENV_HOST_SERVICES];
+  const seenRelayTokens: string[] = [];
   const address = await reserveTCPAddress();
 
   const handler = connectNodeAdapter({
@@ -487,11 +493,7 @@ test("Request.authentication forwards the caller bearer token", async () => {
   });
   const server = createServer((req, res) => {
     const relayToken = req.headers["x-gestalt-host-service-relay-token"];
-    const callerToken = req.headers[CALLER_BEARER_TOKEN_METADATA_KEY];
-    seenHeaders.push({
-      relayToken: typeof relayToken === "string" ? relayToken : "",
-      callerToken: typeof callerToken === "string" ? callerToken : "",
-    });
+    seenRelayTokens.push(typeof relayToken === "string" ? relayToken : "");
     handler(req, res);
   });
 
@@ -505,9 +507,12 @@ test("Request.authentication forwards the caller bearer token", async () => {
     });
 
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
-    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
+    process.env[ENV_HOST_SERVICE_TOKEN] = "runtime-relay-token";
 
-    const auth = await request("caller-access-token").identity();
+    process.env[ENV_HOST_SERVICES] = "identity";
+    const auth = (await attachRequestHelpers(request(
+      "connector-token",
+    ), "invocation-capability-token").gestalt({ service: "identity" })).identity;
     const response = await auth.userInfo({});
 
     expect(response).toEqual({
@@ -515,10 +520,7 @@ test("Request.authentication forwards the caller bearer token", async () => {
       email: "hugh@valon.com",
       name: "Hugh Han",
     });
-    expect(seenHeaders).toEqual([{
-      relayToken: "relay-token-typescript",
-      callerToken: "caller-access-token",
-    }]);
+    expect(seenRelayTokens).toEqual(["invocation-capability-token"]);
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_HOST_SERVICE_SOCKET];
@@ -529,6 +531,11 @@ test("Request.authentication forwards the caller bearer token", async () => {
       delete process.env[ENV_HOST_SERVICE_TOKEN];
     } else {
       process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
+    }
+    if (previousServices === undefined) {
+      delete process.env[ENV_HOST_SERVICES];
+    } else {
+      process.env[ENV_HOST_SERVICES] = previousServices;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {

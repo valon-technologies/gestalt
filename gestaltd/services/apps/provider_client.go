@@ -12,8 +12,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	protobuf "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -49,6 +52,8 @@ type remoteProviderBase struct {
 	publicBaseURL       string
 	callerKind          invocation.ProviderKind
 	callerName          string
+	runtimeSessionID    string
+	relayTokenManager   *runtimehost.HostServiceRelayTokenManager
 	workflowDefinitions []*proto.WorkflowDefinitionSpec
 }
 
@@ -78,6 +83,20 @@ func WithCallerProvider(kind invocation.ProviderKind, name string) RemoteProvide
 	return func(b *remoteProviderBase) {
 		b.callerKind = invocation.ProviderKind(strings.TrimSpace(string(kind)))
 		b.callerName = strings.TrimSpace(name)
+	}
+}
+
+// WithRuntimeSessionID binds invocation capabilities to a hosted runtime session.
+func WithRuntimeSessionID(sessionID string) RemoteProviderOption {
+	return func(b *remoteProviderBase) {
+		b.runtimeSessionID = strings.TrimSpace(sessionID)
+	}
+}
+
+// WithRelayTokenManager enables per-invocation capability minting for hosted providers.
+func WithRelayTokenManager(manager *runtimehost.HostServiceRelayTokenManager) RemoteProviderOption {
+	return func(b *remoteProviderBase) {
+		b.relayTokenManager = manager
 	}
 }
 
@@ -206,6 +225,10 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	if err != nil {
 		return nil, err
 	}
+	ctx, err = p.attachInvocationCapability(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
 		Operation:        operation,
 		Params:           msg,
@@ -260,6 +283,10 @@ func (p *remoteProviderBase) CatalogForRequest(ctx context.Context, token string
 
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
 	reqCtx, err := p.requestContextProto(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err = p.attachInvocationCapability(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -333,6 +360,31 @@ func invocationIDFromContext(ctx context.Context) string {
 		return ""
 	}
 	return meta.RequestID
+}
+
+func (p *remoteProviderBase) attachInvocationCapability(ctx context.Context) (context.Context, error) {
+	if p == nil || p.relayTokenManager == nil {
+		return ctx, nil
+	}
+	caller := principal.FromContext(ctx)
+	if caller == nil {
+		return ctx, nil
+	}
+	claims := principalRelayClaimsFromPrincipal(caller)
+	if claims == nil {
+		return ctx, fmt.Errorf("mint invocation capability: caller principal subject is required")
+	}
+	capability, err := p.relayTokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+		AppName:      p.name,
+		SessionID:    p.runtimeSessionID,
+		Service:      "host_service",
+		MethodPrefix: "/",
+		Caller:       claims,
+	})
+	if err != nil {
+		return ctx, fmt.Errorf("mint invocation capability: %w", err)
+	}
+	return metadata.AppendToOutgoingContext(ctx, runtimehost.HostServiceRelayTokenHeader, capability), nil
 }
 
 func (p *remoteProviderBase) requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
@@ -479,4 +531,28 @@ func remoteOperationResult(resp *proto.OperationResult) *core.OperationResult {
 		Headers: protoutil.StringListsFromProto(resp.GetHeaders()),
 		Body:    resp.GetBody(),
 	}
+}
+
+func principalRelayClaimsFromPrincipal(p *principal.Principal) *runtimehost.PrincipalClaims {
+	if p == nil {
+		return nil
+	}
+	subjectID := strings.TrimSpace(p.SubjectID)
+	if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+		subjectID = principal.UserSubjectID(strings.TrimSpace(p.UserID))
+	}
+	if subjectID == "" {
+		return nil
+	}
+	claims := &runtimehost.PrincipalClaims{
+		SubjectID: subjectID,
+		ClientID:  strings.TrimSpace(p.ClientID),
+	}
+	if len(p.Scopes) > 0 {
+		claims.Scopes = append([]string(nil), p.Scopes...)
+	}
+	if len(p.Audience) > 0 {
+		claims.Audience = append([]string(nil), p.Audience...)
+	}
+	return claims
 }

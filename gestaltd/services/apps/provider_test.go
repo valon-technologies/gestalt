@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -169,7 +171,15 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	client := newAppProviderClient(t, NewProviderServer(&roundTripProvider{}))
-	prov, err := NewRemote(context.Background(), client, roundTripStaticSpec(), nil, WithHostContext(" https://gestalt.example.test/ "))
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager([]byte("roundtrip-relay-token-secret-01"))
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	prov, err := NewRemote(context.Background(), client, roundTripStaticSpec(), nil,
+		WithHostContext(" https://gestalt.example.test/ "),
+		WithRelayTokenManager(tokenManager),
+		WithRuntimeSessionID("roundtrip-session"),
+	)
 	if err != nil {
 		t.Fatalf("NewRemote: %v", err)
 	}
@@ -293,6 +303,22 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("malformed principal", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := principal.WithPrincipal(context.Background(), &principal.Principal{})
+
+		_, err := prov.Execute(ctx, "echo", map[string]any{"message": "hi"}, "secret-token")
+		if err == nil || !strings.Contains(err.Error(), "caller principal subject is required") {
+			t.Fatalf("Execute error = %v, want caller principal subject is required", err)
+		}
+
+		_, _, err = core.CatalogForRequest(ctx, prov, "token-123")
+		if err == nil || !strings.Contains(err.Error(), "caller principal subject is required") {
+			t.Fatalf("CatalogForRequest error = %v, want caller principal subject is required", err)
+		}
+	})
 
 	t.Run("invalid workflow context", func(t *testing.T) {
 		t.Parallel()

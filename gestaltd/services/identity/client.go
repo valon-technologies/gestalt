@@ -27,17 +27,18 @@ type identityRPCClient interface {
 }
 
 type ExecConfig struct {
-	Command      string
-	Args         []string
-	Workdir      string
-	Env          map[string]string
-	Config       map[string]any
-	Egress       egress.Policy
-	HostBinary   string
-	Cleanup      func()
-	HostServices []runtimehost.HostService
-	Name         string
-	CallbackURL  string
+	Command                string
+	Args                   []string
+	Workdir                string
+	Env                    map[string]string
+	Config                 map[string]any
+	Egress                 egress.Policy
+	HostBinary             string
+	Cleanup                func()
+	HostServices           []runtimehost.HostService
+	Name                   string
+	CallbackURL            string
+	HostServiceGRPCOptions []grpc.ServerOption
 }
 
 type remoteIdentityProvider struct {
@@ -52,15 +53,16 @@ type remoteIdentityProvider struct {
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.IdentityProvider, error) {
 	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
-		Command:      cfg.Command,
-		Args:         cfg.Args,
-		Workdir:      cfg.Workdir,
-		Env:          cfg.Env,
-		Egress:       cfg.Egress,
-		HostBinary:   cfg.HostBinary,
-		Cleanup:      cfg.Cleanup,
-		HostServices: cfg.HostServices,
-		ProviderName: cfg.Name,
+		Command:           cfg.Command,
+		Args:              cfg.Args,
+		Workdir:           cfg.Workdir,
+		Env:               cfg.Env,
+		Egress:            cfg.Egress,
+		HostBinary:        cfg.HostBinary,
+		Cleanup:           cfg.Cleanup,
+		HostServices:      cfg.HostServices,
+		ProviderName:      cfg.Name,
+		GRPCServerOptions: cfg.HostServiceGRPCOptions,
 	})
 	if err != nil {
 		return nil, err

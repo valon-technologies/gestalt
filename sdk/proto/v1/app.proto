@@ -114,6 +114,8 @@ message AppInvokeRequest {
   string credential_mode = 9;
   RequestContext context = 11;
   SubjectContext run_as = 12;
+  reserved 13;
+  reserved "delegated_caller_proof";
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
@@ -128,6 +130,8 @@ message AppInvokeGraphQLRequest {
   string instance = 5;
   string idempotency_key = 7;
   RequestContext context = 8;
+  reserved 9;
+  reserved "delegated_caller_proof";
 }
 
 // SubjectContext identifies the caller that initiated an operation.
@@ -269,6 +273,7 @@ message ResolveHTTPSubjectResponse {
 // ExecuteRequest invokes one executable operation.
 message ExecuteRequest {
   reserved 8;
+  reserved "invocation_token";
 
   string operation = 1;
   google.protobuf.Struct params = 2;
@@ -277,6 +282,8 @@ message ExecuteRequest {
   string invocation_id = 5;
   RequestContext context = 6;
   string idempotency_key = 9;
+  reserved 11;
+  reserved "caller_proof";
 }
 
 // GetSessionCatalogRequest asks a provider for request-scoped catalog

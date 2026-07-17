@@ -9,12 +9,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 type AuthorizationParams struct {
-	ProviderID  string
-	Operation   string
-	CallerToken string
+	ProviderID string
+	Operation  string
 }
 
 func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params AuthorizationParams) (bool, error) {
@@ -22,12 +22,12 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 		return true, nil
 	}
 	allowed, req := t.shadowAuthorizationCheck(ctx, params)
-	recordProviderGatewayAuthorizationCheck(ctx, allowed, strings.TrimSpace(params.CallerToken) != "", req)
-	return true, nil
+	recordProviderGatewayAuthorizationCheck(ctx, allowed, principal.FromContext(ctx) != nil, req)
+	return allowed, nil
 }
 
 func (t *ProviderGatewayTransport) shadowAuthorizationCheck(ctx context.Context, params AuthorizationParams) (bool, *proto.CheckAccessRequest) {
-	subject, err := t.authorizationSubject(params.CallerToken)
+	subject, err := t.authorizationSubject(ctx)
 	if err != nil {
 		return false, nil
 	}
@@ -54,12 +54,11 @@ type UserStore interface {
 }
 
 type ProviderGatewayTransport struct {
-	authorization        AuthorizationProvider
-	callerTokenPublicKey string
-	identity             core.IdentityProvider
-	users                UserStore
-	publicMethods        *publicrpc.Registry
-	publicBaseURL        string
+	authorization AuthorizationProvider
+	identity      core.IdentityProvider
+	users         UserStore
+	publicMethods *publicrpc.Registry
+	publicBaseURL string
 }
 
 func NewProviderGatewayTransport() *ProviderGatewayTransport {
@@ -71,13 +70,6 @@ func (t *ProviderGatewayTransport) SetAuthorizationProvider(authorization Author
 		return
 	}
 	t.authorization = authorization
-}
-
-func (t *ProviderGatewayTransport) SetCallerTokenPublicKey(publicKey string) {
-	if t == nil {
-		return
-	}
-	t.callerTokenPublicKey = strings.TrimSpace(publicKey)
 }
 
 func (t *ProviderGatewayTransport) SetIdentityProvider(identity core.IdentityProvider) {
@@ -121,9 +113,8 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: next handler is required")
 	}
 	allowed, err := t.Authorize(ctx, AuthorizationParams{
-		ProviderID:  req.ProviderID,
-		Operation:   req.Operation,
-		CallerToken: req.CallerToken,
+		ProviderID: req.ProviderID,
+		Operation:  req.Operation,
 	})
 	if err != nil {
 		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: authorize: %w", err)
@@ -162,13 +153,17 @@ func (t *ProviderGatewayTransport) runAuthorizationCheck(
 	return resp.GetAllowed(), req, nil
 }
 
-func (t *ProviderGatewayTransport) authorizationSubject(callerToken string) (*proto.Subject, error) {
-	if t == nil || strings.TrimSpace(t.callerTokenPublicKey) == "" {
-		return nil, fmt.Errorf("provider gateway: caller token public key is required")
+func (t *ProviderGatewayTransport) authorizationSubject(ctx context.Context) (*proto.Subject, error) {
+	caller := principal.FromContext(ctx)
+	if caller == nil {
+		return nil, fmt.Errorf("provider gateway: caller principal is required")
 	}
-	subjectID, err := CallerTokenSubjectID(callerToken, t.callerTokenPublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("provider gateway: caller token subject: %w", err)
+	subjectID := strings.TrimSpace(caller.SubjectID)
+	if subjectID == "" && strings.TrimSpace(caller.UserID) != "" {
+		subjectID = principal.UserSubjectID(strings.TrimSpace(caller.UserID))
+	}
+	if subjectID == "" {
+		return nil, fmt.Errorf("provider gateway: caller principal is required")
 	}
 	return &proto.Subject{
 		Type: "subject",
