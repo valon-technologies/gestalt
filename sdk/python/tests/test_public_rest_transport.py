@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json as json_module
 import unittest
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 from unittest import mock
 
@@ -31,7 +31,7 @@ class _RecordingTransport:
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        params: str | None = None,
+        params: Sequence[tuple[str, str]] | str | None = None,
         json: dict[str, Any] | None = None,
         timeout: float | None = None,
     ) -> httpx.Response:

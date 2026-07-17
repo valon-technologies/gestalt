@@ -127,6 +127,7 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("\tHTTPQueryFields []PublicField\n")
 	r.body.WriteString("\tFill []string\n")
 	r.body.WriteString("\tReject []string\n")
+	r.body.WriteString("\tResponseIsOperationResult bool\n")
 	r.body.WriteString("}\n\n")
 	r.body.WriteString("// PublicField names one request field used by REST metadata.\n")
 	r.body.WriteString("type PublicField struct {\n")
@@ -154,6 +155,7 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 		}
 		r.body.WriteString("\tFill: " + goStringList(publicsurface.FieldNames(pm.ServerFilled)) + ",\n")
 		r.body.WriteString("\tReject: " + goStringList(publicsurface.FieldNames(pm.Rejected)) + ",\n")
+		fmt.Fprintf(&r.body, "\tResponseIsOperationResult: %t,\n", publicsurface.ResponseIsOperationResult(pm))
 		r.body.WriteString("}\n\n")
 	}
 }

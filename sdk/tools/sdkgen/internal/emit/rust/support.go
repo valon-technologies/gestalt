@@ -30,6 +30,11 @@ var codecSupportFile string
 //go:embed invoke_support.rs
 var invokeSupportFile string
 
+// transportKernelFile is the schema-derived public REST transport kernel.
+//
+//go:embed transport_kernel.rs
+var transportKernelFile string
+
 // hostServiceFile holds the crate-private host-service transport shared by
 // the generated clients of host-bound services. It is emitted unfiltered as
 // codec/host_service.rs when some service carries a host_binding annotation.

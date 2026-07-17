@@ -6,16 +6,17 @@ package generated
 
 // Method describes one public unary RPC.
 type Method struct {
-	Service         string
-	Name            string
-	FullMethod      string
-	HTTPVerb        string
-	HTTPPath        string
-	HTTPBody        string
-	HTTPPathFields  []PublicField
-	HTTPQueryFields []PublicField
-	Fill            []string
-	Reject          []string
+	Service                   string
+	Name                      string
+	FullMethod                string
+	HTTPVerb                  string
+	HTTPPath                  string
+	HTTPBody                  string
+	HTTPPathFields            []PublicField
+	HTTPQueryFields           []PublicField
+	Fill                      []string
+	Reject                    []string
+	ResponseIsOperationResult bool
 }
 
 // PublicField names one request field used by REST metadata.
@@ -25,27 +26,29 @@ type PublicField struct {
 }
 
 var MethodAppInvoke = Method{
-	Service:         "gestalt.provider.v1.App",
-	Name:            "Invoke",
-	FullMethod:      "/gestalt.provider.v1.App/Invoke",
-	HTTPVerb:        "POST",
-	HTTPPath:        "/api/v2/app/{app}/operations/{operation}",
-	HTTPBody:        "*",
-	HTTPPathFields:  []PublicField{PublicField{Name: "app", JSONName: "app"}, PublicField{Name: "operation", JSONName: "operation"}},
-	HTTPQueryFields: nil,
-	Fill:            []string{"context"},
-	Reject:          []string{"run_as"},
+	Service:                   "gestalt.provider.v1.App",
+	Name:                      "Invoke",
+	FullMethod:                "/gestalt.provider.v1.App/Invoke",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/app/{app}/operations/{operation}",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "app", JSONName: "app"}, PublicField{Name: "operation", JSONName: "operation"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    []string{"run_as"},
+	ResponseIsOperationResult: true,
 }
 
 var MethodAppInvokeGraphQL = Method{
-	Service:         "gestalt.provider.v1.App",
-	Name:            "InvokeGraphQL",
-	FullMethod:      "/gestalt.provider.v1.App/InvokeGraphQL",
-	HTTPVerb:        "POST",
-	HTTPPath:        "/api/v2/app/{app}/graphql",
-	HTTPBody:        "*",
-	HTTPPathFields:  []PublicField{PublicField{Name: "app", JSONName: "app"}},
-	HTTPQueryFields: nil,
-	Fill:            []string{"context"},
-	Reject:          nil,
+	Service:                   "gestalt.provider.v1.App",
+	Name:                      "InvokeGraphQL",
+	FullMethod:                "/gestalt.provider.v1.App/InvokeGraphQL",
+	HTTPVerb:                  "POST",
+	HTTPPath:                  "/api/v2/app/{app}/graphql",
+	HTTPBody:                  "*",
+	HTTPPathFields:            []PublicField{PublicField{Name: "app", JSONName: "app"}},
+	HTTPQueryFields:           nil,
+	Fill:                      []string{"context"},
+	Reject:                    nil,
+	ResponseIsOperationResult: true,
 }

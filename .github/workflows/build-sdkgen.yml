@@ -7,11 +7,13 @@ on:
     paths:
       - 'sdk/tools/sdkgen/**'
       - 'sdk/proto/**'
+      - 'sdk/testdata/public_conformance/**'
       - '.github/workflows/build-sdkgen.yml'
   pull_request:
     paths:
       - 'sdk/tools/sdkgen/**'
       - 'sdk/proto/**'
+      - 'sdk/testdata/public_conformance/**'
       - '.github/workflows/build-sdkgen.yml'
 
   workflow_dispatch:

@@ -12,10 +12,15 @@ import {
   type GestaltErrorCode as GestaltErrorCodeType,
 } from "../runtime/rpc_support.ts";
 
+interface GatewayErrorObject {
+  code?: number | string;
+  message?: string;
+}
+
 interface GatewayErrorBody {
   code?: number | string;
   message?: string;
-  error?: string;
+  error?: string | GatewayErrorObject;
 }
 
 export function parseGatewayError(
@@ -32,23 +37,58 @@ export function parseGatewayError(
   }
   const code = resolveGatewayErrorCode(status, parsed);
   const message =
-    (typeof parsed?.message === "string" && parsed.message.trim()) ||
-    (typeof parsed?.error === "string" && parsed.error.trim()) ||
+    extractGatewayErrorMessage(parsed) ??
     `request failed with status ${status}`;
   return new GestaltError(code, message);
+}
+
+function extractGatewayErrorMessage(
+  parsed: GatewayErrorBody | undefined,
+): string | undefined {
+  if (!parsed) {
+    return undefined;
+  }
+  if (typeof parsed.message === "string" && parsed.message.trim()) {
+    return parsed.message;
+  }
+  if (typeof parsed.error === "string" && parsed.error.trim()) {
+    return parsed.error;
+  }
+  if (
+    typeof parsed.error === "object" &&
+    parsed.error !== null &&
+    typeof parsed.error.message === "string" &&
+    parsed.error.message.trim()
+  ) {
+    return parsed.error.message;
+  }
+  return undefined;
 }
 
 function resolveGatewayErrorCode(
   status: number,
   parsed: GatewayErrorBody | undefined,
 ): GestaltErrorCodeType {
-  if (typeof parsed?.code === "number") {
-    return parsed.code as GestaltErrorCodeType;
-  }
-  if (typeof parsed?.code === "string") {
-    const fromName = grpcCodeNameToGestaltCode(parsed.code);
-    if (fromName !== undefined) {
-      return fromName;
+  if (parsed) {
+    if (typeof parsed.code === "number") {
+      return parsed.code as GestaltErrorCodeType;
+    }
+    if (typeof parsed.code === "string") {
+      const fromName = grpcCodeNameToGestaltCode(parsed.code);
+      if (fromName !== undefined) {
+        return fromName;
+      }
+    }
+    if (typeof parsed.error === "object" && parsed.error !== null) {
+      if (typeof parsed.error.code === "number") {
+        return parsed.error.code as GestaltErrorCodeType;
+      }
+      if (typeof parsed.error.code === "string") {
+        const fromName = grpcCodeNameToGestaltCode(parsed.error.code);
+        if (fromName !== undefined) {
+          return fromName;
+        }
+      }
     }
   }
   return httpStatusToGestaltCode(status);
@@ -57,38 +97,58 @@ function resolveGatewayErrorCode(
 function grpcCodeNameToGestaltCode(
   name: string,
 ): GestaltErrorCodeType | undefined {
-  switch (name) {
-    case "Canceled":
+  const trimmed = name.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) as GestaltErrorCodeType;
+  }
+  const direct = trimmed.toUpperCase().replace(/-/g, "_");
+  const fromDirect = gestaltCodeFromNormalized(direct);
+  if (fromDirect !== undefined) {
+    return fromDirect;
+  }
+  const normalized = trimmed
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/-/g, "_")
+    .toUpperCase();
+  return gestaltCodeFromNormalized(normalized);
+}
+
+function gestaltCodeFromNormalized(
+  normalized: string,
+): GestaltErrorCodeType | undefined {
+  switch (normalized) {
+    case "CANCELED":
+    case "CANCELLED":
       return GestaltErrorCode.Canceled;
-    case "Unknown":
+    case "UNKNOWN":
       return GestaltErrorCode.Unknown;
-    case "InvalidArgument":
+    case "INVALID_ARGUMENT":
       return GestaltErrorCode.InvalidArgument;
-    case "DeadlineExceeded":
+    case "DEADLINE_EXCEEDED":
       return GestaltErrorCode.DeadlineExceeded;
-    case "NotFound":
+    case "NOT_FOUND":
       return GestaltErrorCode.NotFound;
-    case "AlreadyExists":
+    case "ALREADY_EXISTS":
       return GestaltErrorCode.AlreadyExists;
-    case "PermissionDenied":
+    case "PERMISSION_DENIED":
       return GestaltErrorCode.PermissionDenied;
-    case "ResourceExhausted":
+    case "RESOURCE_EXHAUSTED":
       return GestaltErrorCode.ResourceExhausted;
-    case "FailedPrecondition":
+    case "FAILED_PRECONDITION":
       return GestaltErrorCode.FailedPrecondition;
-    case "Aborted":
+    case "ABORTED":
       return GestaltErrorCode.Aborted;
-    case "OutOfRange":
+    case "OUT_OF_RANGE":
       return GestaltErrorCode.OutOfRange;
-    case "Unimplemented":
+    case "UNIMPLEMENTED":
       return GestaltErrorCode.Unimplemented;
-    case "Internal":
+    case "INTERNAL":
       return GestaltErrorCode.Internal;
-    case "Unavailable":
+    case "UNAVAILABLE":
       return GestaltErrorCode.Unavailable;
-    case "DataLoss":
+    case "DATA_LOSS":
       return GestaltErrorCode.DataLoss;
-    case "Unauthenticated":
+    case "UNAUTHENTICATED":
       return GestaltErrorCode.Unauthenticated;
     default:
       return undefined;

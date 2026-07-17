@@ -299,7 +299,7 @@ test("REST transport maps malformed success bodies to GestaltError", async () =>
   ).rejects.toMatchObject({
     name: "GestaltError",
     code: GestaltErrorCode.Internal,
-    message: "response body is not valid JSON",
+    message: expect.stringContaining("invalid JSON"),
   });
 });
 

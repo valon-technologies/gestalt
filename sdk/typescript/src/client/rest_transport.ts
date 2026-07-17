@@ -2,22 +2,16 @@
  * Fetch-based REST transport for the public Gestalt API (/api/v2).
  */
 
-import { toJson } from "@bufbuild/protobuf";
-import type { DescMessage, JsonValue, Message } from "@bufbuild/protobuf";
+import type { DescMessage, Message } from "@bufbuild/protobuf";
 
 import type { AuthProvider } from "./auth.ts";
-import { parseGatewayError } from "./generated/gateway_error.ts";
 import type { PublicMethod } from "./generated/methods.ts";
 import {
-  buildRestBody,
-  buildRestPath,
-  buildRestQuery,
-} from "./generated/rest_request_mapping.ts";
+  decodeRestResponse,
+  prepareRestRequest,
+} from "./generated/transport_kernel.ts";
 import {
-  parseSuccessJson,
-  parseSuccessMessage,
   raceWithAbort,
-  readResponseBodyText,
   resolveEffectiveAbortSignal,
   throwIfAborted,
   toTransportGestaltError,
@@ -47,16 +41,11 @@ export function createRestUnaryTransport(
       responseSchema: DescMessage,
       callOptions?: PublicUnaryCallOptions,
     ): Promise<Output> {
-      if (!method.http) {
-        throw new Error(`method ${method.grpcPath} has no HTTP binding`);
-      }
-      const http = method.http;
-      const requestJson = toJson(requestSchema, request) as Record<string, JsonValue>;
-      const path = buildRestPath(http, requestJson);
-      const url = new URL(path, baseUrl);
-      buildRestQuery(http, requestJson).forEach((value, key) => {
+      const prepared = prepareRestRequest(method, requestSchema, request);
+      const url = new URL(prepared.path, baseUrl);
+      for (const [key, value] of prepared.query) {
         url.searchParams.append(key, value);
-      });
+      }
 
       const signal = resolveEffectiveAbortSignal(callOptions);
 
@@ -77,27 +66,23 @@ export function createRestUnaryTransport(
         }
 
         const init: RequestInit = {
-          method: http.verb,
+          method: prepared.verb,
           headers,
           credentials: "omit",
           ...(signal !== undefined ? { signal } : {}),
         };
-        const body = buildRestBody(method, requestJson);
-        if (body !== undefined) {
-          init.body = JSON.stringify(body);
+        if (prepared.body !== undefined) {
+          init.body = JSON.stringify(prepared.body);
         }
 
         const response = await fetchImpl(url, init);
-        const bodyText = await readResponseBodyText(response);
+        const body = new Uint8Array(await response.arrayBuffer());
 
-        if (response.ok) {
-          return parseSuccessMessage<Output>(
-            responseSchema,
-            parseSuccessJson(bodyText),
-          );
-        }
-
-        throw parseGatewayError(response.status, bodyText);
+        return decodeRestResponse<Output>(method, responseSchema, {
+          status: response.status,
+          headers: [...response.headers.entries()],
+          body,
+        });
       } catch (error) {
         throw toTransportGestaltError(callOptions, error, signal);
       }

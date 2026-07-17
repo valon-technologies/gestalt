@@ -16,6 +16,11 @@ var supportFile string
 //go:embed support_codec.go.tmpl
 var codecSupportFile string
 
+// publicTransportKernelFile is the schema-derived public REST transport kernel.
+//
+//go:embed public_transport_kernel.go.tmpl
+var publicTransportKernelFile string
+
 const publicRPCSupportFile = `package generated
 
 import gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
@@ -24,6 +29,25 @@ type (
 	GestaltError     = gestaltclient.GestaltError
 	GestaltErrorCode = gestaltclient.GestaltErrorCode
 	RpcStatus        = gestaltclient.RpcStatus
+)
+
+const (
+	GestaltErrorCodeCanceled           = gestaltclient.GestaltErrorCodeCanceled
+	GestaltErrorCodeUnknown            = gestaltclient.GestaltErrorCodeUnknown
+	GestaltErrorCodeInvalidArgument    = gestaltclient.GestaltErrorCodeInvalidArgument
+	GestaltErrorCodeDeadlineExceeded   = gestaltclient.GestaltErrorCodeDeadlineExceeded
+	GestaltErrorCodeNotFound           = gestaltclient.GestaltErrorCodeNotFound
+	GestaltErrorCodeAlreadyExists      = gestaltclient.GestaltErrorCodeAlreadyExists
+	GestaltErrorCodePermissionDenied   = gestaltclient.GestaltErrorCodePermissionDenied
+	GestaltErrorCodeResourceExhausted  = gestaltclient.GestaltErrorCodeResourceExhausted
+	GestaltErrorCodeFailedPrecondition = gestaltclient.GestaltErrorCodeFailedPrecondition
+	GestaltErrorCodeAborted            = gestaltclient.GestaltErrorCodeAborted
+	GestaltErrorCodeOutOfRange         = gestaltclient.GestaltErrorCodeOutOfRange
+	GestaltErrorCodeUnimplemented      = gestaltclient.GestaltErrorCodeUnimplemented
+	GestaltErrorCodeInternal           = gestaltclient.GestaltErrorCodeInternal
+	GestaltErrorCodeUnavailable        = gestaltclient.GestaltErrorCodeUnavailable
+	GestaltErrorCodeDataLoss           = gestaltclient.GestaltErrorCodeDataLoss
+	GestaltErrorCodeUnauthenticated    = gestaltclient.GestaltErrorCodeUnauthenticated
 )
 
 func toGestaltError(err error) *GestaltError {

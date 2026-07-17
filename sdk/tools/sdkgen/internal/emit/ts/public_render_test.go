@@ -146,8 +146,6 @@ func TestRenderPublicTransportSupportServerImports(t *testing.T) {
 		"export function resolveEffectiveAbortSignal",
 		"export async function raceWithAbort",
 		"export function toTransportGestaltError",
-		"export function parseSuccessJson",
-		"export async function readResponseBodyText",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in transport_support:\n%s", want, out)
@@ -161,5 +159,34 @@ func TestRenderPublicTransportSupportWebImports(t *testing.T) {
 	out := renderPublicTransportSupport(WebPublicImports())
 	if !strings.Contains(out, `from "../runtime/rpc_support.ts"`) {
 		t.Fatalf("web transport_support must import runtime rpc_support:\n%s", out)
+	}
+}
+
+func TestRenderPublicTransportKernelImports(t *testing.T) {
+	t.Parallel()
+
+	server := renderPublicTransportKernel(ServerPublicImports())
+	if !strings.Contains(server, `from "../../rpc_support.ts"`) {
+		t.Fatalf("server transport kernel must import package rpc_support:\n%s", server)
+	}
+	for _, want := range []string{
+		`from "./gateway_error.ts"`,
+		`from "./rest_request_mapping.ts"`,
+		"export function prepareRestRequest",
+		"export function decodeRestResponse",
+	} {
+		if !strings.Contains(server, want) {
+			t.Fatalf("missing %q in transport_kernel:\n%s", want, server)
+		}
+	}
+	for _, forbidden := range []string{"from \"node:", "from 'node:", "from \"http\"", "fetch("} {
+		if strings.Contains(server, forbidden) {
+			t.Fatalf("transport kernel must not use %s", forbidden)
+		}
+	}
+
+	web := renderPublicTransportKernel(WebPublicImports())
+	if !strings.Contains(web, `from "../runtime/rpc_support.ts"`) {
+		t.Fatalf("web transport kernel must import runtime rpc_support:\n%s", web)
 	}
 }

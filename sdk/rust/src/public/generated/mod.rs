@@ -10,4 +10,5 @@ pub mod codec;
 pub mod invoke_support;
 pub mod metadata;
 pub mod rpc_support;
+pub mod transport_kernel;
 pub mod unary_transport;

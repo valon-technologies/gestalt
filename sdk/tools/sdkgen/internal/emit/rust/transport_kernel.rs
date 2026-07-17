@@ -1,0 +1,453 @@
+//! Schema-derived, I/O-neutral public REST transport kernel.
+
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use serde_json::{Map, Value};
+
+use crate::public::generated::metadata::{Method, PublicField};
+use crate::public::generated::rpc_support::{GestaltError, gestalt_error_code};
+
+/// Prepared REST request components for adapter execution.
+pub struct PreparedRestRequest {
+    pub verb: &'static str,
+    pub path: String,
+    pub query: Vec<(String, String)>,
+    pub body: Option<Value>,
+}
+
+/// Raw REST response from an adapter.
+pub struct RawRestResponse {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+/// Header name that marks OperationResult passthrough responses.
+pub const RESPONSE_KIND_HEADER: &str = "X-Gestalt-Response-Kind";
+/// Header value indicating the body is an OperationResult envelope.
+pub const RESPONSE_KIND_OPERATION_RESULT: &str = "operation-result";
+
+/// Builds REST request components from method metadata and wire request bytes.
+pub fn prepare_rest_request(
+    method: &Method,
+    request_bytes: &[u8],
+) -> Result<PreparedRestRequest, GestaltError> {
+    if method.http_verb.is_empty() || method.http_path.is_empty() {
+        return Err(GestaltError::new(
+            gestalt_error_code::INVALID_ARGUMENT,
+            format!("method {} has no HTTP binding", method.full_method),
+        ));
+    }
+    let encode = method.encode_request_json.ok_or_else(|| {
+        GestaltError::new(
+            gestalt_error_code::INVALID_ARGUMENT,
+            format!("method {} has no REST encoder", method.full_method),
+        )
+    })?;
+    let request_json = encode(request_bytes)?;
+    let path = build_rest_path(method, &request_json)?;
+    let query = build_rest_query(method, &request_json);
+    let body = build_rest_body(method, &request_json);
+    Ok(PreparedRestRequest {
+        verb: method.http_verb,
+        path,
+        query,
+        body,
+    })
+}
+
+/// Decodes a raw REST response into wire response bytes.
+pub fn decode_rest_response(
+    method: &Method,
+    response: RawRestResponse,
+) -> Result<Vec<u8>, GestaltError> {
+    let decode = method.decode_response_json.ok_or_else(|| {
+        GestaltError::new(
+            gestalt_error_code::INVALID_ARGUMENT,
+            format!("method {} has no REST decoder", method.full_method),
+        )
+    })?;
+    let response_json = if is_operation_result(&response.headers) {
+        if !method.response_is_operation_result {
+            return Err(GestaltError::new(
+                gestalt_error_code::INTERNAL,
+                "unexpected operation-result response kind",
+            ));
+        }
+        synthesize_operation_result_json(response.status, &response.body, &response.headers)
+    } else if response.status >= 400 {
+        return Err(parse_gateway_error(response.status, &response.body));
+    } else if response.body.iter().all(|b| b.is_ascii_whitespace()) {
+        Value::Object(Map::new())
+    } else {
+        serde_json::from_slice(&response.body).map_err(|err| {
+            GestaltError::new(gestalt_error_code::INTERNAL, err.to_string())
+        })?
+    };
+    decode(&response_json).map_err(|err| {
+        if err.code == gestalt_error_code::INVALID_ARGUMENT {
+            GestaltError::new(gestalt_error_code::INTERNAL, err.message)
+        } else {
+            err
+        }
+    })
+}
+
+/// Parses a gateway error from a non-operation-result REST failure.
+pub fn parse_gateway_error(status: u16, body: &[u8]) -> GestaltError {
+    let parsed = if body.is_empty() {
+        None
+    } else {
+        serde_json::from_slice::<Value>(body).ok()
+    };
+    let code = resolve_gateway_error_code(status, parsed.as_ref());
+    let message = parsed
+        .as_ref()
+        .and_then(extract_gateway_error_message)
+        .unwrap_or_else(|| format!("request failed with status {status}"));
+    GestaltError::new(code, message)
+}
+
+pub fn build_rest_path(method: &Method, request: &Value) -> Result<String, GestaltError> {
+    substitute_path(method.http_path, request, method.http_path_fields)
+}
+
+pub fn build_rest_query(method: &Method, request: &Value) -> Vec<(String, String)> {
+    let Some(object) = request.as_object() else {
+        return Vec::new();
+    };
+    let mut pairs = Vec::new();
+    for field in method.http_query_fields {
+        let value = field_value(object, field);
+        if value.is_none() || value == Some(&Value::Null) {
+            continue;
+        }
+        append_query_params(&mut pairs, field.json_name, value.unwrap());
+    }
+    pairs
+}
+
+pub fn build_rest_body(method: &Method, request: &Value) -> Option<Value> {
+    let Some(object) = request.as_object() else {
+        return if method.http_body == "*" {
+            Some(Value::Object(Map::new()))
+        } else {
+            None
+        };
+    };
+    if method.http_body == "*" {
+        let excluded = excluded_field_keys(method);
+        let mut body = Map::new();
+        for (key, value) in object {
+            if excluded.contains(key.as_str()) || value.is_null() {
+                continue;
+            }
+            body.insert(key.clone(), value.clone());
+        }
+        Some(Value::Object(body))
+    } else if method.http_body.is_empty() {
+        None
+    } else {
+        let camel = snake_to_camel(method.http_body);
+        let value = object
+            .get(camel.as_str())
+            .or_else(|| object.get(method.http_body));
+        Some(match value {
+            None => Value::Object(Map::new()),
+            Some(Value::Object(map)) => Value::Object(map.clone()),
+            Some(other) => Value::Object(Map::from_iter([(
+                method.http_body.to_string(),
+                other.clone(),
+            )])),
+        })
+    }
+}
+
+pub fn substitute_path(
+    pattern: &str,
+    request: &Value,
+    path_fields: &[PublicField],
+) -> Result<String, GestaltError> {
+    let Some(object) = request.as_object() else {
+        return Ok(pattern.to_string());
+    };
+    let mut out = pattern.to_string();
+    for field in path_fields {
+        let token = format!("{{{}}}", field.name);
+        let value = field_value(object, field).ok_or_else(|| {
+            GestaltError::new(
+                gestalt_error_code::INVALID_ARGUMENT,
+                format!("missing path parameter {}", field.name),
+            )
+        })?;
+        let segment = scalar_to_string(value).ok_or_else(|| {
+            GestaltError::new(
+                gestalt_error_code::INVALID_ARGUMENT,
+                format!("path parameter {} must be scalar", field.name),
+            )
+        })?;
+        out = out.replace(&token, &urlencoding::encode(&segment));
+    }
+    Ok(out)
+}
+
+fn is_operation_result(headers: &[(String, String)]) -> bool {
+    headers.iter().any(|(key, value)| {
+        key.eq_ignore_ascii_case(RESPONSE_KIND_HEADER)
+            && value.eq_ignore_ascii_case(RESPONSE_KIND_OPERATION_RESULT)
+    })
+}
+
+fn synthesize_operation_result_json(
+    status: u16,
+    body: &[u8],
+    headers: &[(String, String)],
+) -> Value {
+    use std::collections::BTreeMap;
+    let mut grouped: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (key, value) in headers {
+        if key.eq_ignore_ascii_case(RESPONSE_KIND_HEADER) {
+            continue;
+        }
+        grouped.entry(key.clone()).or_default().push(value.clone());
+    }
+    let header_json: Map<String, Value> = grouped
+        .into_iter()
+        .map(|(key, values)| {
+            (
+                key,
+                Value::Object(Map::from_iter([(
+                    "values".to_string(),
+                    Value::Array(values.into_iter().map(Value::String).collect()),
+                )])),
+            )
+        })
+        .collect();
+    Value::Object(Map::from_iter([
+        ("status".to_string(), Value::Number((status as i64).into())),
+        ("body".to_string(), Value::String(BASE64.encode(body))),
+        ("headers".to_string(), Value::Object(header_json)),
+    ]))
+}
+
+fn excluded_field_keys(method: &Method) -> std::collections::HashSet<String> {
+    let mut keys = std::collections::HashSet::new();
+    for field in method.http_path_fields {
+        for alias in field_aliases(field) {
+            keys.insert(alias);
+        }
+    }
+    for field in method.http_query_fields {
+        for alias in field_aliases(field) {
+            keys.insert(alias);
+        }
+    }
+    for name in method.fill.iter().chain(method.reject.iter()) {
+        keys.insert((*name).to_string());
+        keys.insert(snake_to_camel(name));
+    }
+    keys
+}
+
+fn field_aliases(field: &PublicField) -> Vec<String> {
+    vec![
+        field.name.to_string(),
+        field.json_name.to_string(),
+        snake_to_camel(field.name),
+    ]
+}
+
+fn field_value<'a>(object: &'a Map<String, Value>, field: &PublicField) -> Option<&'a Value> {
+    object
+        .get(field.json_name)
+        .or_else(|| object.get(field.name))
+        .or_else(|| object.get(&snake_to_camel(field.name)))
+}
+
+fn append_query_params(out: &mut Vec<(String, String)>, prefix: &str, value: &Value) {
+    match value {
+        Value::Null => {}
+        Value::Array(items) => {
+            for item in items {
+                append_query_params(out, prefix, item);
+            }
+        }
+        Value::Object(nested) => {
+            for (key, nested_value) in nested {
+                let nested_prefix = if prefix.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{prefix}.{key}")
+                };
+                append_query_params(out, &nested_prefix, nested_value);
+            }
+        }
+        _ => {
+            if let Some(text) = scalar_to_string(value) {
+                out.push((prefix.to_string(), text));
+            }
+        }
+    }
+}
+
+fn scalar_to_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => Some(text.clone()),
+        Value::Number(number) => Some(number.to_string()),
+        Value::Bool(flag) => Some(if *flag { "true" } else { "false" }.to_string()),
+        _ => None,
+    }
+}
+
+fn snake_to_camel(name: &str) -> String {
+    let mut parts = name.split('_');
+    let Some(head) = parts.next() else {
+        return name.to_string();
+    };
+    let mut out = head.to_string();
+    for part in parts {
+        if part.is_empty() {
+            continue;
+        }
+        let mut chars = part.chars();
+        if let Some(first) = chars.next() {
+            out.push(first.to_ascii_uppercase());
+            out.extend(chars);
+        }
+    }
+    out
+}
+
+fn extract_gateway_error_message(parsed: &Value) -> Option<String> {
+    if let Some(text) = parsed.get("message").and_then(|v| v.as_str()) {
+        let text = text.trim();
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
+    }
+    match parsed.get("error") {
+        Some(Value::String(text)) => {
+            let text = text.trim();
+            if text.is_empty() {
+                None
+            } else {
+                Some(text.to_string())
+            }
+        }
+        Some(Value::Object(err)) => err
+            .get("message")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
+fn resolve_gateway_error_code(status: u16, parsed: Option<&Value>) -> i32 {
+    let Some(parsed) = parsed else {
+        return http_status_to_gestalt_code(status);
+    };
+    if let Some(code) = parsed.get("code") {
+        match code {
+            Value::Number(number) => {
+                return number
+                    .as_i64()
+                    .and_then(|value| i32::try_from(value).ok())
+                    .unwrap_or_else(|| http_status_to_gestalt_code(status));
+            }
+            Value::String(name) => {
+                if let Some(code) = grpc_code_name_to_gestalt_code(name) {
+                    return code;
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(Value::Object(err)) = parsed.get("error") {
+        if let Some(Value::String(name)) = err.get("code") {
+            if let Some(code) = grpc_code_name_to_gestalt_code(name) {
+                return code;
+            }
+        }
+        if let Some(Value::Number(number)) = err.get("code") {
+            return number
+                .as_i64()
+                .and_then(|value| i32::try_from(value).ok())
+                .unwrap_or_else(|| http_status_to_gestalt_code(status));
+        }
+    }
+    http_status_to_gestalt_code(status)
+}
+
+fn grpc_code_name_to_gestalt_code(name: &str) -> Option<i32> {
+    let stripped = name.trim();
+    if let Ok(value) = stripped.parse::<i32>() {
+        return Some(value);
+    }
+    let direct = stripped.to_ascii_uppercase().replace('-', "_");
+    if let Some(code) = gestalt_code_from_normalized(&direct) {
+        return Some(code);
+    }
+    let normalized = snake_to_screaming(stripped);
+    gestalt_code_from_normalized(&normalized)
+}
+
+fn gestalt_code_from_normalized(normalized: &str) -> Option<i32> {
+    Some(match normalized {
+        "CANCELED" | "CANCELLED" => gestalt_error_code::CANCELLED,
+        "UNKNOWN" => gestalt_error_code::UNKNOWN,
+        "INVALID_ARGUMENT" => gestalt_error_code::INVALID_ARGUMENT,
+        "DEADLINE_EXCEEDED" => gestalt_error_code::DEADLINE_EXCEEDED,
+        "NOT_FOUND" => gestalt_error_code::NOT_FOUND,
+        "ALREADY_EXISTS" => gestalt_error_code::ALREADY_EXISTS,
+        "PERMISSION_DENIED" => gestalt_error_code::PERMISSION_DENIED,
+        "RESOURCE_EXHAUSTED" => gestalt_error_code::RESOURCE_EXHAUSTED,
+        "FAILED_PRECONDITION" => gestalt_error_code::FAILED_PRECONDITION,
+        "ABORTED" => gestalt_error_code::ABORTED,
+        "OUT_OF_RANGE" => gestalt_error_code::OUT_OF_RANGE,
+        "UNIMPLEMENTED" => gestalt_error_code::UNIMPLEMENTED,
+        "INTERNAL" => gestalt_error_code::INTERNAL,
+        "UNAVAILABLE" => gestalt_error_code::UNAVAILABLE,
+        "DATA_LOSS" => gestalt_error_code::DATA_LOSS,
+        "UNAUTHENTICATED" => gestalt_error_code::UNAUTHENTICATED,
+        _ => return None,
+    })
+}
+
+fn snake_to_screaming(name: &str) -> String {
+    let trimmed = name.trim();
+    let mut out = String::new();
+    for (i, ch) in trimmed.chars().enumerate() {
+        if ch == '-' {
+            out.push('_');
+            continue;
+        }
+        if ch.is_ascii_uppercase() && i > 0 {
+            let prev = trimmed.chars().nth(i - 1).unwrap();
+            if prev.is_ascii_lowercase() || prev.is_ascii_digit() {
+                out.push('_');
+            }
+        }
+        out.push(ch.to_ascii_uppercase());
+    }
+    out
+}
+
+fn http_status_to_gestalt_code(status: u16) -> i32 {
+    match status {
+        400 => gestalt_error_code::INVALID_ARGUMENT,
+        401 => gestalt_error_code::UNAUTHENTICATED,
+        403 => gestalt_error_code::PERMISSION_DENIED,
+        404 => gestalt_error_code::NOT_FOUND,
+        409 => gestalt_error_code::ALREADY_EXISTS,
+        412 => gestalt_error_code::FAILED_PRECONDITION,
+        429 => gestalt_error_code::RESOURCE_EXHAUSTED,
+        499 => gestalt_error_code::CANCELLED,
+        500 => gestalt_error_code::INTERNAL,
+        501 => gestalt_error_code::UNIMPLEMENTED,
+        503 => gestalt_error_code::UNAVAILABLE,
+        504 => gestalt_error_code::DEADLINE_EXCEEDED,
+        _ => gestalt_error_code::UNKNOWN,
+    }
+}

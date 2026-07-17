@@ -34,6 +34,7 @@ pub struct Method {
     pub reject: &'static [&'static str],
     pub encode_request_json: Option<EncodeRequestJson>,
     pub decode_response_json: Option<DecodeResponseJson>,
+    pub response_is_operation_result: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,6 +87,7 @@ pub const METHOD_APP_INVOKE: Method = Method {
     reject: &["run_as"],
     encode_request_json: Some(encode_invoke_request_json),
     decode_response_json: Some(decode_invoke_response_json),
+    response_is_operation_result: true,
 };
 
 pub const METHOD_APP_INVOKE_GRAPHQL: Method = Method {
@@ -104,4 +106,5 @@ pub const METHOD_APP_INVOKE_GRAPHQL: Method = Method {
     reject: &[],
     encode_request_json: Some(encode_invoke_graphql_request_json),
     decode_response_json: Some(decode_invoke_graphql_response_json),
+    response_is_operation_result: true,
 };

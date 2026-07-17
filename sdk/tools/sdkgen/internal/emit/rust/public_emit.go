@@ -83,6 +83,9 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/unary_transport.rs", []byte(publicUnaryTransportFile)); err != nil {
 		return nil, err
 	}
+	if err := set.Add("generated/transport_kernel.rs", []byte(transportKernelFile)); err != nil {
+		return nil, err
+	}
 	meta := newRenderer(idx, "metadata", "metadata", modulePublic, true)
 	meta.renderPublicMetadata(methods)
 	if err := set.Add("generated/metadata.rs", []byte(meta.assembleGenerated())); err != nil {
@@ -133,8 +136,11 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/app_client.rs", []byte(client.assembleGenerated())); err != nil {
 		return nil, err
 	}
+	if err := set.Add("grpc_transport.rs", []byte(renderGrpcTransport(plan.Filtered.Services))); err != nil {
+		return nil, err
+	}
 
-	modules := []string{"metadata", "rpc_support", "unary_transport", "app_client"}
+	modules := []string{"metadata", "rpc_support", "transport_kernel", "unary_transport", "app_client"}
 	if hasPublicJsonResult(plan.Filtered.Services) {
 		modules = append(modules, "invoke_support")
 	}
@@ -184,6 +190,160 @@ func hasPublicJsonResult(services []*model.Service) bool {
 		}
 	}
 	return false
+}
+
+func renderGrpcTransport(services []*model.Service) string {
+	var b strings.Builder
+	b.WriteString("//! tonic-based gRPC transport for the public Gestalt API.\n\n")
+	b.WriteString("use std::sync::Arc;\n")
+	b.WriteString("use std::time::Duration;\n\n")
+	b.WriteString("use prost::Message;\n")
+	b.WriteString("use tonic::service::Interceptor;\n")
+	b.WriteString("use tonic::transport::{Channel, ClientTlsConfig, Endpoint};\n")
+	b.WriteString("use tonic::{Request, Status};\n\n")
+	b.WriteString("use crate::codec::host_service::HostServiceChannel;\n")
+	b.WriteString("use crate::generated::v1;\n")
+	b.WriteString("use crate::public::auth::Auth;\n")
+	b.WriteString("use crate::public::generated::metadata::Method;\n")
+	b.WriteString("use crate::public::generated::rpc_support::GestaltError;\n")
+	b.WriteString("use crate::public::generated::unary_transport::UnaryTransport;\n")
+	b.WriteString("use crate::rpc_support::gestalt_error_code;\n\n")
+	b.WriteString("type AuthChannel = tonic::service::interceptor::InterceptedService<Channel, AuthInterceptor>;\n\n")
+	b.WriteString("#[derive(Clone)]\n")
+	b.WriteString("enum AppGrpcClient {\n")
+	b.WriteString("    Public(v1::app_client::AppClient<AuthChannel>),\n")
+	b.WriteString("    Bound(v1::app_client::AppClient<HostServiceChannel>),\n")
+	b.WriteString("}\n\n")
+	b.WriteString("/// gRPC transport implementing [`UnaryTransport`] for the public App surface.\n")
+	b.WriteString("#[derive(Clone)]\n")
+	b.WriteString("pub struct GrpcTransport {\n")
+	b.WriteString("    client: AppGrpcClient,\n")
+	b.WriteString("    timeout: Option<Duration>,\n")
+	b.WriteString("}\n\n")
+	b.WriteString("impl GrpcTransport {\n")
+	b.WriteString("    /// Creates a gRPC transport over an established public channel.\n")
+	b.WriteString("    pub fn new(channel: Channel, auth: Arc<dyn Auth>) -> Self {\n")
+	b.WriteString("        Self::from_client(AppGrpcClient::Public(v1::app_client::AppClient::new(\n")
+	b.WriteString("            auth_channel(channel, auth),\n")
+	b.WriteString("        )))\n")
+	b.WriteString("    }\n\n")
+	b.WriteString("    /// Creates a gRPC transport over the provider host-service relay.\n")
+	b.WriteString("    pub(crate) fn from_host_service(channel: HostServiceChannel) -> Self {\n")
+	b.WriteString("        Self::from_client(AppGrpcClient::Bound(v1::app_client::AppClient::new(\n")
+	b.WriteString("            channel,\n")
+	b.WriteString("        )))\n")
+	b.WriteString("    }\n\n")
+	b.WriteString("    fn from_client(client: AppGrpcClient) -> Self {\n")
+	b.WriteString("        Self {\n")
+	b.WriteString("            client,\n")
+	b.WriteString("            timeout: None,\n")
+	b.WriteString("        }\n")
+	b.WriteString("    }\n\n")
+	b.WriteString("    /// Applies a per-request deadline to unary calls.\n")
+	b.WriteString("    pub fn with_timeout(mut self, timeout: Duration) -> Self {\n")
+	b.WriteString("        self.timeout = Some(timeout);\n")
+	b.WriteString("        self\n")
+	b.WriteString("    }\n")
+	b.WriteString("}\n\n")
+	b.WriteString("impl UnaryTransport for GrpcTransport {\n")
+	b.WriteString("    fn unary<Req, Resp>(\n")
+	b.WriteString("        &self,\n")
+	b.WriteString("        method: &Method,\n")
+	b.WriteString("        request: &Req,\n")
+	b.WriteString("        response: &mut Resp,\n")
+	b.WriteString("    ) -> impl std::future::Future<Output = Result<(), GestaltError>> + Send\n")
+	b.WriteString("    where\n")
+	b.WriteString("        Req: Message + Send + Sync,\n")
+	b.WriteString("        Resp: Message + Default + Send,\n")
+	b.WriteString("    {\n")
+	b.WriteString("        let mut client = self.client.clone();\n")
+	b.WriteString("        let timeout = self.timeout;\n")
+	b.WriteString("        let request_bytes = request.encode_to_vec();\n\n")
+	b.WriteString("        async move {\n")
+	b.WriteString("            let tonic_response = match method.full_method {\n")
+
+	for _, svc := range services {
+		for _, m := range svc.Methods {
+			if m.Stream != model.Unary || m.Input == nil || m.Output == nil {
+				continue
+			}
+			wireInput := wireTypeName(m.Input.FullName)
+			clientMethod := escapeIdent(heckSnake(m.Name))
+			fmt.Fprintf(&b, "                %q => {\n", m.FullMethod)
+			fmt.Fprintf(&b, "                    let wire = v1::%s::decode(request_bytes.as_slice()).map_err(|err| {\n", wireInput)
+			b.WriteString("                        GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())\n")
+			b.WriteString("                    })?;\n")
+			b.WriteString("                    let mut tonic_request = Request::new(wire);\n")
+			b.WriteString("                    if let Some(timeout) = timeout {\n")
+			b.WriteString("                        tonic_request.set_timeout(timeout);\n")
+			b.WriteString("                    }\n")
+			b.WriteString("                    match &mut client {\n")
+			fmt.Fprintf(&b, "                        AppGrpcClient::Public(c) => c.%s(tonic_request).await,\n", clientMethod)
+			fmt.Fprintf(&b, "                        AppGrpcClient::Bound(c) => c.%s(tonic_request).await,\n", clientMethod)
+			b.WriteString("                    }\n")
+			b.WriteString("                    .map_err(GestaltError::from)?\n")
+			b.WriteString("                    .into_inner()\n")
+			b.WriteString("                }\n")
+		}
+	}
+
+	b.WriteString("                _ => {\n")
+	b.WriteString("                    return Err(GestaltError::new(\n")
+	b.WriteString("                        gestalt_error_code::UNIMPLEMENTED,\n")
+	b.WriteString("                        format!(\"unsupported public gRPC method {}\", method.full_method),\n")
+	b.WriteString("                    ));\n")
+	b.WriteString("                }\n")
+	b.WriteString("            };\n\n")
+	b.WriteString("            let bytes = tonic_response.encode_to_vec();\n")
+	b.WriteString("            *response = Resp::decode(bytes.as_slice())\n")
+	b.WriteString("                .map_err(|err| GestaltError::new(gestalt_error_code::INTERNAL, err.to_string()))?;\n")
+	b.WriteString("            Ok(())\n")
+	b.WriteString("        }\n")
+	b.WriteString("    }\n")
+	b.WriteString("}\n\n")
+	b.WriteString("/// Dials a public gRPC endpoint from an https:// or http:// address.\n")
+	b.WriteString("pub fn dial_public_grpc(address: &str) -> Result<Channel, GestaltError> {\n")
+	b.WriteString("    let endpoint = if let Some(rest) = address.strip_prefix(\"https://\") {\n")
+	b.WriteString("        Endpoint::from_shared(format!(\"https://{rest}\"))\n")
+	b.WriteString("            .map_err(transport_error)?\n")
+	b.WriteString("            .tls_config(ClientTlsConfig::new().with_native_roots())\n")
+	b.WriteString("            .map_err(transport_error)?\n")
+	b.WriteString("    } else if let Some(rest) = address.strip_prefix(\"http://\") {\n")
+	b.WriteString("        Endpoint::from_shared(format!(\"http://{rest}\")).map_err(transport_error)?\n")
+	b.WriteString("    } else {\n")
+	b.WriteString("        return Err(GestaltError::new(\n")
+	b.WriteString("            gestalt_error_code::INVALID_ARGUMENT,\n")
+	b.WriteString("            format!(\"invalid gRPC address {address:?}\"),\n")
+	b.WriteString("        ));\n")
+	b.WriteString("    };\n")
+	b.WriteString("    Ok(endpoint.connect_lazy())\n")
+	b.WriteString("}\n\n")
+	b.WriteString("fn auth_channel(channel: Channel, auth: Arc<dyn Auth>) -> AuthChannel {\n")
+	b.WriteString("    tonic::service::interceptor::InterceptedService::new(channel, AuthInterceptor { auth })\n")
+	b.WriteString("}\n\n")
+	b.WriteString("#[derive(Clone)]\n")
+	b.WriteString("struct AuthInterceptor {\n")
+	b.WriteString("    auth: Arc<dyn Auth>,\n")
+	b.WriteString("}\n\n")
+	b.WriteString("impl Interceptor for AuthInterceptor {\n")
+	b.WriteString("    fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, Status> {\n")
+	b.WriteString("        if let Some(authorization) = self.auth.authorization_header() {\n")
+	b.WriteString("            request.metadata_mut().insert(\n")
+	b.WriteString("                \"authorization\",\n")
+	b.WriteString("                authorization.parse().map_err(\n")
+	b.WriteString("                    |err: tonic::metadata::errors::InvalidMetadataValue| {\n")
+	b.WriteString("                        Status::invalid_argument(err.to_string())\n")
+	b.WriteString("                    },\n")
+	b.WriteString("                )?,\n")
+	b.WriteString("            );\n")
+	b.WriteString("        }\n")
+	b.WriteString("        Ok(request)\n")
+	b.WriteString("    }\n")
+	b.WriteString("}\n\n")
+	b.WriteString("fn transport_error(err: tonic::transport::Error) -> GestaltError {\n")
+	b.WriteString("    GestaltError::new(gestalt_error_code::UNAVAILABLE, err.to_string())\n")
+	b.WriteString("}\n")
+	return b.String()
 }
 
 func markConversionNeeds(idx *index, services []*model.Service) {
@@ -307,6 +467,7 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("    pub reject: &'static [&'static str],\n")
 	r.body.WriteString("    pub encode_request_json: Option<EncodeRequestJson>,\n")
 	r.body.WriteString("    pub decode_response_json: Option<DecodeResponseJson>,\n")
+	r.body.WriteString("    pub response_is_operation_result: bool,\n")
 	r.body.WriteString("}\n\n")
 	r.body.WriteString("#[derive(Clone, Debug, PartialEq, Eq)]\n")
 	r.body.WriteString("pub struct PublicField {\n")
@@ -352,6 +513,7 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 			r.body.WriteString("    encode_request_json: None,\n")
 			r.body.WriteString("    decode_response_json: None,\n")
 		}
+		fmt.Fprintf(&r.body, "    response_is_operation_result: %t,\n", publicsurface.ResponseIsOperationResult(pm))
 		r.body.WriteString("};\n\n")
 	}
 }

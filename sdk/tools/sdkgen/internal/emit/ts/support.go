@@ -40,3 +40,8 @@ var restRequestMappingFile string
 //
 //go:embed transport_support.ts
 var transportSupportFile string
+
+// transportKernelFile is the schema-derived public REST transport kernel.
+//
+//go:embed transport_kernel.ts
+var transportKernelFile string

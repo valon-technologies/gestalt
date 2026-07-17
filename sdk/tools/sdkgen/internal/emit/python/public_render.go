@@ -136,7 +136,8 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("    http_path_fields: tuple[PublicField, ...] = ()\n")
 	r.body.WriteString("    http_query_fields: tuple[PublicField, ...] = ()\n")
 	r.body.WriteString("    fill: tuple[str, ...] = ()\n")
-	r.body.WriteString("    reject: tuple[str, ...] = ()\n\n")
+	r.body.WriteString("    reject: tuple[str, ...] = ()\n")
+	r.body.WriteString("    response_is_operation_result: bool = False\n\n")
 	r.body.WriteString("@dataclass(frozen=True, slots=True)\n")
 	r.body.WriteString("class PublicField:\n")
 	r.body.WriteString("    name: str\n")
@@ -162,8 +163,16 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 		}
 		fmt.Fprintf(&r.body, "    fill=%s,\n", pythonStringTuple(publicsurface.FieldNames(pm.ServerFilled)))
 		fmt.Fprintf(&r.body, "    reject=%s,\n", pythonStringTuple(publicsurface.FieldNames(pm.Rejected)))
+		fmt.Fprintf(&r.body, "    response_is_operation_result=%s,\n", pythonBool(publicsurface.ResponseIsOperationResult(pm)))
 		r.body.WriteString(")\n\n")
 	}
+}
+
+func pythonBool(v bool) string {
+	if v {
+		return "True"
+	}
+	return "False"
 }
 
 func pythonPublicFieldTuple(fields []publicsurface.PublicField) string {

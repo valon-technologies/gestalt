@@ -131,9 +131,6 @@ export function buildRestBody(
   if (!http) {
     return undefined;
   }
-  if (http.verb === "GET" || http.verb === "DELETE") {
-    return undefined;
-  }
   if (http.body === "*") {
     const excluded = excludedFieldKeys(http);
     for (const name of [...method.fill, ...method.reject]) {
@@ -142,7 +139,7 @@ export function buildRestBody(
     }
     const body: Record<string, JsonValue> = {};
     for (const [key, value] of Object.entries(request)) {
-      if (excluded.has(key) || value === undefined) {
+      if (excluded.has(key) || value === undefined || value === null) {
         continue;
       }
       body[key] = value;
@@ -155,5 +152,11 @@ export function buildRestBody(
   const value =
     fieldValue(request, http.body, snakeToCamel(http.body)) ??
     request[http.body];
-  return value === undefined ? {} : value;
+  if (value === undefined || value === null) {
+    return {};
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value;
+  }
+  return { [http.body]: value };
 }

@@ -63,3 +63,16 @@ func TestRenderPublicMetadataWireJSONCallbacks(t *testing.T) {
 		}
 	}
 }
+
+func TestRustTransportKernelEmitted(t *testing.T) {
+	t.Parallel()
+	got := transportKernelFile
+	if !strings.Contains(got, "pub fn prepare_rest_request(") {
+		t.Fatalf("missing prepare_rest_request in transport kernel")
+	}
+	for _, forbidden := range []string{"reqwest", "tonic", "hyper::"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("transport kernel must not import %s", forbidden)
+		}
+	}
+}
