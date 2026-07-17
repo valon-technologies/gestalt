@@ -10,6 +10,7 @@ import type {
   ProviderIdentity,
   StartRuntimeProviderResponse,
 } from "../../runtime.ts";
+import { sanitizeJsonObject } from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
 
 export function toWireConfigureProviderRequest(
@@ -17,7 +18,9 @@ export function toWireConfigureProviderRequest(
 ): wire.ConfigureProviderRequest {
   return create(wire.ConfigureProviderRequestSchema, {
     name: value.name ?? "",
-    ...(value.config !== undefined ? { config: value.config } : {}),
+    ...(value.config !== undefined
+      ? { config: sanitizeJsonObject(value.config) }
+      : {}),
     protocolVersion: value.protocolVersion ?? 0,
   });
 }

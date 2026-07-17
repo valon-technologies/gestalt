@@ -184,8 +184,11 @@ func (r *renderer) fnFromWire(ref *model.TypeRef) string {
 // toWireExpr renders the wire-bound conversion of a singular value.
 func (r *renderer) toWireExpr(ref *model.TypeRef, expr string) string {
 	switch ref.Kind {
-	case model.KindScalar, model.KindBytes, model.KindJSONStruct:
+	case model.KindScalar, model.KindBytes:
 		return expr
+	case model.KindJSONStruct:
+		r.use("sanitizeJsonObject", false)
+		return "sanitizeJsonObject(" + expr + ")"
 	case model.KindEnum:
 		return expr + " as wire." + r.wireEnum(ref.Enum)
 	case model.KindJSONNull:
@@ -222,10 +225,10 @@ func (r *renderer) wireEnum(fullName string) string {
 	return localName(fullName)
 }
 
-// identityToWire also covers google.protobuf.Struct: protobuf-es renders
-// Struct fields as plain JsonObject on the wire types.
+// identityToWire covers scalars and bytes. google.protobuf.Struct values are
+// sanitized before wire encoding so sparse Init objects stay valid.
 func identityToWire(ref *model.TypeRef) bool {
-	return ref.Kind == model.KindScalar || ref.Kind == model.KindBytes || ref.Kind == model.KindJSONStruct
+	return ref.Kind == model.KindScalar || ref.Kind == model.KindBytes
 }
 
 func identityFromWire(ref *model.TypeRef) bool {

@@ -1,5 +1,5 @@
 import { create, fromJson, toJson } from "@bufbuild/protobuf";
-import type { JsonValue } from "@bufbuild/protobuf";
+import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 import {
   DurationSchema,
   ValueSchema,
@@ -115,11 +115,55 @@ export function fromWireTimestamp(value: Timestamp): Date {
   return timestampDate(value);
 }
 
+/**
+ * Normalizes JSON objects before protobuf Struct encoding. Undefined
+ * properties are omitted recursively so callers can pass sparse Init objects
+ * (for example pagination cursors) without producing invalid wire values.
+ */
+export function sanitizeJsonObject(value: Init<JsonObject>): JsonObject {
+  const out: JsonObject = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) {
+      out[key] = sanitizeJsonValue(entry);
+    }
+  }
+  return out;
+}
+
+/**
+ * Normalizes JSON before protobuf Value encoding. Undefined object properties
+ * are omitted recursively; undefined array elements become null.
+ */
+export function sanitizeJsonValue(value: Init<JsonValue>): JsonValue {
+  if (value === undefined) {
+    return null;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      item === undefined ? null : sanitizeJsonValue(item),
+    );
+  }
+  const out: Record<string, JsonValue> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) {
+      out[key] = sanitizeJsonValue(entry);
+    }
+  }
+  return out;
+}
+
 export function toWireValue(value: Init<JsonValue>): Value {
-  // Init<JsonValue> is structurally identical to JsonValue: JSON values have
-  // no required properties and map values stay required under Init. The cast
-  // spares the checker the recursive comparison.
-  return fromJson(ValueSchema, value as JsonValue);
+  return fromJson(ValueSchema, sanitizeJsonValue(value));
 }
 
 export function fromWireValue(value: Value): JsonValue {
