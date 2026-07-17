@@ -8,6 +8,7 @@ use crate::agent_provider::AgentToolRef;
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 use crate::proto::v1;
+use crate::rpc_support::GestaltError;
 
 /// Split a canonical subject ID such as `user:ada` into kind and id.
 pub fn parse_subject_id(subject_id: &str) -> Option<(&str, &str)> {
@@ -98,6 +99,13 @@ impl Request {
     /// Returns one resolved connection parameter by name.
     pub fn connection_param(&self, name: &str) -> Option<&str> {
         self.connection_params.get(name).map(String::as_str)
+    }
+
+    /// Returns a public Gestalt client bound to the current provider request.
+    pub async fn gestalt(
+        &self,
+    ) -> std::result::Result<crate::public::client::GestaltClient, GestaltError> {
+        crate::public::gestalt_from_context().await
     }
 }
 
