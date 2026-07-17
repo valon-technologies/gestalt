@@ -52,8 +52,8 @@ func InstallPublishedPackage(ctx context.Context, packagePath, destDir, configur
 }
 
 // ValidateInstalledPublishedPackage reports whether destDir contains a complete
-// published app install produced by InstallPublishedPackage.
-func ValidateInstalledPublishedPackage(destDir, configuredName string) error {
+// published app install produced by InstallPublishedPackage for expectedVersion.
+func ValidateInstalledPublishedPackage(destDir, configuredName, expectedVersion string) error {
 	destDir = strings.TrimSpace(destDir)
 	if destDir == "" {
 		return fmt.Errorf("destination directory is required")
@@ -75,6 +75,14 @@ func ValidateInstalledPublishedPackage(destDir, configuredName string) error {
 		return err
 	}
 	manifest = packageio.ResolveManifestLocalReferences(manifest, manifestPath)
+
+	expectedVersion = strings.TrimSpace(expectedVersion)
+	if expectedVersion != "" {
+		manifestVersion := strings.TrimSpace(manifest.Version)
+		if manifestVersion != expectedVersion {
+			return fmt.Errorf("installed manifest version %q does not match expected version %q", manifestVersion, expectedVersion)
+		}
+	}
 
 	if isAssetOnly(manifest) {
 		if manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {

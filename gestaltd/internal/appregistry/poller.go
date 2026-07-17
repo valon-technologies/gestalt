@@ -447,7 +447,7 @@ func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceI
 			if recordedPath == "" {
 				recordedPath = MaterializedPath(p.AppMaterializer.ArtifactsDir, appName, version)
 			}
-			ready, err := isMaterializedPackage(recordedPath, appName)
+			ready, err := isMaterializedPackage(recordedPath, appName, version)
 			if err != nil {
 				return fmt.Errorf("validate materialized %s@%s: %w", appName, version, err)
 			}

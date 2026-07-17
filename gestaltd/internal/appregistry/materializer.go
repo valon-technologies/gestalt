@@ -52,7 +52,7 @@ func (m *Materializer) Materialize(ctx context.Context, installation *core.AppIn
 	}
 
 	destDir := MaterializedPath(artifactsDir, appName, version)
-	if materialized, err := isMaterializedPackage(destDir, appName); err != nil {
+	if materialized, err := isMaterializedPackage(destDir, appName, version); err != nil {
 		return "", err
 	} else if materialized {
 		return destDir, nil
@@ -124,7 +124,7 @@ func (m *Materializer) Materialize(ctx context.Context, installation *core.AppIn
 	return destDir, nil
 }
 
-func isMaterializedPackage(destDir, appName string) (bool, error) {
+func isMaterializedPackage(destDir, appName, version string) (bool, error) {
 	destDir = strings.TrimSpace(destDir)
 	if destDir == "" {
 		return false, nil
@@ -135,7 +135,7 @@ func isMaterializedPackage(destDir, appName string) (bool, error) {
 		}
 		return false, fmt.Errorf("stat materialized path %s: %w", destDir, err)
 	}
-	if err := operator.ValidateInstalledPublishedPackage(destDir, appName); err == nil {
+	if err := operator.ValidateInstalledPublishedPackage(destDir, appName, version); err == nil {
 		return true, nil
 	}
 	return false, nil

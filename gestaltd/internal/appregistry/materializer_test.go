@@ -122,6 +122,57 @@ func TestMaterializer_retries_after_partial_install(t *testing.T) {
 	}
 }
 
+func TestMaterializer_retries_when_manifest_version_mismatches(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	fixture := registrytest.NewInstallFixture(t)
+	artifactsDir := t.TempDir()
+
+	materializer := &appregistry.Materializer{
+		Registries: map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		},
+		Reader:       fixture.Reader,
+		ArtifactsDir: artifactsDir,
+	}
+	installation := &core.AppInstallation{
+		AppName:  "g-issues",
+		Version:  fixture.Version,
+		Registry: "toolshed",
+	}
+
+	destDir, err := materializer.Materialize(ctx, installation)
+	if err != nil {
+		t.Fatalf("first Materialize: %v", err)
+	}
+
+	manifestPath := filepath.Join(destDir, "manifest.yaml")
+	_, manifest, err := packageio.ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile: %v", err)
+	}
+	manifest.Version = "0.0.0-snapshot.gwrong"
+	updated, err := packageio.EncodeManifestFormat(manifest, packageio.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, updated, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if _, err := materializer.Materialize(ctx, installation); err != nil {
+		t.Fatalf("second Materialize: %v", err)
+	}
+	_, manifest, err = packageio.ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile after rematerialize: %v", err)
+	}
+	if manifest.Version != fixture.Version {
+		t.Fatalf("manifest.Version = %q, want %q", manifest.Version, fixture.Version)
+	}
+}
+
 func TestMaterializer_rejects_digest_mismatch(t *testing.T) {
 	t.Parallel()
 
