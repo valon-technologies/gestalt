@@ -8,6 +8,99 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
+func TestRenderPublicTypesWebUsesSparseInit(t *testing.T) {
+	t.Parallel()
+
+	input := &model.Message{
+		FullName:  "gestalt.provider.v1.AppInvokeRequest",
+		Name:      "AppInvokeRequest",
+		ProtoFile: "sdk/proto/v1/app.proto",
+		Fields: []*model.Field{
+			{Name: "app", JSONName: "app", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "operation", JSONName: "operation", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "connection", JSONName: "connection", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "instance", JSONName: "instance", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "idempotency_key", JSONName: "idempotencyKey", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "credential_mode", JSONName: "credentialMode", Kind: model.KindScalar, Scalar: model.ScalarString},
+		},
+	}
+	graphqlInput := &model.Message{
+		FullName:  "gestalt.provider.v1.AppInvokeGraphQLRequest",
+		Name:      "AppInvokeGraphQLRequest",
+		ProtoFile: "sdk/proto/v1/app.proto",
+		Fields: []*model.Field{
+			{Name: "app", JSONName: "app", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "query", JSONName: "query", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "context", JSONName: "context", Kind: model.KindMessage},
+		},
+	}
+	view := &publicsurface.View{
+		Services: []*publicsurface.Service{{
+			Service: &model.Service{
+				FullName:  "gestalt.provider.v1.App",
+				Name:      "App",
+				ProtoFile: "sdk/proto/v1/app.proto",
+			},
+			PublicMethods: []*model.Method{
+				{
+					Name:  "Invoke",
+					Input: input,
+				},
+				{
+					Name:  "InvokeGraphQL",
+					Input: graphqlInput,
+				},
+			},
+		}},
+	}
+
+	out := renderPublicTypes(view, WebPublicImports())
+	for _, want := range []string{
+		`import type { Init } from "../runtime/rpc_support.ts"`,
+		"export type PublicAppInvokeRequest = Init<AppInvokeRequest>",
+		"export type PublicAppInvokeGraphQLRequest = Init<AppInvokeGraphQLRequest>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in web public types:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Partial<Pick<") {
+		t.Fatalf("web public types must not use field-specific Partial overrides:\n%s", out)
+	}
+}
+
+func TestRenderPublicTypesServerDoesNotUseSparseInit(t *testing.T) {
+	t.Parallel()
+
+	input := &model.Message{
+		FullName:  "gestalt.provider.v1.AppInvokeRequest",
+		Name:      "AppInvokeRequest",
+		ProtoFile: "sdk/proto/v1/app.proto",
+		Fields: []*model.Field{
+			{Name: "app", JSONName: "app", Kind: model.KindScalar, Scalar: model.ScalarString},
+			{Name: "operation", JSONName: "operation", Kind: model.KindScalar, Scalar: model.ScalarString},
+		},
+	}
+	view := &publicsurface.View{
+		Services: []*publicsurface.Service{{
+			Service: &model.Service{
+				FullName:  "gestalt.provider.v1.App",
+				Name:      "App",
+				ProtoFile: "sdk/proto/v1/app.proto",
+			},
+			PublicMethods: []*model.Method{{
+				Name:  "Invoke",
+				Input: input,
+			}},
+		}},
+	}
+
+	out := renderPublicTypes(view, ServerPublicImports())
+	if strings.Contains(out, "Init<") {
+		t.Fatalf("server public types must not use Init:\n%s", out)
+	}
+}
+
 func TestRenderPublicConvertersAlwaysEmitWireMessages(t *testing.T) {
 	t.Parallel()
 

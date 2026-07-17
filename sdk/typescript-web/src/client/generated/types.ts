@@ -10,13 +10,12 @@ import type {
   AppInvokeGraphQLRequest,
   AppInvokeRequest,
 } from "../runtime/native-types.ts";
+import type { Init } from "../runtime/rpc_support.ts";
 
-export type PublicAppInvokeRequest = Omit<
-  AppInvokeRequest,
-  "context" | "runAs"
+export type PublicAppInvokeRequest = Init<
+  Omit<AppInvokeRequest, "context" | "runAs">
 >;
 
-export type PublicAppInvokeGraphQLRequest = Omit<
-  AppInvokeGraphQLRequest,
-  "context"
+export type PublicAppInvokeGraphQLRequest = Init<
+  Omit<AppInvokeGraphQLRequest, "context">
 >;

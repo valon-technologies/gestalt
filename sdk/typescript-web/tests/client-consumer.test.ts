@@ -16,6 +16,13 @@ test("web client auth helpers are available", () => {
   expect(unauthenticated()).toEqual({ kind: "unauthenticated" });
 });
 
+test("package.json declares Vite 8 in peerDependencies", async () => {
+  const pkg = await Bun.file(
+    new URL("../package.json", import.meta.url),
+  ).json();
+  expect(pkg.peerDependencies.vite).toContain("^8.0.0");
+});
+
 test("generated AppClient and error types are exported from gestalt-web", () => {
   expect(AppClient).toBeDefined();
   expect(GestaltError).toBeDefined();

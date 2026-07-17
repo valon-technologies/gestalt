@@ -55,7 +55,11 @@ export class AppClient {
     callOptions?: PublicUnaryCallOptions,
   ): Promise<T> {
     const response = await this.invokeRaw(request, callOptions);
-    return decodeAppResult<T>(request.app, request.operation, response);
+    return decodeAppResult<T>(
+      request.app ?? "",
+      request.operation ?? "",
+      response,
+    );
   }
 
   async invokeGraphQL(
