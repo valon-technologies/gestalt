@@ -14,6 +14,8 @@ from ._protocol import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from typing_extensions import dataclass_transform
+
+    from gestalt.public.client import GestaltClient
 else:
     try:
         from typing import dataclass_transform
@@ -134,6 +136,13 @@ class Request:
         from .app import App
 
         return App.connect(context=self._native_context(), timeout=timeout)
+
+    def gestalt(self) -> "GestaltClient":
+        """Return the public Gestalt client bound to this request's relay context."""
+
+        from gestalt.public.bound import gestalt_from_request
+
+        return gestalt_from_request(self)
 
     def agent(self, *, timeout: float | None = None) -> "Agent":
         """Return a generated :class:`gestalt.agent.Agent` client bound to this
