@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 
 import {
   AppClient,
+  GestaltError,
+  InvokeError,
   bearer,
   createGestaltClient,
   session,
@@ -14,15 +16,26 @@ test("web client auth helpers are available", () => {
   expect(unauthenticated()).toEqual({ kind: "unauthenticated" });
 });
 
-test("generated AppClient is exported from gestalt-web", () => {
+test("generated AppClient and error types are exported from gestalt-web", () => {
   expect(AppClient).toBeDefined();
+  expect(GestaltError).toBeDefined();
+  expect(InvokeError).toBeDefined();
 });
 
-test("createGestaltClient rejects until REST transport lands in SDK-4", async () => {
-  await expect(
-    createGestaltClient({
-      address: "https://gestalt.example.test",
-      auth: session(),
-    }),
-  ).rejects.toThrow("SDK-4");
+test("createGestaltClient returns a browser REST client", async () => {
+  const client = createGestaltClient({
+    address: "https://gestalt.example.test",
+    auth: session(),
+    fetch: (async () =>
+      new Response(
+        JSON.stringify({
+          status: 200,
+          body: btoa(JSON.stringify({ status: "success", data: {} })),
+          headers: {},
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch,
+  });
+  expect(client.address).toBe("https://gestalt.example.test");
+  expect(client.app).toBeInstanceOf(AppClient);
 });

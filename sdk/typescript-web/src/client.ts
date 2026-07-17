@@ -4,8 +4,10 @@
  * @module client
  */
 
+import { normalizeAddress } from "./address.ts";
 import { AppClient } from "./client/generated/app_client.ts";
 import type { UnaryTransport } from "./client/generated/unary_transport.ts";
+import { createRestUnaryTransport } from "./rest_transport.ts";
 
 export interface SessionAuth {
   readonly kind: "session";
@@ -25,6 +27,8 @@ export type Auth = SessionAuth | BearerAuth | Unauthenticated;
 export interface ClientOptions {
   address?: string | URL;
   auth: Auth;
+  /** Optional fetch override for testing. */
+  fetch?: typeof fetch;
 }
 
 export interface GestaltClient {
@@ -44,13 +48,17 @@ export function unauthenticated(): Unauthenticated {
   return { kind: "unauthenticated" };
 }
 
-export async function createGestaltClient(
-  options: ClientOptions,
-): Promise<GestaltClient> {
+export function createGestaltClient(options: ClientOptions): GestaltClient {
   const address = resolveAddress(options.address);
   return {
     address,
-    app: new AppClient(await createWebTransport(options)),
+    app: new AppClient(
+      createRestUnaryTransport({
+        baseUrl: address,
+        auth: options.auth,
+        ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+      }),
+    ),
   };
 }
 
@@ -61,13 +69,5 @@ function resolveAddress(address: string | URL | undefined): string {
     }
     return globalThis.location.origin;
   }
-  return typeof address === "string" ? address : address.toString();
-}
-
-async function createWebTransport(
-  _options: ClientOptions,
-): Promise<UnaryTransport> {
-  throw new Error(
-    "createGestaltClient REST transport is not implemented yet; use SDK-4",
-  );
+  return normalizeAddress(address);
 }

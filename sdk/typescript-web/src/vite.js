@@ -116,6 +116,7 @@ function gestaltConfig(env, command) {
       ...binding,
       proxy: {
         "/api/v1": proxy,
+        "/api/v2": proxy,
       },
     },
     preview: binding,
