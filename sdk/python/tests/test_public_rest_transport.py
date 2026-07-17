@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json as json_module
 import unittest
+from collections.abc import Mapping
 from typing import Any
 from unittest import mock
 
 import httpx
 from google.protobuf import json_format
-from google.protobuf.struct_pb2 import Struct
 
 from gestalt._gen.v1 import app_pb2
 from gestalt.public.auth import auth_to_provider, bearer, unauthenticated
@@ -25,7 +25,16 @@ class _RecordingTransport:
         self._handler = handler
         self.calls: list[dict[str, Any]] = []
 
-    def request(self, method, url, *, headers=None, params=None, json=None, timeout=None):
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: str | None = None,
+        json: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> httpx.Response:
         self.calls.append(
             {
                 "method": method,
@@ -36,14 +45,16 @@ class _RecordingTransport:
                 "timeout": timeout,
             }
         )
-        return self._handler(method, url, headers=headers, params=params, json=json)
+        return self._handler(
+            method, url, headers=headers, params=params, json=json, timeout=timeout
+        )
 
 
 class PublicRestTransportTests(unittest.TestCase):
     def test_rest_transport_maps_requests_and_gateway_errors(self) -> None:
         calls: list[dict[str, Any]] = []
 
-        def handler(method, url, *, headers=None, params=None, json=None):
+        def handler(method, url, *, headers=None, params=None, json=None, **kwargs):
             calls.append(
                 {
                     "method": method,
@@ -70,16 +81,14 @@ class PublicRestTransportTests(unittest.TestCase):
         transport = RestUnaryTransport(
             "https://gestalt.test/",
             auth_to_provider(bearer(lambda: "token-123")),
-            client=client,  # type: ignore[arg-type]
+            client=client,
         )
-        params = Struct()
-        params.update({"ok": True})
         request = app_pb2.AppInvokeRequest(
             app="example",
             operation="sync",
-            params=params,
             idempotency_key="key-1",
         )
+        request.params["ok"] = True
         response = transport.unary(
             METHOD_APP_INVOKE,
             request,
@@ -109,7 +118,7 @@ class PublicRestTransportTests(unittest.TestCase):
         gateway_transport = RestUnaryTransport(
             "https://gestalt.test/",
             auth_to_provider(bearer(lambda: "token")),
-            client=gateway_client,  # type: ignore[arg-type]
+            client=gateway_client,
         )
         with self.assertRaises(GestaltError) as caught:
             gateway_transport.unary(
@@ -134,7 +143,7 @@ class PublicRestTransportTests(unittest.TestCase):
         transport = RestUnaryTransport(
             "https://gestalt.test/",
             auth_to_provider(bearer(lambda: token["value"])),
-            client=_RecordingTransport(handler),  # type: ignore[arg-type]
+            client=_RecordingTransport(handler),
         )
         request = app_pb2.AppInvokeRequest(app="example", operation="sync")
         transport.unary(METHOD_APP_INVOKE, request, app_pb2.OperationResult)
@@ -155,7 +164,7 @@ class PublicRestTransportTests(unittest.TestCase):
         transport = RestUnaryTransport(
             "https://gestalt.test/",
             auth_to_provider(unauthenticated()),
-            client=_RecordingTransport(handler),  # type: ignore[arg-type]
+            client=_RecordingTransport(handler),
         )
         request = app_pb2.AppInvokeRequest(app="example", operation="sync")
         transport.unary(METHOD_APP_INVOKE, request, app_pb2.OperationResult)
@@ -185,7 +194,15 @@ class PublicRestTransportTests(unittest.TestCase):
                 pass
 
     def test_create_gestalt_client_invokes_through_generated_app_client(self) -> None:
-        def handler(_method, _url, *, headers=None, json=None, **_kwargs):
+        def handler(
+            _method: str,
+            _url: str,
+            *,
+            headers: Mapping[str, str] | None = None,
+            json: dict[str, Any] | None = None,
+            **_kwargs: object,
+        ) -> httpx.Response:
+            assert headers is not None
             self.assertEqual(headers.get("Authorization"), "Bearer token")
             self.assertEqual(json, {"params": {"id": "plan-28"}})
             return httpx.Response(
@@ -204,7 +221,7 @@ class PublicRestTransportTests(unittest.TestCase):
             address="https://valon.tools",
             transport=rest(),
             auth=bearer(lambda: "token"),
-            httpx_client=_RecordingTransport(handler),  # type: ignore[arg-type]
+            httpx_client=_RecordingTransport(handler),
         ) as client:
             result = client.app.invoke(
                 AppInvokeRequest(

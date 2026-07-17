@@ -15,7 +15,7 @@ from gestalt.public.generated.app_client import AppClient
 from .address import normalize_address
 from .auth import Auth, AuthProvider, auth_to_provider
 from .grpc_transport import GrpcUnaryTransport, grpc_channel_from_address
-from .rest_transport import RestUnaryTransport
+from .rest_transport import HttpClient, RestUnaryTransport
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +57,7 @@ def create_gestalt_client(
     address: str,
     transport: RestTransport,
     auth: Auth,
-    httpx_client: object | None = None,
+    httpx_client: HttpClient | None = None,
 ) -> Iterator[GestaltClient]: ...
 
 
@@ -78,7 +78,7 @@ def create_gestalt_client(
     transport: RestTransport | GrpcTransport,
     auth: Auth,
     channel: _grpc.Channel | None = None,
-    httpx_client: object | None = None,
+    httpx_client: HttpClient | None = None,
 ) -> Iterator[GestaltClient]:
     """Create an external public Gestalt client over REST or gRPC."""
     normalized = normalize_address(address)
@@ -100,12 +100,12 @@ def _build_rest_client(
     base_url: str,
     auth: AuthProvider,
     *,
-    httpx_client: object | None,
+    httpx_client: HttpClient | None,
 ) -> GestaltClient:
     transport = RestUnaryTransport(
         base_url,
         auth,
-        client=httpx_client,  # type: ignore[arg-type]
+        client=httpx_client,
     )
     return GestaltClient(app=AppClient(transport), _close=transport.close)
 

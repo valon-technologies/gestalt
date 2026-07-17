@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, TypeVar, cast
+from collections.abc import Mapping
+from typing import Any, Protocol, TypeVar, cast
 
 import httpx
 from google.protobuf import json_format
@@ -24,6 +25,19 @@ from .rest_mapping import (
 ResponseT = TypeVar("ResponseT", bound=Message)
 
 
+class HttpClient(Protocol):
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: str | None = None,
+        json: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> httpx.Response: ...
+
+
 class RestUnaryTransport:
     """Protobuf-JSON REST transport implementing the generated UnaryTransport protocol."""
 
@@ -32,7 +46,7 @@ class RestUnaryTransport:
         base_url: str,
         auth: AuthProvider,
         *,
-        client: httpx.Client | None = None,
+        client: HttpClient | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._auth = auth
