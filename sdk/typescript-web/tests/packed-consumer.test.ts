@@ -54,10 +54,12 @@ function installPackedFixture(tarballPath: string): string {
   writeFileSync(
     join(fixtureDir, "consumer.ts"),
     [
-      'import { bearer, session, type Auth } from "@valon-technologies/gestalt-web";',
+      'import { bearer, session, type Auth, GestaltError, InvokeError } from "@valon-technologies/gestalt-web";',
       "const auth: Auth = session();",
-      "void bearer(() => \"token\");",
+      'void bearer(() => "token");',
       "void auth;",
+      "void GestaltError;",
+      "void InvokeError;",
       "",
     ].join("\n"),
   );

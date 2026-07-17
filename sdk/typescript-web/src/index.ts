@@ -27,6 +27,13 @@ export {
   type Unauthenticated,
 } from "./client.ts";
 
+export {
+  GestaltError,
+  GestaltErrorCode,
+  toGestaltError,
+} from "./client/runtime/rpc_support.ts";
+export { InvokeError } from "./client/runtime/invoke_support.ts";
+
 export { AppClient } from "./client/generated/app_client.ts";
 export { PUBLIC_METHODS } from "./client/generated/methods.ts";
 export type { PublicMethod, PublicMethodHttp } from "./client/generated/methods.ts";
@@ -34,4 +41,7 @@ export type {
   PublicAppInvokeGraphQLRequest,
   PublicAppInvokeRequest,
 } from "./client/generated/types.ts";
-export type { UnaryTransport } from "./client/generated/unary_transport.ts";
+export type {
+  PublicUnaryCallOptions,
+  UnaryTransport,
+} from "./client/generated/unary_transport.ts";

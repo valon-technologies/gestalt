@@ -86,7 +86,7 @@ describe("gestalt vite plugin", () => {
     expect(config.build.outDir).toBe("dist");
   });
 
-  test("dev env applies gestaltd dev contract and /api/v1 proxy", async () => {
+  test("dev env applies gestaltd dev contract and API proxies", async () => {
     const config = await resolveConfig(
       {
         configFile: false,
@@ -113,6 +113,12 @@ describe("gestalt vite plugin", () => {
     expect(config.preview.strictPort).toBe(true);
     expect(config.preview.allowedHosts).toBe(true);
     expect(config.server.proxy?.["/api/v1"]).toEqual(
+      expect.objectContaining({
+        target: "http://127.0.0.1:65003",
+        changeOrigin: true,
+      }),
+    );
+    expect(config.server.proxy?.["/api/v2"]).toEqual(
       expect.objectContaining({
         target: "http://127.0.0.1:65003",
         changeOrigin: true,
@@ -177,8 +183,40 @@ describe("gestalt vite plugin", () => {
       headers: { host: "127.0.0.1:5173" },
     });
     expect(authorization).toBe("Bearer test-token");
+  });
 
-    expect(authorization).toBe("Bearer test-token");
+  test("API proxy does not overwrite an explicit Authorization header", async () => {
+    const config = await resolveConfig(
+      {
+        configFile: false,
+        root: fixtureRoot,
+        plugins: [
+          gestalt({
+            env: {
+              GESTALT_DEV_PORT: "5173",
+              GESTALT_DEV_API_PROXY_TOKEN: "proxy-token",
+            },
+          }),
+        ],
+      },
+      "serve",
+    );
+    for (const prefix of ["/api/v1", "/api/v2"] as const) {
+      const proxy = config.server.proxy?.[prefix];
+      if (!proxy || typeof proxy === "string" || !proxy.configure) {
+        throw new Error(`expected configurable API proxy for ${prefix}`);
+      }
+      const proxyServer = new EventEmitter();
+      proxy.configure(proxyServer as never, {} as never);
+      let authorization: string | undefined;
+      const proxyReq = {
+        setHeader: (_name: string, value: string) => (authorization = value),
+      };
+      proxyServer.emit("proxyReq", proxyReq, {
+        headers: { authorization: "Bearer explicit-token" },
+      });
+      expect(authorization).toBeUndefined();
+    }
   });
 
   test("live dev server serves mount with foreign Host and injected base tag", async () => {
