@@ -51,8 +51,10 @@ directory at the configured mount path.
   `GESTALT_BUILD_STATIC` during preparation.
 - `gestaltd serve --locked` serves prepared `static/` artifacts; local `run:`
   commands enable hot reload through the gestaltd dev proxy.
-- App frontends call the same `/api/v1` and `/mcp` surfaces as the CLI; there
-  is no separate app-local browser API.
+- Browser app UIs use the Gestalt web SDK with `session()` and call app operations
+  on `/api/v2` with `credentials: "include"` (HttpOnly `session_token` cookie).
+- Management and login routes remain on `/api/v1`; MCP is available at `/mcp`.
+  There is no separate app-local browser API.
 
 For packaging and release, see
 [Applications](/applications) and
