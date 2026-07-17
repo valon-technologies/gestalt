@@ -45,6 +45,11 @@ export {
   type SubjectInput,
 } from "./api.ts";
 export {
+  type BoundGestalt,
+  type BoundHostService,
+  type RequestGestaltOptions,
+} from "./bound-gestalt.ts";
+export {
   type JsonInput,
   type JsonObject,
   type JsonObjectInput,
