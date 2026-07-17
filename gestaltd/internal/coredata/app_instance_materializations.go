@@ -113,7 +113,7 @@ func (s *AppInstanceMaterializationService) Acknowledge(ctx context.Context, mat
 	return recordToAppInstanceMaterialization(rec), nil
 }
 
-func (s *AppInstanceMaterializationService) MarkMaterialized(ctx context.Context, instanceID, app, version, materializedPath string, materializedAt time.Time) (*core.AppInstanceMaterialization, error) {
+func (s *AppInstanceMaterializationService) MarkMaterialized(ctx context.Context, instanceID, app, version string, materializedAt time.Time) (*core.AppInstanceMaterialization, error) {
 	return s.updateTimestamps(ctx, instanceID, app, version, func(rec idb.Record) idb.Record {
 		if materializedAt.IsZero() {
 			materializedAt = time.Now().UTC().Truncate(time.Millisecond)
@@ -121,7 +121,6 @@ func (s *AppInstanceMaterializationService) MarkMaterialized(ctx context.Context
 			materializedAt = materializedAt.UTC().Truncate(time.Millisecond)
 		}
 		rec["materialized_at"] = materializedAt
-		rec["materialized_path"] = strings.TrimSpace(materializedPath)
 		return rec
 	})
 }
@@ -194,13 +193,12 @@ func (s *AppInstanceMaterializationService) findByInstanceAppVersion(ctx context
 
 func recordToAppInstanceMaterialization(rec idb.Record) *core.AppInstanceMaterialization {
 	return &core.AppInstanceMaterialization{
-		InstanceID:       recString(rec, "instance_id"),
-		App:              recString(rec, "app"),
-		Version:          recString(rec, "version"),
-		AcknowledgedAt:   recTime(rec, "acknowledged_at"),
-		MaterializedAt:   recTime(rec, "materialized_at"),
-		MaterializedPath: recString(rec, "materialized_path"),
-		StoppedAt:        recTime(rec, "stopped_at"),
-		RestartedAt:      recTime(rec, "restarted_at"),
+		InstanceID:     recString(rec, "instance_id"),
+		App:            recString(rec, "app"),
+		Version:        recString(rec, "version"),
+		AcknowledgedAt: recTime(rec, "acknowledged_at"),
+		MaterializedAt: recTime(rec, "materialized_at"),
+		StoppedAt:      recTime(rec, "stopped_at"),
+		RestartedAt:    recTime(rec, "restarted_at"),
 	}
 }

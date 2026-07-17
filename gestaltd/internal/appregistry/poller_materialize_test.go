@@ -118,9 +118,6 @@ func TestCatalogPollerMaterializesBeforeStop(t *testing.T) {
 		t.Fatalf("MaterializedAt = %v, want %v", materialization.MaterializedAt, h.clock)
 	}
 	wantPath := h.materializedPath()
-	if materialization.MaterializedPath != wantPath {
-		t.Fatalf("MaterializedPath = %q, want %q", materialization.MaterializedPath, wantPath)
-	}
 	if _, err := os.Stat(filepath.Join(wantPath, "manifest.yaml")); err != nil {
 		t.Fatalf("stat materialized manifest: %v", err)
 	}

@@ -454,11 +454,11 @@ func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceI
 		if err != nil {
 			return fmt.Errorf("materialize %s@%s: %w", appName, version, err)
 		}
-		if !result.Changed && !materialization.MaterializedAt.IsZero() && materialization.MaterializedPath == result.Path {
+		if !result.Changed && !materialization.MaterializedAt.IsZero() {
 			continue
 		}
 		materializedAt := p.now()
-		if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, result.Path, materializedAt); err != nil {
+		if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, materializedAt); err != nil {
 			return fmt.Errorf("record materialization for %s@%s: %w", appName, version, err)
 		}
 		slog.Info(

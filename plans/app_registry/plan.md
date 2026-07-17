@@ -262,6 +262,6 @@ Core recovery paths must not depend on dynamically installed apps.
 7. Split install from local materialization — `POST …/install` writes `app_version_change_requests` only. See [lifecycle.md](./lifecycle.md).
 8. Per-replica catalog polling: acknowledge each new fleet-known `(app, version)` in IndexedDB. **Done:** `app_instance_materializations` + background poller. See [lifecycle.md](./lifecycle.md#polling).
 9. Stop the running app and start the same app back up (restart machinery only; no binary change yet). Use a **1 minute** delay between stop and start during early rollout testing so operators can observe that the process started; production restart has no intentional wait.
-10. Download and materialize the new version artifact **before** bringing the app down. **Done:** catalog poller downloads registry archives to `{artifactsDir}/registry-installed/{app}/{version}` and records `materialized_at` / `materialized_path` before `StopApp`. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#artifact-materialization-tests).
+10. Download and materialize the new version artifact **before** bringing the app down. **Done:** catalog poller downloads registry archives to `{artifactsDir}/registry-installed/{app}/{version}` and records `materialized_at` before `StopApp`. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#artifact-materialization-tests).
 11. Mount the newly materialized binary instead of the old one when restarting.
 12. Add install-time validation, fleet activation/rollback, and concurrency guards.

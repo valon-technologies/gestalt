@@ -164,7 +164,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		ToVersion:   version,
 		Actor:       actor,
 		Timestamp:   requestedAt,
-		Metadata:    coredata.ChangeRequestMetadata(known, ""),
+		Metadata:    coredata.ChangeRequestMetadata(known),
 	})
 	if err != nil {
 		_, _ = i.Rollouts.MarkFailed(context.WithoutCancel(installCtx), appName, version, i.now())

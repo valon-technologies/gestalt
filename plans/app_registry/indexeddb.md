@@ -123,7 +123,6 @@ Primary key: `id` (UUID).
   "actor": "user:alice",
   "metadata_json": {
     "registry": "toolshed",
-    "materialized_path": "/var/gestalt/artifacts/registry-installed/g-issues/0.0.0-snapshot.gabc123",
     "source_ref": "abc123def456abc123def456abc123def456abcd",
     "provider_release_url": "https://storage.googleapis.com/.../versions/0.0.0-snapshot.gabc123.json",
     "artifact_checksums": {
@@ -251,7 +250,6 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
   "version": "0.0.0-snapshot.gabc123",
   "acknowledged_at": "2026-07-13T21:00:00Z",
   "materialized_at": "2026-07-13T21:00:02Z",
-  "materialized_path": "/var/gestalt/artifacts/registry-installed/g-issues/0.0.0-snapshot.gabc123",
   "stopped_at": "2026-07-13T21:00:05Z",
   "restarted_at": "2026-07-13T21:01:05Z"
 }
@@ -268,7 +266,7 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 | `HasAcknowledged(ctx, instanceID, app, version)` | Whether this replica already acked the pair. |
 | `Get(ctx, instanceID, app, version)` | Load the per-replica materialization row. |
 | `Acknowledge(ctx, materialization)` | Insert ack row; idempotent if already present. |
-| `MarkMaterialized(ctx, instanceID, app, version, materializedPath, materializedAt)` | Record on-disk artifact path after download/extract. |
+| `MarkMaterialized(ctx, instanceID, app, version, materializedAt)` | Record when download and extraction completed at the canonical local path. |
 | `ListByAppVersion(ctx, app, version)` | List the replicas that acknowledged one rollout. |
 | `MarkStopped(ctx, instanceID, app, version, stoppedAt)` | Record when the app provider was stopped for this fleet version. |
 | `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the app provider restart cycle completed for this fleet version. |
