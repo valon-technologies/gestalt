@@ -6,7 +6,6 @@
  * @module services/indexeddb
  */
 
-import type { JsonValue } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
@@ -45,7 +44,7 @@ import {
   mapRecv,
   mapSend,
 } from "./internal/codec/support.ts";
-import type { Init, RpcStatus, Unit } from "./rpc_support.ts";
+import type { Init, JsonInput, RpcStatus, Unit } from "./rpc_support.ts";
 
 /**
  * CursorDirection controls IndexedDB cursor traversal order.
@@ -724,7 +723,7 @@ export type TypedValueKind =
   | { case: "boolValue"; value: boolean }
   | { case: "timeValue"; value: Date }
   | { case: "bytesValue"; value: Uint8Array }
-  | { case: "jsonValue"; value: JsonValue }
+  | { case: "jsonValue"; value: JsonInput }
   | { case: undefined; value?: undefined };
 
 export function typedValueKindNullValue(): TypedValueKind {
@@ -755,7 +754,7 @@ export function typedValueKindBytesValue(value: Uint8Array): TypedValueKind {
   return { case: "bytesValue", value };
 }
 
-export function typedValueKindJsonValue(value: JsonValue): TypedValueKind {
+export function typedValueKindJsonValue(value: JsonInput): TypedValueKind {
   return { case: "jsonValue", value };
 }
 

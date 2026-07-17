@@ -144,9 +144,17 @@ func (r *renderer) refType(ref *model.TypeRef) string {
 	case model.KindMessage:
 		return r.messageType(ref.Message)
 	case model.KindJSONStruct:
+		if r.kind == modulePublic {
+			r.use("JsonObjectInput", true)
+			return "JsonObjectInput"
+		}
 		r.features.jsonObject = true
 		return "JsonObject"
 	case model.KindJSONValue:
+		if r.kind == modulePublic {
+			r.use("JsonInput", true)
+			return "JsonInput"
+		}
 		r.features.jsonValue = true
 		return "JsonValue"
 	case model.KindJSONNull:

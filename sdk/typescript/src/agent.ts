@@ -6,7 +6,6 @@
  * @module services/agent
  */
 
-import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
@@ -47,7 +46,7 @@ import {
   toWireUpdateAgentProviderSessionRequest,
 } from "./internal/codec/agent.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
-import type { Init } from "./rpc_support.ts";
+import type { Init, JsonInput, JsonObjectInput } from "./rpc_support.ts";
 
 export const AgentExecutionStatus = {
   UNSPECIFIED: 0,
@@ -117,8 +116,8 @@ export interface AgentInteraction {
   state: AgentInteractionState;
   title: string;
   prompt: string;
-  request?: JsonObject;
-  resolution?: JsonObject;
+  request?: JsonObjectInput;
+  resolution?: JsonObjectInput;
   createdAt?: Date;
   resolvedAt?: Date;
   turnId: string;
@@ -129,13 +128,13 @@ export interface AgentMessage {
   role: string;
   text: string;
   parts: AgentMessagePart[];
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
 }
 
 export interface AgentMessagePart {
   type: AgentMessagePartType;
   text: string;
-  json?: JsonObject;
+  json?: JsonObjectInput;
   toolCall?: AgentMessagePartToolCall;
   toolResult?: AgentMessagePartToolResult;
   imageRef?: AgentMessagePartImageRef;
@@ -149,14 +148,14 @@ export interface AgentMessagePartImageRef {
 export interface AgentMessagePartToolCall {
   id: string;
   toolId: string;
-  arguments?: JsonObject;
+  arguments?: JsonObjectInput;
 }
 
 export interface AgentMessagePartToolResult {
   toolCallId: string;
   status: number;
   content: string;
-  output?: JsonObject;
+  output?: JsonObjectInput;
 }
 
 export interface AgentNoTools {}
@@ -204,7 +203,7 @@ export interface AgentSession {
   model: string;
   clientRef: string;
   state: AgentSessionState;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   createdBySubjectId: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -231,7 +230,7 @@ export interface AgentSessionStartHookOutput {
 }
 
 export interface AgentStructuredOutput {
-  schema?: JsonObject;
+  schema?: JsonObjectInput;
 }
 
 export interface AgentTextOutput {}
@@ -297,9 +296,9 @@ export interface AgentTurnDisplay {
   label: string;
   ref: string;
   parentRef: string;
-  input?: JsonValue;
-  output?: JsonValue;
-  error?: JsonValue;
+  input?: JsonInput;
+  output?: JsonInput;
+  error?: JsonInput;
   action: string;
   format: string;
   language: string;
@@ -312,14 +311,14 @@ export interface AgentTurnEvent {
   type: string;
   source: string;
   visibility: string;
-  data?: JsonObject;
+  data?: JsonObjectInput;
   createdAt?: Date;
   display?: AgentTurnDisplay;
 }
 
 export interface AgentTurnStructuredOutput {
   text: string;
-  value?: JsonObject;
+  value?: JsonObjectInput;
 }
 
 export interface AgentTurnTextOutput {
@@ -355,7 +354,7 @@ export interface CreateAgentProviderSessionRequest {
   idempotencyKey: string;
   model: string;
   clientRef: string;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   sessionStart?: AgentSessionStartConfig;
   preparedWorkspace?: PreparedAgentWorkspace;
   providerName: string;
@@ -370,9 +369,9 @@ export interface CreateAgentProviderTurnRequest {
   idempotencyKey: string;
   model: string;
   messages: AgentMessage[];
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   executionRef: string;
-  modelOptions?: JsonObject;
+  modelOptions?: JsonObjectInput;
   /**
    * Optional provider-owned turn execution budget, in seconds.
    * If unset or zero, the provider chooses its own execution timeout. This does
@@ -491,7 +490,7 @@ export interface PreparedAgentWorkspace {
 
 export interface ResolveAgentProviderInteractionRequest {
   interactionId: string;
-  resolution?: JsonObject;
+  resolution?: JsonObjectInput;
   turnId: string;
   context?: RequestContext;
   providerName: string;
@@ -501,7 +500,7 @@ export interface UpdateAgentProviderSessionRequest {
   sessionId: string;
   clientRef: string;
   state: AgentSessionState;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   context?: RequestContext;
   providerName: string;
 }
@@ -548,7 +547,7 @@ export class Agent {
     options?: {
       providerName?: string | undefined;
       clientRef?: string | undefined;
-      metadata?: JsonObject | undefined;
+      metadata?: JsonObjectInput | undefined;
       workspace?: Init<AgentWorkspace> | undefined;
       tools?: Init<AgentToolConfig> | undefined;
     },
@@ -692,7 +691,7 @@ export class Agent {
       clientRef?: string | undefined;
       state?: AgentSessionState | undefined;
       providerName?: string | undefined;
-      metadata?: JsonObject | undefined;
+      metadata?: JsonObjectInput | undefined;
     },
   ): Promise<AgentSession> {
     const request = {
@@ -745,8 +744,8 @@ export class Agent {
       executionRef?: string | undefined;
       timeoutSeconds?: number | undefined;
       providerName?: string | undefined;
-      metadata?: JsonObject | undefined;
-      modelOptions?: JsonObject | undefined;
+      metadata?: JsonObjectInput | undefined;
+      modelOptions?: JsonObjectInput | undefined;
       output?: Init<AgentOutput> | undefined;
     },
   ): Promise<AgentTurn> {
@@ -1066,7 +1065,7 @@ export class Agent {
 
   async resolveInteraction(
     interactionId: string,
-    resolution?: JsonObject,
+    resolution?: JsonObjectInput,
     options?: {
       turnId?: string | undefined;
       providerName?: string | undefined;

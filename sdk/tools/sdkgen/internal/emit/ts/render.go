@@ -921,14 +921,16 @@ func (r *renderer) assemble() string {
 		b.WriteString("import { create } from \"@bufbuild/protobuf\";\n")
 	}
 	var jsonTypes []string
-	if r.features.jsonObject {
-		jsonTypes = append(jsonTypes, "JsonObject")
-	}
-	if r.features.jsonValue {
-		jsonTypes = append(jsonTypes, "JsonValue")
-	}
-	if len(jsonTypes) > 0 {
-		fmt.Fprintf(&b, "import type { %s } from \"@bufbuild/protobuf\";\n", strings.Join(jsonTypes, ", "))
+	if r.kind == moduleCodec {
+		if r.features.jsonObject {
+			jsonTypes = append(jsonTypes, "JsonObject")
+		}
+		if r.features.jsonValue {
+			jsonTypes = append(jsonTypes, "JsonValue")
+		}
+		if len(jsonTypes) > 0 {
+			fmt.Fprintf(&b, "import type { %s } from \"@bufbuild/protobuf\";\n", strings.Join(jsonTypes, ", "))
+		}
 	}
 	var wkt []string
 	if r.features.emptySchema {

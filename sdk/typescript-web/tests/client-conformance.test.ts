@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { create } from "@bufbuild/protobuf";
+import type { JsonObject } from "@bufbuild/protobuf";
 import { expect, test } from "bun:test";
 
 import { bearer, createGestaltClient } from "../src/client.ts";
@@ -83,7 +84,7 @@ test("REST transport surfaces platform errors from gateway responses", async () 
   const request = create(AppInvokeRequestSchema, {
     app: platformCase.publicRequest.app ?? "",
     operation: platformCase.publicRequest.operation ?? "",
-    params: platformCase.publicRequest.params ?? {},
+    params: (platformCase.publicRequest.params ?? {}) as unknown as JsonObject,
     connection: "",
     instance: "",
     idempotencyKey: "",

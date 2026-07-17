@@ -10,7 +10,7 @@ const appSourcePath = join(import.meta.dir, "..", "..", "typescript", "src", "ap
 describe("extractNativeTypes", () => {
   test("stops after a single-line export type before a class", () => {
     const source = [
-      'import type { JsonObject } from "@bufbuild/protobuf";',
+      'import type { JsonObjectInput } from "./rpc_support.ts";',
       "",
       "export type Safe = string;",
       "export class ServerOnly {}",

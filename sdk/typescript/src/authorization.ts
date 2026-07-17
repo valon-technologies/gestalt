@@ -6,7 +6,6 @@
  * @module services/authorization
  */
 
-import type { JsonObject } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
@@ -38,7 +37,7 @@ import {
   toWireSetAuthorizationStateRequest,
 } from "./internal/codec/authorization.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
-import type { Init } from "./rpc_support.ts";
+import type { Init, JsonObjectInput } from "./rpc_support.ts";
 
 export const RelationshipTargetType = {
   UNSPECIFIED: 0,
@@ -59,7 +58,7 @@ export type SourceLayer = number;
 
 export interface Action {
   name: string;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
 }
 
 export interface AddRelationshipRequest {
@@ -187,7 +186,7 @@ export interface ModelRelation {
 
 export interface Relationship {
   tuple?: RelationshipTuple;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
   sourceLayer: SourceLayer;
 }
 
@@ -238,7 +237,7 @@ export interface RelationshipTuple {
 export interface Resource {
   type: string;
   id: string;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
 }
 
 export interface SetActiveModelRequest {
@@ -261,7 +260,7 @@ export interface SetAuthorizationStateResponse {
 export interface Subject {
   type: string;
   id: string;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
 }
 
 export interface SubjectSet {

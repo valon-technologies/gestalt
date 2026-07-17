@@ -6,7 +6,6 @@
  * @module services/app
  */
 
-import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
@@ -32,7 +31,7 @@ import {
   toWireStartProviderRequest,
 } from "./internal/codec/app.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
-import type { Init } from "./rpc_support.ts";
+import type { Init, JsonInput, JsonObjectInput } from "./rpc_support.ts";
 import { decodeAppResult } from "./invoke_support.ts";
 
 /**
@@ -79,7 +78,7 @@ export interface AgentToolRef {
 export interface AppInvokeGraphQLRequest {
   app: string;
   document: string;
-  variables?: JsonObject;
+  variables?: JsonObjectInput;
   connection: string;
   instance: string;
   idempotencyKey: string;
@@ -92,7 +91,7 @@ export interface AppInvokeGraphQLRequest {
 export interface AppInvokeRequest {
   app: string;
   operation: string;
-  params?: JsonObject;
+  params?: JsonObjectInput;
   connection: string;
   instance: string;
   idempotencyKey: string;
@@ -143,7 +142,7 @@ export interface CatalogParameter {
   type: string;
   description: string;
   required: boolean;
-  default?: JsonValue;
+  default?: JsonInput;
 }
 
 /**
@@ -172,7 +171,7 @@ export interface CredentialContext {
  */
 export interface ExecuteRequest {
   operation: string;
-  params?: JsonObject;
+  params?: JsonObjectInput;
   token: string;
   connectionParams: { [key: string]: string };
   invocationId: string;
@@ -209,7 +208,7 @@ export interface HTTPSubjectRequest {
   contentType: string;
   headers: { [key: string]: StringList };
   query: { [key: string]: StringList };
-  params?: JsonObject;
+  params?: JsonObjectInput;
   rawBody: Uint8Array;
   securityScheme: string;
   verifiedSubject: string;
@@ -294,7 +293,7 @@ export interface RequestContext {
   subject?: SubjectContext;
   credential?: CredentialContext;
   access?: AccessContext;
-  workflow?: JsonObject;
+  workflow?: JsonObjectInput;
   host?: HostContext;
   /**
    * Original agent caller when an agent tool executes with delegated run-as identity.
@@ -350,7 +349,7 @@ export interface ResolveHTTPSubjectResponse {
  */
 export interface StartProviderRequest {
   name: string;
-  config?: JsonObject;
+  config?: JsonObjectInput;
   protocolVersion: number;
 }
 
@@ -422,7 +421,7 @@ export class App {
   async invoke<T = unknown>(
     app: string,
     operation: string,
-    params?: JsonObject,
+    params?: JsonObjectInput,
     options?: {
       connection?: string | undefined;
       instance?: string | undefined;
@@ -480,7 +479,7 @@ export class App {
       connection?: string | undefined;
       instance?: string | undefined;
       idempotencyKey?: string | undefined;
-      variables?: JsonObject | undefined;
+      variables?: JsonObjectInput | undefined;
     },
   ): Promise<OperationResult> {
     const request = {
@@ -556,7 +555,7 @@ export class AppProvider {
   async startProvider(
     name: string,
     protocolVersion: number,
-    config?: JsonObject,
+    config?: JsonObjectInput,
   ): Promise<StartProviderResponse> {
     const request = {
       name,
@@ -589,7 +588,7 @@ export class AppProvider {
     token: string,
     invocationId: string,
     idempotencyKey: string,
-    params?: JsonObject,
+    params?: JsonObjectInput,
   ): Promise<OperationResult> {
     const request = {
       operation,
