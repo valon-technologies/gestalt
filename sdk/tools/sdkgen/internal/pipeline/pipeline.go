@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicrust"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicts"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publictsweb"
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/publicrpc"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/python"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/rust"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit/ts"
@@ -132,6 +133,29 @@ func generate(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emi
 		_, _ = fmt.Fprintf(opts.Stdout, "sdkgen: %s: %d files emitted, %d written, %d stale removed\n",
 			e.Target(), set.Len(), len(report.Written), len(report.Deleted))
 	}
+	return reconcileRESTGateway(opts, schema)
+}
+
+func reconcileRESTGateway(opts Options, schema *model.Schema) error {
+	content, err := publicrpc.EmitRESTGateway(schema)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(opts.RepoRoot, "gestaltd/internal/publicrpc/rest_gateway_gen.go")
+	if opts.Check {
+		existing, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return fmt.Errorf("check publicrpc: %w", readErr)
+		}
+		if string(existing) != content {
+			return fmt.Errorf("%w: gestaltd/internal/publicrpc/rest_gateway_gen.go", ErrDrift)
+		}
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(opts.Stdout, "sdkgen: publicrpc: rest_gateway_gen.go written")
 	return nil
 }
 
@@ -152,6 +176,13 @@ func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.E
 		}
 		for _, entry := range d {
 			drift = append(drift, fileset.DriftEntry{Kind: entry.Kind, Path: path.Join(e.OutputRoot(), entry.Path)})
+		}
+	}
+	if err := reconcileRESTGateway(opts, schema); err != nil {
+		if errors.Is(err, ErrDrift) {
+			drift = append(drift, fileset.DriftEntry{Kind: fileset.Modified, Path: "gestaltd/internal/publicrpc/rest_gateway_gen.go"})
+		} else {
+			return err
 		}
 	}
 	if len(drift) == 0 {

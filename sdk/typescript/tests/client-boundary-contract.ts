@@ -4,7 +4,8 @@ import {
   grpc,
   rest,
   unauthenticated,
-  type ClientOptions,
+  type GrpcClientOptions,
+  type RestClientOptions,
 } from "@valon-technologies/gestalt/client";
 
 // Stand-in for gestalt-web session auth; must not be imported from the web
@@ -16,10 +17,10 @@ function session(): { kind: "session" } {
 const address = "https://gestalt.example.test";
 
 // @ts-expect-error server clients require an explicit address.
-({ transport: rest(), auth: bearer(() => "token") } satisfies ClientOptions);
+({ transport: rest(), auth: bearer(() => "token") } satisfies RestClientOptions);
 
 // @ts-expect-error server clients do not accept session auth.
-({ address, transport: grpc(), auth: session() } satisfies ClientOptions);
+({ address, transport: grpc(), auth: session() } satisfies GrpcClientOptions);
 
 void bearer;
 void createGestaltClient;

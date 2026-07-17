@@ -3,7 +3,7 @@
 /**
  * Transport-neutral App client.
  *
- * @module client/generated/app_client
+ * @module client/generated/app_client.ts
  */
 
 import type { OperationResult } from "../../app.ts";
@@ -13,7 +13,7 @@ import {
   AppInvokeRequestSchema,
   OperationResultSchema,
 } from "../../internal/gen/v1/app_pb.ts";
-import { decodeAppResult } from "../../invoke_support.ts";
+import { decodeAppResult, decodeGraphQLResult } from "../../invoke_support.ts";
 import {
   toWireAppInvokeGraphQLRequest,
   toWireAppInvokeRequest,
@@ -77,10 +77,42 @@ export class AppClient {
     );
   }
 
+  /** Alias for invokeGraphQL. */
   async invokeGraphQLRaw(
     request: PublicAppInvokeGraphQLRequest,
     callOptions?: PublicUnaryCallOptions,
   ): Promise<OperationResult> {
     return this.invokeGraphQL(request, callOptions);
   }
+
+  async invokeGraphQLDecoded<T = unknown>(
+    request: PublicAppInvokeGraphQLRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<T> {
+    const response = await this.invokeGraphQL(request, callOptions);
+    return decodeGraphQLResult<T>(request.app ?? "", response);
+  }
+}
+
+export interface AppClientREST {
+  invokeRaw(
+    request: PublicAppInvokeRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<OperationResult>;
+  invoke<T = unknown>(
+    request: PublicAppInvokeRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<T>;
+  invokeGraphQL(
+    request: PublicAppInvokeGraphQLRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<OperationResult>;
+  invokeGraphQLRaw(
+    request: PublicAppInvokeGraphQLRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<OperationResult>;
+  invokeGraphQLDecoded<T = unknown>(
+    request: PublicAppInvokeGraphQLRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<T>;
 }

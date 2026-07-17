@@ -6,7 +6,18 @@
 
 import { normalizeAddress } from "./address.ts";
 import { authToProvider, type Auth } from "./auth.ts";
+import type { AgentClientREST } from "./generated/agent_client.ts";
+import { AgentClient } from "./generated/agent_client.ts";
+import type { AppClientREST } from "./generated/app_client.ts";
 import { AppClient } from "./generated/app_client.ts";
+import type { AuthorizationClientREST } from "./generated/authorization_client.ts";
+import { AuthorizationClient } from "./generated/authorization_client.ts";
+import { ExternalCredentialsClient } from "./generated/externalCredentials_client.ts";
+import type { IdentityClientREST } from "./generated/identity_client.ts";
+import { IdentityClient } from "./generated/identity_client.ts";
+import { IndexedDBClient } from "./generated/indexedDB_client.ts";
+import type { WorkflowClientREST } from "./generated/workflow_client.ts";
+import { WorkflowClient } from "./generated/workflow_client.ts";
 import { createRestUnaryTransport } from "./rest_transport.ts";
 import type { UnaryTransport } from "./generated/unary_transport.ts";
 
@@ -34,8 +45,36 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
+export interface RestClientOptions extends ClientOptions {
+  transport: RestTransport;
+}
+
+export interface GrpcClientOptions extends ClientOptions {
+  transport: GrpcTransport;
+}
+
 export interface GestaltClient {
   readonly app: AppClient;
+  close(): Promise<void>;
+}
+
+export interface RestGestaltClient {
+  readonly app: AppClientREST;
+  readonly agent: AgentClientREST;
+  readonly workflow: WorkflowClientREST;
+  readonly identity: IdentityClientREST;
+  readonly authorization: AuthorizationClientREST;
+  close(): Promise<void>;
+}
+
+export interface GrpcGestaltClient {
+  readonly app: AppClient;
+  readonly agent: AgentClient;
+  readonly workflow: WorkflowClient;
+  readonly identity: IdentityClient;
+  readonly authorization: AuthorizationClient;
+  readonly indexedDB: IndexedDBClient;
+  readonly externalCredentials: ExternalCredentialsClient;
   close(): Promise<void>;
 }
 
@@ -47,21 +86,69 @@ export function grpc(): GrpcTransport {
   return { kind: "grpc" };
 }
 
+interface CoreGestaltClients {
+  readonly app: AppClient;
+  readonly agent: AgentClient;
+  readonly workflow: WorkflowClient;
+  readonly identity: IdentityClient;
+  readonly authorization: AuthorizationClient;
+}
+
+function bindCoreClients(transport: UnaryTransport): CoreGestaltClients {
+  return {
+    app: new AppClient(transport),
+    agent: new AgentClient(transport),
+    workflow: new WorkflowClient(transport),
+    identity: new IdentityClient(transport),
+    authorization: new AuthorizationClient(transport),
+  };
+}
+
+function asRestGestaltClient(
+  clients: CoreGestaltClients,
+): Omit<RestGestaltClient, "close"> {
+  return clients;
+}
+
+function bindGrpcClients(transport: UnaryTransport): Omit<GrpcGestaltClient, "close"> {
+  return {
+    ...bindCoreClients(transport),
+    indexedDB: new IndexedDBClient(transport),
+    externalCredentials: new ExternalCredentialsClient(transport),
+  };
+}
+
+export function createGestaltClient(
+  options: RestClientOptions,
+): Promise<RestGestaltClient>;
+export function createGestaltClient(
+  options: GrpcClientOptions,
+): Promise<GrpcGestaltClient>;
+export function createGestaltClient(
+  options: ClientOptions,
+): Promise<GestaltClient>;
 export async function createGestaltClient(
   options: ClientOptions,
-): Promise<GestaltClient> {
+): Promise<GestaltClient | RestGestaltClient | GrpcGestaltClient> {
   const baseUrl = normalizeAddress(options.address);
   const auth = authToProvider(options.auth);
   let transport: UnaryTransport;
   let close: () => Promise<void> = async () => {};
 
   if (options.transport.kind === "rest") {
+    const restOptions = options as RestClientOptions;
     transport = createRestUnaryTransport({
       baseUrl,
       auth,
-      ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+      ...(restOptions.fetch !== undefined ? { fetch: restOptions.fetch } : {}),
     });
-  } else if (options.transport.kind === "grpc") {
+    return {
+      ...asRestGestaltClient(bindCoreClients(transport)),
+      close,
+    };
+  }
+
+  if (options.transport.kind === "grpc") {
     const { createGrpcUnaryTransport } = await import("./grpc_transport.ts");
     const grpcTransport = await createGrpcUnaryTransport({
       baseUrl,
@@ -69,13 +156,12 @@ export async function createGestaltClient(
     });
     transport = grpcTransport;
     close = () => grpcTransport.close();
-  } else {
-    const unknownTransport: never = options.transport;
-    throw new Error(`unsupported transport: ${JSON.stringify(unknownTransport)}`);
+    return {
+      ...bindGrpcClients(transport),
+      close,
+    };
   }
 
-  return {
-    app: new AppClient(transport),
-    close,
-  };
+  const unknownTransport: never = options.transport;
+  throw new Error(`unsupported transport: ${JSON.stringify(unknownTransport)}`);
 }

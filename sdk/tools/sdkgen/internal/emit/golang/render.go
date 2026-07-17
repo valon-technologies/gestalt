@@ -24,9 +24,10 @@ type features struct {
 	rpcstatus   bool
 	grpc        bool
 	durationpb  bool
-	emptypb     bool
-	structpb    bool
-	timestamppb bool
+	emptypb      bool
+	gestaltclient bool
+	structpb     bool
+	timestamppb  bool
 }
 
 type renderer struct {
@@ -1166,6 +1167,9 @@ func (r *renderer) importHeader() string {
 	}
 	if r.features.emptypb {
 		ext = append(ext, `"google.golang.org/protobuf/types/known/emptypb"`)
+	}
+	if r.features.gestaltclient {
+		ext = append(ext, `gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"`)
 	}
 	if r.features.structpb {
 		ext = append(ext, `"google.golang.org/protobuf/types/known/structpb"`)

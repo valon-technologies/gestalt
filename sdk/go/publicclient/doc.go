@@ -3,10 +3,16 @@
 //
 // External callers configure an address, transport, and auth explicitly:
 //
-//	client, err := publicclient.New(publicclient.Options{
-//	    Address:   "https://valon.tools",
-//	    Transport: publicclient.GRPC(),
-//	    Auth:      publicclient.Bearer(func(ctx context.Context) (string, error) { ... }),
+//	client, err := publicclient.NewREST(publicclient.AddressOptions{
+//	    Address: "https://valon.tools",
+//	    Auth:    publicclient.Bearer(func(ctx context.Context) (string, error) { ... }),
+//	})
+//
+// Or for external gRPC:
+//
+//	client, err := publicclient.NewGRPC(publicclient.AddressOptions{
+//	    Address: "https://valon.tools",
+//	    Auth:    publicclient.Bearer(func(ctx context.Context) (string, error) { ... }),
 //	})
 //
 // Provider handlers derive a bound gRPC client from request context instead:

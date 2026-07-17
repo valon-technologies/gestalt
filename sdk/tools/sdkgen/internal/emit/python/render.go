@@ -52,6 +52,7 @@ type features struct {
 	metadataMethods map[string]bool        // public client: METHOD_* constants from metadata
 	unaryTransport  bool                   // public client: UnaryTransport from unary_transport
 	jsonFormat      bool                   // public client: google.protobuf.json_format
+	protocol        bool                   // public client: typing.Protocol for REST projections
 }
 
 type renderer struct {
@@ -1285,6 +1286,9 @@ func (r *renderer) assemble() string {
 	}
 	if r.features.overload {
 		typingNames = append(typingNames, "overload")
+	}
+	if r.features.protocol {
+		typingNames = append(typingNames, "Protocol")
 	}
 	if len(typingNames) > 0 {
 		stdlib = append(stdlib, fromImport("typing", typingNames))

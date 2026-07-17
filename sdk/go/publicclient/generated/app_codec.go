@@ -6,6 +6,42 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
+func ToWireAgentToolRef(value *AgentToolRef) *proto.AgentToolRef {
+	if value == nil {
+		return nil
+	}
+	out := &proto.AgentToolRef{
+		App:            value.App,
+		Operation:      value.Operation,
+		Connection:     value.Connection,
+		Instance:       value.Instance,
+		Title:          value.Title,
+		Description:    value.Description,
+		CredentialMode: value.CredentialMode,
+		System:         value.System,
+		RunAs:          ToWireSubjectContext(value.RunAs),
+	}
+	return out
+}
+
+func FromWireAgentToolRef(value *proto.AgentToolRef) *AgentToolRef {
+	if value == nil {
+		return nil
+	}
+	out := &AgentToolRef{
+		App:            value.App,
+		Operation:      value.Operation,
+		Connection:     value.Connection,
+		Instance:       value.Instance,
+		Title:          value.Title,
+		Description:    value.Description,
+		CredentialMode: value.CredentialMode,
+		System:         value.System,
+		RunAs:          FromWireSubjectContext(value.RunAs),
+	}
+	return out
+}
+
 func ToWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInvokeGraphQLRequest {
 	if value == nil {
 		return nil
@@ -68,6 +104,32 @@ func FromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
 	return out
 }
 
+func ToWireOperationAnnotations(value *OperationAnnotations) *proto.OperationAnnotations {
+	if value == nil {
+		return nil
+	}
+	out := &proto.OperationAnnotations{
+		ReadOnlyHint:    value.ReadOnlyHint,
+		IdempotentHint:  value.IdempotentHint,
+		DestructiveHint: value.DestructiveHint,
+		OpenWorldHint:   value.OpenWorldHint,
+	}
+	return out
+}
+
+func FromWireOperationAnnotations(value *proto.OperationAnnotations) *OperationAnnotations {
+	if value == nil {
+		return nil
+	}
+	out := &OperationAnnotations{
+		ReadOnlyHint:    value.ReadOnlyHint,
+		IdempotentHint:  value.IdempotentHint,
+		DestructiveHint: value.DestructiveHint,
+		OpenWorldHint:   value.OpenWorldHint,
+	}
+	return out
+}
+
 func ToWireOperationResult(value *OperationResult) *proto.OperationResult {
 	if value == nil {
 		return nil
@@ -118,6 +180,62 @@ func FromWireStringList(value *proto.StringList) *StringList {
 	}
 	out := &StringList{
 		Values: value.Values,
+	}
+	return out
+}
+
+func ToWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
+	if value == nil {
+		return nil
+	}
+	out := &proto.SubjectContext{
+		Id:          value.Id,
+		Email:       value.Email,
+		DisplayName: value.DisplayName,
+		Scopes:      value.Scopes,
+	}
+	for _, item := range value.Permissions {
+		out.Permissions = append(out.Permissions, ToWireSubjectPermissionContext(item))
+	}
+	return out
+}
+
+func FromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
+	if value == nil {
+		return nil
+	}
+	out := &SubjectContext{
+		Id:          value.Id,
+		Email:       value.Email,
+		DisplayName: value.DisplayName,
+		Scopes:      value.Scopes,
+	}
+	for _, item := range value.Permissions {
+		out.Permissions = append(out.Permissions, FromWireSubjectPermissionContext(item))
+	}
+	return out
+}
+
+func ToWireSubjectPermissionContext(value *SubjectPermissionContext) *proto.SubjectPermissionContext {
+	if value == nil {
+		return nil
+	}
+	out := &proto.SubjectPermissionContext{
+		App:           value.App,
+		Operations:    value.Operations,
+		AllOperations: value.AllOperations,
+	}
+	return out
+}
+
+func FromWireSubjectPermissionContext(value *proto.SubjectPermissionContext) *SubjectPermissionContext {
+	if value == nil {
+		return nil
+	}
+	out := &SubjectPermissionContext{
+		App:           value.App,
+		Operations:    value.Operations,
+		AllOperations: value.AllOperations,
 	}
 	return out
 }

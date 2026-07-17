@@ -1,0 +1,75 @@
+# Public API availability
+
+Generated from the public surface manifest (69 gRPC methods, 41 REST methods).
+
+| Service | Method | REST | Go | Python | Rust | TypeScript |
+| --- | --- | --- | --- | --- | --- | --- |
+| Agent | CancelTurn | POST /api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel | AgentClient.CancelTurn | AgentClient.cancel_turn | AgentClient.cancel_turn | AgentClient.cancelTurn |
+| Agent | CreateSession | POST /api/v2/agent/sessions | AgentClient.CreateSession | AgentClient.create_session | AgentClient.create_session | AgentClient.createSession |
+| Agent | CreateTurn | POST /api/v2/agent/sessions/{session_id}/turns | AgentClient.CreateTurn | AgentClient.create_turn | AgentClient.create_turn | AgentClient.createTurn |
+| Agent | GetSession | GET /api/v2/agent/sessions/{session_id} | AgentClient.GetSession | AgentClient.get_session | AgentClient.get_session | AgentClient.getSession |
+| Agent | GetTurn | GET /api/v2/agent/sessions/{session_id}/turns/{turn_id} | AgentClient.GetTurn | AgentClient.get_turn | AgentClient.get_turn | AgentClient.getTurn |
+| Agent | ListSessions | GET /api/v2/agent/sessions | AgentClient.ListSessions | AgentClient.list_sessions | AgentClient.list_sessions | AgentClient.listSessions |
+| Agent | ListTurnEvents | GET /api/v2/agent/sessions/{session_id}/turns/{turn_id}/events | AgentClient.ListTurnEvents | AgentClient.list_turn_events | AgentClient.list_turn_events | AgentClient.listTurnEvents |
+| Agent | ListTurns | GET /api/v2/agent/sessions/{session_id}/turns | AgentClient.ListTurns | AgentClient.list_turns | AgentClient.list_turns | AgentClient.listTurns |
+| Agent | UpdateSession | PATCH /api/v2/agent/sessions/{session_id} | AgentClient.UpdateSession | AgentClient.update_session | AgentClient.update_session | AgentClient.updateSession |
+| App | Invoke | POST /api/v2/app/{app}/operations/{operation} | AppClient.Invoke | AppClient.invoke | AppClient.invoke | AppClient.invoke |
+| App | InvokeGraphQL | POST /api/v2/app/{app}/graphql | AppClient.InvokeGraphQL | AppClient.invoke_graphql | AppClient.invoke_graphql | AppClient.invokeGraphQL |
+| Authorization | AddRelationship | POST /api/v2/authorization/relationships | AuthorizationClient.AddRelationship | AuthorizationClient.add_relationship | AuthorizationClient.add_relationship | AuthorizationClient.addRelationship |
+| Authorization | CheckAccess | POST /api/v2/authorization/access:check | AuthorizationClient.CheckAccess | AuthorizationClient.check_access | AuthorizationClient.check_access | AuthorizationClient.checkAccess |
+| Authorization | CheckAccessMany | POST /api/v2/authorization/access:checkMany | AuthorizationClient.CheckAccessMany | AuthorizationClient.check_access_many | AuthorizationClient.check_access_many | AuthorizationClient.checkAccessMany |
+| Authorization | DeleteRelationship | POST /api/v2/authorization/relationships:delete | AuthorizationClient.DeleteRelationship | AuthorizationClient.delete_relationship | AuthorizationClient.delete_relationship | AuthorizationClient.deleteRelationship |
+| Authorization | GetActiveModelRef | GET /api/v2/authorization/models/active | AuthorizationClient.GetActiveModelRef | AuthorizationClient.get_active_model_ref | AuthorizationClient.get_active_model_ref | AuthorizationClient.getActiveModelRef |
+| Authorization | ListActiveModelResourceTypes | GET /api/v2/authorization/models/active/resource-types | AuthorizationClient.ListActiveModelResourceTypes | AuthorizationClient.list_active_model_resource_types | AuthorizationClient.list_active_model_resource_types | AuthorizationClient.listActiveModelResourceTypes |
+| Authorization | ListRelationships | GET /api/v2/authorization/relationships | AuthorizationClient.ListRelationships | AuthorizationClient.list_relationships | AuthorizationClient.list_relationships | AuthorizationClient.listRelationships |
+| Authorization | SetActiveModel | PUT /api/v2/authorization/models/active | AuthorizationClient.SetActiveModel | AuthorizationClient.set_active_model | AuthorizationClient.set_active_model | AuthorizationClient.setActiveModel |
+| Authorization | SetAuthorizationState | PUT /api/v2/authorization/state | AuthorizationClient.SetAuthorizationState | AuthorizationClient.set_authorization_state | AuthorizationClient.set_authorization_state | AuthorizationClient.setAuthorizationState |
+| ExternalCredentials | CreateCredential | gRPC only | ExternalCredentialsClient.CreateCredential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.createCredential |
+| ExternalCredentials | DeleteCredential | gRPC only | ExternalCredentialsClient.DeleteCredential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.deleteCredential |
+| ExternalCredentials | ExchangeCredential | gRPC only | ExternalCredentialsClient.ExchangeCredential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchangeCredential |
+| ExternalCredentials | GetCredential | gRPC only | ExternalCredentialsClient.GetCredential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.getCredential |
+| ExternalCredentials | ListCredentials | gRPC only | ExternalCredentialsClient.ListCredentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.listCredentials |
+| ExternalCredentials | ResolveCredential | gRPC only | ExternalCredentialsClient.ResolveCredential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolveCredential |
+| ExternalCredentials | UpsertCredential | gRPC only | ExternalCredentialsClient.UpsertCredential | ExternalCredentialsClient.upsert_credential | ExternalCredentialsClient.upsert_credential | ExternalCredentialsClient.upsertCredential |
+| ExternalCredentials | ValidateCredentialConfig | gRPC only | ExternalCredentialsClient.ValidateCredentialConfig | ExternalCredentialsClient.validate_credential_config | ExternalCredentialsClient.validate_credential_config | ExternalCredentialsClient.validateCredentialConfig |
+| Identity | Authorize | POST /api/v2/identity/authorize | IdentityClient.Authorize | IdentityClient.authorize | IdentityClient.authorize | IdentityClient.authorize |
+| Identity | GetGrant | GET /api/v2/identity/grants/{grant_id} | IdentityClient.GetGrant | IdentityClient.get_grant | IdentityClient.get_grant | IdentityClient.getGrant |
+| Identity | Introspect | POST /api/v2/identity/introspect | IdentityClient.Introspect | IdentityClient.introspect | IdentityClient.introspect | IdentityClient.introspect |
+| Identity | ListGrants | GET /api/v2/identity/grants | IdentityClient.ListGrants | IdentityClient.list_grants | IdentityClient.list_grants | IdentityClient.listGrants |
+| Identity | RevokeGrant | DELETE /api/v2/identity/grants/{grant_id} | IdentityClient.RevokeGrant | IdentityClient.revoke_grant | IdentityClient.revoke_grant | IdentityClient.revokeGrant |
+| Identity | Token | POST /api/v2/identity/token | IdentityClient.Token | IdentityClient.token | IdentityClient.token | IdentityClient.token |
+| Identity | UserInfo | GET /api/v2/identity/userinfo | IdentityClient.UserInfo | IdentityClient.user_info | IdentityClient.user_info | IdentityClient.userInfo |
+| IndexedDB | Add | gRPC only | IndexedDBClient.Add | IndexedDBClient.add | IndexedDBClient.add | IndexedDBClient.add |
+| IndexedDB | Clear | gRPC only | IndexedDBClient.Clear | IndexedDBClient.clear | IndexedDBClient.clear | IndexedDBClient.clear |
+| IndexedDB | Count | gRPC only | IndexedDBClient.Count | IndexedDBClient.count | IndexedDBClient.count | IndexedDBClient.count |
+| IndexedDB | CreateIndex | gRPC only | IndexedDBClient.CreateIndex | IndexedDBClient.create_index | IndexedDBClient.create_index | IndexedDBClient.createIndex |
+| IndexedDB | CreateObjectStore | gRPC only | IndexedDBClient.CreateObjectStore | IndexedDBClient.create_object_store | IndexedDBClient.create_object_store | IndexedDBClient.createObjectStore |
+| IndexedDB | Delete | gRPC only | IndexedDBClient.Delete | IndexedDBClient.delete | IndexedDBClient.delete | IndexedDBClient.delete |
+| IndexedDB | DeleteIndex | gRPC only | IndexedDBClient.DeleteIndex | IndexedDBClient.delete_index | IndexedDBClient.delete_index | IndexedDBClient.deleteIndex |
+| IndexedDB | DeleteObjectStore | gRPC only | IndexedDBClient.DeleteObjectStore | IndexedDBClient.delete_object_store | IndexedDBClient.delete_object_store | IndexedDBClient.deleteObjectStore |
+| IndexedDB | DeleteRange | gRPC only | IndexedDBClient.DeleteRange | IndexedDBClient.delete_range | IndexedDBClient.delete_range | IndexedDBClient.deleteRange |
+| IndexedDB | Get | gRPC only | IndexedDBClient.Get | IndexedDBClient.get | IndexedDBClient.get | IndexedDBClient.get |
+| IndexedDB | GetAll | gRPC only | IndexedDBClient.GetAll | IndexedDBClient.get_all | IndexedDBClient.get_all | IndexedDBClient.getAll |
+| IndexedDB | GetAllKeys | gRPC only | IndexedDBClient.GetAllKeys | IndexedDBClient.get_all_keys | IndexedDBClient.get_all_keys | IndexedDBClient.getAllKeys |
+| IndexedDB | GetKey | gRPC only | IndexedDBClient.GetKey | IndexedDBClient.get_key | IndexedDBClient.get_key | IndexedDBClient.getKey |
+| IndexedDB | IndexCount | gRPC only | IndexedDBClient.IndexCount | IndexedDBClient.index_count | IndexedDBClient.index_count | IndexedDBClient.indexCount |
+| IndexedDB | IndexDelete | gRPC only | IndexedDBClient.IndexDelete | IndexedDBClient.index_delete | IndexedDBClient.index_delete | IndexedDBClient.indexDelete |
+| IndexedDB | IndexGet | gRPC only | IndexedDBClient.IndexGet | IndexedDBClient.index_get | IndexedDBClient.index_get | IndexedDBClient.indexGet |
+| IndexedDB | IndexGetAll | gRPC only | IndexedDBClient.IndexGetAll | IndexedDBClient.index_get_all | IndexedDBClient.index_get_all | IndexedDBClient.indexGetAll |
+| IndexedDB | IndexGetAllKeys | gRPC only | IndexedDBClient.IndexGetAllKeys | IndexedDBClient.index_get_all_keys | IndexedDBClient.index_get_all_keys | IndexedDBClient.indexGetAllKeys |
+| IndexedDB | IndexGetKey | gRPC only | IndexedDBClient.IndexGetKey | IndexedDBClient.index_get_key | IndexedDBClient.index_get_key | IndexedDBClient.indexGetKey |
+| IndexedDB | Put | gRPC only | IndexedDBClient.Put | IndexedDBClient.put | IndexedDBClient.put | IndexedDBClient.put |
+| Workflow | ApplyDefinition | POST /api/v2/workflow/definitions:apply | WorkflowClient.ApplyDefinition | WorkflowClient.apply_definition | WorkflowClient.apply_definition | WorkflowClient.applyDefinition |
+| Workflow | CancelRun | POST /api/v2/workflow/runs/{run_id}:cancel | WorkflowClient.CancelRun | WorkflowClient.cancel_run | WorkflowClient.cancel_run | WorkflowClient.cancelRun |
+| Workflow | DeleteDefinition | DELETE /api/v2/workflow/definitions/{definition_id} | WorkflowClient.DeleteDefinition | WorkflowClient.delete_definition | WorkflowClient.delete_definition | WorkflowClient.deleteDefinition |
+| Workflow | GetDefinition | GET /api/v2/workflow/definitions/{definition_id} | WorkflowClient.GetDefinition | WorkflowClient.get_definition | WorkflowClient.get_definition | WorkflowClient.getDefinition |
+| Workflow | GetRun | GET /api/v2/workflow/runs/{run_id} | WorkflowClient.GetRun | WorkflowClient.get_run | WorkflowClient.get_run | WorkflowClient.getRun |
+| Workflow | GetRunEvents | GET /api/v2/workflow/runs/{run_id}/events | WorkflowClient.GetRunEvents | WorkflowClient.get_run_events | WorkflowClient.get_run_events | WorkflowClient.getRunEvents |
+| Workflow | GetRunOutput | GET /api/v2/workflow/runs/{run_id}/output | WorkflowClient.GetRunOutput | WorkflowClient.get_run_output | WorkflowClient.get_run_output | WorkflowClient.getRunOutput |
+| Workflow | ListDefinitions | GET /api/v2/workflow/definitions | WorkflowClient.ListDefinitions | WorkflowClient.list_definitions | WorkflowClient.list_definitions | WorkflowClient.listDefinitions |
+| Workflow | ListRuns | GET /api/v2/workflow/runs | WorkflowClient.ListRuns | WorkflowClient.list_runs | WorkflowClient.list_runs | WorkflowClient.listRuns |
+| Workflow | SetActivationPaused | POST /api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused | WorkflowClient.SetActivationPaused | WorkflowClient.set_activation_paused | WorkflowClient.set_activation_paused | WorkflowClient.setActivationPaused |
+| Workflow | SetDefinitionPaused | POST /api/v2/workflow/definitions/{definition_id}:setPaused | WorkflowClient.SetDefinitionPaused | WorkflowClient.set_definition_paused | WorkflowClient.set_definition_paused | WorkflowClient.setDefinitionPaused |
+| Workflow | SignalOrStartRun | POST /api/v2/workflow/definitions/{definition_id}:signalOrStart | WorkflowClient.SignalOrStartRun | WorkflowClient.signal_or_start_run | WorkflowClient.signal_or_start_run | WorkflowClient.signalOrStartRun |
+| Workflow | SignalRun | POST /api/v2/workflow/runs/{run_id}:signal | WorkflowClient.SignalRun | WorkflowClient.signal_run | WorkflowClient.signal_run | WorkflowClient.signalRun |
+| Workflow | StartRun | POST /api/v2/workflow/definitions/{definition_id}/runs | WorkflowClient.StartRun | WorkflowClient.start_run | WorkflowClient.start_run | WorkflowClient.startRun |

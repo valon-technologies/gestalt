@@ -6,9 +6,317 @@
 
 use crate::generated::v1;
 use crate::public::generated::app::{
-    AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult, StringList,
+    AgentToolRef, AppInvokeGraphQLRequest, AppInvokeRequest, OperationAnnotations, OperationResult,
+    StringList, SubjectContext, SubjectPermissionContext,
 };
 use crate::public::generated::codec::support::to_wire_struct;
+
+/// Converts a native `AgentToolRef` to its wire message.
+pub(crate) fn to_wire_agent_tool_ref(value: AgentToolRef) -> v1::AgentToolRef {
+    v1::AgentToolRef {
+        app: value.app,
+        operation: value.operation,
+        connection: value.connection,
+        instance: value.instance,
+        title: value.title,
+        description: value.description,
+        credential_mode: value.credential_mode,
+        system: value.system,
+        run_as: value.run_as.map(to_wire_subject_context),
+        ..Default::default()
+    }
+}
+
+/// Converts a wire `AgentToolRef` to its native message.
+pub(crate) fn from_wire_agent_tool_ref(value: v1::AgentToolRef) -> AgentToolRef {
+    AgentToolRef {
+        app: value.app,
+        operation: value.operation,
+        connection: value.connection,
+        instance: value.instance,
+        title: value.title,
+        description: value.description,
+        credential_mode: value.credential_mode,
+        system: value.system,
+        run_as: value.run_as.map(from_wire_subject_context),
+    }
+}
+
+/// Encodes a wire `SubjectPermissionContext` as protobuf JSON.
+pub(crate) fn encode_wire_subject_permission_context_json(
+    value: &v1::SubjectPermissionContext,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.app.is_empty() {
+        object.insert(
+            "app".into(),
+            serde_json::Value::String(value.app.to_string()),
+        );
+    }
+    if !value.operations.is_empty() {
+        object.insert(
+            "operations".into(),
+            serde_json::Value::Array(
+                value
+                    .operations
+                    .iter()
+                    .map(|item| serde_json::Value::String(item.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+    if value.all_operations {
+        object.insert(
+            "allOperations".into(),
+            serde_json::Value::Bool(value.all_operations),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `SubjectPermissionContext`.
+pub(crate) fn decode_wire_subject_permission_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::SubjectPermissionContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::SubjectPermissionContext {
+        app: match object.get("app") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        operations: match object.get("operations") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for operations")
+                })?
+                .iter()
+                .map(|item| {
+                    Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                        crate::public::proto_json::decode_string(item)?,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        all_operations: match object.get("allOperations") {
+            Some(value) => crate::public::proto_json::decode_bool(value)?,
+            None => false,
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `SubjectContext` as protobuf JSON.
+pub(crate) fn encode_wire_subject_context_json(value: &v1::SubjectContext) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.id.is_empty() {
+        object.insert("id".into(), serde_json::Value::String(value.id.to_string()));
+    }
+    if !value.email.is_empty() {
+        object.insert(
+            "email".into(),
+            serde_json::Value::String(value.email.to_string()),
+        );
+    }
+    if !value.display_name.is_empty() {
+        object.insert(
+            "displayName".into(),
+            serde_json::Value::String(value.display_name.to_string()),
+        );
+    }
+    if !value.scopes.is_empty() {
+        object.insert(
+            "scopes".into(),
+            serde_json::Value::Array(
+                value
+                    .scopes
+                    .iter()
+                    .map(|item| serde_json::Value::String(item.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+    if !value.permissions.is_empty() {
+        object.insert(
+            "permissions".into(),
+            serde_json::Value::Array(
+                value
+                    .permissions
+                    .iter()
+                    .map(|item| encode_wire_subject_permission_context_json(item))
+                    .collect(),
+            ),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `SubjectContext`.
+pub(crate) fn decode_wire_subject_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::SubjectContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::SubjectContext {
+        id: match object.get("id") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        email: match object.get("email") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        display_name: match object.get("displayName") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        scopes: match object.get("scopes") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for scopes")
+                })?
+                .iter()
+                .map(|item| {
+                    Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                        crate::public::proto_json::decode_string(item)?,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        permissions: match object.get("permissions") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for permissions")
+                })?
+                .iter()
+                .map(|item| decode_wire_subject_permission_context_json(item))
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `AgentToolRef` as protobuf JSON.
+pub(crate) fn encode_wire_agent_tool_ref_json(value: &v1::AgentToolRef) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.app.is_empty() {
+        object.insert(
+            "app".into(),
+            serde_json::Value::String(value.app.to_string()),
+        );
+    }
+    if !value.operation.is_empty() {
+        object.insert(
+            "operation".into(),
+            serde_json::Value::String(value.operation.to_string()),
+        );
+    }
+    if !value.connection.is_empty() {
+        object.insert(
+            "connection".into(),
+            serde_json::Value::String(value.connection.to_string()),
+        );
+    }
+    if !value.instance.is_empty() {
+        object.insert(
+            "instance".into(),
+            serde_json::Value::String(value.instance.to_string()),
+        );
+    }
+    if !value.title.is_empty() {
+        object.insert(
+            "title".into(),
+            serde_json::Value::String(value.title.to_string()),
+        );
+    }
+    if !value.description.is_empty() {
+        object.insert(
+            "description".into(),
+            serde_json::Value::String(value.description.to_string()),
+        );
+    }
+    if !value.credential_mode.is_empty() {
+        object.insert(
+            "credentialMode".into(),
+            serde_json::Value::String(value.credential_mode.to_string()),
+        );
+    }
+    if !value.system.is_empty() {
+        object.insert(
+            "system".into(),
+            serde_json::Value::String(value.system.to_string()),
+        );
+    }
+    if let Some(inner) = &value.run_as {
+        object.insert("runAs".into(), encode_wire_subject_context_json(inner));
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `AgentToolRef`.
+pub(crate) fn decode_wire_agent_tool_ref_json(
+    value: &serde_json::Value,
+) -> Result<v1::AgentToolRef, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::AgentToolRef {
+        app: match object.get("app") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        operation: match object.get("operation") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        connection: match object.get("connection") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        instance: match object.get("instance") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        title: match object.get("title") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        description: match object.get("description") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        credential_mode: match object.get("credentialMode") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        system: match object.get("system") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        run_as: object
+            .get("runAs")
+            .map(|value| decode_wire_subject_context_json(value))
+            .transpose()?,
+        ..Default::default()
+    })
+}
 
 /// Converts a native `AppInvokeGraphQLRequest` to its wire message.
 pub(crate) fn to_wire_app_invoke_graphql_request(
@@ -215,6 +523,78 @@ pub(crate) fn decode_wire_app_invoke_request_json(
     })
 }
 
+/// Converts a native `OperationAnnotations` to its wire message.
+pub(crate) fn to_wire_operation_annotations(
+    value: OperationAnnotations,
+) -> v1::OperationAnnotations {
+    v1::OperationAnnotations {
+        read_only_hint: value.read_only_hint,
+        idempotent_hint: value.idempotent_hint,
+        destructive_hint: value.destructive_hint,
+        open_world_hint: value.open_world_hint,
+        ..Default::default()
+    }
+}
+
+/// Encodes a wire `OperationAnnotations` as protobuf JSON.
+pub(crate) fn encode_wire_operation_annotations_json(
+    value: &v1::OperationAnnotations,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if let Some(inner) = &value.read_only_hint {
+        if *inner {
+            object.insert("readOnlyHint".into(), serde_json::Value::Bool(*inner));
+        }
+    }
+    if let Some(inner) = &value.idempotent_hint {
+        if *inner {
+            object.insert("idempotentHint".into(), serde_json::Value::Bool(*inner));
+        }
+    }
+    if let Some(inner) = &value.destructive_hint {
+        if *inner {
+            object.insert("destructiveHint".into(), serde_json::Value::Bool(*inner));
+        }
+    }
+    if let Some(inner) = &value.open_world_hint {
+        if *inner {
+            object.insert("openWorldHint".into(), serde_json::Value::Bool(*inner));
+        }
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `OperationAnnotations`.
+pub(crate) fn decode_wire_operation_annotations_json(
+    value: &serde_json::Value,
+) -> Result<v1::OperationAnnotations, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::OperationAnnotations {
+        read_only_hint: object
+            .get("readOnlyHint")
+            .map(|value| crate::public::proto_json::decode_bool(value))
+            .transpose()?,
+        idempotent_hint: object
+            .get("idempotentHint")
+            .map(|value| crate::public::proto_json::decode_bool(value))
+            .transpose()?,
+        destructive_hint: object
+            .get("destructiveHint")
+            .map(|value| crate::public::proto_json::decode_bool(value))
+            .transpose()?,
+        open_world_hint: object
+            .get("openWorldHint")
+            .map(|value| crate::public::proto_json::decode_bool(value))
+            .transpose()?,
+        ..Default::default()
+    })
+}
+
 /// Converts a wire `OperationResult` to its native message.
 pub(crate) fn from_wire_operation_result(value: v1::OperationResult) -> OperationResult {
     OperationResult {
@@ -345,5 +725,59 @@ pub(crate) fn decode_wire_operation_result_json(
 pub(crate) fn from_wire_string_list(value: v1::StringList) -> StringList {
     StringList {
         values: value.values,
+    }
+}
+
+/// Converts a native `SubjectContext` to its wire message.
+pub(crate) fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectContext {
+    v1::SubjectContext {
+        id: value.id,
+        email: value.email,
+        display_name: value.display_name,
+        scopes: value.scopes,
+        permissions: value
+            .permissions
+            .into_iter()
+            .map(to_wire_subject_permission_context)
+            .collect(),
+        ..Default::default()
+    }
+}
+
+/// Converts a wire `SubjectContext` to its native message.
+pub(crate) fn from_wire_subject_context(value: v1::SubjectContext) -> SubjectContext {
+    SubjectContext {
+        id: value.id,
+        email: value.email,
+        display_name: value.display_name,
+        scopes: value.scopes,
+        permissions: value
+            .permissions
+            .into_iter()
+            .map(from_wire_subject_permission_context)
+            .collect(),
+    }
+}
+
+/// Converts a native `SubjectPermissionContext` to its wire message.
+pub(crate) fn to_wire_subject_permission_context(
+    value: SubjectPermissionContext,
+) -> v1::SubjectPermissionContext {
+    v1::SubjectPermissionContext {
+        app: value.app,
+        operations: value.operations,
+        all_operations: value.all_operations,
+        ..Default::default()
+    }
+}
+
+/// Converts a wire `SubjectPermissionContext` to its native message.
+pub(crate) fn from_wire_subject_permission_context(
+    value: v1::SubjectPermissionContext,
+) -> SubjectPermissionContext {
+    SubjectPermissionContext {
+        app: value.app,
+        operations: value.operations,
+        all_operations: value.all_operations,
     }
 }

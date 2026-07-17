@@ -74,14 +74,27 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		}
 	}
 
-	client := newRenderer(idx, "app_client", "app", modulePublic)
-	client.publicClient = true
-	client.docIntro = "Generated transport-neutral App client for the public gestaltd surface."
 	for _, svc := range plan.Filtered.Services {
+		wireBase := generatedFileBase(svc.ProtoFile)
+		clientFile := serviceClientFile(svc.Name)
+		client := newRenderer(idx, strings.TrimSuffix(clientFile, ".py"), wireBase, modulePublic)
+		client.publicClient = true
+		client.docIntro = "Generated transport-neutral " + svc.Name + " client for the public gestaltd surface."
 		client.renderAppClient(svc)
-	}
-	if err := set.Add("generated/app_client.py", []byte(client.assembleGenerated())); err != nil {
-		return nil, err
+		if err := set.Add("generated/"+clientFile, []byte(client.assembleGenerated())); err != nil {
+			return nil, err
+		}
 	}
 	return set, nil
+}
+
+func serviceClientFile(serviceName string) string {
+	switch serviceName {
+	case "ExternalCredentials":
+		return "external_credentials_client.py"
+	case "IndexedDB":
+		return "indexeddb_client.py"
+	default:
+		return strings.ToLower(serviceName[:1]) + serviceName[1:] + "_client.py"
+	}
 }

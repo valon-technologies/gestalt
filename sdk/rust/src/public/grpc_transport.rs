@@ -3,52 +3,50 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use http::uri::PathAndQuery;
 use prost::Message;
-use tonic::service::Interceptor;
-use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
+use tonic::client::Grpc;
+use tonic::service::interceptor::InterceptedService;
+use tonic::transport::Channel;
 use tonic::{Request, Status};
+use tonic_prost::ProstCodec;
 
 use crate::codec::host_service::HostServiceChannel;
-use crate::generated::v1;
 use crate::public::auth::Auth;
-use crate::public::generated::metadata::{METHOD_APP_INVOKE, METHOD_APP_INVOKE_GRAPHQL, Method};
+use crate::public::generated::metadata::Method;
 use crate::public::generated::rpc_support::GestaltError;
-use crate::public::generated::unary_transport::UnaryTransport;
+use crate::public::generated::unary_transport::{GrpcCapable, UnaryTransport};
 use crate::rpc_support::gestalt_error_code;
 
-type AuthChannel = tonic::service::interceptor::InterceptedService<Channel, AuthInterceptor>;
+type AuthChannel = InterceptedService<Channel, AuthInterceptor>;
 
 #[derive(Clone)]
-enum AppGrpcClient {
-    Public(v1::app_client::AppClient<AuthChannel>),
-    Bound(v1::app_client::AppClient<HostServiceChannel>),
+enum GrpcService {
+    Public(AuthChannel),
+    Bound(HostServiceChannel),
 }
 
-/// gRPC transport implementing [`UnaryTransport`] for the public App surface.
+/// gRPC transport implementing [`UnaryTransport`] for the full public surface.
 #[derive(Clone)]
 pub struct GrpcTransport {
-    client: AppGrpcClient,
+    service: GrpcService,
     timeout: Option<Duration>,
 }
 
 impl GrpcTransport {
     /// Creates a gRPC transport over an established public channel.
     pub fn new(channel: Channel, auth: Arc<dyn Auth>) -> Self {
-        Self::from_client(AppGrpcClient::Public(v1::app_client::AppClient::new(
-            auth_channel(channel, auth),
-        )))
+        Self::from_service(GrpcService::Public(auth_channel(channel, auth)))
     }
 
     /// Creates a gRPC transport over the provider host-service relay.
     pub(crate) fn from_host_service(channel: HostServiceChannel) -> Self {
-        Self::from_client(AppGrpcClient::Bound(v1::app_client::AppClient::new(
-            channel,
-        )))
+        Self::from_service(GrpcService::Bound(channel))
     }
 
-    fn from_client(client: AppGrpcClient) -> Self {
+    fn from_service(service: GrpcService) -> Self {
         Self {
-            client,
+            service,
             timeout: None,
         }
     }
@@ -68,68 +66,67 @@ impl UnaryTransport for GrpcTransport {
         response: &mut Resp,
     ) -> impl std::future::Future<Output = Result<(), GestaltError>> + Send
     where
-        Req: Message + Send + Sync,
-        Resp: Message + Default + Send,
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static,
     {
-        let mut client = self.client.clone();
+        let service = self.service.clone();
         let timeout = self.timeout;
-        let request_bytes = request.encode_to_vec();
-        let method_name = method.name.to_string();
+        let path = method.full_method.to_string();
+        let request = request.clone();
 
         async move {
-            let tonic_response = if method_name == METHOD_APP_INVOKE.name {
-                let wire =
-                    v1::AppInvokeRequest::decode(request_bytes.as_slice()).map_err(|err| {
-                        GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
-                    })?;
-                let mut tonic_request = Request::new(wire);
-                if let Some(timeout) = timeout {
-                    tonic_request.set_timeout(timeout);
+            let path: PathAndQuery = path.parse().map_err(|err: http::uri::InvalidUri| {
+                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+            })?;
+            let mut tonic_request = Request::new(request);
+            if let Some(timeout) = timeout {
+                tonic_request.set_timeout(timeout);
+            }
+
+            let codec = ProstCodec::<Req, Resp>::default();
+            let wire_response = match service {
+                GrpcService::Public(channel) => {
+                    let mut client = Grpc::new(channel);
+                    client.ready().await.map_err(grpc_ready_error)?;
+                    client
+                        .unary(tonic_request, path, codec)
+                        .await
+                        .map_err(GestaltError::from)?
+                        .into_inner()
                 }
-                match &mut client {
-                    AppGrpcClient::Public(c) => c.invoke(tonic_request).await,
-                    AppGrpcClient::Bound(c) => c.invoke(tonic_request).await,
+                GrpcService::Bound(channel) => {
+                    let mut client = Grpc::new(channel);
+                    client.ready().await.map_err(grpc_ready_error)?;
+                    client
+                        .unary(tonic_request, path, codec)
+                        .await
+                        .map_err(GestaltError::from)?
+                        .into_inner()
                 }
-                .map_err(GestaltError::from)?
-                .into_inner()
-            } else if method_name == METHOD_APP_INVOKE_GRAPHQL.name {
-                let wire = v1::AppInvokeGraphQlRequest::decode(request_bytes.as_slice()).map_err(
-                    |err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()),
-                )?;
-                let mut tonic_request = Request::new(wire);
-                if let Some(timeout) = timeout {
-                    tonic_request.set_timeout(timeout);
-                }
-                match &mut client {
-                    AppGrpcClient::Public(c) => c.invoke_graph_ql(tonic_request).await,
-                    AppGrpcClient::Bound(c) => c.invoke_graph_ql(tonic_request).await,
-                }
-                .map_err(GestaltError::from)?
-                .into_inner()
-            } else {
-                return Err(GestaltError::new(
-                    gestalt_error_code::UNIMPLEMENTED,
-                    format!("unsupported public gRPC method {method_name}"),
-                ));
             };
 
-            let bytes = tonic_response.encode_to_vec();
-            *response = Resp::decode(bytes.as_slice())
-                .map_err(|err| GestaltError::new(gestalt_error_code::INTERNAL, err.to_string()))?;
+            *response = wire_response;
             Ok(())
         }
     }
 }
 
+impl GrpcCapable for GrpcTransport {}
+
+fn grpc_ready_error(err: tonic::transport::Error) -> GestaltError {
+    GestaltError::new(gestalt_error_code::UNAVAILABLE, err.to_string())
+}
+
 /// Dials a public gRPC endpoint from an https:// or http:// address.
 pub fn dial_public_grpc(address: &str) -> Result<Channel, GestaltError> {
     let endpoint = if let Some(rest) = address.strip_prefix("https://") {
-        Endpoint::from_shared(format!("https://{rest}"))
+        tonic::transport::Endpoint::from_shared(format!("https://{rest}"))
             .map_err(transport_error)?
-            .tls_config(ClientTlsConfig::new().with_native_roots())
+            .tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
             .map_err(transport_error)?
     } else if let Some(rest) = address.strip_prefix("http://") {
-        Endpoint::from_shared(format!("http://{rest}")).map_err(transport_error)?
+        tonic::transport::Endpoint::from_shared(format!("http://{rest}"))
+            .map_err(transport_error)?
     } else {
         return Err(GestaltError::new(
             gestalt_error_code::INVALID_ARGUMENT,
@@ -148,7 +145,7 @@ struct AuthInterceptor {
     auth: Arc<dyn Auth>,
 }
 
-impl Interceptor for AuthInterceptor {
+impl tonic::service::Interceptor for AuthInterceptor {
     fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, Status> {
         if let Some(authorization) = self.auth.authorization_header() {
             request.metadata_mut().insert(

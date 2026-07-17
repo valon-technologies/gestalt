@@ -53,6 +53,28 @@ func (r *renderer) renderAppClient(svc *model.Service) {
 		}
 		r.renderAppClientMethod(svc, m)
 	}
+	r.renderAppRESTClientProtocol(svc)
+}
+
+func (r *renderer) renderAppRESTClientProtocol(svc *model.Service) {
+	clientName := localName(svc.FullName) + "Client"
+	protocolName := clientName + "REST"
+	var restMethods []*model.Method
+	for _, m := range svc.Methods {
+		if m.HTTP != nil && m.Stream == model.Unary {
+			restMethods = append(restMethods, m)
+		}
+	}
+	if len(restMethods) == 0 {
+		return
+	}
+	r.features.protocol = true
+	fmt.Fprintf(&r.body, "class %s(Protocol):\n", protocolName)
+	r.writeDocstring("    ", fmt.Sprintf("REST-backed methods for the public %s surface.", svc.FullName))
+	for _, m := range restMethods {
+		r.renderAppRESTProtocolMethod(m)
+	}
+	r.body.WriteString("\n")
 }
 
 func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method) {
@@ -64,10 +86,63 @@ func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method) {
 		r.renderAppClientInvokeMethod(m, methodName)
 		return
 	}
+
+	if m.Name == "InvokeGraphQL" {
+		r.renderAppClientRawMethod(m, constName, methodName)
+		r.renderAppClientGraphQLRawAlias(m, methodName)
+		r.renderAppClientGraphQLDecodedMethod(m, methodName+"_decoded")
+		return
+	}
+
 	r.renderAppClientRawMethod(m, constName, methodName)
 }
 
 func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodName string) {
+	r.useMetadataMethod(constName)
+	r.features.wire = true
+	if m.InputIsEmpty || m.OutputIsEmpty {
+		r.features.emptyPb = true
+	}
+
+	if m.InputIsEmpty && m.OutputIsEmpty {
+		fmt.Fprintf(&r.body, "    def %s(self) -> None:\n", methodName)
+		r.writeMethodDoc(m)
+		r.body.WriteString("        wire = _empty.Empty()\n")
+		r.body.WriteString("        self._transport.unary(\n")
+		fmt.Fprintf(&r.body, "            %s,\n", constName)
+		r.body.WriteString("            wire,\n")
+		r.body.WriteString("            _empty.Empty,\n")
+		r.body.WriteString("        )\n\n")
+		return
+	}
+	if m.InputIsEmpty {
+		outputType := r.messageType(m.Output.FullName)
+		wireOutputType := r.wireModule() + "." + localName(m.Output.FullName)
+		fromWire := r.codecRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
+		fmt.Fprintf(&r.body, "    def %s(self) -> %s:\n", methodName, outputType)
+		r.writeMethodDoc(m)
+		r.body.WriteString("        wire = _empty.Empty()\n")
+		r.body.WriteString("        wire_response = self._transport.unary(\n")
+		fmt.Fprintf(&r.body, "            %s,\n", constName)
+		r.body.WriteString("            wire,\n")
+		fmt.Fprintf(&r.body, "            %s,\n", wireOutputType)
+		r.body.WriteString("        )\n")
+		fmt.Fprintf(&r.body, "        return %s(wire_response)\n\n", fromWire)
+		return
+	}
+	if m.OutputIsEmpty {
+		requestType := r.messageType(m.Input.FullName)
+		toWire := r.codecRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
+		fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> None:\n", methodName, requestType)
+		r.writeMethodDoc(m)
+		fmt.Fprintf(&r.body, "        wire = %s(request)\n", toWire)
+		r.body.WriteString("        self._transport.unary(\n")
+		fmt.Fprintf(&r.body, "            %s,\n", constName)
+		r.body.WriteString("            wire,\n")
+		r.body.WriteString("            _empty.Empty,\n")
+		r.body.WriteString("        )\n\n")
+		return
+	}
 	if m.Input == nil || m.Output == nil {
 		return
 	}
@@ -76,7 +151,6 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 	wireOutputType := r.wireModule() + "." + localName(m.Output.FullName)
 	toWire := r.codecRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 	fromWire := r.codecRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
-	r.useMetadataMethod(constName)
 
 	fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> %s:\n", methodName, requestType, outputType)
 	r.writeMethodDoc(m)
@@ -116,6 +190,91 @@ func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName strin
 		pyName(status.Name),
 		pyName(body.Name),
 	)
+}
+
+func (r *renderer) renderAppClientGraphQLRawAlias(m *model.Method, methodName string) {
+	if m.Input == nil || m.Output == nil {
+		return
+	}
+	requestType := r.messageType(m.Input.FullName)
+	outputType := r.messageType(m.Output.FullName)
+	fmt.Fprintf(&r.body, "    def %s_raw(self, request: %s) -> %s:\n", methodName, requestType, outputType)
+	r.body.WriteString("        \"\"\"Alias for invoke_graphql.\"\"\"\n")
+	fmt.Fprintf(&r.body, "        return self.%s(request)\n\n", methodName)
+}
+
+func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodName string) {
+	if m.Input == nil || m.Output == nil {
+		return
+	}
+	requestType := r.messageType(m.Input.FullName)
+	r.features.anyType = true
+	r.useInvoke("decode_graphql_result")
+
+	fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> Any:\n", methodName, requestType)
+	doc := m.Doc
+	if doc == "" {
+		doc = "The result decodes with GraphQL envelope semantics; envelope failures raise InvokeError."
+	} else {
+		doc += "\n\nThe result decodes with GraphQL envelope semantics; envelope failures raise InvokeError."
+	}
+	r.writeDocstring("        ", doc)
+	fmt.Fprintf(&r.body, "        response = self.invoke_graphql(request)\n")
+	status := findField(m.Output, "status")
+	body := findField(m.Output, "body")
+	fmt.Fprintf(
+		&r.body,
+		"        return decode_graphql_result(%s, response.%s, response.%s)\n\n",
+		jsonResultContext(m, "app"),
+		pyName(status.Name),
+		pyName(body.Name),
+	)
+}
+
+func (r *renderer) renderAppRESTProtocolMethod(m *model.Method) {
+	if m.JsonResult != nil {
+		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name))+"_raw", false)
+		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name)), true)
+		return
+	}
+	if m.Name == "InvokeGraphQL" {
+		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name)), false)
+		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name))+"_raw", false)
+		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name))+"_decoded", true)
+		return
+	}
+	r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name)), false)
+}
+
+func (r *renderer) renderAppRESTProtocolSignature(m *model.Method, methodName string, decoded bool) {
+	if m.InputIsEmpty && m.OutputIsEmpty {
+		fmt.Fprintf(&r.body, "    def %s(self) -> None: ...\n", methodName)
+		return
+	}
+	if decoded {
+		requestType := r.messageType(m.Input.FullName)
+		r.features.anyType = true
+		fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> Any: ...\n", methodName, requestType)
+		return
+	}
+	if m.InputIsEmpty {
+		outputType := r.messageType(m.Output.FullName)
+		fmt.Fprintf(&r.body, "    def %s(self) -> %s: ...\n", methodName, outputType)
+		return
+	}
+	if m.OutputIsEmpty {
+		requestType := r.messageType(m.Input.FullName)
+		fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> None: ...\n", methodName, requestType)
+		return
+	}
+	requestType := r.messageType(m.Input.FullName)
+	if m.JsonResult != nil && methodName == pyName(snakeCase(m.Name)) {
+		r.features.anyType = true
+		fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> Any: ...\n", methodName, requestType)
+		return
+	}
+	outputType := r.messageType(m.Output.FullName)
+	fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> %s: ...\n", methodName, requestType, outputType)
 }
 
 func appClientMethodConst(svc *model.Service, m *model.Method) string {

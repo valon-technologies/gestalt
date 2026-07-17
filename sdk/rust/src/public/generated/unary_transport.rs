@@ -18,6 +18,9 @@ pub trait UnaryTransport: Send + Sync {
         response: &mut Resp,
     ) -> impl Future<Output = Result<(), GestaltError>> + Send
     where
-        Req: Message + Send + Sync,
-        Resp: Message + Default + Send;
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static;
 }
+
+/// Marker for transports that can call gRPC-only public methods.
+pub trait GrpcCapable: UnaryTransport {}

@@ -1,0 +1,2183 @@
+{
+  "languages": [
+    "go",
+    "python",
+    "rust",
+    "typescript"
+  ],
+  "grpcMethodCount": 69,
+  "restMethodCount": 41,
+  "methods": [
+    {
+      "service": "Agent",
+      "method": "CancelTurn",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "session_id",
+          "jsonName": "sessionId"
+        },
+        {
+          "name": "turn_id",
+          "jsonName": "turnId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/CancelTurn",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "CancelTurn"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "cancel_turn"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "cancel_turn"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "cancelTurn"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "CreateSession",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/agent/sessions",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Agent/CreateSession",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "CreateSession"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "create_session"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "create_session"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "createSession"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "CreateTurn",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/agent/sessions/{session_id}/turns",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "session_id",
+          "jsonName": "sessionId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/CreateTurn",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "CreateTurn"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "create_turn"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "create_turn"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "createTurn"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "GetSession",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/agent/sessions/{session_id}",
+      "restPathFields": [
+        {
+          "name": "session_id",
+          "jsonName": "sessionId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider_name",
+          "jsonName": "providerName"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/GetSession",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "GetSession"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "get_session"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "get_session"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "getSession"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "GetTurn",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/agent/sessions/{session_id}/turns/{turn_id}",
+      "restPathFields": [
+        {
+          "name": "session_id",
+          "jsonName": "sessionId"
+        },
+        {
+          "name": "turn_id",
+          "jsonName": "turnId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider_name",
+          "jsonName": "providerName"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/GetTurn",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "GetTurn"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "get_turn"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "get_turn"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "getTurn"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "ListSessions",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/agent/sessions",
+      "restQueryFields": [
+        {
+          "name": "session_ids",
+          "jsonName": "sessionIds"
+        },
+        {
+          "name": "state",
+          "jsonName": "state"
+        },
+        {
+          "name": "limit",
+          "jsonName": "limit"
+        },
+        {
+          "name": "summary_only",
+          "jsonName": "summaryOnly"
+        },
+        {
+          "name": "provider_name",
+          "jsonName": "providerName"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/ListSessions",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "ListSessions"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "list_sessions"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "list_sessions"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "listSessions"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "ListTurnEvents",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/agent/sessions/{session_id}/turns/{turn_id}/events",
+      "restPathFields": [
+        {
+          "name": "session_id",
+          "jsonName": "sessionId"
+        },
+        {
+          "name": "turn_id",
+          "jsonName": "turnId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "after_seq",
+          "jsonName": "afterSeq"
+        },
+        {
+          "name": "limit",
+          "jsonName": "limit"
+        },
+        {
+          "name": "provider_name",
+          "jsonName": "providerName"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/ListTurnEvents",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "ListTurnEvents"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "list_turn_events"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "list_turn_events"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "listTurnEvents"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "ListTurns",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/agent/sessions/{session_id}/turns",
+      "restPathFields": [
+        {
+          "name": "session_id",
+          "jsonName": "sessionId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "turn_ids",
+          "jsonName": "turnIds"
+        },
+        {
+          "name": "status",
+          "jsonName": "status"
+        },
+        {
+          "name": "limit",
+          "jsonName": "limit"
+        },
+        {
+          "name": "summary_only",
+          "jsonName": "summaryOnly"
+        },
+        {
+          "name": "provider_name",
+          "jsonName": "providerName"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/ListTurns",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "ListTurns"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "list_turns"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "list_turns"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "listTurns"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "UpdateSession",
+      "streamingKind": "unary",
+      "restVerb": "PATCH",
+      "restPath": "/api/v2/agent/sessions/{session_id}",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "session_id",
+          "jsonName": "sessionId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/UpdateSession",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "UpdateSession"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "update_session"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "update_session"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "updateSession"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "App",
+      "method": "Invoke",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/app/{app}/operations/{operation}",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "app",
+          "jsonName": "app"
+        },
+        {
+          "name": "operation",
+          "jsonName": "operation"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.App/Invoke",
+      "symbols": {
+        "go": {
+          "service": "AppClient",
+          "method": "Invoke"
+        },
+        "python": {
+          "service": "AppClient",
+          "method": "invoke"
+        },
+        "rust": {
+          "service": "AppClient",
+          "method": "invoke"
+        },
+        "typescript": {
+          "service": "AppClient",
+          "method": "invoke"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "reject": [
+        "run_as"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "App",
+      "method": "InvokeGraphQL",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/app/{app}/graphql",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "app",
+          "jsonName": "app"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.App/InvokeGraphQL",
+      "symbols": {
+        "go": {
+          "service": "AppClient",
+          "method": "InvokeGraphQL"
+        },
+        "python": {
+          "service": "AppClient",
+          "method": "invoke_graphql"
+        },
+        "rust": {
+          "service": "AppClient",
+          "method": "invoke_graphql"
+        },
+        "typescript": {
+          "service": "AppClient",
+          "method": "invokeGraphQL"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Authorization",
+      "method": "AddRelationship",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/authorization/relationships",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Authorization/AddRelationship",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "AddRelationship"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "add_relationship"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "add_relationship"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "addRelationship"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "CheckAccess",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/authorization/access:check",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Authorization/CheckAccess",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "CheckAccess"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "check_access"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "check_access"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "checkAccess"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "CheckAccessMany",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/authorization/access:checkMany",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Authorization/CheckAccessMany",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "CheckAccessMany"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "check_access_many"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "check_access_many"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "checkAccessMany"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "DeleteRelationship",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/authorization/relationships:delete",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Authorization/DeleteRelationship",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "DeleteRelationship"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "delete_relationship"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "delete_relationship"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "deleteRelationship"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "GetActiveModelRef",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/authorization/models/active",
+      "grpcPath": "/gestalt.provider.v1.Authorization/GetActiveModelRef",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "GetActiveModelRef"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "get_active_model_ref"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "get_active_model_ref"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "getActiveModelRef"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "ListActiveModelResourceTypes",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/authorization/models/active/resource-types",
+      "restQueryFields": [
+        {
+          "name": "filter",
+          "jsonName": "filter"
+        },
+        {
+          "name": "page_size",
+          "jsonName": "pageSize"
+        },
+        {
+          "name": "page_token",
+          "jsonName": "pageToken"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "ListActiveModelResourceTypes"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "list_active_model_resource_types"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "list_active_model_resource_types"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "listActiveModelResourceTypes"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "ListRelationships",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/authorization/relationships",
+      "restQueryFields": [
+        {
+          "name": "filter",
+          "jsonName": "filter"
+        },
+        {
+          "name": "page_size",
+          "jsonName": "pageSize"
+        },
+        {
+          "name": "page_token",
+          "jsonName": "pageToken"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Authorization/ListRelationships",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "ListRelationships"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "list_relationships"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "list_relationships"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "listRelationships"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "SetActiveModel",
+      "streamingKind": "unary",
+      "restVerb": "PUT",
+      "restPath": "/api/v2/authorization/models/active",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Authorization/SetActiveModel",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "SetActiveModel"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "set_active_model"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "set_active_model"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "setActiveModel"
+        }
+      }
+    },
+    {
+      "service": "Authorization",
+      "method": "SetAuthorizationState",
+      "streamingKind": "unary",
+      "restVerb": "PUT",
+      "restPath": "/api/v2/authorization/state",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Authorization/SetAuthorizationState",
+      "symbols": {
+        "go": {
+          "service": "AuthorizationClient",
+          "method": "SetAuthorizationState"
+        },
+        "python": {
+          "service": "AuthorizationClient",
+          "method": "set_authorization_state"
+        },
+        "rust": {
+          "service": "AuthorizationClient",
+          "method": "set_authorization_state"
+        },
+        "typescript": {
+          "service": "AuthorizationClient",
+          "method": "setAuthorizationState"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "CreateCredential",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/CreateCredential",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "CreateCredential"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "create_credential"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "create_credential"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "createCredential"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "DeleteCredential",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/DeleteCredential",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "DeleteCredential"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "delete_credential"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "delete_credential"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "deleteCredential"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "ExchangeCredential",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ExchangeCredential",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "ExchangeCredential"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "exchange_credential"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "exchange_credential"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "exchangeCredential"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "GetCredential",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/GetCredential",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "GetCredential"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "get_credential"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "get_credential"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "getCredential"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "ListCredentials",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ListCredentials",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "ListCredentials"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "list_credentials"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "list_credentials"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "listCredentials"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "ResolveCredential",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ResolveCredential",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "ResolveCredential"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "resolve_credential"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "resolve_credential"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "resolveCredential"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "UpsertCredential",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/UpsertCredential",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "UpsertCredential"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "upsert_credential"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "upsert_credential"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "upsertCredential"
+        }
+      }
+    },
+    {
+      "service": "ExternalCredentials",
+      "method": "ValidateCredentialConfig",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig",
+      "symbols": {
+        "go": {
+          "service": "ExternalCredentialsClient",
+          "method": "ValidateCredentialConfig"
+        },
+        "python": {
+          "service": "ExternalCredentialsClient",
+          "method": "validate_credential_config"
+        },
+        "rust": {
+          "service": "ExternalCredentialsClient",
+          "method": "validate_credential_config"
+        },
+        "typescript": {
+          "service": "ExternalCredentialsClient",
+          "method": "validateCredentialConfig"
+        }
+      }
+    },
+    {
+      "service": "Identity",
+      "method": "Authorize",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/identity/authorize",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Identity/Authorize",
+      "symbols": {
+        "go": {
+          "service": "IdentityClient",
+          "method": "Authorize"
+        },
+        "python": {
+          "service": "IdentityClient",
+          "method": "authorize"
+        },
+        "rust": {
+          "service": "IdentityClient",
+          "method": "authorize"
+        },
+        "typescript": {
+          "service": "IdentityClient",
+          "method": "authorize"
+        }
+      }
+    },
+    {
+      "service": "Identity",
+      "method": "GetGrant",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/identity/grants/{grant_id}",
+      "restPathFields": [
+        {
+          "name": "grant_id",
+          "jsonName": "grantId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Identity/GetGrant",
+      "symbols": {
+        "go": {
+          "service": "IdentityClient",
+          "method": "GetGrant"
+        },
+        "python": {
+          "service": "IdentityClient",
+          "method": "get_grant"
+        },
+        "rust": {
+          "service": "IdentityClient",
+          "method": "get_grant"
+        },
+        "typescript": {
+          "service": "IdentityClient",
+          "method": "getGrant"
+        }
+      }
+    },
+    {
+      "service": "Identity",
+      "method": "Introspect",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/identity/introspect",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Identity/Introspect",
+      "symbols": {
+        "go": {
+          "service": "IdentityClient",
+          "method": "Introspect"
+        },
+        "python": {
+          "service": "IdentityClient",
+          "method": "introspect"
+        },
+        "rust": {
+          "service": "IdentityClient",
+          "method": "introspect"
+        },
+        "typescript": {
+          "service": "IdentityClient",
+          "method": "introspect"
+        }
+      }
+    },
+    {
+      "service": "Identity",
+      "method": "ListGrants",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/identity/grants",
+      "grpcPath": "/gestalt.provider.v1.Identity/ListGrants",
+      "symbols": {
+        "go": {
+          "service": "IdentityClient",
+          "method": "ListGrants"
+        },
+        "python": {
+          "service": "IdentityClient",
+          "method": "list_grants"
+        },
+        "rust": {
+          "service": "IdentityClient",
+          "method": "list_grants"
+        },
+        "typescript": {
+          "service": "IdentityClient",
+          "method": "listGrants"
+        }
+      }
+    },
+    {
+      "service": "Identity",
+      "method": "RevokeGrant",
+      "streamingKind": "unary",
+      "restVerb": "DELETE",
+      "restPath": "/api/v2/identity/grants/{grant_id}",
+      "restPathFields": [
+        {
+          "name": "grant_id",
+          "jsonName": "grantId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Identity/RevokeGrant",
+      "symbols": {
+        "go": {
+          "service": "IdentityClient",
+          "method": "RevokeGrant"
+        },
+        "python": {
+          "service": "IdentityClient",
+          "method": "revoke_grant"
+        },
+        "rust": {
+          "service": "IdentityClient",
+          "method": "revoke_grant"
+        },
+        "typescript": {
+          "service": "IdentityClient",
+          "method": "revokeGrant"
+        }
+      }
+    },
+    {
+      "service": "Identity",
+      "method": "Token",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/identity/token",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Identity/Token",
+      "symbols": {
+        "go": {
+          "service": "IdentityClient",
+          "method": "Token"
+        },
+        "python": {
+          "service": "IdentityClient",
+          "method": "token"
+        },
+        "rust": {
+          "service": "IdentityClient",
+          "method": "token"
+        },
+        "typescript": {
+          "service": "IdentityClient",
+          "method": "token"
+        }
+      }
+    },
+    {
+      "service": "Identity",
+      "method": "UserInfo",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/identity/userinfo",
+      "grpcPath": "/gestalt.provider.v1.Identity/UserInfo",
+      "symbols": {
+        "go": {
+          "service": "IdentityClient",
+          "method": "UserInfo"
+        },
+        "python": {
+          "service": "IdentityClient",
+          "method": "user_info"
+        },
+        "rust": {
+          "service": "IdentityClient",
+          "method": "user_info"
+        },
+        "typescript": {
+          "service": "IdentityClient",
+          "method": "userInfo"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "Add",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/Add",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "Add"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "add"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "add"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "add"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "Clear",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/Clear",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "Clear"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "clear"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "clear"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "clear"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "Count",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/Count",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "Count"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "count"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "count"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "count"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "CreateIndex",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/CreateIndex",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "CreateIndex"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "create_index"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "create_index"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "createIndex"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "CreateObjectStore",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/CreateObjectStore",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "CreateObjectStore"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "create_object_store"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "create_object_store"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "createObjectStore"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "Delete",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/Delete",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "Delete"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "delete"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "delete"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "delete"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "DeleteIndex",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/DeleteIndex",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "DeleteIndex"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "delete_index"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "delete_index"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "deleteIndex"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "DeleteObjectStore",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/DeleteObjectStore",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "DeleteObjectStore"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "delete_object_store"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "delete_object_store"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "deleteObjectStore"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "DeleteRange",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/DeleteRange",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "DeleteRange"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "delete_range"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "delete_range"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "deleteRange"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "Get",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/Get",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "Get"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "get"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "get"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "get"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "GetAll",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/GetAll",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "GetAll"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "get_all"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "get_all"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "getAll"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "GetAllKeys",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/GetAllKeys",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "GetAllKeys"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "get_all_keys"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "get_all_keys"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "getAllKeys"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "GetKey",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/GetKey",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "GetKey"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "get_key"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "get_key"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "getKey"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "IndexCount",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/IndexCount",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "IndexCount"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "index_count"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "index_count"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "indexCount"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "IndexDelete",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/IndexDelete",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "IndexDelete"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "index_delete"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "index_delete"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "indexDelete"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "IndexGet",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/IndexGet",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "IndexGet"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "index_get"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "index_get"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "indexGet"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "IndexGetAll",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/IndexGetAll",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "IndexGetAll"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "index_get_all"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "index_get_all"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "indexGetAll"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "IndexGetAllKeys",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "IndexGetAllKeys"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "index_get_all_keys"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "index_get_all_keys"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "indexGetAllKeys"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "IndexGetKey",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/IndexGetKey",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "IndexGetKey"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "index_get_key"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "index_get_key"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "indexGetKey"
+        }
+      }
+    },
+    {
+      "service": "IndexedDB",
+      "method": "Put",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.IndexedDB/Put",
+      "symbols": {
+        "go": {
+          "service": "IndexedDBClient",
+          "method": "Put"
+        },
+        "python": {
+          "service": "IndexedDBClient",
+          "method": "put"
+        },
+        "rust": {
+          "service": "IndexedDBClient",
+          "method": "put"
+        },
+        "typescript": {
+          "service": "IndexedDBClient",
+          "method": "put"
+        }
+      }
+    },
+    {
+      "service": "Workflow",
+      "method": "ApplyDefinition",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/workflow/definitions:apply",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.Workflow/ApplyDefinition",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "ApplyDefinition"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "apply_definition"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "apply_definition"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "applyDefinition"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "CancelRun",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/workflow/runs/{run_id}:cancel",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "run_id",
+          "jsonName": "runId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/CancelRun",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "CancelRun"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "cancel_run"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "cancel_run"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "cancelRun"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "DeleteDefinition",
+      "streamingKind": "unary",
+      "restVerb": "DELETE",
+      "restPath": "/api/v2/workflow/definitions/{definition_id}",
+      "restPathFields": [
+        {
+          "name": "definition_id",
+          "jsonName": "definitionId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider",
+          "jsonName": "provider"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/DeleteDefinition",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "DeleteDefinition"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "delete_definition"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "delete_definition"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "deleteDefinition"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "GetDefinition",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/workflow/definitions/{definition_id}",
+      "restPathFields": [
+        {
+          "name": "definition_id",
+          "jsonName": "definitionId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider",
+          "jsonName": "provider"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/GetDefinition",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "GetDefinition"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "get_definition"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "get_definition"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "getDefinition"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "GetRun",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/workflow/runs/{run_id}",
+      "restPathFields": [
+        {
+          "name": "run_id",
+          "jsonName": "runId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider",
+          "jsonName": "provider"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/GetRun",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "GetRun"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "get_run"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "get_run"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "getRun"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "GetRunEvents",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/workflow/runs/{run_id}/events",
+      "restPathFields": [
+        {
+          "name": "run_id",
+          "jsonName": "runId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider",
+          "jsonName": "provider"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/GetRunEvents",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "GetRunEvents"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "get_run_events"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "get_run_events"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "getRunEvents"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "GetRunOutput",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/workflow/runs/{run_id}/output",
+      "restPathFields": [
+        {
+          "name": "run_id",
+          "jsonName": "runId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider",
+          "jsonName": "provider"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/GetRunOutput",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "GetRunOutput"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "get_run_output"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "get_run_output"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "getRunOutput"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "ListDefinitions",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/workflow/definitions",
+      "restQueryFields": [
+        {
+          "name": "provider",
+          "jsonName": "provider"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/ListDefinitions",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "ListDefinitions"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "list_definitions"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "list_definitions"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "listDefinitions"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "ListRuns",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/workflow/runs",
+      "restQueryFields": [
+        {
+          "name": "page_size",
+          "jsonName": "pageSize"
+        },
+        {
+          "name": "page_token",
+          "jsonName": "pageToken"
+        },
+        {
+          "name": "status",
+          "jsonName": "status"
+        },
+        {
+          "name": "target_app",
+          "jsonName": "targetApp"
+        },
+        {
+          "name": "provider",
+          "jsonName": "provider"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/ListRuns",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "ListRuns"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "list_runs"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "list_runs"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "listRuns"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "SetActivationPaused",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "definition_id",
+          "jsonName": "definitionId"
+        },
+        {
+          "name": "activation_id",
+          "jsonName": "activationId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/SetActivationPaused",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "SetActivationPaused"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "set_activation_paused"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "set_activation_paused"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "setActivationPaused"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "SetDefinitionPaused",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/workflow/definitions/{definition_id}:setPaused",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "definition_id",
+          "jsonName": "definitionId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/SetDefinitionPaused",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "SetDefinitionPaused"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "set_definition_paused"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "set_definition_paused"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "setDefinitionPaused"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "SignalOrStartRun",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/workflow/definitions/{definition_id}:signalOrStart",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "definition_id",
+          "jsonName": "definitionId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/SignalOrStartRun",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "SignalOrStartRun"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "signal_or_start_run"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "signal_or_start_run"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "signalOrStartRun"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "SignalRun",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/workflow/runs/{run_id}:signal",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "run_id",
+          "jsonName": "runId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/SignalRun",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "SignalRun"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "signal_run"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "signal_run"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "signalRun"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Workflow",
+      "method": "StartRun",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/workflow/definitions/{definition_id}/runs",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "definition_id",
+          "jsonName": "definitionId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Workflow/StartRun",
+      "symbols": {
+        "go": {
+          "service": "WorkflowClient",
+          "method": "StartRun"
+        },
+        "python": {
+          "service": "WorkflowClient",
+          "method": "start_run"
+        },
+        "rust": {
+          "service": "WorkflowClient",
+          "method": "start_run"
+        },
+        "typescript": {
+          "service": "WorkflowClient",
+          "method": "startRun"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    }
+  ]
+}

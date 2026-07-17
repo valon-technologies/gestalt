@@ -10,6 +10,19 @@ from gestalt.rpc_support import JsonValue
 
 
 @dataclass(frozen=True, slots=True)
+class AgentToolRef:
+    app: str = ""
+    operation: str = ""
+    connection: str = ""
+    instance: str = ""
+    title: str = ""
+    description: str = ""
+    credential_mode: str = ""
+    system: str = ""
+    run_as: SubjectContext | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AppInvokeGraphQLRequest:
     """AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
     through Gestalt.
@@ -37,6 +50,18 @@ class AppInvokeRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationAnnotations:
+    """OperationAnnotations carries optional host hints about how an operation
+    behaves.
+    """
+
+    read_only_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    destructive_hint: bool | None = None
+    open_world_hint: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class OperationResult:
     """OperationResult is the serialized result returned from an Execute call."""
 
@@ -50,3 +75,21 @@ class StringList:
     """StringList is a helper map value for repeated HTTP header and query values."""
 
     values: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectContext:
+    """SubjectContext identifies the caller that initiated an operation."""
+
+    id: str = ""
+    email: str = ""
+    display_name: str = ""
+    scopes: list[str] = field(default_factory=list)
+    permissions: list[SubjectPermissionContext] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectPermissionContext:
+    app: str = ""
+    operations: list[str] = field(default_factory=list)
+    all_operations: bool = False

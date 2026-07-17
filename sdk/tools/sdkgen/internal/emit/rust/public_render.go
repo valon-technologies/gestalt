@@ -28,13 +28,34 @@ func (r *renderer) renderAppClient(svc *model.Service) {
 	r.body.WriteString("        Self { transport }\n")
 	r.body.WriteString("    }\n\n")
 
+	r.body.WriteString("}\n\n")
+
+	var restMethods []*model.Method
+	var grpcOnlyMethods []*model.Method
 	for _, m := range svc.Methods {
 		if m.Stream != model.Unary {
 			continue
 		}
-		r.renderAppClientMethod(svc, m)
+		if m.HTTP != nil {
+			restMethods = append(restMethods, m)
+			continue
+		}
+		grpcOnlyMethods = append(grpcOnlyMethods, m)
 	}
-	r.body.WriteString("}\n\n")
+	if len(restMethods) > 0 {
+		fmt.Fprintf(&r.body, "impl<T: UnaryTransport> %s<T> {\n", clientName)
+		for _, m := range restMethods {
+			r.renderAppClientMethod(svc, m)
+		}
+		r.body.WriteString("}\n\n")
+	}
+	if len(grpcOnlyMethods) > 0 {
+		fmt.Fprintf(&r.body, "impl<T: crate::public::generated::unary_transport::GrpcCapable> %s<T> {\n", clientName)
+		for _, m := range grpcOnlyMethods {
+			r.renderAppClientMethod(svc, m)
+		}
+		r.body.WriteString("}\n\n")
+	}
 }
 
 func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method) {
@@ -46,10 +67,52 @@ func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method) {
 		r.renderAppClientInvokeMethod(m, methodName)
 		return
 	}
+
+	if m.Name == "InvokeGraphQL" {
+		r.renderAppClientRawMethod(m, constName, methodName)
+		r.renderAppClientGraphQLRawAlias(m, methodName)
+		r.renderAppClientGraphQLDecodedMethod(m, methodName+"_decoded")
+		return
+	}
+
 	r.renderAppClientRawMethod(m, constName, methodName)
 }
 
 func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodName string) {
+	if m.InputIsEmpty || m.OutputIsEmpty {
+		r.features.prostTypes = true
+	}
+
+	if m.InputIsEmpty && m.OutputIsEmpty {
+		fmt.Fprintf(&r.body, "    pub async fn %s(&self) -> Result<(), GestaltError> {\n", methodName)
+		r.body.WriteString("        let wire = Empty::default();\n")
+		r.body.WriteString("        let mut wire_response = Empty::default();\n")
+		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response).await?;\n", constName)
+		r.body.WriteString("        Ok(())\n    }\n\n")
+		return
+	}
+	if m.InputIsEmpty {
+		outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
+		wireResponseType := wireTypeName(m.Output.FullName)
+		fromWire := r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
+		fmt.Fprintf(&r.body, "    pub async fn %s(&self) -> Result<%s, GestaltError> {\n", methodName, outputType)
+		r.body.WriteString("        let wire = Empty::default();\n")
+		fmt.Fprintf(&r.body, "        let mut wire_response = crate::generated::v1::%s::default();\n", wireResponseType)
+		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response).await?;\n", constName)
+		fmt.Fprintf(&r.body, "        Ok(%s(wire_response))\n", fromWire)
+		r.body.WriteString("    }\n\n")
+		return
+	}
+	if m.OutputIsEmpty {
+		requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
+		toWire := r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
+		fmt.Fprintf(&r.body, "    pub async fn %s(&self, request: %s) -> Result<(), GestaltError> {\n", methodName, requestType)
+		fmt.Fprintf(&r.body, "        let wire = %s(request);\n", toWire)
+		r.body.WriteString("        let mut wire_response = Empty::default();\n")
+		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response).await?;\n", constName)
+		r.body.WriteString("        Ok(())\n    }\n\n")
+		return
+	}
 	if m.Input == nil || m.Output == nil {
 		return
 	}
@@ -97,6 +160,46 @@ func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName strin
 		"        decode_app_result(%s, %s, response.%s, &response.%s).map_err(InvokeError::from)\n",
 		appExpr,
 		opExpr,
+		escapeIdent(status.Name),
+		escapeIdent(body.Name),
+	)
+	r.body.WriteString("    }\n\n")
+}
+
+func (r *renderer) renderAppClientGraphQLRawAlias(m *model.Method, methodName string) {
+	if m.Input == nil || m.Output == nil {
+		return
+	}
+	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
+	outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
+	r.body.WriteString("    /// `invoke_graphql_raw` is an alias for [`Self::invoke_graphql`].\n")
+	fmt.Fprintf(&r.body, "    pub async fn %s_raw(&self, request: %s) -> Result<%s, GestaltError> {\n",
+		methodName, requestType, outputType)
+	fmt.Fprintf(&r.body, "        self.%s(request).await\n", methodName)
+	r.body.WriteString("    }\n\n")
+}
+
+func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodName string) {
+	if m.Input == nil || m.Output == nil {
+		return
+	}
+	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
+	r.useInvoke("decode_graphql_result")
+	r.useInvoke("InvokeError")
+
+	fmt.Fprintf(&r.body, "    pub async fn %s(&self, request: %s) -> Result<serde_json::Value, InvokeError> {\n", methodName, requestType)
+	appExpr := `""`
+	if f := findField(m.Input, "app"); f != nil {
+		fmt.Fprintf(&r.body, "        let invoke_app = request.%s.clone();\n", escapeIdent(f.Name))
+		appExpr = "invoke_app.as_str()"
+	}
+	fmt.Fprintf(&r.body, "        let response = self.invoke_graphql(request).await?;\n")
+	status := findField(m.Output, "status")
+	body := findField(m.Output, "body")
+	fmt.Fprintf(
+		&r.body,
+		"        decode_graphql_result(%s, response.%s, &response.%s).map_err(InvokeError::from)\n",
+		appExpr,
 		escapeIdent(status.Name),
 		escapeIdent(body.Name),
 	)

@@ -15,7 +15,7 @@ from ._protocol import JsonObject, JsonValue
 if TYPE_CHECKING:
     from typing_extensions import dataclass_transform
 
-    from gestalt.public.client import GestaltClient
+    from gestalt.public.bound import BoundGestaltClient
 else:
     try:
         from typing import dataclass_transform
@@ -137,7 +137,7 @@ class Request:
 
         return App.connect(context=self._native_context(), timeout=timeout)
 
-    def gestalt(self) -> "GestaltClient":
+    def gestalt(self) -> "BoundGestaltClient":
         """Return the public Gestalt client bound to this request's relay context."""
 
         from gestalt.public.bound import gestalt_from_request

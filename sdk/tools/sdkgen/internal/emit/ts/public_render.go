@@ -313,21 +313,28 @@ export interface UnaryTransport {
 `
 }
 
-func renderPublicAppClient(services []*model.Service, paths PublicImports) string {
+func publicServiceClientFile(serviceName string) string {
+	return lowerFirst(serviceName) + "_client.ts"
+}
+
+func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 	var b strings.Builder
-	b.WriteString("/**\n * Transport-neutral App client.\n *\n * @module client/generated/app_client\n */\n\n")
+	clientName := localName(svc.FullName) + "Client"
+	fmt.Fprintf(&b, "/**\n * Transport-neutral %s client.\n *\n * @module client/generated/%s\n */\n\n",
+		svc.Name, publicServiceClientFile(svc.Name))
 
 	schemaImports := map[string]map[string]bool{}
 	nativeImports := map[string]map[string]bool{}
 	codecImports := map[string]map[string]bool{}
 	var requestTypes []string
 	converterImports := map[string]bool{}
+	needsEmpty := false
 
-	for _, svc := range services {
-		for _, m := range svc.Methods {
-			if m.Input == nil || m.Output == nil {
-				continue
-			}
+	for _, m := range svc.Methods {
+		if m.InputIsEmpty || m.OutputIsEmpty {
+			needsEmpty = true
+		}
+		if m.Input != nil && m.Output != nil {
 			inputNative := localName(m.Input.FullName)
 			outputNative := localName(m.Output.FullName)
 			if schemaImports[m.Input.ProtoFile] == nil {
@@ -348,9 +355,35 @@ func renderPublicAppClient(services []*model.Service, paths PublicImports) strin
 			codecImports[m.Output.ProtoFile]["fromWire"+outputNative] = true
 			requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
 			converterImports["toWire"+inputNative] = true
+		} else if m.Input != nil && !m.InputIsEmpty {
+			inputNative := localName(m.Input.FullName)
+			if schemaImports[m.Input.ProtoFile] == nil {
+				schemaImports[m.Input.ProtoFile] = map[string]bool{}
+			}
+			schemaImports[m.Input.ProtoFile][inputNative+"Schema"] = true
+			requestTypes = append(requestTypes, publicRequestTypeName(svc, m))
+			converterImports["toWire"+inputNative] = true
+		} else if m.Output != nil && !m.OutputIsEmpty {
+			outputNative := localName(m.Output.FullName)
+			if schemaImports[m.Output.ProtoFile] == nil {
+				schemaImports[m.Output.ProtoFile] = map[string]bool{}
+			}
+			schemaImports[m.Output.ProtoFile][outputNative+"Schema"] = true
+			if nativeImports[m.Output.ProtoFile] == nil {
+				nativeImports[m.Output.ProtoFile] = map[string]bool{}
+			}
+			nativeImports[m.Output.ProtoFile][outputNative] = true
+			if codecImports[m.Output.ProtoFile] == nil {
+				codecImports[m.Output.ProtoFile] = map[string]bool{}
+			}
+			codecImports[m.Output.ProtoFile]["fromWire"+outputNative] = true
 		}
 	}
 
+	if needsEmpty {
+		b.WriteString("import { create } from \"@bufbuild/protobuf\";\n")
+		b.WriteString("import { EmptySchema } from \"@bufbuild/protobuf/wkt\";\n")
+	}
 	for _, protoFile := range sortedPublicKeys(nativeImports) {
 		names := nativeImports[protoFile]
 		typeNames := sortedPublicKeys(names)
@@ -366,79 +399,218 @@ func renderPublicAppClient(services []*model.Service, paths PublicImports) strin
 		fmt.Fprintf(&b, "import {\n  %s,\n} from %s;\n",
 			strings.Join(names, ",\n  "), paths.genModuleQuoted(protoFile))
 	}
-	b.WriteString("import { decodeAppResult } from " + paths.supportModuleQuoted("invoke_support.ts") + ";\n")
+	if svc.Name == "App" {
+		b.WriteString("import { decodeAppResult, decodeGraphQLResult } from " + paths.supportModuleQuoted("invoke_support.ts") + ";\n")
+	}
 	b.WriteString("import {\n")
 	for _, name := range sortedPublicKeys(converterImports) {
 		fmt.Fprintf(&b, "  %s,\n", name)
 	}
 	b.WriteString("} from \"./converters.ts\";\n")
 	b.WriteString("import { PUBLIC_METHODS } from \"./methods.ts\";\n")
-	b.WriteString("import type {\n  " + strings.Join(requestTypes, ",\n  ") + ",\n} from \"./types.ts\";\n")
+	if len(requestTypes) > 0 {
+		b.WriteString("import type {\n  " + strings.Join(requestTypes, ",\n  ") + ",\n} from \"./types.ts\";\n")
+	}
 	b.WriteString("import type { UnaryTransport, PublicUnaryCallOptions } from \"./unary_transport.ts\";\n\n")
 
-	b.WriteString("export class AppClient {\n")
+	fmt.Fprintf(&b, "export class %s {\n", clientName)
 	b.WriteString("  constructor(private readonly transport: UnaryTransport) {}\n\n")
-	for _, svc := range services {
-		serviceKey := lowerFirst(svc.Name)
-		for _, m := range svc.Methods {
-			renderPublicAppClientMethod(&b, svc, m, serviceKey)
-		}
+	serviceKey := lowerFirst(svc.Name)
+	for _, m := range svc.Methods {
+		renderPublicServiceClientMethod(&b, svc, m, serviceKey, paths)
 	}
 	b.WriteString("}\n")
+	renderPublicServiceRESTInterface(&b, svc)
 	return b.String()
 }
 
-func renderPublicAppClientMethod(b *strings.Builder, svc *model.Service, m *model.Method, serviceKey string) {
-	if m.Input == nil || m.Output == nil {
+func renderPublicServiceRESTInterface(b *strings.Builder, svc *model.Service) {
+	clientName := localName(svc.FullName) + "Client"
+	ifaceName := clientName + "REST"
+	var restMethods []*model.Method
+	for _, m := range svc.Methods {
+		if m.HTTP != nil {
+			restMethods = append(restMethods, m)
+		}
+	}
+	if len(restMethods) == 0 {
 		return
 	}
+	fmt.Fprintf(b, "\nexport interface %s {\n", ifaceName)
+	for _, m := range restMethods {
+		renderPublicRESTInterfaceMethod(b, svc, m)
+	}
+	b.WriteString("}\n")
+}
+
+func renderPublicServiceClientMethod(b *strings.Builder, svc *model.Service, m *model.Method, serviceKey string, paths PublicImports) {
 	methodKey := lowerFirst(m.Name)
+	methodRef := fmt.Sprintf("PUBLIC_METHODS.%s.%s", serviceKey, methodKey)
+
+	if m.JsonResult != nil && m.Input != nil && m.Output != nil {
+		renderPublicServiceClientJsonMethod(b, svc, m, methodKey, methodRef, paths)
+		return
+	}
+
+	if m.Name == "InvokeGraphQL" && m.Input != nil && m.Output != nil {
+		renderPublicServiceClientGraphQLRawMethod(b, svc, m, methodKey, methodRef)
+		renderPublicServiceClientGraphQLRawAlias(b, svc, m)
+		renderPublicServiceClientGraphQLDecodedMethod(b, svc, m)
+		return
+	}
+
+	sig := renderPublicServiceClientMethodSignature(svc, m, methodKey)
+	returnType := publicServiceClientReturnType(m)
+	if m.OutputIsEmpty {
+		fmt.Fprintf(b, "  async %s%s: Promise<void> {\n", sig.prefix, sig.suffix)
+	} else {
+		fmt.Fprintf(b, "  async %s%s: Promise<%s> {\n", sig.prefix, sig.suffix, returnType)
+	}
+
+	wireExpr := publicServiceWireRequestExpr(m)
+	inputSchema := publicServiceInputSchema(m)
+	outputSchema := publicServiceOutputSchema(m)
+
+	if m.OutputIsEmpty {
+		fmt.Fprintf(b, "    await this.transport.unary(\n      %s,\n      %s,\n      %s,\n      %s,\n      callOptions,\n    );\n  }\n\n",
+			methodRef, wireExpr, inputSchema, outputSchema)
+	} else {
+		fromWire := publicServiceFromWireExpr(m)
+		fmt.Fprintf(b, "    return %s(\n      await this.transport.unary(\n        %s,\n        %s,\n        %s,\n        %s,\n        callOptions,\n      ),\n    );\n  }\n\n",
+			fromWire, methodRef, wireExpr, inputSchema, outputSchema)
+	}
+}
+
+type publicServiceMethodSignature struct {
+	prefix         string
+	suffix         string
+	hasCallOptions bool
+}
+
+func renderPublicServiceClientMethodSignature(svc *model.Service, m *model.Method, methodKey string) publicServiceMethodSignature {
+	sig := publicServiceMethodSignature{prefix: methodKey}
+	var params []string
+	if !m.InputIsEmpty {
+		typeName := publicRequestTypeName(svc, m)
+		params = append(params, fmt.Sprintf("request: %s", typeName))
+	}
+	params = append(params, "callOptions?: PublicUnaryCallOptions")
+	sig.hasCallOptions = true
+	sig.suffix = "(" + strings.Join(params, ", ") + ")"
+	return sig
+}
+
+func publicServiceClientReturnType(m *model.Method) string {
+	if m.OutputIsEmpty {
+		return "void"
+	}
+	return localName(m.Output.FullName)
+}
+
+func publicServiceWireRequestExpr(m *model.Method) string {
+	if m.InputIsEmpty {
+		return "create(EmptySchema, {})"
+	}
+	return "toWire" + localName(m.Input.FullName) + "(request)"
+}
+
+func publicServiceInputSchema(m *model.Method) string {
+	if m.InputIsEmpty {
+		return "EmptySchema"
+	}
+	return localName(m.Input.FullName) + "Schema"
+}
+
+func publicServiceOutputSchema(m *model.Method) string {
+	if m.OutputIsEmpty {
+		return "EmptySchema"
+	}
+	return localName(m.Output.FullName) + "Schema"
+}
+
+func publicServiceFromWireExpr(m *model.Method) string {
+	if m.OutputIsEmpty {
+		return ""
+	}
+	return "fromWire" + localName(m.Output.FullName)
+}
+
+func renderPublicServiceClientJsonMethod(b *strings.Builder, svc *model.Service, m *model.Method, methodKey, methodRef string, paths PublicImports) {
 	typeName := publicRequestTypeName(svc, m)
 	inputNative := localName(m.Input.FullName)
 	outputNative := localName(m.Output.FullName)
-	wireExpr := publicWireRequestExpr(m)
-	schemaName := inputNative + "Schema"
-	outputSchema := outputNative + "Schema"
-	methodRef := fmt.Sprintf("PUBLIC_METHODS.%s.%s", serviceKey, methodKey)
-	fromWire := "fromWire" + outputNative
 
-	rawCall := fmt.Sprintf(`    return %s(
-      await this.transport.unary(
-        %s,
-        %s,
-        %s,
-        %s,
-        callOptions,
-      ),
-    );`, fromWire, methodRef, wireExpr, schemaName, outputSchema)
+	fmt.Fprintf(b, "  async %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n",
+		methodKey, typeName, outputNative)
+	fmt.Fprintf(b, "    return fromWire%s(\n      await this.transport.unary(\n        %s,\n        toWire%s(request),\n        %sSchema,\n        %sSchema,\n        callOptions,\n      ),\n    );\n  }\n\n",
+		outputNative, methodRef, inputNative, inputNative, outputNative)
 
-	if m.JsonResult != nil {
-		fmt.Fprintf(b, "  async %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, typeName, outputNative)
-		b.WriteString(rawCall)
-		b.WriteString("  }\n\n")
-
-		if m.Name == "Invoke" {
-			b.WriteString("  /**\n   * The result decodes with the standard JSON operation envelope semantics;\n   * envelope failures throw InvokeError.\n   */\n")
-		}
-		fmt.Fprintf(b, "  async %s<T = unknown>(request: %s, callOptions?: PublicUnaryCallOptions): Promise<T> {\n", methodKey, typeName)
-		appField := publicJSONResultAppField(m)
-		fmt.Fprintf(b, "    const response = await this.%sRaw(request, callOptions);\n", methodKey)
-		fmt.Fprintf(b, "    return decodeAppResult<T>(request.%s ?? \"\", request.operation ?? \"\", response);\n", appField)
-		b.WriteString("  }\n\n")
-		return
+	if m.Name == "Invoke" {
+		b.WriteString("  /**\n   * The result decodes with the standard JSON operation envelope semantics;\n   * envelope failures throw InvokeError.\n   */\n")
 	}
-
-	fmt.Fprintf(b, "  async %s(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, typeName, outputNative)
-	b.WriteString(rawCall)
-	b.WriteString("  }\n\n")
-
-	fmt.Fprintf(b, "  async %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n", methodKey, typeName, outputNative)
-	fmt.Fprintf(b, "    return this.%s(request, callOptions);\n", methodKey)
+	fmt.Fprintf(b, "  async %s<T = unknown>(request: %s, callOptions?: PublicUnaryCallOptions): Promise<T> {\n", methodKey, typeName)
+	appField := publicJSONResultAppField(m)
+	fmt.Fprintf(b, "    const response = await this.%sRaw(request, callOptions);\n", methodKey)
+	fmt.Fprintf(b, "    return decodeAppResult<T>(request.%s ?? \"\", request.operation ?? \"\", response);\n", appField)
 	b.WriteString("  }\n\n")
 }
 
-func publicWireRequestExpr(m *model.Method) string {
-	return "toWire" + localName(m.Input.FullName) + "(request)"
+func renderPublicServiceClientGraphQLRawMethod(b *strings.Builder, svc *model.Service, m *model.Method, methodKey, methodRef string) {
+	typeName := publicRequestTypeName(svc, m)
+	inputNative := localName(m.Input.FullName)
+	outputNative := localName(m.Output.FullName)
+	sig := renderPublicServiceClientMethodSignature(svc, m, methodKey)
+	fmt.Fprintf(b, "  async %s%s: Promise<%s> {\n", sig.prefix, sig.suffix, outputNative)
+	fmt.Fprintf(b, "    return fromWire%s(\n      await this.transport.unary(\n        %s,\n        toWire%s(request),\n        %sSchema,\n        %sSchema,\n        callOptions,\n      ),\n    );\n  }\n\n",
+		outputNative, methodRef, inputNative, inputNative, outputNative)
+	_ = typeName
+}
+
+func renderPublicServiceClientGraphQLRawAlias(b *strings.Builder, svc *model.Service, m *model.Method) {
+	typeName := publicRequestTypeName(svc, m)
+	outputNative := localName(m.Output.FullName)
+	b.WriteString("  /** Alias for invokeGraphQL. */\n")
+	fmt.Fprintf(b, "  async invokeGraphQLRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s> {\n",
+		typeName, outputNative)
+	b.WriteString("    return this.invokeGraphQL(request, callOptions);\n  }\n\n")
+}
+
+func renderPublicServiceClientGraphQLDecodedMethod(b *strings.Builder, svc *model.Service, m *model.Method) {
+	_ = svc
+	_ = m
+	b.WriteString("  async invokeGraphQLDecoded<T = unknown>(request: PublicAppInvokeGraphQLRequest, callOptions?: PublicUnaryCallOptions): Promise<T> {\n")
+	b.WriteString("    const response = await this.invokeGraphQL(request, callOptions);\n")
+	b.WriteString("    return decodeGraphQLResult<T>(request.app ?? \"\", response);\n")
+	b.WriteString("  }\n\n")
+}
+
+func renderPublicRESTInterfaceMethod(b *strings.Builder, svc *model.Service, m *model.Method) {
+	if m.JsonResult != nil && m.Input != nil && m.Output != nil {
+		typeName := publicRequestTypeName(svc, m)
+		outputNative := localName(m.Output.FullName)
+		fmt.Fprintf(b, "  %sRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s>;\n",
+			lowerFirst(m.Name), typeName, outputNative)
+		fmt.Fprintf(b, "  %s<T = unknown>(request: %s, callOptions?: PublicUnaryCallOptions): Promise<T>;\n",
+			lowerFirst(m.Name), typeName)
+		return
+	}
+	if m.Name == "InvokeGraphQL" && m.Input != nil && m.Output != nil {
+		typeName := publicRequestTypeName(svc, m)
+		outputNative := localName(m.Output.FullName)
+		fmt.Fprintf(b, "  invokeGraphQL(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s>;\n",
+			typeName, outputNative)
+		fmt.Fprintf(b, "  invokeGraphQLRaw(request: %s, callOptions?: PublicUnaryCallOptions): Promise<%s>;\n",
+			typeName, outputNative)
+		b.WriteString("  invokeGraphQLDecoded<T = unknown>(request: PublicAppInvokeGraphQLRequest, callOptions?: PublicUnaryCallOptions): Promise<T>;\n")
+		return
+	}
+	sig := renderPublicServiceClientMethodSignature(svc, m, lowerFirst(m.Name))
+	returnType := publicServiceClientReturnType(m)
+	if m.OutputIsEmpty {
+		fmt.Fprintf(b, "  %s%s: Promise<void>;\n", sig.prefix, sig.suffix)
+		return
+	}
+	fmt.Fprintf(b, "  %s%s: Promise<%s>;\n", sig.prefix, sig.suffix, returnType)
 }
 
 func publicJSONResultAppField(m *model.Method) string {

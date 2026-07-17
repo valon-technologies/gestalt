@@ -34,9 +34,12 @@ pub trait UnaryTransport: Send + Sync {
         response: &mut Resp,
     ) -> impl Future<Output = Result<(), GestaltError>> + Send
     where
-        Req: Message + Send + Sync,
-        Resp: Message + Default + Send;
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static;
 }
+
+/// Marker for transports that can call gRPC-only public methods.
+pub trait GrpcCapable: UnaryTransport {}
 `
 
 // EmitPublic renders the public gestaltd Rust client under sdk/rust/src/public.
@@ -270,7 +273,10 @@ func markPublicWireJSONFromMessages(idx *index, messages []*model.Message) {
 func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("//! Public method metadata for the gestaltd surface.\n\n")
 	r.body.WriteString("use prost::Message as _;\n")
-	r.body.WriteString("use serde_json::Value;\n\n")
+	r.body.WriteString("use serde_json::{Map, Value};\n\n")
+	r.body.WriteString("/// Wire representation of `google.protobuf.Empty`.\n")
+	r.body.WriteString("#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]\n")
+	r.body.WriteString("pub struct Empty {}\n\n")
 	r.body.WriteString("use crate::generated::v1;\n")
 	r.body.WriteString("use crate::public::generated::rpc_support::{GestaltError, gestalt_error_code};\n")
 
@@ -348,9 +354,15 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 		if pm.Input != nil && pm.Output != nil {
 			fmt.Fprintf(&r.body, "    encode_request_json: Some(%s),\n", encodeShim)
 			fmt.Fprintf(&r.body, "    decode_response_json: Some(%s),\n", decodeShim)
+		} else if pm.Input != nil {
+			fmt.Fprintf(&r.body, "    encode_request_json: Some(%s),\n", encodeShim)
+			fmt.Fprintf(&r.body, "    decode_response_json: Some(%s),\n", decodeShim)
+		} else if pm.Output != nil {
+			fmt.Fprintf(&r.body, "    encode_request_json: Some(%s),\n", encodeShim)
+			fmt.Fprintf(&r.body, "    decode_response_json: Some(%s),\n", decodeShim)
 		} else {
-			r.body.WriteString("    encode_request_json: None,\n")
-			r.body.WriteString("    decode_response_json: None,\n")
+			fmt.Fprintf(&r.body, "    encode_request_json: Some(%s),\n", encodeShim)
+			fmt.Fprintf(&r.body, "    decode_response_json: Some(%s),\n", decodeShim)
 		}
 		r.body.WriteString("};\n\n")
 	}
@@ -362,22 +374,61 @@ func wireJSONShimNames(method string) (encode, decode string) {
 }
 
 func collectWireJSONCodecImports(pm publicsurface.PublicMethod, codecImports map[string]map[string]bool) {
-	if pm.Input == nil || pm.Output == nil {
-		return
+	if pm.Input != nil {
+		codecBase := generatedFileBase(pm.Input.ProtoFile)
+		if codecImports[codecBase] == nil {
+			codecImports[codecBase] = map[string]bool{}
+		}
+		codecImports[codecBase][encodeWireJSONFunc(pm.Input.FullName)] = true
 	}
-	codecBase := generatedFileBase(pm.Input.ProtoFile)
-	if codecImports[codecBase] == nil {
-		codecImports[codecBase] = map[string]bool{}
+	if pm.Output != nil {
+		codecBase := generatedFileBase(pm.Output.ProtoFile)
+		if codecImports[codecBase] == nil {
+			codecImports[codecBase] = map[string]bool{}
+		}
+		codecImports[codecBase][decodeWireJSONFunc(pm.Output.FullName)] = true
 	}
-	codecImports[codecBase][encodeWireJSONFunc(pm.Input.FullName)] = true
-	codecImports[codecBase][decodeWireJSONFunc(pm.Output.FullName)] = true
 }
 
 func (r *renderer) renderWireJSONShims(pm publicsurface.PublicMethod) {
-	if pm.Input == nil || pm.Output == nil {
+	encodeShim, decodeShim := wireJSONShimNames(pm.Method)
+
+	if pm.Input == nil && pm.Output == nil {
+		fmt.Fprintf(&r.body, "fn %s(_bytes: &[u8]) -> Result<Value, GestaltError> {\n", encodeShim)
+		r.body.WriteString("    Ok(Value::Object(Map::new()))\n")
+		r.body.WriteString("}\n\n")
+		fmt.Fprintf(&r.body, "fn %s(_value: &Value) -> Result<Vec<u8>, GestaltError> {\n", decodeShim)
+		r.body.WriteString("    Ok(Empty::default().encode_to_vec())\n")
+		r.body.WriteString("}\n\n")
 		return
 	}
-	encodeShim, decodeShim := wireJSONShimNames(pm.Method)
+	if pm.Input == nil {
+		outputWire := wireTypeName(pm.Output.FullName)
+		decodeFn := decodeWireJSONFunc(pm.Output.FullName)
+		fmt.Fprintf(&r.body, "fn %s(_bytes: &[u8]) -> Result<Value, GestaltError> {\n", encodeShim)
+		r.body.WriteString("    Ok(Value::Object(Map::new()))\n")
+		r.body.WriteString("}\n\n")
+		fmt.Fprintf(&r.body, "fn %s(value: &Value) -> Result<Vec<u8>, GestaltError> {\n", decodeShim)
+		fmt.Fprintf(&r.body, "    let wire = %s(value)?;\n", decodeFn)
+		r.body.WriteString("    Ok(wire.encode_to_vec())\n")
+		r.body.WriteString("}\n\n")
+		_ = outputWire
+		return
+	}
+	if pm.Output == nil {
+		inputWire := wireTypeName(pm.Input.FullName)
+		encodeFn := encodeWireJSONFunc(pm.Input.FullName)
+		fmt.Fprintf(&r.body, "fn %s(bytes: &[u8]) -> Result<Value, GestaltError> {\n", encodeShim)
+		fmt.Fprintf(&r.body, "    let wire = v1::%s::decode(bytes).map_err(|err| {\n", inputWire)
+		r.body.WriteString("        GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())\n")
+		r.body.WriteString("    })?;\n")
+		fmt.Fprintf(&r.body, "    Ok(%s(&wire))\n", encodeFn)
+		r.body.WriteString("}\n\n")
+		fmt.Fprintf(&r.body, "fn %s(_value: &Value) -> Result<Vec<u8>, GestaltError> {\n", decodeShim)
+		r.body.WriteString("    Ok(Empty::default().encode_to_vec())\n")
+		r.body.WriteString("}\n\n")
+		return
+	}
 	inputWire := wireTypeName(pm.Input.FullName)
 	encodeFn := encodeWireJSONFunc(pm.Input.FullName)
 	decodeFn := decodeWireJSONFunc(pm.Output.FullName)

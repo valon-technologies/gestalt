@@ -9,13 +9,8 @@ import grpc
 from google.protobuf.message import Message
 
 from gestalt._codec.support import call_unary
-from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
 from gestalt._grpc_transport import insecure_internal_channel, secure_internal_channel
-from gestalt.public.generated.metadata import (
-    METHOD_APP_INVOKE,
-    METHOD_APP_INVOKE_GRAPHQL,
-    Method,
-)
+from gestalt.public.generated.metadata import Method
 
 from .auth import AuthProvider
 
@@ -35,11 +30,6 @@ class GrpcUnaryTransport:
         self._channel = channel
         self._auth = auth
         self._owns_channel = owns_channel
-        stub = _app_pb2_grpc.AppStub(channel)
-        self._stub_calls = {
-            METHOD_APP_INVOKE.full_method: stub.Invoke,
-            METHOD_APP_INVOKE_GRAPHQL.full_method: stub.InvokeGraphQL,
-        }
 
     def unary(
         self,
@@ -47,17 +37,17 @@ class GrpcUnaryTransport:
         request: Message,
         response_type: type[ResponseT],
     ) -> ResponseT:
-        rpc = self._stub_calls.get(method.full_method)
-        if rpc is None:
-            raise ValueError(f"unknown public gRPC method {method.full_method}")
-
         metadata: list[tuple[str, str]] = []
         authorization = self._auth.authorization_header()
         if authorization:
             metadata.append(("authorization", authorization))
 
         return call_unary(
-            lambda: rpc(request, metadata=metadata or None),
+            lambda: self._channel.unary_unary(
+                method.full_method,
+                request_serializer=request.SerializeToString,
+                response_deserializer=response_type.FromString,
+            )(request, metadata=metadata or None),
         )
 
     def close(self) -> None:

@@ -14,12 +14,7 @@ type EmitPlan struct {
 	ReachableEnums    []*model.Enum
 }
 
-// PrepareEmit validates the schema and builds the language-neutral public emit plan.
-func PrepareEmit(schema *model.Schema) (*EmitPlan, error) {
-	if err := Validate(schema); err != nil {
-		return nil, err
-	}
-	view := Build(schema)
+func prepareEmitFromView(view *View, schema *model.Schema) (*EmitPlan, error) {
 	if len(view.Services) == 0 {
 		return &EmitPlan{View: view}, nil
 	}
@@ -48,4 +43,20 @@ func PrepareEmit(schema *model.Schema) (*EmitPlan, error) {
 		ReachableMessages: reachableMessages,
 		ReachableEnums:    reachableEnums,
 	}, nil
+}
+
+// PrepareEmit validates the schema and builds the language-neutral public emit plan.
+func PrepareEmit(schema *model.Schema) (*EmitPlan, error) {
+	if err := Validate(schema); err != nil {
+		return nil, err
+	}
+	return prepareEmitFromView(Build(schema), schema)
+}
+
+// PrepareRESTEmit validates the schema and builds the browser REST emit plan.
+func PrepareRESTEmit(schema *model.Schema) (*EmitPlan, error) {
+	if err := Validate(schema); err != nil {
+		return nil, err
+	}
+	return prepareEmitFromView(FilterREST(Build(schema)), schema)
 }

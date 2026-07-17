@@ -6,7 +6,9 @@ from .auth import BearerAuth, Unauthenticated, bearer, unauthenticated
 from .bound import gestalt_from_request
 from .client import (
     GestaltClient,
+    GrpcGestaltClient,
     GrpcTransport,
+    RestGestaltClient,
     RestTransport,
     create_gestalt_client,
     grpc,
@@ -16,7 +18,9 @@ from .client import (
 __all__ = [
     "BearerAuth",
     "GestaltClient",
+    "GrpcGestaltClient",
     "GrpcTransport",
+    "RestGestaltClient",
     "RestTransport",
     "Unauthenticated",
     "bearer",

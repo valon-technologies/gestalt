@@ -104,7 +104,7 @@ impl Request {
     /// Returns a public Gestalt client bound to the current provider request.
     pub async fn gestalt(
         &self,
-    ) -> std::result::Result<crate::public::client::GestaltClient, GestaltError> {
+    ) -> std::result::Result<crate::public::bound::BoundGestaltClient, GestaltError> {
         crate::public::gestalt_from_context().await
     }
 }

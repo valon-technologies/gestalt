@@ -6,7 +6,6 @@ import (
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
-	"github.com/valon-technologies/gestalt/sdk/go/publicclient/generated"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -19,7 +18,7 @@ var connectPublicAppConns host.ConnPool
 // GestaltFromContext returns a gRPC client bound to the host-service relay.
 // It injects the provider request context and caller bearer token from ctx.
 // Bound access accepts no public address or auth configuration.
-func GestaltFromContext(ctx context.Context) (*Client, error) {
+func GestaltFromContext(ctx context.Context) (*BoundClient, error) {
 	reqCtx := gestalt.RequestContextFromContext(ctx)
 
 	target, token, err := host.Target("app")
@@ -35,10 +34,7 @@ func GestaltFromContext(ctx context.Context) (*Client, error) {
 		RequestContext:      reqCtx,
 	}
 	grpcT := &grpcUnaryTransport{conn: wrapped}
-	return &Client{
-		App:       generated.NewAppClient(grpcT),
-		transport: grpcT,
-	}, nil
+	return bindBoundClient(grpcT, grpcT), nil
 }
 
 type boundClientConn struct {

@@ -6,7 +6,7 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
-// AppServiceName is the only public service generated in SDK-2.
+// AppServiceName is the App service identifier used for backward-compatible aliases.
 const AppServiceName = "App"
 
 // View is the public client projection of a schema.
@@ -22,7 +22,8 @@ type Service struct {
 	PublicMethods []*model.Method
 }
 
-// Build constructs the public view, retaining only PUBLIC methods on App.
+// Build constructs the public view, retaining all PUBLIC unary methods in
+// stable descriptor order.
 func Build(schema *model.Schema) *View {
 	if schema == nil {
 		return &View{}
@@ -38,9 +39,6 @@ func Build(schema *model.Schema) *View {
 
 	var services []*Service
 	for _, svc := range schema.Services {
-		if svc.Name != AppServiceName {
-			continue
-		}
 		var publicMethods []*model.Method
 		for _, m := range svc.Methods {
 			if !m.Public || m.Stream != model.Unary {
@@ -90,6 +88,31 @@ func GRPCMethodCount(view *View) int {
 		n += len(svc.PublicMethods)
 	}
 	return n
+}
+
+// FilterREST returns a view with only HTTP-backed public methods. Services
+// without REST bindings are omitted.
+func FilterREST(view *View) *View {
+	if view == nil {
+		return &View{}
+	}
+	var services []*Service
+	for _, svc := range view.Services {
+		var restMethods []*model.Method
+		for _, m := range svc.PublicMethods {
+			if m.HTTP != nil {
+				restMethods = append(restMethods, m)
+			}
+		}
+		if len(restMethods) == 0 {
+			continue
+		}
+		services = append(services, &Service{
+			Service:       svc.Service,
+			PublicMethods: restMethods,
+		})
+	}
+	return &View{Services: services}
 }
 
 // PolicyFill returns server-filled field names for a public method.

@@ -3,6 +3,47 @@
 //! Crate-private converters between the well-known wire types and their
 //! native representations, shared by the generated codec modules.
 
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Converts a native time to its wire timestamp. Normalized wire
+/// timestamps keep nanos in 0..1_000_000_000, so times before the Unix epoch
+/// borrow one second when they carry nanos.
+pub(crate) fn to_wire_timestamp(value: SystemTime) -> prost_types::Timestamp {
+    match value.duration_since(UNIX_EPOCH) {
+        Ok(elapsed) => prost_types::Timestamp {
+            seconds: elapsed.as_secs() as i64,
+            nanos: elapsed.subsec_nanos() as i32,
+        },
+        Err(err) => {
+            let before = err.duration();
+            let mut seconds = -(before.as_secs() as i64);
+            let mut nanos = before.subsec_nanos() as i32;
+            if nanos > 0 {
+                seconds -= 1;
+                nanos = 1_000_000_000 - nanos;
+            }
+            prost_types::Timestamp { seconds, nanos }
+        }
+    }
+}
+
+/// Converts a wire timestamp to its native time. The conversion is
+/// infallible: out-of-range nanos clamp into range, and timestamps beyond
+/// what SystemTime can represent clamp to the Unix epoch.
+pub(crate) fn from_wire_timestamp(value: prost_types::Timestamp) -> SystemTime {
+    let nanos = value.nanos.clamp(0, 999_999_999) as u32;
+    if value.seconds >= 0 {
+        UNIX_EPOCH
+            .checked_add(Duration::new(value.seconds as u64, nanos))
+            .unwrap_or(UNIX_EPOCH)
+    } else {
+        UNIX_EPOCH
+            .checked_sub(Duration::new(value.seconds.unsigned_abs(), 0))
+            .and_then(|time| time.checked_add(Duration::new(0, nanos)))
+            .unwrap_or(UNIX_EPOCH)
+    }
+}
+
 /// Converts a native JSON object to its wire struct.
 pub(crate) fn to_wire_struct(
     value: serde_json::Map<String, serde_json::Value>,
@@ -13,6 +54,17 @@ pub(crate) fn to_wire_struct(
             .map(|(key, item)| (key, to_wire_value(item)))
             .collect(),
     }
+}
+
+/// Converts a wire struct to its native JSON object.
+pub(crate) fn from_wire_struct(
+    value: prost_types::Struct,
+) -> serde_json::Map<String, serde_json::Value> {
+    value
+        .fields
+        .into_iter()
+        .map(|(key, item)| (key, from_wire_value(item)))
+        .collect()
 }
 
 /// Converts a native JSON value to its wire value.
@@ -29,4 +81,21 @@ pub(crate) fn to_wire_value(value: serde_json::Value) -> prost_types::Value {
         serde_json::Value::Object(items) => Kind::StructValue(to_wire_struct(items)),
     };
     prost_types::Value { kind: Some(kind) }
+}
+
+/// Converts a wire value to its native JSON value. Wire numbers are f64;
+/// non-finite values have no JSON representation, so they become JSON null.
+pub(crate) fn from_wire_value(value: prost_types::Value) -> serde_json::Value {
+    use prost_types::value::Kind;
+    match value.kind {
+        None | Some(Kind::NullValue(_)) => serde_json::Value::Null,
+        Some(Kind::BoolValue(item)) => serde_json::Value::Bool(item),
+        Some(Kind::NumberValue(item)) => serde_json::Number::from_f64(item)
+            .map_or(serde_json::Value::Null, serde_json::Value::Number),
+        Some(Kind::StringValue(item)) => serde_json::Value::String(item),
+        Some(Kind::ListValue(items)) => {
+            serde_json::Value::Array(items.values.into_iter().map(from_wire_value).collect())
+        }
+        Some(Kind::StructValue(items)) => serde_json::Value::Object(from_wire_struct(items)),
+    }
 }
