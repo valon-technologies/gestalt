@@ -51,9 +51,9 @@ pub async fn create_gestalt_client<A: Auth + 'static>(
         )))),
         Transport::Grpc => {
             let channel = dial_public_grpc(&address)?;
-            Ok(GestaltClient::Grpc(Box::new(AppClient::new(GrpcTransport::new(
-                channel, auth,
-            )))))
+            Ok(GestaltClient::Grpc(Box::new(AppClient::new(
+                GrpcTransport::new(channel, auth),
+            ))))
         }
     }
 }
