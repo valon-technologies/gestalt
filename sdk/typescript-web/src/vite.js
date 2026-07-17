@@ -44,6 +44,9 @@ function devBinding(port) {
 }
 
 const DEFAULT_DEV_API_PROXY_TARGET = "http://127.0.0.1:8080";
+// Injects a bearer on proxied /api/* requests when the browser did not send Authorization.
+// Unset this when testing browser session auth (session() + session_token cookie): v2 prefers
+// a valid bearer over the cookie, so a stale proxy token can mask cookie-based identity.
 const DEV_API_PROXY_TOKEN_ENV = "GESTALT_DEV_API_PROXY_TOKEN";
 
 /**

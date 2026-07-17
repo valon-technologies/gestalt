@@ -257,6 +257,52 @@ func TestPublicRESTRouting(t *testing.T) {
 		}
 	})
 
+	t.Run("malformed authorization header with session cookie authenticates", func(t *testing.T) {
+		t.Parallel()
+
+		const cookieToken = "public-rest-cookie-token"
+		ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+			auth := authStubWithSessionTokenIntrospect(cookieToken, principal.UserSubjectID("cookie-user"), "example")
+			cfg.Auth = auth
+			cfg.PublicGatewayTransport.SetIdentityProvider(auth)
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "example",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name: "example",
+					Operations: []catalog.CatalogOperation{{
+						ID:     "sync",
+						Method: "POST",
+					}},
+				},
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte("ok")}, nil
+				},
+			})
+		})
+
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v2/app/example/operations/sync", bytes.NewReader([]byte(`{"params":{}}`)))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "not-a-bearer-token")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: cookieToken})
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST invoke: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, string(body))
+		}
+	})
+
 	t.Run("explicit bearer wins over session cookie", func(t *testing.T) {
 		t.Parallel()
 

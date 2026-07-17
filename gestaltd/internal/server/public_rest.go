@@ -29,7 +29,9 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 	return conn, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, err := requestBearerTokenPreferringHeader(r)
 		if err == nil && token != "" {
-			if headerToken, headerErr := requestBearerToken(r); headerErr == nil && headerToken == "" {
+			headerToken, _ := requestBearerToken(r)
+			// Preserve an explicit bearer; otherwise lift session_token when the header is absent or malformed.
+			if headerToken == "" {
 				r.Header.Set("Authorization", "Bearer "+token)
 			}
 		}
