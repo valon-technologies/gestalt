@@ -1,5 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { expect, test } from "bun:test";
+import type { JsonObject } from "@bufbuild/protobuf";
 
 import {
   AppInvokeRequestSchema,
@@ -579,4 +580,191 @@ test("createGestaltClient validates explicit addresses", () => {
       auth: unauthenticated(),
     }),
   ).toThrow(/http or https/);
+});
+
+test("REST transport omits undefined optional params from sparse JSON bodies", async () => {
+  const bodies: string[] = [];
+  const client = createGestaltClient({
+    address: "https://gestalt.test/",
+    auth: bearer(() => "token"),
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(typeof init?.body === "string" ? init.body : "");
+      return new Response(
+        JSON.stringify({ status: 200, body: "", headers: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch,
+  });
+
+  await client.app.invokeRaw({
+    app: "example",
+    operation: "list",
+    params: {
+      nested: { keep: true, drop: undefined },
+      cursor: undefined,
+      page: 1,
+    } as unknown as JsonObject,
+  });
+
+  expect(JSON.parse(bodies[0] ?? "{}")).toEqual({
+    params: { nested: { keep: true }, page: 1 },
+  });
+});
+
+test("REST transport maps 403 gateway errors to PermissionDenied", async () => {
+  const transport = createRestUnaryTransport({
+    baseUrl: "https://gestalt.test/",
+    auth: bearer(() => "token"),
+    fetch: (async () =>
+      new Response(
+        JSON.stringify({ error: "forbidden", code: "PermissionDenied" }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch,
+  });
+
+  const request = create(AppInvokeRequestSchema, {
+    app: "example",
+    operation: "sync",
+    params: {},
+    connection: "",
+    instance: "",
+    idempotencyKey: "",
+    credentialMode: "",
+  });
+
+  await expect(
+    transport.unary(
+      PUBLIC_METHODS.app.invoke,
+      request,
+      AppInvokeRequestSchema,
+      OperationResultSchema,
+    ),
+  ).rejects.toMatchObject({
+    name: "GestaltError",
+    code: GestaltErrorCode.PermissionDenied,
+    message: "forbidden",
+  });
+});
+
+test("REST transport maps offline fetch failures to Unavailable", async () => {
+  const transport = createRestUnaryTransport({
+    baseUrl: "https://gestalt.test/",
+    auth: bearer(() => "token"),
+    fetch: (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch,
+  });
+
+  const request = create(AppInvokeRequestSchema, {
+    app: "example",
+    operation: "sync",
+    params: {},
+    connection: "",
+    instance: "",
+    idempotencyKey: "",
+    credentialMode: "",
+  });
+
+  await expect(
+    transport.unary(
+      PUBLIC_METHODS.app.invoke,
+      request,
+      AppInvokeRequestSchema,
+      OperationResultSchema,
+    ),
+  ).rejects.toMatchObject({
+    name: "GestaltError",
+    code: GestaltErrorCode.Unavailable,
+  });
+});
+
+test("REST transport rejects malformed success JSON bodies", async () => {
+  const transport = createRestUnaryTransport({
+    baseUrl: "https://gestalt.test/",
+    auth: bearer(() => "token"),
+    fetch: (async () =>
+      new Response("not-json", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch,
+  });
+
+  const request = create(AppInvokeRequestSchema, {
+    app: "example",
+    operation: "sync",
+    params: {},
+    connection: "",
+    instance: "",
+    idempotencyKey: "",
+    credentialMode: "",
+  });
+
+  await expect(
+    transport.unary(
+      PUBLIC_METHODS.app.invoke,
+      request,
+      AppInvokeRequestSchema,
+      OperationResultSchema,
+    ),
+  ).rejects.toThrow();
+});
+
+test("REST transport accepts empty 204 success responses", async () => {
+  const transport = createRestUnaryTransport({
+    baseUrl: "https://gestalt.test/",
+    auth: bearer(() => "token"),
+    fetch: (async () => new Response(null, { status: 204 })) as unknown as typeof fetch,
+  });
+
+  const request = create(AppInvokeRequestSchema, {
+    app: "example",
+    operation: "sync",
+    params: {},
+    connection: "",
+    instance: "",
+    idempotencyKey: "",
+    credentialMode: "",
+  });
+
+  await expect(
+    transport.unary(
+      PUBLIC_METHODS.app.invoke,
+      request,
+      AppInvokeRequestSchema,
+      OperationResultSchema,
+    ),
+  ).resolves.toMatchObject({ status: 0, body: new Uint8Array() });
+});
+
+test("invoke surfaces raw error details through InvokeError", async () => {
+  const client = createGestaltClient({
+    address: "https://gestalt.test",
+    auth: bearer(() => "token"),
+    fetch: (async () =>
+      new Response(
+        JSON.stringify({
+          status: 400,
+          body: btoa(
+            JSON.stringify({
+              status: "error",
+              error: { code: "validation_failed", message: "bad field" },
+            }),
+          ),
+          headers: {},
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch,
+  });
+
+  await expect(
+    client.app.invoke({
+      app: "example",
+      operation: "sync",
+      params: {},
+    }),
+  ).rejects.toMatchObject({
+    name: "InvokeError",
+    reason: "validation_failed",
+    status: 400,
+  });
 });

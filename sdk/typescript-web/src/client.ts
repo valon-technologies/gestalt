@@ -4,9 +4,15 @@
  * @module client
  */
 
+import type { JsonObject } from "@bufbuild/protobuf";
+
 import { normalizeAddress } from "./address.ts";
 import { AppClient } from "./client/generated/app_client.ts";
-import type { UnaryTransport } from "./client/generated/unary_transport.ts";
+import type { PublicAppInvokeRequest } from "./client/generated/types.ts";
+import type {
+  PublicUnaryCallOptions,
+  UnaryTransport,
+} from "./client/generated/unary_transport.ts";
 import { createRestUnaryTransport } from "./rest_transport.ts";
 
 export interface SessionAuth {
@@ -35,6 +41,29 @@ export interface GestaltClient {
   readonly address: string;
   readonly app: AppClient;
 }
+
+/** App-scoped invoke params: bind the app name once, pass only operation + params. */
+export type BoundAppInvokeRequest = Omit<PublicAppInvokeRequest, "app">;
+
+export interface BoundAppClient {
+  invoke<T = unknown>(
+    request: BoundAppInvokeRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<T>;
+}
+
+export function bindApp(client: GestaltClient, app: string): BoundAppClient {
+  return {
+    invoke<T>(
+      request: BoundAppInvokeRequest,
+      callOptions?: PublicUnaryCallOptions,
+    ): Promise<T> {
+      return client.app.invoke<T>({ ...request, app }, callOptions);
+    },
+  };
+}
+
+export type { JsonObject };
 
 export function session(): SessionAuth {
   return { kind: "session" };

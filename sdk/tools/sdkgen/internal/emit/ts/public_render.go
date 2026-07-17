@@ -110,6 +110,7 @@ func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
 
 	imports := map[string]map[string]bool{}
 	var blocks []string
+	useSparseInit := paths.FixedNativeModule != ""
 
 	for _, svc := range view.Services {
 		for _, m := range svc.PublicMethods {
@@ -124,21 +125,19 @@ func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
 				imports[base] = map[string]bool{}
 			}
 			imports[base][native] = true
-			if len(omit) == 0 {
-				blocks = append(blocks, fmt.Sprintf("export type %s = %s;", typeName, native))
-				continue
+			typeExpr := native
+			if len(omit) > 0 {
+				sort.Strings(omit)
+				quoted := make([]string, len(omit))
+				for i, name := range omit {
+					quoted[i] = fmt.Sprintf("%q", publicJSONFieldName(m.Input, name))
+				}
+				typeExpr = fmt.Sprintf("Omit<%s, %s>", native, strings.Join(quoted, " | "))
 			}
-			sort.Strings(omit)
-			quoted := make([]string, len(omit))
-			for i, name := range omit {
-				quoted[i] = fmt.Sprintf("%q", publicJSONFieldName(m.Input, name))
+			if useSparseInit {
+				typeExpr = fmt.Sprintf("Init<%s>", typeExpr)
 			}
-			blocks = append(blocks, fmt.Sprintf(
-				"export type %s = Omit<%s, %s>;",
-				typeName,
-				native,
-				strings.Join(quoted, " | "),
-			))
+			blocks = append(blocks, fmt.Sprintf("export type %s = %s;", typeName, typeExpr))
 		}
 	}
 
@@ -146,7 +145,10 @@ func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
 		names := sortedPublicKeys(imports[base])
 		fmt.Fprintf(&b, "import type { %s } from %s;\n", strings.Join(names, ", "), paths.nativeTypeImportQuoted(base))
 	}
-	if len(imports) > 0 {
+	if useSparseInit {
+		fmt.Fprintf(&b, "import type { Init } from %s;\n", paths.supportModuleQuoted("rpc_support.ts"))
+	}
+	if len(imports) > 0 || useSparseInit {
 		b.WriteString("\n")
 	}
 	b.WriteString(strings.Join(blocks, "\n\n"))
@@ -421,7 +423,7 @@ func renderPublicAppClientMethod(b *strings.Builder, svc *model.Service, m *mode
 		fmt.Fprintf(b, "  async %s<T = unknown>(request: %s, callOptions?: PublicUnaryCallOptions): Promise<T> {\n", methodKey, typeName)
 		appField := publicJSONResultAppField(m)
 		fmt.Fprintf(b, "    const response = await this.%sRaw(request, callOptions);\n", methodKey)
-		fmt.Fprintf(b, "    return decodeAppResult<T>(request.%s, request.operation, response);\n", appField)
+		fmt.Fprintf(b, "    return decodeAppResult<T>(request.%s ?? \"\", request.operation ?? \"\", response);\n", appField)
 		b.WriteString("  }\n\n")
 		return
 	}

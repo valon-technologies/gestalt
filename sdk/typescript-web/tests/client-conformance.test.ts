@@ -81,8 +81,8 @@ test("REST transport surfaces platform errors from gateway responses", async () 
   });
 
   const request = create(AppInvokeRequestSchema, {
-    app: platformCase.publicRequest.app,
-    operation: platformCase.publicRequest.operation,
+    app: platformCase.publicRequest.app ?? "",
+    operation: platformCase.publicRequest.operation ?? "",
     params: platformCase.publicRequest.params ?? {},
     connection: "",
     instance: "",

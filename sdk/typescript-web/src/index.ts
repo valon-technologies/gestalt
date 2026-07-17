@@ -16,13 +16,17 @@
 
 export {
   bearer,
+  bindApp,
   createGestaltClient,
   session,
   unauthenticated,
   type Auth,
   type BearerAuth,
+  type BoundAppClient,
+  type BoundAppInvokeRequest,
   type ClientOptions,
   type GestaltClient,
+  type JsonObject,
   type SessionAuth,
   type Unauthenticated,
 } from "./client.ts";
