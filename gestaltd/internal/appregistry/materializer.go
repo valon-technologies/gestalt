@@ -135,10 +135,10 @@ func isMaterializedPackage(destDir, appName string) (bool, error) {
 		}
 		return false, fmt.Errorf("stat materialized path %s: %w", destDir, err)
 	}
-	if err := operator.ValidateInstalledPublishedPackage(destDir, appName); err != nil {
-		return false, nil
+	if err := operator.ValidateInstalledPublishedPackage(destDir, appName); err == nil {
+		return true, nil
 	}
-	return true, nil
+	return false, nil
 }
 
 func removePartialMaterializedPackage(destDir string) error {
