@@ -12,20 +12,18 @@ import (
 
 const (
 	appVersionChangeRequestMetaRegistry           = "registry"
-	appVersionChangeRequestMetaMaterializedPath   = "materialized_path"
 	appVersionChangeRequestMetaSourceRef          = "source_ref"
 	appVersionChangeRequestMetaProviderReleaseURL = "provider_release_url"
 	appVersionChangeRequestMetaArtifactChecksums  = "artifact_checksums"
 	appVersionChangeRequestMetaInstalledAt        = "installed_at"
 )
 
-func ChangeRequestMetadata(installation *core.AppInstallation, materializedPath string) map[string]any {
+func ChangeRequestMetadata(installation *core.AppInstallation) map[string]any {
 	if installation == nil {
 		return nil
 	}
 	metadata := map[string]any{
 		appVersionChangeRequestMetaRegistry:           strings.TrimSpace(installation.Registry),
-		appVersionChangeRequestMetaMaterializedPath:   strings.TrimSpace(materializedPath),
 		appVersionChangeRequestMetaSourceRef:          strings.TrimSpace(installation.SourceRef),
 		appVersionChangeRequestMetaProviderReleaseURL: strings.TrimSpace(installation.ProviderReleaseURL),
 	}

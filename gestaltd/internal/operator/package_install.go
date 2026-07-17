@@ -51,6 +51,107 @@ func InstallPublishedPackage(ctx context.Context, packagePath, destDir, configur
 	return installedPackageView(pkg), nil
 }
 
+// ValidateInstalledPublishedPackage reports whether destDir contains a complete
+// published app install produced by InstallPublishedPackage for expectedVersion.
+func ValidateInstalledPublishedPackage(destDir, configuredName, expectedVersion string) error {
+	destDir = strings.TrimSpace(destDir)
+	if destDir == "" {
+		return fmt.Errorf("destination directory is required")
+	}
+	info, err := os.Stat(destDir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("installed package path %s is not a directory", destDir)
+	}
+
+	manifestPath, err := packageio.FindManifestFile(destDir)
+	if err != nil {
+		return err
+	}
+	_, manifest, err := packageio.ReadManifestFile(manifestPath)
+	if err != nil {
+		return err
+	}
+	manifest = packageio.ResolveManifestLocalReferences(manifest, manifestPath)
+	return validateInstalledPackageLayout(destDir, configuredName, expectedVersion, manifest)
+}
+
+func validateInstalledPackageLayout(destDir, configuredName, expectedVersion string, manifest *providermanifestv1.Manifest) error {
+	expectedVersion = strings.TrimSpace(expectedVersion)
+	if expectedVersion == "" {
+		return fmt.Errorf("expected version is required")
+	}
+	manifestVersion := strings.TrimSpace(manifest.Version)
+	if manifestVersion != expectedVersion {
+		return fmt.Errorf("installed manifest version %q does not match expected version %q", manifestVersion, expectedVersion)
+	}
+
+	if isAssetOnly(manifest) {
+		if manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {
+			return fmt.Errorf("asset-only manifest is missing asset_root")
+		}
+		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
+		if _, err := os.Stat(assetRoot); err != nil {
+			return fmt.Errorf("installed asset root is missing: %w", err)
+		}
+		return nil
+	}
+
+	if !manifestNeedsExecutableArtifact(manifest) {
+		executablePath, err := executablePathForManifest(destDir, manifest)
+		if err != nil {
+			return err
+		}
+		if executablePath != "" {
+			return fmt.Errorf("manifest-backed package unexpectedly defines executable %s", executablePath)
+		}
+		return nil
+	}
+
+	artifact, err := packageio.CurrentPlatformArtifact(manifest)
+	if err != nil {
+		return err
+	}
+	executablePath, err := executablePathForManifest(destDir, manifest)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(executablePath) == "" {
+		return fmt.Errorf("installed executable path is empty")
+	}
+	if _, err := os.Stat(executablePath); err != nil {
+		return fmt.Errorf("installed executable is missing: %w", err)
+	}
+	got, err := packageio.FileSHA256(executablePath)
+	if err != nil {
+		return err
+	}
+	if got != artifact.SHA256 {
+		return fmt.Errorf("installed executable digest mismatch: got %s, want %s", got, artifact.SHA256)
+	}
+	if configuredName != "" {
+		goos := runtime.GOOS
+		if len(manifest.Artifacts) > 0 && manifest.Artifacts[0].OS != "" {
+			goos = manifest.Artifacts[0].OS
+		}
+		targetRel := packageio.InstalledExecutablePath(configuredName, goos)
+		kind, err := packageio.ManifestKind(manifest)
+		if err != nil {
+			return err
+		}
+		entry := packageio.EntrypointForKind(manifest, kind)
+		if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+			return fmt.Errorf("installed manifest entrypoint is missing")
+		}
+		if entry.ArtifactPath != targetRel {
+			return fmt.Errorf("installed executable is not normalized to %s", targetRel)
+		}
+	}
+	return nil
+}
+
 func isAssetOnly(manifest *providermanifestv1.Manifest) bool {
 	if manifest == nil || manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {
 		return false
@@ -95,12 +196,16 @@ func installPackageAs(ctx context.Context, packagePath, destDir, configuredName 
 			manifestPath = filepath.Join(destDir, packageio.ManifestFile)
 		}
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
-		return &installedPackage{
+		installed := &installedPackage{
 			Root:         destDir,
 			ManifestPath: manifestPath,
 			AssetRoot:    assetRoot,
 			Manifest:     manifest,
-		}, nil
+		}
+		if err := validateInstalledPackageLayout(destDir, configuredName, manifest.Version, manifest); err != nil {
+			return nil, err
+		}
+		return installed, nil
 	}
 
 	var artifact *providermanifestv1.Artifact
@@ -153,12 +258,16 @@ func installPackageAs(ctx context.Context, packagePath, destDir, configuredName 
 		return nil, err
 	}
 
-	return &installedPackage{
+	installed := &installedPackage{
 		Root:           destDir,
 		ManifestPath:   manifestPath,
 		ExecutablePath: executablePath,
 		Manifest:       manifest,
-	}, nil
+	}
+	if err := validateInstalledPackageLayout(destDir, configuredName, manifest.Version, manifest); err != nil {
+		return nil, err
+	}
+	return installed, nil
 }
 
 func executablePathForManifest(root string, manifest *providermanifestv1.Manifest) (string, error) {

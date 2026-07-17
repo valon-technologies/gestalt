@@ -104,4 +104,7 @@ func TestInstallPackageAsPreservesEntrypointArgsWhenRenamingExecutable(t *testin
 	if !slices.Equal(diskManifest.Entrypoint.Args, wantArgs) {
 		t.Fatalf("disk entrypoint args = %v, want %v", diskManifest.Entrypoint.Args, wantArgs)
 	}
+	if err := ValidateInstalledPublishedPackage(installRoot, "configuredName", ""); err == nil {
+		t.Fatal("ValidateInstalledPublishedPackage accepted an empty expected version")
+	}
 }

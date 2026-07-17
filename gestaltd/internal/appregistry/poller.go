@@ -25,6 +25,7 @@ type CatalogPoller struct {
 	ChangeRequests      *coredata.AppVersionChangeRequestService
 	Materializations    *coredata.AppInstanceMaterializationService
 	Rollouts            *coredata.AppRolloutService
+	AppMaterializer     *Materializer
 	AppRestarter        AppRestarter
 	InstanceID          string
 	Interval            time.Duration
@@ -47,6 +48,7 @@ type CatalogPollerConfig struct {
 	ChangeRequests      *coredata.AppVersionChangeRequestService
 	Materializations    *coredata.AppInstanceMaterializationService
 	Rollouts            *coredata.AppRolloutService
+	AppMaterializer     *Materializer
 	AppRestarter        AppRestarter
 	InstanceID          string
 	Interval            time.Duration
@@ -61,6 +63,7 @@ func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 		ChangeRequests:      cfg.ChangeRequests,
 		Materializations:    cfg.Materializations,
 		Rollouts:            cfg.Rollouts,
+		AppMaterializer:     cfg.AppMaterializer,
 		AppRestarter:        cfg.AppRestarter,
 		InstanceID:          strings.TrimSpace(cfg.InstanceID),
 		Interval:            cfg.Interval,
@@ -308,6 +311,10 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
+	if err := p.ensurePendingMaterialized(ctx, instanceID, pending); err != nil {
+		return fmt.Errorf("materialize pending versions for app %s: %w", appName, err)
+	}
+
 	if !p.restartReady() {
 		return nil
 	}
@@ -416,6 +423,57 @@ func (p *CatalogPoller) restartReady() bool {
 	default:
 		return false
 	}
+}
+
+func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceID string, pending []*core.AppInstallation) error {
+	if p == nil || len(pending) == 0 {
+		return nil
+	}
+	if p.AppMaterializer == nil {
+		for _, installation := range pending {
+			if installation != nil && strings.TrimSpace(installation.Registry) != "" {
+				return fmt.Errorf("app registry materializer is required for %s@%s", installation.AppName, installation.Version)
+			}
+		}
+		return nil
+	}
+	for _, installation := range pending {
+		if installation == nil {
+			continue
+		}
+		appName := strings.TrimSpace(installation.AppName)
+		version := strings.TrimSpace(installation.Version)
+		if appName == "" || version == "" {
+			continue
+		}
+		if strings.TrimSpace(installation.Registry) == "" {
+			continue
+		}
+		materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
+		if err != nil {
+			return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
+		}
+		result, err := p.AppMaterializer.Ensure(ctx, installation)
+		if err != nil {
+			return fmt.Errorf("materialize %s@%s: %w", appName, version, err)
+		}
+		if !result.Changed && !materialization.MaterializedAt.IsZero() {
+			continue
+		}
+		materializedAt := p.now()
+		if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, materializedAt); err != nil {
+			return fmt.Errorf("record materialization for %s@%s: %w", appName, version, err)
+		}
+		slog.Info(
+			"app registry catalog poller materialized app artifact",
+			"app", appName,
+			"version", version,
+			"instance_id", instanceID,
+			"materialized_path", result.Path,
+			"materialized_at", materializedAt,
+		)
+	}
+	return nil
 }
 
 func (p *CatalogPoller) markCatalogConverged(ctx context.Context, instanceID, appName string, pending []*core.AppInstallation, convergedAt time.Time) error {

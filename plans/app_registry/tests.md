@@ -18,7 +18,8 @@ Related docs:
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
-| `internal/appregistry` | `poller_test.go` | 16 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 20 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 10 |
+| `internal/appregistry` | `materializer_test.go` | 5 | Unit | step 10 |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_lifecycle_test.go` | 6 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 
@@ -101,7 +102,32 @@ End-to-end test for fleet install convergence across replicas. Replaces isolated
 4. Poll each replica's `app_instance_materializations` (or a future admin list endpoint) until every replica has an ack row for `(app, version)`.
 5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
 
-**Not in scope for the first cut:** artifact download or mount swap — ack + restart-only convergence.
+**Not in scope for the first cut:** mount swap on restart — ack, materialize, and restart-only convergence.
+
+---
+
+## Artifact materialization tests
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry -run 'TestMaterializer|TestCatalogPollerMaterializesBeforeStop' -count=1
+```
+
+### `materializer_test.go`
+
+- **`TestMaterializer_downloads_and_extracts_artifact`** — downloads a registry archive and extracts `manifest.yaml` under `{artifactsDir}/registry-installed/{app}/{version}`.
+- **`TestMaterializer_skips_when_already_materialized`** — idempotent when a complete install already exists on disk.
+- **`TestMaterializer_retries_after_partial_install`** — removes manifest-only partial trees and re-downloads.
+- **`TestMaterializer_retries_when_manifest_version_mismatches`** — re-downloads when the on-disk manifest version does not match the pending fleet version.
+- **`TestMaterializer_rejects_digest_mismatch`** — rejects archives whose digest does not match the registry entry.
+
+### `poller_materialize_test.go`
+
+- **`TestCatalogPollerMaterializesBeforeStop`** — records `materialized_at` and creates the canonical on-disk artifact before `StopApp`, including while `RestartReady` is still open.
+- **`TestCatalogPollerSkipsMaterializationForLegacyNonRegistryVersion`** — allows pre-registry catalog rows to retain restart-only convergence when a materializer is configured.
+- **`TestCatalogPollerRematerializesWhenArtifactMissing`** — re-downloads when IndexedDB shows materialization complete but the on-disk tree was removed.
 
 ---
 

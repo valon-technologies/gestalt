@@ -118,34 +118,17 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
 	}
 
-	registry, ok := i.Registries[registryName]
-	if !ok {
-		return nil, fmt.Errorf("app registry not found")
-	}
-	if strings.TrimSpace(registry.Kind) != config.AppRegistryKindGCS {
-		return nil, fmt.Errorf("unsupported app registry kind")
-	}
-	publicRoot, err := registry.PublicURL()
-	if err != nil {
-		return nil, fmt.Errorf("app registry public URL is invalid: %w", err)
-	}
-
 	reader := i.Reader
 	if reader == nil {
 		reader = &RegistryReader{}
 	}
-	entry, err := reader.FetchEntry(installCtx, publicRoot, appName, version)
+	source, err := fetchConfiguredRegistryEntry(installCtx, i.Registries, reader, registryName, appName, version)
 	if err != nil {
-		return nil, fmt.Errorf("fetch app registry entry: %w", err)
+		return nil, err
 	}
-	if entry.App != appName {
-		return nil, fmt.Errorf("registry entry app %q does not match requested app %q", entry.App, appName)
-	}
-	if entry.Version != version {
-		return nil, fmt.Errorf("registry entry version %q does not match requested version %q", entry.Version, version)
-	}
+	entry := source.Entry
 
-	entryURL := PublicURL(publicRoot, AppVersionEntryPath(appName, version))
+	entryURL := PublicURL(source.PublicRoot, AppVersionEntryPath(appName, version))
 	checksums := artifactChecksumsFromEntry(*entry)
 
 	requestedAt := i.now()
@@ -181,7 +164,7 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		ToVersion:   version,
 		Actor:       actor,
 		Timestamp:   requestedAt,
-		Metadata:    coredata.ChangeRequestMetadata(known, ""),
+		Metadata:    coredata.ChangeRequestMetadata(known),
 	})
 	if err != nil {
 		_, _ = i.Rollouts.MarkFailed(context.WithoutCancel(installCtx), appName, version, i.now())

@@ -50,6 +50,7 @@ type AppInstanceMaterialization struct {
 	App            string
 	Version        string
 	AcknowledgedAt time.Time
+	MaterializedAt time.Time
 	StoppedAt      time.Time
 	RestartedAt    time.Time
 }
