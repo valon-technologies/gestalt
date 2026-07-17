@@ -3,21 +3,14 @@ package publicclient
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"net/url"
 
 	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/publicclient/generated"
-	gproto "google.golang.org/protobuf/encoding/protojson"
 	pb "google.golang.org/protobuf/proto"
-	"google.golang.org/grpc/codes"
 )
-
-var protoJSONMarshal = gproto.MarshalOptions{}
-var protoJSONUnmarshal = gproto.UnmarshalOptions{DiscardUnknown: true}
 
 type restUnaryTransport struct {
 	baseURL string
@@ -33,39 +26,6 @@ func (t *restUnaryTransport) Close() error {
 	return nil
 }
 
-type gatewayErrorBody struct {
-	Error string `json:"error"`
-	Code  string `json:"code"`
-}
-
-func decodeGatewayError(status int, body []byte) error {
-	code := gestaltclient.HTTPStatusToGestaltCode(int32(status))
-	message := fmt.Sprintf("request failed with status %d", status)
-	if len(body) > 0 {
-		var payload gatewayErrorBody
-		if json.Unmarshal(body, &payload) == nil {
-			if payload.Error != "" {
-				message = payload.Error
-			}
-			if payload.Code != "" {
-				if parsed := codeFromString(payload.Code); parsed != gestaltclient.GestaltErrorCodeUnknown {
-					code = parsed
-				}
-			}
-		}
-	}
-	return &generated.GestaltError{Code: code, Message: message}
-}
-
-func codeFromString(raw string) generated.GestaltErrorCode {
-	for c := codes.OK; c <= codes.Unauthenticated; c++ {
-		if c.String() == raw {
-			return generated.GestaltErrorCode(c)
-		}
-	}
-	return gestaltclient.GestaltErrorCodeUnknown
-}
-
 func (t *restUnaryTransport) Unary(
 	ctx context.Context,
 	method generated.Method,
@@ -78,37 +38,30 @@ func (t *restUnaryTransport) Unary(
 		}
 	}
 
-	requestMap, err := messageToJSONMap(request)
+	prepared, err := generated.PrepareRESTRequest(method, request)
 	if err != nil {
 		return err
 	}
-	path, err := buildRestPath(method, requestMap)
+	target, err := joinURL(t.baseURL, prepared.Path)
 	if err != nil {
 		return err
 	}
-	target, err := joinURL(t.baseURL, path)
-	if err != nil {
-		return err
-	}
-	if query := buildRestQuery(method, requestMap).Encode(); query != "" {
-		target += "?" + query
-	}
-
-	var body io.Reader
-	switch strings.ToUpper(method.HTTPVerb) {
-	case http.MethodGet, http.MethodDelete:
-	default:
-		payload := buildRestBody(method, requestMap)
-		if payload != nil {
-			encoded, err := json.Marshal(payload)
-			if err != nil {
-				return err
-			}
-			body = bytes.NewReader(encoded)
+	if len(prepared.Query) > 0 {
+		values := url.Values{}
+		for _, pair := range prepared.Query {
+			values.Add(pair.Name, pair.Value)
+		}
+		if encoded := values.Encode(); encoded != "" {
+			target += "?" + encoded
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method.HTTPVerb, target, body)
+	var body io.Reader
+	if prepared.Body != nil {
+		body = bytes.NewReader(prepared.Body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, prepared.Verb, target, body)
 	if err != nil {
 		return err
 	}
@@ -147,38 +100,16 @@ func (t *restUnaryTransport) Unary(
 		return err
 	}
 
-	if resp.StatusCode >= 400 {
-		return decodeGatewayError(resp.StatusCode, raw)
-	}
-	if response == nil {
-		return nil
-	}
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return nil
-	}
-	if err := protoJSONUnmarshal.Unmarshal(raw, response); err != nil {
-		return &generated.GestaltError{
-			Code:    gestaltclient.GestaltErrorCodeInternal,
-			Message: "response body does not match the expected schema",
+	headers := make([]generated.Header, 0, len(resp.Header))
+	for key, values := range resp.Header {
+		for _, value := range values {
+			headers = append(headers, generated.Header{Name: key, Value: value})
 		}
 	}
-	return nil
-}
 
-func messageToJSONMap(msg pb.Message) (map[string]any, error) {
-	if msg == nil {
-		return map[string]any{}, nil
-	}
-	data, err := protoJSONMarshal.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	var out map[string]any
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
-	}
-	if out == nil {
-		return map[string]any{}, nil
-	}
-	return out, nil
+	return generated.DecodeRESTResponse(method, response, generated.RawRESTResponse{
+		Status:  resp.StatusCode,
+		Headers: headers,
+		Body:    raw,
+	})
 }

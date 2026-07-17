@@ -4,9 +4,6 @@
  * @module client/generated/transport_support
  */
 
-import { fromJson } from "@bufbuild/protobuf";
-import type { DescMessage, JsonValue, Message } from "@bufbuild/protobuf";
-
 import {
   GestaltError,
   GestaltErrorCode,
@@ -135,39 +132,4 @@ export function toTransportGestaltError(
     error instanceof Error ? error.message : String(error),
     { cause: error },
   );
-}
-
-export function parseSuccessJson(bodyText: string): JsonValue {
-  if (bodyText.trim() === "") {
-    return {};
-  }
-  try {
-    return JSON.parse(bodyText) as JsonValue;
-  } catch (error) {
-    throw new GestaltError(
-      GestaltErrorCode.Internal,
-      "response body is not valid JSON",
-      { cause: error instanceof Error ? error : undefined },
-    );
-  }
-}
-
-export function parseSuccessMessage<Output extends Message>(
-  responseSchema: DescMessage,
-  parsed: JsonValue,
-): Output {
-  try {
-    return fromJson(responseSchema, parsed) as Output;
-  } catch (error) {
-    throw new GestaltError(
-      GestaltErrorCode.Internal,
-      "response body does not match the expected schema",
-      { cause: error instanceof Error ? error : undefined },
-    );
-  }
-}
-
-export async function readResponseBodyText(response: Response): Promise<string> {
-  const bytes = await response.arrayBuffer();
-  return new TextDecoder().decode(new Uint8Array(bytes));
 }

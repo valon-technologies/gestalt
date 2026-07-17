@@ -19,6 +19,7 @@ class Method:
     http_query_fields: tuple[PublicField, ...] = ()
     fill: tuple[str, ...] = ()
     reject: tuple[str, ...] = ()
+    response_is_operation_result: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,7 @@ METHOD_APP_INVOKE = Method(
     http_query_fields=(),
     fill=("context",),
     reject=("run_as",),
+    response_is_operation_result=True,
 )
 
 METHOD_APP_INVOKE_GRAPHQL = Method(
@@ -54,4 +56,5 @@ METHOD_APP_INVOKE_GRAPHQL = Method(
     http_query_fields=(),
     fill=("context",),
     reject=(),
+    response_is_operation_result=True,
 )

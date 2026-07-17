@@ -27,6 +27,11 @@ var runtimeFile string
 //go:embed invoke_support.py
 var invokeSupportFile string
 
+// transportKernelFile is the schema-derived public REST transport kernel.
+//
+//go:embed transport_kernel.py
+var transportKernelFile string
+
 // codecInit makes the generated _codec directory importable.
 const codecInit = `"""Internal wire codec for the generated Gestalt SDK modules."""
 `

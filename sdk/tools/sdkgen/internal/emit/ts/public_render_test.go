@@ -8,99 +8,6 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
-func TestRenderPublicTypesWebUsesSparseInit(t *testing.T) {
-	t.Parallel()
-
-	input := &model.Message{
-		FullName:  "gestalt.provider.v1.AppInvokeRequest",
-		Name:      "AppInvokeRequest",
-		ProtoFile: "sdk/proto/v1/app.proto",
-		Fields: []*model.Field{
-			{Name: "app", JSONName: "app", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "operation", JSONName: "operation", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "connection", JSONName: "connection", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "instance", JSONName: "instance", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "idempotency_key", JSONName: "idempotencyKey", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "credential_mode", JSONName: "credentialMode", Kind: model.KindScalar, Scalar: model.ScalarString},
-		},
-	}
-	graphqlInput := &model.Message{
-		FullName:  "gestalt.provider.v1.AppInvokeGraphQLRequest",
-		Name:      "AppInvokeGraphQLRequest",
-		ProtoFile: "sdk/proto/v1/app.proto",
-		Fields: []*model.Field{
-			{Name: "app", JSONName: "app", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "query", JSONName: "query", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "context", JSONName: "context", Kind: model.KindMessage},
-		},
-	}
-	view := &publicsurface.View{
-		Services: []*publicsurface.Service{{
-			Service: &model.Service{
-				FullName:  "gestalt.provider.v1.App",
-				Name:      "App",
-				ProtoFile: "sdk/proto/v1/app.proto",
-			},
-			PublicMethods: []*model.Method{
-				{
-					Name:  "Invoke",
-					Input: input,
-				},
-				{
-					Name:  "InvokeGraphQL",
-					Input: graphqlInput,
-				},
-			},
-		}},
-	}
-
-	out := renderPublicTypes(view, WebPublicImports())
-	for _, want := range []string{
-		`import type { Init } from "../runtime/rpc_support.ts"`,
-		"export type PublicAppInvokeRequest = Init<AppInvokeRequest>",
-		"export type PublicAppInvokeGraphQLRequest = Init<AppInvokeGraphQLRequest>",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in web public types:\n%s", want, out)
-		}
-	}
-	if strings.Contains(out, "Partial<Pick<") {
-		t.Fatalf("web public types must not use field-specific Partial overrides:\n%s", out)
-	}
-}
-
-func TestRenderPublicTypesServerDoesNotUseSparseInit(t *testing.T) {
-	t.Parallel()
-
-	input := &model.Message{
-		FullName:  "gestalt.provider.v1.AppInvokeRequest",
-		Name:      "AppInvokeRequest",
-		ProtoFile: "sdk/proto/v1/app.proto",
-		Fields: []*model.Field{
-			{Name: "app", JSONName: "app", Kind: model.KindScalar, Scalar: model.ScalarString},
-			{Name: "operation", JSONName: "operation", Kind: model.KindScalar, Scalar: model.ScalarString},
-		},
-	}
-	view := &publicsurface.View{
-		Services: []*publicsurface.Service{{
-			Service: &model.Service{
-				FullName:  "gestalt.provider.v1.App",
-				Name:      "App",
-				ProtoFile: "sdk/proto/v1/app.proto",
-			},
-			PublicMethods: []*model.Method{{
-				Name:  "Invoke",
-				Input: input,
-			}},
-		}},
-	}
-
-	out := renderPublicTypes(view, ServerPublicImports())
-	if strings.Contains(out, "Init<") {
-		t.Fatalf("server public types must not use Init:\n%s", out)
-	}
-}
-
 func TestRenderPublicConvertersAlwaysEmitWireMessages(t *testing.T) {
 	t.Parallel()
 
@@ -200,7 +107,7 @@ func TestRenderPublicGatewayErrorWebImports(t *testing.T) {
 func TestRenderPublicRestRequestMappingUsesPublicMethodMetadata(t *testing.T) {
 	t.Parallel()
 
-	out := renderPublicRestRequestMapping()
+	out := renderPublicRestRequestMapping(ServerPublicImports())
 	for _, want := range []string{
 		`from "./methods.ts"`,
 		"export function buildRestPath",
@@ -239,8 +146,6 @@ func TestRenderPublicTransportSupportServerImports(t *testing.T) {
 		"export function resolveEffectiveAbortSignal",
 		"export async function raceWithAbort",
 		"export function toTransportGestaltError",
-		"export function parseSuccessJson",
-		"export async function readResponseBodyText",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in transport_support:\n%s", want, out)
@@ -254,5 +159,34 @@ func TestRenderPublicTransportSupportWebImports(t *testing.T) {
 	out := renderPublicTransportSupport(WebPublicImports())
 	if !strings.Contains(out, `from "../runtime/rpc_support.ts"`) {
 		t.Fatalf("web transport_support must import runtime rpc_support:\n%s", out)
+	}
+}
+
+func TestRenderPublicTransportKernelImports(t *testing.T) {
+	t.Parallel()
+
+	server := renderPublicTransportKernel(ServerPublicImports())
+	if !strings.Contains(server, `from "../../rpc_support.ts"`) {
+		t.Fatalf("server transport kernel must import package rpc_support:\n%s", server)
+	}
+	for _, want := range []string{
+		`from "./gateway_error.ts"`,
+		`from "./rest_request_mapping.ts"`,
+		"export function prepareRestRequest",
+		"export function decodeRestResponse",
+	} {
+		if !strings.Contains(server, want) {
+			t.Fatalf("missing %q in transport_kernel:\n%s", want, server)
+		}
+	}
+	for _, forbidden := range []string{"from \"node:", "from 'node:", "from \"http\"", "fetch("} {
+		if strings.Contains(server, forbidden) {
+			t.Fatalf("transport kernel must not use %s", forbidden)
+		}
+	}
+
+	web := renderPublicTransportKernel(WebPublicImports())
+	if !strings.Contains(web, `from "../runtime/rpc_support.ts"`) {
+		t.Fatalf("web transport kernel must import runtime rpc_support:\n%s", web)
 	}
 }

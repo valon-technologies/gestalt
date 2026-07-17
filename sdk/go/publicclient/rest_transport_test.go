@@ -287,7 +287,7 @@ func TestGestaltFromContextRequiresHostEnvironment(t *testing.T) {
 	}
 }
 
-func TestPublicBearerAuthDoesNotCarryHostServiceCapability(t *testing.T) {
+func TestPublicBearerAuthIsSeparateTypeFromCallerProof(t *testing.T) {
 	publicAuth := publicclient.Bearer(func(context.Context) (string, error) { return "public", nil })
 	req := &publicclient.Request{Headers: map[string]string{}}
 	if err := publicAuth.Apply(context.Background(), req); err != nil {

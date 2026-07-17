@@ -7,6 +7,19 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
+func TestTransportKernelEmittedWithoutIOImports(t *testing.T) {
+	t.Parallel()
+	got := transportKernelFile
+	for _, forbidden := range []string{"import httpx", "import grpc", "import requests"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("transport kernel must not import %s", forbidden)
+		}
+	}
+	if !strings.Contains(got, "def prepare_rest_request(") {
+		t.Fatalf("missing prepare_rest_request in transport kernel")
+	}
+}
+
 func TestPublicRuntimeFileImportOrder(t *testing.T) {
 	t.Parallel()
 	got := publicRuntimeFile

@@ -7,11 +7,15 @@ on:
     paths:
       - 'sdk/rust/**'
       - 'sdk/proto/**'
+      - 'sdk/testdata/public_conformance/**'
+      - 'sdk/tools/sdkgen/**'
       - '.github/workflows/build-rust-sdk.yml'
   pull_request:
     paths:
       - 'sdk/rust/**'
       - 'sdk/proto/**'
+      - 'sdk/testdata/public_conformance/**'
+      - 'sdk/tools/sdkgen/**'
       - '.github/workflows/build-rust-sdk.yml'
 
   workflow_dispatch:

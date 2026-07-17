@@ -10,6 +10,25 @@ type (
 	RpcStatus        = gestaltclient.RpcStatus
 )
 
+const (
+	GestaltErrorCodeCanceled           = gestaltclient.GestaltErrorCodeCanceled
+	GestaltErrorCodeUnknown            = gestaltclient.GestaltErrorCodeUnknown
+	GestaltErrorCodeInvalidArgument    = gestaltclient.GestaltErrorCodeInvalidArgument
+	GestaltErrorCodeDeadlineExceeded   = gestaltclient.GestaltErrorCodeDeadlineExceeded
+	GestaltErrorCodeNotFound           = gestaltclient.GestaltErrorCodeNotFound
+	GestaltErrorCodeAlreadyExists      = gestaltclient.GestaltErrorCodeAlreadyExists
+	GestaltErrorCodePermissionDenied   = gestaltclient.GestaltErrorCodePermissionDenied
+	GestaltErrorCodeResourceExhausted  = gestaltclient.GestaltErrorCodeResourceExhausted
+	GestaltErrorCodeFailedPrecondition = gestaltclient.GestaltErrorCodeFailedPrecondition
+	GestaltErrorCodeAborted            = gestaltclient.GestaltErrorCodeAborted
+	GestaltErrorCodeOutOfRange         = gestaltclient.GestaltErrorCodeOutOfRange
+	GestaltErrorCodeUnimplemented      = gestaltclient.GestaltErrorCodeUnimplemented
+	GestaltErrorCodeInternal           = gestaltclient.GestaltErrorCodeInternal
+	GestaltErrorCodeUnavailable        = gestaltclient.GestaltErrorCodeUnavailable
+	GestaltErrorCodeDataLoss           = gestaltclient.GestaltErrorCodeDataLoss
+	GestaltErrorCodeUnauthenticated    = gestaltclient.GestaltErrorCodeUnauthenticated
+)
+
 func toGestaltError(err error) *GestaltError {
 	return gestaltclient.ToGestaltError(err)
 }

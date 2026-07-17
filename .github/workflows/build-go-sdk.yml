@@ -7,11 +7,15 @@ on:
     paths:
       - 'sdk/go/**'
       - 'sdk/proto/**'
+      - 'sdk/testdata/public_conformance/**'
+      - 'sdk/tools/sdkgen/**'
       - '.github/workflows/build-go-sdk.yml'
   pull_request:
     paths:
       - 'sdk/go/**'
       - 'sdk/proto/**'
+      - 'sdk/testdata/public_conformance/**'
+      - 'sdk/tools/sdkgen/**'
       - '.github/workflows/build-go-sdk.yml'
 
   workflow_dispatch:

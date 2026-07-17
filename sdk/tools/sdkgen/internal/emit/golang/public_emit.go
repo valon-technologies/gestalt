@@ -38,6 +38,9 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/metadata.go", []byte(meta.assembleGenerated())); err != nil {
 		return nil, err
 	}
+	if err := set.Add("generated/transport_kernel.go", []byte(publicTransportKernelFile)); err != nil {
+		return nil, err
+	}
 
 	transport := newPublicRenderer(idx)
 	transport.renderUnaryTransport()

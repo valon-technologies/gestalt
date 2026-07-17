@@ -29,5 +29,8 @@ func (*Emitter) Formatter() *toolchain.Tool { return toolchain.Prettier() }
 func (*Emitter) StaleScope() func(rel string) bool { return nil }
 
 func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
-	return ts.EmitPublic(schema, ts.WebPublicImports())
+	return ts.EmitPublicWithOptions(schema, ts.PublicEmitOptions{
+		Imports:             ts.WebPublicImports(),
+		IncludeGrpcDispatch: false,
+	})
 }

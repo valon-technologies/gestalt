@@ -8,6 +8,8 @@
 
 import type { JsonValue } from "@bufbuild/protobuf";
 
+import { GestaltError, GestaltErrorCode } from "../runtime/rpc_support.ts";
+
 import type { PublicMethod, PublicMethodHttp } from "./methods.ts";
 
 function snakeToCamel(name: string): string {
@@ -67,10 +69,16 @@ export function buildRestPath(
   for (const field of http.pathFields) {
     const value = fieldValue(request, field.name, field.jsonName);
     if (value === undefined || value === null) {
-      throw new Error(`missing path parameter ${field.name}`);
+      throw new GestaltError(
+        GestaltErrorCode.InvalidArgument,
+        `missing path parameter ${field.name}`,
+      );
     }
     if (typeof value === "object") {
-      throw new Error(`path parameter ${field.name} must be scalar`);
+      throw new GestaltError(
+        GestaltErrorCode.InvalidArgument,
+        `path parameter ${field.name} must be scalar`,
+      );
     }
     path = replacePathPlaceholder(
       path,
@@ -95,15 +103,22 @@ export function appendQueryParams(
         continue;
       }
       if (typeof item === "object") {
-        throw new Error(`repeated query field ${prefix} must contain scalars`);
+        throw new GestaltError(
+          GestaltErrorCode.InvalidArgument,
+          `repeated query field ${prefix} must contain scalars`,
+        );
       }
       params.append(prefix, String(item));
     }
     return;
   }
   if (typeof value === "object") {
-    for (const [key, nested] of Object.entries(value)) {
-      appendQueryParams(params, prefix ? `${prefix}.${key}` : key, nested);
+    for (const key of Object.keys(value).sort()) {
+      appendQueryParams(
+        params,
+        prefix ? `${prefix}.${key}` : key,
+        (value as Record<string, JsonValue>)[key]!,
+      );
     }
     return;
   }
@@ -133,9 +148,6 @@ export function buildRestBody(
   if (!http) {
     return undefined;
   }
-  if (http.verb === "GET" || http.verb === "DELETE") {
-    return undefined;
-  }
   if (http.body === "*") {
     const excluded = excludedFieldKeys(http);
     for (const name of [...method.fill, ...method.reject]) {
@@ -144,7 +156,7 @@ export function buildRestBody(
     }
     const body: Record<string, JsonValue> = {};
     for (const [key, value] of Object.entries(request)) {
-      if (excluded.has(key) || value === undefined) {
+      if (excluded.has(key) || value === undefined || value === null) {
         continue;
       }
       body[key] = value;
@@ -157,5 +169,11 @@ export function buildRestBody(
   const value =
     fieldValue(request, http.body, snakeToCamel(http.body)) ??
     request[http.body];
-  return value === undefined ? {} : value;
+  if (value === undefined || value === null) {
+    return {};
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value;
+  }
+  return { [http.body]: value };
 }

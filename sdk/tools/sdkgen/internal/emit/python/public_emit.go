@@ -41,6 +41,9 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/unary_transport.py", []byte(unaryTransportFile)); err != nil {
 		return nil, err
 	}
+	if err := set.Add("generated/transport_kernel.py", []byte(transportKernelFile)); err != nil {
+		return nil, err
+	}
 
 	meta := newRenderer(idx, "metadata", "metadata", modulePublic)
 	meta.publicClient = true

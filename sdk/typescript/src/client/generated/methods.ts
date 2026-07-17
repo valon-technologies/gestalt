@@ -21,6 +21,7 @@ export interface PublicMethod {
   http?: PublicMethodHttp | undefined;
   fill: readonly string[];
   reject: readonly string[];
+  responseIsOperationResult: boolean;
 }
 
 export const PUBLIC_METHODS = {
@@ -31,6 +32,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.App/Invoke",
       fill: ["context"],
       reject: ["run_as"],
+      responseIsOperationResult: true,
       http: {
         verb: "POST",
         path: "/api/v2/app/{app}/operations/{operation}",
@@ -48,6 +50,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.App/InvokeGraphQL",
       fill: ["context"],
       reject: [],
+      responseIsOperationResult: true,
       http: {
         verb: "POST",
         path: "/api/v2/app/{app}/graphql",

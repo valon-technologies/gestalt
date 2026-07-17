@@ -26,6 +26,7 @@ func renderPublicMethods(methods []publicsurface.PublicMethod) string {
 	b.WriteString("  http?: PublicMethodHttp | undefined;\n")
 	b.WriteString("  fill: readonly string[];\n")
 	b.WriteString("  reject: readonly string[];\n")
+	b.WriteString("  responseIsOperationResult: boolean;\n")
 	b.WriteString("}\n\n")
 	b.WriteString("export const PUBLIC_METHODS = {\n")
 
@@ -76,6 +77,7 @@ func renderPublicMethodEntry(pm publicsurface.PublicMethod) string {
 	} else {
 		b.WriteString("    reject: [],\n")
 	}
+	fmt.Fprintf(&b, "    responseIsOperationResult: %t,\n", publicsurface.ResponseIsOperationResult(pm))
 	if pm.REST != nil {
 		b.WriteString("    http: {\n")
 		fmt.Fprintf(&b, "      verb: %q,\n", strings.ToUpper(pm.REST.Verb))
@@ -484,8 +486,12 @@ func renderPublicGatewayError(imports PublicImports) string {
 	)
 }
 
-func renderPublicRestRequestMapping() string {
-	return restRequestMappingFile
+func renderPublicRestRequestMapping(imports PublicImports) string {
+	return strings.ReplaceAll(
+		restRequestMappingFile,
+		"__RPC_SUPPORT_IMPORT__",
+		imports.supportModuleQuoted("rpc_support.ts"),
+	)
 }
 
 func renderPublicTransportSupport(imports PublicImports) string {
@@ -494,4 +500,83 @@ func renderPublicTransportSupport(imports PublicImports) string {
 		"__RPC_SUPPORT_IMPORT__",
 		imports.supportModuleQuoted("rpc_support.ts"),
 	)
+}
+
+func renderPublicTransportKernel(imports PublicImports) string {
+	return strings.ReplaceAll(
+		transportKernelFile,
+		"__RPC_SUPPORT_IMPORT__",
+		imports.supportModuleQuoted("rpc_support.ts"),
+	)
+}
+
+func renderPublicGrpcDispatch(services []*model.Service, imports PublicImports) string {
+	var b strings.Builder
+	b.WriteString("/**\n * Generated gRPC method dispatcher for Connect clients.\n *\n * @module client/generated/grpc_dispatch\n */\n\n")
+	b.WriteString("import type { Client } from \"@connectrpc/connect\";\n")
+	b.WriteString("import type { DescMessage, Message } from \"@bufbuild/protobuf\";\n\n")
+
+	var appProto string
+	for _, svc := range services {
+		if svc.Name != publicsurface.AppServiceName {
+			continue
+		}
+		for _, m := range svc.Methods {
+			if m.Input != nil {
+				appProto = m.Input.ProtoFile
+				break
+			}
+		}
+	}
+	if appProto == "" {
+		return b.String()
+	}
+
+	wireName := localName(services[0].FullName)
+	fmt.Fprintf(&b, "import { %s } from %s;\n\n", wireName, imports.genModuleQuoted(appProto))
+	b.WriteString("import {\n  GestaltError,\n  GestaltErrorCode,\n} from ")
+	b.WriteString(imports.supportModuleQuoted("rpc_support.ts"))
+	b.WriteString(";\n\n")
+	b.WriteString("import { PUBLIC_METHODS, type PublicMethod } from \"./methods.ts\";\n\n")
+	fmt.Fprintf(&b, "export type %sServiceClient = Client<typeof %s>;\n\n", wireName, wireName)
+	b.WriteString("export interface GrpcUnaryRequestOptions {\n")
+	b.WriteString("  signal?: AbortSignal;\n")
+	b.WriteString("  headers?: Record<string, string>;\n")
+	b.WriteString("}\n\n")
+	b.WriteString("export async function dispatchGrpcUnary<Output extends Message>(\n")
+	b.WriteString("  client: ")
+	fmt.Fprintf(&b, "%sServiceClient,\n", wireName)
+	b.WriteString("  method: PublicMethod,\n")
+	b.WriteString("  request: Message,\n")
+	b.WriteString("  requestOptions?: GrpcUnaryRequestOptions,\n")
+	b.WriteString("): Promise<Output> {\n")
+	b.WriteString("  switch (method.grpcPath) {\n")
+
+	for _, svc := range services {
+		serviceKey := lowerFirst(publicsurface.ServiceLocalName(svc.FullName))
+		for _, m := range svc.Methods {
+			if m.Stream != model.Unary {
+				continue
+			}
+			clientMethod := lowerFirst(m.Name)
+			fmt.Fprintf(
+				&b,
+				"    case PUBLIC_METHODS.%s.%s.grpcPath:\n      return (await client.%s(\n        request as Parameters<%sServiceClient[%q]>[0],\n        requestOptions,\n      )) as unknown as Output;\n",
+				serviceKey,
+				clientMethod,
+				clientMethod,
+				wireName,
+				clientMethod,
+			)
+		}
+	}
+
+	b.WriteString("    default:\n")
+	b.WriteString("      throw new GestaltError(\n")
+	b.WriteString("        GestaltErrorCode.Unimplemented,\n")
+	b.WriteString("        `unknown public gRPC method ${method.grpcPath}`,\n")
+	b.WriteString("      );\n")
+	b.WriteString("  }\n")
+	b.WriteString("}\n")
+	return b.String()
 }

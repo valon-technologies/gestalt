@@ -1,0 +1,180 @@
+/**
+ * Schema-derived, I/O-neutral public REST transport kernel.
+ *
+ * @module client/generated/transport_kernel
+ */
+
+import { fromJson, toJson, type DescMessage, type Message } from "@bufbuild/protobuf";
+import type { JsonValue } from "@bufbuild/protobuf";
+
+import {
+  GestaltError,
+  GestaltErrorCode,
+} from __RPC_SUPPORT_IMPORT__;
+
+import type { PublicMethod } from "./methods.ts";
+import { parseGatewayError } from "./gateway_error.ts";
+import {
+  buildRestBody,
+  buildRestPath,
+  buildRestQuery,
+} from "./rest_request_mapping.ts";
+
+const RESPONSE_KIND_HEADER = "X-Gestalt-Response-Kind";
+const RESPONSE_KIND_OPERATION_RESULT = "operation-result";
+
+function toInvalidArgument(error: unknown): GestaltError {
+  const message =
+    error instanceof Error ? error.message : "invalid REST request mapping";
+  return new GestaltError(GestaltErrorCode.InvalidArgument, message);
+}
+
+export interface PreparedRestRequest {
+  readonly verb: "GET" | "PUT" | "POST" | "PATCH" | "DELETE";
+  readonly path: string;
+  readonly query: readonly (readonly [string, string])[];
+  readonly body?: JsonValue;
+}
+
+export interface RawRestResponse {
+  readonly status: number;
+  readonly headers: readonly (readonly [string, string])[];
+  readonly body: Uint8Array;
+}
+
+export function prepareRestRequest(
+  method: PublicMethod,
+  requestSchema: DescMessage,
+  request: Message,
+): PreparedRestRequest {
+  const http = method.http;
+  if (!http) {
+    throw new GestaltError(
+      GestaltErrorCode.InvalidArgument,
+      `method ${method.grpcPath} has no HTTP binding`,
+    );
+  }
+  const requestJson = toJson(requestSchema, request) as Record<string, JsonValue>;
+  let path: string;
+  try {
+    path = buildRestPath(http, requestJson);
+  } catch (error) {
+    throw toInvalidArgument(error);
+  }
+  let queryParams: URLSearchParams;
+  try {
+    queryParams = buildRestQuery(http, requestJson);
+  } catch (error) {
+    throw toInvalidArgument(error);
+  }
+  const query = [...queryParams.entries()] as readonly (readonly [string, string])[];
+  const body = buildRestBody(method, requestJson);
+  if (body === undefined) {
+    return { verb: http.verb, path, query };
+  }
+  return { verb: http.verb, path, query, body };
+}
+
+export function decodeRestResponse<Output extends Message>(
+  method: PublicMethod,
+  responseSchema: DescMessage,
+  response: RawRestResponse,
+): Output {
+  let responseJson: JsonValue;
+  if (isOperationResult(response.headers)) {
+    if (!method.responseIsOperationResult) {
+      throw new GestaltError(
+        GestaltErrorCode.Internal,
+        "unexpected operation-result response kind",
+      );
+    }
+    responseJson = synthesizeOperationResultJson(
+      response.status,
+      response.body,
+      response.headers,
+    );
+  } else if (response.status >= 400 || !isRestSuccessStatus(response.status)) {
+    throw parseGatewayError(
+      response.status,
+      new TextDecoder().decode(response.body),
+    );
+  } else if (response.body.length === 0 || isWhitespaceOnly(response.body)) {
+    responseJson = {};
+  } else {
+    try {
+      responseJson = JSON.parse(new TextDecoder().decode(response.body)) as JsonValue;
+    } catch (error) {
+      throw new GestaltError(
+        GestaltErrorCode.Internal,
+        `invalid JSON response: ${String(error)}`,
+      );
+    }
+  }
+  try {
+    return fromJson(responseSchema, responseJson, {
+      ignoreUnknownFields: true,
+    }) as Output;
+  } catch (error) {
+    throw new GestaltError(
+      GestaltErrorCode.Internal,
+      `response does not match expected schema: ${String(error)}`,
+    );
+  }
+}
+
+function isOperationResult(
+  headers: readonly (readonly [string, string])[],
+): boolean {
+  return headers.some(
+    ([key, value]) =>
+      key.toLowerCase() === RESPONSE_KIND_HEADER.toLowerCase() &&
+      value.toLowerCase() === RESPONSE_KIND_OPERATION_RESULT,
+  );
+}
+
+function synthesizeOperationResultJson(
+  status: number,
+  body: Uint8Array,
+  headers: readonly (readonly [string, string])[],
+): JsonValue {
+  const grouped = new Map<string, string[]>();
+  for (const [key, value] of headers) {
+    if (key.toLowerCase() === RESPONSE_KIND_HEADER.toLowerCase()) {
+      continue;
+    }
+    const values = grouped.get(key) ?? [];
+    values.push(value);
+    grouped.set(key, values);
+  }
+  const headerJson: Record<string, JsonValue> = {};
+  for (const [key, values] of grouped) {
+    headerJson[key] = { values };
+  }
+  return {
+    status,
+    body: bytesToBase64(body),
+    headers: headerJson,
+  };
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(binary);
+}
+
+function isRestSuccessStatus(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
+function isWhitespaceOnly(bytes: Uint8Array): boolean {
+  for (let i = 0; i < bytes.length; i++) {
+    const code = bytes[i]!;
+    if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+      return false;
+    }
+  }
+  return true;
+}

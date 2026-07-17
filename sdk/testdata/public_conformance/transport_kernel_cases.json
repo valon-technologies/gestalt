@@ -1,0 +1,444 @@
+[
+  {
+    "id": "invoke_body_projection",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "context": { "trace": "abc" },
+      "runAs": "other",
+      "params": {},
+      "idempotencyKey": "key-1"
+    },
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": {
+        "params": {},
+        "idempotencyKey": "key-1"
+      }
+    }
+  },
+  {
+    "id": "path_reserved_chars",
+    "method": "App.Invoke",
+    "request": {
+      "app": "a/b c",
+      "operation": "sync/ops",
+      "params": {}
+    },
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/a%2Fb%20c/operations/sync%2Fops",
+      "query": [],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "post_with_query_fields",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "extraQuery": "value"
+    },
+    "overrideQueryFields": [{ "name": "extra_query", "jsonName": "extraQuery" }],
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [["extraQuery", "value"]],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "repeated_scalar_query",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "tags": ["a", "b"]
+    },
+    "overrideQueryFields": [{ "name": "tags", "jsonName": "tags" }],
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [["tags", "a"], ["tags", "b"]],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "nested_query_object",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "filter": { "status": "open", "nested": { "x": 1 } }
+    },
+    "overrideQueryFields": [{ "name": "filter", "jsonName": "filter" }],
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [
+        ["filter.nested.x", "1"],
+        ["filter.status", "open"]
+      ],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "boolean_query_lowercase",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "active": true
+    },
+    "overrideQueryFields": [{ "name": "active", "jsonName": "active" }],
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [["active", "true"]],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "body_none",
+    "method": "App.Invoke",
+    "request": { "app": "example", "operation": "sync" },
+    "overrideHttpBody": "",
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": null
+    }
+  },
+  {
+    "id": "empty_body_star",
+    "method": "App.Invoke",
+    "request": { "app": "example", "operation": "sync" },
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": {}
+    }
+  },
+  {
+    "id": "fill_reject_casing",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "context": {},
+      "run_as": "x",
+      "runAs": "y",
+      "params": {}
+    },
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "operation_result_envelope",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [["Content-Type", "application/json"]],
+      "bodyBase64": "eyJzdGF0dXMiOjIwMCwiYm9keSI6ImV5SnpkR0YwZFhNaU9pSnpkV05qWlhOekluMD0iLCJoZWFkZXJzIjp7IlgtRXhhbXBsZSI6eyJ2YWx1ZXMiOlsicmVzdC12MiJdfX19"
+    },
+    "expectDecode": {
+      "status": 200,
+      "bodyBase64": "eyJzdGF0dXMiOiJzdWNjZXNzIn0=",
+      "headerKeys": ["X-Example"]
+    }
+  },
+  {
+    "id": "response_kind_operation_result_418",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 418,
+      "headers": [
+        ["X-Gestalt-Response-Kind", "operation-result"],
+        ["X-Example", "raw"]
+      ],
+      "bodyBase64": "dGVhcG90"
+    },
+    "expectDecode": {
+      "status": 418,
+      "bodyBase64": "dGVhcG90",
+      "headerKeys": ["X-Example"]
+    }
+  },
+  {
+    "id": "response_kind_operation_result_401",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 401,
+      "headers": [["X-Gestalt-Response-Kind", "OPERATION-RESULT"]],
+      "bodyBase64": "Zm9v"
+    },
+    "expectDecode": {
+      "status": 401,
+      "bodyBase64": "Zm9v",
+      "headerKeys": []
+    }
+  },
+  {
+    "id": "duplicate_response_headers",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [
+        ["X-Gestalt-Response-Kind", "operation-result"],
+        ["Set-Cookie", "a=1"],
+        ["Set-Cookie", "b=2"]
+      ],
+      "bodyBase64": ""
+    },
+    "expectDecode": {
+      "status": 200,
+      "bodyBase64": "",
+      "headerKeys": ["Set-Cookie"],
+      "headerValueCounts": { "Set-Cookie": 2 }
+    }
+  },
+  {
+    "id": "gateway_pascal_case",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 401,
+      "headers": [],
+      "bodyText": "{\"error\":\"missing authorization\",\"code\":\"Unauthenticated\"}"
+    },
+    "expectGatewayError": { "code": 16, "message": "missing authorization" }
+  },
+  {
+    "id": "gateway_upper_snake",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 403,
+      "headers": [],
+      "bodyText": "{\"code\":\"PERMISSION_DENIED\",\"message\":\"denied\"}"
+    },
+    "expectGatewayError": { "code": 7, "message": "denied" }
+  },
+  {
+    "id": "gateway_numeric_code",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 500,
+      "headers": [],
+      "bodyText": "{\"code\":8,\"message\":\"resource exhausted\"}"
+    },
+    "expectGatewayError": { "code": 8, "message": "resource exhausted" }
+  },
+  {
+    "id": "gateway_malformed_body",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 404,
+      "headers": [],
+      "bodyText": "not json"
+    },
+    "expectGatewayError": { "code": 5, "message": "request failed with status 404" }
+  },
+  {
+    "id": "malformed_success_json",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [],
+      "bodyText": "not-json"
+    },
+    "expectGestaltError": { "code": 13 }
+  },
+  {
+    "id": "invalid_success_shape",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [],
+      "bodyText": "{\"status\":\"not-a-number\"}"
+    },
+    "expectGestaltError": { "code": 13 }
+  },
+  {
+    "id": "success_unknown_response_field",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [],
+      "bodyText": "{\"status\":200,\"body\":\"\",\"headers\":{},\"extraFutureField\":\"ignored\"}"
+    },
+    "expectDecode": {
+      "status": 200,
+      "bodyBase64": "",
+      "headerKeys": []
+    }
+  },
+  {
+    "id": "unmarked_redirect_status",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 302,
+      "headers": [],
+      "bodyText": ""
+    },
+    "expectGestaltError": { "code": 2 }
+  },
+  {
+    "id": "null_query_field_omitted",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "extraQuery": null
+    },
+    "overrideQueryFields": [{ "name": "extra_query", "jsonName": "extraQuery" }],
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "body_omits_null_fields",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "note": null,
+      "idempotencyKey": "key-2"
+    },
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": {
+        "params": {},
+        "idempotencyKey": "key-2"
+      }
+    }
+  },
+  {
+    "id": "int64_query_string",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "pageToken": "9007199254740993"
+    },
+    "overrideQueryFields": [{ "name": "page_token", "jsonName": "pageToken" }],
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [["pageToken", "9007199254740993"]],
+      "body": { "params": {} }
+    }
+  },
+  {
+    "id": "enum_like_string_in_params",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": { "state": "STATE_ACTIVE" }
+    },
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": { "params": { "state": "STATE_ACTIVE" } }
+    }
+  },
+  {
+    "id": "nested_map_in_params",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {
+        "filter": { "status": "open", "nested": { "x": 1 } }
+      }
+    },
+    "expectPrepare": {
+      "verb": "POST",
+      "path": "/api/v2/app/example/operations/sync",
+      "query": [],
+      "body": {
+        "params": {
+          "filter": { "status": "open", "nested": { "x": 1 } }
+        }
+      }
+    }
+  },
+  {
+    "id": "repeated_query_object_rejected",
+    "method": "App.Invoke",
+    "request": {
+      "app": "example",
+      "operation": "sync",
+      "params": {},
+      "tags": [{ "x": 1 }]
+    },
+    "overrideQueryFields": [{ "name": "tags", "jsonName": "tags" }],
+    "expectPrepareError": { "code": 3 }
+  },
+  {
+    "id": "operation_result_binary_body",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [["X-Gestalt-Response-Kind", "operation-result"]],
+      "bodyBase64": "cSsvdg=="
+    },
+    "expectDecode": {
+      "status": 200,
+      "bodyBase64": "cSsvdg==",
+      "headerKeys": []
+    }
+  },
+  {
+    "id": "gateway_nested_error",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 401,
+      "headers": [],
+      "bodyText": "{\"error\":{\"code\":\"UNAUTHENTICATED\",\"message\":\"nested auth failure\"}}"
+    },
+    "expectGatewayError": { "code": 16, "message": "nested auth failure" }
+  },
+  {
+    "id": "gateway_empty_body",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 503,
+      "headers": [],
+      "bodyText": ""
+    },
+    "expectGatewayError": { "code": 14, "message": "request failed with status 503" }
+  },
+  {
+    "id": "non_finite_json_rejected",
+    "method": "App.Invoke",
+    "rawResponse": {
+      "status": 200,
+      "headers": [],
+      "bodyText": "{\"status\":NaN,\"body\":\"\",\"headers\":{}}"
+    },
+    "expectGestaltError": { "code": 13 }
+  }
+]

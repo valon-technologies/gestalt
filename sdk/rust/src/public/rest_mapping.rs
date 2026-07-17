@@ -1,41 +1,12 @@
-//! Protobuf-JSON request mapping for the public REST transport.
+//! Protobuf-JSON request mapping (compatibility re-exports).
 
 use serde_json::{Map, Value};
 
 use crate::public::generated::metadata::PublicField;
-use crate::rpc_support::{GestaltError, gestalt_error_code};
 
-/// Substitutes `{param}` placeholders in an HTTP path template.
-pub fn substitute_path(
-    pattern: &str,
-    request: &Value,
-    path_fields: &[PublicField],
-) -> Result<String, GestaltError> {
-    let Some(object) = request.as_object() else {
-        return Ok(pattern.to_string());
-    };
-    let mut out = pattern.to_string();
-    for field in path_fields {
-        let token = format!("{{{}}}", field.name);
-        let value = object
-            .get(field.json_name)
-            .or_else(|| object.get(field.name))
-            .ok_or_else(|| {
-                GestaltError::new(
-                    gestalt_error_code::INVALID_ARGUMENT,
-                    format!("missing path parameter {}", field.name),
-                )
-            })?;
-        let segment = scalar_to_string(value).ok_or_else(|| {
-            GestaltError::new(
-                gestalt_error_code::INVALID_ARGUMENT,
-                format!("unsupported path parameter type for {}", field.name),
-            )
-        })?;
-        out = out.replace(&token, &urlencoding::encode(&segment));
-    }
-    Ok(out)
-}
+pub use crate::public::generated::transport_kernel::{
+    append_query_params, build_rest_body, build_rest_path, build_rest_query, substitute_path,
+};
 
 fn is_path_field(field: &str, path_fields: &[PublicField]) -> bool {
     path_fields

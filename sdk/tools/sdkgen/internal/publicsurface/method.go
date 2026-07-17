@@ -50,6 +50,13 @@ func FieldNames(fields []PublicField) []string {
 	return out
 }
 
+const operationResultMessage = "gestalt.provider.v1.OperationResult"
+
+// ResponseIsOperationResult reports whether a method returns OperationResult.
+func ResponseIsOperationResult(pm PublicMethod) bool {
+	return pm.Output != nil && pm.Output.FullName == operationResultMessage
+}
+
 // PublicMethod is the parsed public App method used by every language emitter.
 type PublicMethod struct {
 	Service    string

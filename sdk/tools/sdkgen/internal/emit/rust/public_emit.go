@@ -83,6 +83,9 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/unary_transport.rs", []byte(publicUnaryTransportFile)); err != nil {
 		return nil, err
 	}
+	if err := set.Add("generated/transport_kernel.rs", []byte(transportKernelFile)); err != nil {
+		return nil, err
+	}
 	meta := newRenderer(idx, "metadata", "metadata", modulePublic, true)
 	meta.renderPublicMetadata(methods)
 	if err := set.Add("generated/metadata.rs", []byte(meta.assembleGenerated())); err != nil {
@@ -133,8 +136,11 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/app_client.rs", []byte(client.assembleGenerated())); err != nil {
 		return nil, err
 	}
+	if err := set.Add("generated/grpc_dispatch.rs", []byte(renderGrpcDispatch(plan.Filtered.Services))); err != nil {
+		return nil, err
+	}
 
-	modules := []string{"metadata", "rpc_support", "unary_transport", "app_client"}
+	modules := []string{"metadata", "rpc_support", "transport_kernel", "grpc_dispatch", "unary_transport", "app_client"}
 	if hasPublicJsonResult(plan.Filtered.Services) {
 		modules = append(modules, "invoke_support")
 	}
@@ -184,6 +190,62 @@ func hasPublicJsonResult(services []*model.Service) bool {
 		}
 	}
 	return false
+}
+
+func renderGrpcDispatch(services []*model.Service) string {
+	var b strings.Builder
+	b.WriteString("//! Schema-derived gRPC unary dispatch for the public gestaltd surface.\n\n")
+	b.WriteString("use std::time::Duration;\n\n")
+	b.WriteString("use prost::Message;\n")
+	b.WriteString("use tonic::Request;\n\n")
+	b.WriteString("use crate::generated::v1;\n")
+	b.WriteString("use crate::public::generated::metadata::Method;\n")
+	b.WriteString("use crate::public::generated::rpc_support::GestaltError;\n")
+	b.WriteString("use crate::public::grpc_transport::AppGrpcClient;\n")
+	b.WriteString("use crate::rpc_support::gestalt_error_code;\n\n")
+	b.WriteString("pub(crate) async fn dispatch_unary(\n")
+	b.WriteString("    client: &mut AppGrpcClient,\n")
+	b.WriteString("    method: &Method,\n")
+	b.WriteString("    request_bytes: &[u8],\n")
+	b.WriteString("    timeout: Option<Duration>,\n")
+	b.WriteString(") -> Result<Vec<u8>, GestaltError> {\n")
+	b.WriteString("    let tonic_response = match method.full_method {\n")
+
+	for _, svc := range services {
+		for _, m := range svc.Methods {
+			if m.Stream != model.Unary || m.Input == nil || m.Output == nil {
+				continue
+			}
+			wireInput := wireTypeName(m.Input.FullName)
+			clientMethod := escapeIdent(heckSnake(m.Name))
+			fmt.Fprintf(&b, "        %q => {\n", m.FullMethod)
+			fmt.Fprintf(&b, "            let wire = v1::%s::decode(request_bytes).map_err(|err| {\n", wireInput)
+			b.WriteString("                GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())\n")
+			b.WriteString("            })?;\n")
+			b.WriteString("            let mut tonic_request = Request::new(wire);\n")
+			b.WriteString("            if let Some(timeout) = timeout {\n")
+			b.WriteString("                tonic_request.set_timeout(timeout);\n")
+			b.WriteString("            }\n")
+			b.WriteString("            match client {\n")
+			fmt.Fprintf(&b, "                AppGrpcClient::Public(c) => c.%s(tonic_request).await,\n", clientMethod)
+			fmt.Fprintf(&b, "                AppGrpcClient::Bound(c) => c.%s(tonic_request).await,\n", clientMethod)
+			b.WriteString("            }\n")
+			b.WriteString("            .map_err(GestaltError::from)?\n")
+			b.WriteString("            .into_inner()\n")
+			b.WriteString("        }\n")
+		}
+	}
+
+	b.WriteString("        _ => {\n")
+	b.WriteString("            return Err(GestaltError::new(\n")
+	b.WriteString("                gestalt_error_code::UNIMPLEMENTED,\n")
+	b.WriteString("                format!(\"unsupported public gRPC method {}\", method.full_method),\n")
+	b.WriteString("            ));\n")
+	b.WriteString("        }\n")
+	b.WriteString("    };\n")
+	b.WriteString("    Ok(tonic_response.encode_to_vec())\n")
+	b.WriteString("}\n")
+	return b.String()
 }
 
 func markConversionNeeds(idx *index, services []*model.Service) {
@@ -307,6 +369,7 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("    pub reject: &'static [&'static str],\n")
 	r.body.WriteString("    pub encode_request_json: Option<EncodeRequestJson>,\n")
 	r.body.WriteString("    pub decode_response_json: Option<DecodeResponseJson>,\n")
+	r.body.WriteString("    pub response_is_operation_result: bool,\n")
 	r.body.WriteString("}\n\n")
 	r.body.WriteString("#[derive(Clone, Debug, PartialEq, Eq)]\n")
 	r.body.WriteString("pub struct PublicField {\n")
@@ -352,6 +415,7 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 			r.body.WriteString("    encode_request_json: None,\n")
 			r.body.WriteString("    decode_response_json: None,\n")
 		}
+		fmt.Fprintf(&r.body, "    response_is_operation_result: %t,\n", publicsurface.ResponseIsOperationResult(pm))
 		r.body.WriteString("};\n\n")
 	}
 }
