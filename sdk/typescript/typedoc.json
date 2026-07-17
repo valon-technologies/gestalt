@@ -2,8 +2,8 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": [
     "src/index.ts",
-    "src/build.ts",
     "src/client/index.ts",
+    "src/build.ts",
     "src/providers/runtime-public.ts",
     "src/schema.ts",
     "src/telemetry.ts",

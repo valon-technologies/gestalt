@@ -68,6 +68,25 @@ test(
   { timeout: 60_000 },
 );
 
+test(
+  "packed gestalt/client loads on Bun without type stripping",
+  () => {
+    const tarball = packPackage();
+    const fixtureDir = installPackedFixture(tarball);
+    try {
+      const output = execSync("bun import.mjs", {
+        cwd: fixtureDir,
+        encoding: "utf8",
+      });
+      expect(output.trim()).toBe("bearer,rest,grpc");
+    } finally {
+      removeTempDir(fixtureDir);
+      rmSync(tarball, { force: true });
+    }
+  },
+  { timeout: 60_000 },
+);
+
 test("packed gestalt/client export points at emitted JavaScript", () => {
   const tarball = packPackage();
   const extractedRoot = mkdtempSync(join(tmpdir(), "gestalt-tarball-"));

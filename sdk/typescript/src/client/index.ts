@@ -37,4 +37,4 @@ export type {
   PublicAppInvokeGraphQLRequest,
   PublicAppInvokeRequest,
 } from "./generated/types.ts";
-export type { UnaryTransport } from "./generated/unary_transport.ts";
+export type { UnaryTransport, PublicUnaryCallOptions } from "./generated/unary_transport.ts";
