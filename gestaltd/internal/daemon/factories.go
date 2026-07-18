@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os/signal"
-	"syscall"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"

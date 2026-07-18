@@ -30,24 +30,24 @@ type pendingProviderClose struct {
 }
 
 type AppProviderRestarter struct {
-	cfg           *config.Config
-	deps          Deps
-	providers     *registry.ProviderMap[core.Provider]
-	authBuilds    []*preparedProviderBuilds
+	cfg             *config.Config
+	deps            Deps
+	providers       *registry.ProviderMap[core.Provider]
+	authBuilds      []*preparedProviderBuilds
 	lifecycles      *appProviderLifecycles
 	registryMounter RegistryInstalledMounter
 	held            map[string]func()
-	closing       map[string]pendingProviderClose
-	closeFailures map[string]error
+	closing         map[string]pendingProviderClose
+	closeFailures   map[string]error
 
 	lifecycleMu sync.Mutex
 }
 
 type AppProviderRestarterConfig struct {
-	Config       *config.Config
-	Deps         Deps
-	Providers    *registry.ProviderMap[core.Provider]
-	AuthBuilds   []*preparedProviderBuilds
+	Config          *config.Config
+	Deps            Deps
+	Providers       *registry.ProviderMap[core.Provider]
+	AuthBuilds      []*preparedProviderBuilds
 	Lifecycles      *appProviderLifecycles
 	RegistryMounter RegistryInstalledMounter
 }
@@ -60,9 +60,9 @@ func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestart
 		authBuilds:      cfg.AuthBuilds,
 		lifecycles:      cfg.Lifecycles,
 		registryMounter: cfg.RegistryMounter,
-		held:          make(map[string]func()),
-		closing:       make(map[string]pendingProviderClose),
-		closeFailures: make(map[string]error),
+		held:            make(map[string]func()),
+		closing:         make(map[string]pendingProviderClose),
+		closeFailures:   make(map[string]error),
 	}
 }
 

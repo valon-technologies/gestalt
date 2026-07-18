@@ -32,10 +32,14 @@ func BindInstalledAppIfPresent(name string, entry *config.ProviderEntry, artifac
 		return nil
 	}
 	destDir := MaterializedPath(artifactsDir, name, version)
-	if err := operator.ValidateInstalledPublishedPackage(destDir, name, version); err != nil {
+	if !registryInstallReady(destDir, name, version) {
 		return nil
 	}
 	return BindInstalledApp(name, entry, destDir, version)
+}
+
+func registryInstallReady(destDir, name, version string) bool {
+	return operator.ValidateInstalledPublishedPackage(destDir, name, version) == nil
 }
 
 // BindInstalledApp updates entry so the next provider build uses the
