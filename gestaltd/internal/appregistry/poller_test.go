@@ -16,6 +16,7 @@ import (
 type recordingAppRestarter struct {
 	stopCalls      []string
 	startCalls     []string
+	startVersions  []string
 	stopErr        error
 	startErr       error
 	restartable    map[string]bool
@@ -46,8 +47,9 @@ func (r *recordingAppRestarter) StopApp(_ context.Context, app string) error {
 	return r.stopErr
 }
 
-func (r *recordingAppRestarter) StartApp(_ context.Context, app string) error {
+func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string) error {
 	r.startCalls = append(r.startCalls, app)
+	r.startVersions = append(r.startVersions, version)
 	return r.startErr
 }
 

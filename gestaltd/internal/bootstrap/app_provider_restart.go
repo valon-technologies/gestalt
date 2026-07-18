@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -29,6 +30,7 @@ type AppProviderRestarter struct {
 	providers     *registry.ProviderMap[core.Provider]
 	authBuilds    []*preparedProviderBuilds
 	lifecycles    *appProviderLifecycles
+	artifactsDir  string
 	held          map[string]func()
 	closing       map[string]pendingProviderClose
 	closeFailures map[string]error
@@ -37,11 +39,12 @@ type AppProviderRestarter struct {
 }
 
 type AppProviderRestarterConfig struct {
-	Config     *config.Config
-	Deps       Deps
-	Providers  *registry.ProviderMap[core.Provider]
-	AuthBuilds []*preparedProviderBuilds
-	Lifecycles *appProviderLifecycles
+	Config       *config.Config
+	Deps         Deps
+	Providers    *registry.ProviderMap[core.Provider]
+	AuthBuilds   []*preparedProviderBuilds
+	Lifecycles   *appProviderLifecycles
+	ArtifactsDir string
 }
 
 func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestarter {
@@ -51,6 +54,7 @@ func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestart
 		providers:     cfg.Providers,
 		authBuilds:    cfg.AuthBuilds,
 		lifecycles:    cfg.Lifecycles,
+		artifactsDir:  strings.TrimSpace(cfg.ArtifactsDir),
 		held:          make(map[string]func()),
 		closing:       make(map[string]pendingProviderClose),
 		closeFailures: make(map[string]error),
@@ -116,11 +120,12 @@ func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
 	return r.awaitProviderClose(ctx, app, pending)
 }
 
-func (r *AppProviderRestarter) StartApp(ctx context.Context, app string) error {
+func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string) error {
 	if r == nil {
 		return fmt.Errorf("start app provider: restarter is not configured")
 	}
 	app = strings.TrimSpace(app)
+	version = strings.TrimSpace(version)
 	if app == "" {
 		return fmt.Errorf("start app provider: app is required")
 	}
@@ -133,6 +138,9 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app string) error {
 	}
 	if r.providers == nil {
 		return fmt.Errorf("start app provider: provider registry is not configured")
+	}
+	if err := r.applyRegistryMount(app, entry, version); err != nil {
+		return err
 	}
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
@@ -254,6 +262,13 @@ func (r *AppProviderRestarter) appEntry(app string) (*config.ProviderEntry, erro
 		return nil, fmt.Errorf("app %q is not configured", app)
 	}
 	return entry, nil
+}
+
+func (r *AppProviderRestarter) applyRegistryMount(app string, entry *config.ProviderEntry, version string) error {
+	if err := appregistry.BindInstalledAppIfPresent(app, entry, r.artifactsDir, version); err != nil {
+		return fmt.Errorf("mount registry installed app %q@%s: %w", app, version, err)
+	}
+	return nil
 }
 
 func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderBuildResult) {

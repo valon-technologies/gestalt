@@ -269,7 +269,7 @@ type Result struct {
 	AppRestarter           interface {
 		Restartable(string) (bool, error)
 		StopApp(context.Context, string) error
-		StartApp(context.Context, string) error
+		StartApp(context.Context, string, string) error
 		AbortRestarts()
 	}
 
@@ -1495,11 +1495,12 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		PublicGatewayTransport: publicGatewayTransport,
 		DevSupervisor:          prepared.Deps.DevSupervisor,
 		AppRestarter: NewAppProviderRestarter(AppProviderRestarterConfig{
-			Config:     cfg,
-			Deps:       prepared.Deps,
-			Providers:  providers,
-			AuthBuilds: []*preparedProviderBuilds{noopBuilds, updateBuilds},
-			Lifecycles: noopBuilds.lifecycles,
+			Config:       cfg,
+			Deps:         prepared.Deps,
+			Providers:    providers,
+			AuthBuilds:   []*preparedProviderBuilds{noopBuilds, updateBuilds},
+			Lifecycles:   noopBuilds.lifecycles,
+			ArtifactsDir: cfg.Server.ArtifactsDir,
 		}),
 		runtimeRegistry:                prepared.runtimeRegistry,
 		workflowConfigReconcileTasks:   deferredWorkflowConfigReconcileTasks,

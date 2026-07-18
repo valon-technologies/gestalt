@@ -17,8 +17,9 @@ import (
 )
 
 type recordingAppRestarter struct {
-	stopCalls  []string
-	startCalls []string
+	stopCalls     []string
+	startCalls    []string
+	startVersions []string
 }
 
 func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
@@ -30,8 +31,9 @@ func (r *recordingAppRestarter) StopApp(_ context.Context, app string) error {
 	return nil
 }
 
-func (r *recordingAppRestarter) StartApp(_ context.Context, app string) error {
+func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string) error {
 	r.startCalls = append(r.startCalls, app)
+	r.startVersions = append(r.startVersions, version)
 	return nil
 }
 
@@ -191,5 +193,21 @@ func TestCatalogPollerRematerializesWhenArtifactMissing(t *testing.T) {
 	}
 	if got := len(h.restarter.stopCalls); got != 1 {
 		t.Fatalf("stopCalls = %d, want 1", got)
+	}
+}
+
+func TestCatalogPollerStartAppPassesDriverVersion(t *testing.T) {
+	t.Parallel()
+	h := newPollerMaterializationHarness(t, "toolshed", true)
+	close(h.restartReady)
+
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("first ReconcileOnce: %v", err)
+	}
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("second ReconcileOnce: %v", err)
+	}
+	if got := h.restarter.startVersions; len(got) != 1 || got[0] != h.fixture.Version {
+		t.Fatalf("startVersions = %#v, want [%q]", got, h.fixture.Version)
 	}
 }

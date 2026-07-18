@@ -104,13 +104,13 @@ func TestAppProviderRestarterStartAppRegistersMissingProvider(t *testing.T) {
 	}
 
 	result.Providers.Remove("restart-app")
-	if err := result.AppRestarter.StartApp(context.Background(), "restart-app"); err != nil {
+	if err := result.AppRestarter.StartApp(context.Background(), "restart-app", ""); err != nil {
 		t.Fatalf("StartApp: %v", err)
 	}
 	if _, err := result.Providers.Get("restart-app"); err != nil {
 		t.Fatalf("Get after StartApp: %v", err)
 	}
-	if err := result.AppRestarter.StartApp(context.Background(), "restart-app"); err != nil {
+	if err := result.AppRestarter.StartApp(context.Background(), "restart-app", ""); err != nil {
 		t.Fatalf("second StartApp: %v", err)
 	}
 }
@@ -137,7 +137,7 @@ func TestAppProviderRestarterStopRemovesProviderAndStartRestoresIt(t *testing.T)
 	if _, err := result.Providers.Get("restart-app"); err == nil {
 		t.Fatal("provider remains registered after StopApp")
 	}
-	if err := result.AppRestarter.StartApp(context.Background(), "restart-app"); err != nil {
+	if err := result.AppRestarter.StartApp(context.Background(), "restart-app", ""); err != nil {
 		t.Fatalf("StartApp: %v", err)
 	}
 	if _, err := result.Providers.Get("restart-app"); err != nil {
