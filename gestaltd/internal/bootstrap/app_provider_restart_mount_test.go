@@ -47,9 +47,11 @@ func TestAppProviderRestarterStartAppMountsRegistryInstalledVersion(t *testing.T
 	}
 	reg := registry.New()
 	restarter := bootstrap.NewAppProviderRestarter(bootstrap.AppProviderRestarterConfig{
-		Config:       cfg,
-		Providers:    &reg.Providers,
-		ArtifactsDir: artifactsDir,
+		Config:    cfg,
+		Providers: &reg.Providers,
+		RegistryMounter: &appregistry.MountService{
+			ArtifactsDir: artifactsDir,
+		},
 	})
 
 	if err := restarter.StartApp(context.Background(), "g-issues", fixture.Version); err == nil {

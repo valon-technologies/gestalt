@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -18,6 +17,12 @@ import (
 )
 
 const providerStopTimeout = 10 * time.Second
+
+// RegistryInstalledMounter binds a registry-materialized app package into a
+// provider entry before catalog-driven restarts rebuild the app.
+type RegistryInstalledMounter interface {
+	BindInstalledAppIfPresent(app string, entry *config.ProviderEntry, version string) error
+}
 
 type pendingProviderClose struct {
 	provider core.Provider
@@ -29,9 +34,9 @@ type AppProviderRestarter struct {
 	deps          Deps
 	providers     *registry.ProviderMap[core.Provider]
 	authBuilds    []*preparedProviderBuilds
-	lifecycles    *appProviderLifecycles
-	artifactsDir  string
-	held          map[string]func()
+	lifecycles      *appProviderLifecycles
+	registryMounter RegistryInstalledMounter
+	held            map[string]func()
 	closing       map[string]pendingProviderClose
 	closeFailures map[string]error
 
@@ -43,18 +48,18 @@ type AppProviderRestarterConfig struct {
 	Deps         Deps
 	Providers    *registry.ProviderMap[core.Provider]
 	AuthBuilds   []*preparedProviderBuilds
-	Lifecycles   *appProviderLifecycles
-	ArtifactsDir string
+	Lifecycles      *appProviderLifecycles
+	RegistryMounter RegistryInstalledMounter
 }
 
 func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestarter {
 	return &AppProviderRestarter{
-		cfg:           cfg.Config,
-		deps:          cfg.Deps,
-		providers:     cfg.Providers,
-		authBuilds:    cfg.AuthBuilds,
-		lifecycles:    cfg.Lifecycles,
-		artifactsDir:  strings.TrimSpace(cfg.ArtifactsDir),
+		cfg:             cfg.Config,
+		deps:            cfg.Deps,
+		providers:       cfg.Providers,
+		authBuilds:      cfg.AuthBuilds,
+		lifecycles:      cfg.Lifecycles,
+		registryMounter: cfg.RegistryMounter,
 		held:          make(map[string]func()),
 		closing:       make(map[string]pendingProviderClose),
 		closeFailures: make(map[string]error),
@@ -265,7 +270,10 @@ func (r *AppProviderRestarter) appEntry(app string) (*config.ProviderEntry, erro
 }
 
 func (r *AppProviderRestarter) applyRegistryMount(app string, entry *config.ProviderEntry, version string) error {
-	if err := appregistry.BindInstalledAppIfPresent(app, entry, r.artifactsDir, version); err != nil {
+	if r == nil || r.registryMounter == nil {
+		return nil
+	}
+	if err := r.registryMounter.BindInstalledAppIfPresent(app, entry, version); err != nil {
 		return fmt.Errorf("mount registry installed app %q@%s: %w", app, version, err)
 	}
 	return nil

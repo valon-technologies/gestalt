@@ -12,6 +12,18 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
+// MountService binds registry-materialized app packages for catalog-driven restarts.
+type MountService struct {
+	ArtifactsDir string
+}
+
+func (m *MountService) BindInstalledAppIfPresent(name string, entry *config.ProviderEntry, version string) error {
+	if m == nil {
+		return nil
+	}
+	return BindInstalledAppIfPresent(name, entry, m.ArtifactsDir, version)
+}
+
 // BindInstalledAppIfPresent mounts a registry-materialized package when it exists
 // on disk. Missing or incomplete installs are ignored so legacy restart-only
 // catalog rows keep using the deploy-time pin.
