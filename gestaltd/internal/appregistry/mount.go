@@ -2,6 +2,7 @@ package appregistry
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,85 +18,116 @@ type MountService struct {
 	ArtifactsDir string
 }
 
-func (m *MountService) BindInstalledAppIfPresent(name string, entry *config.ProviderEntry, version string) error {
+// ResolveInstalledApp returns a provider entry backed by the requested
+// registry install. The deploy-time entry is returned unchanged when no local
+// install exists, which preserves restart-only convergence for legacy rows.
+func (m *MountService) ResolveInstalledApp(name string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error) {
 	if m == nil {
-		return nil
+		return entry, nil
 	}
-	return BindInstalledAppIfPresent(name, entry, m.ArtifactsDir, version)
+	return ResolveInstalledAppIfPresent(name, entry, m.ArtifactsDir, version)
 }
 
-// BindInstalledAppIfPresent mounts a registry-materialized package when it exists
-// on disk. Missing or incomplete installs are ignored so legacy restart-only
-// catalog rows keep using the deploy-time pin.
-func BindInstalledAppIfPresent(name string, entry *config.ProviderEntry, artifactsDir, version string) error {
+// ResolveInstalledAppIfPresent returns an entry backed by a materialized
+// registry package when one exists. It never mutates entry.
+func ResolveInstalledAppIfPresent(name string, entry *config.ProviderEntry, artifactsDir, version string) (*config.ProviderEntry, error) {
 	if strings.TrimSpace(version) == "" || strings.TrimSpace(artifactsDir) == "" {
-		return nil
+		return entry, nil
 	}
 	destDir := MaterializedPath(artifactsDir, name, version)
-	if !registryInstallReady(destDir, name, version) {
-		return nil
+	if _, err := os.Stat(destDir); err != nil {
+		if os.IsNotExist(err) {
+			return entry, nil
+		}
+		return nil, fmt.Errorf("stat registry installed app %q@%s: %w", name, version, err)
 	}
-	return BindInstalledApp(name, entry, destDir, version)
+	if err := operator.ValidateInstalledPublishedPackage(destDir, name, version); err != nil {
+		return nil, fmt.Errorf("validate registry installed app %q@%s: %w", name, version, err)
+	}
+	return ResolveInstalledApp(name, entry, destDir, version)
 }
 
-func registryInstallReady(destDir, name, version string) bool {
-	return operator.ValidateInstalledPublishedPackage(destDir, name, version) == nil
-}
-
-// BindInstalledApp updates entry so the next provider build uses the
-// registry-materialized package at destDir instead of the deploy-time pin.
-func BindInstalledApp(name string, entry *config.ProviderEntry, destDir, version string) error {
+// ResolveInstalledApp builds an isolated provider entry for the materialized
+// package at destDir.
+func ResolveInstalledApp(name string, entry *config.ProviderEntry, destDir, version string) (*config.ProviderEntry, error) {
 	name = strings.TrimSpace(name)
 	destDir = strings.TrimSpace(destDir)
 	version = strings.TrimSpace(version)
 	if name == "" {
-		return fmt.Errorf("app name is required")
+		return nil, fmt.Errorf("app name is required")
 	}
 	if entry == nil {
-		return fmt.Errorf("app %q provider entry is required", name)
+		return nil, fmt.Errorf("app %q provider entry is required", name)
 	}
 	if destDir == "" {
-		return fmt.Errorf("app %q registry install path is required", name)
+		return nil, fmt.Errorf("app %q registry install path is required", name)
 	}
 	if version == "" {
-		return fmt.Errorf("app %q registry install version is required", name)
+		return nil, fmt.Errorf("app %q registry install version is required", name)
 	}
 	if err := operator.ValidateInstalledPublishedPackage(destDir, name, version); err != nil {
-		return fmt.Errorf("validate registry installed app %q@%s: %w", name, version, err)
+		return nil, fmt.Errorf("validate registry installed app %q@%s: %w", name, version, err)
 	}
 	install, err := inspectInstalledApp(destDir)
 	if err != nil {
-		return fmt.Errorf("inspect registry installed app %q@%s: %w", name, version, err)
+		return nil, fmt.Errorf("inspect registry installed app %q@%s: %w", name, version, err)
 	}
 	configMap, err := config.NodeToMap(entry.Config)
 	if err != nil {
-		return fmt.Errorf("decode app config for %q: %w", name, err)
+		return nil, fmt.Errorf("decode app config for %q: %w", name, err)
 	}
 	manifest := providerpkg.ResolveManifestLocalReferences(install.manifest, install.manifestPath)
-	if err := providerpkg.ValidateConfigForManifest(install.manifestPath, manifest, providermanifestv1.KindApp, configMap); err != nil {
-		return fmt.Errorf("provider config validation for provider %q: %w", name, err)
-	}
-	entry.ResolvedManifestPath = install.manifestPath
-	entry.ResolvedManifest = manifest
-	if install.executablePath == "" {
-		return nil
-	}
-	if _, err := os.Stat(install.executablePath); err != nil {
-		return fmt.Errorf("registry installed executable for provider %q not found at %s: %w", name, install.executablePath, err)
-	}
-	args, err := providerEntrypointArgs(manifest)
+	kind, err := providerpkg.ManifestKind(manifest)
 	if err != nil {
-		return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
+		return nil, fmt.Errorf("app %q manifest is invalid: %w", name, err)
 	}
-	entry.Command = install.executablePath
-	entry.Args = append([]string(nil), args...)
-	if entry.Static != nil && !entry.DevActive {
-		if install.assetRootPath == "" {
-			return fmt.Errorf("app %q: static.mount configured but package has no static bundle", name)
+	if kind != providermanifestv1.KindApp {
+		return nil, fmt.Errorf("app %q manifest has kind %q, want %q", name, kind, providermanifestv1.KindApp)
+	}
+	if err := providerpkg.ValidateConfigForManifest(install.manifestPath, manifest, providermanifestv1.KindApp, configMap); err != nil {
+		return nil, fmt.Errorf("provider config validation for provider %q: %w", name, err)
+	}
+
+	resolved := *entry
+	resolved.Command = ""
+	resolved.Args = nil
+	resolved.ResolvedManifestPath = install.manifestPath
+	resolved.ResolvedManifest = manifest
+	resolved.ResolvedIconFile = ""
+	resolved.ResolvedStaticRoot = ""
+
+	if manifest.IconFile != "" {
+		iconPath := filepath.Join(filepath.Dir(install.manifestPath), filepath.FromSlash(manifest.IconFile))
+		if _, err := os.Stat(iconPath); err != nil {
+			slog.Warn("registry installed app icon_file not found", "app", name, "path", iconPath, "error", err)
+		} else {
+			resolved.ResolvedIconFile = iconPath
 		}
-		entry.ResolvedStaticRoot = install.assetRootPath
 	}
-	return nil
+
+	if install.executablePath != "" {
+		if _, err := os.Stat(install.executablePath); err != nil {
+			return nil, fmt.Errorf("registry installed executable for provider %q not found at %s: %w", name, install.executablePath, err)
+		}
+		args, err := providerEntrypointArgs(manifest)
+		if err != nil {
+			return nil, fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
+		}
+		resolved.Command = install.executablePath
+		resolved.Args = args
+	}
+
+	if resolved.Static != nil && !resolved.DevActive {
+		if install.assetRootPath == "" {
+			return nil, fmt.Errorf("app %q: static.mount configured but package has no static bundle", name)
+		}
+		indexPath := filepath.Join(install.assetRootPath, "index.html")
+		if _, err := os.Stat(indexPath); err != nil {
+			return nil, fmt.Errorf("app %q: static bundle missing index.html at %s: %w", name, indexPath, err)
+		}
+		resolved.ResolvedStaticRoot = install.assetRootPath
+	}
+	return &resolved, nil
 }
 
 type installedAppLayout struct {

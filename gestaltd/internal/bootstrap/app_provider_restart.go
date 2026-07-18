@@ -18,10 +18,10 @@ import (
 
 const providerStopTimeout = 10 * time.Second
 
-// RegistryInstalledMounter binds a registry-materialized app package into a
-// provider entry before catalog-driven restarts rebuild the app.
-type RegistryInstalledMounter interface {
-	BindInstalledAppIfPresent(app string, entry *config.ProviderEntry, version string) error
+// RegistryInstalledResolver resolves an isolated provider entry backed by a
+// registry-materialized app package.
+type RegistryInstalledResolver interface {
+	ResolveInstalledApp(app string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error)
 }
 
 type pendingProviderClose struct {
@@ -30,39 +30,39 @@ type pendingProviderClose struct {
 }
 
 type AppProviderRestarter struct {
-	cfg             *config.Config
-	deps            Deps
-	providers       *registry.ProviderMap[core.Provider]
-	authBuilds      []*preparedProviderBuilds
-	lifecycles      *appProviderLifecycles
-	registryMounter RegistryInstalledMounter
-	held            map[string]func()
-	closing         map[string]pendingProviderClose
-	closeFailures   map[string]error
+	cfg              *config.Config
+	deps             Deps
+	providers        *registry.ProviderMap[core.Provider]
+	authBuilds       []*preparedProviderBuilds
+	lifecycles       *appProviderLifecycles
+	registryResolver RegistryInstalledResolver
+	held             map[string]func()
+	closing          map[string]pendingProviderClose
+	closeFailures    map[string]error
 
 	lifecycleMu sync.Mutex
 }
 
 type AppProviderRestarterConfig struct {
-	Config          *config.Config
-	Deps            Deps
-	Providers       *registry.ProviderMap[core.Provider]
-	AuthBuilds      []*preparedProviderBuilds
-	Lifecycles      *appProviderLifecycles
-	RegistryMounter RegistryInstalledMounter
+	Config           *config.Config
+	Deps             Deps
+	Providers        *registry.ProviderMap[core.Provider]
+	AuthBuilds       []*preparedProviderBuilds
+	Lifecycles       *appProviderLifecycles
+	RegistryResolver RegistryInstalledResolver
 }
 
 func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestarter {
 	return &AppProviderRestarter{
-		cfg:             cfg.Config,
-		deps:            cfg.Deps,
-		providers:       cfg.Providers,
-		authBuilds:      cfg.AuthBuilds,
-		lifecycles:      cfg.Lifecycles,
-		registryMounter: cfg.RegistryMounter,
-		held:            make(map[string]func()),
-		closing:         make(map[string]pendingProviderClose),
-		closeFailures:   make(map[string]error),
+		cfg:              cfg.Config,
+		deps:             cfg.Deps,
+		providers:        cfg.Providers,
+		authBuilds:       cfg.AuthBuilds,
+		lifecycles:       cfg.Lifecycles,
+		registryResolver: cfg.RegistryResolver,
+		held:             make(map[string]func()),
+		closing:          make(map[string]pendingProviderClose),
+		closeFailures:    make(map[string]error),
 	}
 }
 
@@ -144,9 +144,6 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	if r.providers == nil {
 		return fmt.Errorf("start app provider: provider registry is not configured")
 	}
-	if err := r.applyRegistryMount(app, entry, version); err != nil {
-		return err
-	}
 	r.lifecycleMu.Lock()
 	defer r.lifecycleMu.Unlock()
 	if err := r.ensureLifecycleLease(ctx, app); err != nil {
@@ -160,6 +157,10 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		return fmt.Errorf("start app provider: %w", getErr)
 	}
 
+	entry, err = r.resolveRegistryInstall(app, entry, version)
+	if err != nil {
+		return err
+	}
 	buildCtx, cancel := context.WithTimeout(ctx, providerInstallTimeout)
 	defer cancel()
 	buildCtx = invocation.WithCallerProvider(buildCtx, invocation.ProviderKindApp, app)
@@ -269,14 +270,18 @@ func (r *AppProviderRestarter) appEntry(app string) (*config.ProviderEntry, erro
 	return entry, nil
 }
 
-func (r *AppProviderRestarter) applyRegistryMount(app string, entry *config.ProviderEntry, version string) error {
-	if r == nil || r.registryMounter == nil {
-		return nil
+func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error) {
+	if r == nil || r.registryResolver == nil {
+		return entry, nil
 	}
-	if err := r.registryMounter.BindInstalledAppIfPresent(app, entry, version); err != nil {
-		return fmt.Errorf("mount registry installed app %q@%s: %w", app, version, err)
+	resolved, err := r.registryResolver.ResolveInstalledApp(app, entry, version)
+	if err != nil {
+		return nil, fmt.Errorf("mount registry installed app %q@%s: %w", app, version, err)
 	}
-	return nil
+	if resolved == nil {
+		return nil, fmt.Errorf("mount registry installed app %q@%s: resolver returned nil provider entry", app, version)
+	}
+	return resolved, nil
 }
 
 func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderBuildResult) {

@@ -61,13 +61,13 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 	}
 	factories.DevSupervisor = devSupervisor
 
-	var registryMounter bootstrap.RegistryInstalledMounter
+	var registryResolver bootstrap.RegistryInstalledResolver
 	if strings.TrimSpace(cfg.Server.ArtifactsDir) != "" && len(cfg.AppRegistries) > 0 {
-		registryMounter = &appregistry.MountService{ArtifactsDir: cfg.Server.ArtifactsDir}
+		registryResolver = &appregistry.MountService{ArtifactsDir: cfg.Server.ArtifactsDir}
 	}
 	result, err := bootstrap.BootstrapWithOptions(ctx, cfg, factories, bootstrap.BootstrapOptions{
 		DeferAppProviderStartup: true,
-		RegistryMounter:         registryMounter,
+		RegistryResolver:        registryResolver,
 	})
 	if err != nil {
 		if devSupervisor != nil {

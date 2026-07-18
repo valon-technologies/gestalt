@@ -1197,7 +1197,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 
 type BootstrapOptions struct {
 	DeferAppProviderStartup bool
-	RegistryMounter         RegistryInstalledMounter
+	RegistryResolver        RegistryInstalledResolver
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
@@ -1496,12 +1496,12 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		PublicGatewayTransport: publicGatewayTransport,
 		DevSupervisor:          prepared.Deps.DevSupervisor,
 		AppRestarter: NewAppProviderRestarter(AppProviderRestarterConfig{
-			Config:          cfg,
-			Deps:            prepared.Deps,
-			Providers:       providers,
-			AuthBuilds:      []*preparedProviderBuilds{noopBuilds, updateBuilds},
-			Lifecycles:      noopBuilds.lifecycles,
-			RegistryMounter: opts.RegistryMounter,
+			Config:           cfg,
+			Deps:             prepared.Deps,
+			Providers:        providers,
+			AuthBuilds:       []*preparedProviderBuilds{noopBuilds, updateBuilds},
+			Lifecycles:       noopBuilds.lifecycles,
+			RegistryResolver: opts.RegistryResolver,
 		}),
 		runtimeRegistry:                prepared.runtimeRegistry,
 		workflowConfigReconcileTasks:   deferredWorkflowConfigReconcileTasks,
