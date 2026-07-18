@@ -1131,7 +1131,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		Auth:                 auth,
 		SelectedAuthProvider: selectedAuthName,
 		AuthProviders:        authProviders,
-		Authorization:        authorizationProviders.Guarded,
+		Authorization:        authorizationProviders.Raw,
 		Services:             svc,
 		ExtraIndexedDBs:      extraIndexedDBs,
 		ExtraCaches:          extraCaches,
