@@ -96,8 +96,8 @@ class AsyncGrpcUnaryTransport:
 
         call = self._channel.unary_unary(
             method.full_method,
-            request_serializer=request.SerializeToString,
-            response_deserializer=response_type.FromString,
+            request_serializer=lambda r: r.SerializeToString(),
+            response_deserializer=lambda b: response_type.FromString(b),
         )(request, metadata=metadata or None)
         try:
             return await call
