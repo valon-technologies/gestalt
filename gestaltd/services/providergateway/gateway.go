@@ -21,17 +21,17 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 	if t == nil || t.authorization == nil {
 		return true, nil
 	}
-	allowed, req := t.shadowAuthorizationCheck(ctx, params)
+	allowed, req := t.authorizationCheck(ctx, params)
 	recordProviderGatewayAuthorizationCheck(ctx, allowed, principal.FromContext(ctx) != nil, req)
 	return allowed, nil
 }
 
-func (t *ProviderGatewayTransport) shadowAuthorizationCheck(ctx context.Context, params AuthorizationParams) (bool, *proto.CheckAccessRequest) {
-	subject, err := t.authorizationSubject(ctx)
+func (t *ProviderGatewayTransport) authorizationCheck(ctx context.Context, params AuthorizationParams) (bool, *proto.CheckAccessRequest) {
+	subject, err := authorizationSubject(ctx)
 	if err != nil {
 		return false, nil
 	}
-	allowed, req, _ := t.runAuthorizationCheck(ctx, subject, params.ProviderID, params.Operation)
+	allowed, req, _ := runAuthorizationCheck(ctx, t.authorization, subject, params.ProviderID, params.Operation)
 	return allowed, req
 }
 
@@ -125,35 +125,36 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 	return next(ctx, req)
 }
 
-func (t *ProviderGatewayTransport) runAuthorizationCheck(
+func runAuthorizationCheck(
 	ctx context.Context,
+	authorization AuthorizationProvider,
 	subject *proto.Subject,
 	providerID, operation string,
 ) (bool, *proto.CheckAccessRequest, error) {
-	if t == nil || t.authorization == nil {
+	if authorization == nil {
 		return true, nil, nil
 	}
 	resource, err := authorizationResource(providerID, operation)
 	if err != nil {
 		return false, nil, err
 	}
-	action, err := authorizationAction(operation)
+	actionObj, err := authorizationAction(operation)
 	if err != nil {
 		return false, nil, err
 	}
 	req := &proto.CheckAccessRequest{
 		Subject:  subject,
 		Resource: resource,
-		Action:   action,
+		Action:   actionObj,
 	}
-	resp, err := t.authorization.CheckAccess(ctx, req)
+	resp, err := authorization.CheckAccess(ctx, req)
 	if err != nil || resp == nil {
 		return false, req, err
 	}
 	return resp.GetAllowed(), req, nil
 }
 
-func (t *ProviderGatewayTransport) authorizationSubject(ctx context.Context) (*proto.Subject, error) {
+func authorizationSubject(ctx context.Context) (*proto.Subject, error) {
 	caller := principal.FromContext(ctx)
 	if caller == nil {
 		return nil, fmt.Errorf("provider gateway: caller principal is required")

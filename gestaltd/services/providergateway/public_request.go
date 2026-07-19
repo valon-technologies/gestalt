@@ -115,7 +115,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	if subjectID == "" {
 		return status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
-	allowed, _, err := t.runAuthorizationCheck(ctx, &proto.Subject{
+	allowed, _, err := runAuthorizationCheck(ctx, t.authorization, &proto.Subject{
 		Type: "subject",
 		Id:   subjectID,
 	}, providerID, fullMethod)
