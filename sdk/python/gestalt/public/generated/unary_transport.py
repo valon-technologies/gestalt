@@ -20,3 +20,12 @@ class UnaryTransport(Protocol):
         request: Message,
         response_type: type[ResponseT],
     ) -> ResponseT: ...
+
+
+class AsyncUnaryTransport(Protocol):
+    async def unary(
+        self,
+        method: Method,
+        request: Message,
+        response_type: type[ResponseT],
+    ) -> ResponseT: ...

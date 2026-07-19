@@ -33,7 +33,7 @@ from .metadata import (
     METHOD_IDENTITY_TOKEN,
     METHOD_IDENTITY_USER_INFO,
 )
-from .unary_transport import UnaryTransport
+from .unary_transport import AsyncUnaryTransport, UnaryTransport
 
 
 class IdentityClient:
@@ -119,3 +119,90 @@ class IdentityClientREST(Protocol):
     def list_grants(self, request: ListGrantsRequest) -> ListGrantsResponse: ...
     def get_grant(self, request: GetGrantRequest) -> GetGrantResponse: ...
     def revoke_grant(self, request: RevokeGrantRequest) -> RevokeGrantResponse: ...
+
+
+class AsyncIdentityClient:
+    """Identity models the shared Gestalt authentication protocol.
+
+    Async client for the public gestalt.provider.v1.Identity surface; methods are coroutines.
+    """
+
+    def __init__(self, transport: AsyncUnaryTransport) -> None:
+        self._transport = transport
+
+    async def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse:
+        wire = _identity_codec.to_wire_authorize_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_AUTHORIZE,
+            wire,
+            _identity_pb2.AuthorizeResponse,
+        )
+        return _identity_codec.from_wire_authorize_response(wire_response)
+
+    async def token(self, request: TokenRequest) -> TokenResponse:
+        wire = _identity_codec.to_wire_token_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_TOKEN,
+            wire,
+            _identity_pb2.TokenResponse,
+        )
+        return _identity_codec.from_wire_token_response(wire_response)
+
+    async def introspect(self, request: IntrospectRequest) -> IntrospectResponse:
+        wire = _identity_codec.to_wire_introspect_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_INTROSPECT,
+            wire,
+            _identity_pb2.IntrospectResponse,
+        )
+        return _identity_codec.from_wire_introspect_response(wire_response)
+
+    async def user_info(self, request: UserInfoRequest) -> UserInfoResponse:
+        wire = _identity_codec.to_wire_user_info_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_USER_INFO,
+            wire,
+            _identity_pb2.UserInfoResponse,
+        )
+        return _identity_codec.from_wire_user_info_response(wire_response)
+
+    async def list_grants(self, request: ListGrantsRequest) -> ListGrantsResponse:
+        wire = _identity_codec.to_wire_list_grants_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_LIST_GRANTS,
+            wire,
+            _identity_pb2.ListGrantsResponse,
+        )
+        return _identity_codec.from_wire_list_grants_response(wire_response)
+
+    async def get_grant(self, request: GetGrantRequest) -> GetGrantResponse:
+        wire = _identity_codec.to_wire_get_grant_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_GET_GRANT,
+            wire,
+            _identity_pb2.GetGrantResponse,
+        )
+        return _identity_codec.from_wire_get_grant_response(wire_response)
+
+    async def revoke_grant(self, request: RevokeGrantRequest) -> RevokeGrantResponse:
+        wire = _identity_codec.to_wire_revoke_grant_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_IDENTITY_REVOKE_GRANT,
+            wire,
+            _identity_pb2.RevokeGrantResponse,
+        )
+        return _identity_codec.from_wire_revoke_grant_response(wire_response)
+
+
+class AsyncIdentityClientREST(Protocol):
+    """REST-backed methods for the public gestalt.provider.v1.Identity surface."""
+
+    async def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse: ...
+    async def token(self, request: TokenRequest) -> TokenResponse: ...
+    async def introspect(self, request: IntrospectRequest) -> IntrospectResponse: ...
+    async def user_info(self, request: UserInfoRequest) -> UserInfoResponse: ...
+    async def list_grants(self, request: ListGrantsRequest) -> ListGrantsResponse: ...
+    async def get_grant(self, request: GetGrantRequest) -> GetGrantResponse: ...
+    async def revoke_grant(
+        self, request: RevokeGrantRequest
+    ) -> RevokeGrantResponse: ...

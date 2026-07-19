@@ -35,7 +35,7 @@ from .metadata import (
     METHOD_AGENT_LIST_TURNS,
     METHOD_AGENT_UPDATE_SESSION,
 )
-from .unary_transport import UnaryTransport
+from .unary_transport import AsyncUnaryTransport, UnaryTransport
 
 
 class AgentClient:
@@ -166,5 +166,145 @@ class AgentClientREST(Protocol):
     ) -> ListAgentProviderTurnsResponse: ...
     def cancel_turn(self, request: CancelAgentProviderTurnRequest) -> AgentTurn: ...
     def list_turn_events(
+        self, request: ListAgentProviderTurnEventsRequest
+    ) -> ListAgentProviderTurnEventsResponse: ...
+
+
+class AsyncAgentClient:
+    """Agent is the authoritative agent data boundary. Read RPCs for
+    sessions, turns, turn events, and interactions should use provider-owned
+    control-plane state and should not require a live execution sandbox,
+    pod-level transport, or cached tunnel.
+
+    Async client for the public gestalt.provider.v1.Agent surface; methods are coroutines.
+    """
+
+    def __init__(self, transport: AsyncUnaryTransport) -> None:
+        self._transport = transport
+
+    async def create_session(
+        self, request: CreateAgentProviderSessionRequest
+    ) -> AgentSession:
+        wire = _agent_codec.to_wire_create_agent_provider_session_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_CREATE_SESSION,
+            wire,
+            _agent_pb2.AgentSession,
+        )
+        return _agent_codec.from_wire_agent_session(wire_response)
+
+    async def get_session(
+        self, request: GetAgentProviderSessionRequest
+    ) -> AgentSession:
+        wire = _agent_codec.to_wire_get_agent_provider_session_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_GET_SESSION,
+            wire,
+            _agent_pb2.AgentSession,
+        )
+        return _agent_codec.from_wire_agent_session(wire_response)
+
+    async def list_sessions(
+        self, request: ListAgentProviderSessionsRequest
+    ) -> ListAgentProviderSessionsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_sessions_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_LIST_SESSIONS,
+            wire,
+            _agent_pb2.ListAgentProviderSessionsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_sessions_response(
+            wire_response
+        )
+
+    async def update_session(
+        self, request: UpdateAgentProviderSessionRequest
+    ) -> AgentSession:
+        wire = _agent_codec.to_wire_update_agent_provider_session_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_UPDATE_SESSION,
+            wire,
+            _agent_pb2.AgentSession,
+        )
+        return _agent_codec.from_wire_agent_session(wire_response)
+
+    async def create_turn(self, request: CreateAgentProviderTurnRequest) -> AgentTurn:
+        wire = _agent_codec.to_wire_create_agent_provider_turn_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_CREATE_TURN,
+            wire,
+            _agent_pb2.AgentTurn,
+        )
+        return _agent_codec.from_wire_agent_turn(wire_response)
+
+    async def get_turn(self, request: GetAgentProviderTurnRequest) -> AgentTurn:
+        wire = _agent_codec.to_wire_get_agent_provider_turn_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_GET_TURN,
+            wire,
+            _agent_pb2.AgentTurn,
+        )
+        return _agent_codec.from_wire_agent_turn(wire_response)
+
+    async def list_turns(
+        self, request: ListAgentProviderTurnsRequest
+    ) -> ListAgentProviderTurnsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_turns_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_LIST_TURNS,
+            wire,
+            _agent_pb2.ListAgentProviderTurnsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_turns_response(wire_response)
+
+    async def cancel_turn(self, request: CancelAgentProviderTurnRequest) -> AgentTurn:
+        wire = _agent_codec.to_wire_cancel_agent_provider_turn_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_CANCEL_TURN,
+            wire,
+            _agent_pb2.AgentTurn,
+        )
+        return _agent_codec.from_wire_agent_turn(wire_response)
+
+    async def list_turn_events(
+        self, request: ListAgentProviderTurnEventsRequest
+    ) -> ListAgentProviderTurnEventsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_turn_events_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_LIST_TURN_EVENTS,
+            wire,
+            _agent_pb2.ListAgentProviderTurnEventsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_turn_events_response(
+            wire_response
+        )
+
+
+class AsyncAgentClientREST(Protocol):
+    """REST-backed methods for the public gestalt.provider.v1.Agent surface."""
+
+    async def create_session(
+        self, request: CreateAgentProviderSessionRequest
+    ) -> AgentSession: ...
+    async def get_session(
+        self, request: GetAgentProviderSessionRequest
+    ) -> AgentSession: ...
+    async def list_sessions(
+        self, request: ListAgentProviderSessionsRequest
+    ) -> ListAgentProviderSessionsResponse: ...
+    async def update_session(
+        self, request: UpdateAgentProviderSessionRequest
+    ) -> AgentSession: ...
+    async def create_turn(
+        self, request: CreateAgentProviderTurnRequest
+    ) -> AgentTurn: ...
+    async def get_turn(self, request: GetAgentProviderTurnRequest) -> AgentTurn: ...
+    async def list_turns(
+        self, request: ListAgentProviderTurnsRequest
+    ) -> ListAgentProviderTurnsResponse: ...
+    async def cancel_turn(
+        self, request: CancelAgentProviderTurnRequest
+    ) -> AgentTurn: ...
+    async def list_turn_events(
         self, request: ListAgentProviderTurnEventsRequest
     ) -> ListAgentProviderTurnEventsResponse: ...

@@ -34,7 +34,7 @@ from .metadata import (
     METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL,
     METHOD_EXTERNAL_CREDENTIALS_VALIDATE_CREDENTIAL_CONFIG,
 )
-from .unary_transport import UnaryTransport
+from .unary_transport import AsyncUnaryTransport, UnaryTransport
 
 _empty: Any = _empty_pb2
 
@@ -145,6 +145,123 @@ class ExternalCredentialsClient:
             request
         )
         wire_response = self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExchangeExternalCredentialResponse,
+        )
+        return (
+            _external_credential_codec.from_wire_exchange_external_credential_response(
+                wire_response
+            )
+        )
+
+
+class AsyncExternalCredentialsClient:
+    """Async client for the public gestalt.provider.v1.ExternalCredentials surface; methods are coroutines."""
+
+    def __init__(self, transport: AsyncUnaryTransport) -> None:
+        self._transport = transport
+
+    async def create_credential(
+        self, request: CreateExternalCredentialRequest
+    ) -> ExternalCredential:
+        wire = _external_credential_codec.to_wire_create_external_credential_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExternalCredential,
+        )
+        return _external_credential_codec.from_wire_external_credential(wire_response)
+
+    async def upsert_credential(
+        self, request: UpsertExternalCredentialRequest
+    ) -> ExternalCredential:
+        wire = _external_credential_codec.to_wire_upsert_external_credential_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExternalCredential,
+        )
+        return _external_credential_codec.from_wire_external_credential(wire_response)
+
+    async def get_credential(
+        self, request: GetExternalCredentialRequest
+    ) -> ExternalCredential:
+        wire = _external_credential_codec.to_wire_get_external_credential_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ExternalCredential,
+        )
+        return _external_credential_codec.from_wire_external_credential(wire_response)
+
+    async def list_credentials(
+        self, request: ListExternalCredentialsRequest
+    ) -> ListExternalCredentialsResponse:
+        wire = _external_credential_codec.to_wire_list_external_credentials_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS,
+            wire,
+            _external_credential_pb2.ListExternalCredentialsResponse,
+        )
+        return _external_credential_codec.from_wire_list_external_credentials_response(
+            wire_response
+        )
+
+    async def delete_credential(self, request: DeleteExternalCredentialRequest) -> None:
+        wire = _external_credential_codec.to_wire_delete_external_credential_request(
+            request
+        )
+        await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL,
+            wire,
+            _empty.Empty,
+        )
+
+    async def validate_credential_config(
+        self, request: ValidateExternalCredentialConfigRequest
+    ) -> None:
+        wire = _external_credential_codec.to_wire_validate_external_credential_config_request(
+            request
+        )
+        await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_VALIDATE_CREDENTIAL_CONFIG,
+            wire,
+            _empty.Empty,
+        )
+
+    async def resolve_credential(
+        self, request: ResolveExternalCredentialRequest
+    ) -> ResolveExternalCredentialResponse:
+        wire = _external_credential_codec.to_wire_resolve_external_credential_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL,
+            wire,
+            _external_credential_pb2.ResolveExternalCredentialResponse,
+        )
+        return (
+            _external_credential_codec.from_wire_resolve_external_credential_response(
+                wire_response
+            )
+        )
+
+    async def exchange_credential(
+        self, request: ExchangeExternalCredentialRequest
+    ) -> ExchangeExternalCredentialResponse:
+        wire = _external_credential_codec.to_wire_exchange_external_credential_request(
+            request
+        )
+        wire_response = await self._transport.unary(
             METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
             wire,
             _external_credential_pb2.ExchangeExternalCredentialResponse,

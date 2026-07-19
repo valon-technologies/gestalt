@@ -49,7 +49,7 @@ from .metadata import (
     METHOD_INDEXED_DB_INDEX_GET_KEY,
     METHOD_INDEXED_DB_PUT,
 )
-from .unary_transport import UnaryTransport
+from .unary_transport import AsyncUnaryTransport, UnaryTransport
 
 _empty: Any = _empty_pb2
 
@@ -233,6 +233,192 @@ class IndexedDBClient:
     def index_delete(self, request: IndexQueryRequest) -> DeleteResponse:
         wire = _indexeddb_codec.to_wire_index_query_request(request)
         wire_response = self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_DELETE,
+            wire,
+            _indexeddb_pb2.DeleteResponse,
+        )
+        return _indexeddb_codec.from_wire_delete_response(wire_response)
+
+
+class AsyncIndexedDBClient:
+    """IndexedDB models the shared Gestalt IndexedDB-provider protocol.
+
+    Async client for the public gestalt.provider.v1.IndexedDB surface; methods are coroutines.
+    """
+
+    def __init__(self, transport: AsyncUnaryTransport) -> None:
+        self._transport = transport
+
+    async def create_object_store(self, request: CreateObjectStoreRequest) -> None:
+        """Lifecycle"""
+        wire = _indexeddb_codec.to_wire_create_object_store_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_CREATE_OBJECT_STORE,
+            wire,
+            _empty.Empty,
+        )
+
+    async def delete_object_store(self, request: DeleteObjectStoreRequest) -> None:
+        wire = _indexeddb_codec.to_wire_delete_object_store_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_DELETE_OBJECT_STORE,
+            wire,
+            _empty.Empty,
+        )
+
+    async def create_index(self, request: CreateIndexRequest) -> None:
+        wire = _indexeddb_codec.to_wire_create_index_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_CREATE_INDEX,
+            wire,
+            _empty.Empty,
+        )
+
+    async def delete_index(self, request: DeleteIndexRequest) -> None:
+        wire = _indexeddb_codec.to_wire_delete_index_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_DELETE_INDEX,
+            wire,
+            _empty.Empty,
+        )
+
+    async def get(self, request: ObjectStoreRequest) -> RecordResponse:
+        """Primary key CRUD"""
+        wire = _indexeddb_codec.to_wire_object_store_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_GET,
+            wire,
+            _indexeddb_pb2.RecordResponse,
+        )
+        return _indexeddb_codec.from_wire_record_response(wire_response)
+
+    async def get_key(self, request: ObjectStoreRequest) -> KeyResponse:
+        wire = _indexeddb_codec.to_wire_object_store_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_GET_KEY,
+            wire,
+            _indexeddb_pb2.KeyResponse,
+        )
+        return _indexeddb_codec.from_wire_key_response(wire_response)
+
+    async def add(self, request: RecordRequest) -> None:
+        wire = _indexeddb_codec.to_wire_record_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_ADD,
+            wire,
+            _empty.Empty,
+        )
+
+    async def put(self, request: RecordRequest) -> None:
+        wire = _indexeddb_codec.to_wire_record_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_PUT,
+            wire,
+            _empty.Empty,
+        )
+
+    async def delete(self, request: ObjectStoreRequest) -> None:
+        wire = _indexeddb_codec.to_wire_object_store_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_DELETE,
+            wire,
+            _empty.Empty,
+        )
+
+    async def clear(self, request: ObjectStoreNameRequest) -> None:
+        """Bulk operations (with optional query)"""
+        wire = _indexeddb_codec.to_wire_object_store_name_request(request)
+        await self._transport.unary(
+            METHOD_INDEXED_DB_CLEAR,
+            wire,
+            _empty.Empty,
+        )
+
+    async def get_all(self, request: ObjectStoreRangeRequest) -> RecordsResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_GET_ALL,
+            wire,
+            _indexeddb_pb2.RecordsResponse,
+        )
+        return _indexeddb_codec.from_wire_records_response(wire_response)
+
+    async def get_all_keys(self, request: ObjectStoreRangeRequest) -> KeysResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_GET_ALL_KEYS,
+            wire,
+            _indexeddb_pb2.KeysResponse,
+        )
+        return _indexeddb_codec.from_wire_keys_response(wire_response)
+
+    async def count(self, request: ObjectStoreRangeRequest) -> CountResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_COUNT,
+            wire,
+            _indexeddb_pb2.CountResponse,
+        )
+        return _indexeddb_codec.from_wire_count_response(wire_response)
+
+    async def delete_range(self, request: ObjectStoreRangeRequest) -> DeleteResponse:
+        wire = _indexeddb_codec.to_wire_object_store_range_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_DELETE_RANGE,
+            wire,
+            _indexeddb_pb2.DeleteResponse,
+        )
+        return _indexeddb_codec.from_wire_delete_response(wire_response)
+
+    async def index_get(self, request: IndexQueryRequest) -> RecordResponse:
+        """Index queries"""
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET,
+            wire,
+            _indexeddb_pb2.RecordResponse,
+        )
+        return _indexeddb_codec.from_wire_record_response(wire_response)
+
+    async def index_get_key(self, request: IndexQueryRequest) -> KeyResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET_KEY,
+            wire,
+            _indexeddb_pb2.KeyResponse,
+        )
+        return _indexeddb_codec.from_wire_key_response(wire_response)
+
+    async def index_get_all(self, request: IndexQueryRequest) -> RecordsResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET_ALL,
+            wire,
+            _indexeddb_pb2.RecordsResponse,
+        )
+        return _indexeddb_codec.from_wire_records_response(wire_response)
+
+    async def index_get_all_keys(self, request: IndexQueryRequest) -> KeysResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_GET_ALL_KEYS,
+            wire,
+            _indexeddb_pb2.KeysResponse,
+        )
+        return _indexeddb_codec.from_wire_keys_response(wire_response)
+
+    async def index_count(self, request: IndexQueryRequest) -> CountResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_INDEXED_DB_INDEX_COUNT,
+            wire,
+            _indexeddb_pb2.CountResponse,
+        )
+        return _indexeddb_codec.from_wire_count_response(wire_response)
+
+    async def index_delete(self, request: IndexQueryRequest) -> DeleteResponse:
+        wire = _indexeddb_codec.to_wire_index_query_request(request)
+        wire_response = await self._transport.unary(
             METHOD_INDEXED_DB_INDEX_DELETE,
             wire,
             _indexeddb_pb2.DeleteResponse,
