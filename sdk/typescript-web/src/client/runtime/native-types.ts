@@ -420,8 +420,8 @@ export interface AgentInteraction {
   state: AgentInteractionState;
   title: string;
   prompt: string;
-  request?: JsonObject;
-  resolution?: JsonObject;
+  request?: JsonObjectInput;
+  resolution?: JsonObjectInput;
   createdAt?: Date;
   resolvedAt?: Date;
   turnId: string;
@@ -432,13 +432,13 @@ export interface AgentMessage {
   role: string;
   text: string;
   parts: AgentMessagePart[];
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
 }
 
 export interface AgentMessagePart {
   type: AgentMessagePartType;
   text: string;
-  json?: JsonObject;
+  json?: JsonObjectInput;
   toolCall?: AgentMessagePartToolCall;
   toolResult?: AgentMessagePartToolResult;
   imageRef?: AgentMessagePartImageRef;
@@ -452,14 +452,14 @@ export interface AgentMessagePartImageRef {
 export interface AgentMessagePartToolCall {
   id: string;
   toolId: string;
-  arguments?: JsonObject;
+  arguments?: JsonObjectInput;
 }
 
 export interface AgentMessagePartToolResult {
   toolCallId: string;
   status: number;
   content: string;
-  output?: JsonObject;
+  output?: JsonObjectInput;
 }
 
 export interface AgentNoTools {}
@@ -497,7 +497,7 @@ export interface AgentSession {
   model: string;
   clientRef: string;
   state: AgentSessionState;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   createdBySubjectId: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -524,7 +524,7 @@ export interface AgentSessionStartHookOutput {
 }
 
 export interface AgentStructuredOutput {
-  schema?: JsonObject;
+  schema?: JsonObjectInput;
 }
 
 export interface AgentTextOutput {}
@@ -566,9 +566,9 @@ export interface AgentTurnDisplay {
   label: string;
   ref: string;
   parentRef: string;
-  input?: JsonValue;
-  output?: JsonValue;
-  error?: JsonValue;
+  input?: JsonInput;
+  output?: JsonInput;
+  error?: JsonInput;
   action: string;
   format: string;
   language: string;
@@ -581,14 +581,14 @@ export interface AgentTurnEvent {
   type: string;
   source: string;
   visibility: string;
-  data?: JsonObject;
+  data?: JsonObjectInput;
   createdAt?: Date;
   display?: AgentTurnDisplay;
 }
 
 export interface AgentTurnStructuredOutput {
   text: string;
-  value?: JsonObject;
+  value?: JsonObjectInput;
 }
 
 export interface AgentTurnTextOutput {
@@ -624,7 +624,7 @@ export interface CreateAgentProviderSessionRequest {
   idempotencyKey: string;
   model: string;
   clientRef: string;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   sessionStart?: AgentSessionStartConfig;
   preparedWorkspace?: PreparedAgentWorkspace;
   providerName: string;
@@ -639,9 +639,9 @@ export interface CreateAgentProviderTurnRequest {
   idempotencyKey: string;
   model: string;
   messages: AgentMessage[];
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   executionRef: string;
-  modelOptions?: JsonObject;
+  modelOptions?: JsonObjectInput;
   /**
    * Optional provider-owned turn execution budget, in seconds.
    * If unset or zero, the provider chooses its own execution timeout. This does
@@ -760,7 +760,7 @@ export interface PreparedAgentWorkspace {
 
 export interface ResolveAgentProviderInteractionRequest {
   interactionId: string;
-  resolution?: JsonObject;
+  resolution?: JsonObjectInput;
   turnId: string;
   context?: RequestContext;
   providerName: string;
@@ -770,7 +770,7 @@ export interface UpdateAgentProviderSessionRequest {
   sessionId: string;
   clientRef: string;
   state: AgentSessionState;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   context?: RequestContext;
   providerName: string;
 }
@@ -851,7 +851,7 @@ export interface GetWorkflowProviderRunOutputRequest {
 }
 
 export interface GetWorkflowProviderRunOutputResponse {
-  output?: JsonValue;
+  output?: JsonInput;
 }
 
 export interface GetWorkflowProviderRunRequest {
@@ -904,7 +904,7 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   signal?: WorkflowSignal;
   provider: string;
   definitionId: string;
-  input?: JsonObject;
+  input?: JsonObjectInput;
   expectedDefinitionGeneration: bigint;
   context?: RequestContext;
 }
@@ -928,7 +928,7 @@ export interface StartWorkflowProviderRunRequest {
   workflowKey: string;
   provider: string;
   definitionId: string;
-  input?: JsonObject;
+  input?: JsonObjectInput;
   expectedDefinitionGeneration: bigint;
   context?: RequestContext;
 }
@@ -948,7 +948,7 @@ export interface WorkflowActivation {
 export interface WorkflowAgentMessage {
   role: string;
   text?: WorkflowText;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
 }
 
 export interface WorkflowArray {
@@ -983,8 +983,8 @@ export interface WorkflowEvent {
   subject: string;
   time?: Date;
   datacontenttype: string;
-  data?: JsonObject;
-  extensions: { [key: string]: JsonValue };
+  data?: JsonObjectInput;
+  extensions: { [key: string]: JsonInput };
 }
 
 export interface WorkflowEventActivation {
@@ -1021,12 +1021,12 @@ export interface WorkflowRun {
   startedAt?: Date;
   completedAt?: Date;
   statusMessage: string;
-  output?: JsonValue;
+  output?: JsonInput;
   workflowKey: string;
   provider: string;
   definitionId: string;
   runAs: string;
-  input?: JsonObject;
+  input?: JsonObjectInput;
   definitionGeneration: bigint;
   currentStepId: string;
   steps: WorkflowStepExecution[];
@@ -1037,7 +1037,7 @@ export interface WorkflowRunEvent {
   runId: string;
   stepId: string;
   type: string;
-  data?: JsonObject;
+  data?: JsonObjectInput;
   createdAt?: Date;
 }
 
@@ -1064,8 +1064,8 @@ export interface WorkflowScheduleTrigger {
 export interface WorkflowSignal {
   id: string;
   name: string;
-  payload?: JsonObject;
-  metadata?: JsonObject;
+  payload?: JsonObjectInput;
+  metadata?: JsonObjectInput;
   createdAt?: Date;
   idempotencyKey: string;
   sequence: bigint;
@@ -1081,7 +1081,7 @@ export interface WorkflowStep {
   inputs: { [key: string]: WorkflowValue };
   when?: WorkflowStepWhen;
   timeoutSeconds: number;
-  metadata?: JsonObject;
+  metadata?: JsonObjectInput;
   action: WorkflowStepAction;
 }
 
@@ -1093,7 +1093,7 @@ export interface WorkflowStepAgentTurn {
   messages: WorkflowAgentMessage[];
   tools: AgentToolRef[];
   output?: AgentOutput;
-  modelOptions?: JsonObject;
+  modelOptions?: JsonObjectInput;
 }
 
 export interface WorkflowStepAppCall {
@@ -1109,8 +1109,8 @@ export interface WorkflowStepAttempt {
   id: string;
   status: WorkflowStepStatus;
   idempotencyKey: string;
-  input?: JsonValue;
-  output?: JsonValue;
+  input?: JsonInput;
+  output?: JsonInput;
   statusMessage: string;
   startedAt?: Date;
   completedAt?: Date;
@@ -1120,8 +1120,8 @@ export interface WorkflowStepExecution {
   stepId: string;
   status: WorkflowStepStatus;
   attempts: WorkflowStepAttempt[];
-  input?: JsonValue;
-  output?: JsonValue;
+  input?: JsonInput;
+  output?: JsonInput;
   statusMessage: string;
   skipReason: string;
   startedAt?: Date;
@@ -1140,7 +1140,7 @@ export interface WorkflowStepOutputSource {
 
 export interface WorkflowStepWhen {
   value?: WorkflowValue;
-  equals?: JsonValue;
+  equals?: JsonInput;
 }
 
 export interface WorkflowText {
@@ -1148,7 +1148,7 @@ export interface WorkflowText {
 }
 
 export type WorkflowValueKind =
-  | { case: "literal"; value: JsonValue }
+  | { case: "literal"; value: JsonInput }
   | { case: "object"; value: WorkflowObject }
   | { case: "array"; value: WorkflowArray }
   | { case: "template"; value: WorkflowText }
@@ -1346,7 +1346,7 @@ export type SourceLayer = number;
 
 export interface Action {
   name: string;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
 }
 
 export interface AddRelationshipRequest {
@@ -1456,7 +1456,7 @@ export interface ModelRelation {
 
 export interface Relationship {
   tuple?: RelationshipTuple;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
   sourceLayer: SourceLayer;
 }
 
@@ -1489,7 +1489,7 @@ export interface RelationshipTuple {
 export interface Resource {
   type: string;
   id: string;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
 }
 
 export interface SetActiveModelRequest {
@@ -1512,7 +1512,7 @@ export interface SetAuthorizationStateResponse {
 export interface Subject {
   type: string;
   id: string;
-  properties?: JsonObject;
+  properties?: JsonObjectInput;
 }
 
 export interface SubjectSet {
