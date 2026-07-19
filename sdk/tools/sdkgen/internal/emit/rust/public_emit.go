@@ -38,8 +38,8 @@ pub trait UnaryTransport: Send + Sync {
         Resp: Message + Default + Send + 'static;
 }
 
-/// Performs one unary public App call synchronously. REST-only; no gRPC
-/// transport implements this trait.
+/// Performs one unary public App call synchronously. REST methods use
+/// SyncRestTransport; gRPC-only methods use SyncGrpcTransport.
 pub trait SyncUnaryTransport: Send + Sync {
     fn unary<Req, Resp>(
         &self,
@@ -54,6 +54,9 @@ pub trait SyncUnaryTransport: Send + Sync {
 
 /// Marker for transports that can call gRPC-only public methods.
 pub trait GrpcCapable: UnaryTransport {}
+
+/// Marker for sync transports that can call gRPC-only public methods.
+pub trait SyncGrpcCapable: SyncUnaryTransport {}
 `
 
 // EmitPublic renders the public gestaltd Rust client under sdk/rust/src/public.

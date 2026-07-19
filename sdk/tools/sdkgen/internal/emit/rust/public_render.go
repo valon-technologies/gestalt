@@ -85,6 +85,12 @@ func (r *renderer) renderAppClient(svc *model.Service) {
 			r.renderAppClientMethod(svc, m, false)
 		}
 		r.body.WriteString("}\n\n")
+
+		fmt.Fprintf(&r.body, "impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> %s<T> {\n", clientName)
+		for _, m := range grpcOnlyMethods {
+			r.renderAppClientMethod(svc, m, true)
+		}
+		r.body.WriteString("}\n\n")
 	}
 }
 

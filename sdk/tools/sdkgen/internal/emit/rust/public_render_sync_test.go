@@ -77,7 +77,7 @@ func TestSyncMethodsGeneratedForREST(t *testing.T) {
 	}
 }
 
-func TestNoSyncMethodsForGRPCOnly(t *testing.T) {
+func TestSyncMethodsGeneratedForGRPCOnly(t *testing.T) {
 	t.Parallel()
 
 	svc := &model.Service{
@@ -109,13 +109,21 @@ func TestNoSyncMethodsForGRPCOnly(t *testing.T) {
 	if !strings.Contains(out, "pub async fn create_credential(") {
 		t.Fatal("missing async create_credential method")
 	}
-	// No sync method — gRPC-only methods don't get sync variants
-	if strings.Contains(out, "create_credential_sync") {
-		t.Fatal("gRPC-only method should not have a sync variant")
+	// Sync method exists (in SyncGrpcCapable block)
+	if !strings.Contains(out, "pub fn create_credential_sync(") {
+		t.Fatal("missing sync create_credential_sync method")
 	}
-	// No SyncUnaryTransport impl block
-	if strings.Contains(out, "SyncUnaryTransport") {
-		t.Fatal("gRPC-only service should not have a SyncUnaryTransport impl block")
+	// Async impl block bound on GrpcCapable
+	if !strings.Contains(out, "impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredentialsClient<T>") {
+		t.Fatal("missing async impl block with GrpcCapable bound")
+	}
+	// Sync impl block bound on SyncGrpcCapable
+	if !strings.Contains(out, "impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> ExternalCredentialsClient<T>") {
+		t.Fatal("missing sync impl block with SyncGrpcCapable bound")
+	}
+	// SyncGrpcCapable trait is in the transport template
+	if !strings.Contains(publicUnaryTransportFile, "pub trait SyncGrpcCapable: SyncUnaryTransport") {
+		t.Fatal("publicUnaryTransportFile missing SyncGrpcCapable trait")
 	}
 }
 
