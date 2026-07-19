@@ -12,10 +12,8 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -318,29 +316,20 @@ func TestBootstrapAuthorizationProviderStateAuthorizesProviderGatewayRequests(t 
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 
-	transport := providergateway.NewProviderGatewayTransport()
-	transport.SetAuthorizationProvider(provider)
-
-	allowedCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:alice"})
-	if _, err := transport.Invoke(allowedCtx, providergateway.ProviderGatewayRequest{
-		ProviderID:   "github",
-		ProviderKind: providergateway.ProviderKindAuthorization,
-		Operation:    "sync",
-	}, func(_ context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
-		return providergateway.ProviderGatewayResponse{}, nil
-	}); err != nil {
-		t.Fatalf("Invoke allowed: %v", err)
+	allowed, err := invocation.CheckSubjectAccess(context.Background(), provider, invocation.SubjectAccessRequest("user:alice", "sync", &proto.Resource{Type: "provider", Id: "github"}))
+	if err != nil {
+		t.Fatalf("CheckSubjectAccess allowed: %v", err)
+	}
+	if !allowed {
+		t.Fatal("CheckSubjectAccess allowed: expected allowed for user:alice")
 	}
 
-	deniedCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:bob"})
-	if _, err := transport.Invoke(deniedCtx, providergateway.ProviderGatewayRequest{
-		ProviderID:   "github",
-		ProviderKind: providergateway.ProviderKindAuthorization,
-		Operation:    "sync",
-	}, func(_ context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
-		return providergateway.ProviderGatewayResponse{}, nil
-	}); err == nil {
-		t.Fatal("Invoke denied: expected unauthorized error")
+	allowed, err = invocation.CheckSubjectAccess(context.Background(), provider, invocation.SubjectAccessRequest("user:bob", "sync", &proto.Resource{Type: "provider", Id: "github"}))
+	if err != nil {
+		t.Fatalf("CheckSubjectAccess denied: %v", err)
+	}
+	if allowed {
+		t.Fatal("CheckSubjectAccess denied: expected denied for user:bob")
 	}
 }
 

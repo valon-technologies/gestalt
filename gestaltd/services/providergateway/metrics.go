@@ -126,7 +126,6 @@ func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, er
 		attrProviderGatewayCallerPrincipalProvided.String(strconv.FormatBool(principal.FromContext(ctx) != nil)),
 	}
 	metricAttrs := metric.WithAttributes(attrs...)
-
 	metrics.count.Add(ctx, 1, metricAttrs)
 	metrics.duration.Record(ctx, time.Since(startedAt).Seconds(), metricAttrs)
 	if err != nil {

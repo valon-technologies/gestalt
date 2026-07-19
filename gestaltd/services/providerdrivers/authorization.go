@@ -8,20 +8,19 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
-type AuthorizationDeps struct {
-	Transport providergateway.Transport
-}
+type AuthorizationDeps struct{}
 
 type AuthorizationBuildResult struct {
-	Raw core.AuthorizationProvider
+	Raw  core.AuthorizationProvider
+	Conn grpc.ClientConnInterface
 }
 
-func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps AuthorizationDeps) (AuthorizationBuildResult, error) {
+func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ AuthorizationDeps) (AuthorizationBuildResult, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return AuthorizationBuildResult{}, fmt.Errorf("authorization provider: parsing config: %w", err)
@@ -37,10 +36,6 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 	}
 	cfg = prepared.YAMLConfig
 
-	transport := deps.Transport
-	if transport == nil {
-		transport = providergateway.DirectTransport{}
-	}
 	execCfg := authorizationservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
@@ -52,7 +47,6 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,
 		Name:         name,
-		Transport:    transport,
 	}
 
 	exec, err := authorizationservice.StartExecutable(ctx, execCfg)
@@ -67,6 +61,7 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 	}
 
 	return AuthorizationBuildResult{
-		Raw: raw,
+		Raw:  raw,
+		Conn: exec.Conn(),
 	}, nil
 }

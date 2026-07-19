@@ -12,175 +12,15 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 )
 
-func TestAuthorizeAllowsRequests(t *testing.T) {
-	t.Parallel()
-
-	transport := NewProviderGatewayTransport()
-	allowed, err := transport.Authorize(context.Background(), AuthorizationParams{
-		ProviderID: "authz-primary",
-		Operation:  "CheckAccess",
-	})
-	if err != nil {
-		t.Fatalf("Authorize: %v", err)
-	}
-	if !allowed {
-		t.Fatal("Authorize allowed = false, want true")
-	}
-}
-
-func TestAuthorizeUsesAuthorizationProvider(t *testing.T) {
-	t.Parallel()
-
-	authorization := &stubAuthorizationProvider{}
-	transport := NewProviderGatewayTransport()
-	transport.SetAuthorizationProvider(authorization)
-
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:alice"})
-	allowed, err := transport.Authorize(ctx, AuthorizationParams{
-		ProviderID: "authz-primary",
-		Operation:  "CheckAccess",
-	})
-	if err != nil {
-		t.Fatalf("Authorize: %v", err)
-	}
-	if !allowed {
-		t.Fatal("Authorize allowed = false, want true")
-	}
-	if !authorization.called {
-		t.Fatal("authorization provider was not called")
-	}
-	if got := authorization.request.GetSubject().GetType(); got != "subject" {
-		t.Fatalf("Subject.Type = %q, want %q", got, "subject")
-	}
-	if got := authorization.request.GetSubject().GetId(); got != "user:alice" {
-		t.Fatalf("Subject.Id = %q, want %q", got, "user:alice")
-	}
-	if got := authorization.request.GetAction().GetName(); got != "CheckAccess" {
-		t.Fatalf("Action.Name = %q, want %q", got, "CheckAccess")
-	}
-	if got := authorization.request.GetResource().GetType(); got != "provider" {
-		t.Fatalf("Resource.Type = %q, want %q", got, "provider")
-	}
-	if got := authorization.request.GetResource().GetId(); got != "authz-primary" {
-		t.Fatalf("Resource.Id = %q, want %q", got, "authz-primary")
-	}
-}
-
-func TestAuthorizeDeniesWhenAuthorizationDenied(t *testing.T) {
-	t.Parallel()
-
-	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
-	transport := NewProviderGatewayTransport()
-	transport.SetAuthorizationProvider(authorization)
-
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:alice"})
-	allowed, err := transport.Authorize(ctx, AuthorizationParams{
-		ProviderID: "authz-primary",
-		Operation:  "CheckAccess",
-	})
-	if err != nil {
-		t.Fatalf("Authorize: %v", err)
-	}
-	if allowed {
-		t.Fatal("Authorize allowed = true, want false when authorization denies")
-	}
-	if !authorization.called {
-		t.Fatal("authorization provider was not called")
-	}
-}
-
-func TestAuthorizeRecordsAuthorizationMetrics(t *testing.T) {
-	t.Parallel()
-
-	metrics := metrictest.NewManualMeterProvider(t)
-	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-
-	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
-	transport := NewProviderGatewayTransport()
-	transport.SetAuthorizationProvider(authorization)
-
-	ctx = principal.WithPrincipal(ctx, &principal.Principal{SubjectID: "user:alice"})
-	if _, err := transport.Authorize(ctx, AuthorizationParams{
-		ProviderID: "authz-primary",
-		Operation:  "CheckAccess",
-	}); err != nil {
-		t.Fatalf("Authorize: %v", err)
-	}
-
-	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
-		"gd.entry":                 "internal",
-		"gd.caller_token_provided": "true",
-		"gd.allowed":               "false",
-		"gd.subject":               "subject/user:alice",
-		"gd.resource":              "provider/authz-primary",
-		"gd.action":                "CheckAccess",
-	})
-}
-
-func TestProviderGatewayTransportAuthorizesThenInvokesNext(t *testing.T) {
-	t.Parallel()
-
-	transport := NewProviderGatewayTransport()
-	req := ProviderGatewayRequest{
-		ProviderID:   "authz-primary",
-		ProviderKind: ProviderKindAuthorization,
-		Operation:    "SetAuthorizationState",
-	}
-	nextCalled := false
-
-	_, err := transport.Invoke(context.Background(), req, func(_ context.Context, got ProviderGatewayRequest) (ProviderGatewayResponse, error) {
-		nextCalled = true
-		if got.ProviderID != req.ProviderID {
-			t.Fatalf("ProviderID = %q, want %q", got.ProviderID, req.ProviderID)
-		}
-		return ProviderGatewayResponse{}, nil
-	})
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if !nextCalled {
-		t.Fatal("next was not called")
-	}
-}
-
-func TestProviderGatewayTransportStoresAuthorizationProvider(t *testing.T) {
-	t.Parallel()
-
-	authorization := &stubAuthorizationProvider{}
-	transport := NewProviderGatewayTransport()
-
-	transport.SetAuthorizationProvider(authorization)
-
-	if transport.authorization != authorization {
-		t.Fatal("authorization provider was not stored")
-	}
-}
-
-func TestDirectTransportInvokesNext(t *testing.T) {
-	t.Parallel()
-
-	called := false
-	req := ProviderGatewayRequest{ProviderID: "authz", Operation: "CheckAccess"}
-	_, err := (DirectTransport{}).Invoke(context.Background(), req, func(_ context.Context, got ProviderGatewayRequest) (ProviderGatewayResponse, error) {
-		called = true
-		if got.ProviderID != req.ProviderID {
-			t.Fatalf("ProviderID = %q, want %q", got.ProviderID, req.ProviderID)
-		}
-		return ProviderGatewayResponse{}, nil
-	})
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if !called {
-		t.Fatal("next was not called")
-	}
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 type stubAuthorizationProvider struct {
@@ -199,10 +39,6 @@ func (p *stubAuthorizationProvider) CheckAccess(ctx context.Context, req *proto.
 		allowed = *p.allowedResult
 	}
 	return &proto.CheckAccessResponse{Allowed: allowed}, nil
-}
-
-func boolPtr(value bool) *bool {
-	return &value
 }
 
 func (p *stubAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
@@ -240,126 +76,6 @@ func (p *stubAuthorizationProvider) ListActiveModelResourceTypes(context.Context
 func (p *stubAuthorizationProvider) Ping(context.Context) error { return nil }
 
 func (p *stubAuthorizationProvider) Close() error { return nil }
-
-func TestDirectTransportInvokeRecordsMetrics(t *testing.T) {
-	t.Parallel()
-
-	metrics := metrictest.NewManualMeterProvider(t)
-	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	req := ProviderGatewayRequest{
-		ProviderID:   "authz",
-		ProviderKind: ProviderKindAuthorization,
-		ServiceName:  "gestalt.v1.Authorization",
-		Operation:    "CheckAccess",
-	}
-
-	_, err := (DirectTransport{}).Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
-		return ProviderGatewayResponse{Payload: []byte("ok")}, nil
-	})
-	if err != nil {
-		t.Fatalf("Invoke error = %v", err)
-	}
-
-	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	attrs := providerGatewayMetricAttrs(req, TransportPathDirect)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
-	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", attrs)
-}
-
-func TestDirectTransportInvokeRecordsErrorMetrics(t *testing.T) {
-	t.Parallel()
-
-	metrics := metrictest.NewManualMeterProvider(t)
-	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	req := ProviderGatewayRequest{
-		ProviderID:   "authz",
-		ProviderKind: ProviderKindAuthorization,
-		ServiceName:  "gestalt.v1.Authorization",
-		Operation:    "CheckAccess",
-	}
-	wantErr := errors.New("provider failed")
-
-	_, err := (DirectTransport{}).Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
-		return ProviderGatewayResponse{}, wantErr
-	})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Invoke error = %v, want %v", err, wantErr)
-	}
-
-	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	attrs := providerGatewayMetricAttrs(req, TransportPathDirect)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", 1, attrs)
-}
-
-func TestProviderGatewayTransportInvokeRecordsMetrics(t *testing.T) {
-	t.Parallel()
-
-	metrics := metrictest.NewManualMeterProvider(t)
-	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	transport := NewProviderGatewayTransport()
-	req := ProviderGatewayRequest{
-		ProviderID:   "authz",
-		ProviderKind: ProviderKindAuthorization,
-		ServiceName:  "gestalt.v1.Authorization",
-		Operation:    "CheckAccess",
-	}
-
-	_, err := transport.Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
-		return ProviderGatewayResponse{Payload: []byte("ok")}, nil
-	})
-	if err != nil {
-		t.Fatalf("Invoke error = %v", err)
-	}
-
-	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	attrs := providerGatewayMetricAttrs(req, TransportPathProviderGateway)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
-	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", attrs)
-}
-
-func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
-	t.Parallel()
-
-	metrics := metrictest.NewManualMeterProvider(t)
-	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	transport := NewProviderGatewayTransport()
-	req := ProviderGatewayRequest{
-		ProviderID:   "authz",
-		ProviderKind: ProviderKindAuthorization,
-		ServiceName:  "gestalt.v1.Authorization",
-		Operation:    "CheckAccess",
-	}
-	wantErr := errors.New("provider failed")
-
-	_, err := transport.Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
-		return ProviderGatewayResponse{}, wantErr
-	})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Invoke error = %v, want %v", err, wantErr)
-	}
-
-	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	attrs := providerGatewayMetricAttrs(req, TransportPathProviderGateway)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", 1, attrs)
-}
-
-func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath TransportPath) map[string]string {
-	return map[string]string{
-		"gd.provider_id":           req.ProviderID,
-		"gd.provider_kind":         string(req.ProviderKind),
-		"gd.service":               req.ServiceName,
-		"gd.operation":             req.Operation,
-		"gd.transport":             string(transportPath),
-		"gd.entry":                 "internal",
-		"gd.caller_token_provided": "false",
-	}
-}
 
 func TestPreparePublicRequest(t *testing.T) {
 	t.Parallel()
@@ -695,4 +411,215 @@ func (s stubGatewayUserStore) FindOrCreateUser(_ context.Context, email string) 
 		return nil, errors.New("user not found")
 	}
 	return &core.User{ID: id, Email: email}, nil
+}
+
+// --- routing gateway tests ---
+
+type stubConn struct {
+	invoke func(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error
+}
+
+func (c *stubConn) Invoke(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error {
+	if c.invoke != nil {
+		return c.invoke(ctx, method, args, reply, opts...)
+	}
+	return nil
+}
+
+func (c *stubConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	return nil, status.Error(codes.Unimplemented, "stubConn does not support streaming")
+}
+
+func TestRoutingInvokeForwardsToEndpoint(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	conn := &stubConn{invoke: func(_ context.Context, method string, args any, reply any, _ ...grpc.CallOption) error {
+		called = true
+		if method != "/test.Service/Echo" {
+			t.Fatalf("method = %q, want /test.Service/Echo", method)
+		}
+		return nil
+	}}
+	transport := NewProviderGatewayTransport()
+	target := ProviderTarget{Kind: "test", Name: "stub"}
+	if err := transport.RegisterDirect(target, DirectEndpoint{Conn: conn}); err != nil {
+		t.Fatalf("RegisterDirect: %v", err)
+	}
+	if err := transport.Conn(target).Invoke(context.Background(), "/test.Service/Echo", nil, nil); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if !called {
+		t.Fatal("endpoint connection was not invoked")
+	}
+}
+
+func TestRoutingInvokeMissingTargetReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	transport := NewProviderGatewayTransport()
+	target := ProviderTarget{Kind: "test", Name: "missing"}
+	err := transport.Conn(target).Invoke(context.Background(), "/test.Service/Echo", nil, nil)
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("status.Code(err) = %v, want NotFound (%v)", status.Code(err), err)
+	}
+}
+
+func TestRoutingGatewayAuthorization(t *testing.T) {
+	t.Parallel()
+
+	parityTarget := ProviderTarget{Kind: "test", Name: "parity"}
+	authzTarget := ProviderTarget{Kind: ProviderKindAuthorization, Name: "authz-primary"}
+
+	tests := []struct {
+		name        string
+		target      ProviderTarget
+		principal   *principal.Principal
+		allowed     *bool
+		wantCode    codes.Code
+		wantCalled  bool
+		wantSuccess bool
+	}{
+		{
+			name:        "authorization kind exempt from meta-check",
+			target:      authzTarget,
+			principal:   &principal.Principal{SubjectID: "user:alice"},
+			allowed:     boolPtr(false),
+			wantCode:    codes.OK,
+			wantCalled:  false,
+			wantSuccess: true,
+		},
+		{
+			name:        "non-authorization kind denied",
+			target:      parityTarget,
+			principal:   &principal.Principal{SubjectID: "user:alice"},
+			allowed:     boolPtr(false),
+			wantCode:    codes.PermissionDenied,
+			wantCalled:  true,
+			wantSuccess: false,
+		},
+		{
+			name:        "non-authorization kind allowed",
+			target:      parityTarget,
+			principal:   &principal.Principal{SubjectID: "user:alice"},
+			allowed:     boolPtr(true),
+			wantCode:    codes.OK,
+			wantCalled:  true,
+			wantSuccess: true,
+		},
+		{
+			name:       "no principal unauthenticated",
+			target:     parityTarget,
+			principal:  nil,
+			allowed:    boolPtr(true),
+			wantCode:   codes.Unauthenticated,
+			wantCalled: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			transport := NewProviderGatewayTransport()
+			connCalled := false
+			conn := &stubConn{invoke: func(_ context.Context, _ string, _ any, reply any, _ ...grpc.CallOption) error {
+				connCalled = true
+				return nil
+			}}
+			for _, target := range []ProviderTarget{parityTarget, authzTarget} {
+				if err := transport.RegisterDirect(target, DirectEndpoint{Conn: conn}); err != nil {
+					t.Fatalf("RegisterDirect(%s): %v", target.Name, err)
+				}
+			}
+			authorization := &stubAuthorizationProvider{allowedResult: tc.allowed}
+			transport.SetAuthorizationProvider(authorization)
+
+			ctx := context.Background()
+			if tc.principal != nil {
+				ctx = principal.WithPrincipal(ctx, tc.principal)
+			}
+			err := transport.Conn(tc.target).Invoke(ctx, "/test.Service/Echo", nil, nil)
+
+			if tc.wantCalled && !authorization.called {
+				t.Fatal("authorization provider was not called")
+			}
+			if !tc.wantCalled && authorization.called {
+				t.Fatal("authorization provider was unexpectedly called")
+			}
+			if status.Code(err) != tc.wantCode {
+				t.Fatalf("status.Code(err) = %v, want %v (%v)", status.Code(err), tc.wantCode, err)
+			}
+			if tc.wantSuccess && !connCalled {
+				t.Fatal("endpoint connection was not invoked")
+			}
+		})
+	}
+}
+
+func TestRoutingGatewayRecordsMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+
+	transport := NewProviderGatewayTransport()
+	target := ProviderTarget{Kind: "test", Name: "parity"}
+	if err := transport.RegisterDirect(target, DirectEndpoint{Conn: &stubConn{}}); err != nil {
+		t.Fatalf("RegisterDirect: %v", err)
+	}
+	authorization := &stubAuthorizationProvider{allowedResult: boolPtr(false)}
+	transport.SetAuthorizationProvider(authorization)
+	authCtx := principal.WithPrincipal(ctx, &principal.Principal{SubjectID: "user:alice"})
+
+	err := transport.Conn(target).Invoke(authCtx, "/test.Service/Echo", nil, nil)
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("status.Code(err) = %v, want PermissionDenied", status.Code(err))
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, map[string]string{
+		"gd.provider_id":           "parity",
+		"gd.provider_kind":         "test",
+		"gd.operation":             "Echo",
+		"gd.transport":             "direct",
+		"gd.entry":                 "internal",
+		"gd.caller_token_provided": "true",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", 1, map[string]string{
+		"gd.provider_id":           "parity",
+		"gd.provider_kind":         "test",
+		"gd.operation":             "Echo",
+		"gd.transport":             "direct",
+		"gd.entry":                 "internal",
+		"gd.caller_token_provided": "true",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.authorization.count", 1, map[string]string{
+		"gd.allowed":               "false",
+		"gd.caller_token_provided": "true",
+		"gd.subject":               "subject/user:alice",
+		"gd.resource":              "provider/parity",
+		"gd.action":                "/test.Service/Echo",
+		"gd.entry":                 "internal",
+	})
+}
+
+func TestRoutingNewStreamUnimplemented(t *testing.T) {
+	t.Parallel()
+
+	transport := NewProviderGatewayTransport()
+	target := ProviderTarget{Kind: "test", Name: "stub"}
+	if err := transport.RegisterDirect(target, DirectEndpoint{Conn: &stubConn{}}); err != nil {
+		t.Fatalf("RegisterDirect: %v", err)
+	}
+	stream, err := transport.Conn(target).NewStream(
+		context.Background(),
+		&grpc.StreamDesc{ServerStreams: true},
+		"/test.Service/Stream",
+	)
+	if stream != nil {
+		t.Fatalf("NewStream stream = %v, want nil", stream)
+	}
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("status.Code(err) = %v, want Unimplemented (%v)", status.Code(err), err)
+	}
 }
