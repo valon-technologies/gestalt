@@ -187,16 +187,19 @@ where
         .context("failed to mint CLI API token")?;
 
     let store = CredentialStore::new()?;
-    store.save(&Credentials {
-        api_token: token_result["token"]
-            .as_str()
-            .context("token response missing token field")?
-            .to_string(),
-        api_token_id: token_result["id"]
-            .as_str()
-            .context("token response missing id field")?
-            .to_string(),
-    })?;
+    store.save_for_origin(
+        &base_url,
+        &Credentials {
+            api_token: token_result["token"]
+                .as_str()
+                .context("token response missing token field")?
+                .to_string(),
+            api_token_id: token_result["id"]
+                .as_str()
+                .context("token response missing id field")?
+                .to_string(),
+        },
+    )?;
 
     let _ = send_browser_response(&stream, "Login successful", "You can close this tab.");
     output::print_success("Logged in successfully. Stored CLI API token.");
@@ -227,33 +230,66 @@ fn build_browser_response_html(title: &str, detail: &str) -> String {
     BROWSER_RESPONSE_PAGE.replace("__DATA__", &data)
 }
 
-pub fn logout() -> Result<()> {
+pub fn logout(url_override: Option<&str>) -> Result<()> {
     let store = CredentialStore::new()?;
-    match store.load() {
-        Ok(Some(creds)) => {
-            if let Ok(url) = api::resolve_url(None) {
-                let client = ApiClient::new(&url, &creds.api_token)?;
+    let mut removed = false;
+    let url_result = api::resolve_url(url_override);
+    if let Ok(url) = url_result.as_ref() {
+        match store.load_for_origin(url) {
+            Ok(Some(creds)) => {
+                let client = ApiClient::new(url, &creds.api_token)?;
                 if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
                     output::print_warning(&format!(
                         "Failed to revoke stored CLI token {}: {}",
                         creds.api_token_id, err
                     ));
                 }
-            } else {
-                output::print_warning(&format!(
-                    "Stored CLI token {} has no configured server URL; removing it locally only.",
-                    creds.api_token_id
-                ));
+                store.delete_for_origin(url)?;
+                removed = true;
             }
+            Err(err) => {
+                output::print_warning(&format!(
+                    "Stored credentials could not be read; removing them locally without remote revoke: {}",
+                    err
+                ));
+                store.delete_file()?;
+                removed = true;
+            }
+            Ok(None) => {}
         }
-        Ok(None) => {}
-        Err(err) => output::print_warning(&format!(
-            "Stored credentials could not be read; removing them locally without remote revoke: {}",
-            err
-        )),
     }
-    store.delete()?;
-    output::print_success("Logged out. Credentials removed.");
+
+    if !removed {
+        match store.take_legacy_credentials_without_config_url() {
+            Ok(Some(_legacy)) => {
+                output::print_warning(
+                    "Legacy credentials have no configured server URL; removing locally without remote revoke.",
+                );
+                store.delete_file()?;
+                removed = true;
+            }
+            Err(err) => {
+                output::print_warning(&format!(
+                    "Stored credentials could not be read; removing them locally without remote revoke: {}",
+                    err
+                ));
+                store.delete_file()?;
+                removed = true;
+            }
+            Ok(None) if url_result.is_err() => {
+                output::print_warning(
+                    "No configured server URL; cannot determine which stored credentials to remove.",
+                );
+            }
+            Ok(None) => {}
+        }
+    }
+
+    if removed {
+        output::print_success("Logged out. Credentials removed.");
+    } else {
+        output::print_success("Logged out.");
+    }
     Ok(())
 }
 
@@ -266,9 +302,21 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
     });
 
     let has_env_key = api::env_api_key_is_set();
-    let (has_stored_credentials, stored_credentials_error) = match CredentialStore::new()?.load() {
-        Ok(Some(_)) => (true, None),
-        Ok(None) => (false, None),
+    let credential_origin = server_config
+        .as_ref()
+        .map(|(url, _)| crate::credentials::normalize_origin(url));
+    let (has_stored_credentials, stored_credentials_error) = match CredentialStore::new() {
+        Ok(store) => match &credential_origin {
+            Some(origin) => match store.load_for_origin(origin) {
+                Ok(Some(_)) => (true, None),
+                Ok(None) => (false, None),
+                Err(err) => (false, Some(err.to_string())),
+            },
+            None => match store.has_any_stored_credentials() {
+                Ok(has) => (has, None),
+                Err(err) => (false, Some(err.to_string())),
+            },
+        },
         Err(err) => (false, Some(err.to_string())),
     };
     let configured = has_env_key || has_stored_credentials;
@@ -297,6 +345,7 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
                 "source": source,
                 "envVarSet": has_env_key,
                 "storedCredentials": has_stored_credentials,
+                "credentialOrigin": credential_origin,
                 "serverUrl": server_url,
                 "urlSource": url_source,
                 "serverReachable": reachable,

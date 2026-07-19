@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
+#![allow(unused_macros)]
 
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Read};
@@ -305,12 +306,6 @@ pub(crate) fn cli_command_for_server(home: &Path, server: &Server) -> Command {
         .arg("--url")
         .arg(server.url());
     cmd
-}
-
-pub(crate) fn write_cli_credentials(home: &Path, json: &str) {
-    let path = credentials_path(home);
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(path, json).unwrap();
 }
 
 pub(crate) fn catalog_body() -> &'static str {

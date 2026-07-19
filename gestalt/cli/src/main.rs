@@ -22,7 +22,7 @@ fn run() -> anyhow::Result<()> {
     match command {
         Commands::Auth { command } => match command {
             AuthCommands::Login => commands::auth::login(url),
-            AuthCommands::Logout => commands::auth::logout(),
+            AuthCommands::Logout => commands::auth::logout(url),
             AuthCommands::Status => commands::auth::status(url, format),
             AuthCommands::Token { command } => dispatch_token_command(command, url, format),
         },

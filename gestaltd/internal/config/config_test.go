@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -5037,12 +5038,27 @@ server:
 	})
 }
 
+func writeTestGestaltCredentials(t *testing.T, xdg string, payload any) {
+	t.Helper()
+	dir := filepath.Join(xdg, "gestalt")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	encoded, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "credentials.json"), encoded, 0o600); err != nil {
+		t.Fatalf("WriteFile credentials: %v", err)
+	}
+}
+
 func TestLoadConfigRemoteGestaltd(t *testing.T) {
 	loadRemoteConfigForServe := func(t *testing.T) (*Config, error) {
 		t.Helper()
 		path := mustWriteConfigFile(t, `
 server:
-  remote: https://valon.tools
+  remote: https://origin-a.example.test
 `)
 		cfg, err := Load(path)
 		if err != nil {
@@ -5105,18 +5121,18 @@ server:
 				xdg := t.TempDir()
 				t.Setenv("XDG_CONFIG_HOME", xdg)
 				if tc.storedToken != "" {
-					credentialsDir := filepath.Join(xdg, "gestalt")
-					if err := os.MkdirAll(credentialsDir, 0o755); err != nil {
-						t.Fatalf("MkdirAll: %v", err)
-					}
-					credentials := fmt.Sprintf(`{"api_token":%q,"api_token_id":"tok_1"}`, tc.storedToken)
-					if err := os.WriteFile(filepath.Join(credentialsDir, "credentials.json"), []byte(credentials), 0o600); err != nil {
-						t.Fatalf("WriteFile credentials: %v", err)
-					}
+					writeTestGestaltCredentials(t, xdg, gestaltCredentialsFile{
+						Servers: map[string]gestaltCredentials{
+							"https://origin-a.example.test": {
+								APIToken:   tc.storedToken,
+								APITokenID: "tok_1",
+							},
+						},
+					})
 				}
 
 				cfg, err := loadRemoteConfigForServe(t)
-				if got := cfg.Server.Remote; got != "https://valon.tools" {
+				if got := cfg.Server.Remote; got != "https://origin-a.example.test" {
 					t.Fatalf("server.remote = %q", got)
 				}
 				if tc.wantErr != "" {

@@ -6,7 +6,6 @@ import (
 	"maps"
 	"net"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -867,47 +866,13 @@ func ApplyServeRemoteOverrides(cfg *Config, remote, remoteToken string) error {
 		return err
 	}
 	if strings.TrimSpace(cfg.Server.Remote) != "" && strings.TrimSpace(cfg.Server.RemoteToken) == "" {
-		token, err := defaultRemoteToken()
+		token, err := defaultRemoteTokenForOrigin(cfg.Server.Remote)
 		if err != nil {
 			return err
 		}
 		cfg.Server.RemoteToken = token
 	}
 	return ValidateRemoteGestaltd(cfg)
-}
-
-func defaultRemoteToken() (string, error) {
-	if token := strings.TrimSpace(os.Getenv("GESTALT_API_KEY")); token != "" {
-		return token, nil
-	}
-	path := gestaltCredentialsPath()
-	if path == "" {
-		return "", nil
-	}
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("config validation: read Gestalt credentials: %w", err)
-	}
-	var creds struct {
-		APIToken string `json:"api_token"`
-	}
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return "", fmt.Errorf("config validation: parse Gestalt credentials: %w", err)
-	}
-	return strings.TrimSpace(creds.APIToken), nil
-}
-
-func gestaltCredentialsPath() string {
-	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
-		return filepath.Join(xdg, "gestalt", "credentials.json")
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".config", "gestalt", "credentials.json")
-	}
-	return ""
 }
 
 func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {

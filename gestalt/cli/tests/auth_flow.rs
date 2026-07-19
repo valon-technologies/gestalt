@@ -34,6 +34,7 @@ fn test_auth_login_stores_credentials_and_serves_browser_callback_page() {
         std::env::set_var(gestalt::api::ENV_API_KEY, "env-token");
     }
     let server = spawn_login_server();
+    let base_url = server.base_url.clone();
     let browser = Arc::new(Mutex::new(None));
     let browser_handle = Arc::clone(&browser);
 
@@ -72,8 +73,14 @@ fn test_auth_login_stores_credentials_and_serves_browser_callback_page() {
     let credentials: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(credentials_path).unwrap()).unwrap();
     assert!(credentials.get("api_url").is_none());
-    assert_eq!(credentials["api_token"], "cli-long-secret");
-    assert_eq!(credentials["api_token_id"], "tok-long");
+    assert_eq!(
+        credentials["servers"][&base_url]["api_token"],
+        "cli-long-secret"
+    );
+    assert_eq!(
+        credentials["servers"][&base_url]["api_token_id"],
+        "tok-long"
+    );
 }
 
 #[test]
@@ -143,6 +150,156 @@ fn test_auth_logout_revokes_token_using_configured_url() {
 }
 
 #[test]
+fn test_auth_logout_uses_url_flag_for_per_origin_credentials() {
+    let mut token_server = Server::new();
+    let revoke = authed_json_mock!(
+        token_server,
+        Method::DELETE,
+        "/api/v1/tokens/tok-456",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"ok"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "servers": {
+                token_server.url(): {
+                    "api_token": TEST_TOKEN,
+                    "api_token_id": "tok-456",
+                },
+                "https://other.example.test": {
+                    "api_token": "other-token",
+                    "api_token_id": "other-id",
+                }
+            }
+        }),
+    );
+
+    cli_command(home.path())
+        .arg("--url")
+        .arg(token_server.url())
+        .args(["auth", "logout"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Logged out. Credentials removed."))
+        .stderr(predicate::str::contains("Failed to revoke stored CLI token").not());
+
+    revoke.assert();
+
+    let credentials: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            home.path()
+                .join("xdg-config")
+                .join("gestalt")
+                .join("credentials.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        credentials["servers"]["https://other.example.test"]["api_token"],
+        "other-token"
+    );
+    assert!(credentials["servers"].get(token_server.url()).is_none());
+}
+
+#[test]
+fn test_auth_logout_clears_legacy_credentials_with_url_flag() {
+    let mut token_server = Server::new();
+    let revoke = authed_json_mock!(
+        token_server,
+        Method::DELETE,
+        "/api/v1/tokens/tok-legacy",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"ok"}"#)
+    .expect(0)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-legacy",
+        }),
+    );
+
+    cli_command(home.path())
+        .arg("--url")
+        .arg(token_server.url())
+        .args(["auth", "logout"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("without remote revoke"))
+        .stderr(predicate::str::contains("Logged out. Credentials removed."));
+
+    revoke.assert();
+    assert!(
+        !home
+            .path()
+            .join("xdg-config")
+            .join("gestalt")
+            .join("credentials.json")
+            .exists()
+    );
+}
+
+#[test]
+fn test_auth_logout_clears_orphaned_legacy_without_url() {
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-legacy",
+        }),
+    );
+
+    cli_command(home.path())
+        .args(["auth", "logout"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("without remote revoke"))
+        .stderr(predicate::str::contains("Logged out. Credentials removed."));
+
+    assert!(
+        !home
+            .path()
+            .join("xdg-config")
+            .join("gestalt")
+            .join("credentials.json")
+            .exists()
+    );
+}
+
+#[test]
+fn test_auth_logout_without_url_deletes_unreadable_credentials() {
+    let home = tempfile::tempdir().unwrap();
+    let credentials_path = home
+        .path()
+        .join("xdg-config")
+        .join("gestalt")
+        .join("credentials.json");
+    std::fs::create_dir_all(credentials_path.parent().unwrap()).unwrap();
+    std::fs::write(&credentials_path, "not-json").unwrap();
+
+    cli_command(home.path())
+        .args(["auth", "logout"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "removing them locally without remote revoke",
+        ))
+        .stderr(predicate::str::contains("Logged out. Credentials removed."));
+
+    assert!(!credentials_path.exists());
+}
+
+#[test]
 fn test_init_skips_login_when_server_auth_is_disabled() {
     let mut server = Server::new();
     let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
@@ -174,8 +331,12 @@ fn test_auth_status_reports_auth_disabled_before_stored_credentials() {
     write_credentials(
         home.path(),
         serde_json::json!({
-            "api_token": TEST_TOKEN,
-            "api_token_id": "tok-123",
+            "servers": {
+                server.url(): {
+                    "api_token": TEST_TOKEN,
+                    "api_token_id": "tok-123",
+                }
+            }
         }),
     );
 
@@ -197,8 +358,12 @@ fn test_auth_status_reports_unreachable_server() {
     write_credentials(
         home.path(),
         serde_json::json!({
-            "api_token": TEST_TOKEN,
-            "api_token_id": "tok-123",
+            "servers": {
+                "http://127.0.0.1:1": {
+                    "api_token": TEST_TOKEN,
+                    "api_token_id": "tok-123",
+                }
+            }
         }),
     );
 
@@ -248,4 +413,113 @@ fn test_auth_status_json_includes_server_fields() {
     assert_eq!(json["serverUrl"], serde_json::json!(server.url()));
     assert_eq!(json["urlSource"], serde_json::json!("--url flag"));
     assert_eq!(json["authenticated"], serde_json::json!(false));
+}
+
+#[test]
+fn test_auth_status_without_url_ignores_orphaned_legacy_credentials() {
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_token": "legacy-token",
+            "api_token_id": "legacy-id",
+        }),
+    );
+
+    let output = cli_command(home.path())
+        .args(["auth", "status", "--format", "json"])
+        .output()
+        .unwrap();
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["storedCredentials"], serde_json::json!(false));
+    assert_eq!(json["authenticated"], serde_json::json!(false));
+}
+
+#[test]
+fn test_auth_status_json_includes_credential_origin() {
+    let mut server = Server::new();
+    let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
+        .with_body(r#"{"loginSupported":true}"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "servers": {
+                server.url(): {
+                    "api_token": TEST_TOKEN,
+                    "api_token_id": "tok-123",
+                }
+            }
+        }),
+    );
+
+    let output = cli_command(home.path())
+        .arg("--url")
+        .arg(server.url())
+        .args(["auth", "status", "--format", "json"])
+        .output()
+        .unwrap();
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["credentialOrigin"], serde_json::json!(server.url()));
+    assert_eq!(json["storedCredentials"], serde_json::json!(true));
+}
+
+#[test]
+fn test_auth_login_preserves_other_origin_credentials() {
+    let _lock = env_lock();
+    let tempdir = tempfile::tempdir().unwrap();
+    let _env = EnvGuard::new(tempdir.path());
+    let other_origin = "https://other.example.test";
+    write_credentials(
+        tempdir.path(),
+        serde_json::json!({
+            "servers": {
+                other_origin: {
+                    "api_token": "other-token",
+                    "api_token_id": "other-id",
+                }
+            }
+        }),
+    );
+
+    let server = spawn_login_server();
+    let base_url = server.base_url.clone();
+    let browser = Arc::new(Mutex::new(None));
+    let browser_handle = Arc::clone(&browser);
+
+    gestalt::commands::auth::login_with_browser_opener(Some(&server.base_url), |url| {
+        let url = url.to_string();
+        *browser_handle.lock().unwrap() = Some(std::thread::spawn(move || {
+            reqwest::blocking::get(url).unwrap();
+        }));
+        Ok(())
+    })
+    .unwrap();
+
+    browser
+        .lock()
+        .unwrap()
+        .take()
+        .expect("browser thread missing")
+        .join()
+        .unwrap();
+    server.handle.join().unwrap();
+
+    let credentials_path = gestalt::paths::gestalt_config_dir()
+        .unwrap()
+        .join("credentials.json");
+    let credentials: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(credentials_path).unwrap()).unwrap();
+    assert_eq!(
+        credentials["servers"][other_origin]["api_token"],
+        "other-token"
+    );
+    assert_eq!(
+        credentials["servers"][base_url]["api_token"],
+        "cli-long-secret"
+    );
 }

@@ -66,8 +66,8 @@ pub fn encode_path_segment(value: &str) -> String {
 }
 
 pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
-    match find_configured_url(url_override)? {
-        Some(url) => Ok(url),
+    match find_configured_url_with_source(url_override)? {
+        Some((url, _)) => Ok(url),
         None => bail_no_url_configured(),
     }
 }
@@ -100,10 +100,6 @@ pub fn fetch_auth_info(base_url: &str) -> Result<AuthInfo> {
 
 pub fn server_auth_disabled(base_url: &str) -> Result<bool> {
     Ok(!fetch_auth_info(base_url)?.login_supported)
-}
-
-fn find_configured_url(url_override: Option<&str>) -> Result<Option<String>> {
-    Ok(find_configured_url_with_source(url_override)?.map(|(url, _)| url))
 }
 
 fn find_configured_url_with_source(url_override: Option<&str>) -> Result<Option<(String, String)>> {
@@ -205,13 +201,12 @@ impl std::error::Error for ApiError {}
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
         let env_api_key = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty());
+        let base_url = resolve_url(url_override)?;
         let stored_credentials = if env_api_key.is_none() {
-            CredentialStore::new()?.load()?
+            CredentialStore::new()?.load_for_origin(&base_url)?
         } else {
             None
         };
-
-        let base_url = resolve_url(url_override)?;
         let (token, source) = match env_api_key {
             Some(key) => (key, TokenSource::EnvVar),
             None => match stored_credentials.as_ref() {

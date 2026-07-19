@@ -10,13 +10,13 @@ fn test_cli_ignores_legacy_stored_credentials_api_url() {
         .create();
 
     let home = tempfile::tempdir().unwrap();
-    write_cli_credentials(
+    write_credentials(
         home.path(),
-        &format!(
-            r#"{{"api_url":"{}","api_token":"{}","api_token_id":"tok-123"}}"#,
-            server.url(),
-            TEST_TOKEN
-        ),
+        serde_json::json!({
+            "api_url": server.url(),
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-123",
+        }),
     );
 
     cli_command(home.path())
