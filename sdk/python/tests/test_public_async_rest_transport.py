@@ -204,3 +204,15 @@ async def test_async_generated_client_check_access() -> None:
     )
     assert resp.allowed is True
     assert resp.model_id == "model-1"
+
+
+async def test_async_rest_transport_close_releases_owned_client() -> None:
+    """AsyncRestUnaryTransport.close() must release the owned httpx.AsyncClient."""
+
+    transport = AsyncRestUnaryTransport(
+        "https://gestalt.test/",
+        bearer(lambda: "token"),
+    )
+    assert transport._owned_client is not None
+    await transport.close()
+    assert transport._owned_client is None

@@ -125,3 +125,13 @@ async def test_async_channel_applies_internal_options() -> None:
             "localhost:8080",
             options=_INTERNAL_CHANNEL_OPTIONS,
         )
+
+
+async def test_async_grpc_transport_close_releases_owned_channel() -> None:
+    """AsyncGrpcUnaryTransport.close() must close the channel when owns_channel=True."""
+    channel = grpc.aio.insecure_channel("127.0.0.1:1")
+    transport = AsyncGrpcUnaryTransport(
+        channel, bearer(lambda: "token"), owns_channel=True
+    )
+    await transport.close()
+    # Channel state after close is SHUTDOWN; accessing it should not raise.

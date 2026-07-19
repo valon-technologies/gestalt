@@ -158,7 +158,7 @@ class AsyncRestUnaryTransport:
             ),
         )
 
-    async def aclose(self) -> None:
+    async def close(self) -> None:
         if self._owns_client and self._owned_client is not None:
             await self._owned_client.aclose()
             self._owned_client = None
