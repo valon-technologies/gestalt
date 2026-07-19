@@ -14,7 +14,11 @@ import grpc.aio
 from google.protobuf.message import Message
 
 from gestalt._codec.support import call_unary
-from gestalt._grpc_transport import insecure_internal_channel, secure_internal_channel
+from gestalt._grpc_transport import (
+    _INTERNAL_CHANNEL_OPTIONS,
+    insecure_internal_channel,
+    secure_internal_channel,
+)
 from gestalt.public.generated.metadata import Method
 from gestalt.rpc_support import GestaltError, GestaltErrorCode
 
@@ -115,12 +119,18 @@ class AsyncGrpcUnaryTransport:
 
 
 def async_grpc_channel_from_address(address: str) -> grpc.aio.Channel:
-    """Return an async gRPC channel for the given address."""
+    """Return an async gRPC channel for the given address.
+
+    Applies the same internal channel options as the sync path
+    (grpc.enable_http_proxy=0 and 64MB message-size limits) so async
+    callers don't diverge from grpc_channel_from_address.
+    """
     parsed = urlparse(address)
     target = parsed.netloc
     if parsed.scheme == "https":
         return grpc.aio.secure_channel(
             target,
             grpc.ssl_channel_credentials(),
+            options=_INTERNAL_CHANNEL_OPTIONS,
         )
-    return grpc.aio.insecure_channel(target)
+    return grpc.aio.insecure_channel(target, options=_INTERNAL_CHANNEL_OPTIONS)

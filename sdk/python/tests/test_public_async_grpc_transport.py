@@ -97,3 +97,31 @@ async def test_async_generated_client_invoke() -> None:
             await channel.close()
     finally:
         await server.stop(grace=None)
+
+
+async def test_async_channel_applies_internal_options() -> None:
+    """async_grpc_channel_from_address must pass the same internal channel
+    options (proxy disable + 64MB message limits) as the sync path."""
+    from unittest import mock
+
+    from gestalt._grpc_transport import _INTERNAL_CHANNEL_OPTIONS
+    from gestalt.public.grpc_transport import async_grpc_channel_from_address
+
+    with (
+        mock.patch("gestalt.public.grpc_transport.grpc.aio.secure_channel") as secure,
+        mock.patch(
+            "gestalt.public.grpc_transport.grpc.aio.insecure_channel"
+        ) as insecure,
+    ):
+        async_grpc_channel_from_address("https://valon.tools")
+        secure.assert_called_once_with(
+            "valon.tools",
+            mock.ANY,
+            options=_INTERNAL_CHANNEL_OPTIONS,
+        )
+
+        async_grpc_channel_from_address("http://localhost:8080")
+        insecure.assert_called_once_with(
+            "localhost:8080",
+            options=_INTERNAL_CHANNEL_OPTIONS,
+        )
