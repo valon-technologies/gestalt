@@ -51,6 +51,7 @@ type features struct {
 	crossCodec  map[string]bool            // codec: sibling codec module bases referenced
 	metadataMethods map[string]bool        // public client: METHOD_* constants from metadata
 	unaryTransport  bool                   // public client: UnaryTransport from unary_transport
+	asyncTransport  bool                   // public client: AsyncUnaryTransport from unary_transport
 	jsonFormat      bool                   // public client: google.protobuf.json_format
 	protocol        bool                   // public client: typing.Protocol for REST projections
 }
@@ -1223,8 +1224,15 @@ func (r *renderer) localImports() string {
 	if len(r.features.metadataMethods) > 0 {
 		locals = append(locals, localImport{module: ".metadata", lines: fromImport(".metadata", sortedKeys(r.features.metadataMethods))})
 	}
-	if r.features.unaryTransport {
-		b.WriteString("from .unary_transport import UnaryTransport\n")
+	if r.features.unaryTransport || r.features.asyncTransport {
+		var names []string
+		if r.features.asyncTransport {
+			names = append(names, "AsyncUnaryTransport")
+		}
+		if r.features.unaryTransport {
+			names = append(names, "UnaryTransport")
+		}
+		locals = append(locals, localImport{module: ".unary_transport", lines: fromImport(".unary_transport", names)})
 	}
 	if r.features.jsonFormat {
 		b.WriteString("from google.protobuf import json_format\n")

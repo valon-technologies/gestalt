@@ -26,7 +26,7 @@ from .metadata import (
     METHOD_WORKFLOW_SIGNAL_RUN,
     METHOD_WORKFLOW_START_RUN,
 )
-from .unary_transport import UnaryTransport
+from .unary_transport import AsyncUnaryTransport, UnaryTransport
 from .workflow import (
     ApplyWorkflowProviderDefinitionRequest,
     CancelWorkflowProviderRunRequest,
@@ -265,5 +265,226 @@ class WorkflowClientREST(Protocol):
         self, request: SignalWorkflowProviderRunRequest
     ) -> SignalWorkflowRunResponse: ...
     def signal_or_start_run(
+        self, request: SignalOrStartWorkflowProviderRunRequest
+    ) -> SignalWorkflowRunResponse: ...
+
+
+class AsyncWorkflowClient:
+    """Async client for the public gestalt.provider.v1.Workflow surface; methods are coroutines."""
+
+    def __init__(self, transport: AsyncUnaryTransport) -> None:
+        self._transport = transport
+
+    async def apply_definition(
+        self, request: ApplyWorkflowProviderDefinitionRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_apply_workflow_provider_definition_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_APPLY_DEFINITION,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    async def get_definition(
+        self, request: GetWorkflowProviderDefinitionRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_get_workflow_provider_definition_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_GET_DEFINITION,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    async def list_definitions(
+        self, request: ListWorkflowProviderDefinitionsRequest
+    ) -> ListWorkflowProviderDefinitionsResponse:
+        wire = _workflow_codec.to_wire_list_workflow_provider_definitions_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_LIST_DEFINITIONS,
+            wire,
+            _workflow_pb2.ListWorkflowProviderDefinitionsResponse,
+        )
+        return _workflow_codec.from_wire_list_workflow_provider_definitions_response(
+            wire_response
+        )
+
+    async def set_definition_paused(
+        self, request: SetWorkflowProviderDefinitionPausedRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_set_workflow_provider_definition_paused_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_SET_DEFINITION_PAUSED,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    async def set_activation_paused(
+        self, request: SetWorkflowProviderActivationPausedRequest
+    ) -> WorkflowDefinition:
+        wire = _workflow_codec.to_wire_set_workflow_provider_activation_paused_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_SET_ACTIVATION_PAUSED,
+            wire,
+            _workflow_pb2.WorkflowDefinition,
+        )
+        return _workflow_codec.from_wire_workflow_definition(wire_response)
+
+    async def delete_definition(
+        self, request: DeleteWorkflowProviderDefinitionRequest
+    ) -> None:
+        wire = _workflow_codec.to_wire_delete_workflow_provider_definition_request(
+            request
+        )
+        await self._transport.unary(
+            METHOD_WORKFLOW_DELETE_DEFINITION,
+            wire,
+            _empty.Empty,
+        )
+
+    async def start_run(self, request: StartWorkflowProviderRunRequest) -> WorkflowRun:
+        wire = _workflow_codec.to_wire_start_workflow_provider_run_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_START_RUN,
+            wire,
+            _workflow_pb2.WorkflowRun,
+        )
+        return _workflow_codec.from_wire_workflow_run(wire_response)
+
+    async def list_runs(
+        self, request: ListWorkflowProviderRunsRequest
+    ) -> ListWorkflowProviderRunsResponse:
+        wire = _workflow_codec.to_wire_list_workflow_provider_runs_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_LIST_RUNS,
+            wire,
+            _workflow_pb2.ListWorkflowProviderRunsResponse,
+        )
+        return _workflow_codec.from_wire_list_workflow_provider_runs_response(
+            wire_response
+        )
+
+    async def get_run(self, request: GetWorkflowProviderRunRequest) -> WorkflowRun:
+        wire = _workflow_codec.to_wire_get_workflow_provider_run_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_GET_RUN,
+            wire,
+            _workflow_pb2.WorkflowRun,
+        )
+        return _workflow_codec.from_wire_workflow_run(wire_response)
+
+    async def get_run_events(
+        self, request: GetWorkflowProviderRunEventsRequest
+    ) -> GetWorkflowProviderRunEventsResponse:
+        wire = _workflow_codec.to_wire_get_workflow_provider_run_events_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_GET_RUN_EVENTS,
+            wire,
+            _workflow_pb2.GetWorkflowProviderRunEventsResponse,
+        )
+        return _workflow_codec.from_wire_get_workflow_provider_run_events_response(
+            wire_response
+        )
+
+    async def get_run_output(
+        self, request: GetWorkflowProviderRunOutputRequest
+    ) -> GetWorkflowProviderRunOutputResponse:
+        wire = _workflow_codec.to_wire_get_workflow_provider_run_output_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_GET_RUN_OUTPUT,
+            wire,
+            _workflow_pb2.GetWorkflowProviderRunOutputResponse,
+        )
+        return _workflow_codec.from_wire_get_workflow_provider_run_output_response(
+            wire_response
+        )
+
+    async def cancel_run(
+        self, request: CancelWorkflowProviderRunRequest
+    ) -> WorkflowRun:
+        wire = _workflow_codec.to_wire_cancel_workflow_provider_run_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_CANCEL_RUN,
+            wire,
+            _workflow_pb2.WorkflowRun,
+        )
+        return _workflow_codec.from_wire_workflow_run(wire_response)
+
+    async def signal_run(
+        self, request: SignalWorkflowProviderRunRequest
+    ) -> SignalWorkflowRunResponse:
+        wire = _workflow_codec.to_wire_signal_workflow_provider_run_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_SIGNAL_RUN,
+            wire,
+            _workflow_pb2.SignalWorkflowRunResponse,
+        )
+        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+
+    async def signal_or_start_run(
+        self, request: SignalOrStartWorkflowProviderRunRequest
+    ) -> SignalWorkflowRunResponse:
+        wire = _workflow_codec.to_wire_signal_or_start_workflow_provider_run_request(
+            request
+        )
+        wire_response = await self._transport.unary(
+            METHOD_WORKFLOW_SIGNAL_OR_START_RUN,
+            wire,
+            _workflow_pb2.SignalWorkflowRunResponse,
+        )
+        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+
+
+class AsyncWorkflowClientREST(Protocol):
+    """REST-backed methods for the public gestalt.provider.v1.Workflow surface."""
+
+    async def apply_definition(
+        self, request: ApplyWorkflowProviderDefinitionRequest
+    ) -> WorkflowDefinition: ...
+    async def get_definition(
+        self, request: GetWorkflowProviderDefinitionRequest
+    ) -> WorkflowDefinition: ...
+    async def list_definitions(
+        self, request: ListWorkflowProviderDefinitionsRequest
+    ) -> ListWorkflowProviderDefinitionsResponse: ...
+    async def set_definition_paused(
+        self, request: SetWorkflowProviderDefinitionPausedRequest
+    ) -> WorkflowDefinition: ...
+    async def set_activation_paused(
+        self, request: SetWorkflowProviderActivationPausedRequest
+    ) -> WorkflowDefinition: ...
+    async def delete_definition(
+        self, request: DeleteWorkflowProviderDefinitionRequest
+    ) -> None: ...
+    async def start_run(
+        self, request: StartWorkflowProviderRunRequest
+    ) -> WorkflowRun: ...
+    async def list_runs(
+        self, request: ListWorkflowProviderRunsRequest
+    ) -> ListWorkflowProviderRunsResponse: ...
+    async def get_run(self, request: GetWorkflowProviderRunRequest) -> WorkflowRun: ...
+    async def get_run_events(
+        self, request: GetWorkflowProviderRunEventsRequest
+    ) -> GetWorkflowProviderRunEventsResponse: ...
+    async def get_run_output(
+        self, request: GetWorkflowProviderRunOutputRequest
+    ) -> GetWorkflowProviderRunOutputResponse: ...
+    async def cancel_run(
+        self, request: CancelWorkflowProviderRunRequest
+    ) -> WorkflowRun: ...
+    async def signal_run(
+        self, request: SignalWorkflowProviderRunRequest
+    ) -> SignalWorkflowRunResponse: ...
+    async def signal_or_start_run(
         self, request: SignalOrStartWorkflowProviderRunRequest
     ) -> SignalWorkflowRunResponse: ...

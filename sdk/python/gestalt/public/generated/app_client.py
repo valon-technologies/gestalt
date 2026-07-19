@@ -12,7 +12,7 @@ from ..._gen.v1 import app_pb2 as _app_pb2
 from ._codec import app as _app_codec
 from .app import AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult
 from .metadata import METHOD_APP_INVOKE, METHOD_APP_INVOKE_GRAPHQL
-from .unary_transport import UnaryTransport
+from .unary_transport import AsyncUnaryTransport, UnaryTransport
 
 
 class AppClient:
@@ -66,3 +66,60 @@ class AppClientREST(Protocol):
         self, request: AppInvokeGraphQLRequest
     ) -> OperationResult: ...
     def invoke_graphql_decoded(self, request: AppInvokeGraphQLRequest) -> Any: ...
+
+
+class AsyncAppClient:
+    """Async client for the public gestalt.provider.v1.App surface; methods are coroutines."""
+
+    def __init__(self, transport: AsyncUnaryTransport) -> None:
+        self._transport = transport
+
+    async def invoke_raw(self, request: AppInvokeRequest) -> OperationResult:
+        wire = _app_codec.to_wire_app_invoke_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_APP_INVOKE,
+            wire,
+            _app_pb2.OperationResult,
+        )
+        return _app_codec.from_wire_operation_result(wire_response)
+
+    async def invoke(self, request: AppInvokeRequest) -> Any:
+        """The result decodes with the standard JSON operation envelope semantics; envelope failures raise InvokeError."""
+        response = await self.invoke_raw(request)
+        return decode_app_result(
+            request.app, request.operation, response.status, response.body
+        )
+
+    async def invoke_graphql(self, request: AppInvokeGraphQLRequest) -> OperationResult:
+        wire = _app_codec.to_wire_app_invoke_graphql_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_APP_INVOKE_GRAPHQL,
+            wire,
+            _app_pb2.OperationResult,
+        )
+        return _app_codec.from_wire_operation_result(wire_response)
+
+    async def invoke_graphql_raw(
+        self, request: AppInvokeGraphQLRequest
+    ) -> OperationResult:
+        """Alias for invoke_graphql."""
+        return await self.invoke_graphql(request)
+
+    async def invoke_graphql_decoded(self, request: AppInvokeGraphQLRequest) -> Any:
+        """The result decodes with GraphQL envelope semantics; envelope failures raise InvokeError."""
+        response = await self.invoke_graphql(request)
+        return decode_graphql_result(request.app, response.status, response.body)
+
+
+class AsyncAppClientREST(Protocol):
+    """REST-backed methods for the public gestalt.provider.v1.App surface."""
+
+    async def invoke_raw(self, request: AppInvokeRequest) -> OperationResult: ...
+    async def invoke(self, request: AppInvokeRequest) -> Any: ...
+    async def invoke_graphql(
+        self, request: AppInvokeGraphQLRequest
+    ) -> OperationResult: ...
+    async def invoke_graphql_raw(
+        self, request: AppInvokeGraphQLRequest
+    ) -> OperationResult: ...
+    async def invoke_graphql_decoded(self, request: AppInvokeGraphQLRequest) -> Any: ...
