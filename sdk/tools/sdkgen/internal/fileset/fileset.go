@@ -65,6 +65,25 @@ func (s *FileSet) Add(path string, content []byte) error {
 	return nil
 }
 
+func (s *FileSet) Merge(other *FileSet) error {
+	for _, f := range other.Files() {
+		if err := s.Add(f.Path, f.Content); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *FileSet) Prefix(dir string) (*FileSet, error) {
+	out := New()
+	for _, f := range s.Files() {
+		if err := out.Add(dir+"/"+f.Path, f.Content); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func (s *FileSet) Len() int {
 	return len(s.files)
 }

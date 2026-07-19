@@ -1,25 +1,24 @@
 package ts
 
-// PublicImports configures support-module import paths for generated public
-// client files under a package-owned output directory.
 type PublicImports struct {
-	// SupportPrefix is the path from generated/ to support modules, without a
-	// trailing slash. Server clients use "../.."; web clients use "../runtime".
-	SupportPrefix string
-	// FixedNativeModule, when set, is used for every native type import instead
-	// of per-proto generatedFileBase names. Web clients use native-types.ts.
+	SupportPrefix     string
 	FixedNativeModule string
 }
 
-// ServerPublicImports returns import paths for @valon-technologies/gestalt.
 func ServerPublicImports() PublicImports {
 	return PublicImports{SupportPrefix: "../.."}
 }
 
-// WebPublicImports returns import paths for @valon-technologies/gestalt-web.
 func WebPublicImports() PublicImports {
 	return PublicImports{
 		SupportPrefix:     "../runtime",
+		FixedNativeModule: "native-types.ts",
+	}
+}
+
+func WebRuntimeImports() PublicImports {
+	return PublicImports{
+		SupportPrefix:     "../..",
 		FixedNativeModule: "native-types.ts",
 	}
 }

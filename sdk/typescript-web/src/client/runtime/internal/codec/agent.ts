@@ -5,7 +5,6 @@ import { create } from "@bufbuild/protobuf";
 import * as wire from "../gen/v1/agent_pb.ts";
 import type {
   AgentCatalogToolConfig,
-  AgentInteraction,
   AgentMessage,
   AgentMessagePart,
   AgentMessagePartImageRef,
@@ -14,7 +13,6 @@ import type {
   AgentNoTools,
   AgentOutput,
   AgentOutputKind,
-  AgentProviderCapabilities,
   AgentSession,
   AgentSessionStartConfig,
   AgentSessionStartHook,
@@ -34,12 +32,8 @@ import type {
   CancelAgentProviderTurnRequest,
   CreateAgentProviderSessionRequest,
   CreateAgentProviderTurnRequest,
-  GetAgentProviderCapabilitiesRequest,
-  GetAgentProviderInteractionRequest,
   GetAgentProviderSessionRequest,
   GetAgentProviderTurnRequest,
-  ListAgentProviderInteractionsRequest,
-  ListAgentProviderInteractionsResponse,
   ListAgentProviderSessionsRequest,
   ListAgentProviderSessionsResponse,
   ListAgentProviderTurnEventsRequest,
@@ -48,16 +42,13 @@ import type {
   ListAgentProviderTurnsResponse,
   ListedAgentTool,
   PreparedAgentWorkspace,
-  ResolveAgentProviderInteractionRequest,
   UpdateAgentProviderSessionRequest,
 } from "../../native-types.ts";
 import {
   fromWireAgentToolRef,
   fromWireOperationAnnotations,
-  fromWireRequestContext,
   toWireAgentToolRef,
   toWireOperationAnnotations,
-  toWireRequestContext,
 } from "./app.ts";
 import {
   fromWireTimestamp,
@@ -83,54 +74,6 @@ export function fromWireAgentCatalogToolConfig(
   return {
     refs: value.refs.map(fromWireAgentToolRef),
     tools: value.tools.map(fromWireListedAgentTool),
-  };
-}
-
-export function toWireAgentInteraction(
-  value: Init<AgentInteraction>,
-): wire.AgentInteraction {
-  return create(wire.AgentInteractionSchema, {
-    id: value.id ?? "",
-    type: (value.type ?? 0) as wire.AgentInteractionType,
-    state: (value.state ?? 0) as wire.AgentInteractionState,
-    title: value.title ?? "",
-    prompt: value.prompt ?? "",
-    ...(value.request !== undefined
-      ? { request: sanitizeJsonObject(value.request) }
-      : {}),
-    ...(value.resolution !== undefined
-      ? { resolution: sanitizeJsonObject(value.resolution) }
-      : {}),
-    ...(value.createdAt !== undefined
-      ? { createdAt: toWireTimestamp(value.createdAt) }
-      : {}),
-    ...(value.resolvedAt !== undefined
-      ? { resolvedAt: toWireTimestamp(value.resolvedAt) }
-      : {}),
-    turnId: value.turnId ?? "",
-    sessionId: value.sessionId ?? "",
-  });
-}
-
-export function fromWireAgentInteraction(
-  value: wire.AgentInteraction,
-): AgentInteraction {
-  return {
-    id: value.id,
-    type: value.type,
-    state: value.state,
-    title: value.title,
-    prompt: value.prompt,
-    ...(value.request !== undefined ? { request: value.request } : {}),
-    ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
-    ...(value.createdAt !== undefined
-      ? { createdAt: fromWireTimestamp(value.createdAt) }
-      : {}),
-    ...(value.resolvedAt !== undefined
-      ? { resolvedAt: fromWireTimestamp(value.resolvedAt) }
-      : {}),
-    turnId: value.turnId,
-    sessionId: value.sessionId,
   };
 }
 
@@ -312,42 +255,6 @@ export function fromWireAgentOutputKind(
     default:
       return { case: undefined };
   }
-}
-
-export function toWireAgentProviderCapabilities(
-  value: Init<AgentProviderCapabilities>,
-): wire.AgentProviderCapabilities {
-  return create(wire.AgentProviderCapabilitiesSchema, {
-    streamingText: value.streamingText ?? false,
-    toolCalls: value.toolCalls ?? false,
-    parallelToolCalls: value.parallelToolCalls ?? false,
-    interactions: value.interactions ?? false,
-    resumableTurns: value.resumableTurns ?? false,
-    reasoningSummaries: value.reasoningSummaries ?? false,
-    boundedListHydration: value.boundedListHydration ?? false,
-    supportedToolSources: (value.supportedToolSources ?? []).map(
-      (item) => item as wire.AgentToolSourceMode,
-    ),
-    supportsSessionStart: value.supportsSessionStart ?? false,
-    supportsPreparedWorkspace: value.supportsPreparedWorkspace ?? false,
-  });
-}
-
-export function fromWireAgentProviderCapabilities(
-  value: wire.AgentProviderCapabilities,
-): AgentProviderCapabilities {
-  return {
-    streamingText: value.streamingText,
-    toolCalls: value.toolCalls,
-    parallelToolCalls: value.parallelToolCalls,
-    interactions: value.interactions,
-    resumableTurns: value.resumableTurns,
-    reasoningSummaries: value.reasoningSummaries,
-    boundedListHydration: value.boundedListHydration,
-    supportedToolSources: value.supportedToolSources,
-    supportsSessionStart: value.supportsSessionStart,
-    supportsPreparedWorkspace: value.supportsPreparedWorkspace,
-  };
 }
 
 export function toWireAgentSession(
@@ -784,9 +691,6 @@ export function toWireCancelAgentProviderTurnRequest(
   return create(wire.CancelAgentProviderTurnRequestSchema, {
     turnId: value.turnId ?? "",
     reason: value.reason ?? "",
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName ?? "",
     sessionId: value.sessionId ?? "",
   });
@@ -798,9 +702,6 @@ export function fromWireCancelAgentProviderTurnRequest(
   return {
     turnId: value.turnId,
     reason: value.reason,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName,
     sessionId: value.sessionId,
   };
@@ -830,9 +731,6 @@ export function toWireCreateAgentProviderSessionRequest(
     ...(value.workspace !== undefined
       ? { workspace: toWireAgentWorkspace(value.workspace) }
       : {}),
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
     ...(value.tools !== undefined
       ? { tools: toWireAgentToolConfig(value.tools) }
       : {}),
@@ -861,9 +759,6 @@ export function fromWireCreateAgentProviderSessionRequest(
     ...(value.workspace !== undefined
       ? { workspace: fromWireAgentWorkspace(value.workspace) }
       : {}),
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     ...(value.tools !== undefined
       ? { tools: fromWireAgentToolConfig(value.tools) }
       : {}),
@@ -890,9 +785,6 @@ export function toWireCreateAgentProviderTurnRequest(
     ...(value.output !== undefined
       ? { output: toWireAgentOutput(value.output) }
       : {}),
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName ?? "",
   });
 }
@@ -915,44 +807,7 @@ export function fromWireCreateAgentProviderTurnRequest(
     ...(value.output !== undefined
       ? { output: fromWireAgentOutput(value.output) }
       : {}),
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName,
-  };
-}
-
-export function toWireGetAgentProviderCapabilitiesRequest(
-  value: Init<GetAgentProviderCapabilitiesRequest>,
-): wire.GetAgentProviderCapabilitiesRequest {
-  return create(wire.GetAgentProviderCapabilitiesRequestSchema, {});
-}
-
-export function fromWireGetAgentProviderCapabilitiesRequest(
-  value: wire.GetAgentProviderCapabilitiesRequest,
-): GetAgentProviderCapabilitiesRequest {
-  return {};
-}
-
-export function toWireGetAgentProviderInteractionRequest(
-  value: Init<GetAgentProviderInteractionRequest>,
-): wire.GetAgentProviderInteractionRequest {
-  return create(wire.GetAgentProviderInteractionRequestSchema, {
-    interactionId: value.interactionId ?? "",
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
-  });
-}
-
-export function fromWireGetAgentProviderInteractionRequest(
-  value: wire.GetAgentProviderInteractionRequest,
-): GetAgentProviderInteractionRequest {
-  return {
-    interactionId: value.interactionId,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
   };
 }
 
@@ -961,9 +816,6 @@ export function toWireGetAgentProviderSessionRequest(
 ): wire.GetAgentProviderSessionRequest {
   return create(wire.GetAgentProviderSessionRequestSchema, {
     sessionId: value.sessionId ?? "",
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName ?? "",
   });
 }
@@ -973,9 +825,6 @@ export function fromWireGetAgentProviderSessionRequest(
 ): GetAgentProviderSessionRequest {
   return {
     sessionId: value.sessionId,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName,
   };
 }
@@ -985,9 +834,6 @@ export function toWireGetAgentProviderTurnRequest(
 ): wire.GetAgentProviderTurnRequest {
   return create(wire.GetAgentProviderTurnRequestSchema, {
     turnId: value.turnId ?? "",
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName ?? "",
     sessionId: value.sessionId ?? "",
   });
@@ -998,51 +844,8 @@ export function fromWireGetAgentProviderTurnRequest(
 ): GetAgentProviderTurnRequest {
   return {
     turnId: value.turnId,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName,
     sessionId: value.sessionId,
-  };
-}
-
-export function toWireListAgentProviderInteractionsRequest(
-  value: Init<ListAgentProviderInteractionsRequest>,
-): wire.ListAgentProviderInteractionsRequest {
-  return create(wire.ListAgentProviderInteractionsRequestSchema, {
-    turnId: value.turnId ?? "",
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
-    providerName: value.providerName ?? "",
-  });
-}
-
-export function fromWireListAgentProviderInteractionsRequest(
-  value: wire.ListAgentProviderInteractionsRequest,
-): ListAgentProviderInteractionsRequest {
-  return {
-    turnId: value.turnId,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
-    providerName: value.providerName,
-  };
-}
-
-export function toWireListAgentProviderInteractionsResponse(
-  value: Init<ListAgentProviderInteractionsResponse>,
-): wire.ListAgentProviderInteractionsResponse {
-  return create(wire.ListAgentProviderInteractionsResponseSchema, {
-    interactions: (value.interactions ?? []).map(toWireAgentInteraction),
-  });
-}
-
-export function fromWireListAgentProviderInteractionsResponse(
-  value: wire.ListAgentProviderInteractionsResponse,
-): ListAgentProviderInteractionsResponse {
-  return {
-    interactions: value.interactions.map(fromWireAgentInteraction),
   };
 }
 
@@ -1055,9 +858,6 @@ export function toWireListAgentProviderSessionsRequest(
     limit: value.limit ?? 0,
     summaryOnly: value.summaryOnly ?? false,
     providerName: value.providerName ?? "",
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
   });
 }
 
@@ -1070,9 +870,6 @@ export function fromWireListAgentProviderSessionsRequest(
     limit: value.limit,
     summaryOnly: value.summaryOnly,
     providerName: value.providerName,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
   };
 }
 
@@ -1099,9 +896,6 @@ export function toWireListAgentProviderTurnEventsRequest(
     turnId: value.turnId ?? "",
     afterSeq: value.afterSeq ?? 0n,
     limit: value.limit ?? 0,
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName ?? "",
     sessionId: value.sessionId ?? "",
   });
@@ -1114,9 +908,6 @@ export function fromWireListAgentProviderTurnEventsRequest(
     turnId: value.turnId,
     afterSeq: value.afterSeq,
     limit: value.limit,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName,
     sessionId: value.sessionId,
   };
@@ -1147,9 +938,6 @@ export function toWireListAgentProviderTurnsRequest(
     status: (value.status ?? 0) as wire.AgentExecutionStatus,
     limit: value.limit ?? 0,
     summaryOnly: value.summaryOnly ?? false,
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName ?? "",
   });
 }
@@ -1163,9 +951,6 @@ export function fromWireListAgentProviderTurnsRequest(
     status: value.status,
     limit: value.limit,
     summaryOnly: value.summaryOnly,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName,
   };
 }
@@ -1244,36 +1029,6 @@ export function fromWirePreparedAgentWorkspace(
   };
 }
 
-export function toWireResolveAgentProviderInteractionRequest(
-  value: Init<ResolveAgentProviderInteractionRequest>,
-): wire.ResolveAgentProviderInteractionRequest {
-  return create(wire.ResolveAgentProviderInteractionRequestSchema, {
-    interactionId: value.interactionId ?? "",
-    ...(value.resolution !== undefined
-      ? { resolution: sanitizeJsonObject(value.resolution) }
-      : {}),
-    turnId: value.turnId ?? "",
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
-      : {}),
-    providerName: value.providerName ?? "",
-  });
-}
-
-export function fromWireResolveAgentProviderInteractionRequest(
-  value: wire.ResolveAgentProviderInteractionRequest,
-): ResolveAgentProviderInteractionRequest {
-  return {
-    interactionId: value.interactionId,
-    ...(value.resolution !== undefined ? { resolution: value.resolution } : {}),
-    turnId: value.turnId,
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
-    providerName: value.providerName,
-  };
-}
-
 export function toWireUpdateAgentProviderSessionRequest(
   value: Init<UpdateAgentProviderSessionRequest>,
 ): wire.UpdateAgentProviderSessionRequest {
@@ -1283,9 +1038,6 @@ export function toWireUpdateAgentProviderSessionRequest(
     state: (value.state ?? 0) as wire.AgentSessionState,
     ...(value.metadata !== undefined
       ? { metadata: sanitizeJsonObject(value.metadata) }
-      : {}),
-    ...(value.context !== undefined
-      ? { context: toWireRequestContext(value.context) }
       : {}),
     providerName: value.providerName ?? "",
   });
@@ -1299,9 +1051,6 @@ export function fromWireUpdateAgentProviderSessionRequest(
     clientRef: value.clientRef,
     state: value.state,
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
-    ...(value.context !== undefined
-      ? { context: fromWireRequestContext(value.context) }
-      : {}),
     providerName: value.providerName,
   };
 }

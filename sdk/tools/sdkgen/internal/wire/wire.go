@@ -20,6 +20,8 @@ import (
 // protoRel is the proto module directory, relative to the repo root.
 const protoRel = "sdk/proto"
 
+const webGenRel = "sdk/typescript-web/src/client/runtime/internal/gen"
+
 // templates maps each target to its existing buf generate template under
 // sdk/proto. Python has no entry: its stubs are vendored with import
 // rewriting (see pyvendor.go), mirroring sdk/python/scripts/generate_stubs.py.
@@ -38,13 +40,17 @@ var staleSuffixes = map[emit.Target][]string{
 	emit.TargetRust: {".rs"},
 }
 
-// renderedOut pairs one scratch render with the checked-in tree directory it
-// corresponds to.
 type renderedOut struct {
-	scratchDir string
-	treeDir    string
-	treeRel    string
-	ignore     func(rel string) bool
+	scratchDir    string
+	treeDir       string
+	treeRel       string
+	extraTreeDirs []extraTreeDir
+	ignore        func(rel string) bool
+}
+
+type extraTreeDir struct {
+	dir string
+	rel string
 }
 
 // render renders every selected target's wire stubs into scratch without
@@ -88,7 +94,7 @@ func render(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targ
 			if err != nil {
 				return nil, err
 			}
-			outs = append(outs, renderedOut{
+			out := renderedOut{
 				scratchDir: scratchDir,
 				treeDir:    treeDir,
 				treeRel:    filepath.ToSlash(treeRel),
@@ -100,7 +106,15 @@ func render(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targ
 					}
 					return true
 				},
-			})
+			}
+			if target == emit.TargetTS && filepath.ToSlash(origOut) == "../typescript/src/internal/gen" {
+				webDir := filepath.Join(repoRoot, filepath.FromSlash(webGenRel))
+				out.extraTreeDirs = append(out.extraTreeDirs, extraTreeDir{
+					dir: webDir,
+					rel: webGenRel,
+				})
+			}
+			outs = append(outs, out)
 		}
 	}
 	return outs, nil
@@ -116,6 +130,11 @@ func Generate(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, ta
 	for _, out := range outs {
 		if err := fileset.SyncDirs(out.scratchDir, out.treeDir, out.ignore); err != nil {
 			return err
+		}
+		for _, extra := range out.extraTreeDirs {
+			if err := fileset.SyncDirs(out.scratchDir, extra.dir, out.ignore); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -135,6 +154,13 @@ func Check(bufTool, rustfmtTool *toolchain.Tool, repoRoot, scratch string, targe
 			return nil, err
 		}
 		drift = append(drift, prefixDrift(d, out.treeRel)...)
+		for _, extra := range out.extraTreeDirs {
+			d, err := fileset.CompareDirs(out.scratchDir, extra.dir, true, out.ignore)
+			if err != nil {
+				return nil, err
+			}
+			drift = append(drift, prefixDrift(d, extra.rel)...)
+		}
 	}
 	return drift, nil
 }
