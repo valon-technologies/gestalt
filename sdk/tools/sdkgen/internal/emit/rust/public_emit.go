@@ -38,6 +38,20 @@ pub trait UnaryTransport: Send + Sync {
         Resp: Message + Default + Send + 'static;
 }
 
+/// Performs one unary public App call synchronously. REST-only; no gRPC
+/// transport implements this trait.
+pub trait SyncUnaryTransport: Send + Sync {
+    fn unary<Req, Resp>(
+        &self,
+        method: &Method,
+        request: &Req,
+        response: &mut Resp,
+    ) -> Result<(), GestaltError>
+    where
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static;
+}
+
 /// Marker for transports that can call gRPC-only public methods.
 pub trait GrpcCapable: UnaryTransport {}
 `

@@ -6,6 +6,30 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
+// methodKeyword returns the fn keyword for async ("pub async fn") or sync ("pub fn").
+func methodKeyword(sync bool) string {
+	if sync {
+		return "pub fn"
+	}
+	return "pub async fn"
+}
+
+// awaitSuffix returns ".await" for async methods or "" for sync methods.
+func awaitSuffix(sync bool) string {
+	if sync {
+		return ""
+	}
+	return ".await"
+}
+
+// syncSuffix appends "_sync" to the method name for sync variants.
+func syncSuffix(methodName string, sync bool) string {
+	if sync {
+		return methodName + "_sync"
+	}
+	return methodName
+}
+
 func (r *renderer) assembleGenerated() string {
 	return r.assemble()
 }
@@ -18,11 +42,11 @@ func (r *renderer) renderAppClient(svc *model.Service) {
 	r.useType("GestaltError")
 
 	r.body.WriteString("/// Transport-neutral client for the public gestaltd App surface.\n")
-	fmt.Fprintf(&r.body, "pub struct %s<T: UnaryTransport> {\n", clientName)
+	fmt.Fprintf(&r.body, "pub struct %s<T: Send + Sync> {\n", clientName)
 	r.body.WriteString("    transport: T,\n")
 	r.body.WriteString("}\n\n")
 
-	fmt.Fprintf(&r.body, "impl<T: UnaryTransport> %s<T> {\n", clientName)
+	fmt.Fprintf(&r.body, "impl<T: Send + Sync> %s<T> {\n", clientName)
 	fmt.Fprintf(&r.body, "    /// Creates a client over the given unary transport.\n")
 	fmt.Fprintf(&r.body, "    pub fn new(transport: T) -> Self {\n")
 	r.body.WriteString("        Self { transport }\n")
@@ -45,49 +69,55 @@ func (r *renderer) renderAppClient(svc *model.Service) {
 	if len(restMethods) > 0 {
 		fmt.Fprintf(&r.body, "impl<T: UnaryTransport> %s<T> {\n", clientName)
 		for _, m := range restMethods {
-			r.renderAppClientMethod(svc, m)
+			r.renderAppClientMethod(svc, m, false)
+		}
+		r.body.WriteString("}\n\n")
+
+		fmt.Fprintf(&r.body, "impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> %s<T> {\n", clientName)
+		for _, m := range restMethods {
+			r.renderAppClientMethod(svc, m, true)
 		}
 		r.body.WriteString("}\n\n")
 	}
 	if len(grpcOnlyMethods) > 0 {
 		fmt.Fprintf(&r.body, "impl<T: crate::public::generated::unary_transport::GrpcCapable> %s<T> {\n", clientName)
 		for _, m := range grpcOnlyMethods {
-			r.renderAppClientMethod(svc, m)
+			r.renderAppClientMethod(svc, m, false)
 		}
 		r.body.WriteString("}\n\n")
 	}
 }
 
-func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method) {
+func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method, sync bool) {
 	constName := appClientMethodConst(svc, m)
 	methodName := publicSnake(m.Name)
 
 	if m.JsonResult != nil {
-		r.renderAppClientRawMethod(m, constName, methodName+"_raw")
-		r.renderAppClientInvokeMethod(m, methodName)
+		r.renderAppClientRawMethod(m, constName, syncSuffix(methodName+"_raw", sync), sync)
+		r.renderAppClientInvokeMethod(m, methodName, sync)
 		return
 	}
 
 	if m.Name == "InvokeGraphQL" {
-		r.renderAppClientRawMethod(m, constName, methodName)
-		r.renderAppClientGraphQLRawAlias(m, methodName)
-		r.renderAppClientGraphQLDecodedMethod(m, methodName+"_decoded")
+		r.renderAppClientRawMethod(m, constName, syncSuffix(methodName, sync), sync)
+		r.renderAppClientGraphQLRawAlias(m, methodName, sync)
+		r.renderAppClientGraphQLDecodedMethod(m, methodName+"_decoded", sync)
 		return
 	}
 
-	r.renderAppClientRawMethod(m, constName, methodName)
+	r.renderAppClientRawMethod(m, constName, syncSuffix(methodName, sync), sync)
 }
 
-func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodName string) {
+func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodName string, sync bool) {
 	if m.InputIsEmpty || m.OutputIsEmpty {
 		r.features.prostTypes = true
 	}
 
 	if m.InputIsEmpty && m.OutputIsEmpty {
-		fmt.Fprintf(&r.body, "    pub async fn %s(&self) -> Result<(), GestaltError> {\n", methodName)
+		fmt.Fprintf(&r.body, "    %s %s(&self) -> Result<(), GestaltError> {\n", methodKeyword(sync), methodName)
 		r.body.WriteString("        let wire = Empty::default();\n")
 		r.body.WriteString("        let mut wire_response = Empty::default();\n")
-		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response).await?;\n", constName)
+		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response)%s?;\n", constName, awaitSuffix(sync))
 		r.body.WriteString("        Ok(())\n    }\n\n")
 		return
 	}
@@ -95,10 +125,10 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 		outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
 		wireResponseType := wireTypeName(m.Output.FullName)
 		fromWire := r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
-		fmt.Fprintf(&r.body, "    pub async fn %s(&self) -> Result<%s, GestaltError> {\n", methodName, outputType)
+		fmt.Fprintf(&r.body, "    %s %s(&self) -> Result<%s, GestaltError> {\n", methodKeyword(sync), methodName, outputType)
 		r.body.WriteString("        let wire = Empty::default();\n")
 		fmt.Fprintf(&r.body, "        let mut wire_response = crate::generated::v1::%s::default();\n", wireResponseType)
-		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response).await?;\n", constName)
+		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response)%s?;\n", constName, awaitSuffix(sync))
 		fmt.Fprintf(&r.body, "        Ok(%s(wire_response))\n", fromWire)
 		r.body.WriteString("    }\n\n")
 		return
@@ -106,10 +136,10 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 	if m.OutputIsEmpty {
 		requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
 		toWire := r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
-		fmt.Fprintf(&r.body, "    pub async fn %s(&self, request: %s) -> Result<(), GestaltError> {\n", methodName, requestType)
+		fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<(), GestaltError> {\n", methodKeyword(sync), methodName, requestType)
 		fmt.Fprintf(&r.body, "        let wire = %s(request);\n", toWire)
 		r.body.WriteString("        let mut wire_response = Empty::default();\n")
-		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response).await?;\n", constName)
+		fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response)%s?;\n", constName, awaitSuffix(sync))
 		r.body.WriteString("        Ok(())\n    }\n\n")
 		return
 	}
@@ -122,15 +152,15 @@ func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodNa
 	toWire := r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
 	fromWire := r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName))
 
-	fmt.Fprintf(&r.body, "    pub async fn %s(&self, request: %s) -> Result<%s, GestaltError> {\n", methodName, requestType, outputType)
+	fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<%s, GestaltError> {\n", methodKeyword(sync), methodName, requestType, outputType)
 	fmt.Fprintf(&r.body, "        let wire = %s(request);\n", toWire)
 	fmt.Fprintf(&r.body, "        let mut wire_response = crate::generated::v1::%s::default();\n", wireResponseType)
-	fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response).await?;\n", constName)
+	fmt.Fprintf(&r.body, "        self.transport.unary(&%s, &wire, &mut wire_response)%s?;\n", constName, awaitSuffix(sync))
 	fmt.Fprintf(&r.body, "        Ok(%s(wire_response))\n", fromWire)
 	r.body.WriteString("    }\n\n")
 }
 
-func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName string) {
+func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName string, sync bool) {
 	if m.Input == nil || m.Output == nil || m.JsonResult == nil {
 		return
 	}
@@ -138,14 +168,14 @@ func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName strin
 	r.useInvoke("decode_app_result")
 	r.useInvoke("InvokeError")
 
-	fmt.Fprintf(&r.body, "    pub async fn %s(&self, request: %s) -> Result<serde_json::Value, InvokeError> {\n", methodName, requestType)
+	fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<serde_json::Value, InvokeError> {\n", methodKeyword(sync), syncSuffix(methodName, sync), requestType)
 	if f := findField(m.Input, "app"); f != nil {
 		fmt.Fprintf(&r.body, "        let invoke_app = request.%s.clone();\n", escapeIdent(f.Name))
 	}
 	if f := findField(m.Input, "operation"); f != nil {
 		fmt.Fprintf(&r.body, "        let invoke_operation = request.%s.clone();\n", escapeIdent(f.Name))
 	}
-	fmt.Fprintf(&r.body, "        let response = self.%s_raw(request).await?;\n", methodName)
+	fmt.Fprintf(&r.body, "        let response = self.%s(request)%s?;\n", syncSuffix(methodName+"_raw", sync), awaitSuffix(sync))
 	status := findField(m.Output, m.JsonResult.Status)
 	body := findField(m.Output, m.JsonResult.Body)
 	appExpr, opExpr := `""`, `""`
@@ -166,20 +196,20 @@ func (r *renderer) renderAppClientInvokeMethod(m *model.Method, methodName strin
 	r.body.WriteString("    }\n\n")
 }
 
-func (r *renderer) renderAppClientGraphQLRawAlias(m *model.Method, methodName string) {
+func (r *renderer) renderAppClientGraphQLRawAlias(m *model.Method, methodName string, sync bool) {
 	if m.Input == nil || m.Output == nil {
 		return
 	}
 	requestType := r.typeRef(m.Input.ProtoFile, localName(m.Input.FullName))
 	outputType := r.typeRef(m.Output.ProtoFile, localName(m.Output.FullName))
 	r.body.WriteString("    /// `invoke_graphql_raw` is an alias for [`Self::invoke_graphql`].\n")
-	fmt.Fprintf(&r.body, "    pub async fn %s_raw(&self, request: %s) -> Result<%s, GestaltError> {\n",
-		methodName, requestType, outputType)
-	fmt.Fprintf(&r.body, "        self.%s(request).await\n", methodName)
+	fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<%s, GestaltError> {\n",
+		methodKeyword(sync), syncSuffix(methodName+"_raw", sync), requestType, outputType)
+	fmt.Fprintf(&r.body, "        self.%s(request)%s\n", syncSuffix(methodName, sync), awaitSuffix(sync))
 	r.body.WriteString("    }\n\n")
 }
 
-func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodName string) {
+func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodName string, sync bool) {
 	if m.Input == nil || m.Output == nil {
 		return
 	}
@@ -187,13 +217,13 @@ func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodNa
 	r.useInvoke("decode_graphql_result")
 	r.useInvoke("InvokeError")
 
-	fmt.Fprintf(&r.body, "    pub async fn %s(&self, request: %s) -> Result<serde_json::Value, InvokeError> {\n", methodName, requestType)
+	fmt.Fprintf(&r.body, "    %s %s(&self, request: %s) -> Result<serde_json::Value, InvokeError> {\n", methodKeyword(sync), syncSuffix(methodName, sync), requestType)
 	appExpr := `""`
 	if f := findField(m.Input, "app"); f != nil {
 		fmt.Fprintf(&r.body, "        let invoke_app = request.%s.clone();\n", escapeIdent(f.Name))
 		appExpr = "invoke_app.as_str()"
 	}
-	fmt.Fprintf(&r.body, "        let response = self.invoke_graphql(request).await?;\n")
+	fmt.Fprintf(&r.body, "        let response = self.%s(request)%s?;\n", syncSuffix("invoke_graphql", sync), awaitSuffix(sync))
 	status := findField(m.Output, "status")
 	body := findField(m.Output, "body")
 	fmt.Fprintf(
