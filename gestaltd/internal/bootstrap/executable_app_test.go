@@ -2802,9 +2802,10 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		EncryptionKey: secret,
-		AppInvocation: bridge,
-		Authorization: newAllowAllAuthorizationProvider(),
+		EncryptionKey:         secret,
+		AppInvocation:         bridge,
+		Authorization:         newAllowAllAuthorizationProvider(),
+		AuthorizationInternal: newAllowAllAuthorizationProvider(),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -2922,9 +2923,10 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		EncryptionKey: secret,
-		AppInvocation: bridge,
-		Authorization: newAllowAllAuthorizationProvider(),
+		EncryptionKey:         secret,
+		AppInvocation:         bridge,
+		Authorization:         newAllowAllAuthorizationProvider(),
+		AuthorizationInternal: newAllowAllAuthorizationProvider(),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -3896,9 +3898,10 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		EncryptionKey:   secret,
-		WorkflowManager: manager,
-		Authorization:   newAllowAllAuthorizationProvider(),
+		EncryptionKey:         secret,
+		WorkflowManager:       manager,
+		Authorization:         newAllowAllAuthorizationProvider(),
+		AuthorizationInternal: newAllowAllAuthorizationProvider(),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -5999,11 +6002,12 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 	}
 
 	deps := Deps{
-		BaseURL:            relaySrv.URL,
-		EncryptionKey:      secret,
-		AppInvocation:      bridge,
-		PublicHostServices: publicHostServices,
-		Authorization:      newAllowAllAuthorizationProvider(),
+		BaseURL:               relaySrv.URL,
+		EncryptionKey:         secret,
+		AppInvocation:         bridge,
+		PublicHostServices:    publicHostServices,
+		Authorization:         newAllowAllAuthorizationProvider(),
+		AuthorizationInternal: newAllowAllAuthorizationProvider(),
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -6752,11 +6756,12 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 	testutil.CloseOnCleanup(t, relaySrv)
 
 	deps := Deps{
-		BaseURL:            relaySrv.URL,
-		EncryptionKey:      secret,
-		WorkflowManager:    manager,
-		PublicHostServices: publicHostServices,
-		Authorization:      newAllowAllAuthorizationProvider(),
+		BaseURL:               relaySrv.URL,
+		EncryptionKey:         secret,
+		WorkflowManager:       manager,
+		PublicHostServices:    publicHostServices,
+		Authorization:         newAllowAllAuthorizationProvider(),
+		AuthorizationInternal: newAllowAllAuthorizationProvider(),
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 

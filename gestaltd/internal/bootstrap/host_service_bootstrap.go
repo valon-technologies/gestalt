@@ -474,7 +474,7 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 			proto.RegisterWorkflowServer(srv, workflowservice.NewProviderServer(
 				appName,
 				manager,
-				deps.Authorization,
+				deps.AuthorizationInternal,
 				opts...,
 			))
 		},

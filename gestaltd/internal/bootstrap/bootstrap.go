@@ -160,21 +160,28 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
 	// raw config value.
-	EncryptionKey           []byte
-	BaseURL                 string
-	RuntimeRelayBaseURL     string
-	SecretManager           core.SecretManager
-	Services                *coredata.Services
-	SelectedIndexedDBName   string
-	IndexedDBs              map[string]indexeddb.IndexedDB
-	IndexedDBDefs           map[string]*config.ProviderEntry
-	IndexedDBFactory        IndexedDBFactory
-	Caches                  map[string]corecache.Cache
-	CacheDefs               map[string]*config.ProviderEntry
-	CacheFactory            CacheFactory
-	S3                      map[string]s3sdk.S3
-	Authentication          core.IdentityProvider
-	Authorization           core.AuthorizationProvider
+	EncryptionKey         []byte
+	BaseURL               string
+	RuntimeRelayBaseURL   string
+	SecretManager         core.SecretManager
+	Services              *coredata.Services
+	SelectedIndexedDBName string
+	IndexedDBs            map[string]indexeddb.IndexedDB
+	IndexedDBDefs         map[string]*config.ProviderEntry
+	IndexedDBFactory      IndexedDBFactory
+	Caches                map[string]corecache.Cache
+	CacheDefs             map[string]*config.ProviderEntry
+	CacheFactory          CacheFactory
+	S3                    map[string]s3sdk.S3
+	Authentication        core.IdentityProvider
+	Authorization         core.AuthorizationProvider
+	// AuthorizationInternal is the direct (Raw) authorization provider used for
+	// gestaltd's own enforcement checks (e.g. the workflow ProviderServer's
+	// requireWorkflowAccess/requireServiceAccountManagement), which must not be
+	// meta-checked by the provider gateway. Authorization above remains the
+	// gateway-guarded (Guarded) client for plugin-facing host services such as
+	// the authorization host service.
+	AuthorizationInternal   core.AuthorizationProvider
 	WorkflowRuntime         *workflowRuntime
 	AgentRuntime            *agentRuntime
 	AgentTurnScopes         *agentturnscope.Store
@@ -1102,6 +1109,17 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	if authorizationProvider != nil {
 		deps.Authorization = authorizationProvider
+	}
+	// AuthorizationInternal is the direct (Raw) instance for gestaltd's own
+	// enforcement checks; it bypasses the gateway meta-check that Authorization
+	// (Guarded) applies for plugin-facing host services.
+	_, internalAuthorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders.Raw)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
+	if internalAuthorizationProvider != nil {
+		deps.AuthorizationInternal = internalAuthorizationProvider
 	}
 	closeExternalCredentialsOnError := true
 	defer func() {
