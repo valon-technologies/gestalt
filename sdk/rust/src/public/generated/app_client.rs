@@ -915,6 +915,124 @@ impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredenti
     }
 }
 
+impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> ExternalCredentialsClient<T> {
+    pub fn create_credential_sync(
+        &self,
+        request: CreateExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_create_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub fn upsert_credential_sync(
+        &self,
+        request: UpsertExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_upsert_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub fn get_credential_sync(
+        &self,
+        request: GetExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_get_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub fn list_credentials_sync(
+        &self,
+        request: ListExternalCredentialsRequest,
+    ) -> Result<ListExternalCredentialsResponse, GestaltError> {
+        let wire = to_wire_list_external_credentials_request(request);
+        let mut wire_response = crate::generated::v1::ListExternalCredentialsResponse::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_list_external_credentials_response(wire_response))
+    }
+
+    pub fn delete_credential_sync(
+        &self,
+        request: DeleteExternalCredentialRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_external_credential_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
+    }
+
+    pub fn validate_credential_config_sync(
+        &self,
+        request: ValidateExternalCredentialConfigRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_validate_external_credential_config_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_VALIDATE_CREDENTIAL_CONFIG,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
+    }
+
+    pub fn resolve_credential_sync(
+        &self,
+        request: ResolveExternalCredentialRequest,
+    ) -> Result<ResolveExternalCredentialResponse, GestaltError> {
+        let wire = to_wire_resolve_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ResolveExternalCredentialResponse::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_resolve_external_credential_response(
+            wire_response,
+        ))
+    }
+
+    pub fn exchange_credential_sync(
+        &self,
+        request: ExchangeExternalCredentialRequest,
+    ) -> Result<ExchangeExternalCredentialResponse, GestaltError> {
+        let wire = to_wire_exchange_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExchangeExternalCredentialResponse::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_exchange_external_credential_response(
+            wire_response,
+        ))
+    }
+}
+
 /// Transport-neutral client for the public gestaltd App surface.
 pub struct IdentityClient<T: Send + Sync> {
     transport: T,
@@ -1324,6 +1442,213 @@ impl<T: crate::public::generated::unary_transport::GrpcCapable> IndexedDBClient<
         self.transport
             .unary(&METHOD_INDEXED_D_B_INDEX_DELETE, &wire, &mut wire_response)
             .await?;
+        Ok(from_wire_delete_response(wire_response))
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> IndexedDBClient<T> {
+    pub fn create_object_store_sync(
+        &self,
+        request: CreateObjectStoreRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_create_object_store_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_INDEXED_D_B_CREATE_OBJECT_STORE,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_object_store_sync(
+        &self,
+        request: DeleteObjectStoreRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_object_store_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_INDEXED_D_B_DELETE_OBJECT_STORE,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
+    }
+
+    pub fn create_index_sync(&self, request: CreateIndexRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_create_index_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_CREATE_INDEX, &wire, &mut wire_response)?;
+        Ok(())
+    }
+
+    pub fn delete_index_sync(&self, request: DeleteIndexRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_index_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_DELETE_INDEX, &wire, &mut wire_response)?;
+        Ok(())
+    }
+
+    pub fn get_sync(&self, request: ObjectStoreRequest) -> Result<RecordResponse, GestaltError> {
+        let wire = to_wire_object_store_request(request);
+        let mut wire_response = crate::generated::v1::RecordResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET, &wire, &mut wire_response)?;
+        Ok(from_wire_record_response(wire_response))
+    }
+
+    pub fn get_key_sync(&self, request: ObjectStoreRequest) -> Result<KeyResponse, GestaltError> {
+        let wire = to_wire_object_store_request(request);
+        let mut wire_response = crate::generated::v1::KeyResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET_KEY, &wire, &mut wire_response)?;
+        Ok(from_wire_key_response(wire_response))
+    }
+
+    pub fn add_sync(&self, request: RecordRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_record_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_ADD, &wire, &mut wire_response)?;
+        Ok(())
+    }
+
+    pub fn put_sync(&self, request: RecordRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_record_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_PUT, &wire, &mut wire_response)?;
+        Ok(())
+    }
+
+    pub fn delete_sync(&self, request: ObjectStoreRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_object_store_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_DELETE, &wire, &mut wire_response)?;
+        Ok(())
+    }
+
+    pub fn clear_sync(&self, request: ObjectStoreNameRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_object_store_name_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_CLEAR, &wire, &mut wire_response)?;
+        Ok(())
+    }
+
+    pub fn get_all_sync(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<RecordsResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::RecordsResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET_ALL, &wire, &mut wire_response)?;
+        Ok(from_wire_records_response(wire_response))
+    }
+
+    pub fn get_all_keys_sync(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<KeysResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::KeysResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_GET_ALL_KEYS, &wire, &mut wire_response)?;
+        Ok(from_wire_keys_response(wire_response))
+    }
+
+    pub fn count_sync(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<CountResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::CountResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_COUNT, &wire, &mut wire_response)?;
+        Ok(from_wire_count_response(wire_response))
+    }
+
+    pub fn delete_range_sync(
+        &self,
+        request: ObjectStoreRangeRequest,
+    ) -> Result<DeleteResponse, GestaltError> {
+        let wire = to_wire_object_store_range_request(request);
+        let mut wire_response = crate::generated::v1::DeleteResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_DELETE_RANGE, &wire, &mut wire_response)?;
+        Ok(from_wire_delete_response(wire_response))
+    }
+
+    pub fn index_get_sync(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<RecordResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::RecordResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_GET, &wire, &mut wire_response)?;
+        Ok(from_wire_record_response(wire_response))
+    }
+
+    pub fn index_get_key_sync(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<KeyResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::KeyResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_GET_KEY, &wire, &mut wire_response)?;
+        Ok(from_wire_key_response(wire_response))
+    }
+
+    pub fn index_get_all_sync(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<RecordsResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::RecordsResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_GET_ALL, &wire, &mut wire_response)?;
+        Ok(from_wire_records_response(wire_response))
+    }
+
+    pub fn index_get_all_keys_sync(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<KeysResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::KeysResponse::default();
+        self.transport.unary(
+            &METHOD_INDEXED_D_B_INDEX_GET_ALL_KEYS,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_keys_response(wire_response))
+    }
+
+    pub fn index_count_sync(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<CountResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::CountResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_COUNT, &wire, &mut wire_response)?;
+        Ok(from_wire_count_response(wire_response))
+    }
+
+    pub fn index_delete_sync(
+        &self,
+        request: IndexQueryRequest,
+    ) -> Result<DeleteResponse, GestaltError> {
+        let wire = to_wire_index_query_request(request);
+        let mut wire_response = crate::generated::v1::DeleteResponse::default();
+        self.transport
+            .unary(&METHOD_INDEXED_D_B_INDEX_DELETE, &wire, &mut wire_response)?;
         Ok(from_wire_delete_response(wire_response))
     }
 }
