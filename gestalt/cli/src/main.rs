@@ -48,8 +48,15 @@ fn run() -> anyhow::Result<()> {
         Commands::Invoke(args) => dispatch_app_command(AppCommands::Invoke(args), url, format),
         Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
         Commands::Workflow { command } => {
-            let client = ApiClient::from_env(url)?;
-            commands::workflows::dispatch(&client, command, format)
+            let api = ApiClient::from_env(url)?;
+            let transport = gestalt_sdk::public::rest_transport::SyncRestTransport::new(
+                api.base_url(),
+                std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
+            )
+            .with_timeout(std::time::Duration::from_secs(30));
+            let workflow =
+                gestalt_sdk::public::generated::app_client::WorkflowClient::new(transport);
+            commands::workflows::dispatch(&api, &workflow, command, format)
         }
         Commands::Agent(args) => dispatch_agent(args, url, url_was_explicit, format),
     }

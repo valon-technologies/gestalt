@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::api::ApiClient;
 use crate::cli::{
@@ -7,65 +7,67 @@ use crate::cli::{
 };
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
-use crate::query;
+
+use gestalt_sdk::public::generated::app_client::WorkflowClient;
+use gestalt_sdk::public::generated::workflow::{
+    CancelWorkflowProviderRunRequest, GetWorkflowProviderRunRequest,
+    ListWorkflowProviderRunsRequest, WorkflowRunStatus,
+};
+use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
 use super::workflow_target::{target_app, target_operation};
 
 const EVENTS_PATH: &str = "/api/v1/workflow/events";
-const RUNS_PATH: &str = "/api/v1/workflow/runs";
 
 pub fn list_runs(
-    client: &ApiClient,
+    client: &WorkflowClient<SyncRestTransport>,
     app: Option<&str>,
     status: Option<&str>,
     page_size: Option<u32>,
     page_token: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let path = runs_path(app, status, page_size, page_token)?;
-    let resp = client.get(&path).context("failed to list workflow runs")?;
-    print_runs(&resp, format, app);
+    let request = ListWorkflowProviderRunsRequest {
+        target_app: app.unwrap_or_default().to_string(),
+        status: parse_run_status(status),
+        page_size: page_size.unwrap_or(0) as i32,
+        page_token: page_token.unwrap_or_default().to_string(),
+        ..Default::default()
+    };
+    let resp = client
+        .list_runs_sync(request)
+        .context("failed to list workflow runs")?;
+    print_runs(&serde_json::to_value(&resp)?, format, app);
     Ok(())
 }
 
-fn runs_path(
-    app: Option<&str>,
-    status: Option<&str>,
-    page_size: Option<u32>,
-    page_token: Option<&str>,
-) -> Result<String> {
-    let mut params = Vec::new();
-    query::push_opt_param(&mut params, "app", app);
-    query::push_opt_param(&mut params, "status", status);
-    if let Some(page_size) = page_size {
-        params.push(("pageSize".to_string(), page_size.to_string()));
-    }
-    query::push_opt_param(&mut params, "pageToken", page_token);
-    query::append_query(RUNS_PATH, &params)
-}
-
-pub fn get_run(client: &ApiClient, id: &str, format: Format) -> Result<()> {
+pub fn get_run(client: &WorkflowClient<SyncRestTransport>, id: &str, format: Format) -> Result<()> {
+    let request = GetWorkflowProviderRunRequest {
+        run_id: id.to_string(),
+        ..Default::default()
+    };
     let resp = client
-        .get(&format!("{RUNS_PATH}/{id}"))
+        .get_run_sync(request)
         .with_context(|| format!("failed to get workflow run {id}"))?;
-    print_run(&resp, format);
+    print_run(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
 pub fn cancel_run(
-    client: &ApiClient,
+    client: &WorkflowClient<SyncRestTransport>,
     id: &str,
     reason: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let body = match reason {
-        Some(reason) => json!({ "reason": reason }),
-        None => json!({}),
+    let request = CancelWorkflowProviderRunRequest {
+        run_id: id.to_string(),
+        reason: reason.unwrap_or_default().to_string(),
+        ..Default::default()
     };
     let resp = client
-        .post(&format!("{RUNS_PATH}/{id}/cancel"), &body)
+        .cancel_run_sync(request)
         .with_context(|| format!("failed to cancel workflow run {id}"))?;
-    print_run(&resp, format);
+    print_run(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
@@ -86,6 +88,18 @@ pub fn deliver_event(
         .context("failed to deliver workflow event")?;
     print_delivered_event(&resp, format);
     Ok(())
+}
+
+fn parse_run_status(value: Option<&str>) -> WorkflowRunStatus {
+    use gestalt_sdk::public::generated::workflow::workflow_run_status::*;
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some("pending") => WORKFLOW_RUN_STATUS_PENDING,
+        Some("running") => WORKFLOW_RUN_STATUS_RUNNING,
+        Some("succeeded") => WORKFLOW_RUN_STATUS_SUCCEEDED,
+        Some("failed") => WORKFLOW_RUN_STATUS_FAILED,
+        Some("canceled") | Some("cancelled") => WORKFLOW_RUN_STATUS_CANCELED,
+        _ => WORKFLOW_RUN_STATUS_UNSPECIFIED,
+    }
 }
 
 fn build_optional_map(
@@ -237,7 +251,7 @@ fn run_row(value: &Value, preferred_app: Option<&str>) -> Vec<String> {
         target_operation(value, preferred_app)
             .unwrap_or("-")
             .to_string(),
-        value["status"].as_str().unwrap_or("-").to_string(),
+        value["status"].to_string(),
         run_trigger_label(value),
         value["startedAt"]
             .as_str()
@@ -265,7 +279,12 @@ fn run_trigger_label(value: &Value) -> String {
     }
 }
 
-pub fn dispatch(client: &ApiClient, command: WorkflowCommands, format: Format) -> Result<()> {
+pub fn dispatch(
+    api: &ApiClient,
+    workflow: &WorkflowClient<SyncRestTransport>,
+    command: WorkflowCommands,
+    format: Format,
+) -> Result<()> {
     match command {
         WorkflowCommands::Runs { command } => match command {
             WorkflowRunCommands::List {
@@ -274,20 +293,20 @@ pub fn dispatch(client: &ApiClient, command: WorkflowCommands, format: Format) -
                 page_size,
                 page_token,
             } => list_runs(
-                client,
+                workflow,
                 app.as_deref(),
                 status.as_deref(),
                 page_size,
                 page_token.as_deref(),
                 format,
             ),
-            WorkflowRunCommands::Get { id } => get_run(client, &id, format),
+            WorkflowRunCommands::Get { id } => get_run(workflow, &id, format),
             WorkflowRunCommands::Cancel { id, reason } => {
-                cancel_run(client, &id, reason.as_deref(), format)
+                cancel_run(workflow, &id, reason.as_deref(), format)
             }
         },
         WorkflowCommands::Events { command } => match command {
-            WorkflowEventCommands::Deliver(args) => deliver_event(client, &args, format),
+            WorkflowEventCommands::Deliver(args) => deliver_event(api, &args, format),
         },
     }
 }
