@@ -124,11 +124,11 @@ use crate::public::generated::workflow::{
 };
 
 /// Transport-neutral client for the public gestaltd App surface.
-pub struct AgentClient<T: UnaryTransport> {
+pub struct AgentClient<T: Send + Sync> {
     transport: T,
 }
 
-impl<T: UnaryTransport> AgentClient<T> {
+impl<T: Send + Sync> AgentClient<T> {
     /// Creates a client over the given unary transport.
     pub fn new(transport: T) -> Self {
         Self { transport }
@@ -250,12 +250,118 @@ impl<T: UnaryTransport> AgentClient<T> {
     }
 }
 
+impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AgentClient<T> {
+    pub fn create_session_sync(
+        &self,
+        request: CreateAgentProviderSessionRequest,
+    ) -> Result<AgentSession, GestaltError> {
+        let wire = to_wire_create_agent_provider_session_request(request);
+        let mut wire_response = crate::generated::v1::AgentSession::default();
+        self.transport
+            .unary(&METHOD_AGENT_CREATE_SESSION, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_session(wire_response))
+    }
+
+    pub fn get_session_sync(
+        &self,
+        request: GetAgentProviderSessionRequest,
+    ) -> Result<AgentSession, GestaltError> {
+        let wire = to_wire_get_agent_provider_session_request(request);
+        let mut wire_response = crate::generated::v1::AgentSession::default();
+        self.transport
+            .unary(&METHOD_AGENT_GET_SESSION, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_session(wire_response))
+    }
+
+    pub fn list_sessions_sync(
+        &self,
+        request: ListAgentProviderSessionsRequest,
+    ) -> Result<ListAgentProviderSessionsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_sessions_request(request);
+        let mut wire_response = crate::generated::v1::ListAgentProviderSessionsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_SESSIONS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_agent_provider_sessions_response(
+            wire_response,
+        ))
+    }
+
+    pub fn update_session_sync(
+        &self,
+        request: UpdateAgentProviderSessionRequest,
+    ) -> Result<AgentSession, GestaltError> {
+        let wire = to_wire_update_agent_provider_session_request(request);
+        let mut wire_response = crate::generated::v1::AgentSession::default();
+        self.transport
+            .unary(&METHOD_AGENT_UPDATE_SESSION, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_session(wire_response))
+    }
+
+    pub fn create_turn_sync(
+        &self,
+        request: CreateAgentProviderTurnRequest,
+    ) -> Result<AgentTurn, GestaltError> {
+        let wire = to_wire_create_agent_provider_turn_request(request);
+        let mut wire_response = crate::generated::v1::AgentTurn::default();
+        self.transport
+            .unary(&METHOD_AGENT_CREATE_TURN, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_turn(wire_response))
+    }
+
+    pub fn get_turn_sync(
+        &self,
+        request: GetAgentProviderTurnRequest,
+    ) -> Result<AgentTurn, GestaltError> {
+        let wire = to_wire_get_agent_provider_turn_request(request);
+        let mut wire_response = crate::generated::v1::AgentTurn::default();
+        self.transport
+            .unary(&METHOD_AGENT_GET_TURN, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_turn(wire_response))
+    }
+
+    pub fn list_turns_sync(
+        &self,
+        request: ListAgentProviderTurnsRequest,
+    ) -> Result<ListAgentProviderTurnsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_turns_request(request);
+        let mut wire_response = crate::generated::v1::ListAgentProviderTurnsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_TURNS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_agent_provider_turns_response(wire_response))
+    }
+
+    pub fn cancel_turn_sync(
+        &self,
+        request: CancelAgentProviderTurnRequest,
+    ) -> Result<AgentTurn, GestaltError> {
+        let wire = to_wire_cancel_agent_provider_turn_request(request);
+        let mut wire_response = crate::generated::v1::AgentTurn::default();
+        self.transport
+            .unary(&METHOD_AGENT_CANCEL_TURN, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_turn(wire_response))
+    }
+
+    pub fn list_turn_events_sync(
+        &self,
+        request: ListAgentProviderTurnEventsRequest,
+    ) -> Result<ListAgentProviderTurnEventsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_turn_events_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListAgentProviderTurnEventsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_TURN_EVENTS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_agent_provider_turn_events_response(
+            wire_response,
+        ))
+    }
+}
+
 /// Transport-neutral client for the public gestaltd App surface.
-pub struct AppClient<T: UnaryTransport> {
+pub struct AppClient<T: Send + Sync> {
     transport: T,
 }
 
-impl<T: UnaryTransport> AppClient<T> {
+impl<T: Send + Sync> AppClient<T> {
     /// Creates a client over the given unary transport.
     pub fn new(transport: T) -> Self {
         Self { transport }
@@ -322,12 +428,67 @@ impl<T: UnaryTransport> AppClient<T> {
     }
 }
 
+impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AppClient<T> {
+    pub fn invoke_raw_sync(
+        &self,
+        request: AppInvokeRequest,
+    ) -> Result<OperationResult, GestaltError> {
+        let wire = to_wire_app_invoke_request(request);
+        let mut wire_response = crate::generated::v1::OperationResult::default();
+        self.transport
+            .unary(&METHOD_APP_INVOKE, &wire, &mut wire_response)?;
+        Ok(from_wire_operation_result(wire_response))
+    }
+
+    pub fn invoke_sync(&self, request: AppInvokeRequest) -> Result<serde_json::Value, InvokeError> {
+        let invoke_app = request.app.clone();
+        let invoke_operation = request.operation.clone();
+        let response = self.invoke_raw_sync(request)?;
+        decode_app_result(
+            invoke_app.as_str(),
+            invoke_operation.as_str(),
+            response.status,
+            &response.body,
+        )
+        .map_err(InvokeError::from)
+    }
+
+    pub fn invoke_graphql_sync(
+        &self,
+        request: AppInvokeGraphQLRequest,
+    ) -> Result<OperationResult, GestaltError> {
+        let wire = to_wire_app_invoke_graphql_request(request);
+        let mut wire_response = crate::generated::v1::OperationResult::default();
+        self.transport
+            .unary(&METHOD_APP_INVOKE_GRAPHQL, &wire, &mut wire_response)?;
+        Ok(from_wire_operation_result(wire_response))
+    }
+
+    /// `invoke_graphql_raw` is an alias for [`Self::invoke_graphql`].
+    pub fn invoke_graphql_raw_sync(
+        &self,
+        request: AppInvokeGraphQLRequest,
+    ) -> Result<OperationResult, GestaltError> {
+        self.invoke_graphql_sync(request)
+    }
+
+    pub fn invoke_graphql_decoded_sync(
+        &self,
+        request: AppInvokeGraphQLRequest,
+    ) -> Result<serde_json::Value, InvokeError> {
+        let invoke_app = request.app.clone();
+        let response = self.invoke_graphql_sync(request)?;
+        decode_graphql_result(invoke_app.as_str(), response.status, &response.body)
+            .map_err(InvokeError::from)
+    }
+}
+
 /// Transport-neutral client for the public gestaltd App surface.
-pub struct AuthorizationClient<T: UnaryTransport> {
+pub struct AuthorizationClient<T: Send + Sync> {
     transport: T,
 }
 
-impl<T: UnaryTransport> AuthorizationClient<T> {
+impl<T: Send + Sync> AuthorizationClient<T> {
     /// Creates a client over the given unary transport.
     pub fn new(transport: T) -> Self {
         Self { transport }
@@ -480,12 +641,140 @@ impl<T: UnaryTransport> AuthorizationClient<T> {
     }
 }
 
+impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AuthorizationClient<T> {
+    pub fn check_access_sync(
+        &self,
+        request: CheckAccessRequest,
+    ) -> Result<CheckAccessResponse, GestaltError> {
+        let wire = to_wire_check_access_request(request);
+        let mut wire_response = crate::generated::v1::CheckAccessResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_CHECK_ACCESS,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_check_access_response(wire_response))
+    }
+
+    pub fn check_access_many_sync(
+        &self,
+        request: CheckAccessManyRequest,
+    ) -> Result<CheckAccessManyResponse, GestaltError> {
+        let wire = to_wire_check_access_many_request(request);
+        let mut wire_response = crate::generated::v1::CheckAccessManyResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_CHECK_ACCESS_MANY,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_check_access_many_response(wire_response))
+    }
+
+    pub fn list_relationships_sync(
+        &self,
+        request: ListRelationshipsRequest,
+    ) -> Result<ListRelationshipsResponse, GestaltError> {
+        let wire = to_wire_list_relationships_request(request);
+        let mut wire_response = crate::generated::v1::ListRelationshipsResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_LIST_RELATIONSHIPS,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_list_relationships_response(wire_response))
+    }
+
+    pub fn add_relationship_sync(
+        &self,
+        request: AddRelationshipRequest,
+    ) -> Result<AddRelationshipResponse, GestaltError> {
+        let wire = to_wire_add_relationship_request(request);
+        let mut wire_response = crate::generated::v1::AddRelationshipResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_ADD_RELATIONSHIP,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_add_relationship_response(wire_response))
+    }
+
+    pub fn delete_relationship_sync(
+        &self,
+        request: DeleteRelationshipRequest,
+    ) -> Result<DeleteRelationshipResponse, GestaltError> {
+        let wire = to_wire_delete_relationship_request(request);
+        let mut wire_response = crate::generated::v1::DeleteRelationshipResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_DELETE_RELATIONSHIP,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_delete_relationship_response(wire_response))
+    }
+
+    pub fn set_authorization_state_sync(
+        &self,
+        request: SetAuthorizationStateRequest,
+    ) -> Result<SetAuthorizationStateResponse, GestaltError> {
+        let wire = to_wire_set_authorization_state_request(request);
+        let mut wire_response = crate::generated::v1::SetAuthorizationStateResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_SET_AUTHORIZATION_STATE,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_set_authorization_state_response(wire_response))
+    }
+
+    pub fn get_active_model_ref_sync(&self) -> Result<GetActiveModelRefResponse, GestaltError> {
+        let wire = Empty::default();
+        let mut wire_response = crate::generated::v1::GetActiveModelRefResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_GET_ACTIVE_MODEL_REF,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_get_active_model_ref_response(wire_response))
+    }
+
+    pub fn set_active_model_sync(
+        &self,
+        request: SetActiveModelRequest,
+    ) -> Result<SetActiveModelResponse, GestaltError> {
+        let wire = to_wire_set_active_model_request(request);
+        let mut wire_response = crate::generated::v1::SetActiveModelResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_SET_ACTIVE_MODEL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_set_active_model_response(wire_response))
+    }
+
+    pub fn list_active_model_resource_types_sync(
+        &self,
+        request: ListActiveModelResourceTypesRequest,
+    ) -> Result<ListActiveModelResourceTypesResponse, GestaltError> {
+        let wire = to_wire_list_active_model_resource_types_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListActiveModelResourceTypesResponse::default();
+        self.transport.unary(
+            &METHOD_AUTHORIZATION_LIST_ACTIVE_MODEL_RESOURCE_TYPES,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_list_active_model_resource_types_response(
+            wire_response,
+        ))
+    }
+}
+
 /// Transport-neutral client for the public gestaltd App surface.
-pub struct ExternalCredentialsClient<T: UnaryTransport> {
+pub struct ExternalCredentialsClient<T: Send + Sync> {
     transport: T,
 }
 
-impl<T: UnaryTransport> ExternalCredentialsClient<T> {
+impl<T: Send + Sync> ExternalCredentialsClient<T> {
     /// Creates a client over the given unary transport.
     pub fn new(transport: T) -> Self {
         Self { transport }
@@ -627,11 +916,11 @@ impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredenti
 }
 
 /// Transport-neutral client for the public gestaltd App surface.
-pub struct IdentityClient<T: UnaryTransport> {
+pub struct IdentityClient<T: Send + Sync> {
     transport: T,
 }
 
-impl<T: UnaryTransport> IdentityClient<T> {
+impl<T: Send + Sync> IdentityClient<T> {
     /// Creates a client over the given unary transport.
     pub fn new(transport: T) -> Self {
         Self { transport }
@@ -721,12 +1010,88 @@ impl<T: UnaryTransport> IdentityClient<T> {
     }
 }
 
+impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> IdentityClient<T> {
+    pub fn authorize_sync(
+        &self,
+        request: AuthorizeRequest,
+    ) -> Result<AuthorizeResponse, GestaltError> {
+        let wire = to_wire_authorize_request(request);
+        let mut wire_response = crate::generated::v1::AuthorizeResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_AUTHORIZE, &wire, &mut wire_response)?;
+        Ok(from_wire_authorize_response(wire_response))
+    }
+
+    pub fn token_sync(&self, request: TokenRequest) -> Result<TokenResponse, GestaltError> {
+        let wire = to_wire_token_request(request);
+        let mut wire_response = crate::generated::v1::TokenResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_TOKEN, &wire, &mut wire_response)?;
+        Ok(from_wire_token_response(wire_response))
+    }
+
+    pub fn introspect_sync(
+        &self,
+        request: IntrospectRequest,
+    ) -> Result<IntrospectResponse, GestaltError> {
+        let wire = to_wire_introspect_request(request);
+        let mut wire_response = crate::generated::v1::IntrospectResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_INTROSPECT, &wire, &mut wire_response)?;
+        Ok(from_wire_introspect_response(wire_response))
+    }
+
+    pub fn user_info_sync(
+        &self,
+        request: UserInfoRequest,
+    ) -> Result<UserInfoResponse, GestaltError> {
+        let wire = to_wire_user_info_request(request);
+        let mut wire_response = crate::generated::v1::UserInfoResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_USER_INFO, &wire, &mut wire_response)?;
+        Ok(from_wire_user_info_response(wire_response))
+    }
+
+    pub fn list_grants_sync(
+        &self,
+        request: ListGrantsRequest,
+    ) -> Result<ListGrantsResponse, GestaltError> {
+        let wire = to_wire_list_grants_request(request);
+        let mut wire_response = crate::generated::v1::ListGrantsResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_LIST_GRANTS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_grants_response(wire_response))
+    }
+
+    pub fn get_grant_sync(
+        &self,
+        request: GetGrantRequest,
+    ) -> Result<GetGrantResponse, GestaltError> {
+        let wire = to_wire_get_grant_request(request);
+        let mut wire_response = crate::generated::v1::GetGrantResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_GET_GRANT, &wire, &mut wire_response)?;
+        Ok(from_wire_get_grant_response(wire_response))
+    }
+
+    pub fn revoke_grant_sync(
+        &self,
+        request: RevokeGrantRequest,
+    ) -> Result<RevokeGrantResponse, GestaltError> {
+        let wire = to_wire_revoke_grant_request(request);
+        let mut wire_response = crate::generated::v1::RevokeGrantResponse::default();
+        self.transport
+            .unary(&METHOD_IDENTITY_REVOKE_GRANT, &wire, &mut wire_response)?;
+        Ok(from_wire_revoke_grant_response(wire_response))
+    }
+}
+
 /// Transport-neutral client for the public gestaltd App surface.
-pub struct IndexedDBClient<T: UnaryTransport> {
+pub struct IndexedDBClient<T: Send + Sync> {
     transport: T,
 }
 
-impl<T: UnaryTransport> IndexedDBClient<T> {
+impl<T: Send + Sync> IndexedDBClient<T> {
     /// Creates a client over the given unary transport.
     pub fn new(transport: T) -> Self {
         Self { transport }
@@ -964,11 +1329,11 @@ impl<T: crate::public::generated::unary_transport::GrpcCapable> IndexedDBClient<
 }
 
 /// Transport-neutral client for the public gestaltd App surface.
-pub struct WorkflowClient<T: UnaryTransport> {
+pub struct WorkflowClient<T: Send + Sync> {
     transport: T,
 }
 
-impl<T: UnaryTransport> WorkflowClient<T> {
+impl<T: Send + Sync> WorkflowClient<T> {
     /// Creates a client over the given unary transport.
     pub fn new(transport: T) -> Self {
         Self { transport }
@@ -1168,6 +1533,185 @@ impl<T: UnaryTransport> WorkflowClient<T> {
                 &mut wire_response,
             )
             .await?;
+        Ok(from_wire_signal_workflow_run_response(wire_response))
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> WorkflowClient<T> {
+    pub fn apply_definition_sync(
+        &self,
+        request: ApplyWorkflowProviderDefinitionRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_apply_workflow_provider_definition_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_APPLY_DEFINITION, &wire, &mut wire_response)?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub fn get_definition_sync(
+        &self,
+        request: GetWorkflowProviderDefinitionRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_get_workflow_provider_definition_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_DEFINITION, &wire, &mut wire_response)?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub fn list_definitions_sync(
+        &self,
+        request: ListWorkflowProviderDefinitionsRequest,
+    ) -> Result<ListWorkflowProviderDefinitionsResponse, GestaltError> {
+        let wire = to_wire_list_workflow_provider_definitions_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListWorkflowProviderDefinitionsResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_LIST_DEFINITIONS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_workflow_provider_definitions_response(
+            wire_response,
+        ))
+    }
+
+    pub fn set_definition_paused_sync(
+        &self,
+        request: SetWorkflowProviderDefinitionPausedRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_set_workflow_provider_definition_paused_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport.unary(
+            &METHOD_WORKFLOW_SET_DEFINITION_PAUSED,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub fn set_activation_paused_sync(
+        &self,
+        request: SetWorkflowProviderActivationPausedRequest,
+    ) -> Result<WorkflowDefinition, GestaltError> {
+        let wire = to_wire_set_workflow_provider_activation_paused_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowDefinition::default();
+        self.transport.unary(
+            &METHOD_WORKFLOW_SET_ACTIVATION_PAUSED,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_workflow_definition(wire_response))
+    }
+
+    pub fn delete_definition_sync(
+        &self,
+        request: DeleteWorkflowProviderDefinitionRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_workflow_provider_definition_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_WORKFLOW_DELETE_DEFINITION,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
+    }
+
+    pub fn start_run_sync(
+        &self,
+        request: StartWorkflowProviderRunRequest,
+    ) -> Result<WorkflowRun, GestaltError> {
+        let wire = to_wire_start_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowRun::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_START_RUN, &wire, &mut wire_response)?;
+        Ok(from_wire_workflow_run(wire_response))
+    }
+
+    pub fn list_runs_sync(
+        &self,
+        request: ListWorkflowProviderRunsRequest,
+    ) -> Result<ListWorkflowProviderRunsResponse, GestaltError> {
+        let wire = to_wire_list_workflow_provider_runs_request(request);
+        let mut wire_response = crate::generated::v1::ListWorkflowProviderRunsResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_LIST_RUNS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_workflow_provider_runs_response(
+            wire_response,
+        ))
+    }
+
+    pub fn get_run_sync(
+        &self,
+        request: GetWorkflowProviderRunRequest,
+    ) -> Result<WorkflowRun, GestaltError> {
+        let wire = to_wire_get_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowRun::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_RUN, &wire, &mut wire_response)?;
+        Ok(from_wire_workflow_run(wire_response))
+    }
+
+    pub fn get_run_events_sync(
+        &self,
+        request: GetWorkflowProviderRunEventsRequest,
+    ) -> Result<GetWorkflowProviderRunEventsResponse, GestaltError> {
+        let wire = to_wire_get_workflow_provider_run_events_request(request);
+        let mut wire_response =
+            crate::generated::v1::GetWorkflowProviderRunEventsResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_RUN_EVENTS, &wire, &mut wire_response)?;
+        Ok(from_wire_get_workflow_provider_run_events_response(
+            wire_response,
+        ))
+    }
+
+    pub fn get_run_output_sync(
+        &self,
+        request: GetWorkflowProviderRunOutputRequest,
+    ) -> Result<GetWorkflowProviderRunOutputResponse, GestaltError> {
+        let wire = to_wire_get_workflow_provider_run_output_request(request);
+        let mut wire_response =
+            crate::generated::v1::GetWorkflowProviderRunOutputResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_GET_RUN_OUTPUT, &wire, &mut wire_response)?;
+        Ok(from_wire_get_workflow_provider_run_output_response(
+            wire_response,
+        ))
+    }
+
+    pub fn cancel_run_sync(
+        &self,
+        request: CancelWorkflowProviderRunRequest,
+    ) -> Result<WorkflowRun, GestaltError> {
+        let wire = to_wire_cancel_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::WorkflowRun::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_CANCEL_RUN, &wire, &mut wire_response)?;
+        Ok(from_wire_workflow_run(wire_response))
+    }
+
+    pub fn signal_run_sync(
+        &self,
+        request: SignalWorkflowProviderRunRequest,
+    ) -> Result<SignalWorkflowRunResponse, GestaltError> {
+        let wire = to_wire_signal_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::SignalWorkflowRunResponse::default();
+        self.transport
+            .unary(&METHOD_WORKFLOW_SIGNAL_RUN, &wire, &mut wire_response)?;
+        Ok(from_wire_signal_workflow_run_response(wire_response))
+    }
+
+    pub fn signal_or_start_run_sync(
+        &self,
+        request: SignalOrStartWorkflowProviderRunRequest,
+    ) -> Result<SignalWorkflowRunResponse, GestaltError> {
+        let wire = to_wire_signal_or_start_workflow_provider_run_request(request);
+        let mut wire_response = crate::generated::v1::SignalWorkflowRunResponse::default();
+        self.transport.unary(
+            &METHOD_WORKFLOW_SIGNAL_OR_START_RUN,
+            &wire,
+            &mut wire_response,
+        )?;
         Ok(from_wire_signal_workflow_run_response(wire_response))
     }
 }
