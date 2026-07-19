@@ -6,21 +6,21 @@ import (
 	"testing"
 )
 
-func TestValidateMountedHTTPBindingRoutesRejectsAuthorizationNamespace(t *testing.T) {
+func TestValidateMountedHTTPBindingRoutesRejectsCoreRouteNamespace(t *testing.T) {
 	t.Parallel()
 
 	err := validateMountedHTTPBindingRoutes([]MountedHTTPBinding{
 		{
-			AppName: "authorization",
-			Name:    "check",
+			AppName: "tokens",
+			Name:    "issue",
 			Method:  http.MethodPost,
-			Path:    "/api/v1/authorization/check-access",
+			Path:    "/api/v1/tokens/issue",
 		},
 	}, nil)
 	if err == nil {
 		t.Fatal("validateMountedHTTPBindingRoutes returned nil, want error")
 	}
-	if got := err.Error(); !strings.Contains(got, `conflicts with core route namespace "/api/v1/authorization"`) {
-		t.Fatalf("error = %q, want authorization namespace conflict", got)
+	if got := err.Error(); !strings.Contains(got, `conflicts with core route namespace "/api/v1/tokens"`) {
+		t.Fatalf("error = %q, want tokens namespace conflict", got)
 	}
 }

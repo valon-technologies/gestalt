@@ -560,11 +560,11 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	resp, err := b.authorization.CheckAccess(ctx, accessRequest(b.providerKinds, p, providerName, operationID))
+	allowed, err := CheckSubjectAccess(ctx, b.authorization, accessRequest(b.providerKinds, p, providerName, operationID))
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
-	if resp == nil || !resp.GetAllowed() {
+	if !allowed {
 		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}
 	return nil
@@ -597,15 +597,9 @@ func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, provid
 		"client_id": strings.TrimSpace(p.ClientID),
 		"audience":  append([]string(nil), p.Audience...),
 	})
-	return &proto.CheckAccessRequest{
-		Subject: &proto.Subject{
-			Type:       "subject",
-			Id:         principal.EffectiveCredentialSubjectID(p),
-			Properties: properties,
-		},
-		Action:   &proto.Action{Name: strings.TrimSpace(action)},
-		Resource: AuthorizationResource(providerName, kinds),
-	}
+	req := SubjectAccessRequest(principal.EffectiveCredentialSubjectID(p), action, AuthorizationResource(providerName, kinds))
+	req.Subject.Properties = properties
+	return req
 }
 
 func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, providerName, connection string) core.ConnectionMode {

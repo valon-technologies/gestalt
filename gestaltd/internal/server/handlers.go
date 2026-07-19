@@ -173,42 +173,21 @@ func (s *Server) authorizeServiceAccountCredentialManagement(ctx context.Context
 	if s == nil || s.authorization == nil {
 		return fmt.Errorf("authorization provider is required")
 	}
-	subjectID := invokingPrincipalSubjectID(p)
+	subjectID := principal.EffectiveCredentialSubjectID(p)
 	if subjectID == "" {
 		return fmt.Errorf("not authenticated")
 	}
-	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
-		Subject: &proto.Subject{
-			Type: "subject",
-			Id:   subjectID,
-		},
-		Action: &proto.Action{Name: "manages"},
-		Resource: &proto.Resource{
-			Type: "service_account",
-			Id:   serviceAccountSubjectID,
-		},
-	})
+	allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, invocation.SubjectAccessRequest(subjectID, "manages", &proto.Resource{
+		Type: "service_account",
+		Id:   serviceAccountSubjectID,
+	}))
 	if err != nil {
 		return fmt.Errorf("service account credential management denied: %w", err)
 	}
-	if resp == nil || !resp.GetAllowed() {
+	if !allowed {
 		return fmt.Errorf("service account credential management denied")
 	}
 	return nil
-}
-
-func invokingPrincipalSubjectID(p *principal.Principal) string {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
-	}
-	if subjectID := strings.TrimSpace(p.SubjectID); subjectID != "" {
-		return subjectID
-	}
-	if userID := strings.TrimSpace(p.UserID); userID != "" {
-		return principal.UserSubjectID(userID)
-	}
-	return ""
 }
 
 func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
