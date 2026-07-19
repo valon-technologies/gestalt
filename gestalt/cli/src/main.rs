@@ -34,8 +34,15 @@ fn run() -> anyhow::Result<()> {
             ConfigCommands::List => commands::config::list(format),
         },
         Commands::Authorization { command } => {
-            let client = ApiClient::from_env(url)?;
-            commands::authorization::dispatch(&client, command, format)
+            let api = ApiClient::from_env(url)?;
+            let transport = gestalt_sdk::public::rest_transport::SyncRestTransport::new(
+                api.base_url(),
+                std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
+            )
+            .with_timeout(std::time::Duration::from_secs(30));
+            let authz =
+                gestalt_sdk::public::generated::app_client::AuthorizationClient::new(transport);
+            commands::authorization::dispatch(&authz, command, format)
         }
         Commands::App { command } => dispatch_app_command(command, url, format),
         Commands::Invoke(args) => dispatch_app_command(AppCommands::Invoke(args), url, format),
