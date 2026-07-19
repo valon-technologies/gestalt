@@ -16,16 +16,8 @@ type providerServer struct {
 	provider core.AuthorizationProvider
 }
 
-type ProviderServerOption func(*providerServer)
-
-func NewProviderServer(provider core.AuthorizationProvider, opts ...ProviderServerOption) proto.AuthorizationServer {
-	s := &providerServer{provider: provider}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(s)
-		}
-	}
-	return s
+func NewProviderServer(provider core.AuthorizationProvider) proto.AuthorizationServer {
+	return &providerServer{provider: provider}
 }
 
 func (s *providerServer) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
