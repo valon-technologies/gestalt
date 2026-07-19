@@ -47,6 +47,22 @@ func invokeDirectUnary(
 	if err != nil {
 		return err
 	}
+	return invokeDirectUnaryHandler(ctx, endpoint.Server, method, fullMethod, req, reply, opts)
+}
+
+// invokeDirectUnaryHandler dispatches a unary RPC through a pre-resolved method
+// descriptor and server. It is the registry-aware dispatch path: the KindRegistry
+// resolves (kind, full method) to a method descriptor and server, then hands them
+// here. The deadline/cancellation parity contract is identical to invokeDirectUnary.
+func invokeDirectUnaryHandler(
+	ctx context.Context,
+	server any,
+	method grpc.MethodDesc,
+	fullMethod string,
+	req any,
+	reply any,
+	opts []grpc.CallOption,
+) error {
 	handlerCtx, transportStream := withDirectUnaryTransportStream(ctx, fullMethod)
 	dec := func(target any) error { return assignReply(target, req) }
 	type unaryResult struct {
@@ -60,7 +76,7 @@ func invokeDirectUnary(
 				resultCh <- unaryResult{err: status.Errorf(codes.Internal, "provider gateway: handler panic: %v", r)}
 			}
 		}()
-		resp, err := method.Handler(endpoint.Server, handlerCtx, dec, nil)
+		resp, err := method.Handler(server, handlerCtx, dec, nil)
 		resultCh <- unaryResult{resp: resp, err: err}
 	}()
 	select {

@@ -72,9 +72,32 @@ func (c *targetConn) Invoke(ctx context.Context, method string, args any, reply 
 		return err
 	}
 	handlerCtx := directHandlerContext(ctx)
-	invokeErr := invokeDirectUnary(handlerCtx, *endpoint, method, args, reply, opts)
+	invokeErr := c.dispatchUnary(handlerCtx, *endpoint, method, args, reply, opts)
 	recordProviderGatewayOperation(ctx, startedAt, invokeErr, metricReq, transportPath)
 	return invokeErr
+}
+
+// dispatchUnary selects the registry-aware dispatch path when a KindRegistry is
+// attached, falling back to the ServiceDesc-based path otherwise. When the
+// registry is attached it is authoritative for method resolution: a full method
+// it does not map (or that belongs to a different kind than the target) returns
+// Unimplemented, which is what makes the future PG-7 allowlist safe by
+// construction. The per-target instance server wins over the kind's default
+// server so direct instances (e.g. individual app providers) dispatch to their
+// own implementation.
+func (c *targetConn) dispatchUnary(ctx context.Context, endpoint DirectEndpoint, fullMethod string, req any, reply any, opts []grpc.CallOption) error {
+	if c.gateway.kinds == nil {
+		return invokeDirectUnary(ctx, endpoint, fullMethod, req, reply, opts)
+	}
+	km, ok := c.gateway.kinds.Lookup(fullMethod)
+	if !ok || km.Kind != c.target.Kind {
+		return status.Errorf(codes.Unimplemented, "provider gateway: unknown method %q", fullMethod)
+	}
+	server := endpoint.Server
+	if server == nil {
+		server = km.Server
+	}
+	return invokeDirectUnaryHandler(ctx, server, km.Method, fullMethod, req, reply, opts)
 }
 
 // NewStream returns Unimplemented: streaming routes move to PG-5 (issue-148).
@@ -89,16 +112,36 @@ func (c *targetConn) NewStream(ctx context.Context, _ *grpc.StreamDesc, method s
 type routingGateway struct {
 	registry      *LocalRegistry
 	authorization AuthorizationProvider
+	kinds         *KindRegistry
+}
+
+// RoutingGatewayOption configures a routing gateway at construction.
+type RoutingGatewayOption func(*routingGateway)
+
+// WithKindRegistry attaches a KindRegistry as the authoritative method
+// resolver for the direct route. When attached, dispatch consults
+// KindRegistry.Lookup for the method descriptor and kind's default server; the
+// per-target instance server still wins when non-nil. Without an attached
+// registry the gateway uses each DirectEndpoint's ServiceDesc, as in PG-1.
+func WithKindRegistry(kinds *KindRegistry) RoutingGatewayOption {
+	return func(g *routingGateway) { g.kinds = kinds }
 }
 
 // NewRoutingGateway returns a ProviderGateway data-plane implementation. A nil
 // authorization provider skips the authorization step (optional-provider
 // convention); a configured provider is consulted for non-authorization kinds.
-func NewRoutingGateway(registry *LocalRegistry, authorization AuthorizationProvider) Gateway {
+// Options attach the kind registry and future data-plane seams.
+func NewRoutingGateway(registry *LocalRegistry, authorization AuthorizationProvider, opts ...RoutingGatewayOption) Gateway {
 	if registry == nil {
 		panic("provider gateway: local registry is required")
 	}
-	return &routingGateway{registry: registry, authorization: authorization}
+	g := &routingGateway{registry: registry, authorization: authorization}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(g)
+		}
+	}
+	return g
 }
 
 func (g *routingGateway) Conn(target ProviderTarget) grpc.ClientConnInterface {
