@@ -22,7 +22,12 @@ fn target_app_step<'a>(
     let steps = value.get("target")?.get("steps")?.as_array()?;
     let mut first_app_step = None;
     for step in steps {
-        let Some(app_step) = step.get("app").and_then(Value::as_object) else {
+        let Some(app_step) = step
+            .get("action")
+            .and_then(|a| a.get("App"))
+            .or_else(|| step.get("app"))
+            .and_then(Value::as_object)
+        else {
             continue;
         };
         if first_app_step.is_none() {
