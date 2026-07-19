@@ -5,8 +5,8 @@
     "rust",
     "typescript"
   ],
-  "grpcMethodCount": 69,
-  "restMethodCount": 41,
+  "grpcMethodCount": 71,
+  "restMethodCount": 51,
   "methods": [
     {
       "service": "Agent",
@@ -207,6 +207,48 @@
     },
     {
       "service": "Agent",
+      "method": "ListInteractions",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/agent/turns/{turn_id}/interactions",
+      "restPathFields": [
+        {
+          "name": "turn_id",
+          "jsonName": "turnId"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "provider_name",
+          "jsonName": "providerName"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/ListInteractions",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "ListInteractions"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "list_interactions"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "list_interactions"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "listInteractions"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
       "method": "ListSessions",
       "streamingKind": "unary",
       "restVerb": "GET",
@@ -362,6 +404,47 @@
         "typescript": {
           "service": "AgentClient",
           "method": "listTurns"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "ResolveInteraction",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/agent/turns/{turn_id}/interactions/{interaction_id}:resolve",
+      "restBody": "*",
+      "restPathFields": [
+        {
+          "name": "turn_id",
+          "jsonName": "turnId"
+        },
+        {
+          "name": "interaction_id",
+          "jsonName": "interactionId"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.Agent/ResolveInteraction",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "ResolveInteraction"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "resolve_interaction"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "resolve_interaction"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "resolveInteraction"
         }
       },
       "fill": [
@@ -759,6 +842,9 @@
       "service": "ExternalCredentials",
       "method": "CreateCredential",
       "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/external-credentials/credentials",
+      "restBody": "*",
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/CreateCredential",
       "symbols": {
         "go": {
@@ -783,6 +869,14 @@
       "service": "ExternalCredentials",
       "method": "DeleteCredential",
       "streamingKind": "unary",
+      "restVerb": "DELETE",
+      "restPath": "/api/v2/external-credentials/credentials/{id}",
+      "restPathFields": [
+        {
+          "name": "id",
+          "jsonName": "id"
+        }
+      ],
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/DeleteCredential",
       "symbols": {
         "go": {
@@ -807,6 +901,9 @@
       "service": "ExternalCredentials",
       "method": "ExchangeCredential",
       "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/external-credentials/credentials:exchange",
+      "restBody": "*",
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ExchangeCredential",
       "symbols": {
         "go": {
@@ -831,6 +928,24 @@
       "service": "ExternalCredentials",
       "method": "GetCredential",
       "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/external-credentials/credentials/{subject}",
+      "restPathFields": [
+        {
+          "name": "subject",
+          "jsonName": "subject"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "audience",
+          "jsonName": "audience"
+        },
+        {
+          "name": "qualifier",
+          "jsonName": "qualifier"
+        }
+      ],
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/GetCredential",
       "symbols": {
         "go": {
@@ -855,6 +970,18 @@
       "service": "ExternalCredentials",
       "method": "ListCredentials",
       "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/external-credentials/credentials",
+      "restQueryFields": [
+        {
+          "name": "subject",
+          "jsonName": "subject"
+        },
+        {
+          "name": "audience",
+          "jsonName": "audience"
+        }
+      ],
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ListCredentials",
       "symbols": {
         "go": {
@@ -879,6 +1006,9 @@
       "service": "ExternalCredentials",
       "method": "ResolveCredential",
       "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/external-credentials/credentials:resolve",
+      "restBody": "*",
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ResolveCredential",
       "symbols": {
         "go": {
@@ -903,6 +1033,9 @@
       "service": "ExternalCredentials",
       "method": "UpsertCredential",
       "streamingKind": "unary",
+      "restVerb": "PUT",
+      "restPath": "/api/v2/external-credentials/credentials",
+      "restBody": "*",
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/UpsertCredential",
       "symbols": {
         "go": {
@@ -927,6 +1060,9 @@
       "service": "ExternalCredentials",
       "method": "ValidateCredentialConfig",
       "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/external-credentials/config:validate",
+      "restBody": "*",
       "grpcPath": "/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig",
       "symbols": {
         "go": {

@@ -120,11 +120,11 @@ func TestPublicSurfaceMethodCounts(t *testing.T) {
 	schema := realSchema(t)
 	view := publicsurface.Build(schema)
 
-	if got := publicsurface.GRPCMethodCount(view); got != 69 {
-		t.Errorf("public gRPC methods = %d, want 69", got)
+	if got := publicsurface.GRPCMethodCount(view); got != 71 {
+		t.Errorf("public gRPC methods = %d, want 71", got)
 	}
-	if got := publicsurface.RESTMethodCount(view); got != 41 {
-		t.Errorf("public REST methods = %d, want 41", got)
+	if got := publicsurface.RESTMethodCount(view); got != 51 {
+		t.Errorf("public REST methods = %d, want 51", got)
 	}
 }
 

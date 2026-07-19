@@ -68,6 +68,8 @@ GET /api/v2/agent/sessions/{session_id}/turns /gestalt.provider.v1.Agent/ListTur
 GET /api/v2/agent/sessions/{session_id}/turns/{turn_id} /gestalt.provider.v1.Agent/GetTurn
 POST /api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel /gestalt.provider.v1.Agent/CancelTurn
 GET /api/v2/agent/sessions/{session_id}/turns/{turn_id}/events /gestalt.provider.v1.Agent/ListTurnEvents
+GET /api/v2/agent/turns/{turn_id}/interactions /gestalt.provider.v1.Agent/ListInteractions
+POST /api/v2/agent/turns/{turn_id}/interactions/{interaction_id}:resolve /gestalt.provider.v1.Agent/ResolveInteraction
 POST /api/v2/workflow/definitions:apply /gestalt.provider.v1.Workflow/ApplyDefinition
 GET /api/v2/workflow/definitions /gestalt.provider.v1.Workflow/ListDefinitions
 GET /api/v2/workflow/definitions/{definition_id} /gestalt.provider.v1.Workflow/GetDefinition
@@ -98,6 +100,14 @@ GET /api/v2/identity/userinfo /gestalt.provider.v1.Identity/UserInfo
 GET /api/v2/identity/grants /gestalt.provider.v1.Identity/ListGrants
 GET /api/v2/identity/grants/{grant_id} /gestalt.provider.v1.Identity/GetGrant
 DELETE /api/v2/identity/grants/{grant_id} /gestalt.provider.v1.Identity/RevokeGrant
+POST /api/v2/external-credentials/credentials /gestalt.provider.v1.ExternalCredentials/CreateCredential
+PUT /api/v2/external-credentials/credentials /gestalt.provider.v1.ExternalCredentials/UpsertCredential
+GET /api/v2/external-credentials/credentials/{subject} /gestalt.provider.v1.ExternalCredentials/GetCredential
+GET /api/v2/external-credentials/credentials /gestalt.provider.v1.ExternalCredentials/ListCredentials
+DELETE /api/v2/external-credentials/credentials/{id} /gestalt.provider.v1.ExternalCredentials/DeleteCredential
+POST /api/v2/external-credentials/config:validate /gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig
+POST /api/v2/external-credentials/credentials:resolve /gestalt.provider.v1.ExternalCredentials/ResolveCredential
+POST /api/v2/external-credentials/credentials:exchange /gestalt.provider.v1.ExternalCredentials/ExchangeCredential
 `), "\n")
 	slices.Sort(got)
 	slices.Sort(want)
@@ -136,8 +146,6 @@ func TestRegistryDoesNotExposeInternalMethods(t *testing.T) {
 
 	internal := []string{
 		gestaltproto.Agent_GetInteraction_FullMethodName,
-		gestaltproto.Agent_ListInteractions_FullMethodName,
-		gestaltproto.Agent_ResolveInteraction_FullMethodName,
 		gestaltproto.Agent_GetCapabilities_FullMethodName,
 		gestaltproto.AppProvider_GetMetadata_FullMethodName,
 	}

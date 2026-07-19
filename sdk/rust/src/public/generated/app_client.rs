@@ -3,12 +3,14 @@
 //! Generated transport-neutral App client for the public gestaltd surface.
 
 use crate::public::generated::agent::{
-    AgentSession, AgentTurn, CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
-    CreateAgentProviderTurnRequest, GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    AgentInteraction, AgentSession, AgentTurn, CancelAgentProviderTurnRequest,
+    CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest,
+    GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
-    UpdateAgentProviderSessionRequest,
+    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
 };
 use crate::public::generated::app::{AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult};
 use crate::public::generated::authorization::{
@@ -20,13 +22,17 @@ use crate::public::generated::authorization::{
     SetAuthorizationStateResponse,
 };
 use crate::public::generated::codec::agent::{
-    from_wire_agent_session, from_wire_agent_turn, from_wire_list_agent_provider_sessions_response,
+    from_wire_agent_interaction, from_wire_agent_session, from_wire_agent_turn,
+    from_wire_list_agent_provider_interactions_response,
+    from_wire_list_agent_provider_sessions_response,
     from_wire_list_agent_provider_turn_events_response,
     from_wire_list_agent_provider_turns_response, to_wire_cancel_agent_provider_turn_request,
     to_wire_create_agent_provider_session_request, to_wire_create_agent_provider_turn_request,
     to_wire_get_agent_provider_session_request, to_wire_get_agent_provider_turn_request,
-    to_wire_list_agent_provider_sessions_request, to_wire_list_agent_provider_turn_events_request,
-    to_wire_list_agent_provider_turns_request, to_wire_update_agent_provider_session_request,
+    to_wire_list_agent_provider_interactions_request, to_wire_list_agent_provider_sessions_request,
+    to_wire_list_agent_provider_turn_events_request, to_wire_list_agent_provider_turns_request,
+    to_wire_resolve_agent_provider_interaction_request,
+    to_wire_update_agent_provider_session_request,
 };
 use crate::public::generated::codec::app::{
     from_wire_operation_result, to_wire_app_invoke_graphql_request, to_wire_app_invoke_request,
@@ -248,6 +254,33 @@ impl<T: UnaryTransport> AgentClient<T> {
             wire_response,
         ))
     }
+
+    pub async fn list_interactions(
+        &self,
+        request: ListAgentProviderInteractionsRequest,
+    ) -> Result<ListAgentProviderInteractionsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_interactions_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListAgentProviderInteractionsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_INTERACTIONS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_agent_provider_interactions_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn resolve_interaction(
+        &self,
+        request: ResolveAgentProviderInteractionRequest,
+    ) -> Result<AgentInteraction, GestaltError> {
+        let wire = to_wire_resolve_agent_provider_interaction_request(request);
+        let mut wire_response = crate::generated::v1::AgentInteraction::default();
+        self.transport
+            .unary(&METHOD_AGENT_RESOLVE_INTERACTION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_interaction(wire_response))
+    }
 }
 
 impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AgentClient<T> {
@@ -353,6 +386,31 @@ impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AgentClie
         Ok(from_wire_list_agent_provider_turn_events_response(
             wire_response,
         ))
+    }
+
+    pub fn list_interactions_sync(
+        &self,
+        request: ListAgentProviderInteractionsRequest,
+    ) -> Result<ListAgentProviderInteractionsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_interactions_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListAgentProviderInteractionsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_INTERACTIONS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_agent_provider_interactions_response(
+            wire_response,
+        ))
+    }
+
+    pub fn resolve_interaction_sync(
+        &self,
+        request: ResolveAgentProviderInteractionRequest,
+    ) -> Result<AgentInteraction, GestaltError> {
+        let wire = to_wire_resolve_agent_provider_interaction_request(request);
+        let mut wire_response = crate::generated::v1::AgentInteraction::default();
+        self.transport
+            .unary(&METHOD_AGENT_RESOLVE_INTERACTION, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_interaction(wire_response))
     }
 }
 
@@ -781,7 +839,7 @@ impl<T: Send + Sync> ExternalCredentialsClient<T> {
     }
 }
 
-impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredentialsClient<T> {
+impl<T: UnaryTransport> ExternalCredentialsClient<T> {
     pub async fn create_credential(
         &self,
         request: CreateExternalCredentialRequest,
@@ -909,6 +967,126 @@ impl<T: crate::public::generated::unary_transport::GrpcCapable> ExternalCredenti
                 &mut wire_response,
             )
             .await?;
+        Ok(from_wire_exchange_external_credential_response(
+            wire_response,
+        ))
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::SyncUnaryTransport>
+    ExternalCredentialsClient<T>
+{
+    pub fn create_credential_sync(
+        &self,
+        request: CreateExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_create_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_CREATE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub fn upsert_credential_sync(
+        &self,
+        request: UpsertExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_upsert_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_UPSERT_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub fn get_credential_sync(
+        &self,
+        request: GetExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let wire = to_wire_get_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExternalCredential::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_GET_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_external_credential(wire_response))
+    }
+
+    pub fn list_credentials_sync(
+        &self,
+        request: ListExternalCredentialsRequest,
+    ) -> Result<ListExternalCredentialsResponse, GestaltError> {
+        let wire = to_wire_list_external_credentials_request(request);
+        let mut wire_response = crate::generated::v1::ListExternalCredentialsResponse::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_LIST_CREDENTIALS,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_list_external_credentials_response(wire_response))
+    }
+
+    pub fn delete_credential_sync(
+        &self,
+        request: DeleteExternalCredentialRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_external_credential_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_DELETE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
+    }
+
+    pub fn validate_credential_config_sync(
+        &self,
+        request: ValidateExternalCredentialConfigRequest,
+    ) -> Result<(), GestaltError> {
+        let wire = to_wire_validate_external_credential_config_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_VALIDATE_CREDENTIAL_CONFIG,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
+    }
+
+    pub fn resolve_credential_sync(
+        &self,
+        request: ResolveExternalCredentialRequest,
+    ) -> Result<ResolveExternalCredentialResponse, GestaltError> {
+        let wire = to_wire_resolve_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ResolveExternalCredentialResponse::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_RESOLVE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_resolve_external_credential_response(
+            wire_response,
+        ))
+    }
+
+    pub fn exchange_credential_sync(
+        &self,
+        request: ExchangeExternalCredentialRequest,
+    ) -> Result<ExchangeExternalCredentialResponse, GestaltError> {
+        let wire = to_wire_exchange_external_credential_request(request);
+        let mut wire_response = crate::generated::v1::ExchangeExternalCredentialResponse::default();
+        self.transport.unary(
+            &METHOD_EXTERNAL_CREDENTIALS_EXCHANGE_CREDENTIAL,
+            &wire,
+            &mut wire_response,
+        )?;
         Ok(from_wire_exchange_external_credential_response(
             wire_response,
         ))

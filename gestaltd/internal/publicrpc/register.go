@@ -52,7 +52,7 @@ func (s Servers) registrations() []serverRegistration {
 		{s.IndexedDB, proto.IndexedDB_ServiceDesc, nil},
 		{s.Identity, proto.Identity_ServiceDesc, proto.RegisterIdentityHandler},
 		{s.Authorization, proto.Authorization_ServiceDesc, proto.RegisterAuthorizationHandler},
-		{s.ExternalCredentials, proto.ExternalCredentials_ServiceDesc, nil},
+		{s.ExternalCredentials, proto.ExternalCredentials_ServiceDesc, proto.RegisterExternalCredentialsHandler},
 	}
 }
 
@@ -72,7 +72,7 @@ func RegisterPublicServer(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDes
 
 // RegisterRESTGateway registers generated /api/v2 handlers that dispatch through
 // conn. IndexedDB and ExternalCredentials are intentionally excluded because
-// they have no registerREST handler.
+// IndexedDB has no registerREST handler.
 func RegisterRESTGateway(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn, servers Servers) error {
 	if mux == nil || conn == nil {
 		return nil

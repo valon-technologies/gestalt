@@ -1,6 +1,6 @@
 # Public API availability
 
-Generated from the public surface manifest (69 gRPC methods, 41 REST methods).
+Generated from the public surface manifest (71 gRPC methods, 51 REST methods).
 
 | Service | Method | REST | Go | Python | Rust | TypeScript |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -9,9 +9,11 @@ Generated from the public surface manifest (69 gRPC methods, 41 REST methods).
 | Agent | CreateTurn | POST /api/v2/agent/sessions/{session_id}/turns | AgentClient.CreateTurn | AgentClient.create_turn | AgentClient.create_turn | AgentClient.createTurn |
 | Agent | GetSession | GET /api/v2/agent/sessions/{session_id} | AgentClient.GetSession | AgentClient.get_session | AgentClient.get_session | AgentClient.getSession |
 | Agent | GetTurn | GET /api/v2/agent/sessions/{session_id}/turns/{turn_id} | AgentClient.GetTurn | AgentClient.get_turn | AgentClient.get_turn | AgentClient.getTurn |
+| Agent | ListInteractions | GET /api/v2/agent/turns/{turn_id}/interactions | AgentClient.ListInteractions | AgentClient.list_interactions | AgentClient.list_interactions | AgentClient.listInteractions |
 | Agent | ListSessions | GET /api/v2/agent/sessions | AgentClient.ListSessions | AgentClient.list_sessions | AgentClient.list_sessions | AgentClient.listSessions |
 | Agent | ListTurnEvents | GET /api/v2/agent/sessions/{session_id}/turns/{turn_id}/events | AgentClient.ListTurnEvents | AgentClient.list_turn_events | AgentClient.list_turn_events | AgentClient.listTurnEvents |
 | Agent | ListTurns | GET /api/v2/agent/sessions/{session_id}/turns | AgentClient.ListTurns | AgentClient.list_turns | AgentClient.list_turns | AgentClient.listTurns |
+| Agent | ResolveInteraction | POST /api/v2/agent/turns/{turn_id}/interactions/{interaction_id}:resolve | AgentClient.ResolveInteraction | AgentClient.resolve_interaction | AgentClient.resolve_interaction | AgentClient.resolveInteraction |
 | Agent | UpdateSession | PATCH /api/v2/agent/sessions/{session_id} | AgentClient.UpdateSession | AgentClient.update_session | AgentClient.update_session | AgentClient.updateSession |
 | App | Invoke | POST /api/v2/app/{app}/operations/{operation} | AppClient.Invoke | AppClient.invoke | AppClient.invoke | AppClient.invoke |
 | App | InvokeGraphQL | POST /api/v2/app/{app}/graphql | AppClient.InvokeGraphQL | AppClient.invoke_graphql | AppClient.invoke_graphql | AppClient.invokeGraphQL |
@@ -24,14 +26,14 @@ Generated from the public surface manifest (69 gRPC methods, 41 REST methods).
 | Authorization | ListRelationships | GET /api/v2/authorization/relationships | AuthorizationClient.ListRelationships | AuthorizationClient.list_relationships | AuthorizationClient.list_relationships | AuthorizationClient.listRelationships |
 | Authorization | SetActiveModel | PUT /api/v2/authorization/models/active | AuthorizationClient.SetActiveModel | AuthorizationClient.set_active_model | AuthorizationClient.set_active_model | AuthorizationClient.setActiveModel |
 | Authorization | SetAuthorizationState | PUT /api/v2/authorization/state | AuthorizationClient.SetAuthorizationState | AuthorizationClient.set_authorization_state | AuthorizationClient.set_authorization_state | AuthorizationClient.setAuthorizationState |
-| ExternalCredentials | CreateCredential | gRPC only | ExternalCredentialsClient.CreateCredential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.createCredential |
-| ExternalCredentials | DeleteCredential | gRPC only | ExternalCredentialsClient.DeleteCredential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.deleteCredential |
-| ExternalCredentials | ExchangeCredential | gRPC only | ExternalCredentialsClient.ExchangeCredential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchangeCredential |
-| ExternalCredentials | GetCredential | gRPC only | ExternalCredentialsClient.GetCredential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.getCredential |
-| ExternalCredentials | ListCredentials | gRPC only | ExternalCredentialsClient.ListCredentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.listCredentials |
-| ExternalCredentials | ResolveCredential | gRPC only | ExternalCredentialsClient.ResolveCredential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolveCredential |
-| ExternalCredentials | UpsertCredential | gRPC only | ExternalCredentialsClient.UpsertCredential | ExternalCredentialsClient.upsert_credential | ExternalCredentialsClient.upsert_credential | ExternalCredentialsClient.upsertCredential |
-| ExternalCredentials | ValidateCredentialConfig | gRPC only | ExternalCredentialsClient.ValidateCredentialConfig | ExternalCredentialsClient.validate_credential_config | ExternalCredentialsClient.validate_credential_config | ExternalCredentialsClient.validateCredentialConfig |
+| ExternalCredentials | CreateCredential | POST /api/v2/external-credentials/credentials | ExternalCredentialsClient.CreateCredential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.create_credential | ExternalCredentialsClient.createCredential |
+| ExternalCredentials | DeleteCredential | DELETE /api/v2/external-credentials/credentials/{id} | ExternalCredentialsClient.DeleteCredential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.delete_credential | ExternalCredentialsClient.deleteCredential |
+| ExternalCredentials | ExchangeCredential | POST /api/v2/external-credentials/credentials:exchange | ExternalCredentialsClient.ExchangeCredential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchange_credential | ExternalCredentialsClient.exchangeCredential |
+| ExternalCredentials | GetCredential | GET /api/v2/external-credentials/credentials/{subject} | ExternalCredentialsClient.GetCredential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.get_credential | ExternalCredentialsClient.getCredential |
+| ExternalCredentials | ListCredentials | GET /api/v2/external-credentials/credentials | ExternalCredentialsClient.ListCredentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.list_credentials | ExternalCredentialsClient.listCredentials |
+| ExternalCredentials | ResolveCredential | POST /api/v2/external-credentials/credentials:resolve | ExternalCredentialsClient.ResolveCredential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolve_credential | ExternalCredentialsClient.resolveCredential |
+| ExternalCredentials | UpsertCredential | PUT /api/v2/external-credentials/credentials | ExternalCredentialsClient.UpsertCredential | ExternalCredentialsClient.upsert_credential | ExternalCredentialsClient.upsert_credential | ExternalCredentialsClient.upsertCredential |
+| ExternalCredentials | ValidateCredentialConfig | POST /api/v2/external-credentials/config:validate | ExternalCredentialsClient.ValidateCredentialConfig | ExternalCredentialsClient.validate_credential_config | ExternalCredentialsClient.validate_credential_config | ExternalCredentialsClient.validateCredentialConfig |
 | Identity | Authorize | POST /api/v2/identity/authorize | IdentityClient.Authorize | IdentityClient.authorize | IdentityClient.authorize | IdentityClient.authorize |
 | Identity | GetGrant | GET /api/v2/identity/grants/{grant_id} | IdentityClient.GetGrant | IdentityClient.get_grant | IdentityClient.get_grant | IdentityClient.getGrant |
 | Identity | Introspect | POST /api/v2/identity/introspect | IdentityClient.Introspect | IdentityClient.introspect | IdentityClient.introspect | IdentityClient.introspect |

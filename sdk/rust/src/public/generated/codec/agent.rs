@@ -6,18 +6,20 @@
 
 use crate::generated::v1;
 use crate::public::generated::agent::{
-    AgentCatalogToolConfig, AgentMessage, AgentMessagePart, AgentMessagePartImageRef,
-    AgentMessagePartToolCall, AgentMessagePartToolResult, AgentNoTools, AgentOutput,
-    AgentOutputKind, AgentSession, AgentSessionStartConfig, AgentSessionStartHook,
+    AgentCatalogToolConfig, AgentInteraction, AgentMessage, AgentMessagePart,
+    AgentMessagePartImageRef, AgentMessagePartToolCall, AgentMessagePartToolResult, AgentNoTools,
+    AgentOutput, AgentOutputKind, AgentSession, AgentSessionStartConfig, AgentSessionStartHook,
     AgentSessionStartHookOutput, AgentStructuredOutput, AgentTextOutput, AgentToolConfig,
     AgentToolConfigSource, AgentTurn, AgentTurnDisplay, AgentTurnEvent, AgentTurnOutput,
     AgentTurnStructuredOutput, AgentTurnTextOutput, AgentWorkspace, AgentWorkspaceGitCheckout,
     CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
     CreateAgentProviderTurnRequest, GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse, ListedAgentTool,
-    PreparedAgentWorkspace, UpdateAgentProviderSessionRequest,
+    PreparedAgentWorkspace, ResolveAgentProviderInteractionRequest,
+    UpdateAgentProviderSessionRequest,
 };
 use crate::public::generated::codec::app::{
     decode_wire_agent_tool_ref_json, decode_wire_operation_annotations_json,
@@ -239,6 +241,229 @@ pub(crate) fn decode_wire_agent_catalog_tool_config_json(
                 .map(|item| decode_wire_listed_agent_tool_json(item))
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Converts a wire `AgentInteraction` to its native message.
+pub(crate) fn from_wire_agent_interaction(value: v1::AgentInteraction) -> AgentInteraction {
+    AgentInteraction {
+        id: value.id,
+        r#type: value.r#type,
+        state: value.state,
+        title: value.title,
+        prompt: value.prompt,
+        request: value.request.map(from_wire_struct),
+        resolution: value.resolution.map(from_wire_struct),
+        created_at: value.created_at.map(from_wire_timestamp),
+        resolved_at: value.resolved_at.map(from_wire_timestamp),
+        turn_id: value.turn_id,
+        session_id: value.session_id,
+    }
+}
+
+/// Encodes a wire `AgentInteraction` as protobuf JSON.
+pub(crate) fn encode_wire_agent_interaction_json(
+    value: &v1::AgentInteraction,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.id.is_empty() {
+        object.insert("id".into(), serde_json::Value::String(value.id.to_string()));
+    }
+    if value.r#type != 0 {
+        object.insert("type".into(), {
+            let v = value.r#type;
+            if let Some(name) = match value.r#type {
+                0 => Some("AGENT_INTERACTION_TYPE_UNSPECIFIED"),
+                1 => Some("AGENT_INTERACTION_TYPE_APPROVAL"),
+                2 => Some("AGENT_INTERACTION_TYPE_CLARIFICATION"),
+                3 => Some("AGENT_INTERACTION_TYPE_INPUT"),
+                _ => None,
+            } {
+                serde_json::Value::String(name.to_string())
+            } else {
+                serde_json::json!(v)
+            }
+        });
+    }
+    if value.state != 0 {
+        object.insert("state".into(), {
+            let v = value.state;
+            if let Some(name) = match value.state {
+                0 => Some("AGENT_INTERACTION_STATE_UNSPECIFIED"),
+                1 => Some("AGENT_INTERACTION_STATE_PENDING"),
+                2 => Some("AGENT_INTERACTION_STATE_RESOLVED"),
+                3 => Some("AGENT_INTERACTION_STATE_CANCELED"),
+                _ => None,
+            } {
+                serde_json::Value::String(name.to_string())
+            } else {
+                serde_json::json!(v)
+            }
+        });
+    }
+    if !value.title.is_empty() {
+        object.insert(
+            "title".into(),
+            serde_json::Value::String(value.title.to_string()),
+        );
+    }
+    if !value.prompt.is_empty() {
+        object.insert(
+            "prompt".into(),
+            serde_json::Value::String(value.prompt.to_string()),
+        );
+    }
+    if let Some(inner) = &value.request {
+        object.insert(
+            "request".into(),
+            crate::public::proto_json::encode_struct(inner),
+        );
+    }
+    if let Some(inner) = &value.resolution {
+        object.insert(
+            "resolution".into(),
+            crate::public::proto_json::encode_struct(inner),
+        );
+    }
+    if let Some(inner) = &value.created_at {
+        object.insert(
+            "createdAt".into(),
+            crate::public::proto_json::encode_timestamp(inner),
+        );
+    }
+    if let Some(inner) = &value.resolved_at {
+        object.insert(
+            "resolvedAt".into(),
+            crate::public::proto_json::encode_timestamp(inner),
+        );
+    }
+    if !value.turn_id.is_empty() {
+        object.insert(
+            "turnId".into(),
+            serde_json::Value::String(value.turn_id.to_string()),
+        );
+    }
+    if !value.session_id.is_empty() {
+        object.insert(
+            "sessionId".into(),
+            serde_json::Value::String(value.session_id.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `AgentInteraction`.
+pub(crate) fn decode_wire_agent_interaction_json(
+    value: &serde_json::Value,
+) -> Result<v1::AgentInteraction, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::AgentInteraction {
+        id: match object.get("id") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        r#type: object
+            .get("type")
+            .map(|value| match value {
+                serde_json::Value::String(text) => match text.as_str() {
+                    "AGENT_INTERACTION_TYPE_UNSPECIFIED" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(0)
+                    }
+                    "AGENT_INTERACTION_TYPE_APPROVAL" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(1)
+                    }
+                    "AGENT_INTERACTION_TYPE_CLARIFICATION" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(2)
+                    }
+                    "AGENT_INTERACTION_TYPE_INPUT" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(3)
+                    }
+                    _ => Err(crate::public::proto_json::invalid_proto_json(
+                        "unknown enum value",
+                    )),
+                },
+                serde_json::Value::Number(number) => number
+                    .as_i64()
+                    .and_then(|v| i32::try_from(v).ok())
+                    .ok_or_else(|| {
+                        crate::public::proto_json::invalid_proto_json("enum number out of range")
+                    }),
+                _ => Err(crate::public::proto_json::invalid_proto_json(
+                    "expected enum value",
+                )),
+            })
+            .transpose()?
+            .unwrap_or(0),
+        state: object
+            .get("state")
+            .map(|value| match value {
+                serde_json::Value::String(text) => match text.as_str() {
+                    "AGENT_INTERACTION_STATE_UNSPECIFIED" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(0)
+                    }
+                    "AGENT_INTERACTION_STATE_PENDING" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(1)
+                    }
+                    "AGENT_INTERACTION_STATE_RESOLVED" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(2)
+                    }
+                    "AGENT_INTERACTION_STATE_CANCELED" => {
+                        Ok::<i32, crate::public::generated::rpc_support::GestaltError>(3)
+                    }
+                    _ => Err(crate::public::proto_json::invalid_proto_json(
+                        "unknown enum value",
+                    )),
+                },
+                serde_json::Value::Number(number) => number
+                    .as_i64()
+                    .and_then(|v| i32::try_from(v).ok())
+                    .ok_or_else(|| {
+                        crate::public::proto_json::invalid_proto_json("enum number out of range")
+                    }),
+                _ => Err(crate::public::proto_json::invalid_proto_json(
+                    "expected enum value",
+                )),
+            })
+            .transpose()?
+            .unwrap_or(0),
+        title: match object.get("title") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        prompt: match object.get("prompt") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        request: object
+            .get("request")
+            .map(|value| crate::public::proto_json::decode_struct(value))
+            .transpose()?,
+        resolution: object
+            .get("resolution")
+            .map(|value| crate::public::proto_json::decode_struct(value))
+            .transpose()?,
+        created_at: object
+            .get("createdAt")
+            .map(|value| crate::public::proto_json::decode_timestamp(value))
+            .transpose()?,
+        resolved_at: object
+            .get("resolvedAt")
+            .map(|value| crate::public::proto_json::decode_timestamp(value))
+            .transpose()?,
+        turn_id: match object.get("turnId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        session_id: match object.get("sessionId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
         },
         ..Default::default()
     })
@@ -2724,6 +2949,125 @@ pub(crate) fn decode_wire_get_agent_provider_turn_request_json(
     })
 }
 
+/// Converts a native `ListAgentProviderInteractionsRequest` to its wire message.
+pub(crate) fn to_wire_list_agent_provider_interactions_request(
+    value: ListAgentProviderInteractionsRequest,
+) -> v1::ListAgentProviderInteractionsRequest {
+    v1::ListAgentProviderInteractionsRequest {
+        turn_id: value.turn_id,
+        provider_name: value.provider_name,
+        ..Default::default()
+    }
+}
+
+/// Encodes a wire `ListAgentProviderInteractionsRequest` as protobuf JSON.
+pub(crate) fn encode_wire_list_agent_provider_interactions_request_json(
+    value: &v1::ListAgentProviderInteractionsRequest,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.turn_id.is_empty() {
+        object.insert(
+            "turnId".into(),
+            serde_json::Value::String(value.turn_id.to_string()),
+        );
+    }
+    if !value.provider_name.is_empty() {
+        object.insert(
+            "providerName".into(),
+            serde_json::Value::String(value.provider_name.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `ListAgentProviderInteractionsRequest`.
+pub(crate) fn decode_wire_list_agent_provider_interactions_request_json(
+    value: &serde_json::Value,
+) -> Result<
+    v1::ListAgentProviderInteractionsRequest,
+    crate::public::generated::rpc_support::GestaltError,
+> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::ListAgentProviderInteractionsRequest {
+        turn_id: match object.get("turnId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        provider_name: match object.get("providerName") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Converts a wire `ListAgentProviderInteractionsResponse` to its native message.
+pub(crate) fn from_wire_list_agent_provider_interactions_response(
+    value: v1::ListAgentProviderInteractionsResponse,
+) -> ListAgentProviderInteractionsResponse {
+    ListAgentProviderInteractionsResponse {
+        interactions: value
+            .interactions
+            .into_iter()
+            .map(from_wire_agent_interaction)
+            .collect(),
+    }
+}
+
+/// Encodes a wire `ListAgentProviderInteractionsResponse` as protobuf JSON.
+pub(crate) fn encode_wire_list_agent_provider_interactions_response_json(
+    value: &v1::ListAgentProviderInteractionsResponse,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.interactions.is_empty() {
+        object.insert(
+            "interactions".into(),
+            serde_json::Value::Array(
+                value
+                    .interactions
+                    .iter()
+                    .map(|item| encode_wire_agent_interaction_json(item))
+                    .collect(),
+            ),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `ListAgentProviderInteractionsResponse`.
+pub(crate) fn decode_wire_list_agent_provider_interactions_response_json(
+    value: &serde_json::Value,
+) -> Result<
+    v1::ListAgentProviderInteractionsResponse,
+    crate::public::generated::rpc_support::GestaltError,
+> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::ListAgentProviderInteractionsResponse {
+        interactions: match object.get("interactions") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for interactions")
+                })?
+                .iter()
+                .map(|item| decode_wire_agent_interaction_json(item))
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        ..Default::default()
+    })
+}
+
 /// Converts a native `ListAgentProviderSessionsRequest` to its wire message.
 pub(crate) fn to_wire_list_agent_provider_sessions_request(
     value: ListAgentProviderSessionsRequest,
@@ -3316,6 +3660,85 @@ pub(crate) fn to_wire_prepared_agent_workspace(
         cwd: value.cwd,
         ..Default::default()
     }
+}
+
+/// Converts a native `ResolveAgentProviderInteractionRequest` to its wire message.
+pub(crate) fn to_wire_resolve_agent_provider_interaction_request(
+    value: ResolveAgentProviderInteractionRequest,
+) -> v1::ResolveAgentProviderInteractionRequest {
+    v1::ResolveAgentProviderInteractionRequest {
+        interaction_id: value.interaction_id,
+        resolution: value.resolution.map(to_wire_struct),
+        turn_id: value.turn_id,
+        provider_name: value.provider_name,
+        ..Default::default()
+    }
+}
+
+/// Encodes a wire `ResolveAgentProviderInteractionRequest` as protobuf JSON.
+pub(crate) fn encode_wire_resolve_agent_provider_interaction_request_json(
+    value: &v1::ResolveAgentProviderInteractionRequest,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.interaction_id.is_empty() {
+        object.insert(
+            "interactionId".into(),
+            serde_json::Value::String(value.interaction_id.to_string()),
+        );
+    }
+    if let Some(inner) = &value.resolution {
+        object.insert(
+            "resolution".into(),
+            crate::public::proto_json::encode_struct(inner),
+        );
+    }
+    if !value.turn_id.is_empty() {
+        object.insert(
+            "turnId".into(),
+            serde_json::Value::String(value.turn_id.to_string()),
+        );
+    }
+    if !value.provider_name.is_empty() {
+        object.insert(
+            "providerName".into(),
+            serde_json::Value::String(value.provider_name.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `ResolveAgentProviderInteractionRequest`.
+pub(crate) fn decode_wire_resolve_agent_provider_interaction_request_json(
+    value: &serde_json::Value,
+) -> Result<
+    v1::ResolveAgentProviderInteractionRequest,
+    crate::public::generated::rpc_support::GestaltError,
+> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::ResolveAgentProviderInteractionRequest {
+        interaction_id: match object.get("interactionId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        resolution: object
+            .get("resolution")
+            .map(|value| crate::public::proto_json::decode_struct(value))
+            .transpose()?,
+        turn_id: match object.get("turnId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        provider_name: match object.get("providerName") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
 }
 
 /// Converts a native `UpdateAgentProviderSessionRequest` to its wire message.
