@@ -36,6 +36,7 @@ type Servers struct {
 	Identity            proto.IdentityServer
 	Authorization       proto.AuthorizationServer
 	ExternalCredentials proto.ExternalCredentialsServer
+	RemoteManagement    proto.RemoteManagementServer
 }
 
 type serverRegistration struct {
@@ -53,6 +54,7 @@ func (s Servers) registrations() []serverRegistration {
 		{s.Identity, proto.Identity_ServiceDesc, proto.RegisterIdentityHandler},
 		{s.Authorization, proto.Authorization_ServiceDesc, proto.RegisterAuthorizationHandler},
 		{s.ExternalCredentials, proto.ExternalCredentials_ServiceDesc, nil},
+		{s.RemoteManagement, proto.RemoteManagement_ServiceDesc, proto.RegisterRemoteManagementHandler},
 	}
 }
 

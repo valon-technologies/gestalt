@@ -38,6 +38,7 @@ var pyProtoModules = []string{
 	"app",
 	"runtime_provider",
 	"runtime",
+	"remote",
 	"s3",
 	"secrets",
 	"test",

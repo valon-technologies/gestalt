@@ -64,6 +64,11 @@ import {
   toWireRecordRequest as codecToWireRecordRequest,
 } from "../../internal/codec/indexeddb.ts";
 import {
+  toWireCreateRemoteRequest as codecToWireCreateRemoteRequest,
+  toWireDeleteRemoteRequest as codecToWireDeleteRemoteRequest,
+  toWireListRemotesRequest as codecToWireListRemotesRequest,
+} from "../../internal/codec/remote.ts";
+import {
   toWireApplyWorkflowProviderDefinitionRequest as codecToWireApplyWorkflowProviderDefinitionRequest,
   toWireCancelWorkflowProviderRunRequest as codecToWireCancelWorkflowProviderRunRequest,
   toWireDeleteWorkflowProviderDefinitionRequest as codecToWireDeleteWorkflowProviderDefinitionRequest,
@@ -137,6 +142,11 @@ import type {
   RecordRequest as NativeRecordRequest,
 } from "../../indexeddb.ts";
 import type {
+  CreateRemoteRequest as NativeCreateRemoteRequest,
+  DeleteRemoteRequest as NativeDeleteRemoteRequest,
+  ListRemotesRequest as NativeListRemotesRequest,
+} from "../../remote.ts";
+import type {
   ApplyWorkflowProviderDefinitionRequest as NativeApplyWorkflowProviderDefinitionRequest,
   CancelWorkflowProviderRunRequest as NativeCancelWorkflowProviderRunRequest,
   DeleteWorkflowProviderDefinitionRequest as NativeDeleteWorkflowProviderDefinitionRequest,
@@ -209,6 +219,11 @@ import type {
   ObjectStoreRequest,
   RecordRequest,
 } from "../../internal/gen/v1/indexeddb_pb.ts";
+import type {
+  CreateRemoteRequest,
+  DeleteRemoteRequest,
+  ListRemotesRequest,
+} from "../../internal/gen/v1/remote_pb.ts";
 import type {
   ApplyWorkflowProviderDefinitionRequest,
   CancelWorkflowProviderRunRequest,
@@ -284,6 +299,9 @@ import type {
   PublicIndexedDBIndexGetKeyRequest,
   PublicIndexedDBIndexGetRequest,
   PublicIndexedDBPutRequest,
+  PublicRemoteManagementCreateRemoteRequest,
+  PublicRemoteManagementDeleteRemoteRequest,
+  PublicRemoteManagementListRemotesRequest,
   PublicWorkflowApplyDefinitionRequest,
   PublicWorkflowCancelRunRequest,
   PublicWorkflowDeleteDefinitionRequest,
@@ -408,6 +426,14 @@ export function toWireCreateObjectStoreRequest(
   );
 }
 
+export function toWireCreateRemoteRequest(
+  request: PublicRemoteManagementCreateRemoteRequest,
+): CreateRemoteRequest {
+  return codecToWireCreateRemoteRequest(
+    request as Init<NativeCreateRemoteRequest>,
+  );
+}
+
 export function toWireDeleteExternalCredentialRequest(
   request: PublicExternalCredentialsDeleteCredentialRequest,
 ): DeleteExternalCredentialRequest {
@@ -437,6 +463,14 @@ export function toWireDeleteRelationshipRequest(
 ): DeleteRelationshipRequest {
   return codecToWireDeleteRelationshipRequest(
     request as Init<NativeDeleteRelationshipRequest>,
+  );
+}
+
+export function toWireDeleteRemoteRequest(
+  request: PublicRemoteManagementDeleteRemoteRequest,
+): DeleteRemoteRequest {
+  return codecToWireDeleteRemoteRequest(
+    request as Init<NativeDeleteRemoteRequest>,
   );
 }
 
@@ -595,6 +629,14 @@ export function toWireListRelationshipsRequest(
 ): ListRelationshipsRequest {
   return codecToWireListRelationshipsRequest(
     request as Init<NativeListRelationshipsRequest>,
+  );
+}
+
+export function toWireListRemotesRequest(
+  request: PublicRemoteManagementListRemotesRequest,
+): ListRemotesRequest {
+  return codecToWireListRemotesRequest(
+    request as Init<NativeListRemotesRequest>,
   );
 }
 

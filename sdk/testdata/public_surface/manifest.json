@@ -5,8 +5,8 @@
     "rust",
     "typescript"
   ],
-  "grpcMethodCount": 72,
-  "restMethodCount": 41,
+  "grpcMethodCount": 75,
+  "restMethodCount": 44,
   "methods": [
     {
       "service": "Agent",
@@ -1708,6 +1708,97 @@
         "typescript": {
           "service": "IndexedDBClient",
           "method": "put"
+        }
+      }
+    },
+    {
+      "service": "RemoteManagement",
+      "method": "CreateRemote",
+      "streamingKind": "unary",
+      "restVerb": "POST",
+      "restPath": "/api/v2/remotes",
+      "restBody": "*",
+      "grpcPath": "/gestalt.provider.v1.RemoteManagement/CreateRemote",
+      "symbols": {
+        "go": {
+          "service": "RemoteManagementClient",
+          "method": "CreateRemote"
+        },
+        "python": {
+          "service": "RemoteManagementClient",
+          "method": "create_remote"
+        },
+        "rust": {
+          "service": "RemoteManagementClient",
+          "method": "create_remote"
+        },
+        "typescript": {
+          "service": "RemoteManagementClient",
+          "method": "createRemote"
+        }
+      }
+    },
+    {
+      "service": "RemoteManagement",
+      "method": "DeleteRemote",
+      "streamingKind": "unary",
+      "restVerb": "DELETE",
+      "restPath": "/api/v2/remotes/{id}",
+      "restPathFields": [
+        {
+          "name": "id",
+          "jsonName": "id"
+        }
+      ],
+      "restQueryFields": [
+        {
+          "name": "expected_generation",
+          "jsonName": "expectedGeneration"
+        }
+      ],
+      "grpcPath": "/gestalt.provider.v1.RemoteManagement/DeleteRemote",
+      "symbols": {
+        "go": {
+          "service": "RemoteManagementClient",
+          "method": "DeleteRemote"
+        },
+        "python": {
+          "service": "RemoteManagementClient",
+          "method": "delete_remote"
+        },
+        "rust": {
+          "service": "RemoteManagementClient",
+          "method": "delete_remote"
+        },
+        "typescript": {
+          "service": "RemoteManagementClient",
+          "method": "deleteRemote"
+        }
+      }
+    },
+    {
+      "service": "RemoteManagement",
+      "method": "ListRemotes",
+      "streamingKind": "unary",
+      "restVerb": "GET",
+      "restPath": "/api/v2/remotes",
+      "grpcPath": "/gestalt.provider.v1.RemoteManagement/ListRemotes",
+      "symbols": {
+        "go": {
+          "service": "RemoteManagementClient",
+          "method": "ListRemotes"
+        },
+        "python": {
+          "service": "RemoteManagementClient",
+          "method": "list_remotes"
+        },
+        "rust": {
+          "service": "RemoteManagementClient",
+          "method": "list_remotes"
+        },
+        "typescript": {
+          "service": "RemoteManagementClient",
+          "method": "listRemotes"
         }
       }
     },

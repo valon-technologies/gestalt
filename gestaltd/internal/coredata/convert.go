@@ -113,6 +113,49 @@ func jsonValue(v any) any {
 	}
 }
 
+func recUint64(rec idb.Record, key string) uint64 {
+	v, ok := rec[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case uint64:
+		return n
+	case int64:
+		if n < 0 {
+			return 0
+		}
+		return uint64(n)
+	case int:
+		if n < 0 {
+			return 0
+		}
+		return uint64(n)
+	case float64:
+		if n < 0 {
+			return 0
+		}
+		return uint64(n)
+	default:
+		return 0
+	}
+}
+
+func recBytes(rec idb.Record, key string) []byte {
+	v, ok := rec[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch b := v.(type) {
+	case []byte:
+		return append([]byte(nil), b...)
+	case string:
+		return []byte(b)
+	default:
+		return nil
+	}
+}
+
 func recTimePtr(rec idb.Record, key string) *time.Time {
 	v, ok := rec[key]
 	if !ok || v == nil {

@@ -61,6 +61,11 @@ import type {
   RecordRequest,
 } from "../../indexeddb.ts";
 import type {
+  CreateRemoteRequest,
+  DeleteRemoteRequest,
+  ListRemotesRequest,
+} from "../../remote.ts";
+import type {
   ApplyWorkflowProviderDefinitionRequest,
   CancelWorkflowProviderRunRequest,
   DeleteWorkflowProviderDefinitionRequest,
@@ -244,6 +249,12 @@ export type PublicIndexedDBIndexGetAllKeysRequest = IndexQueryRequest;
 export type PublicIndexedDBIndexCountRequest = IndexQueryRequest;
 
 export type PublicIndexedDBIndexDeleteRequest = IndexQueryRequest;
+
+export type PublicRemoteManagementCreateRemoteRequest = CreateRemoteRequest;
+
+export type PublicRemoteManagementListRemotesRequest = ListRemotesRequest;
+
+export type PublicRemoteManagementDeleteRemoteRequest = DeleteRemoteRequest;
 
 export type PublicWorkflowApplyDefinitionRequest = Omit<
   ApplyWorkflowProviderDefinitionRequest,

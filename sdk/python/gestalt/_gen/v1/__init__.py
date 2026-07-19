@@ -17,6 +17,8 @@ __all__ = [
     "indexeddb_pb2_grpc",
     "runtime_pb2",
     "runtime_pb2_grpc",
+    "remote_pb2",
+    "remote_pb2_grpc",
     "s3_pb2",
     "s3_pb2_grpc",
     "secrets_pb2",

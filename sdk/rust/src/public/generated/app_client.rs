@@ -59,6 +59,10 @@ use crate::codec::indexeddb::{
     to_wire_object_store_name_request, to_wire_object_store_range_request,
     to_wire_object_store_request, to_wire_record_request,
 };
+use crate::codec::remote::{
+    from_wire_list_remotes_response, from_wire_remote, to_wire_create_remote_request,
+    to_wire_delete_remote_request, to_wire_list_remotes_request,
+};
 use crate::codec::workflow::{
     from_wire_get_workflow_provider_run_events_response,
     from_wire_get_workflow_provider_run_output_response,
@@ -132,6 +136,9 @@ use crate::public::generated::workflow::{
     ListWorkflowProviderRunsRequest, SetWorkflowProviderActivationPausedRequest,
     SetWorkflowProviderDefinitionPausedRequest, SignalOrStartWorkflowProviderRunRequest,
     SignalWorkflowProviderRunRequest, StartWorkflowProviderRunRequest,
+};
+use crate::remote::{
+    CreateRemoteRequest, DeleteRemoteRequest, ListRemotesRequest, ListRemotesResponse, Remote,
 };
 use crate::workflow::{
     GetWorkflowProviderRunEventsResponse, GetWorkflowProviderRunOutputResponse,
@@ -1763,6 +1770,103 @@ impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> IndexedDBCli
         self.transport
             .unary(&METHOD_INDEXED_D_B_INDEX_DELETE, &wire, &mut wire_response)?;
         Ok(from_wire_delete_response(wire_response))
+    }
+}
+
+/// Transport-neutral client for the public gestaltd App surface.
+pub struct RemoteManagementClient<T: Send + Sync> {
+    transport: T,
+}
+
+impl<T: Send + Sync> RemoteManagementClient<T> {
+    /// Creates a client over the given unary transport.
+    pub fn new(transport: T) -> Self {
+        Self { transport }
+    }
+}
+
+impl<T: UnaryTransport> RemoteManagementClient<T> {
+    pub async fn create_remote(
+        &self,
+        request: CreateRemoteRequest,
+    ) -> Result<Remote, GestaltError> {
+        let wire = to_wire_create_remote_request(request);
+        let mut wire_response = crate::generated::v1::Remote::default();
+        self.transport
+            .unary(
+                &METHOD_REMOTE_MANAGEMENT_CREATE_REMOTE,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_remote(wire_response))
+    }
+
+    pub async fn list_remotes(
+        &self,
+        request: ListRemotesRequest,
+    ) -> Result<ListRemotesResponse, GestaltError> {
+        let wire = to_wire_list_remotes_request(request);
+        let mut wire_response = crate::generated::v1::ListRemotesResponse::default();
+        self.transport
+            .unary(
+                &METHOD_REMOTE_MANAGEMENT_LIST_REMOTES,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(from_wire_list_remotes_response(wire_response))
+    }
+
+    pub async fn delete_remote(&self, request: DeleteRemoteRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_remote_request(request);
+        let mut wire_response = Empty::default();
+        self.transport
+            .unary(
+                &METHOD_REMOTE_MANAGEMENT_DELETE_REMOTE,
+                &wire,
+                &mut wire_response,
+            )
+            .await?;
+        Ok(())
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> RemoteManagementClient<T> {
+    pub fn create_remote_sync(&self, request: CreateRemoteRequest) -> Result<Remote, GestaltError> {
+        let wire = to_wire_create_remote_request(request);
+        let mut wire_response = crate::generated::v1::Remote::default();
+        self.transport.unary(
+            &METHOD_REMOTE_MANAGEMENT_CREATE_REMOTE,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_remote(wire_response))
+    }
+
+    pub fn list_remotes_sync(
+        &self,
+        request: ListRemotesRequest,
+    ) -> Result<ListRemotesResponse, GestaltError> {
+        let wire = to_wire_list_remotes_request(request);
+        let mut wire_response = crate::generated::v1::ListRemotesResponse::default();
+        self.transport.unary(
+            &METHOD_REMOTE_MANAGEMENT_LIST_REMOTES,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(from_wire_list_remotes_response(wire_response))
+    }
+
+    pub fn delete_remote_sync(&self, request: DeleteRemoteRequest) -> Result<(), GestaltError> {
+        let wire = to_wire_delete_remote_request(request);
+        let mut wire_response = Empty::default();
+        self.transport.unary(
+            &METHOD_REMOTE_MANAGEMENT_DELETE_REMOTE,
+            &wire,
+            &mut wire_response,
+        )?;
+        Ok(())
     }
 }
 

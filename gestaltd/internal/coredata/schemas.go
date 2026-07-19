@@ -13,6 +13,8 @@ const (
 	StoreAppVersionInstallLocks        = "app_version_install_locks"
 	StoreAppRollouts                   = "app_rollouts"
 	StoreAppInstanceMaterializations   = "app_instance_materializations"
+	StoreRemoteRegistrations           = "remote_registrations"
+	StoreRemoteProviders               = "remote_providers"
 )
 
 var AppSHAsSchema = idb.ObjectStoreOptions{
@@ -124,6 +126,18 @@ var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 		{Name: "attempt_count", Type: idb.TypeInt},
 		{Name: "last_error_at", Type: idb.TypeTime},
 		{Name: "last_error_message", Type: idb.TypeString},
+	},
+}
+
+var RemoteRegistrationsSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_owner_subject", KeyPath: []string{"owner_subject_id"}, Unique: true},
+	},
+}
+
+var RemoteProvidersSchema = idb.ObjectStoreOptions{
+	Indexes: []idb.IndexSchema{
+		{Name: "by_registration", KeyPath: []string{"registration_id"}},
 	},
 }
 

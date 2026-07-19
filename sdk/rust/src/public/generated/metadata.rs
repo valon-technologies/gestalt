@@ -79,6 +79,11 @@ use crate::public::generated::codec::indexeddb::{
     encode_wire_object_store_range_request_json, encode_wire_object_store_request_json,
     encode_wire_record_request_json,
 };
+use crate::public::generated::codec::remote::{
+    decode_wire_list_remotes_response_json, decode_wire_remote_json,
+    encode_wire_create_remote_request_json, encode_wire_delete_remote_request_json,
+    encode_wire_list_remotes_request_json,
+};
 use crate::public::generated::codec::workflow::{
     decode_wire_get_workflow_provider_run_events_response_json,
     decode_wire_get_workflow_provider_run_output_response_json,
@@ -772,6 +777,38 @@ fn encode_index_delete_request_json(bytes: &[u8]) -> Result<Value, GestaltError>
 fn decode_index_delete_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
     let wire = decode_wire_delete_response_json(value)?;
     Ok(wire.encode_to_vec())
+}
+
+fn encode_create_remote_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::CreateRemoteRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_create_remote_request_json(&wire))
+}
+
+fn decode_create_remote_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_remote_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_remotes_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListRemotesRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_remotes_request_json(&wire))
+}
+
+fn decode_list_remotes_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_remotes_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_delete_remote_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::DeleteRemoteRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_delete_remote_request_json(&wire))
+}
+
+fn decode_delete_remote_response_json(_value: &Value) -> Result<Vec<u8>, GestaltError> {
+    Ok(Empty::default().encode_to_vec())
 }
 
 fn encode_apply_definition_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
@@ -1949,6 +1986,57 @@ pub const METHOD_INDEXED_D_B_INDEX_DELETE: Method = Method {
     reject: &[],
     encode_request_json: Some(encode_index_delete_request_json),
     decode_response_json: Some(decode_index_delete_response_json),
+};
+
+pub const METHOD_REMOTE_MANAGEMENT_CREATE_REMOTE: Method = Method {
+    service: "gestalt.provider.v1.RemoteManagement",
+    name: "CreateRemote",
+    full_method: "/gestalt.provider.v1.RemoteManagement/CreateRemote",
+    http_verb: "POST",
+    http_path: "/api/v2/remotes",
+    http_body: "*",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_create_remote_request_json),
+    decode_response_json: Some(decode_create_remote_response_json),
+};
+
+pub const METHOD_REMOTE_MANAGEMENT_LIST_REMOTES: Method = Method {
+    service: "gestalt.provider.v1.RemoteManagement",
+    name: "ListRemotes",
+    full_method: "/gestalt.provider.v1.RemoteManagement/ListRemotes",
+    http_verb: "GET",
+    http_path: "/api/v2/remotes",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_list_remotes_request_json),
+    decode_response_json: Some(decode_list_remotes_response_json),
+};
+
+pub const METHOD_REMOTE_MANAGEMENT_DELETE_REMOTE: Method = Method {
+    service: "gestalt.provider.v1.RemoteManagement",
+    name: "DeleteRemote",
+    full_method: "/gestalt.provider.v1.RemoteManagement/DeleteRemote",
+    http_verb: "DELETE",
+    http_path: "/api/v2/remotes/{id}",
+    http_body: "",
+    http_path_fields: &[PublicField {
+        name: "id",
+        json_name: "id",
+    }],
+    http_query_fields: &[PublicField {
+        name: "expected_generation",
+        json_name: "expectedGeneration",
+    }],
+    fill: &[],
+    reject: &[],
+    encode_request_json: Some(encode_delete_remote_request_json),
+    decode_response_json: Some(decode_delete_remote_response_json),
 };
 
 pub const METHOD_WORKFLOW_APPLY_DEFINITION: Method = Method {

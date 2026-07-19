@@ -9,5 +9,6 @@ var restGatewayServices = map[string]struct{}{
 	"gestalt.provider.v1.App": {},
 	"gestalt.provider.v1.Authorization": {},
 	"gestalt.provider.v1.Identity": {},
+	"gestalt.provider.v1.RemoteManagement": {},
 	"gestalt.provider.v1.Workflow": {},
 }

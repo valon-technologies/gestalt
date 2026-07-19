@@ -2789,6 +2789,129 @@ impl TransactionDurabilityHint {
         }
     }
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TunnelEndpoint {
+    #[prost(string, tag = "1")]
+    pub host: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub certificate: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "3")]
+    pub server_spki_sha256: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProviderRef {
+    #[prost(string, tag = "1")]
+    pub kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RemoteProviderDefinition {
+    #[prost(string, tag = "1")]
+    pub kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub definition: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RemoteProviderSummary {
+    #[prost(string, tag = "1")]
+    pub kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateRemoteRequest {
+    #[prost(message, optional, tag = "1")]
+    pub tunnel: ::core::option::Option<TunnelEndpoint>,
+    #[prost(message, repeated, tag = "2")]
+    pub providers: ::prost::alloc::vec::Vec<RemoteProviderDefinition>,
+    #[prost(uint64, tag = "3")]
+    pub expected_generation: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeleteRemoteRequest {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub expected_generation: u64,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListRemotesRequest {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RemoteReachability {
+    #[prost(bool, tag = "1")]
+    pub reachable: bool,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Remote {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub owner_subject_id: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "3")]
+    pub generation: u64,
+    #[prost(message, repeated, tag = "4")]
+    pub providers: ::prost::alloc::vec::Vec<RemoteProviderSummary>,
+    #[prost(message, optional, tag = "5")]
+    pub reachability: ::core::option::Option<RemoteReachability>,
+    #[prost(string, tag = "6")]
+    pub server_spki_sha256: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "7")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "8")]
+    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "9")]
+    pub last_checked_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "10")]
+    pub last_successful_heartbeat_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "11")]
+    pub last_error: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "12")]
+    pub lease_expires_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ServerIdentity {
+    #[prost(string, tag = "1")]
+    pub client_spki_sha256: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TunnelBootstrap {
+    #[prost(string, tag = "1")]
+    pub frps_address: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub lease_duration: ::core::option::Option<::prost_types::Duration>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListRemotesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub remotes: ::prost::alloc::vec::Vec<Remote>,
+    #[prost(message, optional, tag = "2")]
+    pub server_identity: ::core::option::Option<ServerIdentity>,
+    #[prost(message, optional, tag = "3")]
+    pub tunnel: ::core::option::Option<TunnelBootstrap>,
+    #[prost(message, optional, tag = "4")]
+    pub lease_duration: ::core::option::Option<::prost_types::Duration>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegistrationCheckRequest {
+    #[prost(string, tag = "1")]
+    pub registration_id: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub generation: u64,
+    #[prost(message, repeated, tag = "3")]
+    pub providers: ::prost::alloc::vec::Vec<ProviderRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RegistrationCheckResponse {
+    #[prost(bool, tag = "1")]
+    pub ready: bool,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
 /// ProviderIdentity describes a provider surface and the protocol versions it
 /// supports.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

@@ -20,6 +20,7 @@ func GeneratedFiles() (*protoregistry.Files, error) {
 		gestaltproto.File_v1_identity_proto,
 		gestaltproto.File_v1_authorization_proto,
 		gestaltproto.File_v1_external_credential_proto,
+		gestaltproto.File_v1_remote_proto,
 	)
 }
 

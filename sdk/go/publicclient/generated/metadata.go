@@ -682,6 +682,48 @@ var MethodIndexedDBIndexDelete = Method{
 	Reject:     nil,
 }
 
+var MethodRemoteManagementCreateRemote = Method{
+	Service:         "gestalt.provider.v1.RemoteManagement",
+	Name:            "CreateRemote",
+	FullMethod:      "/gestalt.provider.v1.RemoteManagement/CreateRemote",
+	HTTPVerb:        "POST",
+	HTTPPath:        "/api/v2/remotes",
+	HTTPBody:        "*",
+	HTTPPathFields:  nil,
+	HTTPQueryFields: nil,
+	Stream:          false,
+	Fill:            nil,
+	Reject:          nil,
+}
+
+var MethodRemoteManagementListRemotes = Method{
+	Service:         "gestalt.provider.v1.RemoteManagement",
+	Name:            "ListRemotes",
+	FullMethod:      "/gestalt.provider.v1.RemoteManagement/ListRemotes",
+	HTTPVerb:        "GET",
+	HTTPPath:        "/api/v2/remotes",
+	HTTPBody:        "",
+	HTTPPathFields:  nil,
+	HTTPQueryFields: nil,
+	Stream:          false,
+	Fill:            nil,
+	Reject:          nil,
+}
+
+var MethodRemoteManagementDeleteRemote = Method{
+	Service:         "gestalt.provider.v1.RemoteManagement",
+	Name:            "DeleteRemote",
+	FullMethod:      "/gestalt.provider.v1.RemoteManagement/DeleteRemote",
+	HTTPVerb:        "DELETE",
+	HTTPPath:        "/api/v2/remotes/{id}",
+	HTTPBody:        "",
+	HTTPPathFields:  []PublicField{PublicField{Name: "id", JSONName: "id"}},
+	HTTPQueryFields: []PublicField{PublicField{Name: "expected_generation", JSONName: "expectedGeneration"}},
+	Stream:          false,
+	Fill:            nil,
+	Reject:          nil,
+}
+
 var MethodWorkflowApplyDefinition = Method{
 	Service:         "gestalt.provider.v1.Workflow",
 	Name:            "ApplyDefinition",
