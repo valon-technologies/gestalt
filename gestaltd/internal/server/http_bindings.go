@@ -31,7 +31,6 @@ var coreAPIRouteNamespaces = []string{
 	"/api/v1/workflow",
 	"/api/v1/apps",
 	"/api/v1/s3",
-	"/api/v1/authorization",
 }
 
 func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], mountedUIs []MountedUI) ([]MountedHTTPBinding, error) {

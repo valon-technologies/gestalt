@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type AuthorizationParams struct {
@@ -27,11 +28,11 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 }
 
 func (t *ProviderGatewayTransport) shadowAuthorizationCheck(ctx context.Context, params AuthorizationParams) (bool, *proto.CheckAccessRequest) {
-	subject, err := t.authorizationSubject(ctx)
+	subjectID, err := t.authorizationSubject(ctx)
 	if err != nil {
 		return false, nil
 	}
-	allowed, req, _ := t.runAuthorizationCheck(ctx, subject, params.ProviderID, params.Operation)
+	allowed, req, _ := t.runAuthorizationCheck(ctx, subjectID, params.ProviderID, params.Operation)
 	return allowed, req
 }
 
@@ -127,7 +128,7 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 
 func (t *ProviderGatewayTransport) runAuthorizationCheck(
 	ctx context.Context,
-	subject *proto.Subject,
+	subjectID string,
 	providerID, operation string,
 ) (bool, *proto.CheckAccessRequest, error) {
 	if t == nil || t.authorization == nil {
@@ -141,34 +142,17 @@ func (t *ProviderGatewayTransport) runAuthorizationCheck(
 	if err != nil {
 		return false, nil, err
 	}
-	req := &proto.CheckAccessRequest{
-		Subject:  subject,
-		Resource: resource,
-		Action:   action,
-	}
-	resp, err := t.authorization.CheckAccess(ctx, req)
-	if err != nil || resp == nil {
-		return false, req, err
-	}
-	return resp.GetAllowed(), req, nil
+	req := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
+	allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization.(core.AuthorizationProvider), req)
+	return allowed, req, err
 }
 
-func (t *ProviderGatewayTransport) authorizationSubject(ctx context.Context) (*proto.Subject, error) {
-	caller := principal.FromContext(ctx)
-	if caller == nil {
-		return nil, fmt.Errorf("provider gateway: caller principal is required")
-	}
-	subjectID := strings.TrimSpace(caller.SubjectID)
-	if subjectID == "" && strings.TrimSpace(caller.UserID) != "" {
-		subjectID = principal.UserSubjectID(strings.TrimSpace(caller.UserID))
-	}
+func (t *ProviderGatewayTransport) authorizationSubject(ctx context.Context) (string, error) {
+	subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.FromContext(ctx)))
 	if subjectID == "" {
-		return nil, fmt.Errorf("provider gateway: caller principal is required")
+		return "", fmt.Errorf("provider gateway: caller principal is required")
 	}
-	return &proto.Subject{
-		Type: "subject",
-		Id:   subjectID,
-	}, nil
+	return subjectID, nil
 }
 
 func authorizationResource(providerID, operation string) (*proto.Resource, error) {

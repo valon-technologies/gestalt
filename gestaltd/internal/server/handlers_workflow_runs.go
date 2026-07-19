@@ -231,11 +231,23 @@ func (s *Server) cancelGlobalWorkflowRun(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, workflowRunInfoFromManaged(managed))
 }
 
+func (s *Server) requireAuthorizationProvider(w http.ResponseWriter) bool {
+	if s.authorization == nil {
+		writeError(w, http.StatusPreconditionFailed, "authorization provider is not configured")
+		return false
+	}
+	return true
+}
+
+func (s *Server) authorizationHTTPContext(_ http.ResponseWriter, r *http.Request) (context.Context, bool) {
+	return invocation.WithEntry(r.Context(), invocation.EntryHTTP), true
+}
+
 func (s *Server) requireGlobalWorkflowRunAccess(w http.ResponseWriter, r *http.Request, p *principal.Principal, action string) bool {
 	if !s.requireAuthorizationProvider(w) {
 		return false
 	}
-	subjectID := invokingPrincipalSubjectID(p)
+	subjectID := principal.EffectiveCredentialSubjectID(p)
 	if subjectID == "" {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 		return false
@@ -244,20 +256,16 @@ func (s *Server) requireGlobalWorkflowRunAccess(w http.ResponseWriter, r *http.R
 	if !ok {
 		return false
 	}
-	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
-		Subject: &proto.Subject{Type: "subject", Id: subjectID},
-		Action:  &proto.Action{Name: strings.TrimSpace(action)},
-		Resource: &proto.Resource{
-			Type: "workflow",
-			Id:   strings.TrimSpace(s.workflowProviderName),
-		},
-	})
+	allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, invocation.SubjectAccessRequest(subjectID, action, &proto.Resource{
+		Type: "workflow",
+		Id:   strings.TrimSpace(s.workflowProviderName),
+	}))
 	if err != nil {
 		slog.ErrorContext(r.Context(), "workflow REST authorization check failed", "action", action, "error", err)
 		writeError(w, http.StatusForbidden, invocation.ErrAuthorizationDenied.Error())
 		return false
 	}
-	if resp == nil || !resp.GetAllowed() {
+	if !allowed {
 		writeError(w, http.StatusForbidden, invocation.ErrAuthorizationDenied.Error())
 		return false
 	}

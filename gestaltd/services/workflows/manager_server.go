@@ -174,15 +174,12 @@ func (s *ProviderServer) requireServiceAccountManagement(ctx context.Context, au
 	if subjectID == "" {
 		subjectID = strings.TrimSpace(authCtx.CallerName())
 	}
-	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
-		Subject:  &proto.Subject{Type: "subject", Id: subjectID},
-		Action:   &proto.Action{Name: "manages"},
-		Resource: &proto.Resource{Type: "service_account", Id: strings.TrimSpace(runAs)},
-	})
+	req := invocation.SubjectAccessRequest(subjectID, "manages", &proto.Resource{Type: "service_account", Id: strings.TrimSpace(runAs)})
+	allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, req)
 	if err != nil {
 		return status.Errorf(codes.PermissionDenied, "subject %q cannot manage %q: %v", subjectID, runAs, err)
 	}
-	if resp == nil || !resp.GetAllowed() {
+	if !allowed {
 		return status.Errorf(codes.PermissionDenied, "subject %q cannot manage %q", subjectID, runAs)
 	}
 	return nil
@@ -607,21 +604,15 @@ func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx work
 	if subjectID == "" {
 		subjectID = strings.TrimSpace(authCtx.CallerName())
 	}
-	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
-		Subject: &proto.Subject{
-			Type: "subject",
-			Id:   subjectID,
-		},
-		Action: &proto.Action{Name: action},
-		Resource: &proto.Resource{
-			Type: "workflow",
-			Id:   strings.TrimSpace(providerName),
-		},
+	req := invocation.SubjectAccessRequest(subjectID, action, &proto.Resource{
+		Type: "workflow",
+		Id:   strings.TrimSpace(providerName),
 	})
+	allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, req)
 	if err != nil {
 		return status.Errorf(codes.PermissionDenied, "workflow RPC %q is not allowed for subject %q: %v", action, subjectID, err)
 	}
-	if resp == nil || !resp.GetAllowed() {
+	if !allowed {
 		return status.Errorf(codes.PermissionDenied, "workflow RPC %q is not allowed for subject %q", action, subjectID)
 	}
 	return nil

@@ -110,15 +110,11 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	if t == nil || t.authorization == nil {
 		return status.Error(codes.PermissionDenied, "authorization provider is not configured")
 	}
-	p = principal.Canonicalized(p)
-	subjectID := strings.TrimSpace(p.SubjectID)
+	subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 	if subjectID == "" {
 		return status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
-	allowed, _, err := t.runAuthorizationCheck(ctx, &proto.Subject{
-		Type: "subject",
-		Id:   subjectID,
-	}, providerID, fullMethod)
+	allowed, _, err := t.runAuthorizationCheck(ctx, subjectID, providerID, fullMethod)
 	if err != nil {
 		return status.Errorf(codes.Internal, "provider gateway: authorize: %v", err)
 	}
