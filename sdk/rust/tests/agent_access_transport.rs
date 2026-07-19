@@ -667,9 +667,9 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
     let resolved = agent
         .resolve_interaction(
             "interaction-1".to_string(),
+            "turn-managed-1".to_string(),
             Some(resolution.as_object().expect("resolution object").clone()),
             AgentResolveInteractionOptions {
-                turn_id: "turn-managed-1".to_string(),
                 provider_name: "openai".to_string(),
             },
         )

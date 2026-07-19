@@ -1295,13 +1295,14 @@ impl Agent {
     pub async fn resolve_interaction(
         &mut self,
         interaction_id: String,
+        turn_id: String,
         resolution: Option<serde_json::Map<String, serde_json::Value>>,
         options: AgentResolveInteractionOptions,
     ) -> Result<AgentInteraction, GestaltError> {
         let request = ResolveAgentProviderInteractionRequest {
             interaction_id,
+            turn_id,
             resolution,
-            turn_id: options.turn_id,
             provider_name: options.provider_name,
             context: self.context.clone(),
         };
@@ -1494,8 +1495,6 @@ pub struct AgentListInteractionsOptions {
 /// option unset.
 #[derive(Clone, Debug, Default)]
 pub struct AgentResolveInteractionOptions {
-    /// The `turn_id` field.
-    pub turn_id: String,
     /// The `provider_name` field.
     pub provider_name: String,
 }
