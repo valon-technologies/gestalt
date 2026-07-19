@@ -1,72 +1,90 @@
 use anyhow::{Context, Result};
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use crate::api::ApiClient;
 use crate::cli::{
     AuthorizationActiveModelCommands, AuthorizationActiveModelResourceTypeCommands,
     AuthorizationCommands, AuthorizationModelCommands, AuthorizationRelationshipCommands,
 };
 use crate::output::{self, Format};
-use crate::query;
 
-const CHECK_ACCESS_PATH: &str = "/api/v1/authorization/check-access";
-const RELATIONSHIPS_PATH: &str = "/api/v1/authorization/relationships";
-const ACTIVE_MODEL_PATH: &str = "/api/v1/authorization/models/active";
-const ACTIVE_MODEL_RESOURCE_TYPES_PATH: &str = "/api/v1/authorization/models/active/resource-types";
+use gestalt_sdk::public::generated::app_client::AuthorizationClient;
+use gestalt_sdk::public::generated::authorization::source_layer::{
+    SOURCE_LAYER_RUNTIME, SOURCE_LAYER_STATIC_CONFIG, SOURCE_LAYER_UNSPECIFIED,
+};
+use gestalt_sdk::public::generated::authorization::{
+    Action, AuthorizationModelResourceTypeFilter, CheckAccessRequest,
+    ListActiveModelResourceTypesRequest, ListRelationshipsRequest, RelationshipFilter,
+    RelationshipTarget, RelationshipTargetKind, Resource, Subject,
+};
+use gestalt_sdk::public::rest_transport::SyncRestTransport;
 
-pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Format) -> Result<()> {
+pub fn dispatch(
+    authz: &AuthorizationClient<SyncRestTransport>,
+    command: AuthorizationCommands,
+    format: Format,
+) -> Result<()> {
     match command {
         AuthorizationCommands::CheckAccess(args) => {
-            let body = json!({
-                "subject": {
-                    "type": args.subject_type,
-                    "id": args.subject_id,
-                },
-                "action": {
-                    "name": args.action,
-                },
-                "resource": {
-                    "type": args.resource_type,
-                    "id": args.resource_id,
-                },
-            });
-            let resp = client
-                .post(CHECK_ACCESS_PATH, &body)
+            let request = CheckAccessRequest {
+                subject: Some(Subject {
+                    r#type: args.subject_type.trim().to_string(),
+                    id: args.subject_id.trim().to_string(),
+                    properties: None,
+                }),
+                action: Some(Action {
+                    name: args.action.trim().to_string(),
+                    properties: None,
+                }),
+                resource: Some(Resource {
+                    r#type: args.resource_type.trim().to_string(),
+                    id: args.resource_id.trim().to_string(),
+                    properties: None,
+                }),
+            };
+            let resp = authz
+                .check_access_sync(request)
                 .context("failed to check authorization access")?;
-            print_value(&resp, format);
+            print_value(&serde_json::to_value(&resp)?, format);
             Ok(())
         }
         AuthorizationCommands::Relationships { command } => match command {
             AuthorizationRelationshipCommands::List(args) => {
-                let path = relationships_list_path(&args)?;
-                let resp = client
-                    .get(&path)
+                let request = build_list_relationships_request(&args);
+                let resp = authz
+                    .list_relationships_sync(request)
                     .context("failed to list authorization relationships")?;
-                print_value(&resp, format);
+                print_value(&serde_json::to_value(&resp)?, format);
                 Ok(())
             }
         },
         AuthorizationCommands::Models { command } => match command {
             AuthorizationModelCommands::Active { command } => match command {
                 AuthorizationActiveModelCommands::Get => {
-                    let resp = client
-                        .get(ACTIVE_MODEL_PATH)
+                    let resp = authz
+                        .get_active_model_ref_sync()
                         .context("failed to get active authorization model")?;
-                    print_value(&resp, format);
+                    print_value(&serde_json::to_value(&resp)?, format);
                     Ok(())
                 }
                 AuthorizationActiveModelCommands::ResourceTypes { command } => match command {
                     AuthorizationActiveModelResourceTypeCommands::List(args) => {
-                        let path = active_model_resource_types_path(
-                            args.name.as_deref(),
-                            args.source_layer.as_deref(),
-                            args.page_size,
-                            args.page_token.as_deref(),
-                        )?;
-                        let resp = client
-                            .get(&path)
+                        let request = ListActiveModelResourceTypesRequest {
+                            filter: Some(AuthorizationModelResourceTypeFilter {
+                                name: args.name.as_deref().unwrap_or_default().trim().to_string(),
+                                source_layer: parse_source_layer(args.source_layer.as_deref()),
+                            }),
+                            page_size: args.page_size.unwrap_or(0) as i32,
+                            page_token: args
+                                .page_token
+                                .as_deref()
+                                .unwrap_or_default()
+                                .trim()
+                                .to_string(),
+                        };
+                        let resp = authz
+                            .list_active_model_resource_types_sync(request)
                             .context("failed to list active authorization model resource types")?;
-                        print_value(&resp, format);
+                        print_value(&serde_json::to_value(&resp)?, format);
                         Ok(())
                     }
                 },
@@ -75,31 +93,61 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
     }
 }
 
-fn relationships_list_path(args: &crate::cli::AuthorizationRelationshipListArgs) -> Result<String> {
-    let mut params = Vec::new();
-    query::push_opt_param(&mut params, "subjectId", args.subject_id.as_deref());
-    query::push_opt_param(&mut params, "subjectType", args.subject_type.as_deref());
-    query::push_opt_param(&mut params, "relation", args.relation.as_deref());
-    query::push_opt_param(&mut params, "resourceType", args.resource_type.as_deref());
-    query::push_opt_param(&mut params, "resourceId", args.resource_id.as_deref());
-    query::push_opt_param(&mut params, "sourceLayer", args.source_layer.as_deref());
-    query::push_opt_u32(&mut params, "pageSize", args.page_size);
-    query::push_opt_param(&mut params, "pageToken", args.page_token.as_deref());
-    query::append_query(RELATIONSHIPS_PATH, &params)
+fn build_list_relationships_request(
+    args: &crate::cli::AuthorizationRelationshipListArgs,
+) -> ListRelationshipsRequest {
+    let mut filter = RelationshipFilter {
+        relation: args
+            .relation
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+        target: None,
+        resource: None,
+        target_type: 0,
+        target_entity_type: String::new(),
+        resource_type: String::new(),
+        source_layer: parse_source_layer(args.source_layer.as_deref()),
+    };
+    if let (Some(subject_type), Some(subject_id)) =
+        (args.subject_type.as_deref(), args.subject_id.as_deref())
+    {
+        filter.target = Some(RelationshipTarget {
+            kind: Some(RelationshipTargetKind::Subject(Subject {
+                r#type: subject_type.trim().to_string(),
+                id: subject_id.trim().to_string(),
+                properties: None,
+            })),
+        });
+    }
+    if let (Some(resource_type), Some(resource_id)) =
+        (args.resource_type.as_deref(), args.resource_id.as_deref())
+    {
+        filter.resource = Some(Resource {
+            r#type: resource_type.trim().to_string(),
+            id: resource_id.trim().to_string(),
+            properties: None,
+        });
+    }
+    ListRelationshipsRequest {
+        filter: Some(filter),
+        page_size: args.page_size.unwrap_or(0) as i32,
+        page_token: args
+            .page_token
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    }
 }
 
-fn active_model_resource_types_path(
-    name: Option<&str>,
-    source_layer: Option<&str>,
-    page_size: Option<u32>,
-    page_token: Option<&str>,
-) -> Result<String> {
-    let mut params = Vec::new();
-    query::push_opt_param(&mut params, "name", name);
-    query::push_opt_param(&mut params, "sourceLayer", source_layer);
-    query::push_opt_u32(&mut params, "pageSize", page_size);
-    query::push_opt_param(&mut params, "pageToken", page_token);
-    query::append_query(ACTIVE_MODEL_RESOURCE_TYPES_PATH, &params)
+fn parse_source_layer(value: Option<&str>) -> i32 {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some("static_config") | Some("staticconfig") => SOURCE_LAYER_STATIC_CONFIG,
+        Some("runtime") => SOURCE_LAYER_RUNTIME,
+        _ => SOURCE_LAYER_UNSPECIFIED,
+    }
 }
 
 fn print_value(value: &Value, format: Format) {

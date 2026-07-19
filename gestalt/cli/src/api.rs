@@ -267,6 +267,14 @@ impl ApiClient {
         })
     }
 
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
     pub fn get(&self, path: &str) -> Result<serde_json::Value> {
         self.send(Method::GET, path)
     }
