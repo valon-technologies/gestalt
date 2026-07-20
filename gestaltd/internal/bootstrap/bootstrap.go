@@ -194,6 +194,7 @@ type Deps struct {
 	DevSupervisor           *providerdev.Supervisor
 	RemoteClients           *remote.ClientSet
 	RemoteToken             string
+	GatewayTransport        *providergateway.ProviderGatewayTransport
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -754,7 +755,6 @@ type preparedCore struct {
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.IdentityProvider
 	Authorization        map[string]core.AuthorizationProvider
-	AuthorizationConns   map[string]grpc.ClientConnInterface
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -892,9 +892,17 @@ func resolveConfigSecrets(
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
+	registry, err := publicrpc.NewGeneratedRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("public rpc registry: %w", err)
+	}
+	gatewayTransport := providergateway.NewProviderGatewayTransport()
+	gatewayTransport.SetPublicMethods(registry)
+
 	if err := ResolveConfigSecrets(ctx, cfg, factories); err != nil {
 		return nil, err
 	}
+	gatewayTransport.SetPublicBaseURL(cfg.Server.BaseURL)
 	sm, err := buildRuntimeSecretManager(cfg, factories)
 	if err != nil {
 		return nil, err
@@ -1077,6 +1085,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	auth := authProviders[selectedAuthName]
 	deps.Authentication = auth
+	deps.GatewayTransport = gatewayTransport
 
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
@@ -1086,14 +1095,14 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeAuthorizationOnError := true
 	defer func() {
 		if closeAuthorizationOnError {
-			_ = closeAuthorizationProviders(authorizationProviders.Raw)
+			_ = closeAuthorizationProviders(authorizationProviders)
 		}
 	}()
-	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders.Raw); err != nil {
+	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders.Raw)
+	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
@@ -1129,8 +1138,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		Auth:                 auth,
 		SelectedAuthProvider: selectedAuthName,
 		AuthProviders:        authProviders,
-		Authorization:        authorizationProviders.Raw,
-		AuthorizationConns:   authorizationProviders.Conns,
+		Authorization:        authorizationProviders,
 		Services:             svc,
 		ExtraIndexedDBs:      extraIndexedDBs,
 		ExtraCaches:          extraCaches,
@@ -1449,19 +1457,10 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		startupWorkflowConfigReconcile = nil
 	}
 
-	publicGatewayTransport, err := buildPublicGatewayTransport(
-		cfg,
-		prepared.Auth,
-		prepared.Authorization,
-		prepared.Services.Users,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if publicGatewayTransport != nil {
-		if err := registerAuthorizationGatewayRoutes(publicGatewayTransport, cfg, prepared.AuthorizationConns); err != nil {
-			return nil, err
-		}
+	publicGatewayTransport := prepared.Deps.GatewayTransport
+	wirePublicGatewayTransport(publicGatewayTransport, cfg, prepared.Auth, prepared.Authorization, prepared.Services.Users)
+	if prepared.Auth == nil {
+		publicGatewayTransport = nil
 	}
 
 	closeProviders = false
@@ -2111,70 +2110,70 @@ func buildNamedAuthProvider(cfg *config.Config, name string, authEntry *config.P
 	return auth, nil
 }
 
-type authorizationProviderSets struct {
-	Raw   map[string]core.AuthorizationProvider
-	Conns map[string]grpc.ClientConnInterface
-}
-
-func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (authorizationProviderSets, error) {
+func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (map[string]core.AuthorizationProvider, error) {
 	if len(cfg.Providers.Authorization) == 0 {
-		return authorizationProviderSets{}, nil
+		return nil, nil
 	}
 	name, entry, err := cfg.SelectedAuthorizationProvider()
 	if err != nil {
-		return authorizationProviderSets{}, err
+		return nil, err
 	}
 	if entry == nil {
-		return authorizationProviderSets{}, nil
+		return nil, nil
 	}
-	providers, err := buildNamedAuthorizationProvider(ctx, cfg, name, entry, factories, deps)
+	provider, err := buildNamedAuthorizationProvider(ctx, cfg, name, entry, factories, deps)
 	if err != nil {
-		return authorizationProviderSets{}, err
+		return nil, err
 	}
-	return authorizationProviderSets{
-		Raw:   map[string]core.AuthorizationProvider{name: providers.Raw},
-		Conns: map[string]grpc.ClientConnInterface{name: providers.Conn},
-	}, nil
+	return map[string]core.AuthorizationProvider{name: provider}, nil
 }
 
-func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (providerdrivers.AuthorizationBuildResult, error) {
+func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthorizationProvider, error) {
 	logicalName := strings.TrimSpace(name)
 	if logicalName == "" {
 		logicalName = "authorization"
 	}
 	if entry == nil {
-		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
+		return nil, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
 	}
 	if !providerBuildsLocal(cfg, entry) {
 		if deps.RemoteClients == nil || deps.RemoteClients.Authorization == nil {
-			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: remote authorization client is required when server.remote is configured")
+			return nil, fmt.Errorf("bootstrap: remote authorization client is required when server.remote is configured")
 		}
-		provider, err := authorizationservice.NewRemote(deps.RemoteClients.Authorization, logicalName)
+		conn := grpc.ClientConnInterface(deps.RemoteClients.Conn())
+		if deps.GatewayTransport != nil {
+			target := providergateway.ProviderTarget{Kind: providergateway.ProviderKindAuthorization, Name: logicalName}
+			if err := deps.GatewayTransport.RegisterDirect(target, providergateway.DirectEndpoint{Conn: conn}); err != nil {
+				return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+			}
+			conn = deps.GatewayTransport.Conn(target)
+		}
+		provider, err := authorizationservice.NewRemote(conn, logicalName)
 		if err != nil {
-			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
-		return providerdrivers.AuthorizationBuildResult{Raw: provider, Conn: nil}, nil
+		return provider, nil
 	}
 	if factories.Authorization == nil {
-		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization factory is not registered")
+		return nil, fmt.Errorf("bootstrap: authorization factory is not registered")
 	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
 		node, err = config.BuildComponentRuntimeConfigNode(logicalName, providermanifestv1.KindAuthorization, entry, entry.Config)
 		if err != nil {
-			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
 	}
 	hostServices, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
-		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
-	provider, err := factories.Authorization(ctx, logicalName, node, hostServices, deps)
+	result, err := factories.Authorization(ctx, logicalName, node, hostServices, deps)
 	if err != nil {
-		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
-	return provider, nil
+	return result.Raw, nil
 }
 
 func buildIndexedDB(cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (indexeddb.IndexedDB, error) {
@@ -2365,30 +2364,23 @@ func buildAgent(ctx context.Context, cfg *config.Config, name string, entry *con
 	return tracked, nil
 }
 
-func buildPublicGatewayTransport(
+func wirePublicGatewayTransport(
+	transport *providergateway.ProviderGatewayTransport,
 	cfg *config.Config,
 	auth core.IdentityProvider,
 	authorization map[string]core.AuthorizationProvider,
 	users providergateway.UserStore,
-) (*providergateway.ProviderGatewayTransport, error) {
-	if auth == nil {
-		return nil, nil
+) {
+	if transport == nil || auth == nil {
+		return
 	}
-	registry, err := publicrpc.NewGeneratedRegistry()
-	if err != nil {
-		return nil, fmt.Errorf("public rpc registry: %w", err)
-	}
-	transport := providergateway.NewProviderGatewayTransport()
 	transport.SetIdentityProvider(auth)
 	transport.SetUserStore(users)
-	transport.SetPublicMethods(registry)
 	if cfg != nil {
 		if name, _, err := cfg.SelectedAuthorizationProvider(); err == nil && name != "" && authorization != nil {
 			transport.SetAuthorizationProvider(authorization[name])
 		}
-		transport.SetPublicBaseURL(cfg.Server.BaseURL)
 	}
-	return transport, nil
 }
 
 func ProviderAuthorizationKinds(cfg *config.Config) map[string]invocation.ProviderKind {
@@ -2410,23 +2402,4 @@ func ProviderAuthorizationKinds(cfg *config.Config) map[string]invocation.Provid
 		kinds[name] = invocation.ProviderKindAgent
 	}
 	return kinds
-}
-
-func registerAuthorizationGatewayRoutes(
-	transport *providergateway.ProviderGatewayTransport,
-	cfg *config.Config,
-	conns map[string]grpc.ClientConnInterface,
-) error {
-	name, entry, _ := cfg.SelectedAuthorizationProvider()
-	if entry == nil || name == "" {
-		return nil
-	}
-	conn, ok := conns[name]
-	if !ok || conn == nil {
-		return nil
-	}
-	return transport.RegisterDirect(
-		providergateway.ProviderTarget{Kind: providergateway.ProviderKindAuthorization, Name: name},
-		providergateway.DirectEndpoint{Conn: conn},
-	)
 }

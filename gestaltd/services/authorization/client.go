@@ -102,14 +102,23 @@ func (e *Executable) Close() error {
 	return e.err
 }
 
-func NewFromExecutable(exec *Executable, cfg ExecConfig) (core.AuthorizationProvider, error) {
+func NewFromExecutable(exec io.Closer, conn grpc.ClientConnInterface) (core.AuthorizationProvider, error) {
 	if exec == nil {
 		return nil, fmt.Errorf("authorization executable is required")
 	}
-	client := rpcauthorization.NewConn(exec.Conn(), rpcauthorization.Options{
+	if conn == nil {
+		return nil, fmt.Errorf("authorization connection is required")
+	}
+	var runtime proto.ProviderLifecycleClient
+	if e, ok := exec.(interface {
+		Runtime() proto.ProviderLifecycleClient
+	}); ok {
+		runtime = e.Runtime()
+	}
+	client := rpcauthorization.NewConn(conn, rpcauthorization.Options{
 		UnaryTimeout: runtimehost.ProviderRPCTimeout,
 	})
-	return &remoteAuthorizationProvider{Client: client, runtime: exec.Runtime(), closer: exec}, nil
+	return &remoteAuthorizationProvider{Client: client, runtime: runtime, closer: exec}, nil
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvider, error) {
@@ -117,7 +126,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvi
 	if err != nil {
 		return nil, err
 	}
-	provider, err := NewFromExecutable(exec, cfg)
+	provider, err := NewFromExecutable(exec, exec.Conn())
 	if err != nil {
 		_ = exec.Close()
 		return nil, err
@@ -125,21 +134,25 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvi
 	return provider, nil
 }
 
-// NewRemote returns an authorization provider backed by a public gRPC client.
-func NewRemote(client proto.AuthorizationClient, name string) (core.AuthorizationProvider, error) {
-	if client == nil {
-		return nil, fmt.Errorf("authorization provider client is required")
+// NewRemote returns an authorization provider backed by a public gRPC connection.
+func NewRemote(conn grpc.ClientConnInterface, name string) (core.AuthorizationProvider, error) {
+	if conn == nil {
+		return nil, fmt.Errorf("authorization provider connection is required")
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("authorization provider name is required")
 	}
+	client := proto.NewAuthorizationClient(conn)
 	return rpcauthorization.NewClient(client, rpcauthorization.Options{
 		UnaryTimeout: runtimehost.ProviderRPCTimeout,
 	}), nil
 }
 
 func (r *remoteAuthorizationProvider) Ping(ctx context.Context) error {
+	if r == nil || r.runtime == nil {
+		return nil
+	}
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	_, err := r.runtime.HealthCheck(ctx, &emptypb.Empty{})

@@ -86,6 +86,13 @@ func (c *ClientSet) Close() error {
 	return conn.Close()
 }
 
+// Conn returns the underlying gRPC connection to the remote gestaltd instance.
+func (c *ClientSet) Conn() *grpc.ClientConn {
+	if c == nil {
+		return nil
+	}
+	return c.conn
+}
 func clientSetFromConn(conn *grpc.ClientConn) *ClientSet {
 	return &ClientSet{
 		App:                 proto.NewAppClient(conn),

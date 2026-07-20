@@ -1900,7 +1900,7 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
 		provider := &bootstrapTransportRecordingAuthorizationProvider{}
 		built = append(built, provider)
-		return providerdrivers.AuthorizationBuildResult{Raw: provider, Conn: &stubGatewayConn{}}, nil
+		return providerdrivers.AuthorizationBuildResult{Raw: provider}, nil
 	}
 
 	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -1919,16 +1919,6 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	if result.Authorization["authz"] != provider {
 		t.Fatal("bootstrapped authorization provider is not the runtime authorization provider")
 	}
-}
-
-type stubGatewayConn struct{}
-
-func (stubGatewayConn) Invoke(context.Context, string, any, any, ...grpc.CallOption) error {
-	return status.Error(codes.Unimplemented, "stubGatewayConn")
-}
-
-func (stubGatewayConn) NewStream(context.Context, *grpc.StreamDesc, string, ...grpc.CallOption) (grpc.ClientStream, error) {
-	return nil, status.Error(codes.Unimplemented, "stubGatewayConn")
 }
 
 func TestBootstrapResultClosesExtraCaches(t *testing.T) {
