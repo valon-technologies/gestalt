@@ -48,6 +48,12 @@ export interface AuthorizeRequest {
   redirectUri: string;
   scope: string;
   state: string;
+  /**
+   * audience is the RFC 8707 target audience this flow is for. Empty means the
+   * platform default (login); a connection ID such as "github:default" starts a
+   * connect flow. Same operation, audience selects the surface.
+   */
+  audience: string;
 }
 
 /**
@@ -83,6 +89,24 @@ export interface GrantScope {
 }
 
 /**
+ * GrantSummary describes one caller-visible API-token grant at list time,
+ * serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+ */
+export interface GrantSummary {
+  grantId: string;
+  audience: string;
+  /**
+   * instance was Qualifier; identifies the connection instance within the
+   * audience (e.g. a Slack team ID).
+   */
+  instance: string;
+  /**
+   * metadata_json carries display labels (was ExternalCredential.MetadataJSON).
+   */
+  metadataJson: string;
+}
+
+/**
  * IntrospectRequest models RFC 7662 token introspection parameters.
  */
 export interface IntrospectRequest {
@@ -109,16 +133,26 @@ export interface IntrospectResponse {
 }
 
 /**
- * ListGrantsRequest lists API-token grant IDs visible to the caller.
+ * ListGrantsRequest lists API-token grants visible to the caller.
  */
-export interface ListGrantsRequest {}
+export interface ListGrantsRequest {
+  /**
+   * audience filters grants to one connection audience. Empty lists across all
+   * audiences.
+   */
+  audience: string;
+}
 
 /**
- * ListGrantsResponse returns caller-visible API-token grant IDs created via
- * token exchange. It must not include transient login or session grants.
+ * ListGrantsResponse returns caller-visible API-token grants created via token
+ * exchange. It must not include transient login or session grants.
+ *
+ * grant_ids is retained for backward compatibility and deprecated; new callers
+ * read grants. Removed in XC-5.
  */
 export interface ListGrantsResponse {
   grantIds: string[];
+  grants: GrantSummary[];
 }
 
 /**
@@ -169,6 +203,18 @@ export interface TokenRequest {
    * default.
    */
   expiresIn: bigint;
+  /**
+   * audience is the RFC 8707/8693 target audience. Required for
+   * grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+   * material exchange when no grant exists; cross-check on grant-backed resolve).
+   * Unused on authorization_code calls: the code correlates.
+   */
+  audience: string;
+  /**
+   * grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+   * grant instance for grant-backed resolve (replaces Qualifier/Instance).
+   */
+  grantId: string;
 }
 
 /**
@@ -184,6 +230,12 @@ export interface TokenResponse {
    * grant_id is the OIDF Grant Management extension when available.
    */
   grantId: string;
+  /**
+   * params is the RFC 6749 §5.1 extension member for interpolation params the
+   * provider computes from stored grant metadata + connection config (e.g.
+   * Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+   */
+  params: { [key: string]: string };
 }
 
 /**
@@ -241,6 +293,7 @@ export class Identity {
       redirectUri,
       scope,
       state,
+      audience: "",
     } satisfies Init<AuthorizeRequest>;
     const response = await callUnary(() =>
       this.client.authorize(
@@ -272,7 +325,11 @@ export class Identity {
     scope: string,
     subjectToken: string,
     subjectTokenType: string,
-    options?: { expiresIn?: bigint | undefined },
+    options?: {
+      expiresIn?: bigint | undefined;
+      audience?: string | undefined;
+      grantId?: string | undefined;
+    },
   ): Promise<TokenResponse> {
     const request = {
       grantType,
@@ -284,6 +341,8 @@ export class Identity {
       subjectToken,
       subjectTokenType,
       expiresIn: options?.expiresIn ?? 0n,
+      audience: options?.audience ?? "",
+      grantId: options?.grantId ?? "",
     } satisfies Init<TokenRequest>;
     const response = await callUnary(() =>
       this.client.token(

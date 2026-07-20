@@ -84,6 +84,11 @@ type ProviderIdentity struct {
 	Warnings           []string
 	MinProtocolVersion int32
 	MaxProtocolVersion int32
+	// capabilities declares runtime provider capabilities. Identity providers
+	// that serve connection audiences report "audiences"; enforcement
+	// (boot-time cross-check against installed apps' connections) lands in XC-4.
+	// Providers that report nothing behave exactly as today.
+	Capabilities []string
 }
 
 // StartRuntimeProviderResponse is the native message type for gestalt.provider.v1.StartRuntimeProviderResponse.

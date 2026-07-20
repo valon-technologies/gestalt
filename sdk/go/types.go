@@ -49,6 +49,11 @@ type ProviderMetadata struct {
 	DisplayName string
 	Description string
 	Version     string
+	// Capabilities declares runtime provider capabilities. Identity providers
+	// that serve connection audiences report "audiences"; enforcement
+	// (boot-time cross-check against installed apps' connections) lands in XC-4.
+	// Providers that report nothing behave exactly as today.
+	Capabilities []string
 }
 
 // Provider is the common startup contract shared by every provider kind.

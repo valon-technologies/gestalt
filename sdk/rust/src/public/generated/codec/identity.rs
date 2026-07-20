@@ -7,7 +7,7 @@
 use crate::generated::v1;
 use crate::public::generated::identity::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, GrantScope,
-    IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
+    GrantSummary, IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
     RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest,
     UserInfoResponse,
 };
@@ -20,6 +20,7 @@ pub(crate) fn to_wire_authorize_request(value: AuthorizeRequest) -> v1::Authoriz
         redirect_uri: value.redirect_uri,
         scope: value.scope,
         state: value.state,
+        audience: value.audience,
         ..Default::default()
     }
 }
@@ -59,6 +60,12 @@ pub(crate) fn encode_wire_authorize_request_json(
             serde_json::Value::String(value.state.to_string()),
         );
     }
+    if !value.audience.is_empty() {
+        object.insert(
+            "audience".into(),
+            serde_json::Value::String(value.audience.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -90,6 +97,10 @@ pub(crate) fn decode_wire_authorize_request_json(
             None => String::new(),
         },
         state: match object.get("state") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        audience: match object.get("audience") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
@@ -321,6 +332,77 @@ pub(crate) fn from_wire_grant_scope(value: v1::GrantScope) -> GrantScope {
     }
 }
 
+/// Converts a wire `GrantSummary` to its native message.
+pub(crate) fn from_wire_grant_summary(value: v1::GrantSummary) -> GrantSummary {
+    GrantSummary {
+        grant_id: value.grant_id,
+        audience: value.audience,
+        instance: value.instance,
+        metadata_json: value.metadata_json,
+    }
+}
+
+/// Encodes a wire `GrantSummary` as protobuf JSON.
+pub(crate) fn encode_wire_grant_summary_json(value: &v1::GrantSummary) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.grant_id.is_empty() {
+        object.insert(
+            "grantId".into(),
+            serde_json::Value::String(value.grant_id.to_string()),
+        );
+    }
+    if !value.audience.is_empty() {
+        object.insert(
+            "audience".into(),
+            serde_json::Value::String(value.audience.to_string()),
+        );
+    }
+    if !value.instance.is_empty() {
+        object.insert(
+            "instance".into(),
+            serde_json::Value::String(value.instance.to_string()),
+        );
+    }
+    if !value.metadata_json.is_empty() {
+        object.insert(
+            "metadataJson".into(),
+            serde_json::Value::String(value.metadata_json.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `GrantSummary`.
+pub(crate) fn decode_wire_grant_summary_json(
+    value: &serde_json::Value,
+) -> Result<v1::GrantSummary, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::GrantSummary {
+        grant_id: match object.get("grantId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        audience: match object.get("audience") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        instance: match object.get("instance") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        metadata_json: match object.get("metadataJson") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
 /// Converts a native `IntrospectRequest` to its wire message.
 pub(crate) fn to_wire_introspect_request(value: IntrospectRequest) -> v1::IntrospectRequest {
     v1::IntrospectRequest {
@@ -472,8 +554,9 @@ pub(crate) fn decode_wire_introspect_response_json(
 }
 
 /// Converts a native `ListGrantsRequest` to its wire message.
-pub(crate) fn to_wire_list_grants_request(_value: ListGrantsRequest) -> v1::ListGrantsRequest {
+pub(crate) fn to_wire_list_grants_request(value: ListGrantsRequest) -> v1::ListGrantsRequest {
     v1::ListGrantsRequest {
+        audience: value.audience,
         ..Default::default()
     }
 }
@@ -483,6 +566,12 @@ pub(crate) fn encode_wire_list_grants_request_json(
     value: &v1::ListGrantsRequest,
 ) -> serde_json::Value {
     let mut object = serde_json::Map::new();
+    if !value.audience.is_empty() {
+        object.insert(
+            "audience".into(),
+            serde_json::Value::String(value.audience.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -497,17 +586,28 @@ pub(crate) fn decode_wire_list_grants_request_json(
         ));
     };
     Ok(v1::ListGrantsRequest {
+        audience: match object.get("audience") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
         ..Default::default()
     })
 }
 
+#[allow(deprecated)]
 /// Converts a wire `ListGrantsResponse` to its native message.
 pub(crate) fn from_wire_list_grants_response(value: v1::ListGrantsResponse) -> ListGrantsResponse {
     ListGrantsResponse {
         grant_ids: value.grant_ids,
+        grants: value
+            .grants
+            .into_iter()
+            .map(from_wire_grant_summary)
+            .collect(),
     }
 }
 
+#[allow(deprecated)]
 /// Encodes a wire `ListGrantsResponse` as protobuf JSON.
 pub(crate) fn encode_wire_list_grants_response_json(
     value: &v1::ListGrantsResponse,
@@ -525,9 +625,22 @@ pub(crate) fn encode_wire_list_grants_response_json(
             ),
         );
     }
+    if !value.grants.is_empty() {
+        object.insert(
+            "grants".into(),
+            serde_json::Value::Array(
+                value
+                    .grants
+                    .iter()
+                    .map(|item| encode_wire_grant_summary_json(item))
+                    .collect(),
+            ),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
+#[allow(deprecated)]
 /// Decodes protobuf JSON into a wire `ListGrantsResponse`.
 pub(crate) fn decode_wire_list_grants_response_json(
     value: &serde_json::Value,
@@ -551,6 +664,17 @@ pub(crate) fn decode_wire_list_grants_response_json(
                         crate::public::proto_json::decode_string(item)?,
                     )
                 })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        grants: match object.get("grants") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for grants")
+                })?
+                .iter()
+                .map(|item| decode_wire_grant_summary_json(item))
                 .collect::<Result<Vec<_>, _>>()?,
             None => Vec::new(),
         },
@@ -641,6 +765,8 @@ pub(crate) fn to_wire_token_request(value: TokenRequest) -> v1::TokenRequest {
         subject_token: value.subject_token,
         subject_token_type: value.subject_token_type,
         expires_in: value.expires_in,
+        audience: value.audience,
+        grant_id: value.grant_id,
         ..Default::default()
     }
 }
@@ -702,6 +828,18 @@ pub(crate) fn encode_wire_token_request_json(value: &v1::TokenRequest) -> serde_
             crate::public::proto_json::encode_i64(value.expires_in),
         );
     }
+    if !value.audience.is_empty() {
+        object.insert(
+            "audience".into(),
+            serde_json::Value::String(value.audience.to_string()),
+        );
+    }
+    if !value.grant_id.is_empty() {
+        object.insert(
+            "grantId".into(),
+            serde_json::Value::String(value.grant_id.to_string()),
+        );
+    }
     serde_json::Value::Object(object)
 }
 
@@ -752,6 +890,14 @@ pub(crate) fn decode_wire_token_request_json(
             Some(value) => crate::public::proto_json::decode_i64(value)?,
             None => 0,
         },
+        audience: match object.get("audience") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        grant_id: match object.get("grantId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
         ..Default::default()
     })
 }
@@ -765,6 +911,7 @@ pub(crate) fn from_wire_token_response(value: v1::TokenResponse) -> TokenRespons
         refresh_token: value.refresh_token,
         scope: value.scope,
         grant_id: value.grant_id,
+        params: value.params,
     }
 }
 
@@ -807,6 +954,13 @@ pub(crate) fn encode_wire_token_response_json(value: &v1::TokenResponse) -> serd
             serde_json::Value::String(value.grant_id.to_string()),
         );
     }
+    if !value.params.is_empty() {
+        let mut map = serde_json::Map::new();
+        for (key, value) in &value.params {
+            map.insert(key.clone(), serde_json::Value::String(value.to_string()));
+        }
+        object.insert("params".into(), serde_json::Value::Object(map));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -844,6 +998,28 @@ pub(crate) fn decode_wire_token_response_json(
         grant_id: match object.get("grantId") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
+        },
+        params: match object.get("params") {
+            Some(value) => {
+                let mut out = std::collections::BTreeMap::new();
+                let Some(entries) = value.as_object() else {
+                    return Err(crate::public::proto_json::invalid_proto_json(
+                        "expected object for map",
+                    ));
+                };
+                for (key, value) in entries {
+                    out.insert(
+                        Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                            key.to_string(),
+                        )?,
+                        Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                            crate::public::proto_json::decode_string(value)?,
+                        )?,
+                    );
+                }
+                out
+            }
+            None => std::collections::BTreeMap::new(),
         },
         ..Default::default()
     })

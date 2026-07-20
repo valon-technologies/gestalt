@@ -81,6 +81,7 @@ export function toWireProviderIdentity(
     warnings: value.warnings ?? [],
     minProtocolVersion: value.minProtocolVersion ?? 0,
     maxProtocolVersion: value.maxProtocolVersion ?? 0,
+    capabilities: value.capabilities ?? [],
   });
 }
 
@@ -96,6 +97,7 @@ export function fromWireProviderIdentity(
     warnings: value.warnings,
     minProtocolVersion: value.minProtocolVersion,
     maxProtocolVersion: value.maxProtocolVersion,
+    capabilities: value.capabilities,
   };
 }
 

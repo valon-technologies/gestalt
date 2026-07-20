@@ -17,6 +17,7 @@ def to_wire_authorize_request(value: native.AuthorizeRequest) -> Any:
         redirect_uri=value.redirect_uri,
         scope=value.scope,
         state=value.state,
+        audience=value.audience,
     )
 
 
@@ -27,6 +28,7 @@ def from_wire_authorize_request(value: Any) -> native.AuthorizeRequest:
         redirect_uri=value.redirect_uri,
         scope=value.scope,
         state=value.state,
+        audience=value.audience,
     )
 
 
@@ -84,6 +86,24 @@ def from_wire_grant_scope(value: Any) -> native.GrantScope:
     )
 
 
+def to_wire_grant_summary(value: native.GrantSummary) -> Any:
+    return _identity_pb2.GrantSummary(
+        grant_id=value.grant_id,
+        audience=value.audience,
+        instance=value.instance,
+        metadata_json=value.metadata_json,
+    )
+
+
+def from_wire_grant_summary(value: Any) -> native.GrantSummary:
+    return native.GrantSummary(
+        grant_id=value.grant_id,
+        audience=value.audience,
+        instance=value.instance,
+        metadata_json=value.metadata_json,
+    )
+
+
 def to_wire_introspect_request(value: native.IntrospectRequest) -> Any:
     return _identity_pb2.IntrospectRequest(
         token=value.token,
@@ -118,23 +138,29 @@ def from_wire_introspect_response(value: Any) -> native.IntrospectResponse:
     )
 
 
-def to_wire_list_grants_request(_value: native.ListGrantsRequest) -> Any:
-    return _identity_pb2.ListGrantsRequest()
+def to_wire_list_grants_request(value: native.ListGrantsRequest) -> Any:
+    return _identity_pb2.ListGrantsRequest(
+        audience=value.audience,
+    )
 
 
-def from_wire_list_grants_request(_value: Any) -> native.ListGrantsRequest:
-    return native.ListGrantsRequest()
+def from_wire_list_grants_request(value: Any) -> native.ListGrantsRequest:
+    return native.ListGrantsRequest(
+        audience=value.audience,
+    )
 
 
 def to_wire_list_grants_response(value: native.ListGrantsResponse) -> Any:
     return _identity_pb2.ListGrantsResponse(
         grant_ids=value.grant_ids,
+        grants=[to_wire_grant_summary(item) for item in value.grants],
     )
 
 
 def from_wire_list_grants_response(value: Any) -> native.ListGrantsResponse:
     return native.ListGrantsResponse(
         grant_ids=list(value.grant_ids),
+        grants=[from_wire_grant_summary(item) for item in value.grants],
     )
 
 
@@ -169,6 +195,8 @@ def to_wire_token_request(value: native.TokenRequest) -> Any:
         subject_token=value.subject_token,
         subject_token_type=value.subject_token_type,
         expires_in=value.expires_in,
+        audience=value.audience,
+        grant_id=value.grant_id,
     )
 
 
@@ -183,6 +211,8 @@ def from_wire_token_request(value: Any) -> native.TokenRequest:
         subject_token=value.subject_token,
         subject_token_type=value.subject_token_type,
         expires_in=value.expires_in,
+        audience=value.audience,
+        grant_id=value.grant_id,
     )
 
 
@@ -194,6 +224,7 @@ def to_wire_token_response(value: native.TokenResponse) -> Any:
         refresh_token=value.refresh_token,
         scope=value.scope,
         grant_id=value.grant_id,
+        params=value.params,
     )
 
 
@@ -205,6 +236,7 @@ def from_wire_token_response(value: Any) -> native.TokenResponse:
         refresh_token=value.refresh_token,
         scope=value.scope,
         grant_id=value.grant_id,
+        params=dict(value.params),
     )
 
 

@@ -102,6 +102,13 @@ pub struct ProviderIdentity {
     pub min_protocol_version: i32,
     /// The `max_protocol_version` field.
     pub max_protocol_version: i32,
+    /// capabilities declares runtime provider capabilities. Identity providers
+    /// that serve connection audiences report "audiences"; enforcement
+    /// (boot-time cross-check against installed apps' connections) lands in XC-4.
+    /// Providers that report nothing behave exactly as today.
+    ///
+    /// The `capabilities` field.
+    pub capabilities: Vec<String>,
 }
 
 /// StartRuntimeProviderResponse confirms the protocol version the provider is

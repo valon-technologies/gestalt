@@ -27,11 +27,15 @@ const (
 type AuthorizeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// response_type is typically "code".
-	ResponseType  string `protobuf:"bytes,1,opt,name=response_type,json=responseType,proto3" json:"response_type,omitempty"`
-	ClientId      string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	RedirectUri   string `protobuf:"bytes,3,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
-	Scope         string `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`
-	State         string `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	ResponseType string `protobuf:"bytes,1,opt,name=response_type,json=responseType,proto3" json:"response_type,omitempty"`
+	ClientId     string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	RedirectUri  string `protobuf:"bytes,3,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	Scope        string `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`
+	State        string `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	// audience is the RFC 8707 target audience this flow is for. Empty means the
+	// platform default (login); a connection ID such as "github:default" starts a
+	// connect flow. Same operation, audience selects the surface.
+	Audience      string `protobuf:"bytes,6,opt,name=audience,proto3" json:"audience,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -97,6 +101,13 @@ func (x *AuthorizeRequest) GetScope() string {
 func (x *AuthorizeRequest) GetState() string {
 	if x != nil {
 		return x.State
+	}
+	return ""
+}
+
+func (x *AuthorizeRequest) GetAudience() string {
+	if x != nil {
+		return x.Audience
 	}
 	return ""
 }
@@ -169,7 +180,15 @@ type TokenRequest struct {
 	// lifetime in seconds. The provider MAY clamp or default it; expires_in in
 	// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
 	// default.
-	ExpiresIn     int64 `protobuf:"varint,10,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	ExpiresIn int64 `protobuf:"varint,10,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	// audience is the RFC 8707/8693 target audience. Required for
+	// grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+	// material exchange when no grant exists; cross-check on grant-backed resolve).
+	// Unused on authorization_code calls: the code correlates.
+	Audience string `protobuf:"bytes,11,opt,name=audience,proto3" json:"audience,omitempty"`
+	// grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+	// grant instance for grant-backed resolve (replaces Qualifier/Instance).
+	GrantId       string `protobuf:"bytes,12,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -267,6 +286,20 @@ func (x *TokenRequest) GetExpiresIn() int64 {
 	return 0
 }
 
+func (x *TokenRequest) GetAudience() string {
+	if x != nil {
+		return x.Audience
+	}
+	return ""
+}
+
+func (x *TokenRequest) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
 // TokenResponse models RFC 6749 token endpoint response fields.
 type TokenResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
@@ -276,7 +309,11 @@ type TokenResponse struct {
 	RefreshToken string                 `protobuf:"bytes,4,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	Scope        string                 `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
 	// grant_id is the OIDF Grant Management extension when available.
-	GrantId       string `protobuf:"bytes,6,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	GrantId string `protobuf:"bytes,6,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	// params is the RFC 6749 §5.1 extension member for interpolation params the
+	// provider computes from stored grant metadata + connection config (e.g.
+	// Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+	Params        map[string]string `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -351,6 +388,13 @@ func (x *TokenResponse) GetGrantId() string {
 		return x.GrantId
 	}
 	return ""
+}
+
+func (x *TokenResponse) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
 }
 
 // IntrospectRequest models RFC 7662 token introspection parameters.
@@ -488,9 +532,12 @@ func (x *IntrospectResponse) GetAudience() []string {
 	return nil
 }
 
-// ListGrantsRequest lists API-token grant IDs visible to the caller.
+// ListGrantsRequest lists API-token grants visible to the caller.
 type ListGrantsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// audience filters grants to one connection audience. Empty lists across all
+	// audiences.
+	Audience      string `protobuf:"bytes,1,opt,name=audience,proto3" json:"audience,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -525,18 +572,103 @@ func (*ListGrantsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_identity_proto_rawDescGZIP(), []int{6}
 }
 
-// ListGrantsResponse returns caller-visible API-token grant IDs created via
-// token exchange. It must not include transient login or session grants.
+func (x *ListGrantsRequest) GetAudience() string {
+	if x != nil {
+		return x.Audience
+	}
+	return ""
+}
+
+// GrantSummary describes one caller-visible API-token grant at list time,
+// serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+type GrantSummary struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	GrantId  string                 `protobuf:"bytes,1,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	Audience string                 `protobuf:"bytes,2,opt,name=audience,proto3" json:"audience,omitempty"`
+	// instance was Qualifier; identifies the connection instance within the
+	// audience (e.g. a Slack team ID).
+	Instance string `protobuf:"bytes,3,opt,name=instance,proto3" json:"instance,omitempty"`
+	// metadata_json carries display labels (was ExternalCredential.MetadataJSON).
+	MetadataJson  string `protobuf:"bytes,4,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrantSummary) Reset() {
+	*x = GrantSummary{}
+	mi := &file_v1_identity_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrantSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrantSummary) ProtoMessage() {}
+
+func (x *GrantSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_identity_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrantSummary.ProtoReflect.Descriptor instead.
+func (*GrantSummary) Descriptor() ([]byte, []int) {
+	return file_v1_identity_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GrantSummary) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+func (x *GrantSummary) GetAudience() string {
+	if x != nil {
+		return x.Audience
+	}
+	return ""
+}
+
+func (x *GrantSummary) GetInstance() string {
+	if x != nil {
+		return x.Instance
+	}
+	return ""
+}
+
+func (x *GrantSummary) GetMetadataJson() string {
+	if x != nil {
+		return x.MetadataJson
+	}
+	return ""
+}
+
+// ListGrantsResponse returns caller-visible API-token grants created via token
+// exchange. It must not include transient login or session grants.
+//
+// grant_ids is retained for backward compatibility and deprecated; new callers
+// read grants. Removed in XC-5.
 type ListGrantsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GrantIds      []string               `protobuf:"bytes,1,rep,name=grant_ids,json=grantIds,proto3" json:"grant_ids,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: Marked as deprecated in v1/identity.proto.
+	GrantIds      []string        `protobuf:"bytes,1,rep,name=grant_ids,json=grantIds,proto3" json:"grant_ids,omitempty"`
+	Grants        []*GrantSummary `protobuf:"bytes,2,rep,name=grants,proto3" json:"grants,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListGrantsResponse) Reset() {
 	*x = ListGrantsResponse{}
-	mi := &file_v1_identity_proto_msgTypes[7]
+	mi := &file_v1_identity_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -548,7 +680,7 @@ func (x *ListGrantsResponse) String() string {
 func (*ListGrantsResponse) ProtoMessage() {}
 
 func (x *ListGrantsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[7]
+	mi := &file_v1_identity_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -561,12 +693,20 @@ func (x *ListGrantsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGrantsResponse.ProtoReflect.Descriptor instead.
 func (*ListGrantsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{7}
+	return file_v1_identity_proto_rawDescGZIP(), []int{8}
 }
 
+// Deprecated: Marked as deprecated in v1/identity.proto.
 func (x *ListGrantsResponse) GetGrantIds() []string {
 	if x != nil {
 		return x.GrantIds
+	}
+	return nil
+}
+
+func (x *ListGrantsResponse) GetGrants() []*GrantSummary {
+	if x != nil {
+		return x.Grants
 	}
 	return nil
 }
@@ -581,7 +721,7 @@ type GetGrantRequest struct {
 
 func (x *GetGrantRequest) Reset() {
 	*x = GetGrantRequest{}
-	mi := &file_v1_identity_proto_msgTypes[8]
+	mi := &file_v1_identity_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -593,7 +733,7 @@ func (x *GetGrantRequest) String() string {
 func (*GetGrantRequest) ProtoMessage() {}
 
 func (x *GetGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[8]
+	mi := &file_v1_identity_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -606,7 +746,7 @@ func (x *GetGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGrantRequest.ProtoReflect.Descriptor instead.
 func (*GetGrantRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{8}
+	return file_v1_identity_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetGrantRequest) GetGrantId() string {
@@ -627,7 +767,7 @@ type GrantScope struct {
 
 func (x *GrantScope) Reset() {
 	*x = GrantScope{}
-	mi := &file_v1_identity_proto_msgTypes[9]
+	mi := &file_v1_identity_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -639,7 +779,7 @@ func (x *GrantScope) String() string {
 func (*GrantScope) ProtoMessage() {}
 
 func (x *GrantScope) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[9]
+	mi := &file_v1_identity_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -652,7 +792,7 @@ func (x *GrantScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantScope.ProtoReflect.Descriptor instead.
 func (*GrantScope) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{9}
+	return file_v1_identity_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GrantScope) GetScope() string {
@@ -681,7 +821,7 @@ type GetGrantResponse struct {
 
 func (x *GetGrantResponse) Reset() {
 	*x = GetGrantResponse{}
-	mi := &file_v1_identity_proto_msgTypes[10]
+	mi := &file_v1_identity_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -693,7 +833,7 @@ func (x *GetGrantResponse) String() string {
 func (*GetGrantResponse) ProtoMessage() {}
 
 func (x *GetGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[10]
+	mi := &file_v1_identity_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -706,7 +846,7 @@ func (x *GetGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGrantResponse.ProtoReflect.Descriptor instead.
 func (*GetGrantResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{10}
+	return file_v1_identity_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetGrantResponse) GetScopes() []*GrantScope {
@@ -740,7 +880,7 @@ type RevokeGrantRequest struct {
 
 func (x *RevokeGrantRequest) Reset() {
 	*x = RevokeGrantRequest{}
-	mi := &file_v1_identity_proto_msgTypes[11]
+	mi := &file_v1_identity_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -752,7 +892,7 @@ func (x *RevokeGrantRequest) String() string {
 func (*RevokeGrantRequest) ProtoMessage() {}
 
 func (x *RevokeGrantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[11]
+	mi := &file_v1_identity_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -765,7 +905,7 @@ func (x *RevokeGrantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGrantRequest.ProtoReflect.Descriptor instead.
 func (*RevokeGrantRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{11}
+	return file_v1_identity_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RevokeGrantRequest) GetGrantId() string {
@@ -784,7 +924,7 @@ type RevokeGrantResponse struct {
 
 func (x *RevokeGrantResponse) Reset() {
 	*x = RevokeGrantResponse{}
-	mi := &file_v1_identity_proto_msgTypes[12]
+	mi := &file_v1_identity_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -796,7 +936,7 @@ func (x *RevokeGrantResponse) String() string {
 func (*RevokeGrantResponse) ProtoMessage() {}
 
 func (x *RevokeGrantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[12]
+	mi := &file_v1_identity_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -809,7 +949,7 @@ func (x *RevokeGrantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeGrantResponse.ProtoReflect.Descriptor instead.
 func (*RevokeGrantResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{12}
+	return file_v1_identity_proto_rawDescGZIP(), []int{13}
 }
 
 // UserInfoRequest is intentionally empty. The caller bearer token is supplied
@@ -822,7 +962,7 @@ type UserInfoRequest struct {
 
 func (x *UserInfoRequest) Reset() {
 	*x = UserInfoRequest{}
-	mi := &file_v1_identity_proto_msgTypes[13]
+	mi := &file_v1_identity_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +974,7 @@ func (x *UserInfoRequest) String() string {
 func (*UserInfoRequest) ProtoMessage() {}
 
 func (x *UserInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[13]
+	mi := &file_v1_identity_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,7 +987,7 @@ func (x *UserInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserInfoRequest.ProtoReflect.Descriptor instead.
 func (*UserInfoRequest) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{13}
+	return file_v1_identity_proto_rawDescGZIP(), []int{14}
 }
 
 // UserInfoResponse models profile claims about the authenticated end user.
@@ -862,7 +1002,7 @@ type UserInfoResponse struct {
 
 func (x *UserInfoResponse) Reset() {
 	*x = UserInfoResponse{}
-	mi := &file_v1_identity_proto_msgTypes[14]
+	mi := &file_v1_identity_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -874,7 +1014,7 @@ func (x *UserInfoResponse) String() string {
 func (*UserInfoResponse) ProtoMessage() {}
 
 func (x *UserInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_identity_proto_msgTypes[14]
+	mi := &file_v1_identity_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -887,7 +1027,7 @@ func (x *UserInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserInfoResponse.ProtoReflect.Descriptor instead.
 func (*UserInfoResponse) Descriptor() ([]byte, []int) {
-	return file_v1_identity_proto_rawDescGZIP(), []int{14}
+	return file_v1_identity_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UserInfoResponse) GetSubjectId() string {
@@ -915,15 +1055,16 @@ var File_v1_identity_proto protoreflect.FileDescriptor
 
 const file_v1_identity_proto_rawDesc = "" +
 	"\n" +
-	"\x11v1/identity.proto\x12\x13gestalt.provider.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/api/visibility.proto\x1a\x14v1/annotations.proto\"\xa3\x01\n" +
+	"\x11v1/identity.proto\x12\x13gestalt.provider.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/api/visibility.proto\x1a\x14v1/annotations.proto\"\xbf\x01\n" +
 	"\x10AuthorizeRequest\x12#\n" +
 	"\rresponse_type\x18\x01 \x01(\tR\fresponseType\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12!\n" +
 	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri\x12\x14\n" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n" +
-	"\x05state\x18\x05 \x01(\tR\x05state\"6\n" +
+	"\x05state\x18\x05 \x01(\tR\x05state\x12\x1a\n" +
+	"\baudience\x18\x06 \x01(\tR\baudience\"6\n" +
 	"\x11AuthorizeResponse\x12!\n" +
-	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\xb4\x02\n" +
+	"\fredirect_uri\x18\x01 \x01(\tR\vredirectUri\"\xeb\x02\n" +
 	"\fTokenRequest\x12\x1d\n" +
 	"\n" +
 	"grant_type\x18\x01 \x01(\tR\tgrantType\x12\x12\n" +
@@ -936,7 +1077,9 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenType\x12\x1d\n" +
 	"\n" +
 	"expires_in\x18\n" +
-	" \x01(\x03R\texpiresInJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc6\x01\n" +
+	" \x01(\x03R\texpiresIn\x12\x1a\n" +
+	"\baudience\x18\v \x01(\tR\baudience\x12\x19\n" +
+	"\bgrant_id\x18\f \x01(\tR\agrantIdJ\x04\b\x04\x10\x05R\rrefresh_token\"\xc9\x02\n" +
 	"\rTokenResponse\x12!\n" +
 	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
 	"\n" +
@@ -945,7 +1088,11 @@ const file_v1_identity_proto_rawDesc = "" +
 	"expires_in\x18\x03 \x01(\x03R\texpiresIn\x12#\n" +
 	"\rrefresh_token\x18\x04 \x01(\tR\frefreshToken\x12\x14\n" +
 	"\x05scope\x18\x05 \x01(\tR\x05scope\x12\x19\n" +
-	"\bgrant_id\x18\x06 \x01(\tR\agrantId\"Q\n" +
+	"\bgrant_id\x18\x06 \x01(\tR\agrantId\x12F\n" +
+	"\x06params\x18\a \x03(\v2..gestalt.provider.v1.TokenResponse.ParamsEntryR\x06params\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Q\n" +
 	"\x11IntrospectRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12&\n" +
 	"\x0ftoken_type_hint\x18\x02 \x01(\tR\rtokenTypeHint\"\x95\x01\n" +
@@ -954,10 +1101,17 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x14\n" +
 	"\x05scope\x18\x03 \x01(\tR\x05scope\x12\x1b\n" +
 	"\tclient_id\x18\x04 \x01(\tR\bclientId\x12\x1a\n" +
-	"\baudience\x18\x05 \x03(\tR\baudience\"\x13\n" +
-	"\x11ListGrantsRequest\"1\n" +
-	"\x12ListGrantsResponse\x12\x1b\n" +
-	"\tgrant_ids\x18\x01 \x03(\tR\bgrantIds\",\n" +
+	"\baudience\x18\x05 \x03(\tR\baudience\"/\n" +
+	"\x11ListGrantsRequest\x12\x1a\n" +
+	"\baudience\x18\x01 \x01(\tR\baudience\"\x86\x01\n" +
+	"\fGrantSummary\x12\x19\n" +
+	"\bgrant_id\x18\x01 \x01(\tR\agrantId\x12\x1a\n" +
+	"\baudience\x18\x02 \x01(\tR\baudience\x12\x1a\n" +
+	"\binstance\x18\x03 \x01(\tR\binstance\x12#\n" +
+	"\rmetadata_json\x18\x04 \x01(\tR\fmetadataJson\"p\n" +
+	"\x12ListGrantsResponse\x12\x1f\n" +
+	"\tgrant_ids\x18\x01 \x03(\tB\x02\x18\x01R\bgrantIds\x129\n" +
+	"\x06grants\x18\x02 \x03(\v2!.gestalt.provider.v1.GrantSummaryR\x06grants\",\n" +
 	"\x0fGetGrantRequest\x12\x19\n" +
 	"\bgrant_id\x18\x01 \x01(\tR\agrantId\">\n" +
 	"\n" +
@@ -978,12 +1132,13 @@ const file_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name2\xfc\t\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name2\x94\n" +
+	"\n" +
 	"\bIdentity\x12\xcf\x01\n" +
-	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"s\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/api/v2/identity/authorize\x12\xfa\x01\n" +
-	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\xa9\x01\x8a\xb5\x18\n" +
+	"\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"s\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1f:\x01*\"\x1a/api/v2/identity/authorize\x12\x92\x02\n" +
+	"\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"\xc1\x01\x8a\xb5\x18\n" +
 	"grant_type\x8a\xb5\x18\x04code\x8a\xb5\x18\fredirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\xa2\xb5\x18\n" +
-	"expires_in\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/api/v2/identity/token\x12\xaf\x01\n" +
+	"expires_in\xa2\xb5\x18\baudience\xa2\xb5\x18\bgrant_id\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b:\x01*\"\x16/api/v2/identity/token\x12\xaf\x01\n" +
 	"\n" +
 	"Introspect\x12&.gestalt.provider.v1.IntrospectRequest\x1a'.gestalt.provider.v1.IntrospectResponse\"P\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02 :\x01*\"\x1b/api/v2/identity/introspect\x12\x88\x01\n" +
 	"\bUserInfo\x12$.gestalt.provider.v1.UserInfoRequest\x1a%.gestalt.provider.v1.UserInfoResponse\"/\xfa\xd2\xe4\x93\x02\b\x12\x06PUBLIC\x82\xd3\xe4\x93\x02\x1b\x12\x19/api/v2/identity/userinfo\x12\x8c\x01\n" +
@@ -1005,7 +1160,7 @@ func file_v1_identity_proto_rawDescGZIP() []byte {
 	return file_v1_identity_proto_rawDescData
 }
 
-var file_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_v1_identity_proto_goTypes = []any{
 	(*AuthorizeRequest)(nil),    // 0: gestalt.provider.v1.AuthorizeRequest
 	(*AuthorizeResponse)(nil),   // 1: gestalt.provider.v1.AuthorizeResponse
@@ -1014,36 +1169,40 @@ var file_v1_identity_proto_goTypes = []any{
 	(*IntrospectRequest)(nil),   // 4: gestalt.provider.v1.IntrospectRequest
 	(*IntrospectResponse)(nil),  // 5: gestalt.provider.v1.IntrospectResponse
 	(*ListGrantsRequest)(nil),   // 6: gestalt.provider.v1.ListGrantsRequest
-	(*ListGrantsResponse)(nil),  // 7: gestalt.provider.v1.ListGrantsResponse
-	(*GetGrantRequest)(nil),     // 8: gestalt.provider.v1.GetGrantRequest
-	(*GrantScope)(nil),          // 9: gestalt.provider.v1.GrantScope
-	(*GetGrantResponse)(nil),    // 10: gestalt.provider.v1.GetGrantResponse
-	(*RevokeGrantRequest)(nil),  // 11: gestalt.provider.v1.RevokeGrantRequest
-	(*RevokeGrantResponse)(nil), // 12: gestalt.provider.v1.RevokeGrantResponse
-	(*UserInfoRequest)(nil),     // 13: gestalt.provider.v1.UserInfoRequest
-	(*UserInfoResponse)(nil),    // 14: gestalt.provider.v1.UserInfoResponse
+	(*GrantSummary)(nil),        // 7: gestalt.provider.v1.GrantSummary
+	(*ListGrantsResponse)(nil),  // 8: gestalt.provider.v1.ListGrantsResponse
+	(*GetGrantRequest)(nil),     // 9: gestalt.provider.v1.GetGrantRequest
+	(*GrantScope)(nil),          // 10: gestalt.provider.v1.GrantScope
+	(*GetGrantResponse)(nil),    // 11: gestalt.provider.v1.GetGrantResponse
+	(*RevokeGrantRequest)(nil),  // 12: gestalt.provider.v1.RevokeGrantRequest
+	(*RevokeGrantResponse)(nil), // 13: gestalt.provider.v1.RevokeGrantResponse
+	(*UserInfoRequest)(nil),     // 14: gestalt.provider.v1.UserInfoRequest
+	(*UserInfoResponse)(nil),    // 15: gestalt.provider.v1.UserInfoResponse
+	nil,                         // 16: gestalt.provider.v1.TokenResponse.ParamsEntry
 }
 var file_v1_identity_proto_depIdxs = []int32{
-	9,  // 0: gestalt.provider.v1.GetGrantResponse.scopes:type_name -> gestalt.provider.v1.GrantScope
-	0,  // 1: gestalt.provider.v1.Identity.Authorize:input_type -> gestalt.provider.v1.AuthorizeRequest
-	2,  // 2: gestalt.provider.v1.Identity.Token:input_type -> gestalt.provider.v1.TokenRequest
-	4,  // 3: gestalt.provider.v1.Identity.Introspect:input_type -> gestalt.provider.v1.IntrospectRequest
-	13, // 4: gestalt.provider.v1.Identity.UserInfo:input_type -> gestalt.provider.v1.UserInfoRequest
-	6,  // 5: gestalt.provider.v1.Identity.ListGrants:input_type -> gestalt.provider.v1.ListGrantsRequest
-	8,  // 6: gestalt.provider.v1.Identity.GetGrant:input_type -> gestalt.provider.v1.GetGrantRequest
-	11, // 7: gestalt.provider.v1.Identity.RevokeGrant:input_type -> gestalt.provider.v1.RevokeGrantRequest
-	1,  // 8: gestalt.provider.v1.Identity.Authorize:output_type -> gestalt.provider.v1.AuthorizeResponse
-	3,  // 9: gestalt.provider.v1.Identity.Token:output_type -> gestalt.provider.v1.TokenResponse
-	5,  // 10: gestalt.provider.v1.Identity.Introspect:output_type -> gestalt.provider.v1.IntrospectResponse
-	14, // 11: gestalt.provider.v1.Identity.UserInfo:output_type -> gestalt.provider.v1.UserInfoResponse
-	7,  // 12: gestalt.provider.v1.Identity.ListGrants:output_type -> gestalt.provider.v1.ListGrantsResponse
-	10, // 13: gestalt.provider.v1.Identity.GetGrant:output_type -> gestalt.provider.v1.GetGrantResponse
-	12, // 14: gestalt.provider.v1.Identity.RevokeGrant:output_type -> gestalt.provider.v1.RevokeGrantResponse
-	8,  // [8:15] is the sub-list for method output_type
-	1,  // [1:8] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	16, // 0: gestalt.provider.v1.TokenResponse.params:type_name -> gestalt.provider.v1.TokenResponse.ParamsEntry
+	7,  // 1: gestalt.provider.v1.ListGrantsResponse.grants:type_name -> gestalt.provider.v1.GrantSummary
+	10, // 2: gestalt.provider.v1.GetGrantResponse.scopes:type_name -> gestalt.provider.v1.GrantScope
+	0,  // 3: gestalt.provider.v1.Identity.Authorize:input_type -> gestalt.provider.v1.AuthorizeRequest
+	2,  // 4: gestalt.provider.v1.Identity.Token:input_type -> gestalt.provider.v1.TokenRequest
+	4,  // 5: gestalt.provider.v1.Identity.Introspect:input_type -> gestalt.provider.v1.IntrospectRequest
+	14, // 6: gestalt.provider.v1.Identity.UserInfo:input_type -> gestalt.provider.v1.UserInfoRequest
+	6,  // 7: gestalt.provider.v1.Identity.ListGrants:input_type -> gestalt.provider.v1.ListGrantsRequest
+	9,  // 8: gestalt.provider.v1.Identity.GetGrant:input_type -> gestalt.provider.v1.GetGrantRequest
+	12, // 9: gestalt.provider.v1.Identity.RevokeGrant:input_type -> gestalt.provider.v1.RevokeGrantRequest
+	1,  // 10: gestalt.provider.v1.Identity.Authorize:output_type -> gestalt.provider.v1.AuthorizeResponse
+	3,  // 11: gestalt.provider.v1.Identity.Token:output_type -> gestalt.provider.v1.TokenResponse
+	5,  // 12: gestalt.provider.v1.Identity.Introspect:output_type -> gestalt.provider.v1.IntrospectResponse
+	15, // 13: gestalt.provider.v1.Identity.UserInfo:output_type -> gestalt.provider.v1.UserInfoResponse
+	8,  // 14: gestalt.provider.v1.Identity.ListGrants:output_type -> gestalt.provider.v1.ListGrantsResponse
+	11, // 15: gestalt.provider.v1.Identity.GetGrant:output_type -> gestalt.provider.v1.GetGrantResponse
+	13, // 16: gestalt.provider.v1.Identity.RevokeGrant:output_type -> gestalt.provider.v1.RevokeGrantResponse
+	10, // [10:17] is the sub-list for method output_type
+	3,  // [3:10] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_v1_identity_proto_init() }
@@ -1058,7 +1217,7 @@ func file_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_identity_proto_rawDesc), len(file_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

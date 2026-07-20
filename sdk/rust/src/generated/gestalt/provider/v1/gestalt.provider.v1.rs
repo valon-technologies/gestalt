@@ -2005,6 +2005,11 @@ pub struct AuthorizeRequest {
     pub scope: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub state: ::prost::alloc::string::String,
+    /// audience is the RFC 8707 target audience this flow is for. Empty means the
+    /// platform default (login); a connection ID such as "github:default" starts a
+    /// connect flow. Same operation, audience selects the surface.
+    #[prost(string, tag = "6")]
+    pub audience: ::prost::alloc::string::String,
 }
 /// AuthorizeResponse returns the HTTP Location redirect URI containing RFC 6749
 /// response parameters.
@@ -2045,9 +2050,19 @@ pub struct TokenRequest {
     /// default.
     #[prost(int64, tag = "10")]
     pub expires_in: i64,
+    /// audience is the RFC 8707/8693 target audience. Required for
+    /// grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+    /// material exchange when no grant exists; cross-check on grant-backed resolve).
+    /// Unused on authorization_code calls: the code correlates.
+    #[prost(string, tag = "11")]
+    pub audience: ::prost::alloc::string::String,
+    /// grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+    /// grant instance for grant-backed resolve (replaces Qualifier/Instance).
+    #[prost(string, tag = "12")]
+    pub grant_id: ::prost::alloc::string::String,
 }
 /// TokenResponse models RFC 6749 token endpoint response fields.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TokenResponse {
     #[prost(string, tag = "1")]
     pub access_token: ::prost::alloc::string::String,
@@ -2062,6 +2077,14 @@ pub struct TokenResponse {
     /// grant_id is the OIDF Grant Management extension when available.
     #[prost(string, tag = "6")]
     pub grant_id: ::prost::alloc::string::String,
+    /// params is the RFC 6749 §5.1 extension member for interpolation params the
+    /// provider computes from stored grant metadata + connection config (e.g.
+    /// Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+    #[prost(btree_map = "string, string", tag = "7")]
+    pub params: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 /// IntrospectRequest models RFC 7662 token introspection parameters.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2090,15 +2113,42 @@ pub struct IntrospectResponse {
     #[prost(string, repeated, tag = "5")]
     pub audience: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-/// ListGrantsRequest lists API-token grant IDs visible to the caller.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListGrantsRequest {}
-/// ListGrantsResponse returns caller-visible API-token grant IDs created via
-/// token exchange. It must not include transient login or session grants.
+/// ListGrantsRequest lists API-token grants visible to the caller.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListGrantsRequest {
+    /// audience filters grants to one connection audience. Empty lists across all
+    /// audiences.
+    #[prost(string, tag = "1")]
+    pub audience: ::prost::alloc::string::String,
+}
+/// GrantSummary describes one caller-visible API-token grant at list time,
+/// serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GrantSummary {
+    #[prost(string, tag = "1")]
+    pub grant_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub audience: ::prost::alloc::string::String,
+    /// instance was Qualifier; identifies the connection instance within the
+    /// audience (e.g. a Slack team ID).
+    #[prost(string, tag = "3")]
+    pub instance: ::prost::alloc::string::String,
+    /// metadata_json carries display labels (was ExternalCredential.MetadataJSON).
+    #[prost(string, tag = "4")]
+    pub metadata_json: ::prost::alloc::string::String,
+}
+/// ListGrantsResponse returns caller-visible API-token grants created via token
+/// exchange. It must not include transient login or session grants.
+///
+/// grant_ids is retained for backward compatibility and deprecated; new callers
+/// read grants. Removed in XC-5.
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListGrantsResponse {
+    #[deprecated]
     #[prost(string, repeated, tag = "1")]
     pub grant_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "2")]
+    pub grants: ::prost::alloc::vec::Vec<GrantSummary>,
 }
 /// GetGrantRequest retrieves one API-token grant by ID.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2741,6 +2791,12 @@ pub struct ProviderIdentity {
     pub min_protocol_version: i32,
     #[prost(int32, tag = "11")]
     pub max_protocol_version: i32,
+    /// capabilities declares runtime provider capabilities. Identity providers
+    /// that serve connection audiences report "audiences"; enforcement
+    /// (boot-time cross-check against installed apps' connections) lands in XC-4.
+    /// Providers that report nothing behave exactly as today.
+    #[prost(string, repeated, tag = "12")]
+    pub capabilities: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// ConfigureProviderRequest configures a non-integration provider for one
 /// runtime session.

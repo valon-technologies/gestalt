@@ -41,6 +41,11 @@ message ProviderIdentity {
   repeated string warnings = 6;
   int32 min_protocol_version = 10;
   int32 max_protocol_version = 11;
+  // capabilities declares runtime provider capabilities. Identity providers
+  // that serve connection audiences report "audiences"; enforcement
+  // (boot-time cross-check against installed apps' connections) lands in XC-4.
+  // Providers that report nothing behave exactly as today.
+  repeated string capabilities = 12;
 }
 
 // ConfigureProviderRequest configures a non-integration provider for one

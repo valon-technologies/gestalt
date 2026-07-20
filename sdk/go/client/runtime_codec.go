@@ -85,6 +85,7 @@ func ToWireProviderIdentity(value *ProviderIdentity) *proto.ProviderIdentity {
 		Warnings:           value.Warnings,
 		MinProtocolVersion: value.MinProtocolVersion,
 		MaxProtocolVersion: value.MaxProtocolVersion,
+		Capabilities:       value.Capabilities,
 	}
 	return out
 }
@@ -102,6 +103,7 @@ func FromWireProviderIdentity(value *proto.ProviderIdentity) *ProviderIdentity {
 		Warnings:           value.Warnings,
 		MinProtocolVersion: value.MinProtocolVersion,
 		MaxProtocolVersion: value.MaxProtocolVersion,
+		Capabilities:       value.Capabilities,
 	}
 	return out
 }

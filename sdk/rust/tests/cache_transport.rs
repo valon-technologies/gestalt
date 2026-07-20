@@ -62,6 +62,7 @@ impl CacheProvider for TestCacheProvider {
             display_name: "Cache Example".to_string(),
             description: "Test cache provider".to_string(),
             version: "0.1.0".to_string(),
+            capabilities: Vec::new(),
         })
     }
 

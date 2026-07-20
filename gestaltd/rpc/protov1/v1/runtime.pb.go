@@ -117,8 +117,13 @@ type ProviderIdentity struct {
 	Warnings           []string               `protobuf:"bytes,6,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	MinProtocolVersion int32                  `protobuf:"varint,10,opt,name=min_protocol_version,json=minProtocolVersion,proto3" json:"min_protocol_version,omitempty"`
 	MaxProtocolVersion int32                  `protobuf:"varint,11,opt,name=max_protocol_version,json=maxProtocolVersion,proto3" json:"max_protocol_version,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// capabilities declares runtime provider capabilities. Identity providers
+	// that serve connection audiences report "audiences"; enforcement
+	// (boot-time cross-check against installed apps' connections) lands in XC-4.
+	// Providers that report nothing behave exactly as today.
+	Capabilities  []string `protobuf:"bytes,12,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProviderIdentity) Reset() {
@@ -205,6 +210,13 @@ func (x *ProviderIdentity) GetMaxProtocolVersion() int32 {
 		return x.MaxProtocolVersion
 	}
 	return 0
+}
+
+func (x *ProviderIdentity) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 // ConfigureProviderRequest configures a non-integration provider for one
@@ -418,7 +430,7 @@ var File_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_v1_runtime_proto_rawDesc = "" +
 	"\n" +
-	"\x10v1/runtime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x14v1/annotations.proto\"\xbc\x02\n" +
+	"\x10v1/runtime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x14v1/annotations.proto\"\xe0\x02\n" +
 	"\x10ProviderIdentity\x125\n" +
 	"\x04kind\x18\x01 \x01(\x0e2!.gestalt.provider.v1.ProviderKindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
@@ -428,7 +440,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\bwarnings\x18\x06 \x03(\tR\bwarnings\x120\n" +
 	"\x14min_protocol_version\x18\n" +
 	" \x01(\x05R\x12minProtocolVersion\x120\n" +
-	"\x14max_protocol_version\x18\v \x01(\x05R\x12maxProtocolVersion\"\x8a\x01\n" +
+	"\x14max_protocol_version\x18\v \x01(\x05R\x12maxProtocolVersion\x12\"\n" +
+	"\fcapabilities\x18\f \x03(\tR\fcapabilities\"\x8a\x01\n" +
 	"\x18ConfigureProviderRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12)\n" +

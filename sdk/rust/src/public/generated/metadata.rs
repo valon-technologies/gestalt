@@ -1582,7 +1582,10 @@ pub const METHOD_IDENTITY_LIST_GRANTS: Method = Method {
     http_path: "/api/v2/identity/grants",
     http_body: "",
     http_path_fields: &[],
-    http_query_fields: &[],
+    http_query_fields: &[PublicField {
+        name: "audience",
+        json_name: "audience",
+    }],
     fill: &[],
     reject: &[],
     encode_request_json: Some(encode_list_grants_request_json),

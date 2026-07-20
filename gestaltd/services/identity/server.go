@@ -87,11 +87,11 @@ func (s *providerServer) UserInfo(ctx context.Context, req *proto.UserInfoReques
 	return userInfoResponseToProto(resp), nil
 }
 
-func (s *providerServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
+func (s *providerServer) ListGrants(ctx context.Context, req *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	resp, err := s.provider.ListGrants(providerHandlerContext(ctx), &core.ListGrantsRequest{})
+	resp, err := s.provider.ListGrants(providerHandlerContext(ctx), listGrantsRequestFromProto(req))
 	if err != nil {
 		return nil, identityToGRPCError("list grants", err)
 	}
@@ -158,6 +158,7 @@ func authorizeRequestFromProto(req *proto.AuthorizeRequest) *core.AuthorizeReque
 		RedirectURI:  req.GetRedirectUri(),
 		Scope:        req.GetScope(),
 		State:        req.GetState(),
+		Audience:     req.GetAudience(),
 	}
 }
 
@@ -182,6 +183,8 @@ func tokenRequestFromProto(req *proto.TokenRequest) *core.TokenRequest {
 		SubjectToken:     req.GetSubjectToken(),
 		SubjectTokenType: req.GetSubjectTokenType(),
 		ExpiresIn:        req.GetExpiresIn(),
+		Audience:         req.GetAudience(),
+		GrantID:          req.GetGrantId(),
 	}
 }
 
@@ -189,7 +192,7 @@ func tokenResponseToProto(resp *core.TokenResponse) *proto.TokenResponse {
 	if resp == nil {
 		return nil
 	}
-	return &proto.TokenResponse{
+	out := &proto.TokenResponse{
 		AccessToken:  resp.AccessToken,
 		TokenType:    resp.TokenType,
 		ExpiresIn:    int64(resp.ExpiresIn),
@@ -197,6 +200,13 @@ func tokenResponseToProto(resp *core.TokenResponse) *proto.TokenResponse {
 		Scope:        resp.Scope,
 		GrantId:      resp.GrantID,
 	}
+	if resp.Params != nil {
+		out.Params = make(map[string]string, len(resp.Params))
+		for k, v := range resp.Params {
+			out.Params[k] = v
+		}
+	}
+	return out
 }
 
 func introspectRequestFromProto(req *proto.IntrospectRequest) *core.IntrospectRequest {
@@ -237,11 +247,27 @@ func userInfoResponseToProto(resp *core.UserInfoResponse) *proto.UserInfoRespons
 	}
 }
 
+func listGrantsRequestFromProto(req *proto.ListGrantsRequest) *core.ListGrantsRequest {
+	if req == nil {
+		return nil
+	}
+	return &core.ListGrantsRequest{Audience: req.GetAudience()}
+}
+
 func listGrantsResponseToProto(resp *core.ListGrantsResponse) *proto.ListGrantsResponse {
 	if resp == nil {
 		return nil
 	}
-	return &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
+	out := &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
+	for _, g := range resp.Grants {
+		out.Grants = append(out.Grants, &proto.GrantSummary{
+			GrantId:      g.GrantID,
+			Audience:     g.Audience,
+			Instance:     g.Instance,
+			MetadataJson: g.MetadataJSON,
+		})
+	}
+	return out
 }
 
 func getGrantRequestFromProto(req *proto.GetGrantRequest) *core.GetGrantRequest {

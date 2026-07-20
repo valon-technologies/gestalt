@@ -9,6 +9,7 @@ import type {
   GetGrantRequest,
   GetGrantResponse,
   GrantScope,
+  GrantSummary,
   IntrospectRequest,
   IntrospectResponse,
   ListGrantsRequest,
@@ -31,6 +32,7 @@ export function toWireAuthorizeRequest(
     redirectUri: value.redirectUri ?? "",
     scope: value.scope ?? "",
     state: value.state ?? "",
+    audience: value.audience ?? "",
   });
 }
 
@@ -43,6 +45,7 @@ export function fromWireAuthorizeRequest(
     redirectUri: value.redirectUri,
     scope: value.scope,
     state: value.state,
+    audience: value.audience,
   };
 }
 
@@ -112,6 +115,26 @@ export function fromWireGrantScope(value: wire.GrantScope): GrantScope {
   };
 }
 
+export function toWireGrantSummary(
+  value: Init<GrantSummary>,
+): wire.GrantSummary {
+  return create(wire.GrantSummarySchema, {
+    grantId: value.grantId ?? "",
+    audience: value.audience ?? "",
+    instance: value.instance ?? "",
+    metadataJson: value.metadataJson ?? "",
+  });
+}
+
+export function fromWireGrantSummary(value: wire.GrantSummary): GrantSummary {
+  return {
+    grantId: value.grantId,
+    audience: value.audience,
+    instance: value.instance,
+    metadataJson: value.metadataJson,
+  };
+}
+
 export function toWireIntrospectRequest(
   value: Init<IntrospectRequest>,
 ): wire.IntrospectRequest {
@@ -157,13 +180,17 @@ export function fromWireIntrospectResponse(
 export function toWireListGrantsRequest(
   value: Init<ListGrantsRequest>,
 ): wire.ListGrantsRequest {
-  return create(wire.ListGrantsRequestSchema, {});
+  return create(wire.ListGrantsRequestSchema, {
+    audience: value.audience ?? "",
+  });
 }
 
 export function fromWireListGrantsRequest(
   value: wire.ListGrantsRequest,
 ): ListGrantsRequest {
-  return {};
+  return {
+    audience: value.audience,
+  };
 }
 
 export function toWireListGrantsResponse(
@@ -171,6 +198,7 @@ export function toWireListGrantsResponse(
 ): wire.ListGrantsResponse {
   return create(wire.ListGrantsResponseSchema, {
     grantIds: value.grantIds ?? [],
+    grants: (value.grants ?? []).map(toWireGrantSummary),
   });
 }
 
@@ -179,6 +207,7 @@ export function fromWireListGrantsResponse(
 ): ListGrantsResponse {
   return {
     grantIds: value.grantIds,
+    grants: value.grants.map(fromWireGrantSummary),
   };
 }
 
@@ -223,6 +252,8 @@ export function toWireTokenRequest(
     subjectToken: value.subjectToken ?? "",
     subjectTokenType: value.subjectTokenType ?? "",
     expiresIn: value.expiresIn ?? 0n,
+    audience: value.audience ?? "",
+    grantId: value.grantId ?? "",
   });
 }
 
@@ -237,6 +268,8 @@ export function fromWireTokenRequest(value: wire.TokenRequest): TokenRequest {
     subjectToken: value.subjectToken,
     subjectTokenType: value.subjectTokenType,
     expiresIn: value.expiresIn,
+    audience: value.audience,
+    grantId: value.grantId,
   };
 }
 
@@ -250,6 +283,7 @@ export function toWireTokenResponse(
     refreshToken: value.refreshToken ?? "",
     scope: value.scope ?? "",
     grantId: value.grantId ?? "",
+    params: value.params ?? {},
   });
 }
 
@@ -263,6 +297,7 @@ export function fromWireTokenResponse(
     refreshToken: value.refreshToken,
     scope: value.scope,
     grantId: value.grantId,
+    params: value.params,
   };
 }
 

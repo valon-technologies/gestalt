@@ -50,6 +50,7 @@ pub(crate) fn from_wire_provider_identity(value: v1::ProviderIdentity) -> Provid
         warnings: value.warnings,
         min_protocol_version: value.min_protocol_version,
         max_protocol_version: value.max_protocol_version,
+        capabilities: value.capabilities,
     }
 }
 

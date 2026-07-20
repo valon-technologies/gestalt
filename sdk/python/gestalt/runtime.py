@@ -83,6 +83,11 @@ class ProviderIdentity:
     warnings: list[str] = field(default_factory=list)
     min_protocol_version: int = 0
     max_protocol_version: int = 0
+    #: capabilities declares runtime provider capabilities. Identity providers
+    #: that serve connection audiences report "audiences"; enforcement
+    #: (boot-time cross-check against installed apps' connections) lands in XC-4.
+    #: Providers that report nothing behave exactly as today.
+    capabilities: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

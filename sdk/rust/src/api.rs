@@ -289,6 +289,11 @@ pub struct RuntimeMetadata {
     pub description: String,
     /// Provider version string.
     pub version: String,
+    /// Runtime provider capabilities. Identity providers that serve connection
+    /// audiences report "audiences"; enforcement (boot-time cross-check against
+    /// installed apps' connections) lands in XC-4. Providers that report nothing
+    /// behave exactly as today.
+    pub capabilities: Vec<String>,
 }
 
 #[async_trait]

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/identity.proto.
  */
 export const file_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("ChF2MS9pZGVudGl0eS5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSJwChBBdXRob3JpemVSZXF1ZXN0EhUKDXJlc3BvbnNlX3R5cGUYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRINCgVzY29wZRgEIAEoCRINCgVzdGF0ZRgFIAEoCSIpChFBdXRob3JpemVSZXNwb25zZRIUCgxyZWRpcmVjdF91cmkYASABKAki0wEKDFRva2VuUmVxdWVzdBISCgpncmFudF90eXBlGAEgASgJEgwKBGNvZGUYAiABKAkSFAoMcmVkaXJlY3RfdXJpGAMgASgJEhEKCWNsaWVudF9pZBgFIAEoCRINCgVzdGF0ZRgGIAEoCRINCgVzY29wZRgHIAEoCRIVCg1zdWJqZWN0X3Rva2VuGAggASgJEhoKEnN1YmplY3RfdG9rZW5fdHlwZRgJIAEoCRISCgpleHBpcmVzX2luGAogASgDSgQIBBAFUg1yZWZyZXNoX3Rva2VuIoUBCg1Ub2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgp0b2tlbl90eXBlGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMSFQoNcmVmcmVzaF90b2tlbhgEIAEoCRINCgVzY29wZRgFIAEoCRIQCghncmFudF9pZBgGIAEoCSI7ChFJbnRyb3NwZWN0UmVxdWVzdBINCgV0b2tlbhgBIAEoCRIXCg90b2tlbl90eXBlX2hpbnQYAiABKAkiaQoSSW50cm9zcGVjdFJlc3BvbnNlEg4KBmFjdGl2ZRgBIAEoCBIPCgdzdWJqZWN0GAIgASgJEg0KBXNjb3BlGAMgASgJEhEKCWNsaWVudF9pZBgEIAEoCRIQCghhdWRpZW5jZRgFIAMoCSITChFMaXN0R3JhbnRzUmVxdWVzdCInChJMaXN0R3JhbnRzUmVzcG9uc2USEQoJZ3JhbnRfaWRzGAEgAygJIiMKD0dldEdyYW50UmVxdWVzdBIQCghncmFudF9pZBgBIAEoCSItCgpHcmFudFNjb3BlEg0KBXNjb3BlGAEgASgJEhAKCHJlc291cmNlGAIgAygJImsKEEdldEdyYW50UmVzcG9uc2USLwoGc2NvcGVzGAEgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5HcmFudFNjb3BlEhIKCmNyZWF0ZWRfYXQYAiABKAMSEgoKZXhwaXJlc19hdBgDIAEoAyImChJSZXZva2VHcmFudFJlcXVlc3QSEAoIZ3JhbnRfaWQYASABKAkiFQoTUmV2b2tlR3JhbnRSZXNwb25zZSIRCg9Vc2VySW5mb1JlcXVlc3QiQwoQVXNlckluZm9SZXNwb25zZRISCgpzdWJqZWN0X2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEgwKBG5hbWUYAyABKAky/AkKCElkZW50aXR5Es8BCglBdXRob3JpemUSJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6ZVJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6ZVJlc3BvbnNlInOKtRgNcmVzcG9uc2VfdHlwZYq1GAljbGllbnRfaWSKtRgMcmVkaXJlY3RfdXJpirUYBXNjb3BlirUYBXN0YXRl+tLkkwIIEgZQVUJMSUOC0+STAh86ASoiGi9hcGkvdjIvaWRlbnRpdHkvYXV0aG9yaXplEvoBCgVUb2tlbhIhLmdlc3RhbHQucHJvdmlkZXIudjEuVG9rZW5SZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Ub2tlblJlc3BvbnNlIqkBirUYCmdyYW50X3R5cGWKtRgEY29kZYq1GAxyZWRpcmVjdF91cmmKtRgJY2xpZW50X2lkirUYBXN0YXRlirUYBXNjb3BlirUYDXN1YmplY3RfdG9rZW6KtRgSc3ViamVjdF90b2tlbl90eXBlorUYCmV4cGlyZXNfaW760uSTAggSBlBVQkxJQ4LT5JMCGzoBKiIWL2FwaS92Mi9pZGVudGl0eS90b2tlbhKvAQoKSW50cm9zcGVjdBImLmdlc3RhbHQucHJvdmlkZXIudjEuSW50cm9zcGVjdFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkludHJvc3BlY3RSZXNwb25zZSJQirUYBXRva2VuirUYD3Rva2VuX3R5cGVfaGludPrS5JMCCBIGUFVCTElDgtPkkwIgOgEqIhsvYXBpL3YyL2lkZW50aXR5L2ludHJvc3BlY3QSiAEKCFVzZXJJbmZvEiQuZ2VzdGFsdC5wcm92aWRlci52MS5Vc2VySW5mb1JlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLlVzZXJJbmZvUmVzcG9uc2UiL/rS5JMCCBIGUFVCTElDgtPkkwIbEhkvYXBpL3YyL2lkZW50aXR5L3VzZXJpbmZvEowBCgpMaXN0R3JhbnRzEiYuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0R3JhbnRzUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEdyYW50c1Jlc3BvbnNlIi360uSTAggSBlBVQkxJQ4LT5JMCGRIXL2FwaS92Mi9pZGVudGl0eS9ncmFudHMSnQEKCEdldEdyYW50EiQuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRHcmFudFJlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldEdyYW50UmVzcG9uc2UiRIq1GAhncmFudF9pZPrS5JMCCBIGUFVCTElDgtPkkwIkEiIvYXBpL3YyL2lkZW50aXR5L2dyYW50cy97Z3JhbnRfaWR9EqYBCgtSZXZva2VHcmFudBInLmdlc3RhbHQucHJvdmlkZXIudjEuUmV2b2tlR3JhbnRSZXF1ZXN0GiguZ2VzdGFsdC5wcm92aWRlci52MS5SZXZva2VHcmFudFJlc3BvbnNlIkSKtRgIZ3JhbnRfaWT60uSTAggSBlBVQkxJQ4LT5JMCJCoiL2FwaS92Mi9pZGVudGl0eS9ncmFudHMve2dyYW50X2lkfRoMirUYCGlkZW50aXR5YgZwcm90bzM", [file_google_api_annotations, file_google_api_visibility, file_v1_annotations]);
+  fileDesc("ChF2MS9pZGVudGl0eS5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSKCAQoQQXV0aG9yaXplUmVxdWVzdBIVCg1yZXNwb25zZV90eXBlGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSDQoFc2NvcGUYBCABKAkSDQoFc3RhdGUYBSABKAkSEAoIYXVkaWVuY2UYBiABKAkiKQoRQXV0aG9yaXplUmVzcG9uc2USFAoMcmVkaXJlY3RfdXJpGAEgASgJIvcBCgxUb2tlblJlcXVlc3QSEgoKZ3JhbnRfdHlwZRgBIAEoCRIMCgRjb2RlGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRIRCgljbGllbnRfaWQYBSABKAkSDQoFc3RhdGUYBiABKAkSDQoFc2NvcGUYByABKAkSFQoNc3ViamVjdF90b2tlbhgIIAEoCRIaChJzdWJqZWN0X3Rva2VuX3R5cGUYCSABKAkSEgoKZXhwaXJlc19pbhgKIAEoAxIQCghhdWRpZW5jZRgLIAEoCRIQCghncmFudF9pZBgMIAEoCUoECAQQBVINcmVmcmVzaF90b2tlbiL0AQoNVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSEgoKdG9rZW5fdHlwZRgCIAEoCRISCgpleHBpcmVzX2luGAMgASgDEhUKDXJlZnJlc2hfdG9rZW4YBCABKAkSDQoFc2NvcGUYBSABKAkSEAoIZ3JhbnRfaWQYBiABKAkSPgoGcGFyYW1zGAcgAygLMi4uZ2VzdGFsdC5wcm92aWRlci52MS5Ub2tlblJlc3BvbnNlLlBhcmFtc0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiOwoRSW50cm9zcGVjdFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFwoPdG9rZW5fdHlwZV9oaW50GAIgASgJImkKEkludHJvc3BlY3RSZXNwb25zZRIOCgZhY3RpdmUYASABKAgSDwoHc3ViamVjdBgCIAEoCRINCgVzY29wZRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIYXVkaWVuY2UYBSADKAkiJQoRTGlzdEdyYW50c1JlcXVlc3QSEAoIYXVkaWVuY2UYASABKAkiWwoMR3JhbnRTdW1tYXJ5EhAKCGdyYW50X2lkGAEgASgJEhAKCGF1ZGllbmNlGAIgASgJEhAKCGluc3RhbmNlGAMgASgJEhUKDW1ldGFkYXRhX2pzb24YBCABKAkiXgoSTGlzdEdyYW50c1Jlc3BvbnNlEhUKCWdyYW50X2lkcxgBIAMoCUICGAESMQoGZ3JhbnRzGAIgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5HcmFudFN1bW1hcnkiIwoPR2V0R3JhbnRSZXF1ZXN0EhAKCGdyYW50X2lkGAEgASgJIi0KCkdyYW50U2NvcGUSDQoFc2NvcGUYASABKAkSEAoIcmVzb3VyY2UYAiADKAkiawoQR2V0R3JhbnRSZXNwb25zZRIvCgZzY29wZXMYASADKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdyYW50U2NvcGUSEgoKY3JlYXRlZF9hdBgCIAEoAxISCgpleHBpcmVzX2F0GAMgASgDIiYKElJldm9rZUdyYW50UmVxdWVzdBIQCghncmFudF9pZBgBIAEoCSIVChNSZXZva2VHcmFudFJlc3BvbnNlIhEKD1VzZXJJbmZvUmVxdWVzdCJDChBVc2VySW5mb1Jlc3BvbnNlEhIKCnN1YmplY3RfaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEbmFtZRgDIAEoCTKUCgoISWRlbnRpdHkSzwEKCUF1dGhvcml6ZRIlLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXplUmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXplUmVzcG9uc2Uic4q1GA1yZXNwb25zZV90eXBlirUYCWNsaWVudF9pZIq1GAxyZWRpcmVjdF91cmmKtRgFc2NvcGWKtRgFc3RhdGX60uSTAggSBlBVQkxJQ4LT5JMCHzoBKiIaL2FwaS92Mi9pZGVudGl0eS9hdXRob3JpemUSkgIKBVRva2VuEiEuZ2VzdGFsdC5wcm92aWRlci52MS5Ub2tlblJlcXVlc3QaIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlRva2VuUmVzcG9uc2UiwQGKtRgKZ3JhbnRfdHlwZYq1GARjb2RlirUYDHJlZGlyZWN0X3VyaYq1GAljbGllbnRfaWSKtRgFc3RhdGWKtRgFc2NvcGWKtRgNc3ViamVjdF90b2tlboq1GBJzdWJqZWN0X3Rva2VuX3R5cGWitRgKZXhwaXJlc19pbqK1GAhhdWRpZW5jZaK1GAhncmFudF9pZPrS5JMCCBIGUFVCTElDgtPkkwIbOgEqIhYvYXBpL3YyL2lkZW50aXR5L3Rva2VuEq8BCgpJbnRyb3NwZWN0EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbnRyb3NwZWN0UmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuSW50cm9zcGVjdFJlc3BvbnNlIlCKtRgFdG9rZW6KtRgPdG9rZW5fdHlwZV9oaW50+tLkkwIIEgZQVUJMSUOC0+STAiA6ASoiGy9hcGkvdjIvaWRlbnRpdHkvaW50cm9zcGVjdBKIAQoIVXNlckluZm8SJC5nZXN0YWx0LnByb3ZpZGVyLnYxLlVzZXJJbmZvUmVxdWVzdBolLmdlc3RhbHQucHJvdmlkZXIudjEuVXNlckluZm9SZXNwb25zZSIv+tLkkwIIEgZQVUJMSUOC0+STAhsSGS9hcGkvdjIvaWRlbnRpdHkvdXNlcmluZm8SjAEKCkxpc3RHcmFudHMSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RHcmFudHNSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0R3JhbnRzUmVzcG9uc2UiLfrS5JMCCBIGUFVCTElDgtPkkwIZEhcvYXBpL3YyL2lkZW50aXR5L2dyYW50cxKdAQoIR2V0R3JhbnQSJC5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldEdyYW50UmVxdWVzdBolLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0R3JhbnRSZXNwb25zZSJEirUYCGdyYW50X2lk+tLkkwIIEgZQVUJMSUOC0+STAiQSIi9hcGkvdjIvaWRlbnRpdHkvZ3JhbnRzL3tncmFudF9pZH0SpgEKC1Jldm9rZUdyYW50EicuZ2VzdGFsdC5wcm92aWRlci52MS5SZXZva2VHcmFudFJlcXVlc3QaKC5nZXN0YWx0LnByb3ZpZGVyLnYxLlJldm9rZUdyYW50UmVzcG9uc2UiRIq1GAhncmFudF9pZPrS5JMCCBIGUFVCTElDgtPkkwIkKiIvYXBpL3YyL2lkZW50aXR5L2dyYW50cy97Z3JhbnRfaWR9GgyKtRgIaWRlbnRpdHliBnByb3RvMw", [file_google_api_annotations, file_google_api_visibility, file_v1_annotations]);
 
 /**
  * AuthorizeRequest models RFC 6749 authorization endpoint parameters.
@@ -47,6 +47,15 @@ export type AuthorizeRequest = Message<"gestalt.provider.v1.AuthorizeRequest"> &
    * @generated from field: string state = 5;
    */
   state: string;
+
+  /**
+   * audience is the RFC 8707 target audience this flow is for. Empty means the
+   * platform default (login); a connection ID such as "github:default" starts a
+   * connect flow. Same operation, audience selects the surface.
+   *
+   * @generated from field: string audience = 6;
+   */
+  audience: string;
 };
 
 /**
@@ -143,6 +152,24 @@ export type TokenRequest = Message<"gestalt.provider.v1.TokenRequest"> & {
    * @generated from field: int64 expires_in = 10;
    */
   expiresIn: bigint;
+
+  /**
+   * audience is the RFC 8707/8693 target audience. Required for
+   * grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+   * material exchange when no grant exists; cross-check on grant-backed resolve).
+   * Unused on authorization_code calls: the code correlates.
+   *
+   * @generated from field: string audience = 11;
+   */
+  audience: string;
+
+  /**
+   * grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+   * grant instance for grant-backed resolve (replaces Qualifier/Instance).
+   *
+   * @generated from field: string grant_id = 12;
+   */
+  grantId: string;
 };
 
 /**
@@ -189,6 +216,15 @@ export type TokenResponse = Message<"gestalt.provider.v1.TokenResponse"> & {
    * @generated from field: string grant_id = 6;
    */
   grantId: string;
+
+  /**
+   * params is the RFC 6749 §5.1 extension member for interpolation params the
+   * provider computes from stored grant metadata + connection config (e.g.
+   * Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+   *
+   * @generated from field: map<string, string> params = 7;
+   */
+  params: { [key: string]: string };
 };
 
 /**
@@ -268,11 +304,18 @@ export const IntrospectResponseSchema: GenMessage<IntrospectResponse> = /*@__PUR
   messageDesc(file_v1_identity, 5);
 
 /**
- * ListGrantsRequest lists API-token grant IDs visible to the caller.
+ * ListGrantsRequest lists API-token grants visible to the caller.
  *
  * @generated from message gestalt.provider.v1.ListGrantsRequest
  */
 export type ListGrantsRequest = Message<"gestalt.provider.v1.ListGrantsRequest"> & {
+  /**
+   * audience filters grants to one connection audience. Empty lists across all
+   * audiences.
+   *
+   * @generated from field: string audience = 1;
+   */
+  audience: string;
 };
 
 /**
@@ -283,16 +326,65 @@ export const ListGrantsRequestSchema: GenMessage<ListGrantsRequest> = /*@__PURE_
   messageDesc(file_v1_identity, 6);
 
 /**
- * ListGrantsResponse returns caller-visible API-token grant IDs created via
- * token exchange. It must not include transient login or session grants.
+ * GrantSummary describes one caller-visible API-token grant at list time,
+ * serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+ *
+ * @generated from message gestalt.provider.v1.GrantSummary
+ */
+export type GrantSummary = Message<"gestalt.provider.v1.GrantSummary"> & {
+  /**
+   * @generated from field: string grant_id = 1;
+   */
+  grantId: string;
+
+  /**
+   * @generated from field: string audience = 2;
+   */
+  audience: string;
+
+  /**
+   * instance was Qualifier; identifies the connection instance within the
+   * audience (e.g. a Slack team ID).
+   *
+   * @generated from field: string instance = 3;
+   */
+  instance: string;
+
+  /**
+   * metadata_json carries display labels (was ExternalCredential.MetadataJSON).
+   *
+   * @generated from field: string metadata_json = 4;
+   */
+  metadataJson: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.GrantSummary.
+ * Use `create(GrantSummarySchema)` to create a new message.
+ */
+export const GrantSummarySchema: GenMessage<GrantSummary> = /*@__PURE__*/
+  messageDesc(file_v1_identity, 7);
+
+/**
+ * ListGrantsResponse returns caller-visible API-token grants created via token
+ * exchange. It must not include transient login or session grants.
+ *
+ * grant_ids is retained for backward compatibility and deprecated; new callers
+ * read grants. Removed in XC-5.
  *
  * @generated from message gestalt.provider.v1.ListGrantsResponse
  */
 export type ListGrantsResponse = Message<"gestalt.provider.v1.ListGrantsResponse"> & {
   /**
-   * @generated from field: repeated string grant_ids = 1;
+   * @generated from field: repeated string grant_ids = 1 [deprecated = true];
+   * @deprecated
    */
   grantIds: string[];
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.GrantSummary grants = 2;
+   */
+  grants: GrantSummary[];
 };
 
 /**
@@ -300,7 +392,7 @@ export type ListGrantsResponse = Message<"gestalt.provider.v1.ListGrantsResponse
  * Use `create(ListGrantsResponseSchema)` to create a new message.
  */
 export const ListGrantsResponseSchema: GenMessage<ListGrantsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 7);
+  messageDesc(file_v1_identity, 8);
 
 /**
  * GetGrantRequest retrieves one API-token grant by ID.
@@ -319,7 +411,7 @@ export type GetGrantRequest = Message<"gestalt.provider.v1.GetGrantRequest"> & {
  * Use `create(GetGrantRequestSchema)` to create a new message.
  */
 export const GetGrantRequestSchema: GenMessage<GetGrantRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 8);
+  messageDesc(file_v1_identity, 9);
 
 /**
  * GrantScope describes one authorized scope and optional resources.
@@ -343,7 +435,7 @@ export type GrantScope = Message<"gestalt.provider.v1.GrantScope"> & {
  * Use `create(GrantScopeSchema)` to create a new message.
  */
 export const GrantScopeSchema: GenMessage<GrantScope> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 9);
+  messageDesc(file_v1_identity, 10);
 
 /**
  * GetGrantResponse returns OIDF-shaped grant details.
@@ -372,7 +464,7 @@ export type GetGrantResponse = Message<"gestalt.provider.v1.GetGrantResponse"> &
  * Use `create(GetGrantResponseSchema)` to create a new message.
  */
 export const GetGrantResponseSchema: GenMessage<GetGrantResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 10);
+  messageDesc(file_v1_identity, 11);
 
 /**
  * RevokeGrantRequest revokes one caller-visible API-token grant by ID.
@@ -391,7 +483,7 @@ export type RevokeGrantRequest = Message<"gestalt.provider.v1.RevokeGrantRequest
  * Use `create(RevokeGrantRequestSchema)` to create a new message.
  */
 export const RevokeGrantRequestSchema: GenMessage<RevokeGrantRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 11);
+  messageDesc(file_v1_identity, 12);
 
 /**
  * RevokeGrantResponse acknowledges grant revocation.
@@ -406,7 +498,7 @@ export type RevokeGrantResponse = Message<"gestalt.provider.v1.RevokeGrantRespon
  * Use `create(RevokeGrantResponseSchema)` to create a new message.
  */
 export const RevokeGrantResponseSchema: GenMessage<RevokeGrantResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 12);
+  messageDesc(file_v1_identity, 13);
 
 /**
  * UserInfoRequest is intentionally empty. The caller bearer token is supplied
@@ -422,7 +514,7 @@ export type UserInfoRequest = Message<"gestalt.provider.v1.UserInfoRequest"> & {
  * Use `create(UserInfoRequestSchema)` to create a new message.
  */
 export const UserInfoRequestSchema: GenMessage<UserInfoRequest> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 13);
+  messageDesc(file_v1_identity, 14);
 
 /**
  * UserInfoResponse models profile claims about the authenticated end user.
@@ -451,7 +543,7 @@ export type UserInfoResponse = Message<"gestalt.provider.v1.UserInfoResponse"> &
  * Use `create(UserInfoResponseSchema)` to create a new message.
  */
 export const UserInfoResponseSchema: GenMessage<UserInfoResponse> = /*@__PURE__*/
-  messageDesc(file_v1_identity, 14);
+  messageDesc(file_v1_identity, 15);
 
 /**
  * Identity models the shared Gestalt authentication protocol.

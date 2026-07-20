@@ -95,6 +95,48 @@ Gestalt sends the browser to. `Token` exchanges callback parameters or subject
 tokens for bearer credentials. `Introspect` resolves bearer tokens to canonical
 Gestalt subject IDs.
 
+### Audiences and grant selection
+
+The identity surface is audience-scoped. Every token names an audience per RFC
+8707: the platform is the default audience (login), and each connection ID such
+as `github:default` is its own audience. `AuthorizeRequest.Audience` selects
+which audience a flow starts for; platform login and "connect GitHub" are the
+same operation distinguished only by audience.
+
+`TokenRequest.Audience` is required for
+`grant_type=urn:ietf:params:oauth:grant-type:token-exchange`: it is load-bearing
+for material exchange when no grant exists yet, and a cross-check on
+grant-backed resolve. It is unused on `authorization_code` Token calls, which
+correlate via the code the provider issued and tracks in its pending-OAuth
+state. `TokenRequest.GrantID` is the OIDF Grant Management token-endpoint
+`grant_id`; it selects the grant instance for grant-backed resolve, replacing
+the legacy Qualifier/Instance selection.
+
+A request sent to a provider that does not serve the requested audience returns
+the RFC 8693 `invalid_target` error. Ambiguity (no `GrantID` when multiple
+grants exist for the audience) is a token-exchange error. There are no `Subject`
+request fields anywhere on the identity surface: the acting subject travels via
+the trusted-caller call context (`IdentityCallContext`), the same channel
+`UserInfo` uses today. `TokenResponse.Params` carries the RFC 6749 §5.1
+extension member for interpolation parameters the provider computes from stored
+grant metadata and connection config (for example Looker's `{host}`); it
+supersedes metadata-derived params when non-empty.
+
+`ListGrantsRequest.Audience` filters grants to one connection audience; empty
+lists across all audiences. `ListGrantsResponse.Grants` returns
+`GrantSummary` entries (grant ID, audience, instance, display metadata) so one
+list call serves both catalog fan-out and the connections UI without N+1
+`GetGrant` calls.
+
+### Capability declaration
+
+Identity providers that serve connection audiences declare the `audiences`
+capability on their provider identity surface (`ProviderIdentity.Capabilities`,
+mirrored on the SDK `ProviderMetadata` and the host `RuntimeProviderMetadata`).
+Gestalt fetches this at boot before serving. Providers that report no
+capabilities behave exactly as today; enforcement (boot-time cross-check
+against installed apps' connections) lands in a later issue.
+
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go

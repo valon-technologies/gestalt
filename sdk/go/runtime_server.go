@@ -35,6 +35,7 @@ func (s *runtimeServer) GetProviderIdentity(_ context.Context, _ *emptypb.Empty)
 		meta.DisplayName = providerMeta.DisplayName
 		meta.Description = providerMeta.Description
 		meta.Version = providerMeta.Version
+		meta.Capabilities = append([]string(nil), providerMeta.Capabilities...)
 	}
 	if provider, ok := s.provider.(WarningsProvider); ok {
 		meta.Warnings = append(meta.Warnings, provider.Warnings()...)

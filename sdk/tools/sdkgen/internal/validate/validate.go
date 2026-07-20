@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/diag"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
@@ -166,10 +167,11 @@ func (b *builder) message(md protoreflect.MessageDescriptor) *model.Message {
 
 func (b *builder) field(fd protoreflect.FieldDescriptor) *model.Field {
 	f := &model.Field{
-		Doc:      docFor(fd),
-		Name:     string(fd.Name()),
-		JSONName: fd.JSONName(),
-		Number:   int32(fd.Number()),
+		Doc:        docFor(fd),
+		Name:       string(fd.Name()),
+		JSONName:   fd.JSONName(),
+		Number:     int32(fd.Number()),
+		Deprecated: fieldDeprecated(fd),
 	}
 	switch {
 	case fd.IsMap():
@@ -340,4 +342,10 @@ func scalarType(k protoreflect.Kind) model.ScalarType {
 	default:
 		return model.ScalarInvalid
 	}
+}
+
+// fieldDeprecated reports whether fd carries the proto3 `option deprecated = true`.
+func fieldDeprecated(fd protoreflect.FieldDescriptor) bool {
+	opts, ok := fd.Options().(*descriptorpb.FieldOptions)
+	return ok && opts.GetDeprecated()
 }

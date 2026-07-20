@@ -16,12 +16,14 @@ class AuthorizeRequest(_message.Message):
     REDIRECT_URI_FIELD_NUMBER: _ClassVar[int]
     SCOPE_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     response_type: str
     client_id: str
     redirect_uri: str
     scope: str
     state: str
-    def __init__(self, response_type: _Optional[str] = ..., client_id: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., scope: _Optional[str] = ..., state: _Optional[str] = ...) -> None: ...
+    audience: str
+    def __init__(self, response_type: _Optional[str] = ..., client_id: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., scope: _Optional[str] = ..., state: _Optional[str] = ..., audience: _Optional[str] = ...) -> None: ...
 
 class AuthorizeResponse(_message.Message):
     __slots__ = ()
@@ -40,6 +42,8 @@ class TokenRequest(_message.Message):
     SUBJECT_TOKEN_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
     grant_type: str
     code: str
     redirect_uri: str
@@ -49,23 +53,34 @@ class TokenRequest(_message.Message):
     subject_token: str
     subject_token_type: str
     expires_in: int
-    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., expires_in: _Optional[int] = ...) -> None: ...
+    audience: str
+    grant_id: str
+    def __init__(self, grant_type: _Optional[str] = ..., code: _Optional[str] = ..., redirect_uri: _Optional[str] = ..., client_id: _Optional[str] = ..., state: _Optional[str] = ..., scope: _Optional[str] = ..., subject_token: _Optional[str] = ..., subject_token_type: _Optional[str] = ..., expires_in: _Optional[int] = ..., audience: _Optional[str] = ..., grant_id: _Optional[str] = ...) -> None: ...
 
 class TokenResponse(_message.Message):
     __slots__ = ()
+    class ParamsEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
     TOKEN_TYPE_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_IN_FIELD_NUMBER: _ClassVar[int]
     REFRESH_TOKEN_FIELD_NUMBER: _ClassVar[int]
     SCOPE_FIELD_NUMBER: _ClassVar[int]
     GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    PARAMS_FIELD_NUMBER: _ClassVar[int]
     access_token: str
     token_type: str
     expires_in: int
     refresh_token: str
     scope: str
     grant_id: str
-    def __init__(self, access_token: _Optional[str] = ..., token_type: _Optional[str] = ..., expires_in: _Optional[int] = ..., refresh_token: _Optional[str] = ..., scope: _Optional[str] = ..., grant_id: _Optional[str] = ...) -> None: ...
+    params: _containers.ScalarMap[str, str]
+    def __init__(self, access_token: _Optional[str] = ..., token_type: _Optional[str] = ..., expires_in: _Optional[int] = ..., refresh_token: _Optional[str] = ..., scope: _Optional[str] = ..., grant_id: _Optional[str] = ..., params: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class IntrospectRequest(_message.Message):
     __slots__ = ()
@@ -91,13 +106,29 @@ class IntrospectResponse(_message.Message):
 
 class ListGrantsRequest(_message.Message):
     __slots__ = ()
-    def __init__(self) -> None: ...
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    audience: str
+    def __init__(self, audience: _Optional[str] = ...) -> None: ...
+
+class GrantSummary(_message.Message):
+    __slots__ = ()
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_FIELD_NUMBER: _ClassVar[int]
+    METADATA_JSON_FIELD_NUMBER: _ClassVar[int]
+    grant_id: str
+    audience: str
+    instance: str
+    metadata_json: str
+    def __init__(self, grant_id: _Optional[str] = ..., audience: _Optional[str] = ..., instance: _Optional[str] = ..., metadata_json: _Optional[str] = ...) -> None: ...
 
 class ListGrantsResponse(_message.Message):
     __slots__ = ()
     GRANT_IDS_FIELD_NUMBER: _ClassVar[int]
+    GRANTS_FIELD_NUMBER: _ClassVar[int]
     grant_ids: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, grant_ids: _Optional[_Iterable[str]] = ...) -> None: ...
+    grants: _containers.RepeatedCompositeFieldContainer[GrantSummary]
+    def __init__(self, grant_ids: _Optional[_Iterable[str]] = ..., grants: _Optional[_Iterable[_Union[GrantSummary, _Mapping]]] = ...) -> None: ...
 
 class GetGrantRequest(_message.Message):
     __slots__ = ()

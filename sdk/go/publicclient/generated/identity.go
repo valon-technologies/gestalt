@@ -12,6 +12,10 @@ type AuthorizeRequest struct {
 	RedirectUri  string
 	Scope        string
 	State        string
+	// audience is the RFC 8707 target audience this flow is for. Empty means the
+	// platform default (login); a connection ID such as "github:default" starts a
+	// connect flow. Same operation, audience selects the surface.
+	Audience string
 }
 
 // AuthorizeResponse is the native message type for gestalt.provider.v1.AuthorizeResponse.
@@ -46,6 +50,20 @@ type GrantScope struct {
 	Resource []string
 }
 
+// GrantSummary is the native message type for gestalt.provider.v1.GrantSummary.
+//
+// GrantSummary describes one caller-visible API-token grant at list time,
+// serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+type GrantSummary struct {
+	GrantId  string
+	Audience string
+	// instance was Qualifier; identifies the connection instance within the
+	// audience (e.g. a Slack team ID).
+	Instance string
+	// metadata_json carries display labels (was ExternalCredential.MetadataJSON).
+	MetadataJson string
+}
+
 // IntrospectRequest is the native message type for gestalt.provider.v1.IntrospectRequest.
 //
 // IntrospectRequest models RFC 7662 token introspection parameters.
@@ -72,15 +90,23 @@ type IntrospectResponse struct {
 
 // ListGrantsRequest is the native message type for gestalt.provider.v1.ListGrantsRequest.
 //
-// ListGrantsRequest lists API-token grant IDs visible to the caller.
-type ListGrantsRequest struct{}
+// ListGrantsRequest lists API-token grants visible to the caller.
+type ListGrantsRequest struct {
+	// audience filters grants to one connection audience. Empty lists across all
+	// audiences.
+	Audience string
+}
 
 // ListGrantsResponse is the native message type for gestalt.provider.v1.ListGrantsResponse.
 //
-// ListGrantsResponse returns caller-visible API-token grant IDs created via
-// token exchange. It must not include transient login or session grants.
+// ListGrantsResponse returns caller-visible API-token grants created via token
+// exchange. It must not include transient login or session grants.
+//
+// grant_ids is retained for backward compatibility and deprecated; new callers
+// read grants. Removed in XC-5.
 type ListGrantsResponse struct {
 	GrantIds []string
+	Grants   []*GrantSummary
 }
 
 // RevokeGrantRequest is the native message type for gestalt.provider.v1.RevokeGrantRequest.
@@ -119,6 +145,14 @@ type TokenRequest struct {
 	// TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
 	// default.
 	ExpiresIn int64
+	// audience is the RFC 8707/8693 target audience. Required for
+	// grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+	// material exchange when no grant exists; cross-check on grant-backed resolve).
+	// Unused on authorization_code calls: the code correlates.
+	Audience string
+	// grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+	// grant instance for grant-backed resolve (replaces Qualifier/Instance).
+	GrantId string
 }
 
 // TokenResponse is the native message type for gestalt.provider.v1.TokenResponse.
@@ -132,6 +166,10 @@ type TokenResponse struct {
 	Scope        string
 	// grant_id is the OIDF Grant Management extension when available.
 	GrantId string
+	// params is the RFC 6749 §5.1 extension member for interpolation params the
+	// provider computes from stored grant metadata + connection config (e.g.
+	// Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+	Params map[string]string
 }
 
 // UserInfoRequest is the native message type for gestalt.provider.v1.UserInfoRequest.

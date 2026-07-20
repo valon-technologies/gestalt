@@ -474,7 +474,7 @@ export const PUBLIC_METHODS = {
         path: "/api/v2/identity/grants",
         body: "",
         pathFields: [],
-        queryFields: [],
+        queryFields: [{ name: "audience", jsonName: "audience" }],
       },
     },
     revokeGrant: {

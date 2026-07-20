@@ -12,6 +12,15 @@ const (
 	GrantTypeAuthorizationCode  = "authorization_code"
 	GrantTypeTokenExchange      = "urn:ietf:params:oauth:grant-type:token-exchange"
 	SubjectTokenTypeAccessToken = "urn:ietf:params:oauth:token-type:access_token"
+	// SubjectTokenTypeGestaltSubject is the RFC 8693 subject_token_type for the
+	// canonical Gestalt subject ID. It is a fallback only: when a live caller
+	// bearer exists on the request path, token exchange passes that actual token
+	// with SubjectTokenTypeAccessToken (the provider issued it and can validate
+	// it). This constant covers host-initiated flows with no bearer to present
+	// (background refresh, workflow and service-account principals), where the
+	// subject token is the canonical subject ID arriving over the trusted host
+	// channel.
+	SubjectTokenTypeGestaltSubject = "urn:gestalt:token-type:subject"
 )
 
 // MaxTokenExpiresInSeconds is the upper bound a caller may request for a
@@ -70,6 +79,10 @@ type AuthorizeRequest struct {
 	RedirectURI  string
 	Scope        string
 	State        string
+	// Audience is the RFC 8707 target audience this flow is for. Empty means the
+	// platform default (login); a connection ID such as "github:default" starts a
+	// connect flow. Same operation, audience selects the surface.
+	Audience string
 }
 
 // AuthorizeResponse contains the redirect URI with RFC 6749 response parameters.
@@ -89,6 +102,14 @@ type TokenRequest struct {
 	SubjectToken     string
 	SubjectTokenType string
 	ExpiresIn        int64
+	// Audience is the RFC 8707/8693 target audience. Required for
+	// grant_type=token-exchange (load-bearing for material exchange when no grant
+	// exists; cross-check on grant-backed resolve). Unused on authorization_code
+	// calls: the code correlates.
+	Audience string
+	// GrantID is the OIDF Grant Management token-endpoint grant_id. Selects the
+	// grant instance for grant-backed resolve (replaces Qualifier/Instance).
+	GrantID string
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -99,6 +120,10 @@ type TokenResponse struct {
 	RefreshToken string
 	Scope        string
 	GrantID      string
+	// Params is the RFC 6749 §5.1 extension member for interpolation params the
+	// provider computes from stored grant metadata + connection config (e.g.
+	// Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+	Params map[string]string
 }
 
 // IntrospectRequest models RFC 7662 token introspection parameters.
@@ -123,12 +148,29 @@ type IntrospectResponse struct {
 	Audience []string
 }
 
-// ListGrantsRequest lists API-token grant IDs visible to the caller.
-type ListGrantsRequest struct{}
+// ListGrantsRequest lists API-token grants visible to the caller.
+type ListGrantsRequest struct {
+	// Audience filters grants to one connection audience. Empty lists across all
+	// audiences.
+	Audience string
+}
 
-// ListGrantsResponse returns caller-visible API-token grant IDs.
+// GrantSummary describes one caller-visible API-token grant at list time,
+// serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+type GrantSummary struct {
+	GrantID      string
+	Audience     string
+	Instance     string // was Qualifier
+	MetadataJSON string // display labels (was ExternalCredential.MetadataJSON)
+}
+
+// ListGrantsResponse returns caller-visible API-token grants.
+//
+// GrantIDs is retained for backward compatibility and deprecated; new callers
+// read Grants. Removed in XC-5.
 type ListGrantsResponse struct {
 	GrantIDs []string
+	Grants   []GrantSummary
 }
 
 // GetGrantRequest retrieves one grant by ID.

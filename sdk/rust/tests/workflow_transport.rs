@@ -55,6 +55,7 @@ impl WorkflowProvider for TestWorkflowProvider {
             display_name: "Workflow Example".to_string(),
             description: "Test workflow provider".to_string(),
             version: "0.1.0".to_string(),
+            capabilities: Vec::new(),
         })
     }
 

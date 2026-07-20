@@ -22,17 +22,17 @@ const (
 // features tracks which imports a generated file needs; the use header is
 // assembled after the body renders.
 type features struct {
-	v1           bool                       // the crate::generated::v1 wire alias
-	restMetadata bool                       // public clients import method metadata constants
-	unaryTransport bool                     // public AppClient imports UnaryTransport
-	streamExt    bool                       // tokio_stream::StreamExt for stream mapping
-	supportTypes map[string]bool            // imported from the public rpc_support module
-	supportFns   map[string]bool            // imported from the codec support module
-	invokeUses   map[string]bool            // imported from the public invoke_support module
-	prostTypes   bool                       // google.protobuf.Empty via prost_types
-	crossPublic  map[string]map[string]bool // public module base -> imported native type names
-	crossCodec   map[string]map[string]bool // codec module base -> imported converter names
-	wireJSONDone map[string]bool            // wire message full names with protobuf JSON helpers
+	v1             bool                       // the crate::generated::v1 wire alias
+	restMetadata   bool                       // public clients import method metadata constants
+	unaryTransport bool                       // public AppClient imports UnaryTransport
+	streamExt      bool                       // tokio_stream::StreamExt for stream mapping
+	supportTypes   map[string]bool            // imported from the public rpc_support module
+	supportFns     map[string]bool            // imported from the codec support module
+	invokeUses     map[string]bool            // imported from the public invoke_support module
+	prostTypes     bool                       // google.protobuf.Empty via prost_types
+	crossPublic    map[string]map[string]bool // public module base -> imported native type names
+	crossCodec     map[string]map[string]bool // codec module base -> imported converter names
+	wireJSONDone   map[string]bool            // wire message full names with protobuf JSON helpers
 }
 
 type renderer struct {
@@ -424,6 +424,18 @@ func (r *renderer) renderMessage(m *model.Message) {
 // renderConversions emits the crate-private wire converters a message needs.
 // Only directions with callers are emitted: requests convert to the wire,
 // responses from it, so every pub(crate) converter stays live at crate level.
+// hasDeprecatedField reports whether any of fields is marked deprecated.
+// Used to suppress deprecation diagnostics on generated converters that must
+// copy deprecated fields for backward compatibility.
+func hasDeprecatedField(fields []*model.Field) bool {
+	for _, f := range fields {
+		if f.Deprecated {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *renderer) renderConversions(m *model.Message) {
 	needTo := r.idx.needToWire[m.FullName]
 	needFrom := r.idx.needFromWire[m.FullName]
@@ -459,6 +471,9 @@ func (r *renderer) renderConversions(m *model.Message) {
 			}
 		}
 
+		if hasDeprecatedField(wireMsg.Fields) {
+			fmt.Fprintf(&r.body, "#[allow(deprecated)]\n")
+		}
 		fmt.Fprintf(&r.body, "/// Converts a native `%s` to its wire message.\n", name)
 		fmt.Fprintf(&r.body, "pub(crate) fn %s(%s: %s) -> v1::%s {\n", toWireFunc(m.FullName), param, name, wireName)
 		fmt.Fprintf(&r.body, "    v1::%s {\n", wireName)
@@ -492,6 +507,9 @@ func (r *renderer) renderConversions(m *model.Message) {
 	}
 
 	if needFrom {
+		if hasDeprecatedField(m.Fields) {
+			fmt.Fprintf(&r.body, "#[allow(deprecated)]\n")
+		}
 		fmt.Fprintf(&r.body, "/// Converts a wire `%s` to its native message.\n", name)
 		fmt.Fprintf(&r.body, "pub(crate) fn %s(%s: v1::%s) -> %s {\n", fromWireFunc(m.FullName), param, wireName, name)
 		fmt.Fprintf(&r.body, "    %s {\n", name)

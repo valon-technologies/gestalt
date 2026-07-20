@@ -424,7 +424,7 @@ var MethodIdentityListGrants = Method{
 	HTTPPath:        "/api/v2/identity/grants",
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
-	HTTPQueryFields: nil,
+	HTTPQueryFields: []PublicField{PublicField{Name: "audience", JSONName: "audience"}},
 	Fill:            nil,
 	Reject:          nil,
 }

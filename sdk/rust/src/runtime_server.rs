@@ -222,6 +222,7 @@ impl ProviderLifecycle for RuntimeServer {
             warnings: self.provider.warnings(),
             min_protocol_version: CURRENT_PROTOCOL_VERSION,
             max_protocol_version: CURRENT_PROTOCOL_VERSION,
+            capabilities: metadata.capabilities,
         }))
     }
 

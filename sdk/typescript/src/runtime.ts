@@ -78,6 +78,13 @@ export interface ProviderIdentity {
   warnings: string[];
   minProtocolVersion: number;
   maxProtocolVersion: number;
+  /**
+   * capabilities declares runtime provider capabilities. Identity providers
+   * that serve connection audiences report "audiences"; enforcement
+   * (boot-time cross-check against installed apps' connections) lands in XC-4.
+   * Providers that report nothing behave exactly as today.
+   */
+  capabilities: string[];
 }
 
 /**

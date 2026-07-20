@@ -16,6 +16,7 @@ func ToWireAuthorizeRequest(value *AuthorizeRequest) *proto.AuthorizeRequest {
 		RedirectUri:  value.RedirectUri,
 		Scope:        value.Scope,
 		State:        value.State,
+		Audience:     value.Audience,
 	}
 	return out
 }
@@ -30,6 +31,7 @@ func FromWireAuthorizeRequest(value *proto.AuthorizeRequest) *AuthorizeRequest {
 		RedirectUri:  value.RedirectUri,
 		Scope:        value.Scope,
 		State:        value.State,
+		Audience:     value.Audience,
 	}
 	return out
 }
@@ -124,6 +126,32 @@ func FromWireGrantScope(value *proto.GrantScope) *GrantScope {
 	return out
 }
 
+func ToWireGrantSummary(value *GrantSummary) *proto.GrantSummary {
+	if value == nil {
+		return nil
+	}
+	out := &proto.GrantSummary{
+		GrantId:      value.GrantId,
+		Audience:     value.Audience,
+		Instance:     value.Instance,
+		MetadataJson: value.MetadataJson,
+	}
+	return out
+}
+
+func FromWireGrantSummary(value *proto.GrantSummary) *GrantSummary {
+	if value == nil {
+		return nil
+	}
+	out := &GrantSummary{
+		GrantId:      value.GrantId,
+		Audience:     value.Audience,
+		Instance:     value.Instance,
+		MetadataJson: value.MetadataJson,
+	}
+	return out
+}
+
 func ToWireIntrospectRequest(value *IntrospectRequest) *proto.IntrospectRequest {
 	if value == nil {
 		return nil
@@ -178,7 +206,9 @@ func ToWireListGrantsRequest(value *ListGrantsRequest) *proto.ListGrantsRequest 
 	if value == nil {
 		return nil
 	}
-	out := &proto.ListGrantsRequest{}
+	out := &proto.ListGrantsRequest{
+		Audience: value.Audience,
+	}
 	return out
 }
 
@@ -186,7 +216,9 @@ func FromWireListGrantsRequest(value *proto.ListGrantsRequest) *ListGrantsReques
 	if value == nil {
 		return nil
 	}
-	out := &ListGrantsRequest{}
+	out := &ListGrantsRequest{
+		Audience: value.Audience,
+	}
 	return out
 }
 
@@ -197,6 +229,9 @@ func ToWireListGrantsResponse(value *ListGrantsResponse) *proto.ListGrantsRespon
 	out := &proto.ListGrantsResponse{
 		GrantIds: value.GrantIds,
 	}
+	for _, item := range value.Grants {
+		out.Grants = append(out.Grants, ToWireGrantSummary(item))
+	}
 	return out
 }
 
@@ -206,6 +241,9 @@ func FromWireListGrantsResponse(value *proto.ListGrantsResponse) *ListGrantsResp
 	}
 	out := &ListGrantsResponse{
 		GrantIds: value.GrantIds,
+	}
+	for _, item := range value.Grants {
+		out.Grants = append(out.Grants, FromWireGrantSummary(item))
 	}
 	return out
 }
@@ -260,6 +298,8 @@ func ToWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
 		SubjectToken:     value.SubjectToken,
 		SubjectTokenType: value.SubjectTokenType,
 		ExpiresIn:        value.ExpiresIn,
+		Audience:         value.Audience,
+		GrantId:          value.GrantId,
 	}
 	return out
 }
@@ -278,6 +318,8 @@ func FromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
 		SubjectToken:     value.SubjectToken,
 		SubjectTokenType: value.SubjectTokenType,
 		ExpiresIn:        value.ExpiresIn,
+		Audience:         value.Audience,
+		GrantId:          value.GrantId,
 	}
 	return out
 }
@@ -293,6 +335,7 @@ func ToWireTokenResponse(value *TokenResponse) *proto.TokenResponse {
 		RefreshToken: value.RefreshToken,
 		Scope:        value.Scope,
 		GrantId:      value.GrantId,
+		Params:       value.Params,
 	}
 	return out
 }
@@ -308,6 +351,7 @@ func FromWireTokenResponse(value *proto.TokenResponse) *TokenResponse {
 		RefreshToken: value.RefreshToken,
 		Scope:        value.Scope,
 		GrantId:      value.GrantId,
+		Params:       value.Params,
 	}
 	return out
 }

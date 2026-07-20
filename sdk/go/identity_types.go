@@ -17,6 +17,10 @@ type AuthorizeRequest struct {
 	RedirectURI  string
 	Scope        string
 	State        string
+	// Audience is the RFC 8707 target audience this flow is for. Empty means the
+	// platform default (login); a connection ID such as "github:default" starts a
+	// connect flow. Same operation, audience selects the surface.
+	Audience string
 }
 
 // AuthorizeResponse contains the redirect URI with RFC 6749 response parameters.
@@ -36,6 +40,14 @@ type TokenRequest struct {
 	SubjectToken     string
 	SubjectTokenType string
 	ExpiresIn        int64
+	// Audience is the RFC 8707/8693 target audience. Required for
+	// grant_type=token-exchange (load-bearing for material exchange when no grant
+	// exists; cross-check on grant-backed resolve). Unused on authorization_code
+	// calls: the code correlates.
+	Audience string
+	// GrantID is the OIDF Grant Management token-endpoint grant_id. Selects the
+	// grant instance for grant-backed resolve (replaces Qualifier/Instance).
+	GrantID string
 }
 
 // TokenResponse models RFC 6749 token endpoint response fields.
@@ -46,6 +58,10 @@ type TokenResponse struct {
 	RefreshToken string
 	Scope        string
 	GrantID      string
+	// Params is the RFC 6749 §5.1 extension member for interpolation params the
+	// provider computes from stored grant metadata + connection config (e.g.
+	// Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+	Params map[string]string
 }
 
 // IntrospectRequest models RFC 7662 token introspection parameters.
@@ -70,13 +86,30 @@ type IntrospectResponse struct {
 	Audience []string
 }
 
-// ListGrantsRequest lists API-token grant IDs visible to the caller.
-type ListGrantsRequest struct{}
+// ListGrantsRequest lists API-token grants visible to the caller.
+type ListGrantsRequest struct {
+	// Audience filters grants to one connection audience. Empty lists across all
+	// audiences.
+	Audience string
+}
 
-// ListGrantsResponse returns caller-visible API-token grant IDs created via
-// token exchange. It must not include transient login or session grants.
+// GrantSummary describes one caller-visible API-token grant at list time,
+// serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+type GrantSummary struct {
+	GrantID      string
+	Audience     string
+	Instance     string // was Qualifier
+	MetadataJSON string // display labels (was ExternalCredential.MetadataJSON)
+}
+
+// ListGrantsResponse returns caller-visible API-token grants created via token
+// exchange. It must not include transient login or session grants.
+//
+// GrantIDs is retained for backward compatibility and deprecated; new callers
+// read Grants. Removed in XC-5.
 type ListGrantsResponse struct {
 	GrantIDs []string
+	Grants   []GrantSummary
 }
 
 // GetGrantRequest retrieves one API-token grant by ID.
@@ -126,6 +159,7 @@ func authorizeRequestFromProto(req *proto.AuthorizeRequest) *AuthorizeRequest {
 		RedirectURI:  req.GetRedirectUri(),
 		Scope:        req.GetScope(),
 		State:        req.GetState(),
+		Audience:     req.GetAudience(),
 	}
 }
 
@@ -150,6 +184,8 @@ func tokenRequestFromProto(req *proto.TokenRequest) *TokenRequest {
 		SubjectToken:     req.GetSubjectToken(),
 		SubjectTokenType: req.GetSubjectTokenType(),
 		ExpiresIn:        req.GetExpiresIn(),
+		Audience:         req.GetAudience(),
+		GrantID:          req.GetGrantId(),
 	}
 }
 
@@ -157,7 +193,7 @@ func tokenResponseToProto(resp *TokenResponse) *proto.TokenResponse {
 	if resp == nil {
 		return nil
 	}
-	return &proto.TokenResponse{
+	out := &proto.TokenResponse{
 		AccessToken:  resp.AccessToken,
 		TokenType:    resp.TokenType,
 		ExpiresIn:    resp.ExpiresIn,
@@ -165,6 +201,13 @@ func tokenResponseToProto(resp *TokenResponse) *proto.TokenResponse {
 		Scope:        resp.Scope,
 		GrantId:      resp.GrantID,
 	}
+	if resp.Params != nil {
+		out.Params = make(map[string]string, len(resp.Params))
+		for k, v := range resp.Params {
+			out.Params[k] = v
+		}
+	}
+	return out
 }
 
 func introspectRequestFromProto(req *proto.IntrospectRequest) *IntrospectRequest {
@@ -190,11 +233,27 @@ func introspectResponseToProto(resp *IntrospectResponse) *proto.IntrospectRespon
 	}
 }
 
+func listGrantsRequestFromProto(req *proto.ListGrantsRequest) *ListGrantsRequest {
+	if req == nil {
+		return nil
+	}
+	return &ListGrantsRequest{Audience: req.GetAudience()}
+}
+
 func listGrantsResponseToProto(resp *ListGrantsResponse) *proto.ListGrantsResponse {
 	if resp == nil {
 		return nil
 	}
-	return &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
+	out := &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
+	for _, g := range resp.Grants {
+		out.Grants = append(out.Grants, &proto.GrantSummary{
+			GrantId:      g.GrantID,
+			Audience:     g.Audience,
+			Instance:     g.Instance,
+			MetadataJson: g.MetadataJSON,
+		})
+	}
+	return out
 }
 
 func getGrantRequestFromProto(req *proto.GetGrantRequest) *GetGrantRequest {

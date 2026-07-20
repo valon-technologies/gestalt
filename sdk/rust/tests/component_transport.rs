@@ -66,6 +66,7 @@ impl IdentityProvider for TestAuthProvider {
             display_name: "Auth Example".to_string(),
             description: "Test authentication provider".to_string(),
             version: "0.1.0".to_string(),
+            capabilities: Vec::new(),
         })
     }
 
@@ -93,6 +94,7 @@ impl IdentityProvider for TestAuthProvider {
             refresh_token: String::new(),
             scope: "openid email".to_string(),
             grant_id: "grant-fixture".to_string(),
+            params: std::collections::BTreeMap::new(),
         })
     }
 
@@ -137,6 +139,7 @@ impl IdentityProvider for TestAuthProvider {
     ) -> gestalt::Result<ListGrantsResponse> {
         Ok(ListGrantsResponse {
             grant_ids: vec!["grant-fixture".to_string()],
+            grants: Vec::new(),
         })
     }
 
@@ -190,6 +193,7 @@ impl gestalt::S3Provider for TestS3Provider {
             display_name: "S3 Example".to_string(),
             description: "Test s3 provider".to_string(),
             version: "0.1.0".to_string(),
+            capabilities: Vec::new(),
         })
     }
 
@@ -406,6 +410,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
             redirect_uri: "https://host/callback".to_string(),
             scope: "openid".to_string(),
             state: "host-state".to_string(),
+            audience: String::new(),
         })
         .await
         .expect("authorize")
@@ -423,6 +428,8 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
             subject_token: String::new(),
             subject_token_type: String::new(),
             expires_in: 0,
+            audience: String::new(),
+            grant_id: String::new(),
         })
         .await
         .expect("token")

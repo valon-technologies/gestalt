@@ -5,7 +5,7 @@
 use crate::generated::v1;
 use crate::identity::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, GrantScope,
-    IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
+    GrantSummary, IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
     RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest,
     UserInfoResponse,
 };
@@ -18,6 +18,7 @@ pub(crate) fn to_wire_authorize_request(value: AuthorizeRequest) -> v1::Authoriz
         redirect_uri: value.redirect_uri,
         scope: value.scope,
         state: value.state,
+        audience: value.audience,
     }
 }
 
@@ -56,6 +57,16 @@ pub(crate) fn from_wire_grant_scope(value: v1::GrantScope) -> GrantScope {
     }
 }
 
+/// Converts a wire `GrantSummary` to its native message.
+pub(crate) fn from_wire_grant_summary(value: v1::GrantSummary) -> GrantSummary {
+    GrantSummary {
+        grant_id: value.grant_id,
+        audience: value.audience,
+        instance: value.instance,
+        metadata_json: value.metadata_json,
+    }
+}
+
 /// Converts a native `IntrospectRequest` to its wire message.
 pub(crate) fn to_wire_introspect_request(value: IntrospectRequest) -> v1::IntrospectRequest {
     v1::IntrospectRequest {
@@ -76,14 +87,22 @@ pub(crate) fn from_wire_introspect_response(value: v1::IntrospectResponse) -> In
 }
 
 /// Converts a native `ListGrantsRequest` to its wire message.
-pub(crate) fn to_wire_list_grants_request(_value: ListGrantsRequest) -> v1::ListGrantsRequest {
-    v1::ListGrantsRequest {}
+pub(crate) fn to_wire_list_grants_request(value: ListGrantsRequest) -> v1::ListGrantsRequest {
+    v1::ListGrantsRequest {
+        audience: value.audience,
+    }
 }
 
+#[allow(deprecated)]
 /// Converts a wire `ListGrantsResponse` to its native message.
 pub(crate) fn from_wire_list_grants_response(value: v1::ListGrantsResponse) -> ListGrantsResponse {
     ListGrantsResponse {
         grant_ids: value.grant_ids,
+        grants: value
+            .grants
+            .into_iter()
+            .map(from_wire_grant_summary)
+            .collect(),
     }
 }
 
@@ -113,6 +132,8 @@ pub(crate) fn to_wire_token_request(value: TokenRequest) -> v1::TokenRequest {
         subject_token: value.subject_token,
         subject_token_type: value.subject_token_type,
         expires_in: value.expires_in,
+        audience: value.audience,
+        grant_id: value.grant_id,
     }
 }
 
@@ -125,6 +146,7 @@ pub(crate) fn from_wire_token_response(value: v1::TokenResponse) -> TokenRespons
         refresh_token: value.refresh_token,
         scope: value.scope,
         grant_id: value.grant_id,
+        params: value.params,
     }
 }
 

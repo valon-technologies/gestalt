@@ -30,6 +30,12 @@ pub struct AuthorizeRequest {
     pub scope: String,
     /// The `state` field.
     pub state: String,
+    /// audience is the RFC 8707 target audience this flow is for. Empty means the
+    /// platform default (login); a connection ID such as "github:default" starts a
+    /// connect flow. Same operation, audience selects the surface.
+    ///
+    /// The `audience` field.
+    pub audience: String,
 }
 
 /// AuthorizeResponse returns the HTTP Location redirect URI containing RFC 6749
@@ -75,6 +81,27 @@ pub struct GrantScope {
     pub resource: Vec<String>,
 }
 
+/// GrantSummary describes one caller-visible API-token grant at list time,
+/// serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+///
+/// Native message type for `gestalt.provider.v1.GrantSummary`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GrantSummary {
+    /// The `grant_id` field.
+    pub grant_id: String,
+    /// The `audience` field.
+    pub audience: String,
+    /// instance was Qualifier; identifies the connection instance within the
+    /// audience (e.g. a Slack team ID).
+    ///
+    /// The `instance` field.
+    pub instance: String,
+    /// metadata_json carries display labels (was ExternalCredential.MetadataJSON).
+    ///
+    /// The `metadata_json` field.
+    pub metadata_json: String,
+}
+
 /// IntrospectRequest models RFC 7662 token introspection parameters.
 ///
 /// Native message type for `gestalt.provider.v1.IntrospectRequest`.
@@ -109,20 +136,31 @@ pub struct IntrospectResponse {
     pub audience: Vec<String>,
 }
 
-/// ListGrantsRequest lists API-token grant IDs visible to the caller.
+/// ListGrantsRequest lists API-token grants visible to the caller.
 ///
 /// Native message type for `gestalt.provider.v1.ListGrantsRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ListGrantsRequest {}
+pub struct ListGrantsRequest {
+    /// audience filters grants to one connection audience. Empty lists across all
+    /// audiences.
+    ///
+    /// The `audience` field.
+    pub audience: String,
+}
 
-/// ListGrantsResponse returns caller-visible API-token grant IDs created via
-/// token exchange. It must not include transient login or session grants.
+/// ListGrantsResponse returns caller-visible API-token grants created via token
+/// exchange. It must not include transient login or session grants.
+///
+/// grant_ids is retained for backward compatibility and deprecated; new callers
+/// read grants. Removed in XC-5.
 ///
 /// Native message type for `gestalt.provider.v1.ListGrantsResponse`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListGrantsResponse {
     /// The `grant_ids` field.
     pub grant_ids: Vec<String>,
+    /// The `grants` field.
+    pub grants: Vec<GrantSummary>,
 }
 
 /// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
@@ -180,6 +218,18 @@ pub struct TokenRequest {
     ///
     /// The `expires_in` field.
     pub expires_in: i64,
+    /// audience is the RFC 8707/8693 target audience. Required for
+    /// grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+    /// material exchange when no grant exists; cross-check on grant-backed resolve).
+    /// Unused on authorization_code calls: the code correlates.
+    ///
+    /// The `audience` field.
+    pub audience: String,
+    /// grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+    /// grant instance for grant-backed resolve (replaces Qualifier/Instance).
+    ///
+    /// The `grant_id` field.
+    pub grant_id: String,
 }
 
 /// TokenResponse models RFC 6749 token endpoint response fields.
@@ -201,6 +251,12 @@ pub struct TokenResponse {
     ///
     /// The `grant_id` field.
     pub grant_id: String,
+    /// params is the RFC 6749 §5.1 extension member for interpolation params the
+    /// provider computes from stored grant metadata + connection config (e.g.
+    /// Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+    ///
+    /// The `params` field.
+    pub params: std::collections::BTreeMap<String, String>,
 }
 
 /// UserInfoRequest is intentionally empty. The caller bearer token is supplied
@@ -277,6 +333,7 @@ impl Identity {
             redirect_uri,
             scope,
             state,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_authorize_request(request));
         if let Some(timeout) = self.timeout {
@@ -323,6 +380,8 @@ impl Identity {
             subject_token,
             subject_token_type,
             expires_in: options.expires_in,
+            audience: options.audience,
+            grant_id: options.grant_id,
         };
         let mut tonic_request = tonic::Request::new(to_wire_token_request(request));
         if let Some(timeout) = self.timeout {
@@ -465,4 +524,16 @@ pub struct IdentityTokenOptions {
     ///
     /// The `expires_in` field.
     pub expires_in: i64,
+    /// audience is the RFC 8707/8693 target audience. Required for
+    /// grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+    /// material exchange when no grant exists; cross-check on grant-backed resolve).
+    /// Unused on authorization_code calls: the code correlates.
+    ///
+    /// The `audience` field.
+    pub audience: String,
+    /// grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+    /// grant instance for grant-backed resolve (replaces Qualifier/Instance).
+    ///
+    /// The `grant_id` field.
+    pub grant_id: String,
 }

@@ -7,12 +7,12 @@ use crate::generated::v1::identity_server::Identity as IdentityProviderGrpc;
 use crate::generated::v1::{
     AuthorizeRequest as ProtoAuthorizeRequest, AuthorizeResponse as ProtoAuthorizeResponse,
     GetGrantRequest as ProtoGetGrantRequest, GetGrantResponse as ProtoGetGrantResponse,
-    GrantScope as ProtoGrantScope, IntrospectRequest as ProtoIntrospectRequest,
-    IntrospectResponse as ProtoIntrospectResponse, ListGrantsRequest as ProtoListGrantsRequest,
-    ListGrantsResponse as ProtoListGrantsResponse, RevokeGrantRequest as ProtoRevokeGrantRequest,
-    RevokeGrantResponse as ProtoRevokeGrantResponse, TokenRequest as ProtoTokenRequest,
-    TokenResponse as ProtoTokenResponse, UserInfoRequest as ProtoUserInfoRequest,
-    UserInfoResponse as ProtoUserInfoResponse,
+    GrantScope as ProtoGrantScope, GrantSummary as ProtoGrantSummary,
+    IntrospectRequest as ProtoIntrospectRequest, IntrospectResponse as ProtoIntrospectResponse,
+    ListGrantsRequest as ProtoListGrantsRequest, ListGrantsResponse as ProtoListGrantsResponse,
+    RevokeGrantRequest as ProtoRevokeGrantRequest, RevokeGrantResponse as ProtoRevokeGrantResponse,
+    TokenRequest as ProtoTokenRequest, TokenResponse as ProtoTokenResponse,
+    UserInfoRequest as ProtoUserInfoRequest, UserInfoResponse as ProtoUserInfoResponse,
 };
 use crate::identity::{
     AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
@@ -46,6 +46,7 @@ fn authorize_request_from_proto(value: ProtoAuthorizeRequest) -> AuthorizeReques
         redirect_uri: value.redirect_uri,
         scope: value.scope,
         state: value.state,
+        audience: value.audience,
     }
 }
 
@@ -60,6 +61,8 @@ fn token_request_from_proto(value: ProtoTokenRequest) -> TokenRequest {
         subject_token: value.subject_token,
         subject_token_type: value.subject_token_type,
         expires_in: value.expires_in,
+        audience: value.audience,
+        grant_id: value.grant_id,
     }
 }
 
@@ -98,6 +101,7 @@ fn token_response_to_proto(value: TokenResponse) -> ProtoTokenResponse {
         refresh_token: value.refresh_token,
         scope: value.scope,
         grant_id: value.grant_id,
+        params: value.params,
     }
 }
 
@@ -111,9 +115,20 @@ fn introspect_response_to_proto(value: IntrospectResponse) -> ProtoIntrospectRes
     }
 }
 
+#[allow(deprecated)]
 fn list_grants_response_to_proto(value: ListGrantsResponse) -> ProtoListGrantsResponse {
     ProtoListGrantsResponse {
         grant_ids: value.grant_ids,
+        grants: value
+            .grants
+            .into_iter()
+            .map(|grant| ProtoGrantSummary {
+                grant_id: grant.grant_id,
+                audience: grant.audience,
+                instance: grant.instance,
+                metadata_json: grant.metadata_json,
+            })
+            .collect(),
     }
 }
 
@@ -197,9 +212,15 @@ where
         let call = IdentityCallContext {
             caller_bearer_token: caller_bearer_token_from_metadata(request.metadata()),
         };
+        let request = request.into_inner();
         let response = self
             .provider
-            .list_grants(call, ListGrantsRequest {})
+            .list_grants(
+                call,
+                ListGrantsRequest {
+                    audience: request.audience,
+                },
+            )
             .await
             .map_err(|error| rpc_status("list grants", error))?;
         Ok(GrpcResponse::new(list_grants_response_to_proto(response)))

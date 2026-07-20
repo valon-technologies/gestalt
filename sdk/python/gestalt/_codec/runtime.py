@@ -65,6 +65,7 @@ def to_wire_provider_identity(value: native.ProviderIdentity) -> Any:
         warnings=value.warnings,
         min_protocol_version=value.min_protocol_version,
         max_protocol_version=value.max_protocol_version,
+        capabilities=value.capabilities,
     )
 
 
@@ -78,6 +79,7 @@ def from_wire_provider_identity(value: Any) -> native.ProviderIdentity:
         warnings=list(value.warnings),
         min_protocol_version=value.min_protocol_version,
         max_protocol_version=value.max_protocol_version,
+        capabilities=list(value.capabilities),
     )
 
 

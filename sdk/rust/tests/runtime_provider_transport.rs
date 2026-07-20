@@ -67,6 +67,7 @@ impl RuntimeProvider for TestRuntimeProvider {
             display_name: "Runtime Example".to_string(),
             description: "Test runtime provider".to_string(),
             version: "0.1.0".to_string(),
+            capabilities: Vec::new(),
         })
     }
 

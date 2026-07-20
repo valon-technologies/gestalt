@@ -463,7 +463,7 @@ METHOD_IDENTITY_LIST_GRANTS = Method(
     http_path="/api/v2/identity/grants",
     http_body="",
     http_path_fields=(),
-    http_query_fields=(),
+    http_query_fields=(PublicField(name="audience", json_name="audience"),),
     fill=(),
     reject=(),
 )

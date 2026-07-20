@@ -74,9 +74,9 @@ func (s *authServer) UserInfo(ctx context.Context, req *proto.UserInfoRequest) (
 	return userInfoResponseToProto(resp), nil
 }
 
-func (s *authServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
+func (s *authServer) ListGrants(ctx context.Context, req *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
 	ctx = AuthCallContextFromIncoming(ctx)
-	resp, err := s.auth.ListGrants(ctx, &ListGrantsRequest{})
+	resp, err := s.auth.ListGrants(ctx, listGrantsRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("list grants", err)
 	}

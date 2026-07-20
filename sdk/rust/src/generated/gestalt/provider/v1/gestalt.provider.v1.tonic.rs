@@ -4222,7 +4222,6 @@ pub mod identity_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn authorize(
             &mut self,
             request: impl tonic::IntoRequest<super::AuthorizeRequest>,
@@ -4238,7 +4237,6 @@ pub mod identity_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.Identity", "Authorize"));
             self.inner.unary(req, path, codec).await
         }
-        ///
         pub async fn token(
             &mut self,
             request: impl tonic::IntoRequest<super::TokenRequest>,
@@ -4357,12 +4355,10 @@ pub mod identity_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IdentityServer.
     #[async_trait]
     pub trait Identity: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn authorize(
             &self,
             request: tonic::Request<super::AuthorizeRequest>,
         ) -> std::result::Result<tonic::Response<super::AuthorizeResponse>, tonic::Status>;
-        ///
         async fn token(
             &self,
             request: tonic::Request<super::TokenRequest>,

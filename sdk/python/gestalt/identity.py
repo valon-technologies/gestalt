@@ -30,6 +30,10 @@ class AuthorizeRequest:
     redirect_uri: str = ""
     scope: str = ""
     state: str = ""
+    #: audience is the RFC 8707 target audience this flow is for. Empty means the
+    #: platform default (login); a connection ID such as "github:default" starts a
+    #: connect flow. Same operation, audience selects the surface.
+    audience: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +70,21 @@ class GrantScope:
 
 
 @dataclass(frozen=True, slots=True)
+class GrantSummary:
+    """GrantSummary describes one caller-visible API-token grant at list time,
+    serving catalog fan-out and the connections UI without N+1 GetGrant calls.
+    """
+
+    grant_id: str = ""
+    audience: str = ""
+    #: instance was Qualifier; identifies the connection instance within the
+    #: audience (e.g. a Slack team ID).
+    instance: str = ""
+    #: metadata_json carries display labels (was ExternalCredential.MetadataJSON).
+    metadata_json: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class IntrospectRequest:
     """IntrospectRequest models RFC 7662 token introspection parameters."""
 
@@ -92,16 +111,24 @@ class IntrospectResponse:
 
 @dataclass(frozen=True, slots=True)
 class ListGrantsRequest:
-    """ListGrantsRequest lists API-token grant IDs visible to the caller."""
+    """ListGrantsRequest lists API-token grants visible to the caller."""
+
+    #: audience filters grants to one connection audience. Empty lists across all
+    #: audiences.
+    audience: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class ListGrantsResponse:
-    """ListGrantsResponse returns caller-visible API-token grant IDs created via
-    token exchange. It must not include transient login or session grants.
+    """ListGrantsResponse returns caller-visible API-token grants created via token
+    exchange. It must not include transient login or session grants.
+
+    grant_ids is retained for backward compatibility and deprecated; new callers
+    read grants. Removed in XC-5.
     """
 
     grant_ids: list[str] = field(default_factory=list)
+    grants: list[GrantSummary] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +168,14 @@ class TokenRequest:
     #: TokenResponse remains authoritative per RFC 6749 §5.1. 0 means use the grant
     #: default.
     expires_in: int = 0
+    #: audience is the RFC 8707/8693 target audience. Required for
+    #: grant_type=urn:ietf:params:oauth:grant-type:token-exchange (load-bearing for
+    #: material exchange when no grant exists; cross-check on grant-backed resolve).
+    #: Unused on authorization_code calls: the code correlates.
+    audience: str = ""
+    #: grant_id is the OIDF Grant Management token-endpoint grant_id. Selects the
+    #: grant instance for grant-backed resolve (replaces Qualifier/Instance).
+    grant_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +189,10 @@ class TokenResponse:
     scope: str = ""
     #: grant_id is the OIDF Grant Management extension when available.
     grant_id: str = ""
+    #: params is the RFC 6749 §5.1 extension member for interpolation params the
+    #: provider computes from stored grant metadata + connection config (e.g.
+    #: Looker {host}). Supersedes MetadataJSON-derived params when non-empty.
+    params: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +317,8 @@ class Identity:
         subject_token: str = ...,
         subject_token_type: str = ...,
         expires_in: int = ...,
+        audience: str = ...,
+        grant_id: str = ...,
     ) -> TokenResponse: ...
 
     def token(
@@ -293,6 +334,8 @@ class Identity:
         subject_token: str | None = None,
         subject_token_type: str | None = None,
         expires_in: int | None = None,
+        audience: str | None = None,
+        grant_id: str | None = None,
     ) -> TokenResponse:
         if request is None:
             request = TokenRequest(
@@ -305,6 +348,8 @@ class Identity:
                 subject_token=subject_token or "",
                 subject_token_type=subject_token_type or "",
                 expires_in=expires_in or 0,
+                audience=audience or "",
+                grant_id=grant_id or "",
             )
         elif (
             grant_type is not None
@@ -316,6 +361,8 @@ class Identity:
             or subject_token is not None
             or subject_token_type is not None
             or expires_in is not None
+            or audience is not None
+            or grant_id is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(

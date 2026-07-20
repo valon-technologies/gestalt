@@ -193,7 +193,7 @@ func (p *remoteIdentityProvider) ListGrants(ctx context.Context, req *core.ListG
 	defer cancel()
 	ctx = p.outgoingIdentityCallContext(ctx)
 
-	resp, err := p.client.ListGrants(ctx, &proto.ListGrantsRequest{})
+	resp, err := p.client.ListGrants(ctx, listGrantsRequestToProto(req))
 	if err != nil {
 		return nil, mapIdentityProviderRPCError(err)
 	}
@@ -245,6 +245,7 @@ func authorizeRequestToProto(req *core.AuthorizeRequest) *proto.AuthorizeRequest
 		RedirectUri:  req.RedirectURI,
 		Scope:        req.Scope,
 		State:        req.State,
+		Audience:     req.Audience,
 	}
 }
 
@@ -269,6 +270,8 @@ func tokenRequestToProto(req *core.TokenRequest) *proto.TokenRequest {
 		SubjectToken:     req.SubjectToken,
 		SubjectTokenType: req.SubjectTokenType,
 		ExpiresIn:        req.ExpiresIn,
+		Audience:         req.Audience,
+		GrantId:          req.GrantID,
 	}
 }
 
@@ -276,7 +279,7 @@ func tokenResponseFromProto(resp *proto.TokenResponse) *core.TokenResponse {
 	if resp == nil {
 		return nil
 	}
-	return &core.TokenResponse{
+	out := &core.TokenResponse{
 		AccessToken:  resp.GetAccessToken(),
 		TokenType:    resp.GetTokenType(),
 		ExpiresIn:    int(resp.GetExpiresIn()),
@@ -284,6 +287,13 @@ func tokenResponseFromProto(resp *proto.TokenResponse) *core.TokenResponse {
 		Scope:        resp.GetScope(),
 		GrantID:      resp.GetGrantId(),
 	}
+	if params := resp.GetParams(); params != nil {
+		out.Params = make(map[string]string, len(params))
+		for k, v := range params {
+			out.Params[k] = v
+		}
+	}
+	return out
 }
 
 func introspectRequestToProto(req *core.IntrospectRequest) *proto.IntrospectRequest {
@@ -309,11 +319,27 @@ func introspectResponseFromProto(resp *proto.IntrospectResponse) *core.Introspec
 	}
 }
 
+func listGrantsRequestToProto(req *core.ListGrantsRequest) *proto.ListGrantsRequest {
+	if req == nil {
+		return nil
+	}
+	return &proto.ListGrantsRequest{Audience: req.Audience}
+}
+
 func listGrantsResponseFromProto(resp *proto.ListGrantsResponse) *core.ListGrantsResponse {
 	if resp == nil {
 		return nil
 	}
-	return &core.ListGrantsResponse{GrantIDs: append([]string(nil), resp.GetGrantIds()...)}
+	out := &core.ListGrantsResponse{GrantIDs: append([]string(nil), resp.GetGrantIds()...)}
+	for _, g := range resp.GetGrants() {
+		out.Grants = append(out.Grants, core.GrantSummary{
+			GrantID:      g.GetGrantId(),
+			Audience:     g.GetAudience(),
+			Instance:     g.GetInstance(),
+			MetadataJSON: g.GetMetadataJson(),
+		})
+	}
+	return out
 }
 
 func getGrantRequestToProto(req *core.GetGrantRequest) *proto.GetGrantRequest {

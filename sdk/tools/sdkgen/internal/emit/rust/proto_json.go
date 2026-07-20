@@ -35,6 +35,9 @@ func (r *renderer) renderWireProtoJSON(m *model.Message, needEncode, needDecode 
 	r.features.v1 = true
 
 	if needEncode {
+		if hasDeprecatedField(wire.Fields) {
+			fmt.Fprintf(&r.body, "#[allow(deprecated)]\n")
+		}
 		fmt.Fprintf(&r.body, "/// Encodes a wire `%s` as protobuf JSON.\n", wireName)
 		fmt.Fprintf(&r.body, "pub(crate) fn %s(value: &v1::%s) -> serde_json::Value {\n", encodeWireJSONFunc(m.FullName), wireName)
 		r.body.WriteString("    let mut object = serde_json::Map::new();\n")
@@ -51,6 +54,9 @@ func (r *renderer) renderWireProtoJSON(m *model.Message, needEncode, needDecode 
 	}
 
 	if needDecode {
+		if hasDeprecatedField(wire.Fields) {
+			fmt.Fprintf(&r.body, "#[allow(deprecated)]\n")
+		}
 		fmt.Fprintf(&r.body, "/// Decodes protobuf JSON into a wire `%s`.\n", wireName)
 		errRef := r.gestaltErrorRef()
 		fmt.Fprintf(&r.body, "pub(crate) fn %s(value: &serde_json::Value) -> Result<v1::%s, %s::GestaltError> {\n", decodeWireJSONFunc(m.FullName), wireName, errRef)

@@ -34,6 +34,11 @@ type RuntimeProviderMetadata struct {
 	Description string
 	Version     string
 	Warnings    []string
+	// Capabilities declares runtime provider capabilities. Identity providers
+	// that serve connection audiences report "audiences"; enforcement
+	// (boot-time cross-check against installed apps' connections) lands in XC-4.
+	// Providers that report nothing behave exactly as today.
+	Capabilities []string
 }
 
 func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
@@ -81,12 +86,13 @@ func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycl
 	}
 
 	return &RuntimeProviderMetadata{
-		Kind:        configuredMeta.GetKind(),
-		Name:        configuredMeta.GetName(),
-		DisplayName: configuredMeta.GetDisplayName(),
-		Description: configuredMeta.GetDescription(),
-		Version:     configuredMeta.GetVersion(),
-		Warnings:    append([]string(nil), configuredMeta.GetWarnings()...),
+		Kind:         configuredMeta.GetKind(),
+		Name:         configuredMeta.GetName(),
+		DisplayName:  configuredMeta.GetDisplayName(),
+		Description:  configuredMeta.GetDescription(),
+		Version:      configuredMeta.GetVersion(),
+		Warnings:     append([]string(nil), configuredMeta.GetWarnings()...),
+		Capabilities: append([]string(nil), configuredMeta.GetCapabilities()...),
 	}, nil
 }
 

@@ -51,6 +51,7 @@ class ProviderIdentity(_message.Message):
     WARNINGS_FIELD_NUMBER: _ClassVar[int]
     MIN_PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     MAX_PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
+    CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     kind: ProviderKind
     name: str
     display_name: str
@@ -59,7 +60,8 @@ class ProviderIdentity(_message.Message):
     warnings: _containers.RepeatedScalarFieldContainer[str]
     min_protocol_version: int
     max_protocol_version: int
-    def __init__(self, kind: _Optional[_Union[ProviderKind, str]] = ..., name: _Optional[str] = ..., display_name: _Optional[str] = ..., description: _Optional[str] = ..., version: _Optional[str] = ..., warnings: _Optional[_Iterable[str]] = ..., min_protocol_version: _Optional[int] = ..., max_protocol_version: _Optional[int] = ...) -> None: ...
+    capabilities: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, kind: _Optional[_Union[ProviderKind, str]] = ..., name: _Optional[str] = ..., display_name: _Optional[str] = ..., description: _Optional[str] = ..., version: _Optional[str] = ..., warnings: _Optional[_Iterable[str]] = ..., min_protocol_version: _Optional[int] = ..., max_protocol_version: _Optional[int] = ..., capabilities: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ConfigureProviderRequest(_message.Message):
     __slots__ = ()

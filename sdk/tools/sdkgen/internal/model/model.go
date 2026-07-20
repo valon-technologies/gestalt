@@ -211,6 +211,11 @@ type Field struct {
 	Message    string     // KindMessage: full name
 	Enum       string     // KindEnum: full name
 	OneofIndex int        // index into Message.Oneofs, -1 when not a oneof member
+	// Deprecated marks proto3 `option deprecated = true` fields. Generated
+	// converters that copy these fields for backward compatibility suppress the
+	// language's deprecation diagnostic so the SDK stays lint-clean until the
+	// field is removed (see XC-5).
+	Deprecated bool
 }
 
 // TypeRef classifies a repeated element or map value.
