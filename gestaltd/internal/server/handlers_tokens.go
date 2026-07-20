@@ -132,49 +132,6 @@ func decodeCreateTokenRequest(r io.Reader, req *createTokenRequest) error {
 	return decoder.Decode(req)
 }
 
-func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
-	auditAllowed := false
-	auditErr := errors.New("grant list failed")
-	defer func() {
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "grant.list", auditAllowed, auditErr)
-	}()
-
-	if err := requireUserCaller(w, PrincipalFromContext(r.Context())); err != nil {
-		auditErr = err
-		return
-	}
-	if s.auth == nil {
-		auditErr = errors.New("auth is disabled")
-		writeError(w, http.StatusNotFound, "auth is disabled")
-		return
-	}
-
-	ctx := s.callerAuthContext(r.Context(), r)
-	resp, err := s.auth.ListGrants(ctx, &core.ListGrantsRequest{})
-	if err != nil || resp == nil {
-		auditErr = errors.New("failed to list grants")
-		writeError(w, http.StatusInternalServerError, "failed to list grants")
-		return
-	}
-
-	out := make([]grantInfo, 0, len(resp.GrantIDs))
-	for _, grantID := range resp.GrantIDs {
-		detail, detailErr := s.auth.GetGrant(ctx, &core.GetGrantRequest{GrantID: grantID})
-		if detailErr != nil {
-			if errors.Is(detailErr, core.ErrNotFound) {
-				continue
-			}
-			auditErr = errors.New("failed to list grants")
-			writeError(w, http.StatusInternalServerError, "failed to list grants")
-			return
-		}
-		out = append(out, grantInfoFromResponse(grantID, detail))
-	}
-	auditAllowed = true
-	auditErr = nil
-	writeJSON(w, http.StatusOK, out)
-}
-
 func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("grant revoke failed")
@@ -208,57 +165,6 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
-}
-
-func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
-	auditAllowed := false
-	auditErr := errors.New("grant revoke all failed")
-	auditTarget := apiTokenCollectionAuditTarget()
-	defer func() {
-		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "grant.revoke_all", auditAllowed, auditErr, auditTarget)
-	}()
-
-	if err := requireUserCaller(w, PrincipalFromContext(r.Context())); err != nil {
-		auditErr = err
-		return
-	}
-	if s.auth == nil {
-		auditErr = errors.New("auth is disabled")
-		writeError(w, http.StatusNotFound, "auth is disabled")
-		return
-	}
-
-	ctx := s.callerAuthContext(r.Context(), r)
-	resp, err := s.auth.ListGrants(ctx, &core.ListGrantsRequest{})
-	if err != nil || resp == nil {
-		auditErr = errors.New("failed to list grants")
-		writeError(w, http.StatusInternalServerError, "failed to list grants")
-		return
-	}
-	count := 0
-	var failed []map[string]string
-	for _, grantID := range resp.GrantIDs {
-		if _, revokeErr := s.auth.RevokeGrant(ctx, &core.RevokeGrantRequest{GrantID: grantID}); revokeErr != nil {
-			failed = append(failed, map[string]string{
-				"id":    grantID,
-				"error": "failed to revoke grant",
-			})
-			continue
-		}
-		count++
-	}
-	if len(failed) > 0 {
-		auditErr = errors.New("failed to revoke one or more grants")
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"status": "partial",
-			"count":  count,
-			"failed": failed,
-		})
-		return
-	}
-	auditAllowed = true
-	auditErr = nil
-	writeJSON(w, http.StatusOK, map[string]any{"status": "revoked", "count": count})
 }
 
 func (s *Server) connectionInfosForPlugin(integration string, app *config.ProviderEntry, instances []instanceInfo, integrationAuthTypes []string, p *principal.Principal) []connectionDefInfo {

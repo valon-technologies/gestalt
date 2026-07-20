@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +18,40 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
+
+func queryValue(values url.Values, names ...string) string {
+	for _, name := range names {
+		if raw := strings.TrimSpace(values.Get(name)); raw != "" {
+			return raw
+		}
+	}
+	return ""
+}
+
+func parseOptionalIntQuery(w http.ResponseWriter, raw, name string) (int, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, true
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("%s must be an integer", name))
+		return 0, false
+	}
+	return value, true
+}
+
+type workflowRunEventInfo struct {
+	ID              string         `json:"id,omitempty"`
+	Source          string         `json:"source,omitempty"`
+	SpecVersion     string         `json:"specVersion,omitempty"`
+	Type            string         `json:"type,omitempty"`
+	Subject         string         `json:"subject,omitempty"`
+	Time            *time.Time     `json:"time,omitempty"`
+	DataContentType string         `json:"dataContentType,omitempty"`
+	Data            map[string]any `json:"data,omitempty"`
+	Extensions      map[string]any `json:"extensions,omitempty"`
+}
 
 type workflowEventDeliverRequest struct {
 	ID              string         `json:"id,omitempty"`

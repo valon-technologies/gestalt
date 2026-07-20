@@ -114,10 +114,6 @@ func apiTokenAuditTarget(id, name string) auditTarget {
 	}
 }
 
-func apiTokenCollectionAuditTarget() auditTarget {
-	return auditTarget{Kind: auditTargetKindAPITokenCollection}
-}
-
 func connectionAuditTarget(provider, connection, instance string) auditTarget {
 	connection = auditConnectionName(connection)
 	if instance == "" {

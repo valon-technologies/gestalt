@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"maps"
 	"net/http"
 	"strings"
 
@@ -134,48 +133,8 @@ func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type workflowScheduleTargetInfo struct {
-	Steps []workflowStepTargetInfo `json:"steps,omitempty"`
-}
-
-type workflowAppStepInfo struct {
-	Name           string `json:"name"`
-	Operation      string `json:"operation"`
-	Connection     string `json:"connection,omitempty"`
-	Instance       string `json:"instance,omitempty"`
-	CredentialMode string `json:"credentialMode,omitempty"`
-	Input          any    `json:"input,omitempty"`
-}
-
-type workflowAgentStepInfo struct {
-	ProviderName string                `json:"provider,omitempty"`
-	Model        string                `json:"model,omitempty"`
-	SessionKey   string                `json:"sessionKey,omitempty"`
-	Prompt       *workflowTextInfo     `json:"prompt,omitempty"`
-	Messages     []workflowMessageInfo `json:"messages,omitempty"`
-	ToolRefs     []agentToolRefRequest `json:"tools,omitempty"`
-	Output       *agentOutputRequest   `json:"output,omitempty"`
-	ModelOptions map[string]any        `json:"modelOptions,omitempty"`
-}
-
-type workflowStepTargetInfo struct {
-	ID             string                 `json:"id,omitempty"`
-	Inputs         map[string]any         `json:"inputs,omitempty"`
-	App            *workflowAppStepInfo   `json:"app,omitempty"`
-	Agent          *workflowAgentStepInfo `json:"agent,omitempty"`
-	Metadata       map[string]any         `json:"metadata,omitempty"`
-	TimeoutSeconds int                    `json:"timeoutSeconds,omitempty"`
-	When           *workflowStepWhenInfo  `json:"when,omitempty"`
-}
-
 type workflowTextInfo struct {
 	Template string `json:"template,omitempty"`
-}
-
-type workflowMessageInfo struct {
-	Role     string            `json:"role,omitempty"`
-	Text     *workflowTextInfo `json:"text,omitempty"`
-	Metadata map[string]any    `json:"metadata,omitempty"`
 }
 
 type workflowStepWhenInfo struct {
@@ -254,57 +213,6 @@ func workflowValueFromRequest(value workflowValueRequest) coreworkflow.Value {
 	return out
 }
 
-func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowScheduleTargetInfo {
-	info := workflowScheduleTargetInfo{Steps: make([]workflowStepTargetInfo, 0, len(target.Steps))}
-	for i := range target.Steps {
-		step := target.Steps[i]
-		info.Steps = append(info.Steps, workflowStepInfoFromCore(step))
-	}
-	return info
-}
-
-func workflowStepInfoFromCore(step coreworkflow.Step) workflowStepTargetInfo {
-	return workflowStepTargetInfo{
-		ID:             step.ID,
-		Inputs:         workflowValueMapInfoFromCore(step.Inputs),
-		App:            workflowAppInfoFromCore(step.App),
-		Agent:          workflowAgentInfoFromCore(step.Agent),
-		Metadata:       maps.Clone(step.Metadata),
-		TimeoutSeconds: step.TimeoutSeconds,
-		When:           workflowStepWhenInfoFromCore(step.When),
-	}
-}
-
-func workflowAppInfoFromCore(app *coreworkflow.AppCall) *workflowAppStepInfo {
-	if app == nil {
-		return nil
-	}
-	return &workflowAppStepInfo{
-		Name:           app.Name,
-		Operation:      app.Operation,
-		Connection:     userFacingConnectionName(app.Connection),
-		Instance:       app.Instance,
-		CredentialMode: string(app.CredentialMode),
-		Input:          workflowValueInfoFromCore(app.Input),
-	}
-}
-
-func workflowAgentInfoFromCore(agent *coreworkflow.AgentTurn) *workflowAgentStepInfo {
-	if agent == nil {
-		return nil
-	}
-	return &workflowAgentStepInfo{
-		ProviderName: agent.ProviderName,
-		Model:        agent.Model,
-		SessionKey:   agent.SessionKey,
-		Prompt:       workflowTextInfoFromCore(agent.Prompt),
-		Messages:     workflowMessagesInfoFromCore(agent.Messages),
-		ToolRefs:     agentToolRefsToRequest(agent.ToolRefs),
-		Output:       agentOutputRequestFromCore(agent.Output),
-		ModelOptions: maps.Clone(agent.ModelOptions),
-	}
-}
-
 func workflowStepWhenInfoFromCore(when *coreworkflow.StepWhen) *workflowStepWhenInfo {
 	if when == nil {
 		return nil
@@ -321,28 +229,6 @@ func workflowTextInfoFromCore(text coreworkflow.Text) *workflowTextInfo {
 		return nil
 	}
 	return &workflowTextInfo{Template: text.Template}
-}
-
-func workflowMessagesInfoFromCore(messages []coreworkflow.AgentMessage) []workflowMessageInfo {
-	if len(messages) == 0 {
-		return nil
-	}
-	out := make([]workflowMessageInfo, 0, len(messages))
-	for i := range messages {
-		out = append(out, workflowMessageInfo{
-			Role:     messages[i].Role,
-			Text:     workflowTextInfoFromCore(messages[i].Text),
-			Metadata: maps.Clone(messages[i].Metadata),
-		})
-	}
-	return out
-}
-
-func workflowValueMapInfoFromCore(values map[string]coreworkflow.Value) map[string]any {
-	if len(values) == 0 {
-		return nil
-	}
-	return workflowValueObjectInfoFromCore(values)
 }
 
 func workflowValueObjectInfoFromCore(values map[string]coreworkflow.Value) map[string]any {

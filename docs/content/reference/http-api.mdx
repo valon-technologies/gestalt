@@ -135,9 +135,6 @@ for a service-account credential.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/workflow/events` | Deliver one workflow event. Gestalt normalizes the event and fans it out across configured workflow providers. |
-| `GET` | `/api/v1/workflow/runs` | List workflow runs. Supports optional `app` and `status` query filters. |
-| `GET` | `/api/v1/workflow/runs/{runID}` | Inspect one workflow run. |
-| `POST` | `/api/v1/workflow/runs/{runID}/cancel` | Cancel one workflow run. The request body may include an optional `reason`. |
 
 Run responses include `definitionId`, `definitionGeneration`, `input`,
 `currentStepId`, and a `steps` array with per-step status, attempts, timing, and
@@ -166,18 +163,7 @@ workflow providers through the provider RPC contract.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/agent/sessions` | Create one agent session. Accepts an optional `idempotencyKey` field and optional `Idempotency-Key` header. |
-| `GET` | `/api/v1/agent/sessions` | List agent sessions. Supports optional `provider` and `state` query filters. |
-| `GET` | `/api/v1/agent/sessions/{sessionID}` | Inspect one agent session. |
-| `PATCH` | `/api/v1/agent/sessions/{sessionID}` | Update one agent session. |
-| `POST` | `/api/v1/agent/sessions/{sessionID}/turns` | Create one agent turn inside a session. Accepts an optional `idempotencyKey` field and optional `Idempotency-Key` header. |
-| `GET` | `/api/v1/agent/sessions/{sessionID}/turns` | List turns for one session. Supports optional `status`. |
-| `GET` | `/api/v1/agent/turns/{turnID}` | Inspect one agent turn. |
-| `POST` | `/api/v1/agent/turns/{turnID}/cancel` | Cancel one agent turn. The request body may include an optional `reason`. |
-| `GET` | `/api/v1/agent/turns/{turnID}/events` | List stored events for one turn. Supports optional `after` sequence cursor and `limit`. |
 | `GET` | `/api/v1/agent/turns/{turnID}/events/stream` | Stream turn events as server-sent events. Supports optional `after` sequence cursor, `limit`, and `until=terminal\|blocked_or_terminal`. |
-| `GET` | `/api/v1/agent/turns/{turnID}/interactions` | List provider-owned interactions for one turn. |
-| `POST` | `/api/v1/agent/turns/{turnID}/interactions/{interactionID}/resolve` | Resolve one pending interaction by submitting a `resolution` payload. |
 
 Session creation accepts `provider`, `model`, optional `clientRef`, optional
 `metadata`, optional `workspace`, and optional `idempotencyKey`.
@@ -216,9 +202,7 @@ still honor each event's `visibility`.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/tokens` | Create an API token. Plaintext is returned once. |
-| `GET` | `/api/v1/tokens` | List API tokens for the current user. |
 | `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
-| `DELETE` | `/api/v1/tokens` | Revoke all API tokens for the current user. |
 
 ### Operator Surfaces
 
