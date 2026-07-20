@@ -147,9 +147,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 		})
 	}
 	factories.Authorization = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
-		result, err := providerdrivers.AuthorizationFactory(ctx, name, node, hostServices, providerdrivers.AuthorizationDeps{
-			Transport: deps.ProviderTransport,
-		})
+		result, err := providerdrivers.AuthorizationFactory(ctx, name, node, hostServices, providerdrivers.AuthorizationDeps{})
 		if err != nil {
 			return providerdrivers.AuthorizationBuildResult{}, err
 		}

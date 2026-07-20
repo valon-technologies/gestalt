@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
@@ -13,49 +12,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-type AuthorizationParams struct {
-	ProviderID string
-	Operation  string
-}
-
-func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params AuthorizationParams) (bool, error) {
-	if t == nil || t.authorization == nil {
-		return true, nil
-	}
-	allowed, req := t.shadowAuthorizationCheck(ctx, params)
-	recordProviderGatewayAuthorizationCheck(ctx, allowed, principal.FromContext(ctx) != nil, req)
-	return allowed, nil
-}
-
-func (t *ProviderGatewayTransport) shadowAuthorizationCheck(ctx context.Context, params AuthorizationParams) (bool, *proto.CheckAccessRequest) {
-	subjectID, err := t.authorizationSubject(ctx)
-	if err != nil {
-		return false, nil
-	}
-	allowed, req, _ := t.runAuthorizationCheck(ctx, subjectID, params.ProviderID, params.Operation)
-	return allowed, req
-}
-
-type DirectTransport struct{}
-
-func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (resp ProviderGatewayResponse, err error) {
-	startedAt := time.Now()
-	defer func() {
-		recordProviderGatewayOperation(ctx, startedAt, err, req, TransportPathDirect)
-	}()
-
-	if next == nil {
-		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: next handler is required")
-	}
-	return next(ctx, req)
-}
-
 type UserStore interface {
 	FindOrCreateUser(ctx context.Context, email string) (*core.User, error)
 }
 
 type ProviderGatewayTransport struct {
-	authorization AuthorizationProvider
+	authorization core.AuthorizationProvider
 	identity      core.IdentityProvider
 	users         UserStore
 	publicMethods *publicrpc.Registry
@@ -66,7 +28,7 @@ func NewProviderGatewayTransport() *ProviderGatewayTransport {
 	return &ProviderGatewayTransport{}
 }
 
-func (t *ProviderGatewayTransport) SetAuthorizationProvider(authorization AuthorizationProvider) {
+func (t *ProviderGatewayTransport) SetAuthorizationProvider(authorization core.AuthorizationProvider) {
 	if t == nil {
 		return
 	}
@@ -101,31 +63,6 @@ func (t *ProviderGatewayTransport) SetPublicBaseURL(publicBaseURL string) {
 	t.publicBaseURL = strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
 }
 
-func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (resp ProviderGatewayResponse, err error) {
-	startedAt := time.Now()
-	defer func() {
-		recordProviderGatewayOperation(ctx, startedAt, err, req, TransportPathProviderGateway)
-	}()
-
-	if t == nil {
-		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: transport is nil")
-	}
-	if next == nil {
-		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: next handler is required")
-	}
-	allowed, err := t.Authorize(ctx, AuthorizationParams{
-		ProviderID: req.ProviderID,
-		Operation:  req.Operation,
-	})
-	if err != nil {
-		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: authorize: %w", err)
-	}
-	if !allowed {
-		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: unauthorized")
-	}
-	return next(ctx, req)
-}
-
 func (t *ProviderGatewayTransport) runAuthorizationCheck(
 	ctx context.Context,
 	subjectID string,
@@ -143,7 +80,7 @@ func (t *ProviderGatewayTransport) runAuthorizationCheck(
 		return false, nil, err
 	}
 	req := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
-	allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization.(core.AuthorizationProvider), req)
+	allowed, err := invocation.CheckSubjectAccess(ctx, t.authorization, req)
 	return allowed, req, err
 }
 

@@ -190,7 +190,6 @@ type Deps struct {
 	HostServiceTLSCAFile    string
 	HostServiceTLSCAPEM     string
 	Telemetry               core.TelemetryProvider
-	ProviderTransport       providergateway.Transport
 	DevSupervisor           *providerdev.Supervisor
 	RemoteClients           *remote.ClientSet
 	RemoteToken             string
@@ -1070,8 +1069,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 
-	providerTransport := providergateway.DirectTransport{}
-	deps.ProviderTransport = providerTransport
 
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
@@ -1088,14 +1085,14 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeAuthorizationOnError := true
 	defer func() {
 		if closeAuthorizationOnError {
-			_ = closeAuthorizationProviders(authorizationProviders.Guarded)
+			_ = closeAuthorizationProviders(authorizationProviders.Raw)
 		}
 	}()
 	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders.Raw); err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders.Guarded)
+	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders.Raw)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
@@ -2106,8 +2103,7 @@ func buildNamedAuthProvider(cfg *config.Config, name string, authEntry *config.P
 }
 
 type authorizationProviderSets struct {
-	Raw     map[string]core.AuthorizationProvider
-	Guarded map[string]core.AuthorizationProvider
+	Raw map[string]core.AuthorizationProvider
 }
 
 func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (authorizationProviderSets, error) {
@@ -2126,8 +2122,7 @@ func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factor
 		return authorizationProviderSets{}, err
 	}
 	return authorizationProviderSets{
-		Raw:     map[string]core.AuthorizationProvider{name: providers.Raw},
-		Guarded: map[string]core.AuthorizationProvider{name: providers.Guarded},
+		Raw: map[string]core.AuthorizationProvider{name: providers.Raw},
 	}, nil
 }
 
@@ -2147,7 +2142,7 @@ func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, na
 		if err != nil {
 			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
-		return providerdrivers.AuthorizationBuildResult{Raw: provider, Guarded: provider}, nil
+		return providerdrivers.AuthorizationBuildResult{Raw: provider}, nil
 	}
 	if factories.Authorization == nil {
 		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization factory is not registered")
