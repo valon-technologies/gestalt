@@ -3,6 +3,8 @@ package publicsurface
 import (
 	"encoding/json"
 	"sort"
+
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
 // ManifestField names one REST request field in the golden manifest.
@@ -36,6 +38,22 @@ type Manifest struct {
 	Methods         []ManifestEntry `json:"methods"`
 }
 
+// streamingKindString maps a model.StreamKind to the manifest's streaming kind
+// string. Client-streaming and bidi-streaming methods never reach the manifest
+// because they are rejected by Validate.
+func streamingKindString(s model.StreamKind) string {
+	switch s {
+	case model.ServerStream:
+		return "server_stream"
+	case model.ClientStream:
+		return "client_stream"
+	case model.Bidi:
+		return "bidi_stream"
+	default:
+		return "unary"
+	}
+}
+
 // BuildManifest renders the public unary manifest from a validated view and methods.
 func BuildManifest(view *View, methods []PublicMethod) Manifest {
 	out := Manifest{
@@ -47,7 +65,7 @@ func BuildManifest(view *View, methods []PublicMethod) Manifest {
 		entry := ManifestEntry{
 			Service:       ServiceLocalName(pm.Service),
 			Method:        pm.Method,
-			StreamingKind: "unary",
+			StreamingKind: streamingKindString(pm.Stream),
 			GRPCPath:      pm.FullMethod,
 			Fill:          append([]string(nil), FieldNames(pm.ServerFilled)...),
 			Reject:        append([]string(nil), FieldNames(pm.Rejected)...),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import pathlib
 from collections.abc import Mapping
 from typing import (
@@ -61,6 +62,33 @@ class OperationAnnotations:
 
 
 @dataclasses.dataclass(slots=True)
+class UnaryResponseSpec:
+    """Unary (fully materialized) operation response. Schema is a JSON-encoded
+    JSON Schema object."""
+
+    schema: str = ""
+
+
+@dataclasses.dataclass(slots=True)
+class StreamResponseSpec:
+    """Streaming operation response. media_type names the representation (for
+    example application/x-ndjson); item_schema is an optional JSON-encoded
+    schema describing one yielded item."""
+
+    media_type: str = ""
+    item_schema: str = ""
+
+
+@dataclasses.dataclass(slots=True)
+class OperationResponseSpec:
+    """Declares how an operation responds. Set unary or stream; both None means
+    unary with no schema."""
+
+    unary: UnaryResponseSpec | None = None
+    stream: StreamResponseSpec | None = None
+
+
+@dataclasses.dataclass(slots=True)
 class CatalogOperation:
     id: str = ""
     method: str = ""
@@ -68,6 +96,7 @@ class CatalogOperation:
     description: str = ""
     input_schema: str = ""
     output_schema: str = ""
+    response: OperationResponseSpec | None = None
     annotations: OperationAnnotations | None = None
     parameters: list[CatalogParameter] = dataclasses.field(default_factory=list)
     required_scopes: list[str] = dataclasses.field(default_factory=list)
@@ -218,6 +247,46 @@ def _catalog_to_proto(catalog: Catalog) -> Any:
     return proto_catalog
 
 
+def _response_to_proto(
+    response: OperationResponseSpec | None, legacy_output_schema: str
+) -> Any | None:
+    """Maps an OperationResponseSpec (or legacy output_schema) to the proto
+    OperationResponseSpec. Returns None when neither is set."""
+    if response is not None:
+        if response.stream is not None:
+            return app_pb2.OperationResponseSpec(
+                stream=app_pb2.StreamResponseSpec(
+                    media_type=response.stream.media_type,
+                    item_schema=_schema_string_to_struct(response.stream.item_schema),
+                )
+            )
+        if response.unary is not None:
+            return app_pb2.OperationResponseSpec(
+                unary=app_pb2.UnaryResponseSpec(
+                    schema=_schema_string_to_struct(response.unary.schema)
+                )
+            )
+    schema = _schema_string_to_struct(legacy_output_schema)
+    if schema is None:
+        return None
+    return app_pb2.OperationResponseSpec(
+        unary=app_pb2.UnaryResponseSpec(schema=schema)
+    )
+
+
+def _schema_string_to_struct(schema: str) -> Any | None:
+    trimmed = schema.strip()
+    if not trimmed:
+        return None
+    try:
+        parsed = json.loads(trimmed)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return json_format.ParseDict(parsed, struct_pb2.Struct())
+
+
 def _catalog_operation_to_proto(operation: CatalogOperation) -> Any:
     proto_operation = app_pb2.CatalogOperation(
         id=operation.id,
@@ -225,10 +294,12 @@ def _catalog_operation_to_proto(operation: CatalogOperation) -> Any:
         title=operation.title,
         description=operation.description,
         input_schema=operation.input_schema,
-        output_schema=operation.output_schema,
         read_only=operation.read_only,
         transport=operation.transport,
     )
+    response_spec = _response_to_proto(operation.response, operation.output_schema)
+    if response_spec is not None:
+        proto_operation.response.CopyFrom(response_spec)
     if operation.annotations is not None and _has_annotations(operation.annotations):
         proto_operation.annotations.CopyFrom(
             _operation_annotations_to_proto(operation.annotations)

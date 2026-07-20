@@ -19,6 +19,7 @@ import {
 import * as wire from "./internal/gen/v1/app_pb.ts";
 import {
   fromWireGetSessionCatalogResponse,
+  fromWireInvokeFrame,
   fromWireOperationResult,
   fromWireProviderMetadata,
   fromWireResolveHTTPSubjectResponse,
@@ -30,7 +31,7 @@ import {
   toWireResolveHTTPSubjectRequest,
   toWireStartProviderRequest,
 } from "./internal/codec/app.ts";
-import { callOptions, callUnary } from "./internal/codec/support.ts";
+import { callOptions, callUnary, mapRecv } from "./internal/codec/support.ts";
 import type { Init, JsonInput, JsonObjectInput } from "./rpc_support.ts";
 import { decodeAppResult } from "./invoke_support.ts";
 
@@ -122,7 +123,6 @@ export interface CatalogOperation {
   title: string;
   description: string;
   inputSchema: string;
-  outputSchema: string;
   annotations?: OperationAnnotations;
   parameters: CatalogParameter[];
   requiredScopes: string[];
@@ -131,6 +131,11 @@ export interface CatalogOperation {
   visible?: boolean;
   transport: string;
   allowedRoles: string[];
+  /**
+   * Response mode and schema for this operation. Replaces the former
+   * output_schema string; absent is equivalent to unary with no schema.
+   */
+  response?: OperationResponseSpec;
 }
 
 /**
@@ -231,6 +236,44 @@ export interface InvocationContext {
   connection: string;
 }
 
+export type InvokeFrameValue =
+  | { case: "metadata"; value: InvokeMetadata }
+  | { case: "data"; value: Uint8Array }
+  | { case: undefined; value?: undefined };
+
+export function invokeFrameValueMetadata(
+  value: InvokeMetadata,
+): InvokeFrameValue {
+  return { case: "metadata", value };
+}
+
+export function invokeFrameValueData(value: Uint8Array): InvokeFrameValue {
+  return { case: "data", value };
+}
+
+/**
+ * InvokeFrame is one frame in a streaming invocation. The first frame is always
+ * metadata; subsequent frames carry data bytes produced by the operation
+ * handler (after encoding, for typed item streams). A mid-stream error (for
+ * example, a validation failure or a recovered panic) may emit a trailing
+ * metadata frame with a non-2xx status followed by a data frame carrying a
+ * JSON error body, after which the stream ends.
+ */
+export interface InvokeFrame {
+  value: InvokeFrameValue;
+}
+
+/**
+ * InvokeMetadata is the first frame of a streaming invocation. It carries the
+ * HTTP-shaped status, headers, and the response media type (from the
+ * operation's StreamResponseSpec).
+ */
+export interface InvokeMetadata {
+  status: number;
+  headers: { [key: string]: StringList };
+  mediaType: string;
+}
+
 /**
  * OperationAnnotations carries optional host hints about how an operation
  * behaves.
@@ -240,6 +283,31 @@ export interface OperationAnnotations {
   idempotentHint?: boolean;
   destructiveHint?: boolean;
   openWorldHint?: boolean;
+}
+
+export type OperationResponseSpecKind =
+  | { case: "unary"; value: UnaryResponseSpec }
+  | { case: "stream"; value: StreamResponseSpec }
+  | { case: undefined; value?: undefined };
+
+export function operationResponseSpecKindUnary(
+  value: UnaryResponseSpec,
+): OperationResponseSpecKind {
+  return { case: "unary", value };
+}
+
+export function operationResponseSpecKindStream(
+  value: StreamResponseSpec,
+): OperationResponseSpecKind {
+  return { case: "stream", value };
+}
+
+/**
+ * OperationResponseSpec declares how an operation responds. App authoring
+ * defaults to unary; emitted catalogs always declare either unary or stream.
+ */
+export interface OperationResponseSpec {
+  kind: OperationResponseSpecKind;
 }
 
 /**
@@ -361,6 +429,16 @@ export interface StartProviderResponse {
 }
 
 /**
+ * StreamResponseSpec describes a streaming operation response. The media type
+ * names the representation (for example application/x-ndjson); the item schema
+ * is optional and describes one yielded item when the stream is typed.
+ */
+export interface StreamResponseSpec {
+  mediaType: string;
+  itemSchema?: JsonObjectInput;
+}
+
+/**
  * StringList is a helper map value for repeated HTTP header and query values.
  */
 export interface StringList {
@@ -382,6 +460,13 @@ export interface SubjectPermissionContext {
   app: string;
   operations: string[];
   allOperations: boolean;
+}
+
+/**
+ * UnaryResponseSpec describes a unary (fully materialized) operation response.
+ */
+export interface UnaryResponseSpec {
+  schema?: JsonObjectInput;
 }
 
 export class App {
@@ -470,6 +555,57 @@ export class App {
       ),
     );
     return fromWireOperationResult(response);
+  }
+
+  invokeStream(
+    app: string,
+    operation: string,
+    params?: JsonObjectInput,
+    options?: {
+      connection?: string | undefined;
+      instance?: string | undefined;
+      idempotencyKey?: string | undefined;
+      credentialMode?: string | undefined;
+      runAs?: Init<SubjectContext> | undefined;
+    },
+  ): AsyncIterable<InvokeFrame> {
+    const request = {
+      app,
+      operation,
+      connection: options?.connection ?? "",
+      instance: options?.instance ?? "",
+      idempotencyKey: options?.idempotencyKey ?? "",
+      credentialMode: options?.credentialMode ?? "",
+      ...(params !== undefined ? { params } : {}),
+      ...(options?.runAs !== undefined ? { runAs: options.runAs } : {}),
+      ...(this.context !== undefined ? { context: this.context } : {}),
+    } satisfies Init<AppInvokeRequest>;
+    return mapRecv(
+      this.client.invokeStream(toWireAppInvokeRequest(request)),
+      fromWireInvokeFrame,
+    );
+  }
+
+  /**
+   * InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+   * REST binding) and shares Invoke's request shape, authorization, and
+   * signature policy. The first response frame is always InvokeMetadata;
+   * subsequent frames carry data bytes from the operation's stream response.
+   * A mid-stream error may emit a trailing metadata frame with an error status
+   * followed by a JSON error body, after which the stream ends.
+   */
+  invokeStreamRaw(request: Init<AppInvokeRequest>): AsyncIterable<InvokeFrame> {
+    return mapRecv(
+      this.client.invokeStream(
+        toWireAppInvokeRequest({
+          ...request,
+          ...(request.context === undefined && this.context !== undefined
+            ? { context: this.context }
+            : {}),
+        }),
+      ),
+      fromWireInvokeFrame,
+    );
   }
 
   async invokeGraphQL(
@@ -626,6 +762,48 @@ export class AppProvider {
       ),
     );
     return fromWireOperationResult(response);
+  }
+
+  executeStream(
+    operation: string,
+    token: string,
+    invocationId: string,
+    idempotencyKey: string,
+    params?: JsonObjectInput,
+  ): AsyncIterable<InvokeFrame> {
+    const request = {
+      operation,
+      token,
+      invocationId,
+      idempotencyKey,
+      connectionParams: {},
+      ...(params !== undefined ? { params } : {}),
+      ...(this.context !== undefined ? { context: this.context } : {}),
+    } satisfies Init<ExecuteRequest>;
+    return mapRecv(
+      this.client.executeStream(toWireExecuteRequest(request)),
+      fromWireInvokeFrame,
+    );
+  }
+
+  /**
+   * ExecuteStream is the streaming counterpart of Execute. The first response
+   * frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+   * A mid-stream error may emit a trailing metadata frame with an error status
+   * followed by a JSON error body, after which the stream ends.
+   */
+  executeStreamRaw(request: Init<ExecuteRequest>): AsyncIterable<InvokeFrame> {
+    return mapRecv(
+      this.client.executeStream(
+        toWireExecuteRequest({
+          ...request,
+          ...(request.context === undefined && this.context !== undefined
+            ? { context: this.context }
+            : {}),
+        }),
+      ),
+      fromWireInvokeFrame,
+    );
   }
 
   async resolveHTTPSubject(

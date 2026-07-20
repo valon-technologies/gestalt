@@ -3,7 +3,9 @@ package gestalt
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -312,9 +314,10 @@ type Operation[In any, Out any] struct {
 
 // Registration describes one provider registered with the router.
 type Registration[P any] struct {
-	catalogOp *CatalogOperation
-	execute   func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
-	err       error
+	catalogOp     *CatalogOperation
+	execute       func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
+	streamExecute func(context.Context, *P, map[string]any, Request) (StreamReader, error)
+	err           error
 }
 
 // Register ties a typed operation definition to a typed handler.
@@ -358,11 +361,85 @@ func Register[P any, In any, Out any](
 	}
 }
 
+// StreamOperation describes one statically declared streaming operation.
+// Input is used for typed dispatch; the handler yields InvokeFrame frames
+// (metadata first, then data). The catalog response is emitted as a stream
+// spec with the given media type.
+type StreamOperation[In any] struct {
+	ID           string
+	Method       string
+	Title        string
+	Description  string
+	MediaType    string
+	ItemSchema   string
+	AllowedRoles []string
+	Tags         []string
+	ReadOnly     bool
+	Visible      *bool
+}
+
+// RegisterStream ties a streaming operation definition to a typed handler
+// that yields InvokeFrame frames. The handler is responsible for emitting a
+// leading metadata frame and subsequent data frames.
+func RegisterStream[P any, In any](
+	op StreamOperation[In],
+	handler func(*P, context.Context, In, Request) (StreamReader, error),
+) Registration[P] {
+	catOp, err := streamCatalogOperationFor(op)
+	if err != nil {
+		return Registration[P]{err: err}
+	}
+	return Registration[P]{
+		catalogOp: catOp,
+		streamExecute: func(ctx context.Context, provider *P, rawParams map[string]any, req Request) (StreamReader, error) {
+			var input In
+			if err := decodeParams(rawParams, &input); err != nil {
+				return nil, newOperationError(http.StatusBadRequest, fmt.Sprintf("decode params for %q: %v", op.ID, err), err)
+			}
+			return handler(provider, ctx, input, req)
+		},
+	}
+}
+
+// streamCatalogOperationFor builds a CatalogOperation whose Response is a
+// StreamResponseSpec.
+func streamCatalogOperationFor[In any](op StreamOperation[In]) (*CatalogOperation, error) {
+	id := strings.TrimSpace(op.ID)
+	if id == "" {
+		return nil, fmt.Errorf("operation id is required")
+	}
+	params, err := catalogParametersFor[In]()
+	if err != nil {
+		return nil, fmt.Errorf("operation %q: %w", id, err)
+	}
+	catOp := &CatalogOperation{
+		Id:           id,
+		Method:       normalizeMethod(op.Method),
+		Title:        strings.TrimSpace(op.Title),
+		Description:  strings.TrimSpace(op.Description),
+		AllowedRoles: append([]string(nil), op.AllowedRoles...),
+		Parameters:   params,
+		Tags:         append([]string(nil), op.Tags...),
+		ReadOnly:     op.ReadOnly,
+		Response: &OperationResponseSpec{
+			Stream: &StreamResponseSpec{
+				MediaType:  strings.TrimSpace(op.MediaType),
+				ItemSchema: strings.TrimSpace(op.ItemSchema),
+			},
+		},
+	}
+	if op.Visible != nil {
+		catOp.Visible = op.Visible
+	}
+	return catOp, nil
+}
+
 // Router dispatches provider Execute calls against typed handlers and derives
 // the corresponding static executable catalog.
 type Router[P any] struct {
-	catalog  *Catalog
-	handlers map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
+	catalog        *Catalog
+	handlers       map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
+	streamHandlers map[string]func(context.Context, *P, map[string]any, Request) (StreamReader, error)
 }
 
 // NewRouter constructs a typed router from registrations. Source-provider flows
@@ -377,7 +454,8 @@ func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P]
 			Name:       name,
 			Operations: make([]*CatalogOperation, 0, len(registrations)),
 		},
-		handlers: make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(registrations)),
+		handlers:       make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(registrations)),
+		streamHandlers: make(map[string]func(context.Context, *P, map[string]any, Request) (StreamReader, error)),
 	}
 	for i := range registrations {
 		reg := registrations[i]
@@ -388,7 +466,14 @@ func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P]
 		if _, exists := router.handlers[opID]; exists {
 			return nil, fmt.Errorf("duplicate operation id %q", opID)
 		}
-		router.handlers[opID] = reg.execute
+		if _, exists := router.streamHandlers[opID]; exists {
+			return nil, fmt.Errorf("duplicate operation id %q", opID)
+		}
+		if reg.streamExecute != nil {
+			router.streamHandlers[opID] = reg.streamExecute
+		} else {
+			router.handlers[opID] = reg.execute
+		}
 		router.catalog.Operations = append(router.catalog.Operations, reg.catalogOp)
 	}
 	return router, nil
@@ -424,9 +509,14 @@ func (r *Router[P]) WithName(name string) *Router[P] {
 	for opID, handler := range r.handlers {
 		handlers[opID] = handler
 	}
+	streamHandlers := make(map[string]func(context.Context, *P, map[string]any, Request) (StreamReader, error), len(r.streamHandlers))
+	for opID, handler := range r.streamHandlers {
+		streamHandlers[opID] = handler
+	}
 	return &Router[P]{
-		catalog:  cat,
-		handlers: handlers,
+		catalog:        cat,
+		handlers:       handlers,
+		streamHandlers: streamHandlers,
 	}
 }
 
@@ -460,6 +550,105 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 	}
 	return result, nil
 }
+
+// ExecuteStream dispatches a streaming operation invocation to its streaming
+// handler. It returns a StreamReader that yields InvokeFrame frames. If the
+// operation is not registered as streaming, it returns an error.
+func (r *Router[P]) ExecuteStream(ctx context.Context, provider *P, operation string, params map[string]any, token string) (StreamReader, error) {
+	if r == nil {
+		return errStreamReader(http.StatusInternalServerError, streamingRouterNilMessage), nil
+	}
+	handler, ok := r.streamHandlers[operation]
+	if !ok {
+		return errStreamReader(http.StatusNotFound, unknownOperationMessage), nil
+	}
+	reader := protectedStream(operation, func() (StreamReader, error) {
+		return handler(ctx, provider, params, Request{
+			Token:            token,
+			ConnectionParams: ConnectionParams(ctx),
+			Subject:          SubjectFromContext(ctx),
+			AgentSubject:     AgentSubjectFromContext(ctx),
+			Credential:       CredentialFromContext(ctx),
+			Access:           AccessFromContext(ctx),
+			Host:             HostContextFromContext(ctx),
+			IdempotencyKey:   IdempotencyKeyFromContext(ctx),
+			ToolRefs:         ToolRefsFromContext(ctx),
+			ToolRefsSet:      ToolRefsSetFromContext(ctx),
+			requestContext:   requestContextFromContext(ctx),
+		})
+	})
+	return reader, nil
+}
+
+// errStreamReader returns a StreamReader that yields a single metadata frame
+// carrying the error status and then ends.
+func errStreamReader(status int, message string) StreamReader {
+	return &errorStreamReader{status: status, message: message}
+}
+
+type errorStreamReader struct {
+	status   int
+	message  string
+	sentMeta bool
+	sentData bool
+}
+
+func (e *errorStreamReader) Recv() (*InvokeFrame, error) {
+	if e.sentData {
+		return nil, io.EOF
+	}
+	if !e.sentMeta {
+		e.sentMeta = true
+		return &InvokeFrame{
+			Metadata: &InvokeMetadata{
+				Status:    e.status,
+				Headers:   http.Header{"Content-Type": []string{"application/json"}},
+				MediaType: "application/json",
+			},
+		}, nil
+	}
+	e.sentData = true
+	body, _ := json.Marshal(map[string]string{"error": e.message})
+	return &InvokeFrame{Data: body}, nil
+}
+
+// protectedStream wraps a streaming handler call with panic recovery. A
+// recovered panic or handler error is surfaced as an error StreamReader (a
+// metadata frame carrying the error's HTTP status followed by a JSON error
+// body), so callers never observe a nil reader. operationError statuses are
+// preserved, matching unary dispatch via operationResultFromError.
+func protectedStream(operation string, fn func() (StreamReader, error)) (reader StreamReader) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			_ = recoveredOperationResult(operation, recovered)
+			reader = errStreamReader(http.StatusInternalServerError, internalErrorMessage)
+		}
+	}()
+	reader, err := fn()
+	if err != nil {
+		status := http.StatusInternalServerError
+		message := internalErrorMessage
+		var opErr *operationError
+		if errors.As(err, &opErr) {
+			if opErr.status != 0 {
+				status = opErr.status
+			}
+			message = opErr.message
+			if message == "" {
+				message = opErr.Error()
+			}
+		}
+		return errStreamReader(status, message)
+	}
+	if reader == nil {
+		return errStreamReader(http.StatusInternalServerError, nilResultMessage)
+	}
+	return reader
+}
+
+var _ StreamReader = (*errorStreamReader)(nil)
+
+const streamingRouterNilMessage = "router is nil"
 
 func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*CatalogOperation, error) {
 	id := strings.TrimSpace(op.ID)

@@ -21,6 +21,8 @@ export interface PublicMethod {
   http?: PublicMethodHttp | undefined;
   fill: readonly string[];
   reject: readonly string[];
+  // stream is true for server-streaming methods rendered as streaming calls.
+  stream: boolean;
 }
 
 export const PUBLIC_METHODS = {
@@ -31,6 +33,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/CancelTurn",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}:cancel",
@@ -48,6 +51,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/CreateSession",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/agent/sessions",
@@ -62,6 +66,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/CreateTurn",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/agent/sessions/{session_id}/turns",
@@ -76,6 +81,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/GetSession",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/agent/sessions/{session_id}",
@@ -90,6 +96,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/GetTurn",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}",
@@ -107,6 +114,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/ListInteractions",
       fill: ["context"],
       reject: [],
+      stream: false,
     },
     listSessions: {
       service: "Agent",
@@ -114,6 +122,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/ListSessions",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/agent/sessions",
@@ -134,6 +143,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/ListTurnEvents",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/agent/sessions/{session_id}/turns/{turn_id}/events",
@@ -155,6 +165,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/ListTurns",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/agent/sessions/{session_id}/turns",
@@ -175,6 +186,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/ResolveInteraction",
       fill: ["context"],
       reject: [],
+      stream: false,
     },
     updateSession: {
       service: "Agent",
@@ -182,6 +194,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Agent/UpdateSession",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "PATCH",
         path: "/api/v2/agent/sessions/{session_id}",
@@ -198,6 +211,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.App/Invoke",
       fill: ["context"],
       reject: ["run_as"],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/app/{app}/operations/{operation}",
@@ -215,6 +229,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.App/InvokeGraphQL",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/app/{app}/graphql",
@@ -222,6 +237,14 @@ export const PUBLIC_METHODS = {
         pathFields: [{ name: "app", jsonName: "app" }],
         queryFields: [],
       },
+    },
+    invokeStream: {
+      service: "App",
+      method: "InvokeStream",
+      grpcPath: "/gestalt.provider.v1.App/InvokeStream",
+      fill: ["context"],
+      reject: ["run_as"],
+      stream: true,
     },
   },
   authorization: {
@@ -231,6 +254,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/AddRelationship",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/authorization/relationships",
@@ -245,6 +269,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/CheckAccess",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/authorization/access:check",
@@ -259,6 +284,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/CheckAccessMany",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/authorization/access:checkMany",
@@ -273,6 +299,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/DeleteRelationship",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/authorization/relationships:delete",
@@ -287,6 +314,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/GetActiveModelRef",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/authorization/models/active",
@@ -302,6 +330,7 @@ export const PUBLIC_METHODS = {
         "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/authorization/models/active/resource-types",
@@ -320,6 +349,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/ListRelationships",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/authorization/relationships",
@@ -338,6 +368,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/SetActiveModel",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "PUT",
         path: "/api/v2/authorization/models/active",
@@ -352,6 +383,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Authorization/SetAuthorizationState",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "PUT",
         path: "/api/v2/authorization/state",
@@ -368,6 +400,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.ExternalCredentials/CreateCredential",
       fill: [],
       reject: [],
+      stream: false,
     },
     deleteCredential: {
       service: "ExternalCredentials",
@@ -375,6 +408,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.ExternalCredentials/DeleteCredential",
       fill: [],
       reject: [],
+      stream: false,
     },
     exchangeCredential: {
       service: "ExternalCredentials",
@@ -382,6 +416,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.ExternalCredentials/ExchangeCredential",
       fill: [],
       reject: [],
+      stream: false,
     },
     getCredential: {
       service: "ExternalCredentials",
@@ -389,6 +424,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.ExternalCredentials/GetCredential",
       fill: [],
       reject: [],
+      stream: false,
     },
     listCredentials: {
       service: "ExternalCredentials",
@@ -396,6 +432,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.ExternalCredentials/ListCredentials",
       fill: [],
       reject: [],
+      stream: false,
     },
     resolveCredential: {
       service: "ExternalCredentials",
@@ -403,6 +440,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.ExternalCredentials/ResolveCredential",
       fill: [],
       reject: [],
+      stream: false,
     },
     upsertCredential: {
       service: "ExternalCredentials",
@@ -410,6 +448,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.ExternalCredentials/UpsertCredential",
       fill: [],
       reject: [],
+      stream: false,
     },
     validateCredentialConfig: {
       service: "ExternalCredentials",
@@ -418,6 +457,7 @@ export const PUBLIC_METHODS = {
         "/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig",
       fill: [],
       reject: [],
+      stream: false,
     },
   },
   identity: {
@@ -427,6 +467,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Identity/Authorize",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/identity/authorize",
@@ -441,6 +482,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Identity/GetGrant",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/identity/grants/{grant_id}",
@@ -455,6 +497,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Identity/Introspect",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/identity/introspect",
@@ -469,6 +512,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Identity/ListGrants",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/identity/grants",
@@ -483,6 +527,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Identity/RevokeGrant",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "DELETE",
         path: "/api/v2/identity/grants/{grant_id}",
@@ -497,6 +542,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Identity/Token",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/identity/token",
@@ -511,6 +557,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Identity/UserInfo",
       fill: [],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/identity/userinfo",
@@ -527,6 +574,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/Add",
       fill: [],
       reject: [],
+      stream: false,
     },
     clear: {
       service: "IndexedDB",
@@ -534,6 +582,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/Clear",
       fill: [],
       reject: [],
+      stream: false,
     },
     count: {
       service: "IndexedDB",
@@ -541,6 +590,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/Count",
       fill: [],
       reject: [],
+      stream: false,
     },
     createIndex: {
       service: "IndexedDB",
@@ -548,6 +598,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/CreateIndex",
       fill: [],
       reject: [],
+      stream: false,
     },
     createObjectStore: {
       service: "IndexedDB",
@@ -555,6 +606,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/CreateObjectStore",
       fill: [],
       reject: [],
+      stream: false,
     },
     delete: {
       service: "IndexedDB",
@@ -562,6 +614,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/Delete",
       fill: [],
       reject: [],
+      stream: false,
     },
     deleteIndex: {
       service: "IndexedDB",
@@ -569,6 +622,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/DeleteIndex",
       fill: [],
       reject: [],
+      stream: false,
     },
     deleteObjectStore: {
       service: "IndexedDB",
@@ -576,6 +630,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/DeleteObjectStore",
       fill: [],
       reject: [],
+      stream: false,
     },
     deleteRange: {
       service: "IndexedDB",
@@ -583,6 +638,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/DeleteRange",
       fill: [],
       reject: [],
+      stream: false,
     },
     get: {
       service: "IndexedDB",
@@ -590,6 +646,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/Get",
       fill: [],
       reject: [],
+      stream: false,
     },
     getAll: {
       service: "IndexedDB",
@@ -597,6 +654,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/GetAll",
       fill: [],
       reject: [],
+      stream: false,
     },
     getAllKeys: {
       service: "IndexedDB",
@@ -604,6 +662,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/GetAllKeys",
       fill: [],
       reject: [],
+      stream: false,
     },
     getKey: {
       service: "IndexedDB",
@@ -611,6 +670,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/GetKey",
       fill: [],
       reject: [],
+      stream: false,
     },
     indexCount: {
       service: "IndexedDB",
@@ -618,6 +678,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/IndexCount",
       fill: [],
       reject: [],
+      stream: false,
     },
     indexDelete: {
       service: "IndexedDB",
@@ -625,6 +686,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/IndexDelete",
       fill: [],
       reject: [],
+      stream: false,
     },
     indexGet: {
       service: "IndexedDB",
@@ -632,6 +694,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/IndexGet",
       fill: [],
       reject: [],
+      stream: false,
     },
     indexGetAll: {
       service: "IndexedDB",
@@ -639,6 +702,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/IndexGetAll",
       fill: [],
       reject: [],
+      stream: false,
     },
     indexGetAllKeys: {
       service: "IndexedDB",
@@ -646,6 +710,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys",
       fill: [],
       reject: [],
+      stream: false,
     },
     indexGetKey: {
       service: "IndexedDB",
@@ -653,6 +718,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/IndexGetKey",
       fill: [],
       reject: [],
+      stream: false,
     },
     put: {
       service: "IndexedDB",
@@ -660,6 +726,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.IndexedDB/Put",
       fill: [],
       reject: [],
+      stream: false,
     },
   },
   workflow: {
@@ -669,6 +736,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/ApplyDefinition",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/workflow/definitions:apply",
@@ -683,6 +751,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/CancelRun",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/workflow/runs/{run_id}:cancel",
@@ -697,6 +766,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/DeleteDefinition",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "DELETE",
         path: "/api/v2/workflow/definitions/{definition_id}",
@@ -711,6 +781,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/GetDefinition",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/workflow/definitions/{definition_id}",
@@ -725,6 +796,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/GetRun",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/workflow/runs/{run_id}",
@@ -739,6 +811,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/GetRunEvents",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/workflow/runs/{run_id}/events",
@@ -753,6 +826,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/GetRunOutput",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/workflow/runs/{run_id}/output",
@@ -767,6 +841,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/ListDefinitions",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/workflow/definitions",
@@ -781,6 +856,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/ListRuns",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "GET",
         path: "/api/v2/workflow/runs",
@@ -801,6 +877,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/SetActivationPaused",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/workflow/definitions/{definition_id}/activations/{activation_id}:setPaused",
@@ -818,6 +895,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/SetDefinitionPaused",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/workflow/definitions/{definition_id}:setPaused",
@@ -832,6 +910,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/SignalOrStartRun",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/workflow/definitions/{definition_id}:signalOrStart",
@@ -846,6 +925,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/SignalRun",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/workflow/runs/{run_id}:signal",
@@ -860,6 +940,7 @@ export const PUBLIC_METHODS = {
       grpcPath: "/gestalt.provider.v1.Workflow/StartRun",
       fill: ["context"],
       reject: [],
+      stream: false,
       http: {
         verb: "POST",
         path: "/api/v2/workflow/definitions/{definition_id}/runs",

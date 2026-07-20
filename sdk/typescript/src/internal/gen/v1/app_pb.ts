@@ -15,7 +15,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/app.proto.
  */
 export const file_v1_app: GenFile = /*@__PURE__*/
-  fileDesc("Cgx2MS9hcHAucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEifgoQQ2F0YWxvZ1BhcmFtZXRlchIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSJwoHZGVmYXVsdBgFIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZSLeAQoUT3BlcmF0aW9uQW5ub3RhdGlvbnMSGwoOcmVhZF9vbmx5X2hpbnQYASABKAhIAIgBARIcCg9pZGVtcG90ZW50X2hpbnQYAiABKAhIAYgBARIdChBkZXN0cnVjdGl2ZV9oaW50GAMgASgISAKIAQESHAoPb3Blbl93b3JsZF9oaW50GAQgASgISAOIAQFCEQoPX3JlYWRfb25seV9oaW50QhIKEF9pZGVtcG90ZW50X2hpbnRCEwoRX2Rlc3RydWN0aXZlX2hpbnRCEgoQX29wZW5fd29ybGRfaGludCKAAwoQQ2F0YWxvZ09wZXJhdGlvbhIKCgJpZBgBIAEoCRIOCgZtZXRob2QYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSFAoMaW5wdXRfc2NoZW1hGAUgASgJEhUKDW91dHB1dF9zY2hlbWEYBiABKAkSPgoLYW5ub3RhdGlvbnMYByABKAsyKS5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvbkFubm90YXRpb25zEjkKCnBhcmFtZXRlcnMYCCADKAsyJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhdGFsb2dQYXJhbWV0ZXISFwoPcmVxdWlyZWRfc2NvcGVzGAkgAygJEgwKBHRhZ3MYCiADKAkSEQoJcmVhZF9vbmx5GAsgASgIEhQKB3Zpc2libGUYDCABKAhIAIgBARIRCgl0cmFuc3BvcnQYDSABKAkSFQoNYWxsb3dlZF9yb2xlcxgOIAMoCUIKCghfdmlzaWJsZSKPAQoHQ2F0YWxvZxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghpY29uX3N2ZxgEIAEoCRI5CgpvcGVyYXRpb25zGAUgAygLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nT3BlcmF0aW9uIm8KEkNvbm5lY3Rpb25QYXJhbURlZhIQCghyZXF1aXJlZBgBIAEoCBITCgtkZXNjcmlwdGlvbhgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEgwKBGZyb20YBCABKAkSDQoFZmllbGQYBSABKAkijgQKEFByb3ZpZGVyTWV0YWRhdGESDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSPAoPY29ubmVjdGlvbl9tb2RlGAQgASgOMiMuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uTW9kZRISCgphdXRoX3R5cGVzGAUgAygJElYKEWNvbm5lY3Rpb25fcGFyYW1zGAYgAygLMjsuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRI0Cg5zdGF0aWNfY2F0YWxvZxgHIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZxIgChhzdXBwb3J0c19zZXNzaW9uX2NhdGFsb2cYCCABKAgSHAoUbWluX3Byb3RvY29sX3ZlcnNpb24YCyABKAUSHAoUbWF4X3Byb3RvY29sX3ZlcnNpb24YDCABKAUSIQoZd29ya2Zsb3dfZGVmaW5pdGlvbl9zcGVjcxgNIAMoDBpgChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEjYKBXZhbHVlGAIgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uUGFyYW1EZWY6AjgBIsQBCg9PcGVyYXRpb25SZXN1bHQSDgoGc3RhdHVzGAEgASgFEgwKBGJvZHkYAiABKAwSQgoHaGVhZGVycxgDIAMoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuT3BlcmF0aW9uUmVzdWx0LkhlYWRlcnNFbnRyeRpPCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEi4KBXZhbHVlGAIgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdHJpbmdMaXN0OgI4ASLSAgoQQXBwSW52b2tlUmVxdWVzdBILCgNhcHAYAiABKAkSEQoJb3BlcmF0aW9uGAMgASgJEicKBnBhcmFtcxgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKY29ubmVjdGlvbhgFIAEoCRIQCghpbnN0YW5jZRgGIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYCCABKAkSFwoPY3JlZGVudGlhbF9tb2RlGAkgASgJEjQKB2NvbnRleHQYCyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0EjMKBnJ1bl9hcxgMIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHRKBAgHEAhKBAgKEAtKBAgNEA5SCHdvcmtmbG93UhZkZWxlZ2F0ZWRfY2FsbGVyX3Byb29mIv0BChdBcHBJbnZva2VHcmFwaFFMUmVxdWVzdBILCgNhcHAYASABKAkSEAoIZG9jdW1lbnQYAiABKAkSKgoJdmFyaWFibGVzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBISCgpjb25uZWN0aW9uGAQgASgJEhAKCGluc3RhbmNlGAUgASgJEhcKD2lkZW1wb3RlbmN5X2tleRgHIAEoCRI0Cgdjb250ZXh0GAggASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZXF1ZXN0Q29udGV4dEoECAYQB0oECAkQClIWZGVsZWdhdGVkX2NhbGxlcl9wcm9vZiKbAQoOU3ViamVjdENvbnRleHQSCgoCaWQYASABKAkSDQoFZW1haWwYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg4KBnNjb3BlcxgFIAMoCRJCCgtwZXJtaXNzaW9ucxgGIAMoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdFBlcm1pc3Npb25Db250ZXh0SgQIAhADIlMKGFN1YmplY3RQZXJtaXNzaW9uQ29udGV4dBILCgNhcHAYASABKAkSEgoKb3BlcmF0aW9ucxgCIAMoCRIWCg5hbGxfb3BlcmF0aW9ucxgDIAEoCCLWAQoMQWdlbnRUb29sUmVmEgsKA2FwcBgBIAEoCRIRCglvcGVyYXRpb24YAiABKAkSEgoKY29ubmVjdGlvbhgDIAEoCRIQCghpbnN0YW5jZRgEIAEoCRINCgV0aXRsZRgFIAEoCRITCgtkZXNjcmlwdGlvbhgGIAEoCRIXCg9jcmVkZW50aWFsX21vZGUYByABKAkSDgoGc3lzdGVtGAggASgJEjMKBnJ1bl9hcxgJIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQiHAoKU3RyaW5nTGlzdBIOCgZ2YWx1ZXMYASADKAkiWwoRQ3JlZGVudGlhbENvbnRleHQSDAoEbW9kZRgBIAEoCRISCgpzdWJqZWN0X2lkGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiLQoNQWNjZXNzQ29udGV4dBIOCgZwb2xpY3kYASABKAkSDAoEcm9sZRgCIAEoCSImCgtIb3N0Q29udGV4dBIXCg9wdWJsaWNfYmFzZV91cmwYASABKAkiLQoPUHJvdmlkZXJDb250ZXh0EgwKBGtpbmQYASABKAkSDAoEbmFtZRgCIAEoCSKTAQoRSW52b2NhdGlvbkNvbnRleHQSEgoKcmVxdWVzdF9pZBgBIAEoCRINCgVkZXB0aBgCIAEoBRISCgpjYWxsX2NoYWluGAMgAygJEg8KB3N1cmZhY2UYBCABKAkSIgoaaW50ZXJuYWxfY29ubmVjdGlvbl9hY2Nlc3MYBSABKAgSEgoKY29ubmVjdGlvbhgGIAEoCSJQChJSZXF1ZXN0TWV0YUNvbnRleHQSEQoJY2xpZW50X2lwGAEgASgJEhMKC3JlbW90ZV9hZGRyGAIgASgJEhIKCnVzZXJfYWdlbnQYAyABKAkiVAoWQWdlbnRJbnZvY2F0aW9uQ29udGV4dBIVCg1wcm92aWRlcl9uYW1lGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDwoHdHVybl9pZBgDIAEoCSKHBQoOUmVxdWVzdENvbnRleHQSNAoHc3ViamVjdBgBIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQSOgoKY3JlZGVudGlhbBgCIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuQ3JlZGVudGlhbENvbnRleHQSMgoGYWNjZXNzGAMgASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5BY2Nlc3NDb250ZXh0EikKCHdvcmtmbG93GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCgRob3N0GAUgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5Ib3N0Q29udGV4dBI6Cg1hZ2VudF9zdWJqZWN0GAYgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dBI0CgZjYWxsZXIYByABKAsyJC5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVyQ29udGV4dBI6CgppbnZvY2F0aW9uGAggASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbnZvY2F0aW9uQ29udGV4dBI0Cgl0b29sX3JlZnMYCSADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VG9vbFJlZhIVCg10b29sX3JlZnNfc2V0GAogASgIEj0KDHJlcXVlc3RfbWV0YRgLIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVxdWVzdE1ldGFDb250ZXh0EjoKBWFnZW50GAwgASgLMisuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudEludm9jYXRpb25Db250ZXh0Iv4EChJIVFRQU3ViamVjdFJlcXVlc3QSDwoHYmluZGluZxgBIAEoCRIOCgZtZXRob2QYAiABKAkSDAoEcGF0aBgDIAEoCRIUCgxjb250ZW50X3R5cGUYBCABKAkSRQoHaGVhZGVycxgFIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0LkhlYWRlcnNFbnRyeRJBCgVxdWVyeRgGIAMoCzIyLmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0LlF1ZXJ5RW50cnkSJwoGcGFyYW1zGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghyYXdfYm9keRgIIAEoDBIXCg9zZWN1cml0eV9zY2hlbWUYCSABKAkSGAoQdmVyaWZpZWRfc3ViamVjdBgKIAEoCRJUCg92ZXJpZmllZF9jbGFpbXMYCyADKAsyOy5nZXN0YWx0LnByb3ZpZGVyLnYxLkhUVFBTdWJqZWN0UmVxdWVzdC5WZXJpZmllZENsYWltc0VudHJ5Gk8KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0cmluZ0xpc3Q6AjgBGk0KClF1ZXJ5RW50cnkSCwoDa2V5GAEgASgJEi4KBXZhbHVlGAIgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdHJpbmdMaXN0OgI4ARo1ChNWZXJpZmllZENsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiiwEKGVJlc29sdmVIVFRQU3ViamVjdFJlcXVlc3QSOAoHcmVxdWVzdBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0EjQKB2NvbnRleHQYAiABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0IoEBChpSZXNvbHZlSFRUUFN1YmplY3RSZXNwb25zZRI0CgdzdWJqZWN0GAEgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dBIVCg1yZWplY3Rfc3RhdHVzGAIgASgFEhYKDnJlamVjdF9tZXNzYWdlGAMgASgJIvwCCg5FeGVjdXRlUmVxdWVzdBIRCglvcGVyYXRpb24YASABKAkSJwoGcGFyYW1zGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBINCgV0b2tlbhgDIAEoCRJUChFjb25uZWN0aW9uX3BhcmFtcxgEIAMoCzI5Lmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZVJlcXVlc3QuQ29ubmVjdGlvblBhcmFtc0VudHJ5EhUKDWludm9jYXRpb25faWQYBSABKAkSNAoHY29udGV4dBgGIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuUmVxdWVzdENvbnRleHQSFwoPaWRlbXBvdGVuY3lfa2V5GAkgASgJGjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBSgQICBAJSgQICxAMUhBpbnZvY2F0aW9uX3Rva2VuUgxjYWxsZXJfcHJvb2YijwIKGEdldFNlc3Npb25DYXRhbG9nUmVxdWVzdBINCgV0b2tlbhgBIAEoCRJeChFjb25uZWN0aW9uX3BhcmFtcxgCIAMoCzJDLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2Vzc2lvbkNhdGFsb2dSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRIVCg1pbnZvY2F0aW9uX2lkGAMgASgJEjQKB2NvbnRleHQYBCABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0GjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkoKGUdldFNlc3Npb25DYXRhbG9nUmVzcG9uc2USLQoHY2F0YWxvZxgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZyJnChRTdGFydFByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgEIAEoBSIxChVTdGFydFByb3ZpZGVyUmVzcG9uc2USGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoBSpoCg5Db25uZWN0aW9uTW9kZRIfChtDT05ORUNUSU9OX01PREVfVU5TUEVDSUZJRUQQABIYChRDT05ORUNUSU9OX01PREVfTk9ORRABEhsKF0NPTk5FQ1RJT05fTU9ERV9TVUJKRUNUEAIykQUKC0FwcFByb3ZpZGVyEkwKC0dldE1ldGFkYXRhEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiUuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhEo4BCg1TdGFydFByb3ZpZGVyEikuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFByb3ZpZGVyUmVxdWVzdBoqLmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQcm92aWRlclJlc3BvbnNlIiaKtRgEbmFtZYq1GBBwcm90b2NvbF92ZXJzaW9uirUYBmNvbmZpZxKaAQoHRXhlY3V0ZRIjLmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZVJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvblJlc3VsdCJEirUYCW9wZXJhdGlvboq1GAV0b2tlboq1GA1pbnZvY2F0aW9uX2lkirUYD2lkZW1wb3RlbmN5X2tleYq1GAZwYXJhbXMSdQoSUmVzb2x2ZUhUVFBTdWJqZWN0Ei4uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlSFRUUFN1YmplY3RSZXF1ZXN0Gi8uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlSFRUUFN1YmplY3RSZXNwb25zZRKOAQoRR2V0U2Vzc2lvbkNhdGFsb2cSLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFNlc3Npb25DYXRhbG9nUmVxdWVzdBouLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2Vzc2lvbkNhdGFsb2dSZXNwb25zZSIairUYBXRva2VuirUYDWludm9jYXRpb25faWQyrgQKA0FwcBKoAgoGSW52b2tlEiUuZ2VzdGFsdC5wcm92aWRlci52MS5BcHBJbnZva2VSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25SZXN1bHQi0AGKtRgDYXBwirUYCW9wZXJhdGlvboq1GAZwYXJhbXOatRgOCgZzdGF0dXMSBGJvZHmitRgKY29ubmVjdGlvbqK1GAhpbnN0YW5jZaK1GA9pZGVtcG90ZW5jeV9rZXmitRgPY3JlZGVudGlhbF9tb2RlorUYBnJ1bl9hc8rzGBEKB2NvbnRleHQSBnJ1bl9hc/rS5JMCCBIGUFVCTElDgtPkkwItOgEqIigvYXBpL3YyL2FwcC97YXBwfS9vcGVyYXRpb25zL3tvcGVyYXRpb259EvIBCg1JbnZva2VHcmFwaFFMEiwuZ2VzdGFsdC5wcm92aWRlci52MS5BcHBJbnZva2VHcmFwaFFMUmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuT3BlcmF0aW9uUmVzdWx0IowBirUYA2FwcIq1GAhkb2N1bWVudKK1GApjb25uZWN0aW9uorUYCGluc3RhbmNlorUYD2lkZW1wb3RlbmN5X2tleaK1GAl2YXJpYWJsZXPK8xgJCgdjb250ZXh0+tLkkwIIEgZQVUJMSUOC0+STAh46ASoiGS9hcGkvdjIvYXBwL3thcHB9L2dyYXBocWwaB4q1GANhcHBiBnByb3RvMw", [file_google_api_annotations, file_google_api_visibility, file_google_protobuf_empty, file_google_protobuf_struct, file_v1_annotations]);
+  fileDesc("Cgx2MS9hcHAucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEifgoQQ2F0YWxvZ1BhcmFtZXRlchIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSJwoHZGVmYXVsdBgFIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZSLeAQoUT3BlcmF0aW9uQW5ub3RhdGlvbnMSGwoOcmVhZF9vbmx5X2hpbnQYASABKAhIAIgBARIcCg9pZGVtcG90ZW50X2hpbnQYAiABKAhIAYgBARIdChBkZXN0cnVjdGl2ZV9oaW50GAMgASgISAKIAQESHAoPb3Blbl93b3JsZF9oaW50GAQgASgISAOIAQFCEQoPX3JlYWRfb25seV9oaW50QhIKEF9pZGVtcG90ZW50X2hpbnRCEwoRX2Rlc3RydWN0aXZlX2hpbnRCEgoQX29wZW5fd29ybGRfaGludCI8ChFVbmFyeVJlc3BvbnNlU3BlYxInCgZzY2hlbWEYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IlYKElN0cmVhbVJlc3BvbnNlU3BlYxISCgptZWRpYV90eXBlGAEgASgJEiwKC2l0ZW1fc2NoZW1hGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKTAQoVT3BlcmF0aW9uUmVzcG9uc2VTcGVjEjcKBXVuYXJ5GAEgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5VbmFyeVJlc3BvbnNlU3BlY0gAEjkKBnN0cmVhbRgCIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuU3RyZWFtUmVzcG9uc2VTcGVjSABCBgoEa2luZCK8AwoQQ2F0YWxvZ09wZXJhdGlvbhIKCgJpZBgBIAEoCRIOCgZtZXRob2QYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSFAoMaW5wdXRfc2NoZW1hGAUgASgJEj4KC2Fubm90YXRpb25zGAcgASgLMikuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25Bbm5vdGF0aW9ucxI5CgpwYXJhbWV0ZXJzGAggAygLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nUGFyYW1ldGVyEhcKD3JlcXVpcmVkX3Njb3BlcxgJIAMoCRIMCgR0YWdzGAogAygJEhEKCXJlYWRfb25seRgLIAEoCBIUCgd2aXNpYmxlGAwgASgISACIAQESEQoJdHJhbnNwb3J0GA0gASgJEhUKDWFsbG93ZWRfcm9sZXMYDiADKAkSPAoIcmVzcG9uc2UYDyABKAsyKi5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvblJlc3BvbnNlU3BlY0IKCghfdmlzaWJsZUoECAYQB1INb3V0cHV0X3NjaGVtYSKPAQoHQ2F0YWxvZxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghpY29uX3N2ZxgEIAEoCRI5CgpvcGVyYXRpb25zGAUgAygLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nT3BlcmF0aW9uIm8KEkNvbm5lY3Rpb25QYXJhbURlZhIQCghyZXF1aXJlZBgBIAEoCBITCgtkZXNjcmlwdGlvbhgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEgwKBGZyb20YBCABKAkSDQoFZmllbGQYBSABKAkijgQKEFByb3ZpZGVyTWV0YWRhdGESDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSPAoPY29ubmVjdGlvbl9tb2RlGAQgASgOMiMuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uTW9kZRISCgphdXRoX3R5cGVzGAUgAygJElYKEWNvbm5lY3Rpb25fcGFyYW1zGAYgAygLMjsuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRI0Cg5zdGF0aWNfY2F0YWxvZxgHIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZxIgChhzdXBwb3J0c19zZXNzaW9uX2NhdGFsb2cYCCABKAgSHAoUbWluX3Byb3RvY29sX3ZlcnNpb24YCyABKAUSHAoUbWF4X3Byb3RvY29sX3ZlcnNpb24YDCABKAUSIQoZd29ya2Zsb3dfZGVmaW5pdGlvbl9zcGVjcxgNIAMoDBpgChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEjYKBXZhbHVlGAIgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uUGFyYW1EZWY6AjgBIsQBCg9PcGVyYXRpb25SZXN1bHQSDgoGc3RhdHVzGAEgASgFEgwKBGJvZHkYAiABKAwSQgoHaGVhZGVycxgDIAMoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuT3BlcmF0aW9uUmVzdWx0LkhlYWRlcnNFbnRyeRpPCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEi4KBXZhbHVlGAIgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdHJpbmdMaXN0OgI4ASLIAQoOSW52b2tlTWV0YWRhdGESDgoGc3RhdHVzGAEgASgFEkEKB2hlYWRlcnMYAiADKAsyMC5nZXN0YWx0LnByb3ZpZGVyLnYxLkludm9rZU1ldGFkYXRhLkhlYWRlcnNFbnRyeRISCgptZWRpYV90eXBlGAMgASgJGk8KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0cmluZ0xpc3Q6AjgBIl8KC0ludm9rZUZyYW1lEjcKCG1ldGFkYXRhGAEgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5JbnZva2VNZXRhZGF0YUgAEg4KBGRhdGEYAiABKAxIAEIHCgV2YWx1ZSLSAgoQQXBwSW52b2tlUmVxdWVzdBILCgNhcHAYAiABKAkSEQoJb3BlcmF0aW9uGAMgASgJEicKBnBhcmFtcxgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKY29ubmVjdGlvbhgFIAEoCRIQCghpbnN0YW5jZRgGIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYCCABKAkSFwoPY3JlZGVudGlhbF9tb2RlGAkgASgJEjQKB2NvbnRleHQYCyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0EjMKBnJ1bl9hcxgMIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHRKBAgHEAhKBAgKEAtKBAgNEA5SCHdvcmtmbG93UhZkZWxlZ2F0ZWRfY2FsbGVyX3Byb29mIv0BChdBcHBJbnZva2VHcmFwaFFMUmVxdWVzdBILCgNhcHAYASABKAkSEAoIZG9jdW1lbnQYAiABKAkSKgoJdmFyaWFibGVzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBISCgpjb25uZWN0aW9uGAQgASgJEhAKCGluc3RhbmNlGAUgASgJEhcKD2lkZW1wb3RlbmN5X2tleRgHIAEoCRI0Cgdjb250ZXh0GAggASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZXF1ZXN0Q29udGV4dEoECAYQB0oECAkQClIWZGVsZWdhdGVkX2NhbGxlcl9wcm9vZiKbAQoOU3ViamVjdENvbnRleHQSCgoCaWQYASABKAkSDQoFZW1haWwYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg4KBnNjb3BlcxgFIAMoCRJCCgtwZXJtaXNzaW9ucxgGIAMoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdFBlcm1pc3Npb25Db250ZXh0SgQIAhADIlMKGFN1YmplY3RQZXJtaXNzaW9uQ29udGV4dBILCgNhcHAYASABKAkSEgoKb3BlcmF0aW9ucxgCIAMoCRIWCg5hbGxfb3BlcmF0aW9ucxgDIAEoCCLWAQoMQWdlbnRUb29sUmVmEgsKA2FwcBgBIAEoCRIRCglvcGVyYXRpb24YAiABKAkSEgoKY29ubmVjdGlvbhgDIAEoCRIQCghpbnN0YW5jZRgEIAEoCRINCgV0aXRsZRgFIAEoCRITCgtkZXNjcmlwdGlvbhgGIAEoCRIXCg9jcmVkZW50aWFsX21vZGUYByABKAkSDgoGc3lzdGVtGAggASgJEjMKBnJ1bl9hcxgJIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQiHAoKU3RyaW5nTGlzdBIOCgZ2YWx1ZXMYASADKAkiWwoRQ3JlZGVudGlhbENvbnRleHQSDAoEbW9kZRgBIAEoCRISCgpzdWJqZWN0X2lkGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiLQoNQWNjZXNzQ29udGV4dBIOCgZwb2xpY3kYASABKAkSDAoEcm9sZRgCIAEoCSImCgtIb3N0Q29udGV4dBIXCg9wdWJsaWNfYmFzZV91cmwYASABKAkiLQoPUHJvdmlkZXJDb250ZXh0EgwKBGtpbmQYASABKAkSDAoEbmFtZRgCIAEoCSKTAQoRSW52b2NhdGlvbkNvbnRleHQSEgoKcmVxdWVzdF9pZBgBIAEoCRINCgVkZXB0aBgCIAEoBRISCgpjYWxsX2NoYWluGAMgAygJEg8KB3N1cmZhY2UYBCABKAkSIgoaaW50ZXJuYWxfY29ubmVjdGlvbl9hY2Nlc3MYBSABKAgSEgoKY29ubmVjdGlvbhgGIAEoCSJQChJSZXF1ZXN0TWV0YUNvbnRleHQSEQoJY2xpZW50X2lwGAEgASgJEhMKC3JlbW90ZV9hZGRyGAIgASgJEhIKCnVzZXJfYWdlbnQYAyABKAkiVAoWQWdlbnRJbnZvY2F0aW9uQ29udGV4dBIVCg1wcm92aWRlcl9uYW1lGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDwoHdHVybl9pZBgDIAEoCSKHBQoOUmVxdWVzdENvbnRleHQSNAoHc3ViamVjdBgBIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQSOgoKY3JlZGVudGlhbBgCIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuQ3JlZGVudGlhbENvbnRleHQSMgoGYWNjZXNzGAMgASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5BY2Nlc3NDb250ZXh0EikKCHdvcmtmbG93GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCgRob3N0GAUgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5Ib3N0Q29udGV4dBI6Cg1hZ2VudF9zdWJqZWN0GAYgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dBI0CgZjYWxsZXIYByABKAsyJC5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVyQ29udGV4dBI6CgppbnZvY2F0aW9uGAggASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbnZvY2F0aW9uQ29udGV4dBI0Cgl0b29sX3JlZnMYCSADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VG9vbFJlZhIVCg10b29sX3JlZnNfc2V0GAogASgIEj0KDHJlcXVlc3RfbWV0YRgLIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVxdWVzdE1ldGFDb250ZXh0EjoKBWFnZW50GAwgASgLMisuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudEludm9jYXRpb25Db250ZXh0Iv4EChJIVFRQU3ViamVjdFJlcXVlc3QSDwoHYmluZGluZxgBIAEoCRIOCgZtZXRob2QYAiABKAkSDAoEcGF0aBgDIAEoCRIUCgxjb250ZW50X3R5cGUYBCABKAkSRQoHaGVhZGVycxgFIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0LkhlYWRlcnNFbnRyeRJBCgVxdWVyeRgGIAMoCzIyLmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0LlF1ZXJ5RW50cnkSJwoGcGFyYW1zGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghyYXdfYm9keRgIIAEoDBIXCg9zZWN1cml0eV9zY2hlbWUYCSABKAkSGAoQdmVyaWZpZWRfc3ViamVjdBgKIAEoCRJUCg92ZXJpZmllZF9jbGFpbXMYCyADKAsyOy5nZXN0YWx0LnByb3ZpZGVyLnYxLkhUVFBTdWJqZWN0UmVxdWVzdC5WZXJpZmllZENsYWltc0VudHJ5Gk8KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0cmluZ0xpc3Q6AjgBGk0KClF1ZXJ5RW50cnkSCwoDa2V5GAEgASgJEi4KBXZhbHVlGAIgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdHJpbmdMaXN0OgI4ARo1ChNWZXJpZmllZENsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiiwEKGVJlc29sdmVIVFRQU3ViamVjdFJlcXVlc3QSOAoHcmVxdWVzdBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0EjQKB2NvbnRleHQYAiABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0IoEBChpSZXNvbHZlSFRUUFN1YmplY3RSZXNwb25zZRI0CgdzdWJqZWN0GAEgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dBIVCg1yZWplY3Rfc3RhdHVzGAIgASgFEhYKDnJlamVjdF9tZXNzYWdlGAMgASgJIvwCCg5FeGVjdXRlUmVxdWVzdBIRCglvcGVyYXRpb24YASABKAkSJwoGcGFyYW1zGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBINCgV0b2tlbhgDIAEoCRJUChFjb25uZWN0aW9uX3BhcmFtcxgEIAMoCzI5Lmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZVJlcXVlc3QuQ29ubmVjdGlvblBhcmFtc0VudHJ5EhUKDWludm9jYXRpb25faWQYBSABKAkSNAoHY29udGV4dBgGIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuUmVxdWVzdENvbnRleHQSFwoPaWRlbXBvdGVuY3lfa2V5GAkgASgJGjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBSgQICBAJSgQICxAMUhBpbnZvY2F0aW9uX3Rva2VuUgxjYWxsZXJfcHJvb2YijwIKGEdldFNlc3Npb25DYXRhbG9nUmVxdWVzdBINCgV0b2tlbhgBIAEoCRJeChFjb25uZWN0aW9uX3BhcmFtcxgCIAMoCzJDLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2Vzc2lvbkNhdGFsb2dSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRIVCg1pbnZvY2F0aW9uX2lkGAMgASgJEjQKB2NvbnRleHQYBCABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0GjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkoKGUdldFNlc3Npb25DYXRhbG9nUmVzcG9uc2USLQoHY2F0YWxvZxgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZyJnChRTdGFydFByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgEIAEoBSIxChVTdGFydFByb3ZpZGVyUmVzcG9uc2USGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoBSpoCg5Db25uZWN0aW9uTW9kZRIfChtDT05ORUNUSU9OX01PREVfVU5TUEVDSUZJRUQQABIYChRDT05ORUNUSU9OX01PREVfTk9ORRABEhsKF0NPTk5FQ1RJT05fTU9ERV9TVUJKRUNUEAIysgYKC0FwcFByb3ZpZGVyEkwKC0dldE1ldGFkYXRhEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiUuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhEo4BCg1TdGFydFByb3ZpZGVyEikuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFByb3ZpZGVyUmVxdWVzdBoqLmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQcm92aWRlclJlc3BvbnNlIiaKtRgEbmFtZYq1GBBwcm90b2NvbF92ZXJzaW9uirUYBmNvbmZpZxKaAQoHRXhlY3V0ZRIjLmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZVJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvblJlc3VsdCJEirUYCW9wZXJhdGlvboq1GAV0b2tlboq1GA1pbnZvY2F0aW9uX2lkirUYD2lkZW1wb3RlbmN5X2tleYq1GAZwYXJhbXMSngEKDUV4ZWN1dGVTdHJlYW0SIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4ZWN1dGVSZXF1ZXN0GiAuZ2VzdGFsdC5wcm92aWRlci52MS5JbnZva2VGcmFtZSJEirUYCW9wZXJhdGlvboq1GAV0b2tlboq1GA1pbnZvY2F0aW9uX2lkirUYD2lkZW1wb3RlbmN5X2tleYq1GAZwYXJhbXMwARJ1ChJSZXNvbHZlSFRUUFN1YmplY3QSLi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVIVFRQU3ViamVjdFJlcXVlc3QaLy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVIVFRQU3ViamVjdFJlc3BvbnNlEo4BChFHZXRTZXNzaW9uQ2F0YWxvZxItLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2Vzc2lvbkNhdGFsb2dSZXF1ZXN0Gi4uZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZXNzaW9uQ2F0YWxvZ1Jlc3BvbnNlIhqKtRgFdG9rZW6KtRgNaW52b2NhdGlvbl9pZDKYBgoDQXBwEqgCCgZJbnZva2USJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFwcEludm9rZVJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvblJlc3VsdCLQAYq1GANhcHCKtRgJb3BlcmF0aW9uirUYBnBhcmFtc5q1GA4KBnN0YXR1cxIEYm9keaK1GApjb25uZWN0aW9uorUYCGluc3RhbmNlorUYD2lkZW1wb3RlbmN5X2tleaK1GA9jcmVkZW50aWFsX21vZGWitRgGcnVuX2FzyvMYEQoHY29udGV4dBIGcnVuX2Fz+tLkkwIIEgZQVUJMSUOC0+STAi06ASoiKC9hcGkvdjIvYXBwL3thcHB9L29wZXJhdGlvbnMve29wZXJhdGlvbn0S5wEKDEludm9rZVN0cmVhbRIlLmdlc3RhbHQucHJvdmlkZXIudjEuQXBwSW52b2tlUmVxdWVzdBogLmdlc3RhbHQucHJvdmlkZXIudjEuSW52b2tlRnJhbWUiiwGKtRgDYXBwirUYCW9wZXJhdGlvboq1GAZwYXJhbXOitRgKY29ubmVjdGlvbqK1GAhpbnN0YW5jZaK1GA9pZGVtcG90ZW5jeV9rZXmitRgPY3JlZGVudGlhbF9tb2RlorUYBnJ1bl9hc8rzGBEKB2NvbnRleHQSBnJ1bl9hc/rS5JMCCBIGUFVCTElDMAES8gEKDUludm9rZUdyYXBoUUwSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkFwcEludm9rZUdyYXBoUUxSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25SZXN1bHQijAGKtRgDYXBwirUYCGRvY3VtZW50orUYCmNvbm5lY3Rpb26itRgIaW5zdGFuY2WitRgPaWRlbXBvdGVuY3lfa2V5orUYCXZhcmlhYmxlc8rzGAkKB2NvbnRleHT60uSTAggSBlBVQkxJQ4LT5JMCHjoBKiIZL2FwaS92Mi9hcHAve2FwcH0vZ3JhcGhxbBoHirUYA2FwcGIGcHJvdG8z", [file_google_api_annotations, file_google_api_visibility, file_google_protobuf_empty, file_google_protobuf_struct, file_v1_annotations]);
 
 /**
  * CatalogParameter describes one input parameter surfaced in the generated
@@ -93,6 +93,83 @@ export const OperationAnnotationsSchema: GenMessage<OperationAnnotations> = /*@_
   messageDesc(file_v1_app, 1);
 
 /**
+ * UnaryResponseSpec describes a unary (fully materialized) operation response.
+ *
+ * @generated from message gestalt.provider.v1.UnaryResponseSpec
+ */
+export type UnaryResponseSpec = Message<"gestalt.provider.v1.UnaryResponseSpec"> & {
+  /**
+   * @generated from field: google.protobuf.Struct schema = 1;
+   */
+  schema?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.UnaryResponseSpec.
+ * Use `create(UnaryResponseSpecSchema)` to create a new message.
+ */
+export const UnaryResponseSpecSchema: GenMessage<UnaryResponseSpec> = /*@__PURE__*/
+  messageDesc(file_v1_app, 2);
+
+/**
+ * StreamResponseSpec describes a streaming operation response. The media type
+ * names the representation (for example application/x-ndjson); the item schema
+ * is optional and describes one yielded item when the stream is typed.
+ *
+ * @generated from message gestalt.provider.v1.StreamResponseSpec
+ */
+export type StreamResponseSpec = Message<"gestalt.provider.v1.StreamResponseSpec"> & {
+  /**
+   * @generated from field: string media_type = 1;
+   */
+  mediaType: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct item_schema = 2;
+   */
+  itemSchema?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.StreamResponseSpec.
+ * Use `create(StreamResponseSpecSchema)` to create a new message.
+ */
+export const StreamResponseSpecSchema: GenMessage<StreamResponseSpec> = /*@__PURE__*/
+  messageDesc(file_v1_app, 3);
+
+/**
+ * OperationResponseSpec declares how an operation responds. App authoring
+ * defaults to unary; emitted catalogs always declare either unary or stream.
+ *
+ * @generated from message gestalt.provider.v1.OperationResponseSpec
+ */
+export type OperationResponseSpec = Message<"gestalt.provider.v1.OperationResponseSpec"> & {
+  /**
+   * @generated from oneof gestalt.provider.v1.OperationResponseSpec.kind
+   */
+  kind: {
+    /**
+     * @generated from field: gestalt.provider.v1.UnaryResponseSpec unary = 1;
+     */
+    value: UnaryResponseSpec;
+    case: "unary";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.StreamResponseSpec stream = 2;
+     */
+    value: StreamResponseSpec;
+    case: "stream";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.OperationResponseSpec.
+ * Use `create(OperationResponseSpecSchema)` to create a new message.
+ */
+export const OperationResponseSpecSchema: GenMessage<OperationResponseSpec> = /*@__PURE__*/
+  messageDesc(file_v1_app, 4);
+
+/**
  * CatalogOperation is one executable operation exposed by an integration
  * provider.
  *
@@ -123,11 +200,6 @@ export type CatalogOperation = Message<"gestalt.provider.v1.CatalogOperation"> &
    * @generated from field: string input_schema = 5;
    */
   inputSchema: string;
-
-  /**
-   * @generated from field: string output_schema = 6;
-   */
-  outputSchema: string;
 
   /**
    * @generated from field: gestalt.provider.v1.OperationAnnotations annotations = 7;
@@ -168,6 +240,14 @@ export type CatalogOperation = Message<"gestalt.provider.v1.CatalogOperation"> &
    * @generated from field: repeated string allowed_roles = 14;
    */
   allowedRoles: string[];
+
+  /**
+   * Response mode and schema for this operation. Replaces the former
+   * output_schema string; absent is equivalent to unary with no schema.
+   *
+   * @generated from field: gestalt.provider.v1.OperationResponseSpec response = 15;
+   */
+  response?: OperationResponseSpec | undefined;
 };
 
 /**
@@ -175,7 +255,7 @@ export type CatalogOperation = Message<"gestalt.provider.v1.CatalogOperation"> &
  * Use `create(CatalogOperationSchema)` to create a new message.
  */
 export const CatalogOperationSchema: GenMessage<CatalogOperation> = /*@__PURE__*/
-  messageDesc(file_v1_app, 2);
+  messageDesc(file_v1_app, 5);
 
 /**
  * Catalog is the static or request-scoped executable surface exposed by a
@@ -215,7 +295,7 @@ export type Catalog = Message<"gestalt.provider.v1.Catalog"> & {
  * Use `create(CatalogSchema)` to create a new message.
  */
 export const CatalogSchema: GenMessage<Catalog> = /*@__PURE__*/
-  messageDesc(file_v1_app, 3);
+  messageDesc(file_v1_app, 6);
 
 /**
  * ConnectionParamDef describes one provider-defined connection parameter.
@@ -254,7 +334,7 @@ export type ConnectionParamDef = Message<"gestalt.provider.v1.ConnectionParamDef
  * Use `create(ConnectionParamDefSchema)` to create a new message.
  */
 export const ConnectionParamDefSchema: GenMessage<ConnectionParamDef> = /*@__PURE__*/
-  messageDesc(file_v1_app, 4);
+  messageDesc(file_v1_app, 7);
 
 /**
  * ProviderMetadata describes an integration provider's static capabilities.
@@ -330,7 +410,7 @@ export type ProviderMetadata = Message<"gestalt.provider.v1.ProviderMetadata"> &
  * Use `create(ProviderMetadataSchema)` to create a new message.
  */
 export const ProviderMetadataSchema: GenMessage<ProviderMetadata> = /*@__PURE__*/
-  messageDesc(file_v1_app, 5);
+  messageDesc(file_v1_app, 8);
 
 /**
  * OperationResult is the serialized result returned from an Execute call.
@@ -359,7 +439,74 @@ export type OperationResult = Message<"gestalt.provider.v1.OperationResult"> & {
  * Use `create(OperationResultSchema)` to create a new message.
  */
 export const OperationResultSchema: GenMessage<OperationResult> = /*@__PURE__*/
-  messageDesc(file_v1_app, 6);
+  messageDesc(file_v1_app, 9);
+
+/**
+ * InvokeMetadata is the first frame of a streaming invocation. It carries the
+ * HTTP-shaped status, headers, and the response media type (from the
+ * operation's StreamResponseSpec).
+ *
+ * @generated from message gestalt.provider.v1.InvokeMetadata
+ */
+export type InvokeMetadata = Message<"gestalt.provider.v1.InvokeMetadata"> & {
+  /**
+   * @generated from field: int32 status = 1;
+   */
+  status: number;
+
+  /**
+   * @generated from field: map<string, gestalt.provider.v1.StringList> headers = 2;
+   */
+  headers: { [key: string]: StringList };
+
+  /**
+   * @generated from field: string media_type = 3;
+   */
+  mediaType: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.InvokeMetadata.
+ * Use `create(InvokeMetadataSchema)` to create a new message.
+ */
+export const InvokeMetadataSchema: GenMessage<InvokeMetadata> = /*@__PURE__*/
+  messageDesc(file_v1_app, 10);
+
+/**
+ * InvokeFrame is one frame in a streaming invocation. The first frame is always
+ * metadata; subsequent frames carry data bytes produced by the operation
+ * handler (after encoding, for typed item streams). A mid-stream error (for
+ * example, a validation failure or a recovered panic) may emit a trailing
+ * metadata frame with a non-2xx status followed by a data frame carrying a
+ * JSON error body, after which the stream ends.
+ *
+ * @generated from message gestalt.provider.v1.InvokeFrame
+ */
+export type InvokeFrame = Message<"gestalt.provider.v1.InvokeFrame"> & {
+  /**
+   * @generated from oneof gestalt.provider.v1.InvokeFrame.value
+   */
+  value: {
+    /**
+     * @generated from field: gestalt.provider.v1.InvokeMetadata metadata = 1;
+     */
+    value: InvokeMetadata;
+    case: "metadata";
+  } | {
+    /**
+     * @generated from field: bytes data = 2;
+     */
+    value: Uint8Array;
+    case: "data";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.InvokeFrame.
+ * Use `create(InvokeFrameSchema)` to create a new message.
+ */
+export const InvokeFrameSchema: GenMessage<InvokeFrame> = /*@__PURE__*/
+  messageDesc(file_v1_app, 11);
 
 /**
  * AppInvokeRequest invokes a declared operation on another app through Gestalt.
@@ -418,7 +565,7 @@ export type AppInvokeRequest = Message<"gestalt.provider.v1.AppInvokeRequest"> &
  * Use `create(AppInvokeRequestSchema)` to create a new message.
  */
 export const AppInvokeRequestSchema: GenMessage<AppInvokeRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 7);
+  messageDesc(file_v1_app, 12);
 
 /**
  * AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
@@ -468,7 +615,7 @@ export type AppInvokeGraphQLRequest = Message<"gestalt.provider.v1.AppInvokeGrap
  * Use `create(AppInvokeGraphQLRequestSchema)` to create a new message.
  */
 export const AppInvokeGraphQLRequestSchema: GenMessage<AppInvokeGraphQLRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 8);
+  messageDesc(file_v1_app, 13);
 
 /**
  * SubjectContext identifies the caller that initiated an operation.
@@ -507,7 +654,7 @@ export type SubjectContext = Message<"gestalt.provider.v1.SubjectContext"> & {
  * Use `create(SubjectContextSchema)` to create a new message.
  */
 export const SubjectContextSchema: GenMessage<SubjectContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 9);
+  messageDesc(file_v1_app, 14);
 
 /**
  * @generated from message gestalt.provider.v1.SubjectPermissionContext
@@ -534,7 +681,7 @@ export type SubjectPermissionContext = Message<"gestalt.provider.v1.SubjectPermi
  * Use `create(SubjectPermissionContextSchema)` to create a new message.
  */
 export const SubjectPermissionContextSchema: GenMessage<SubjectPermissionContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 10);
+  messageDesc(file_v1_app, 15);
 
 /**
  * @generated from message gestalt.provider.v1.AgentToolRef
@@ -591,7 +738,7 @@ export type AgentToolRef = Message<"gestalt.provider.v1.AgentToolRef"> & {
  * Use `create(AgentToolRefSchema)` to create a new message.
  */
 export const AgentToolRefSchema: GenMessage<AgentToolRef> = /*@__PURE__*/
-  messageDesc(file_v1_app, 11);
+  messageDesc(file_v1_app, 16);
 
 /**
  * StringList is a helper map value for repeated HTTP header and query values.
@@ -610,7 +757,7 @@ export type StringList = Message<"gestalt.provider.v1.StringList"> & {
  * Use `create(StringListSchema)` to create a new message.
  */
 export const StringListSchema: GenMessage<StringList> = /*@__PURE__*/
-  messageDesc(file_v1_app, 12);
+  messageDesc(file_v1_app, 17);
 
 /**
  * CredentialContext describes the resolved credential used for an operation.
@@ -644,7 +791,7 @@ export type CredentialContext = Message<"gestalt.provider.v1.CredentialContext">
  * Use `create(CredentialContextSchema)` to create a new message.
  */
 export const CredentialContextSchema: GenMessage<CredentialContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 13);
+  messageDesc(file_v1_app, 18);
 
 /**
  * AccessContext describes the host-side access decision for an operation.
@@ -668,7 +815,7 @@ export type AccessContext = Message<"gestalt.provider.v1.AccessContext"> & {
  * Use `create(AccessContextSchema)` to create a new message.
  */
 export const AccessContextSchema: GenMessage<AccessContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 14);
+  messageDesc(file_v1_app, 19);
 
 /**
  * HostContext describes stable public host metadata available to provider code.
@@ -687,7 +834,7 @@ export type HostContext = Message<"gestalt.provider.v1.HostContext"> & {
  * Use `create(HostContextSchema)` to create a new message.
  */
 export const HostContextSchema: GenMessage<HostContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 15);
+  messageDesc(file_v1_app, 20);
 
 /**
  * ProviderContext identifies the provider process that received the request
@@ -712,7 +859,7 @@ export type ProviderContext = Message<"gestalt.provider.v1.ProviderContext"> & {
  * Use `create(ProviderContextSchema)` to create a new message.
  */
 export const ProviderContextSchema: GenMessage<ProviderContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 16);
+  messageDesc(file_v1_app, 21);
 
 /**
  * @generated from message gestalt.provider.v1.InvocationContext
@@ -754,7 +901,7 @@ export type InvocationContext = Message<"gestalt.provider.v1.InvocationContext">
  * Use `create(InvocationContextSchema)` to create a new message.
  */
 export const InvocationContextSchema: GenMessage<InvocationContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 17);
+  messageDesc(file_v1_app, 22);
 
 /**
  * @generated from message gestalt.provider.v1.RequestMetaContext
@@ -781,7 +928,7 @@ export type RequestMetaContext = Message<"gestalt.provider.v1.RequestMetaContext
  * Use `create(RequestMetaContextSchema)` to create a new message.
  */
 export const RequestMetaContextSchema: GenMessage<RequestMetaContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 18);
+  messageDesc(file_v1_app, 23);
 
 /**
  * @generated from message gestalt.provider.v1.AgentInvocationContext
@@ -808,7 +955,7 @@ export type AgentInvocationContext = Message<"gestalt.provider.v1.AgentInvocatio
  * Use `create(AgentInvocationContextSchema)` to create a new message.
  */
 export const AgentInvocationContextSchema: GenMessage<AgentInvocationContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 19);
+  messageDesc(file_v1_app, 24);
 
 /**
  * RequestContext bundles the caller, credential, access, and host metadata for
@@ -891,7 +1038,7 @@ export type RequestContext = Message<"gestalt.provider.v1.RequestContext"> & {
  * Use `create(RequestContextSchema)` to create a new message.
  */
 export const RequestContextSchema: GenMessage<RequestContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 20);
+  messageDesc(file_v1_app, 25);
 
 /**
  * HTTPSubjectRequest carries one verified hosted HTTP request into an optional
@@ -961,7 +1108,7 @@ export type HTTPSubjectRequest = Message<"gestalt.provider.v1.HTTPSubjectRequest
  * Use `create(HTTPSubjectRequestSchema)` to create a new message.
  */
 export const HTTPSubjectRequestSchema: GenMessage<HTTPSubjectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 21);
+  messageDesc(file_v1_app, 26);
 
 /**
  * ResolveHTTPSubjectRequest asks a provider to map a verified hosted HTTP
@@ -987,7 +1134,7 @@ export type ResolveHTTPSubjectRequest = Message<"gestalt.provider.v1.ResolveHTTP
  * Use `create(ResolveHTTPSubjectRequestSchema)` to create a new message.
  */
 export const ResolveHTTPSubjectRequestSchema: GenMessage<ResolveHTTPSubjectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 22);
+  messageDesc(file_v1_app, 27);
 
 /**
  * ResolveHTTPSubjectResponse returns the concrete Gestalt subject a hosted HTTP
@@ -1019,7 +1166,7 @@ export type ResolveHTTPSubjectResponse = Message<"gestalt.provider.v1.ResolveHTT
  * Use `create(ResolveHTTPSubjectResponseSchema)` to create a new message.
  */
 export const ResolveHTTPSubjectResponseSchema: GenMessage<ResolveHTTPSubjectResponse> = /*@__PURE__*/
-  messageDesc(file_v1_app, 23);
+  messageDesc(file_v1_app, 28);
 
 /**
  * ExecuteRequest invokes one executable operation.
@@ -1068,7 +1215,7 @@ export type ExecuteRequest = Message<"gestalt.provider.v1.ExecuteRequest"> & {
  * Use `create(ExecuteRequestSchema)` to create a new message.
  */
 export const ExecuteRequestSchema: GenMessage<ExecuteRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 24);
+  messageDesc(file_v1_app, 29);
 
 /**
  * GetSessionCatalogRequest asks a provider for request-scoped catalog
@@ -1103,7 +1250,7 @@ export type GetSessionCatalogRequest = Message<"gestalt.provider.v1.GetSessionCa
  * Use `create(GetSessionCatalogRequestSchema)` to create a new message.
  */
 export const GetSessionCatalogRequestSchema: GenMessage<GetSessionCatalogRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 25);
+  messageDesc(file_v1_app, 30);
 
 /**
  * GetSessionCatalogResponse returns request-scoped catalog extensions.
@@ -1122,7 +1269,7 @@ export type GetSessionCatalogResponse = Message<"gestalt.provider.v1.GetSessionC
  * Use `create(GetSessionCatalogResponseSchema)` to create a new message.
  */
 export const GetSessionCatalogResponseSchema: GenMessage<GetSessionCatalogResponse> = /*@__PURE__*/
-  messageDesc(file_v1_app, 26);
+  messageDesc(file_v1_app, 31);
 
 /**
  * StartProviderRequest configures an integration provider for one runtime
@@ -1152,7 +1299,7 @@ export type StartProviderRequest = Message<"gestalt.provider.v1.StartProviderReq
  * Use `create(StartProviderRequestSchema)` to create a new message.
  */
 export const StartProviderRequestSchema: GenMessage<StartProviderRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 27);
+  messageDesc(file_v1_app, 32);
 
 /**
  * StartProviderResponse confirms the protocol version the provider is serving.
@@ -1171,7 +1318,7 @@ export type StartProviderResponse = Message<"gestalt.provider.v1.StartProviderRe
  * Use `create(StartProviderResponseSchema)` to create a new message.
  */
 export const StartProviderResponseSchema: GenMessage<StartProviderResponse> = /*@__PURE__*/
-  messageDesc(file_v1_app, 28);
+  messageDesc(file_v1_app, 33);
 
 /**
  * ConnectionMode describes which credential sources a provider accepts.
@@ -1232,6 +1379,19 @@ export const AppProvider: GenService<{
     output: typeof OperationResultSchema;
   },
   /**
+   * ExecuteStream is the streaming counterpart of Execute. The first response
+   * frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+   * A mid-stream error may emit a trailing metadata frame with an error status
+   * followed by a JSON error body, after which the stream ends.
+   *
+   * @generated from rpc gestalt.provider.v1.AppProvider.ExecuteStream
+   */
+  executeStream: {
+    methodKind: "server_streaming";
+    input: typeof ExecuteRequestSchema;
+    output: typeof InvokeFrameSchema;
+  },
+  /**
    * @generated from rpc gestalt.provider.v1.AppProvider.ResolveHTTPSubject
    */
   resolveHTTPSubject: {
@@ -1261,6 +1421,21 @@ export const App: GenService<{
     methodKind: "unary";
     input: typeof AppInvokeRequestSchema;
     output: typeof OperationResultSchema;
+  },
+  /**
+   * InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+   * REST binding) and shares Invoke's request shape, authorization, and
+   * signature policy. The first response frame is always InvokeMetadata;
+   * subsequent frames carry data bytes from the operation's stream response.
+   * A mid-stream error may emit a trailing metadata frame with an error status
+   * followed by a JSON error body, after which the stream ends.
+   *
+   * @generated from rpc gestalt.provider.v1.App.InvokeStream
+   */
+  invokeStream: {
+    methodKind: "server_streaming";
+    input: typeof AppInvokeRequestSchema;
+    output: typeof InvokeFrameSchema;
   },
   /**
    * @generated from rpc gestalt.provider.v1.App.InvokeGraphQL

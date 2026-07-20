@@ -168,6 +168,40 @@ func (r *OperationResult) Text() string {
 	return string(r.Body)
 }
 
+// InvokeMetadata is the first frame of a streaming invocation: the HTTP-shaped
+// status, headers, and the response media type.
+type InvokeMetadata struct {
+	Status    int
+	Headers   http.Header
+	MediaType string
+}
+
+// InvokeFrame is one frame in a streaming invocation. The first frame sent on
+// the wire is always a Metadata frame; subsequent frames are Data byte chunks.
+type InvokeFrame struct {
+	// Metadata is set on the first frame; nil on data frames.
+	Metadata *InvokeMetadata
+	// Data is set on data frames; nil on the metadata frame.
+	Data []byte
+}
+
+// IsMetadata reports whether this frame is the leading metadata frame.
+func (f *InvokeFrame) IsMetadata() bool {
+	return f != nil && f.Metadata != nil
+}
+
+// StreamReader yields InvokeFrame frames. io.EOF ends the stream.
+type StreamReader interface {
+	Recv() (*InvokeFrame, error)
+}
+
+// StreamingExecutor is implemented by providers that support streaming
+// operation responses. A provider opts in per-operation; ExecuteStream is
+// only called for operations whose catalog response mode is stream.
+type StreamingExecutor interface {
+	ExecuteStream(ctx context.Context, operation string, params map[string]any, token string) (StreamReader, error)
+}
+
 type connectionParamsKey struct{}
 type subjectKey struct{}
 type agentSubjectKey struct{}

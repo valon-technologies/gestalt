@@ -3145,10 +3145,16 @@ func agentToolInputSchemaJSON(op catalog.CatalogOperation) string {
 }
 
 func agentToolOutputSchemaJSON(op catalog.CatalogOperation) string {
-	if len(op.OutputSchema) == 0 || len(op.OutputSchema) > agentToolSchemaMaxBytes {
+	// Prefer the legacy OutputSchema field; fall back to the unary response
+	// schema introduced by the OperationResponseSpec change.
+	schema := op.OutputSchema
+	if len(schema) == 0 && op.Response != nil && op.Response.Unary != nil {
+		schema = op.Response.Unary.Schema
+	}
+	if len(schema) == 0 || len(schema) > agentToolSchemaMaxBytes {
 		return ""
 	}
-	return string(op.OutputSchema)
+	return string(schema)
 }
 
 func agentToolSchemaJSON(schema map[string]any) (string, error) {

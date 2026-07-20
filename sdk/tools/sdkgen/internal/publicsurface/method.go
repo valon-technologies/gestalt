@@ -63,6 +63,11 @@ type PublicMethod struct {
 	ServerFilled []PublicField
 	Rejected     []PublicField
 	JSONResult   *model.JsonResult
+
+	// Stream is the method's streaming kind. Unary and ServerStream methods are
+	// emitted on the public client surface; ServerStream methods render as
+	// streaming invocation methods.
+	Stream model.StreamKind
 }
 
 var pathSegmentPattern = regexp.MustCompile(`\{([^}/]+)\}`)
@@ -93,6 +98,7 @@ func parseMethod(schema *model.Schema, svc *model.Service, m *model.Method) (Pub
 		Input:      m.Input,
 		Output:     m.Output,
 		JSONResult: m.JsonResult,
+		Stream:     m.Stream,
 	}
 	if m.PublicPolicy != nil {
 		for _, name := range m.PublicPolicy.Fill {

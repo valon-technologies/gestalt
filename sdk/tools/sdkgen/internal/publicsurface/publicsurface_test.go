@@ -79,6 +79,13 @@ func TestBuildAppOnlySurface(t *testing.T) {
 						FullMethod: "/gestalt.provider.v1.App/StreamEvents",
 						Public:     true,
 						Stream:     model.ServerStream,
+						Input:      grpcOnlyInput,
+					},
+					{
+						Name:       "BidiReject",
+						FullMethod: "/gestalt.provider.v1.App/BidiReject",
+						Public:     true,
+						Stream:     model.Bidi,
 					},
 				},
 			},
@@ -92,16 +99,17 @@ func TestBuildAppOnlySurface(t *testing.T) {
 	}
 
 	if err := publicsurface.Validate(schema); err == nil {
-		t.Fatal("Validate() = nil, want error for public streaming method")
-	} else if !strings.Contains(err.Error(), "StreamEvents") {
-		t.Fatalf("Validate() = %v, want StreamEvents error", err)
+		t.Fatal("Validate() = nil, want error for public bidi-streaming method")
+	} else if !strings.Contains(err.Error(), "BidiReject") {
+		t.Fatalf("Validate() = %v, want BidiReject error", err)
 	}
 
-	// Drop the unsupported stream before building the view for structure checks.
-	schema.Services[0].Methods = schema.Services[0].Methods[:3]
+	// Drop the unsupported bidi method before building the view for structure
+	// checks. StreamEvents (server-streaming) stays and must be projected.
+	schema.Services[0].Methods = schema.Services[0].Methods[:4]
 
 	if err := publicsurface.Validate(schema); err != nil {
-		t.Fatalf("Validate() after dropping stream: %v", err)
+		t.Fatalf("Validate() after dropping bidi: %v", err)
 	}
 
 	view := publicsurface.Build(schema)
@@ -116,11 +124,11 @@ func TestBuildAppOnlySurface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseMethods: %v", err)
 	}
-	if len(methods) != 4 {
-		t.Fatalf("methods = %d, want 4", len(methods))
+	if len(methods) != 5 {
+		t.Fatalf("methods = %d, want 5", len(methods))
 	}
 
-	var invoke, invokeGraphQL, grpcOnly *publicsurface.PublicMethod
+	var invoke, invokeGraphQL, grpcOnly, streamEvents *publicsurface.PublicMethod
 	for i := range methods {
 		switch methods[i].Method {
 		case "Invoke":
@@ -129,14 +137,19 @@ func TestBuildAppOnlySurface(t *testing.T) {
 			invokeGraphQL = &methods[i]
 		case "GrpcOnly":
 			grpcOnly = &methods[i]
+		case "StreamEvents":
+			streamEvents = &methods[i]
 		}
 	}
-	if invoke == nil || invokeGraphQL == nil || grpcOnly == nil {
-		t.Fatalf("methods = %+v, want Invoke, InvokeGraphQL, GrpcOnly", methodNames(methods))
+	if invoke == nil || invokeGraphQL == nil || grpcOnly == nil || streamEvents == nil {
+		t.Fatalf("methods = %+v, want Invoke, InvokeGraphQL, GrpcOnly, StreamEvents", methodNames(methods))
+	}
+	if streamEvents.Stream != model.ServerStream {
+		t.Fatalf("StreamEvents.Stream = %v, want ServerStream", streamEvents.Stream)
 	}
 
-	if got := publicsurface.GRPCMethodCount(view); got != 4 {
-		t.Fatalf("gRPC methods = %d, want 4", got)
+	if got := publicsurface.GRPCMethodCount(view); got != 5 {
+		t.Fatalf("gRPC methods = %d, want 5", got)
 	}
 	if got := publicsurface.RESTMethodCount(view); got != 3 {
 		t.Fatalf("REST methods = %d, want 3", got)

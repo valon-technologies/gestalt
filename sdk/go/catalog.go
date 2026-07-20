@@ -1,7 +1,9 @@
 package gestalt
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	gproto "google.golang.org/protobuf/proto"
@@ -59,20 +61,23 @@ func (c *Catalog) GetOperations() []*CatalogOperation {
 
 // CatalogOperation describes one callable operation in an app catalog.
 type CatalogOperation struct {
-	Id             string                `json:"id,omitempty"`
-	Method         string                `json:"method,omitempty"`
-	Title          string                `json:"title,omitempty"`
-	Description    string                `json:"description,omitempty"`
-	InputSchema    string                `json:"inputSchema,omitempty"`
-	OutputSchema   string                `json:"outputSchema,omitempty"`
-	Annotations    *OperationAnnotations `json:"annotations,omitempty"`
-	Parameters     []*CatalogParameter   `json:"parameters,omitempty"`
-	RequiredScopes []string              `json:"requiredScopes,omitempty"`
-	Tags           []string              `json:"tags,omitempty"`
-	ReadOnly       bool                  `json:"readOnly,omitempty"`
-	Visible        *bool                 `json:"visible,omitempty"`
-	Transport      string                `json:"transport,omitempty"`
-	AllowedRoles   []string              `json:"allowedRoles,omitempty"`
+	Id          string `json:"id,omitempty"`
+	Method      string `json:"method,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	InputSchema string `json:"inputSchema,omitempty"`
+	// OutputSchema is deprecated; use Response. Kept for backward-compatible
+	// catalog authoring. When set, it is emitted as a unary response schema.
+	OutputSchema   string                 `json:"outputSchema,omitempty"`
+	Response       *OperationResponseSpec `json:"response,omitempty"`
+	Annotations    *OperationAnnotations  `json:"annotations,omitempty"`
+	Parameters     []*CatalogParameter    `json:"parameters,omitempty"`
+	RequiredScopes []string               `json:"requiredScopes,omitempty"`
+	Tags           []string               `json:"tags,omitempty"`
+	ReadOnly       bool                   `json:"readOnly,omitempty"`
+	Visible        *bool                  `json:"visible,omitempty"`
+	Transport      string                 `json:"transport,omitempty"`
+	AllowedRoles   []string               `json:"allowedRoles,omitempty"`
 }
 
 // GetId returns the id field; it is safe to call on a nil receiver.
@@ -115,12 +120,20 @@ func (o *CatalogOperation) GetInputSchema() string {
 	return o.InputSchema
 }
 
-// GetOutputSchema returns the output schema field; it is safe to call on a nil receiver.
+// GetOutputSchema returns the legacy output schema field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetOutputSchema() string {
 	if o == nil {
 		return ""
 	}
 	return o.OutputSchema
+}
+
+// GetResponse returns the response spec; it is safe to call on a nil receiver.
+func (o *CatalogOperation) GetResponse() *OperationResponseSpec {
+	if o == nil {
+		return nil
+	}
+	return o.Response
 }
 
 // GetAnnotations returns the annotations field; it is safe to call on a nil receiver.
@@ -253,6 +266,105 @@ type OperationAnnotations struct {
 	OpenWorldHint   *bool `json:"openWorldHint,omitempty"`
 }
 
+// UnaryResponseSpec describes a unary (fully materialized) operation response.
+// Schema is a JSON-encoded schema object (JSON Schema shape).
+type UnaryResponseSpec struct {
+	Schema string `json:"schema,omitempty"`
+}
+
+// StreamResponseSpec describes a streaming operation response. MediaType names
+// the representation (for example application/x-ndjson); ItemSchema is an
+// optional JSON-encoded schema describing one yielded item.
+type StreamResponseSpec struct {
+	MediaType  string `json:"mediaType,omitempty"`
+	ItemSchema string `json:"itemSchema,omitempty"`
+}
+
+// OperationResponseSpec declares how an operation responds. Either Unary or
+// Stream is set; both nil means unary with no schema.
+type OperationResponseSpec struct {
+	Unary  *UnaryResponseSpec  `json:"unary,omitempty"`
+	Stream *StreamResponseSpec `json:"stream,omitempty"`
+}
+
+// IsStream reports whether this response spec declares a streaming response.
+func (r *OperationResponseSpec) IsStream() bool {
+	return r != nil && r.Stream != nil
+}
+
+// cloneOperationResponseSpec returns a deep copy of spec.
+func cloneOperationResponseSpec(spec *OperationResponseSpec) *OperationResponseSpec {
+	if spec == nil {
+		return nil
+	}
+	out := &OperationResponseSpec{}
+	if spec.Unary != nil {
+		out.Unary = &UnaryResponseSpec{Schema: spec.Unary.Schema}
+	}
+	if spec.Stream != nil {
+		out.Stream = &StreamResponseSpec{
+			MediaType:  spec.Stream.MediaType,
+			ItemSchema: spec.Stream.ItemSchema,
+		}
+	}
+	return out
+}
+
+// operationResponseSpecToProto converts the SDK response spec to the proto
+// OperationResponseSpec. When spec is nil but legacyOutputSchema is non-empty,
+// it is mapped to a unary response with that schema for backward compatibility.
+func operationResponseSpecToProto(spec *OperationResponseSpec, legacyOutputSchema string) *proto.OperationResponseSpec {
+	if spec != nil {
+		if spec.Stream != nil {
+			return &proto.OperationResponseSpec{
+				Kind: &proto.OperationResponseSpec_Stream{
+					Stream: &proto.StreamResponseSpec{
+						MediaType:  spec.Stream.MediaType,
+						ItemSchema: schemaStringToStruct(spec.Stream.ItemSchema),
+					},
+				},
+			}
+		}
+		if spec.Unary != nil {
+			return &proto.OperationResponseSpec{
+				Kind: &proto.OperationResponseSpec_Unary{
+					Unary: &proto.UnaryResponseSpec{
+						Schema: schemaStringToStruct(spec.Unary.Schema),
+					},
+				},
+			}
+		}
+	}
+	if legacyOutputSchema == "" {
+		return nil
+	}
+	return &proto.OperationResponseSpec{
+		Kind: &proto.OperationResponseSpec_Unary{
+			Unary: &proto.UnaryResponseSpec{
+				Schema: schemaStringToStruct(legacyOutputSchema),
+			},
+		},
+	}
+}
+
+// schemaStringToStruct parses a JSON-encoded schema string into a protobuf
+// Struct. An empty string or parse error yields nil.
+func schemaStringToStruct(schema string) *structpb.Struct {
+	schema = strings.TrimSpace(schema)
+	if schema == "" {
+		return nil
+	}
+	var v map[string]any
+	if err := json.Unmarshal([]byte(schema), &v); err != nil {
+		return nil
+	}
+	st, err := structpb.NewStruct(v)
+	if err != nil {
+		return nil
+	}
+	return st
+}
+
 // GetReadOnlyHint returns the read only hint field; it is safe to call on a nil receiver.
 func (a *OperationAnnotations) GetReadOnlyHint() bool {
 	if a == nil || a.ReadOnlyHint == nil {
@@ -313,6 +425,7 @@ func cloneCatalogOperation(src *CatalogOperation) *CatalogOperation {
 		Description:    src.Description,
 		InputSchema:    src.InputSchema,
 		OutputSchema:   src.OutputSchema,
+		Response:       cloneOperationResponseSpec(src.Response),
 		Annotations:    cloneOperationAnnotations(src.Annotations),
 		Parameters:     make([]*CatalogParameter, 0, len(src.Parameters)),
 		RequiredScopes: append([]string(nil), src.RequiredScopes...),
@@ -409,7 +522,7 @@ func catalogOperationToProto(op *CatalogOperation) (*proto.CatalogOperation, err
 		Title:          op.Title,
 		Description:    op.Description,
 		InputSchema:    op.InputSchema,
-		OutputSchema:   op.OutputSchema,
+		Response:       operationResponseSpecToProto(op.Response, op.OutputSchema),
 		Annotations:    operationAnnotationsToProto(op.Annotations),
 		Parameters:     make([]*proto.CatalogParameter, 0, len(op.Parameters)),
 		RequiredScopes: append([]string(nil), op.RequiredScopes...),

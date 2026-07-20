@@ -111,6 +111,82 @@ func publicPrepareUnaryInterceptor(transport *providergateway.ProviderGatewayTra
 	}
 }
 
+// publicPrepareStreamInterceptor mirrors publicPrepareUnaryInterceptor for
+// server-streaming public methods: it verifies a public origin, authenticates
+// the bearer, and attaches the resolved principal to the stream context.
+func publicPrepareStreamInterceptor(transport *providergateway.ProviderGatewayTransport) grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		// Stream interceptors run before wrapPublicStreamHandler attaches the
+		// public-origin marker, so derive the origin from the gRPC full method
+		// directly and verify it is a registered public method.
+		fullMethod := info.FullMethod
+		reg, err := publicrpc.LoadGeneratedRegistry()
+		if err != nil {
+			return status.Error(codes.Internal, "publicrpc registry unavailable")
+		}
+		if _, ok := reg.Lookup(fullMethod); !ok {
+			return status.Error(codes.Unauthenticated, "bearer token is required")
+		}
+		authStream := &publicAuthStream{ServerStream: stream, transport: transport, fullMethod: fullMethod}
+		return handler(srv, authStream)
+	}
+}
+
+// publicAuthStream authenticates on the first message and stamps the resolved
+// principal onto the context for downstream handlers.
+type publicAuthStream struct {
+	grpc.ServerStream
+	transport  *providergateway.ProviderGatewayTransport
+	fullMethod string
+	authed     bool
+	principal  *principal.Principal
+}
+
+func (s *publicAuthStream) Context() context.Context {
+	// Always strip caller-supplied internal identity metadata, mirroring the
+	// unary public interceptor: a public caller must not forge a trusted
+	// caller subject. The resolved principal is reattached below.
+	ctx := stripInternalIdentityMetadata(s.ServerStream.Context())
+	if s.principal != nil {
+		canonical := principal.Canonicalized(s.principal)
+		ctx = principal.WithPrincipal(ctx, canonical)
+		if subjectID := strings.TrimSpace(canonical.SubjectID); subjectID != "" {
+			ctx = gestalt.WithTrustedCallerSubject(ctx, subjectID)
+		}
+	}
+	return ctx
+}
+
+func (s *publicAuthStream) RecvMsg(msg any) error {
+	if err := s.ServerStream.RecvMsg(msg); err != nil {
+		return err
+	}
+	if !s.authed {
+		s.authed = true
+		m, ok := msg.(gproto.Message)
+		if !ok {
+			return status.Error(codes.Internal, "request type mismatch")
+		}
+		p, adapted, err := s.transport.PreparePublicRequest(s.ServerStream.Context(), s.fullMethod, m)
+		if err != nil {
+			return err
+		}
+		s.principal = p
+		if adapted != nil && m != adapted {
+			gproto.Reset(m)
+			// Copy adapted fields into the decoded message via proto.Marshal/Unmarshal.
+			data, err := gproto.Marshal(adapted)
+			if err != nil {
+				return status.Error(codes.Internal, "failed to adapt request")
+			}
+			if err := gproto.Unmarshal(data, m); err != nil {
+				return status.Error(codes.Internal, "failed to adapt request")
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Server) publicGRPCMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s == nil || r == nil {

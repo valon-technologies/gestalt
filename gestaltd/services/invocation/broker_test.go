@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -534,4 +535,148 @@ func (p *brokerOperationConnectionProvider) ResolveConnectionForOperation(operat
 
 func (p *brokerOperationConnectionProvider) OperationConnectionOverrideAllowed(string, map[string]any) bool {
 	return p.allowOverride
+}
+
+func TestBrokerInvokeStreamDispatchesToStreamingExecutor(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "events",
+		Operations: []catalog.CatalogOperation{{
+			ID:        "events.watch",
+			Method:    "GET",
+			Transport: catalog.TransportApp,
+			Response: &catalog.OperationResponseSpec{
+				Stream: &catalog.StreamResponseSpec{MediaType: "application/x-ndjson"},
+			},
+		}},
+	}
+	provider := &streamingStub{
+		StubIntegration: &coretesting.StubIntegration{
+			N:          "events",
+			ConnMode:   core.ConnectionModeNone,
+			CatalogVal: cat,
+		},
+		executeStream: func(_ context.Context, op string, _ map[string]any, _ string) (core.StreamReader, error) {
+			if op != "events.watch" {
+				return nil, fmt.Errorf("unexpected operation %q", op)
+			}
+			return &sliceCoreStreamReader{
+				frames: []*core.InvokeFrame{
+					{Metadata: &core.InvokeMetadata{Status: 200, MediaType: "application/x-ndjson"}},
+					{Data: []byte(`{"event":"start"}` + "\n")},
+					{Data: []byte(`{"event":"end"}` + "\n")},
+				},
+			}, nil
+		},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+
+	reader, err := broker.InvokeStream(
+		context.Background(),
+		&principal.Principal{SubjectID: principal.UserSubjectID("u-events"), UserID: "u-events", Kind: principal.KindUser},
+		"events",
+		"",
+		"events.watch",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InvokeStream: %v", err)
+	}
+	meta, err := reader.Recv()
+	if err != nil {
+		t.Fatalf("Recv metadata: %v", err)
+	}
+	if meta.Metadata == nil || meta.Metadata.Status != 200 || meta.Metadata.MediaType != "application/x-ndjson" {
+		t.Fatalf("metadata = %+v, want status 200 mediaType application/x-ndjson", meta)
+	}
+	first, err := reader.Recv()
+	if err != nil {
+		t.Fatalf("Recv data 1: %v", err)
+	}
+	if string(first.Data) != `{"event":"start"}`+"\n" {
+		t.Fatalf("data 1 = %q", string(first.Data))
+	}
+	second, err := reader.Recv()
+	if err != nil {
+		t.Fatalf("Recv data 2: %v", err)
+	}
+	if string(second.Data) != `{"event":"end"}`+"\n" {
+		t.Fatalf("data 2 = %q", string(second.Data))
+	}
+	if _, err := reader.Recv(); err != io.EOF {
+		t.Fatalf("Recv after end = %v, want io.EOF", err)
+	}
+}
+
+func TestBrokerInvokeStreamRejectsNonStreamingProvider(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "plain",
+		Operations: []catalog.CatalogOperation{{
+			ID:     "plain.op",
+			Method: "POST",
+		}},
+	}
+	// StubIntegration without ExecuteStreamFn still implements
+	// StreamingExecutor (returns an error reader), so use a provider that
+	// does NOT implement StreamingExecutor at all.
+	provider := &coretesting.StubIntegration{
+		N:          "plain",
+		ConnMode:   core.ConnectionModeNone,
+		CatalogVal: cat,
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+
+	_, err := broker.InvokeStream(
+		context.Background(),
+		&principal.Principal{SubjectID: principal.UserSubjectID("u-plain"), UserID: "u-plain", Kind: principal.KindUser},
+		"plain",
+		"",
+		"plain.op",
+		nil,
+	)
+	if err == nil {
+		t.Fatal("InvokeStream succeeded, want error for non-streaming provider")
+	}
+	if !errors.Is(err, ErrStreamingUnsupported) {
+		t.Fatalf("InvokeStream error = %v, want ErrStreamingUnsupported", err)
+	}
+}
+
+// streamingStub wraps StubIntegration and implements core.StreamingExecutor
+// so the broker can dispatch streaming operations to it.
+type streamingStub struct {
+	*coretesting.StubIntegration
+	executeStream func(context.Context, string, map[string]any, string) (core.StreamReader, error)
+}
+
+func (s *streamingStub) ExecuteStream(ctx context.Context, op string, params map[string]any, token string) (core.StreamReader, error) {
+	return s.executeStream(ctx, op, params, token)
+}
+
+// sliceCoreStreamReader yields a fixed list of core.InvokeFrame then io.EOF.
+type sliceCoreStreamReader struct {
+	frames []*core.InvokeFrame
+	idx    int
+}
+
+func (r *sliceCoreStreamReader) Recv() (*core.InvokeFrame, error) {
+	if r.idx >= len(r.frames) {
+		return nil, io.EOF
+	}
+	f := r.frames[r.idx]
+	r.idx++
+	return f, nil
 }

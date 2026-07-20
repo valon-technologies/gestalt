@@ -31,8 +31,8 @@ use crate::public::generated::codec::agent::{
     encode_wire_update_agent_provider_session_request_json,
 };
 use crate::public::generated::codec::app::{
-    decode_wire_operation_result_json, encode_wire_app_invoke_graphql_request_json,
-    encode_wire_app_invoke_request_json,
+    decode_wire_invoke_frame_json, decode_wire_operation_result_json,
+    encode_wire_app_invoke_graphql_request_json, encode_wire_app_invoke_request_json,
 };
 use crate::public::generated::codec::authorization::{
     decode_wire_add_relationship_response_json, decode_wire_check_access_many_response_json,
@@ -269,6 +269,17 @@ fn encode_invoke_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
 
 fn decode_invoke_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
     let wire = decode_wire_operation_result_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_invoke_stream_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::AppInvokeRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_app_invoke_request_json(&wire))
+}
+
+fn decode_invoke_stream_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_invoke_frame_json(value)?;
     Ok(wire.encode_to_vec())
 }
 
@@ -1213,6 +1224,21 @@ pub const METHOD_APP_INVOKE: Method = Method {
     reject: &["run_as"],
     encode_request_json: Some(encode_invoke_request_json),
     decode_response_json: Some(decode_invoke_response_json),
+};
+
+pub const METHOD_APP_INVOKE_STREAM: Method = Method {
+    service: "gestalt.provider.v1.App",
+    name: "InvokeStream",
+    full_method: "/gestalt.provider.v1.App/InvokeStream",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &["run_as"],
+    encode_request_json: Some(encode_invoke_stream_request_json),
+    decode_response_json: Some(decode_invoke_stream_response_json),
 };
 
 pub const METHOD_APP_INVOKE_GRAPHQL: Method = Method {

@@ -6,14 +6,22 @@
  * @module client/generated/app_client.ts
  */
 
-import type { OperationResult } from "../../app.ts";
-import { fromWireOperationResult } from "../../internal/codec/app.ts";
+import type { InvokeFrame, OperationResult } from "../../app.ts";
+import {
+  fromWireInvokeFrame,
+  fromWireOperationResult,
+} from "../../internal/codec/app.ts";
 import {
   AppInvokeGraphQLRequestSchema,
   AppInvokeRequestSchema,
+  InvokeFrameSchema,
   OperationResultSchema,
 } from "../../internal/gen/v1/app_pb.ts";
-import { decodeAppResult, decodeGraphQLResult } from "../../invoke_support.ts";
+import {
+  decodeAppResult,
+  decodeGraphQLResult,
+  mapServerStreamFrames,
+} from "../../invoke_support.ts";
 import {
   toWireAppInvokeGraphQLRequest,
   toWireAppInvokeRequest,
@@ -21,6 +29,7 @@ import {
 import { PUBLIC_METHODS } from "./methods.ts";
 import type {
   PublicAppInvokeRequest,
+  PublicAppInvokeStreamRequest,
   PublicAppInvokeGraphQLRequest,
 } from "./types.ts";
 import type {
@@ -59,6 +68,25 @@ export class AppClient {
       request.app ?? "",
       request.operation ?? "",
       response,
+    );
+  }
+
+  invokeStream(
+    request: PublicAppInvokeStreamRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): AsyncIterable<InvokeFrame> {
+    if (this.transport.serverStream === undefined) {
+      throw new Error("streaming is not supported by this transport");
+    }
+    const frames = this.transport.serverStream(
+      PUBLIC_METHODS.app.invokeStream,
+      toWireAppInvokeRequest(request),
+      AppInvokeRequestSchema,
+      InvokeFrameSchema,
+      callOptions,
+    );
+    return mapServerStreamFrames(frames, (f) =>
+      fromWireInvokeFrame(f as Parameters<typeof fromWireInvokeFrame>[0]),
     );
   }
 

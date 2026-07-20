@@ -661,6 +661,10 @@ func (c *recordingRemoteAppClient) InvokeGraphQL(context.Context, *proto.AppInvo
 	return nil, status.Error(codes.Unimplemented, "unimplemented")
 }
 
+func (c *recordingRemoteAppClient) InvokeStream(context.Context, *proto.AppInvokeRequest, ...grpc.CallOption) (proto.App_InvokeStreamClient, error) {
+	return nil, status.Error(codes.Unimplemented, "unimplemented")
+}
+
 func (c *recordingRemoteAppClient) snapshot() []remoteAppInvokeCall {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -16,6 +16,7 @@ type Method struct {
 	HTTPQueryFields []PublicField
 	Fill            []string
 	Reject          []string
+	Stream          bool
 }
 
 // PublicField names one request field used by REST metadata.
@@ -33,6 +34,7 @@ var MethodAgentCreateSession = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -46,6 +48,7 @@ var MethodAgentGetSession = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -59,6 +62,7 @@ var MethodAgentListSessions = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: []PublicField{PublicField{Name: "session_ids", JSONName: "sessionIds"}, PublicField{Name: "state", JSONName: "state"}, PublicField{Name: "limit", JSONName: "limit"}, PublicField{Name: "summary_only", JSONName: "summaryOnly"}, PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -72,6 +76,7 @@ var MethodAgentUpdateSession = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -85,6 +90,7 @@ var MethodAgentCreateTurn = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -98,6 +104,7 @@ var MethodAgentGetTurn = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}, PublicField{Name: "turn_id", JSONName: "turnId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -111,6 +118,7 @@ var MethodAgentListTurns = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "turn_ids", JSONName: "turnIds"}, PublicField{Name: "status", JSONName: "status"}, PublicField{Name: "limit", JSONName: "limit"}, PublicField{Name: "summary_only", JSONName: "summaryOnly"}, PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -124,6 +132,7 @@ var MethodAgentCancelTurn = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}, PublicField{Name: "turn_id", JSONName: "turnId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -137,6 +146,7 @@ var MethodAgentListTurnEvents = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "session_id", JSONName: "sessionId"}, PublicField{Name: "turn_id", JSONName: "turnId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "after_seq", JSONName: "afterSeq"}, PublicField{Name: "limit", JSONName: "limit"}, PublicField{Name: "provider_name", JSONName: "providerName"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -145,6 +155,7 @@ var MethodAgentListInteractions = Method{
 	Service:    "gestalt.provider.v1.Agent",
 	Name:       "ListInteractions",
 	FullMethod: "/gestalt.provider.v1.Agent/ListInteractions",
+	Stream:     false,
 	Fill:       []string{"context"},
 	Reject:     nil,
 }
@@ -153,6 +164,7 @@ var MethodAgentResolveInteraction = Method{
 	Service:    "gestalt.provider.v1.Agent",
 	Name:       "ResolveInteraction",
 	FullMethod: "/gestalt.provider.v1.Agent/ResolveInteraction",
+	Stream:     false,
 	Fill:       []string{"context"},
 	Reject:     nil,
 }
@@ -166,8 +178,18 @@ var MethodAppInvoke = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "app", JSONName: "app"}, PublicField{Name: "operation", JSONName: "operation"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          []string{"run_as"},
+}
+
+var MethodAppInvokeStream = Method{
+	Service:    "gestalt.provider.v1.App",
+	Name:       "InvokeStream",
+	FullMethod: "/gestalt.provider.v1.App/InvokeStream",
+	Stream:     true,
+	Fill:       []string{"context"},
+	Reject:     []string{"run_as"},
 }
 
 var MethodAppInvokeGraphQL = Method{
@@ -179,6 +201,7 @@ var MethodAppInvokeGraphQL = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "app", JSONName: "app"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -192,6 +215,7 @@ var MethodAuthorizationCheckAccess = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -205,6 +229,7 @@ var MethodAuthorizationCheckAccessMany = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -218,6 +243,7 @@ var MethodAuthorizationListRelationships = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: []PublicField{PublicField{Name: "filter", JSONName: "filter"}, PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}},
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -231,6 +257,7 @@ var MethodAuthorizationAddRelationship = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -244,6 +271,7 @@ var MethodAuthorizationDeleteRelationship = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -257,6 +285,7 @@ var MethodAuthorizationSetAuthorizationState = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -270,6 +299,7 @@ var MethodAuthorizationGetActiveModelRef = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -283,6 +313,7 @@ var MethodAuthorizationSetActiveModel = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -296,6 +327,7 @@ var MethodAuthorizationListActiveModelResourceTypes = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: []PublicField{PublicField{Name: "filter", JSONName: "filter"}, PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}},
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -304,6 +336,7 @@ var MethodExternalCredentialsCreateCredential = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "CreateCredential",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/CreateCredential",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -312,6 +345,7 @@ var MethodExternalCredentialsUpsertCredential = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "UpsertCredential",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/UpsertCredential",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -320,6 +354,7 @@ var MethodExternalCredentialsGetCredential = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "GetCredential",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/GetCredential",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -328,6 +363,7 @@ var MethodExternalCredentialsListCredentials = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "ListCredentials",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/ListCredentials",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -336,6 +372,7 @@ var MethodExternalCredentialsDeleteCredential = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "DeleteCredential",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/DeleteCredential",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -344,6 +381,7 @@ var MethodExternalCredentialsValidateCredentialConfig = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "ValidateCredentialConfig",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/ValidateCredentialConfig",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -352,6 +390,7 @@ var MethodExternalCredentialsResolveCredential = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "ResolveCredential",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/ResolveCredential",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -360,6 +399,7 @@ var MethodExternalCredentialsExchangeCredential = Method{
 	Service:    "gestalt.provider.v1.ExternalCredentials",
 	Name:       "ExchangeCredential",
 	FullMethod: "/gestalt.provider.v1.ExternalCredentials/ExchangeCredential",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -373,6 +413,7 @@ var MethodIdentityAuthorize = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -386,6 +427,7 @@ var MethodIdentityToken = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -399,6 +441,7 @@ var MethodIdentityIntrospect = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -412,6 +455,7 @@ var MethodIdentityUserInfo = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -425,6 +469,7 @@ var MethodIdentityListGrants = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -438,6 +483,7 @@ var MethodIdentityGetGrant = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "grant_id", JSONName: "grantId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -451,6 +497,7 @@ var MethodIdentityRevokeGrant = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "grant_id", JSONName: "grantId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            nil,
 	Reject:          nil,
 }
@@ -459,6 +506,7 @@ var MethodIndexedDBCreateObjectStore = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "CreateObjectStore",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/CreateObjectStore",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -467,6 +515,7 @@ var MethodIndexedDBDeleteObjectStore = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "DeleteObjectStore",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/DeleteObjectStore",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -475,6 +524,7 @@ var MethodIndexedDBCreateIndex = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "CreateIndex",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/CreateIndex",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -483,6 +533,7 @@ var MethodIndexedDBDeleteIndex = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "DeleteIndex",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/DeleteIndex",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -491,6 +542,7 @@ var MethodIndexedDBGet = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "Get",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/Get",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -499,6 +551,7 @@ var MethodIndexedDBGetKey = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "GetKey",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/GetKey",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -507,6 +560,7 @@ var MethodIndexedDBAdd = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "Add",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/Add",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -515,6 +569,7 @@ var MethodIndexedDBPut = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "Put",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/Put",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -523,6 +578,7 @@ var MethodIndexedDBDelete = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "Delete",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/Delete",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -531,6 +587,7 @@ var MethodIndexedDBClear = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "Clear",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/Clear",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -539,6 +596,7 @@ var MethodIndexedDBGetAll = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "GetAll",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/GetAll",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -547,6 +605,7 @@ var MethodIndexedDBGetAllKeys = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "GetAllKeys",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/GetAllKeys",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -555,6 +614,7 @@ var MethodIndexedDBCount = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "Count",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/Count",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -563,6 +623,7 @@ var MethodIndexedDBDeleteRange = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "DeleteRange",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/DeleteRange",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -571,6 +632,7 @@ var MethodIndexedDBIndexGet = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "IndexGet",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/IndexGet",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -579,6 +641,7 @@ var MethodIndexedDBIndexGetKey = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "IndexGetKey",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/IndexGetKey",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -587,6 +650,7 @@ var MethodIndexedDBIndexGetAll = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "IndexGetAll",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/IndexGetAll",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -595,6 +659,7 @@ var MethodIndexedDBIndexGetAllKeys = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "IndexGetAllKeys",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -603,6 +668,7 @@ var MethodIndexedDBIndexCount = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "IndexCount",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/IndexCount",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -611,6 +677,7 @@ var MethodIndexedDBIndexDelete = Method{
 	Service:    "gestalt.provider.v1.IndexedDB",
 	Name:       "IndexDelete",
 	FullMethod: "/gestalt.provider.v1.IndexedDB/IndexDelete",
+	Stream:     false,
 	Fill:       nil,
 	Reject:     nil,
 }
@@ -624,6 +691,7 @@ var MethodWorkflowApplyDefinition = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -637,6 +705,7 @@ var MethodWorkflowGetDefinition = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -650,6 +719,7 @@ var MethodWorkflowListDefinitions = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -663,6 +733,7 @@ var MethodWorkflowSetDefinitionPaused = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -676,6 +747,7 @@ var MethodWorkflowSetActivationPaused = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}, PublicField{Name: "activation_id", JSONName: "activationId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -689,6 +761,7 @@ var MethodWorkflowDeleteDefinition = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -702,6 +775,7 @@ var MethodWorkflowStartRun = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -715,6 +789,7 @@ var MethodWorkflowListRuns = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  nil,
 	HTTPQueryFields: []PublicField{PublicField{Name: "page_size", JSONName: "pageSize"}, PublicField{Name: "page_token", JSONName: "pageToken"}, PublicField{Name: "status", JSONName: "status"}, PublicField{Name: "target_app", JSONName: "targetApp"}, PublicField{Name: "provider", JSONName: "provider"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -728,6 +803,7 @@ var MethodWorkflowGetRun = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -741,6 +817,7 @@ var MethodWorkflowGetRunEvents = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -754,6 +831,7 @@ var MethodWorkflowGetRunOutput = Method{
 	HTTPBody:        "",
 	HTTPPathFields:  []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
 	HTTPQueryFields: []PublicField{PublicField{Name: "provider", JSONName: "provider"}},
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -767,6 +845,7 @@ var MethodWorkflowCancelRun = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -780,6 +859,7 @@ var MethodWorkflowSignalRun = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "run_id", JSONName: "runId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }
@@ -793,6 +873,7 @@ var MethodWorkflowSignalOrStartRun = Method{
 	HTTPBody:        "*",
 	HTTPPathFields:  []PublicField{PublicField{Name: "definition_id", JSONName: "definitionId"}},
 	HTTPQueryFields: nil,
+	Stream:          false,
 	Fill:            []string{"context"},
 	Reject:          nil,
 }

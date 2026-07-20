@@ -105,7 +105,6 @@ type CatalogOperation struct {
 	Title          string
 	Description    string
 	InputSchema    string
-	OutputSchema   string
 	Annotations    *OperationAnnotations
 	Parameters     []*CatalogParameter
 	RequiredScopes []string
@@ -114,6 +113,9 @@ type CatalogOperation struct {
 	Visible        *bool
 	Transport      string
 	AllowedRoles   []string
+	// Response mode and schema for this operation. Replaces the former
+	// output_schema string; absent is equivalent to unary with no schema.
+	Response *OperationResponseSpec
 }
 
 // CatalogParameter is the native message type for gestalt.provider.v1.CatalogParameter.
@@ -215,6 +217,49 @@ type InvocationContext struct {
 	Connection               string
 }
 
+// InvokeFrameValue selects one variant of the value oneof of InvokeFrame.
+// A nil value means unset.
+type InvokeFrameValue interface {
+	isInvokeFrameValue()
+}
+
+// InvokeFrameValueMetadata is the metadata variant.
+type InvokeFrameValueMetadata struct {
+	Value *InvokeMetadata
+}
+
+func (*InvokeFrameValueMetadata) isInvokeFrameValue() {}
+
+// InvokeFrameValueData is the data variant.
+type InvokeFrameValueData struct {
+	Value []byte
+}
+
+func (*InvokeFrameValueData) isInvokeFrameValue() {}
+
+// InvokeFrame is the native message type for gestalt.provider.v1.InvokeFrame.
+//
+// InvokeFrame is one frame in a streaming invocation. The first frame is always
+// metadata; subsequent frames carry data bytes produced by the operation
+// handler (after encoding, for typed item streams). A mid-stream error (for
+// example, a validation failure or a recovered panic) may emit a trailing
+// metadata frame with a non-2xx status followed by a data frame carrying a
+// JSON error body, after which the stream ends.
+type InvokeFrame struct {
+	Value InvokeFrameValue
+}
+
+// InvokeMetadata is the native message type for gestalt.provider.v1.InvokeMetadata.
+//
+// InvokeMetadata is the first frame of a streaming invocation. It carries the
+// HTTP-shaped status, headers, and the response media type (from the
+// operation's StreamResponseSpec).
+type InvokeMetadata struct {
+	Status    int32
+	Headers   map[string]*StringList
+	MediaType string
+}
+
 // OperationAnnotations is the native message type for gestalt.provider.v1.OperationAnnotations.
 //
 // OperationAnnotations carries optional host hints about how an operation
@@ -224,6 +269,34 @@ type OperationAnnotations struct {
 	IdempotentHint  *bool
 	DestructiveHint *bool
 	OpenWorldHint   *bool
+}
+
+// OperationResponseSpecKind selects one variant of the kind oneof of OperationResponseSpec.
+// A nil value means unset.
+type OperationResponseSpecKind interface {
+	isOperationResponseSpecKind()
+}
+
+// OperationResponseSpecKindUnary is the unary variant.
+type OperationResponseSpecKindUnary struct {
+	Value *UnaryResponseSpec
+}
+
+func (*OperationResponseSpecKindUnary) isOperationResponseSpecKind() {}
+
+// OperationResponseSpecKindStream is the stream variant.
+type OperationResponseSpecKindStream struct {
+	Value *StreamResponseSpec
+}
+
+func (*OperationResponseSpecKindStream) isOperationResponseSpecKind() {}
+
+// OperationResponseSpec is the native message type for gestalt.provider.v1.OperationResponseSpec.
+//
+// OperationResponseSpec declares how an operation responds. App authoring
+// defaults to unary; emitted catalogs always declare either unary or stream.
+type OperationResponseSpec struct {
+	Kind OperationResponseSpecKind
 }
 
 // OperationResult is the native message type for gestalt.provider.v1.OperationResult.
@@ -337,6 +410,16 @@ type StartProviderResponse struct {
 	ProtocolVersion int32
 }
 
+// StreamResponseSpec is the native message type for gestalt.provider.v1.StreamResponseSpec.
+//
+// StreamResponseSpec describes a streaming operation response. The media type
+// names the representation (for example application/x-ndjson); the item schema
+// is optional and describes one yielded item when the stream is typed.
+type StreamResponseSpec struct {
+	MediaType  string
+	ItemSchema map[string]any
+}
+
 // StringList is the native message type for gestalt.provider.v1.StringList.
 //
 // StringList is a helper map value for repeated HTTP header and query values.
@@ -360,6 +443,13 @@ type SubjectPermissionContext struct {
 	App           string
 	Operations    []string
 	AllOperations bool
+}
+
+// UnaryResponseSpec is the native message type for gestalt.provider.v1.UnaryResponseSpec.
+//
+// UnaryResponseSpec describes a unary (fully materialized) operation response.
+type UnaryResponseSpec struct {
+	Schema map[string]any
 }
 
 // App is the generated client for gestalt.provider.v1.App.
@@ -437,6 +527,64 @@ func (c *App) InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*Operat
 	return FromWireOperationResult(response), nil
 }
 
+// AppInvokeStreamOptions carries the optional parameters of [App.InvokeStream].
+// A nil options value is equivalent to the zero value.
+type AppInvokeStreamOptions struct {
+	Connection     string
+	Instance       string
+	IdempotencyKey string
+	CredentialMode string
+	RunAs          *SubjectContext
+}
+
+// InvokeStream is the ergonomic form of [App.InvokeStreamRaw].
+//
+// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+// REST binding) and shares Invoke's request shape, authorization, and
+// signature policy. The first response frame is always InvokeMetadata;
+// subsequent frames carry data bytes from the operation's stream response.
+// A mid-stream error may emit a trailing metadata frame with an error status
+// followed by a JSON error body, after which the stream ends.
+func (c *App) InvokeStream(ctx context.Context, app string, operation string, params map[string]any, opts *AppInvokeStreamOptions) (*AppInvokeStreamStream, error) {
+	if opts == nil {
+		opts = &AppInvokeStreamOptions{}
+	}
+
+	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs}
+
+	if request.Context == nil && c.context != nil {
+		shallow := *request
+		shallow.Context = c.context
+		request = &shallow
+	}
+	stream, err := c.client.InvokeStream(ctx, ToWireAppInvokeRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return &AppInvokeStreamStream{stream: stream}, nil
+}
+
+// InvokeStreamRaw is the faithful form of [App.InvokeStream].
+//
+// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+// REST binding) and shares Invoke's request shape, authorization, and
+// signature policy. The first response frame is always InvokeMetadata;
+// subsequent frames carry data bytes from the operation's stream response.
+// A mid-stream error may emit a trailing metadata frame with an error status
+// followed by a JSON error body, after which the stream ends.
+func (c *App) InvokeStreamRaw(ctx context.Context, request *AppInvokeRequest) (*AppInvokeStreamStream, error) {
+	if request.Context == nil && c.context != nil {
+		shallow := *request
+		shallow.Context = c.context
+		request = &shallow
+	}
+	stream, err := c.client.InvokeStream(ctx, ToWireAppInvokeRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return &AppInvokeStreamStream{stream: stream}, nil
+}
+
 // AppInvokeGraphQLOptions carries the optional parameters of [App.InvokeGraphQL].
 // A nil options value is equivalent to the zero value.
 type AppInvokeGraphQLOptions struct {
@@ -471,6 +619,29 @@ func (c *App) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLReq
 		return nil, toGestaltError(err)
 	}
 	return FromWireOperationResult(response), nil
+}
+
+// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+// REST binding) and shares Invoke's request shape, authorization, and
+// signature policy. The first response frame is always InvokeMetadata;
+// subsequent frames carry data bytes from the operation's stream response.
+// A mid-stream error may emit a trailing metadata frame with an error status
+// followed by a JSON error body, after which the stream ends.
+//
+// AppInvokeStreamStream is the server stream of InvokeFrame frames
+// returned by App.InvokeStream.
+type AppInvokeStreamStream struct {
+	stream proto.App_InvokeStreamClient
+}
+
+// Recv receives the next frame. io.EOF reports the normal end of the
+// stream; every other error is a *GestaltError.
+func (s *AppInvokeStreamStream) Recv() (*InvokeFrame, error) {
+	frame, err := s.stream.Recv()
+	if err != nil {
+		return nil, streamError(err)
+	}
+	return FromWireInvokeFrame(frame), nil
 }
 
 // AppProvider is the generated client for gestalt.provider.v1.AppProvider.
@@ -542,6 +713,46 @@ func (c *AppProvider) ExecuteRaw(ctx context.Context, request *ExecuteRequest) (
 	return FromWireOperationResult(response), nil
 }
 
+// ExecuteStream is the ergonomic form of [AppProvider.ExecuteStreamRaw].
+//
+// ExecuteStream is the streaming counterpart of Execute. The first response
+// frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+// A mid-stream error may emit a trailing metadata frame with an error status
+// followed by a JSON error body, after which the stream ends.
+func (c *AppProvider) ExecuteStream(ctx context.Context, operation string, token string, invocationId string, idempotencyKey string, params map[string]any) (*AppProviderExecuteStreamStream, error) {
+	request := &ExecuteRequest{Operation: operation, Token: token, InvocationId: invocationId, IdempotencyKey: idempotencyKey, Params: params}
+
+	if request.Context == nil && c.context != nil {
+		shallow := *request
+		shallow.Context = c.context
+		request = &shallow
+	}
+	stream, err := c.client.ExecuteStream(ctx, ToWireExecuteRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return &AppProviderExecuteStreamStream{stream: stream}, nil
+}
+
+// ExecuteStreamRaw is the faithful form of [AppProvider.ExecuteStream].
+//
+// ExecuteStream is the streaming counterpart of Execute. The first response
+// frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+// A mid-stream error may emit a trailing metadata frame with an error status
+// followed by a JSON error body, after which the stream ends.
+func (c *AppProvider) ExecuteStreamRaw(ctx context.Context, request *ExecuteRequest) (*AppProviderExecuteStreamStream, error) {
+	if request.Context == nil && c.context != nil {
+		shallow := *request
+		shallow.Context = c.context
+		request = &shallow
+	}
+	stream, err := c.client.ExecuteStream(ctx, ToWireExecuteRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return &AppProviderExecuteStreamStream{stream: stream}, nil
+}
+
 // ResolveHTTPSubject calls the ResolveHTTPSubject RPC of AppProvider.
 func (c *AppProvider) ResolveHTTPSubject(ctx context.Context, request *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error) {
 	if request.Context == nil && c.context != nil {
@@ -578,4 +789,25 @@ func (c *AppProvider) GetSessionCatalogRaw(ctx context.Context, request *GetSess
 		return nil, toGestaltError(err)
 	}
 	return FromWireGetSessionCatalogResponse(response), nil
+}
+
+// ExecuteStream is the streaming counterpart of Execute. The first response
+// frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+// A mid-stream error may emit a trailing metadata frame with an error status
+// followed by a JSON error body, after which the stream ends.
+//
+// AppProviderExecuteStreamStream is the server stream of InvokeFrame frames
+// returned by AppProvider.ExecuteStream.
+type AppProviderExecuteStreamStream struct {
+	stream proto.AppProvider_ExecuteStreamClient
+}
+
+// Recv receives the next frame. io.EOF reports the normal end of the
+// stream; every other error is a *GestaltError.
+func (s *AppProviderExecuteStreamStream) Recv() (*InvokeFrame, error) {
+	frame, err := s.stream.Recv()
+	if err != nil {
+		return nil, streamError(err)
+	}
+	return FromWireInvokeFrame(frame), nil
 }

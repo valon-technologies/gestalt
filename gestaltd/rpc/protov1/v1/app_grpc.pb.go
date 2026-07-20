@@ -23,6 +23,7 @@ const (
 	AppProvider_GetMetadata_FullMethodName        = "/gestalt.provider.v1.AppProvider/GetMetadata"
 	AppProvider_StartProvider_FullMethodName      = "/gestalt.provider.v1.AppProvider/StartProvider"
 	AppProvider_Execute_FullMethodName            = "/gestalt.provider.v1.AppProvider/Execute"
+	AppProvider_ExecuteStream_FullMethodName      = "/gestalt.provider.v1.AppProvider/ExecuteStream"
 	AppProvider_ResolveHTTPSubject_FullMethodName = "/gestalt.provider.v1.AppProvider/ResolveHTTPSubject"
 	AppProvider_GetSessionCatalog_FullMethodName  = "/gestalt.provider.v1.AppProvider/GetSessionCatalog"
 )
@@ -36,6 +37,11 @@ type AppProviderClient interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderMetadata, error)
 	StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error)
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	// ExecuteStream is the streaming counterpart of Execute. The first response
+	// frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+	// A mid-stream error may emit a trailing metadata frame with an error status
+	// followed by a JSON error body, after which the stream ends.
+	ExecuteStream(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InvokeFrame], error)
 	ResolveHTTPSubject(ctx context.Context, in *ResolveHTTPSubjectRequest, opts ...grpc.CallOption) (*ResolveHTTPSubjectResponse, error)
 	GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error)
 }
@@ -78,6 +84,25 @@ func (c *appProviderClient) Execute(ctx context.Context, in *ExecuteRequest, opt
 	return out, nil
 }
 
+func (c *appProviderClient) ExecuteStream(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InvokeFrame], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AppProvider_ServiceDesc.Streams[0], AppProvider_ExecuteStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ExecuteRequest, InvokeFrame]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AppProvider_ExecuteStreamClient = grpc.ServerStreamingClient[InvokeFrame]
+
 func (c *appProviderClient) ResolveHTTPSubject(ctx context.Context, in *ResolveHTTPSubjectRequest, opts ...grpc.CallOption) (*ResolveHTTPSubjectResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResolveHTTPSubjectResponse)
@@ -107,6 +132,11 @@ type AppProviderServer interface {
 	GetMetadata(context.Context, *emptypb.Empty) (*ProviderMetadata, error)
 	StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error)
 	Execute(context.Context, *ExecuteRequest) (*OperationResult, error)
+	// ExecuteStream is the streaming counterpart of Execute. The first response
+	// frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+	// A mid-stream error may emit a trailing metadata frame with an error status
+	// followed by a JSON error body, after which the stream ends.
+	ExecuteStream(*ExecuteRequest, grpc.ServerStreamingServer[InvokeFrame]) error
 	ResolveHTTPSubject(context.Context, *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error)
 	GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error)
 	mustEmbedUnimplementedAppProviderServer()
@@ -127,6 +157,9 @@ func (UnimplementedAppProviderServer) StartProvider(context.Context, *StartProvi
 }
 func (UnimplementedAppProviderServer) Execute(context.Context, *ExecuteRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Execute not implemented")
+}
+func (UnimplementedAppProviderServer) ExecuteStream(*ExecuteRequest, grpc.ServerStreamingServer[InvokeFrame]) error {
+	return status.Error(codes.Unimplemented, "method ExecuteStream not implemented")
 }
 func (UnimplementedAppProviderServer) ResolveHTTPSubject(context.Context, *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResolveHTTPSubject not implemented")
@@ -209,6 +242,17 @@ func _AppProvider_Execute_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AppProvider_ExecuteStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ExecuteRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AppProviderServer).ExecuteStream(m, &grpc.GenericServerStream[ExecuteRequest, InvokeFrame]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AppProvider_ExecuteStreamServer = grpc.ServerStreamingServer[InvokeFrame]
+
 func _AppProvider_ResolveHTTPSubject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResolveHTTPSubjectRequest)
 	if err := dec(in); err != nil {
@@ -273,12 +317,19 @@ var AppProvider_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AppProvider_GetSessionCatalog_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ExecuteStream",
+			Handler:       _AppProvider_ExecuteStream_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "v1/app.proto",
 }
 
 const (
 	App_Invoke_FullMethodName        = "/gestalt.provider.v1.App/Invoke"
+	App_InvokeStream_FullMethodName  = "/gestalt.provider.v1.App/InvokeStream"
 	App_InvokeGraphQL_FullMethodName = "/gestalt.provider.v1.App/InvokeGraphQL"
 )
 
@@ -287,6 +338,13 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AppClient interface {
 	Invoke(ctx context.Context, in *AppInvokeRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+	// REST binding) and shares Invoke's request shape, authorization, and
+	// signature policy. The first response frame is always InvokeMetadata;
+	// subsequent frames carry data bytes from the operation's stream response.
+	// A mid-stream error may emit a trailing metadata frame with an error status
+	// followed by a JSON error body, after which the stream ends.
+	InvokeStream(ctx context.Context, in *AppInvokeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InvokeFrame], error)
 	InvokeGraphQL(ctx context.Context, in *AppInvokeGraphQLRequest, opts ...grpc.CallOption) (*OperationResult, error)
 }
 
@@ -308,6 +366,25 @@ func (c *appClient) Invoke(ctx context.Context, in *AppInvokeRequest, opts ...gr
 	return out, nil
 }
 
+func (c *appClient) InvokeStream(ctx context.Context, in *AppInvokeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InvokeFrame], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &App_ServiceDesc.Streams[0], App_InvokeStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AppInvokeRequest, InvokeFrame]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type App_InvokeStreamClient = grpc.ServerStreamingClient[InvokeFrame]
+
 func (c *appClient) InvokeGraphQL(ctx context.Context, in *AppInvokeGraphQLRequest, opts ...grpc.CallOption) (*OperationResult, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OperationResult)
@@ -323,6 +400,13 @@ func (c *appClient) InvokeGraphQL(ctx context.Context, in *AppInvokeGraphQLReque
 // for forward compatibility.
 type AppServer interface {
 	Invoke(context.Context, *AppInvokeRequest) (*OperationResult, error)
+	// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+	// REST binding) and shares Invoke's request shape, authorization, and
+	// signature policy. The first response frame is always InvokeMetadata;
+	// subsequent frames carry data bytes from the operation's stream response.
+	// A mid-stream error may emit a trailing metadata frame with an error status
+	// followed by a JSON error body, after which the stream ends.
+	InvokeStream(*AppInvokeRequest, grpc.ServerStreamingServer[InvokeFrame]) error
 	InvokeGraphQL(context.Context, *AppInvokeGraphQLRequest) (*OperationResult, error)
 	mustEmbedUnimplementedAppServer()
 }
@@ -336,6 +420,9 @@ type UnimplementedAppServer struct{}
 
 func (UnimplementedAppServer) Invoke(context.Context, *AppInvokeRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Invoke not implemented")
+}
+func (UnimplementedAppServer) InvokeStream(*AppInvokeRequest, grpc.ServerStreamingServer[InvokeFrame]) error {
+	return status.Error(codes.Unimplemented, "method InvokeStream not implemented")
 }
 func (UnimplementedAppServer) InvokeGraphQL(context.Context, *AppInvokeGraphQLRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method InvokeGraphQL not implemented")
@@ -379,6 +466,17 @@ func _App_Invoke_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _App_InvokeStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AppInvokeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AppServer).InvokeStream(m, &grpc.GenericServerStream[AppInvokeRequest, InvokeFrame]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type App_InvokeStreamServer = grpc.ServerStreamingServer[InvokeFrame]
+
 func _App_InvokeGraphQL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AppInvokeGraphQLRequest)
 	if err := dec(in); err != nil {
@@ -413,6 +511,12 @@ var App_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _App_InvokeGraphQL_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "InvokeStream",
+			Handler:       _App_InvokeStream_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "v1/app.proto",
 }

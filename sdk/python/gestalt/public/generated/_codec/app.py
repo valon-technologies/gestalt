@@ -89,6 +89,55 @@ def from_wire_app_invoke_request(value: Any) -> native.AppInvokeRequest:
     )
 
 
+def to_wire_invoke_frame(value: native.InvokeFrame) -> Any:
+    return _app_pb2.InvokeFrame(
+        **to_wire_invoke_frame_value(value.value),
+    )
+
+
+def from_wire_invoke_frame(value: Any) -> native.InvokeFrame:
+    return native.InvokeFrame(
+        value=from_wire_invoke_frame_value(value),
+    )
+
+
+def to_wire_invoke_frame_value(value: native.InvokeFrameValue) -> dict[str, Any]:
+    if isinstance(value, native.InvokeFrameMetadata):
+        return {"metadata": to_wire_invoke_metadata(value.value)}
+    if isinstance(value, native.InvokeFrameData):
+        return {"data": value.value}
+    return {}
+
+
+def from_wire_invoke_frame_value(value: Any) -> native.InvokeFrameValue:
+    case = value.WhichOneof("value")
+    if case == "metadata":
+        return native.InvokeFrameMetadata(
+            value=from_wire_invoke_metadata(value.metadata)
+        )
+    if case == "data":
+        return native.InvokeFrameData(value=value.data)
+    return None
+
+
+def to_wire_invoke_metadata(value: native.InvokeMetadata) -> Any:
+    return _app_pb2.InvokeMetadata(
+        status=value.status,
+        headers={key: to_wire_string_list(item) for key, item in value.headers.items()},
+        media_type=value.media_type,
+    )
+
+
+def from_wire_invoke_metadata(value: Any) -> native.InvokeMetadata:
+    return native.InvokeMetadata(
+        status=value.status,
+        headers={
+            key: from_wire_string_list(item) for key, item in value.headers.items()
+        },
+        media_type=value.media_type,
+    )
+
+
 def to_wire_operation_annotations(value: native.OperationAnnotations) -> Any:
     return _app_pb2.OperationAnnotations(
         read_only_hint=value.read_only_hint,

@@ -16,8 +16,8 @@ func Validate(schema *model.Schema) error {
 			if !m.Public {
 				continue
 			}
-			if m.Stream != model.Unary {
-				return fmt.Errorf("%s: public streaming methods are not supported", m.FullMethod)
+			if m.Stream != model.Unary && m.Stream != model.ServerStream {
+				return fmt.Errorf("%s: public client-streaming and bidi-streaming methods are not supported", m.FullMethod)
 			}
 		}
 	}

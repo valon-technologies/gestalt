@@ -232,6 +232,9 @@ func manifestLangCases() []langCase {
 				if symbol.Method == "invoke" {
 					return "invoke<T"
 				}
+				if symbol.Method == "invokeStream" {
+					return "invokeStream("
+				}
 				return fmt.Sprintf("async %s(", symbol.Method)
 			},
 			rest: func(symbol manifestSymbol) string {

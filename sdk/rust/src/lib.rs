@@ -112,7 +112,10 @@ pub use auth::{
 };
 pub use cache::Cache;
 pub use cache_provider::{CacheEntry, CacheProvider, CacheSetOptions};
-pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotations};
+pub use catalog::{
+    Catalog, CatalogOperation, CatalogParameter, OperationAnnotations, OperationResponseSpec,
+    StreamResponseSpec, UnaryResponseSpec,
+};
 pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, ENV_PROVIDER_SOCKET,
 };

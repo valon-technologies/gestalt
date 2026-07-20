@@ -1,6 +1,6 @@
 # Public API availability
 
-Generated from the public surface manifest (71 gRPC methods, 41 REST methods).
+Generated from the public surface manifest (72 gRPC methods, 41 REST methods).
 
 | Service | Method | REST | Go | Python | Rust | TypeScript |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -17,6 +17,7 @@ Generated from the public surface manifest (71 gRPC methods, 41 REST methods).
 | Agent | UpdateSession | PATCH /api/v2/agent/sessions/{session_id} | AgentClient.UpdateSession | AgentClient.update_session | AgentClient.update_session | AgentClient.updateSession |
 | App | Invoke | POST /api/v2/app/{app}/operations/{operation} | AppClient.Invoke | AppClient.invoke | AppClient.invoke | AppClient.invoke |
 | App | InvokeGraphQL | POST /api/v2/app/{app}/graphql | AppClient.InvokeGraphQL | AppClient.invoke_graphql | AppClient.invoke_graphql | AppClient.invokeGraphQL |
+| App | InvokeStream | gRPC only | AppClient.InvokeStream | AppClient.invoke_stream | AppClient.invoke_stream | AppClient.invokeStream |
 | Authorization | AddRelationship | POST /api/v2/authorization/relationships | AuthorizationClient.AddRelationship | AuthorizationClient.add_relationship | AuthorizationClient.add_relationship | AuthorizationClient.addRelationship |
 | Authorization | CheckAccess | POST /api/v2/authorization/access:check | AuthorizationClient.CheckAccess | AuthorizationClient.check_access | AuthorizationClient.check_access | AuthorizationClient.checkAccess |
 | Authorization | CheckAccessMany | POST /api/v2/authorization/access:checkMany | AuthorizationClient.CheckAccessMany | AuthorizationClient.check_access_many | AuthorizationClient.check_access_many | AuthorizationClient.checkAccessMany |

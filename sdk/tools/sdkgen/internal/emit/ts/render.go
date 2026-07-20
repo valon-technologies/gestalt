@@ -671,9 +671,91 @@ func (r *renderer) renderMethod(m *model.Method) {
 	case m.Stream == model.Unary && (len(m.Signature) > 0 || len(m.OptionalSignature) > 0 || r.collapseOutput(m) != nil):
 		r.renderErgonomicUnary(m)
 		r.renderFaithfulMethod(m, true)
+	case m.Stream == model.ServerStream && (len(m.Signature) > 0 || len(m.OptionalSignature) > 0):
+		r.renderErgonomicServerStream(m)
+		r.renderFaithfulMethod(m, true)
 	default:
 		r.renderFaithfulMethod(m, false)
 	}
+}
+
+// renderErgonomicServerStream renders the flattened surface of a
+// server-streaming method with signature annotations: positional signature
+// parameters, a trailing options object from optional_signature, and an
+// AsyncIterable<Output> return piped through mapRecv.
+func (r *renderer) renderErgonomicServerStream(m *model.Method) {
+	methodName := lowerFirst(m.Name)
+	params := ""
+	requestArg := "{}"
+	var requestLines []string
+	if !m.InputIsEmpty {
+		requestArg = r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(" + requestExpr(m.Input, "request") + ")"
+	}
+	if len(m.Signature) > 0 || len(m.OptionalSignature) > 0 {
+		var decls, props []string
+		var spreads []string
+		listed := map[string]bool{}
+		for _, name := range m.Signature {
+			listed[name] = true
+			f := findField(m.Input, name)
+			param := f.JSONName
+			prop := f.JSONName
+			if param == "options" {
+				param = "options_"
+				prop = f.JSONName + ": " + param
+			}
+			optional := ""
+			if f.Presence == model.ExplicitPresence {
+				optional = "?"
+				spreads = append(spreads, fmt.Sprintf("...(%s !== undefined ? { %s } : {})", param, prop))
+			} else {
+				props = append(props, prop)
+			}
+			decls = append(decls, fmt.Sprintf("%s%s: %s", param, optional, r.flattenedType(f)))
+		}
+		if len(m.OptionalSignature) > 0 {
+			var optionDecls []string
+			for _, name := range m.OptionalSignature {
+				listed[name] = true
+				f := findField(m.Input, name)
+				optionDecls = append(optionDecls, fmt.Sprintf("%s?: %s | undefined", f.JSONName, r.flattenedType(f)))
+				if f.Presence == model.ExplicitPresence {
+					spreads = append(spreads, fmt.Sprintf("...(options?.%s !== undefined ? { %s: options.%s } : {})", f.JSONName, f.JSONName, f.JSONName))
+				} else {
+					props = append(props, fmt.Sprintf("%s: options?.%s ?? %s", f.JSONName, f.JSONName, tsDefaultExpr(f)))
+				}
+			}
+			decls = append(decls, fmt.Sprintf("options?: { %s }", strings.Join(optionDecls, "; ")))
+		}
+		for _, f := range m.Input.Fields {
+			if listed[f.Name] || f.OneofIndex >= 0 || f.Presence == model.ExplicitPresence {
+				continue
+			}
+			props = append(props, f.JSONName+": "+tsDefaultExpr(f))
+		}
+		for _, o := range m.Input.Oneofs {
+			props = append(props, oneofProp(o)+": { case: undefined }")
+		}
+		if findField(m.Input, "context") != nil {
+			spreads = append(spreads, "...(this.context !== undefined ? { context: this.context } : {})")
+		}
+		params = strings.Join(decls, ", ")
+		requestLines = append(requestLines, fmt.Sprintf("    const request = { %s } satisfies %s;",
+			strings.Join(append(props, spreads...), ", "), r.initType(m.Input.FullName)))
+		// Rebuild requestArg from the ergonomic request literal so signature
+		// defaults and spreads are encoded into the wire request. The request
+		// literal already merges this.context via spreads, so bypass
+		// requestExpr (which would add a redundant context re-merge).
+		requestArg = r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
+	}
+	r.use("mapRecv", false)
+	responseType := r.messageType(m.Output.FullName)
+	fmt.Fprintf(&r.body, "  %s(%s): AsyncIterable<%s> {\n", methodName, params, responseType)
+	for _, line := range requestLines {
+		r.body.WriteString(line + "\n")
+	}
+	fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", lowerFirst(m.Name), requestArg, r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+	r.body.WriteString("  }\n\n")
 }
 
 // renderErgonomicUnary renders the annotated surface of a unary method:

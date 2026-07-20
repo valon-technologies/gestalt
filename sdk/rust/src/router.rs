@@ -220,6 +220,7 @@ where
             description: operation.description.trim().to_owned(),
             input_schema: input_schema_str,
             output_schema: output_schema_str,
+            response: None,
             annotations,
             parameters,
             required_scopes: Vec::new(),

@@ -11,9 +11,9 @@ import (
 
 	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/publicclient/generated"
+	"google.golang.org/grpc/codes"
 	gproto "google.golang.org/protobuf/encoding/protojson"
 	pb "google.golang.org/protobuf/proto"
-	"google.golang.org/grpc/codes"
 )
 
 var protoJSONMarshal = gproto.MarshalOptions{}
@@ -187,4 +187,20 @@ func messageToJSONMap(msg pb.Message) (map[string]any, error) {
 		return map[string]any{}, nil
 	}
 	return out, nil
+}
+
+// ServerStream is not supported by the REST transport; streaming public
+// methods require the gRPC transport. Callers that construct a REST-only
+// client never see streaming methods because REST-only clients expose only
+// REST-bound methods. This stub exists so *restUnaryTransport satisfies the
+// generated.UnaryTransport interface.
+func (t *restUnaryTransport) ServerStream(
+	_ context.Context,
+	method generated.Method,
+	_ pb.Message,
+) (generated.ServerStreamRecvCloser, error) {
+	return nil, &generated.GestaltError{
+		Code:    gestaltclient.GestaltErrorCodeUnimplemented,
+		Message: fmt.Sprintf("publicclient: method %s is not available on the REST transport; use a gRPC client", method.FullMethod),
+	}
 }

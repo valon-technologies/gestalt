@@ -84,6 +84,7 @@ impl Provider for TestProvider {
                 description: String::new(),
                 input_schema: String::new(),
                 output_schema: String::new(),
+                response: None,
                 annotations: None,
                 parameters: Vec::new(),
                 required_scopes: Vec::new(),

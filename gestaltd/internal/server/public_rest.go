@@ -15,7 +15,7 @@ func buildPublicGateway(cfg publicGRPCConfig) (*publicrpc.InProcessConn, http.Ha
 		return nil, nil, nil
 	}
 	servers := buildPublicServers(cfg)
-	srv := grpc.NewServer(grpc.UnaryInterceptor(publicPrepareUnaryInterceptor(cfg.Transport)))
+	srv := grpc.NewServer(grpc.UnaryInterceptor(publicPrepareUnaryInterceptor(cfg.Transport)), grpc.StreamInterceptor(publicPrepareStreamInterceptor(cfg.Transport)))
 	publicrpc.RegisterPublicServers(srv, servers)
 	conn, err := publicrpc.NewInProcessConn(srv)
 	if err != nil {

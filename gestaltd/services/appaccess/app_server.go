@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -95,6 +96,131 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 
 	result, err := s.invoker.Invoke(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
 	return appOperationResult(result, err)
+}
+
+// InvokeStream is the streaming counterpart of Invoke. It resolves and
+// authorizes the request the same way Invoke does, then forwards frames from
+// the provider's streaming executor to the gRPC stream. The first frame is
+// always InvokeMetadata; subsequent frames carry data bytes.
+func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_InvokeStreamServer) error {
+	if req == nil {
+		return status.Error(codes.InvalidArgument, "request is required")
+	}
+	targetApp := strings.TrimSpace(req.GetApp())
+	targetOperation := strings.TrimSpace(req.GetOperation())
+	if targetApp == "" {
+		return status.Error(codes.InvalidArgument, "app is required")
+	}
+	if targetOperation == "" {
+		return status.Error(codes.InvalidArgument, "operation is required")
+	}
+	callCtx, err := s.requestContextForInvoke(stream.Context(), req.GetContext(), targetApp, targetOperation, req.GetConnection(), req.GetInstance(), req.GetCredentialMode(), req.GetRunAs())
+	if err != nil {
+		return err
+	}
+	invokeCtx, instance, err := prepareInvocationSelectors(stream.Context(), callCtx, req.GetConnection(), req.GetInstance())
+	if err != nil {
+		return err
+	}
+	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
+	params := map[string]any{}
+	if raw := req.GetParams(); raw != nil {
+		params = raw.AsMap()
+	}
+	invokePrincipal := callCtx.principal
+	invokeCtx, invokePrincipal = invocation.ApplyDelegation(
+		invokeCtx,
+		invokePrincipal,
+		callCtx.delegationRunAs,
+	)
+	streamInvoker, ok := s.invoker.(invocation.StreamingInvoker)
+	if !ok {
+		return status.Error(codes.Unimplemented, "streaming invocation is not available")
+	}
+	reader, err := streamInvoker.InvokeStream(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
+	if err != nil {
+		return appStreamError(err)
+	}
+	for {
+		frame, err := reader.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return appStreamError(err)
+		}
+		for _, pf := range invokeFrameToProto(frame) {
+			if err := stream.Send(pf); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// invokeFrameToProto converts a core InvokeFrame into one or two proto
+// InvokeFrame messages. A frame with both Metadata and Data (used by error
+// readers) yields a metadata frame followed by a data frame so the JSON error
+// body is not dropped by the proto oneof.
+func invokeFrameToProto(frame *core.InvokeFrame) []*proto.InvokeFrame {
+	if frame == nil {
+		return nil
+	}
+	var frames []*proto.InvokeFrame
+	if frame.Metadata != nil {
+		frames = append(frames, &proto.InvokeFrame{
+			Value: &proto.InvokeFrame_Metadata{
+				Metadata: &proto.InvokeMetadata{
+					Status:    int32(frame.Metadata.Status),
+					Headers:   protoutil.StringSlicesToProto(frame.Metadata.Headers),
+					MediaType: frame.Metadata.MediaType,
+				},
+			},
+		})
+	}
+	if len(frame.Data) > 0 || frame.Metadata == nil {
+		frames = append(frames, &proto.InvokeFrame{
+			Value: &proto.InvokeFrame_Data{
+				Data: append([]byte(nil), frame.Data...),
+			},
+		})
+	}
+	return frames
+}
+
+// appStreamError maps an invocation error to a gRPC status for streaming,
+// mirroring the unary invocationStatusError mappings so clients see the same
+// gRPC codes regardless of transport.
+func appStreamError(err error) error {
+	switch {
+	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, invocation.ErrNotAuthenticated):
+		return status.Error(codes.Unauthenticated, "not authenticated")
+	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
+		return status.Error(codes.PermissionDenied, err.Error())
+	case errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, invocation.ErrInvalidInvocation):
+		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, invocation.ErrStreamingUnsupported):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, invocation.ErrAmbiguousInstance):
+		return status.Error(codes.Aborted, err.Error())
+	default:
+		var maxDepthErr *invocation.MaxDepthError
+		if errors.As(err, &maxDepthErr) {
+			return status.Error(codes.ResourceExhausted, maxDepthErr.Error())
+		}
+		var rateLimitErr *invocation.RateLimitError
+		if errors.As(err, &rateLimitErr) {
+			return status.Error(codes.ResourceExhausted, rateLimitErr.Error())
+		}
+		var recursionErr *invocation.RecursionError
+		if errors.As(err, &recursionErr) {
+			return status.Error(codes.FailedPrecondition, recursionErr.Error())
+		}
+		return status.Error(codes.Internal, err.Error())
+	}
 }
 
 func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
@@ -510,6 +636,8 @@ func invocationStatusError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, invocation.ErrInvalidInvocation):
 		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, invocation.ErrStreamingUnsupported):
+		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, invocation.ErrAmbiguousInstance):

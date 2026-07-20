@@ -4,15 +4,25 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from gestalt.invoke_support import decode_app_result, decode_graphql_result
 
 from ..._gen.v1 import app_pb2 as _app_pb2
 from ._codec import app as _app_codec
 from .app import AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult
-from .metadata import METHOD_APP_INVOKE, METHOD_APP_INVOKE_GRAPHQL
-from .unary_transport import AsyncUnaryTransport, UnaryTransport
+from .metadata import (
+    METHOD_APP_INVOKE,
+    METHOD_APP_INVOKE_GRAPHQL,
+    METHOD_APP_INVOKE_STREAM,
+)
+from .unary_transport import (
+    AsyncServerStreamingTransport,
+    AsyncUnaryTransport,
+    ServerStreamingTransport,
+    ServerStreamRecv,
+    UnaryTransport,
+)
 
 
 class AppClient:
@@ -35,6 +45,13 @@ class AppClient:
         response = self.invoke_raw(request)
         return decode_app_result(
             request.app, request.operation, response.status, response.body
+        )
+
+    def invoke_stream(self, request: AppInvokeRequest) -> ServerStreamRecv:
+        """Invoke the InvokeStream streaming RPC. Returns a ServerStreamRecv whose recv() yields InvokeFrame frames."""
+        wire = _app_codec.to_wire_app_invoke_request(request)
+        return cast(ServerStreamingTransport, self._transport).server_stream(
+            METHOD_APP_INVOKE_STREAM, wire, _app_pb2.InvokeFrame
         )
 
     def invoke_graphql(self, request: AppInvokeGraphQLRequest) -> OperationResult:
@@ -88,6 +105,13 @@ class AsyncAppClient:
         response = await self.invoke_raw(request)
         return decode_app_result(
             request.app, request.operation, response.status, response.body
+        )
+
+    async def invoke_stream(self, request: AppInvokeRequest) -> ServerStreamRecv:
+        """Invoke the InvokeStream streaming RPC. Returns a ServerStreamRecv whose recv() yields InvokeFrame frames."""
+        wire = _app_codec.to_wire_app_invoke_request(request)
+        return await cast(AsyncServerStreamingTransport, self._transport).server_stream(
+            METHOD_APP_INVOKE_STREAM, wire, _app_pb2.InvokeFrame
         )
 
     async def invoke_graphql(self, request: AppInvokeGraphQLRequest) -> OperationResult:

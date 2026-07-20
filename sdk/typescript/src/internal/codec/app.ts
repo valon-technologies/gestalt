@@ -20,7 +20,12 @@ import type {
   HTTPSubjectRequest,
   HostContext,
   InvocationContext,
+  InvokeFrame,
+  InvokeFrameValue,
+  InvokeMetadata,
   OperationAnnotations,
+  OperationResponseSpec,
+  OperationResponseSpecKind,
   OperationResult,
   ProviderContext,
   ProviderMetadata,
@@ -30,9 +35,11 @@ import type {
   ResolveHTTPSubjectResponse,
   StartProviderRequest,
   StartProviderResponse,
+  StreamResponseSpec,
   StringList,
   SubjectContext,
   SubjectPermissionContext,
+  UnaryResponseSpec,
 } from "../../app.ts";
 import { fromWireValue, sanitizeJsonObject, toWireValue } from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
@@ -214,7 +221,6 @@ export function toWireCatalogOperation(
     title: value.title ?? "",
     description: value.description ?? "",
     inputSchema: value.inputSchema ?? "",
-    outputSchema: value.outputSchema ?? "",
     ...(value.annotations !== undefined
       ? { annotations: toWireOperationAnnotations(value.annotations) }
       : {}),
@@ -225,6 +231,9 @@ export function toWireCatalogOperation(
     ...(value.visible !== undefined ? { visible: value.visible } : {}),
     transport: value.transport ?? "",
     allowedRoles: value.allowedRoles ?? [],
+    ...(value.response !== undefined
+      ? { response: toWireOperationResponseSpec(value.response) }
+      : {}),
   });
 }
 
@@ -237,7 +246,6 @@ export function fromWireCatalogOperation(
     title: value.title,
     description: value.description,
     inputSchema: value.inputSchema,
-    outputSchema: value.outputSchema,
     ...(value.annotations !== undefined
       ? { annotations: fromWireOperationAnnotations(value.annotations) }
       : {}),
@@ -248,6 +256,9 @@ export function fromWireCatalogOperation(
     ...(value.visible !== undefined ? { visible: value.visible } : {}),
     transport: value.transport,
     allowedRoles: value.allowedRoles,
+    ...(value.response !== undefined
+      ? { response: fromWireOperationResponseSpec(value.response) }
+      : {}),
   };
 }
 
@@ -501,6 +512,74 @@ export function fromWireInvocationContext(
   };
 }
 
+export function toWireInvokeFrame(value: Init<InvokeFrame>): wire.InvokeFrame {
+  return create(wire.InvokeFrameSchema, {
+    value: toWireInvokeFrameValue(value.value ?? { case: undefined }),
+  });
+}
+
+export function fromWireInvokeFrame(value: wire.InvokeFrame): InvokeFrame {
+  return {
+    value: fromWireInvokeFrameValue(value.value),
+  };
+}
+
+export function toWireInvokeFrameValue(
+  value: Init<InvokeFrameValue>,
+): wire.InvokeFrame["value"] {
+  switch (value.case) {
+    case "metadata":
+      return { case: "metadata", value: toWireInvokeMetadata(value.value) };
+    case "data":
+      return { case: "data", value: value.value };
+    default:
+      return { case: undefined };
+  }
+}
+
+export function fromWireInvokeFrameValue(
+  value: wire.InvokeFrame["value"],
+): InvokeFrameValue {
+  switch (value.case) {
+    case "metadata":
+      return { case: "metadata", value: fromWireInvokeMetadata(value.value) };
+    case "data":
+      return { case: "data", value: value.value };
+    default:
+      return { case: undefined };
+  }
+}
+
+export function toWireInvokeMetadata(
+  value: Init<InvokeMetadata>,
+): wire.InvokeMetadata {
+  return create(wire.InvokeMetadataSchema, {
+    status: value.status ?? 0,
+    headers: Object.fromEntries(
+      Object.entries(value.headers ?? {}).map(([key, item]) => [
+        key,
+        toWireStringList(item),
+      ]),
+    ),
+    mediaType: value.mediaType ?? "",
+  });
+}
+
+export function fromWireInvokeMetadata(
+  value: wire.InvokeMetadata,
+): InvokeMetadata {
+  return {
+    status: value.status,
+    headers: Object.fromEntries(
+      Object.entries(value.headers).map(([key, item]) => [
+        key,
+        fromWireStringList(item),
+      ]),
+    ),
+    mediaType: value.mediaType,
+  };
+}
+
 export function toWireOperationAnnotations(
   value: Init<OperationAnnotations>,
 ): wire.OperationAnnotations {
@@ -537,6 +616,48 @@ export function fromWireOperationAnnotations(
       ? { openWorldHint: value.openWorldHint }
       : {}),
   };
+}
+
+export function toWireOperationResponseSpec(
+  value: Init<OperationResponseSpec>,
+): wire.OperationResponseSpec {
+  return create(wire.OperationResponseSpecSchema, {
+    kind: toWireOperationResponseSpecKind(value.kind ?? { case: undefined }),
+  });
+}
+
+export function fromWireOperationResponseSpec(
+  value: wire.OperationResponseSpec,
+): OperationResponseSpec {
+  return {
+    kind: fromWireOperationResponseSpecKind(value.kind),
+  };
+}
+
+export function toWireOperationResponseSpecKind(
+  value: Init<OperationResponseSpecKind>,
+): wire.OperationResponseSpec["kind"] {
+  switch (value.case) {
+    case "unary":
+      return { case: "unary", value: toWireUnaryResponseSpec(value.value) };
+    case "stream":
+      return { case: "stream", value: toWireStreamResponseSpec(value.value) };
+    default:
+      return { case: undefined };
+  }
+}
+
+export function fromWireOperationResponseSpecKind(
+  value: wire.OperationResponseSpec["kind"],
+): OperationResponseSpecKind {
+  switch (value.case) {
+    case "unary":
+      return { case: "unary", value: fromWireUnaryResponseSpec(value.value) };
+    case "stream":
+      return { case: "stream", value: fromWireStreamResponseSpec(value.value) };
+    default:
+      return { case: undefined };
+  }
 }
 
 export function toWireOperationResult(
@@ -821,6 +942,26 @@ export function fromWireStartProviderResponse(
   };
 }
 
+export function toWireStreamResponseSpec(
+  value: Init<StreamResponseSpec>,
+): wire.StreamResponseSpec {
+  return create(wire.StreamResponseSpecSchema, {
+    mediaType: value.mediaType ?? "",
+    ...(value.itemSchema !== undefined
+      ? { itemSchema: sanitizeJsonObject(value.itemSchema) }
+      : {}),
+  });
+}
+
+export function fromWireStreamResponseSpec(
+  value: wire.StreamResponseSpec,
+): StreamResponseSpec {
+  return {
+    mediaType: value.mediaType,
+    ...(value.itemSchema !== undefined ? { itemSchema: value.itemSchema } : {}),
+  };
+}
+
 export function toWireStringList(value: Init<StringList>): wire.StringList {
   return create(wire.StringListSchema, {
     values: value.values ?? [],
@@ -874,5 +1015,23 @@ export function fromWireSubjectPermissionContext(
     app: value.app,
     operations: value.operations,
     allOperations: value.allOperations,
+  };
+}
+
+export function toWireUnaryResponseSpec(
+  value: Init<UnaryResponseSpec>,
+): wire.UnaryResponseSpec {
+  return create(wire.UnaryResponseSpecSchema, {
+    ...(value.schema !== undefined
+      ? { schema: sanitizeJsonObject(value.schema) }
+      : {}),
+  });
+}
+
+export function fromWireUnaryResponseSpec(
+  value: wire.UnaryResponseSpec,
+): UnaryResponseSpec {
+  return {
+    ...(value.schema !== undefined ? { schema: value.schema } : {}),
   };
 }

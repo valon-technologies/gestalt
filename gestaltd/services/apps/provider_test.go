@@ -753,6 +753,10 @@ func (*unavailableMetadataProviderServer) Execute(context.Context, *proto.Execut
 	panic("unexpected Execute call")
 }
 
+func (*unavailableMetadataProviderServer) ExecuteStream(context.Context, *proto.ExecuteRequest, ...grpc.CallOption) (proto.AppProvider_ExecuteStreamClient, error) {
+	panic("unexpected ExecuteStream call")
+}
+
 func (*unavailableMetadataProviderServer) ResolveHTTPSubject(context.Context, *proto.ResolveHTTPSubjectRequest, ...grpc.CallOption) (*proto.ResolveHTTPSubjectResponse, error) {
 	panic("unexpected ResolveHTTPSubject call")
 }

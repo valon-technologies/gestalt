@@ -137,6 +137,11 @@ export type PublicAppInvokeRequest = Omit<
   "context" | "runAs"
 >;
 
+export type PublicAppInvokeStreamRequest = Omit<
+  AppInvokeRequest,
+  "context" | "runAs"
+>;
+
 export type PublicAppInvokeGraphQLRequest = Omit<
   AppInvokeGraphQLRequest,
   "context"

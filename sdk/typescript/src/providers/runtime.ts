@@ -53,11 +53,18 @@ import {
   CatalogSchema as ProtoCatalogSchema,
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
+  InvokeFrameSchema as ProtoInvokeFrameSchema,
+  InvokeMetadataSchema as ProtoInvokeMetadataSchema,
   OperationAnnotationsSchema as ProtoOperationAnnotationsSchema,
+  OperationResponseSpecSchema as ProtoOperationResponseSpecSchema,
   ResolveHTTPSubjectResponseSchema,
   OperationResultSchema,
   ProviderMetadataSchema,
+  StreamResponseSpecSchema as ProtoStreamResponseSpecSchema,
+  UnaryResponseSpecSchema as ProtoUnaryResponseSpecSchema,
   type HTTPSubjectRequest as ProtoHTTPSubjectRequest,
+  type InvokeFrame as ProtoInvokeFrame,
+  type OperationResponseSpec as ProtoOperationResponseSpec,
   type RequestContext as ProtoRequestContext,
   type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
   type SubjectContext as ProtoSubjectContext,
@@ -123,8 +130,11 @@ import { catalogToYaml, type Catalog } from "../catalog.ts";
 import {
   stringListsFromProto,
   stringListsToProto,
+  structFromObject,
   valueFromJson,
+  type JsonObject,
   type JsonInput,
+  type JsonObjectInput,
 } from "../protocol.ts";
 import {
   HTTPSubjectResolutionError,
@@ -635,6 +645,30 @@ export function createProviderService(
         closeRequestGestaltScope(providerReq);
       }
     },
+    async *executeStream(
+      request: ExecuteRequest,
+      context: HandlerContext,
+    ): AsyncIterable<ProtoInvokeFrame> {
+      const providerReq = providerRequest(
+        request.token,
+        request.connectionParams,
+        request.context,
+        request.idempotencyKey,
+        context,
+      );
+      try {
+        const stream = await provider.executeStream(
+          request.operation,
+          objectFromUnknown(request.params),
+          providerReq,
+        );
+        for await (const frame of streamReaderToFrames(stream)) {
+          yield frame;
+        }
+      } finally {
+        closeRequestGestaltScope(providerReq);
+      }
+    },
     async resolveHTTPSubject(request: ProtoResolveHTTPSubjectRequest) {
       let subject;
       try {
@@ -1121,7 +1155,7 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
         title: op.title ?? "",
         description: op.description ?? "",
         inputSchema: catalogSchemaToWire(op.inputSchema),
-        outputSchema: catalogSchemaToWire(op.outputSchema),
+        response: catalogResponseToWire(op.response, op.outputSchema),
         annotations: op.annotations
           ? create(ProtoOperationAnnotationsSchema, {
               readOnlyHint: op.annotations.readOnlyHint,
@@ -1153,6 +1187,70 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
       return protoOp;
     }),
   });
+}
+
+function catalogResponseToWire(
+  response: unknown,
+  legacyOutputSchema: unknown,
+): ProtoOperationResponseSpec | undefined {
+  if (response && typeof response === "object") {
+    const r = response as {
+      unary?: { schema?: unknown };
+      stream?: { mediaType?: unknown; itemSchema?: unknown };
+    };
+    if (r.stream) {
+      return create(ProtoOperationResponseSpecSchema, {
+        kind: {
+          case: "stream",
+          value: create(ProtoStreamResponseSpecSchema, {
+            mediaType: typeof r.stream.mediaType === "string" ? r.stream.mediaType : "",
+            itemSchema: catalogSchemaToJsonObject(r.stream.itemSchema),
+          }),
+        },
+      });
+    }
+    if (r.unary) {
+      return create(ProtoOperationResponseSpecSchema, {
+        kind: {
+          case: "unary",
+          value: create(ProtoUnaryResponseSpecSchema, {
+            schema: catalogSchemaToJsonObject(r.unary.schema),
+          }),
+        },
+      });
+    }
+  }
+  // Legacy outputSchema maps to unary with the given schema.
+  const schema = catalogSchemaToJsonObject(legacyOutputSchema);
+  if (schema === undefined) {
+    return undefined;
+  }
+  return create(ProtoOperationResponseSpecSchema, {
+    kind: {
+      case: "unary",
+      value: create(ProtoUnaryResponseSpecSchema, { schema }),
+    },
+  });
+}
+
+function catalogSchemaToJsonObject(schema: unknown): JsonObject | undefined {
+  if (schema === undefined || schema === null) {
+    return undefined;
+  }
+  if (typeof schema === "string") {
+    if (schema.trim() === "") {
+      return undefined;
+    }
+    try {
+      return JSON.parse(schema) as JsonObject;
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof schema === "object" && !Array.isArray(schema)) {
+    return structFromObject(schema as JsonObjectInput);
+  }
+  return undefined;
 }
 
 function catalogSchemaToWire(schema: unknown): string {
@@ -1230,4 +1328,35 @@ export function nativeRequestContext(
   context: WireRequestContext | undefined,
 ): RequestContext | undefined {
   return context === undefined ? undefined : fromWireRequestContext(context);
+}
+
+
+// streamReaderToFrames converts a provider StreamReader (metadata + data
+// frames) into wire InvokeFrame messages for the ExecuteStream RPC.
+async function* streamReaderToFrames(
+  stream: import("./app.ts").StreamReader,
+): AsyncIterable<ProtoInvokeFrame> {
+  for (;;) {
+    const frame = await stream.recv();
+    if (frame === null) {
+      return;
+    }
+    if (frame.metadata) {
+      yield create(ProtoInvokeFrameSchema, {
+        value: {
+          case: "metadata",
+          value: create(ProtoInvokeMetadataSchema, {
+            status: frame.metadata.status,
+            headers: stringListsToProto(frame.metadata.headers),
+            mediaType: frame.metadata.mediaType,
+          }),
+        },
+      });
+    }
+    if (frame.data) {
+      yield create(ProtoInvokeFrameSchema, {
+        value: { case: "data", value: frame.data },
+      });
+    }
+  }
 }

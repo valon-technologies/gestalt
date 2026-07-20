@@ -20,6 +20,8 @@ type PublicMethodPolicy struct {
 	FullMethod string
 	Fill       []string
 	Reject     []string
+	// Streaming reports whether this method is server-streaming.
+	Streaming bool
 }
 
 // Registry indexes public gRPC methods and their request adaptation policy.
@@ -102,7 +104,7 @@ func policyForMethod(md protoreflect.MethodDescriptor) (PublicMethodPolicy, bool
 		return PublicMethodPolicy{}, false, nil
 	}
 
-	policy := PublicMethodPolicy{FullMethod: fullMethod}
+	policy := PublicMethodPolicy{FullMethod: fullMethod, Streaming: md.IsStreamingServer()}
 	if hasPublicPolicy {
 		fill, reject, err := readPublicPolicy(opts)
 		if err != nil {

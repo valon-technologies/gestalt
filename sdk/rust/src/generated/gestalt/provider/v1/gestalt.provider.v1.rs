@@ -97,6 +97,39 @@ pub struct OperationAnnotations {
     #[prost(bool, optional, tag = "4")]
     pub open_world_hint: ::core::option::Option<bool>,
 }
+/// UnaryResponseSpec describes a unary (fully materialized) operation response.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UnaryResponseSpec {
+    #[prost(message, optional, tag = "1")]
+    pub schema: ::core::option::Option<::prost_types::Struct>,
+}
+/// StreamResponseSpec describes a streaming operation response. The media type
+/// names the representation (for example application/x-ndjson); the item schema
+/// is optional and describes one yielded item when the stream is typed.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamResponseSpec {
+    #[prost(string, tag = "1")]
+    pub media_type: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub item_schema: ::core::option::Option<::prost_types::Struct>,
+}
+/// OperationResponseSpec declares how an operation responds. App authoring
+/// defaults to unary; emitted catalogs always declare either unary or stream.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OperationResponseSpec {
+    #[prost(oneof = "operation_response_spec::Kind", tags = "1, 2")]
+    pub kind: ::core::option::Option<operation_response_spec::Kind>,
+}
+/// Nested message and enum types in `OperationResponseSpec`.
+pub mod operation_response_spec {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        Unary(super::UnaryResponseSpec),
+        #[prost(message, tag = "2")]
+        Stream(super::StreamResponseSpec),
+    }
+}
 /// CatalogOperation is one executable operation exposed by an integration
 /// provider.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -111,8 +144,6 @@ pub struct CatalogOperation {
     pub description: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub input_schema: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub output_schema: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]
     pub annotations: ::core::option::Option<OperationAnnotations>,
     #[prost(message, repeated, tag = "8")]
@@ -129,6 +160,10 @@ pub struct CatalogOperation {
     pub transport: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "14")]
     pub allowed_roles: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// Response mode and schema for this operation. Replaces the former
+    /// output_schema string; absent is equivalent to unary with no schema.
+    #[prost(message, optional, tag = "15")]
+    pub response: ::core::option::Option<OperationResponseSpec>,
 }
 /// Catalog is the static or request-scoped executable surface exposed by a
 /// provider.
@@ -201,6 +236,39 @@ pub struct OperationResult {
     pub body: ::prost::alloc::vec::Vec<u8>,
     #[prost(btree_map = "string, message", tag = "3")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
+}
+/// InvokeMetadata is the first frame of a streaming invocation. It carries the
+/// HTTP-shaped status, headers, and the response media type (from the
+/// operation's StreamResponseSpec).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InvokeMetadata {
+    #[prost(int32, tag = "1")]
+    pub status: i32,
+    #[prost(btree_map = "string, message", tag = "2")]
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
+    #[prost(string, tag = "3")]
+    pub media_type: ::prost::alloc::string::String,
+}
+/// InvokeFrame is one frame in a streaming invocation. The first frame is always
+/// metadata; subsequent frames carry data bytes produced by the operation
+/// handler (after encoding, for typed item streams). A mid-stream error (for
+/// example, a validation failure or a recovered panic) may emit a trailing
+/// metadata frame with a non-2xx status followed by a data frame carrying a
+/// JSON error body, after which the stream ends.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InvokeFrame {
+    #[prost(oneof = "invoke_frame::Value", tags = "1, 2")]
+    pub value: ::core::option::Option<invoke_frame::Value>,
+}
+/// Nested message and enum types in `InvokeFrame`.
+pub mod invoke_frame {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Value {
+        #[prost(message, tag = "1")]
+        Metadata(super::InvokeMetadata),
+        #[prost(bytes, tag = "2")]
+        Data(::prost::alloc::vec::Vec<u8>),
+    }
 }
 /// AppInvokeRequest invokes a declared operation on another app through Gestalt.
 #[derive(Clone, PartialEq, ::prost::Message)]

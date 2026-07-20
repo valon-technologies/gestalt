@@ -2,6 +2,7 @@ package appaccess
 
 import (
 	"context"
+	"io"
 	"slices"
 	"testing"
 
@@ -616,3 +617,171 @@ func requestContextWithCallerKind(t *testing.T, callerKind, caller string, workf
 		},
 	}
 }
+
+func (i *recordingAppInvocation) InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error) {
+	i.providerName = providerName
+	i.instance = instance
+	i.operation = operation
+	i.params = params
+	if p != nil {
+		i.subjectID = p.SubjectID
+	}
+	return &sliceStreamReader{
+		frames: []*core.InvokeFrame{
+			{Metadata: &core.InvokeMetadata{Status: 200, MediaType: "application/x-ndjson"}},
+			{Data: []byte(`{"event":"start"}` + "\n")},
+			{Data: []byte(`{"event":"end"}` + "\n")},
+		},
+	}, nil
+}
+
+type sliceStreamReader struct {
+	frames []*core.InvokeFrame
+	idx    int
+}
+
+func (r *sliceStreamReader) Recv() (*core.InvokeFrame, error) {
+	if r.idx >= len(r.frames) {
+		return nil, io.EOF
+	}
+	f := r.frames[r.idx]
+	r.idx++
+	return f, nil
+}
+
+func TestAppServerInvokeStream(t *testing.T) {
+	t.Parallel()
+	rec := &recordingAppInvocation{}
+	server := NewAppServer(rec, WithCallerApp("caller"))
+	stream := &invokeStreamServerStub{ctx: context.Background()}
+	err := server.InvokeStream(&proto.AppInvokeRequest{
+		App:       "example",
+		Operation: "events.watch",
+		Params:    structpbStruct(t, map[string]any{"since": "now"}),
+		Context:   requestContext(t, "caller", nil),
+	}, stream)
+	if err != nil {
+		t.Fatalf("InvokeStream: %v", err)
+	}
+	if rec.providerName != "example" || rec.operation != "events.watch" {
+		t.Fatalf("recorded provider=%q operation=%q", rec.providerName, rec.operation)
+	}
+	if len(stream.frames) != 3 {
+		t.Fatalf("frames = %d, want 3", len(stream.frames))
+	}
+	if m := stream.frames[0].GetMetadata(); m == nil || m.GetStatus() != 200 || m.GetMediaType() != "application/x-ndjson" {
+		t.Fatalf("metadata frame = %+v", m)
+	}
+	if string(stream.frames[1].GetData()) != `{"event":"start"}`+"\n" {
+		t.Fatalf("data frame 1 = %q", string(stream.frames[1].GetData()))
+	}
+}
+
+type invokeStreamServerStub struct {
+	proto.App_InvokeStreamServer
+	ctx    context.Context
+	frames []*proto.InvokeFrame
+}
+
+func (s *invokeStreamServerStub) Context() context.Context { return s.ctx }
+func (s *invokeStreamServerStub) Send(frame *proto.InvokeFrame) error {
+	s.frames = append(s.frames, frame)
+	return nil
+}
+
+func structpbStruct(t *testing.T, m map[string]any) *structpb.Struct {
+	t.Helper()
+	s, err := structpb.NewStruct(m)
+	if err != nil {
+		t.Fatalf("structpb.NewStruct: %v", err)
+	}
+	return s
+}
+
+func TestInvokeFrameToProtoEmitsBothMetadataAndData(t *testing.T) {
+	t.Parallel()
+	frame := &core.InvokeFrame{
+		Metadata: &core.InvokeMetadata{
+			Status:    500,
+			MediaType: "application/json",
+		},
+		Data: []byte(`{"error":"boom"}`),
+	}
+	frames := invokeFrameToProto(frame)
+	if len(frames) != 2 {
+		t.Fatalf("got %d frames, want 2", len(frames))
+	}
+	if frames[0].GetMetadata() == nil || frames[0].GetMetadata().GetStatus() != 500 {
+		t.Fatalf("first frame metadata = %+v", frames[0].GetMetadata())
+	}
+	if string(frames[1].GetData()) != `{"error":"boom"}` {
+		t.Fatalf("second frame data = %q", string(frames[1].GetData()))
+	}
+}
+
+func TestInvokeFrameToProtoMetadataOnlyYieldsOneFrame(t *testing.T) {
+	t.Parallel()
+	frame := &core.InvokeFrame{
+		Metadata: &core.InvokeMetadata{Status: 200, MediaType: "application/x-ndjson"},
+	}
+	frames := invokeFrameToProto(frame)
+	if len(frames) != 1 {
+		t.Fatalf("got %d frames, want 1", len(frames))
+	}
+	if frames[0].GetMetadata() == nil {
+		t.Fatal("expected metadata frame")
+	}
+}
+
+func TestInvokeFrameToProtoDataOnlyYieldsOneFrame(t *testing.T) {
+	t.Parallel()
+	frame := &core.InvokeFrame{Data: []byte("chunk")}
+	frames := invokeFrameToProto(frame)
+	if len(frames) != 1 {
+		t.Fatalf("got %d frames, want 1", len(frames))
+	}
+	if string(frames[0].GetData()) != "chunk" {
+		t.Fatalf("data = %q", string(frames[0].GetData()))
+	}
+}
+
+func TestAppStreamErrorMapsAllInvocationErrors(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		err      error
+		wantCode codes.Code
+	}{
+		{"provider not found", invocation.ErrProviderNotFound, codes.NotFound},
+		{"operation not found", invocation.ErrOperationNotFound, codes.NotFound},
+		{"not authenticated", invocation.ErrNotAuthenticated, codes.Unauthenticated},
+		{"authorization denied", invocation.ErrAuthorizationDenied, codes.PermissionDenied},
+		{"scope denied", invocation.ErrScopeDenied, codes.PermissionDenied},
+		{"no credential", invocation.ErrNoCredential, codes.FailedPrecondition},
+		{"reconnect required", invocation.ErrReconnectRequired, codes.FailedPrecondition},
+		{"invalid invocation", invocation.ErrInvalidInvocation, codes.InvalidArgument},
+		{"streaming unsupported", invocation.ErrStreamingUnsupported, codes.FailedPrecondition},
+		{"ambiguous instance", invocation.ErrAmbiguousInstance, codes.Aborted},
+		{"max depth", &invocation.MaxDepthError{Depth: 5, Max: 4}, codes.ResourceExhausted},
+		{"rate limit", &invocation.RateLimitError{Provider: "foo"}, codes.ResourceExhausted},
+		{"recursion", &invocation.RecursionError{Provider: "foo", Operation: "bar"}, codes.FailedPrecondition},
+		{"unknown", assertErr("unknown"), codes.Internal},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			st, ok := status.FromError(appStreamError(tc.err))
+			if !ok {
+				t.Fatalf("appStreamError did not return a gRPC status: %v", appStreamError(tc.err))
+			}
+			if st.Code() != tc.wantCode {
+				t.Fatalf("got code %s, want %s", st.Code(), tc.wantCode)
+			}
+		})
+	}
+}
+
+type assertErrType string
+
+func (e assertErrType) Error() string { return string(e) }
+func assertErr(s string) error        { return assertErrType(s) }

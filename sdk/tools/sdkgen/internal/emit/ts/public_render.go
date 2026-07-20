@@ -26,6 +26,8 @@ func renderPublicMethods(methods []publicsurface.PublicMethod) string {
 	b.WriteString("  http?: PublicMethodHttp | undefined;\n")
 	b.WriteString("  fill: readonly string[];\n")
 	b.WriteString("  reject: readonly string[];\n")
+	b.WriteString("  // stream is true for server-streaming methods rendered as streaming calls.\n")
+	b.WriteString("  stream: boolean;\n")
 	b.WriteString("}\n\n")
 	b.WriteString("export const PUBLIC_METHODS = {\n")
 
@@ -76,6 +78,7 @@ func renderPublicMethodEntry(pm publicsurface.PublicMethod) string {
 	} else {
 		b.WriteString("    reject: [],\n")
 	}
+	fmt.Fprintf(&b, "    stream: %v,\n", pm.Stream == model.ServerStream)
 	if pm.REST != nil {
 		b.WriteString("    http: {\n")
 		fmt.Fprintf(&b, "      verb: %q,\n", strings.ToUpper(pm.REST.Verb))
@@ -309,6 +312,17 @@ export interface UnaryTransport {
     outputSchema: DescMessage,
     callOptions?: PublicUnaryCallOptions,
   ): Promise<Output>;
+
+  // serverStream invokes a server-streaming method and returns an async
+  // iterable of decoded response frames. The first frame is metadata. It is
+  // optional because REST-only transports do not support streaming.
+  serverStream?<Output extends Message>(
+    method: PublicMethod,
+    request: Message,
+    inputSchema: DescMessage,
+    outputSchema: DescMessage,
+    callOptions?: PublicUnaryCallOptions,
+  ): AsyncIterable<Output>;
 }
 `
 }
@@ -400,7 +414,14 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 			strings.Join(names, ",\n  "), paths.genModuleQuoted(protoFile))
 	}
 	if svc.Name == "App" {
-		b.WriteString("import { decodeAppResult, decodeGraphQLResult } from " + paths.supportModuleQuoted("invoke_support.ts") + ";\n")
+		invokeSupportImports := []string{"decodeAppResult", "decodeGraphQLResult"}
+		for _, m := range svc.Methods {
+			if m.Stream == model.ServerStream {
+				invokeSupportImports = append(invokeSupportImports, "mapServerStreamFrames")
+				break
+			}
+		}
+		b.WriteString("import { " + strings.Join(invokeSupportImports, ", ") + " } from " + paths.supportModuleQuoted("invoke_support.ts") + ";\n")
 	}
 	b.WriteString("import {\n")
 	for _, name := range sortedPublicKeys(converterImports) {
@@ -446,6 +467,11 @@ func renderPublicServiceRESTInterface(b *strings.Builder, svc *model.Service) {
 func renderPublicServiceClientMethod(b *strings.Builder, svc *model.Service, m *model.Method, serviceKey string, paths PublicImports) {
 	methodKey := lowerFirst(m.Name)
 	methodRef := fmt.Sprintf("PUBLIC_METHODS.%s.%s", serviceKey, methodKey)
+
+	if m.Stream == model.ServerStream && m.Input != nil && m.Output != nil {
+		renderPublicServiceClientStreamMethod(b, svc, m, methodKey, methodRef)
+		return
+	}
 
 	if m.JsonResult != nil && m.Input != nil && m.Output != nil {
 		renderPublicServiceClientJsonMethod(b, svc, m, methodKey, methodRef, paths)
@@ -584,7 +610,34 @@ func renderPublicServiceClientGraphQLDecodedMethod(b *strings.Builder, svc *mode
 	b.WriteString("  }\n\n")
 }
 
+// renderPublicServiceClientStreamMethod renders a server-streaming public
+// method. It returns an AsyncIterable of decoded output frames by piping the
+// transport's serverStream through the per-frame fromWire codec.
+func renderPublicServiceClientStreamMethod(b *strings.Builder, svc *model.Service, m *model.Method, methodKey, methodRef string) {
+	typeName := publicRequestTypeName(svc, m)
+	outputNative := localName(m.Output.FullName)
+	fromWire := publicServiceFromWireExpr(m)
+	wireExpr := publicServiceWireRequestExpr(m)
+	inputSchema := publicServiceInputSchema(m)
+	outputSchema := publicServiceOutputSchema(m)
+
+	fmt.Fprintf(b, "  %s(request: %s, callOptions?: PublicUnaryCallOptions): AsyncIterable<%s> {\n",
+		methodKey, typeName, outputNative)
+	fmt.Fprintf(b, "    if (this.transport.serverStream === undefined) {\n      throw new Error(\"streaming is not supported by this transport\");\n    }\n")
+	fmt.Fprintf(b, "    const frames = this.transport.serverStream(\n      %s,\n      %s,\n      %s,\n      %s,\n      callOptions,\n    );\n",
+		methodRef, wireExpr, inputSchema, outputSchema)
+	fmt.Fprintf(b, "    return mapServerStreamFrames(frames, (f) => %s(f as Parameters<typeof %s>[0]));\n  }\n\n",
+		fromWire, fromWire)
+}
+
 func renderPublicRESTInterfaceMethod(b *strings.Builder, svc *model.Service, m *model.Method) {
+	if m.Stream == model.ServerStream && m.Input != nil && m.Output != nil {
+		typeName := publicRequestTypeName(svc, m)
+		outputNative := localName(m.Output.FullName)
+		fmt.Fprintf(b, "  %s(request: %s, callOptions?: PublicUnaryCallOptions): AsyncIterable<%s>;\n",
+			lowerFirst(m.Name), typeName, outputNative)
+		return
+	}
 	if m.JsonResult != nil && m.Input != nil && m.Output != nil {
 		typeName := publicRequestTypeName(svc, m)
 		outputNative := localName(m.Output.FullName)

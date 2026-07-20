@@ -27,6 +27,28 @@ message OperationAnnotations {
   optional bool open_world_hint = 4;
 }
 
+// UnaryResponseSpec describes a unary (fully materialized) operation response.
+message UnaryResponseSpec {
+  google.protobuf.Struct schema = 1;
+}
+
+// StreamResponseSpec describes a streaming operation response. The media type
+// names the representation (for example application/x-ndjson); the item schema
+// is optional and describes one yielded item when the stream is typed.
+message StreamResponseSpec {
+  string media_type = 1;
+  google.protobuf.Struct item_schema = 2;
+}
+
+// OperationResponseSpec declares how an operation responds. App authoring
+// defaults to unary; emitted catalogs always declare either unary or stream.
+message OperationResponseSpec {
+  oneof kind {
+    UnaryResponseSpec unary = 1;
+    StreamResponseSpec stream = 2;
+  }
+}
+
 // CatalogOperation is one executable operation exposed by an integration
 // provider.
 message CatalogOperation {
@@ -35,7 +57,8 @@ message CatalogOperation {
   string title = 3;
   string description = 4;
   string input_schema = 5;
-  string output_schema = 6;
+  reserved 6;
+  reserved "output_schema";
   OperationAnnotations annotations = 7;
   repeated CatalogParameter parameters = 8;
   repeated string required_scopes = 9;
@@ -44,6 +67,9 @@ message CatalogOperation {
   optional bool visible = 12;
   string transport = 13;
   repeated string allowed_roles = 14;
+  // Response mode and schema for this operation. Replaces the former
+  // output_schema string; absent is equivalent to unary with no schema.
+  OperationResponseSpec response = 15;
 }
 
 // Catalog is the static or request-scoped executable surface exposed by a
@@ -98,6 +124,28 @@ message OperationResult {
   int32 status = 1;
   bytes body = 2;
   map<string, StringList> headers = 3;
+}
+
+// InvokeMetadata is the first frame of a streaming invocation. It carries the
+// HTTP-shaped status, headers, and the response media type (from the
+// operation's StreamResponseSpec).
+message InvokeMetadata {
+  int32 status = 1;
+  map<string, StringList> headers = 2;
+  string media_type = 3;
+}
+
+// InvokeFrame is one frame in a streaming invocation. The first frame is always
+// metadata; subsequent frames carry data bytes produced by the operation
+// handler (after encoding, for typed item streams). A mid-stream error (for
+// example, a validation failure or a recovered panic) may emit a trailing
+// metadata frame with a non-2xx status followed by a data frame carrying a
+// JSON error body, after which the stream ends.
+message InvokeFrame {
+  oneof value {
+    InvokeMetadata metadata = 1;
+    bytes data = 2;
+  }
 }
 
 // AppInvokeRequest invokes a declared operation on another app through Gestalt.
@@ -328,6 +376,17 @@ service AppProvider {
     option (signature) = "idempotency_key";
     option (signature) = "params";
   }
+  // ExecuteStream is the streaming counterpart of Execute. The first response
+  // frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+  // A mid-stream error may emit a trailing metadata frame with an error status
+  // followed by a JSON error body, after which the stream ends.
+  rpc ExecuteStream(ExecuteRequest) returns (stream InvokeFrame) {
+    option (signature) = "operation";
+    option (signature) = "token";
+    option (signature) = "invocation_id";
+    option (signature) = "idempotency_key";
+    option (signature) = "params";
+  }
   rpc ResolveHTTPSubject(ResolveHTTPSubjectRequest) returns (ResolveHTTPSubjectResponse);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse) {
     option (signature) = "token";
@@ -353,6 +412,29 @@ service App {
     option (json_result) = {
       status: "status"
       body: "body"
+    };
+    option (signature) = "app";
+    option (signature) = "operation";
+    option (signature) = "params";
+    option (optional_signature) = "connection";
+    option (optional_signature) = "instance";
+    option (optional_signature) = "idempotency_key";
+    option (optional_signature) = "credential_mode";
+    option (optional_signature) = "run_as";
+  }
+  // InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+  // REST binding) and shares Invoke's request shape, authorization, and
+  // signature policy. The first response frame is always InvokeMetadata;
+  // subsequent frames carry data bytes from the operation's stream response.
+  // A mid-stream error may emit a trailing metadata frame with an error status
+  // followed by a JSON error body, after which the stream ends.
+  rpc InvokeStream(AppInvokeRequest) returns (stream InvokeFrame) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+      reject: "run_as"
     };
     option (signature) = "app";
     option (signature) = "operation";

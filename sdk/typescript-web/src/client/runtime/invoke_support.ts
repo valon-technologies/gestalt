@@ -4,6 +4,7 @@ import {
   GestaltError,
   GestaltErrorCode,
   httpStatusToGestaltCode,
+  toGestaltError,
 } from "./rpc_support.ts";
 
 /**
@@ -262,4 +263,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+/**
+ * Pipes a server-streaming transport's wire frames through a per-frame
+ * fromWire decoder, surfacing transport errors as GestaltError. Used by
+ * generated streaming public client methods such as invokeStream.
+ */
+export async function* mapServerStreamFrames<N>(
+  frames: AsyncIterable<unknown>,
+  fromWire: (frame: unknown) => N,
+): AsyncIterable<N> {
+  try {
+    for await (const frame of frames) {
+      yield fromWire(frame);
+    }
+  } catch (error) {
+    throw toGestaltError(error);
+  }
 }

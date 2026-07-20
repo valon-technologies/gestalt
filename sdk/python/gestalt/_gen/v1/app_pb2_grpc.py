@@ -51,6 +51,11 @@ class AppProviderStub(object):
                 request_serializer=v1_dot_app__pb2.ExecuteRequest.SerializeToString,
                 response_deserializer=v1_dot_app__pb2.OperationResult.FromString,
                 _registered_method=True)
+        self.ExecuteStream = channel.unary_stream(
+                '/gestalt.provider.v1.AppProvider/ExecuteStream',
+                request_serializer=v1_dot_app__pb2.ExecuteRequest.SerializeToString,
+                response_deserializer=v1_dot_app__pb2.InvokeFrame.FromString,
+                _registered_method=True)
         self.ResolveHTTPSubject = channel.unary_unary(
                 '/gestalt.provider.v1.AppProvider/ResolveHTTPSubject',
                 request_serializer=v1_dot_app__pb2.ResolveHTTPSubjectRequest.SerializeToString,
@@ -85,6 +90,16 @@ class AppProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ExecuteStream(self, request, context):
+        """ExecuteStream is the streaming counterpart of Execute. The first response
+        frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+        A mid-stream error may emit a trailing metadata frame with an error status
+        followed by a JSON error body, after which the stream ends.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ResolveHTTPSubject(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -114,6 +129,11 @@ def add_AppProviderServicer_to_server(servicer, server):
                     servicer.Execute,
                     request_deserializer=v1_dot_app__pb2.ExecuteRequest.FromString,
                     response_serializer=v1_dot_app__pb2.OperationResult.SerializeToString,
+            ),
+            'ExecuteStream': grpc.unary_stream_rpc_method_handler(
+                    servicer.ExecuteStream,
+                    request_deserializer=v1_dot_app__pb2.ExecuteRequest.FromString,
+                    response_serializer=v1_dot_app__pb2.InvokeFrame.SerializeToString,
             ),
             'ResolveHTTPSubject': grpc.unary_unary_rpc_method_handler(
                     servicer.ResolveHTTPSubject,
@@ -219,6 +239,33 @@ class AppProvider(object):
             _registered_method=True)
 
     @staticmethod
+    def ExecuteStream(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/gestalt.provider.v1.AppProvider/ExecuteStream',
+            v1_dot_app__pb2.ExecuteRequest.SerializeToString,
+            v1_dot_app__pb2.InvokeFrame.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def ResolveHTTPSubject(request,
             target,
             options=(),
@@ -287,6 +334,11 @@ class AppStub(object):
                 request_serializer=v1_dot_app__pb2.AppInvokeRequest.SerializeToString,
                 response_deserializer=v1_dot_app__pb2.OperationResult.FromString,
                 _registered_method=True)
+        self.InvokeStream = channel.unary_stream(
+                '/gestalt.provider.v1.App/InvokeStream',
+                request_serializer=v1_dot_app__pb2.AppInvokeRequest.SerializeToString,
+                response_deserializer=v1_dot_app__pb2.InvokeFrame.FromString,
+                _registered_method=True)
         self.InvokeGraphQL = channel.unary_unary(
                 '/gestalt.provider.v1.App/InvokeGraphQL',
                 request_serializer=v1_dot_app__pb2.AppInvokeGraphQLRequest.SerializeToString,
@@ -299,6 +351,18 @@ class AppServicer(object):
 
     def Invoke(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def InvokeStream(self, request, context):
+        """InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+        REST binding) and shares Invoke's request shape, authorization, and
+        signature policy. The first response frame is always InvokeMetadata;
+        subsequent frames carry data bytes from the operation's stream response.
+        A mid-stream error may emit a trailing metadata frame with an error status
+        followed by a JSON error body, after which the stream ends.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -316,6 +380,11 @@ def add_AppServicer_to_server(servicer, server):
                     servicer.Invoke,
                     request_deserializer=v1_dot_app__pb2.AppInvokeRequest.FromString,
                     response_serializer=v1_dot_app__pb2.OperationResult.SerializeToString,
+            ),
+            'InvokeStream': grpc.unary_stream_rpc_method_handler(
+                    servicer.InvokeStream,
+                    request_deserializer=v1_dot_app__pb2.AppInvokeRequest.FromString,
+                    response_serializer=v1_dot_app__pb2.InvokeFrame.SerializeToString,
             ),
             'InvokeGraphQL': grpc.unary_unary_rpc_method_handler(
                     servicer.InvokeGraphQL,
@@ -350,6 +419,33 @@ class App(object):
             '/gestalt.provider.v1.App/Invoke',
             v1_dot_app__pb2.AppInvokeRequest.SerializeToString,
             v1_dot_app__pb2.OperationResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def InvokeStream(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/gestalt.provider.v1.App/InvokeStream',
+            v1_dot_app__pb2.AppInvokeRequest.SerializeToString,
+            v1_dot_app__pb2.InvokeFrame.FromString,
             options,
             channel_credentials,
             insecure,

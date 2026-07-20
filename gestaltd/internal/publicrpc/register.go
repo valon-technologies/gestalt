@@ -89,6 +89,12 @@ func RegisterRESTGateway(ctx context.Context, mux *runtime.ServeMux, conn *grpc.
 
 var loadGeneratedRegistry = sync.OnceValues(NewGeneratedRegistry)
 
+// LoadGeneratedRegistry returns the public-method registry discovered from
+// compiled protobuf descriptors. It is safe to call concurrently.
+func LoadGeneratedRegistry() (*Registry, error) {
+	return loadGeneratedRegistry()
+}
+
 func registerPublic(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
 	reg, err := loadGeneratedRegistry()
 	if err != nil {
@@ -97,12 +103,31 @@ func registerPublic(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
 	methods := make([]grpc.MethodDesc, 0, len(desc.Methods))
 	for _, method := range desc.Methods {
 		fullMethod := "/" + desc.ServiceName + "/" + method.MethodName
-		if _, ok := reg.Lookup(fullMethod); !ok {
+		policy, ok := reg.Lookup(fullMethod)
+		if !ok {
 			continue
 		}
+		_ = policy
 		methods = append(methods, grpc.MethodDesc{
 			MethodName: method.MethodName,
 			Handler:    wrapPublicHandler(fullMethod, method.Handler),
+		})
+	}
+	streams := make([]grpc.StreamDesc, 0, len(desc.Streams))
+	for _, stream := range desc.Streams {
+		fullMethod := "/" + desc.ServiceName + "/" + stream.StreamName
+		policy, ok := reg.Lookup(fullMethod)
+		if !ok {
+			continue
+		}
+		if !policy.Streaming {
+			continue
+		}
+		streams = append(streams, grpc.StreamDesc{
+			StreamName:    stream.StreamName,
+			Handler:       wrapPublicStreamHandler(fullMethod, stream.Handler),
+			ServerStreams: stream.ServerStreams,
+			ClientStreams: stream.ClientStreams,
 		})
 	}
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
@@ -112,7 +137,7 @@ func registerPublic(s grpc.ServiceRegistrar, srv any, desc grpc.ServiceDesc) {
 		ServiceName: desc.ServiceName,
 		HandlerType: desc.HandlerType,
 		Methods:     methods,
-		Streams:     []grpc.StreamDesc{},
+		Streams:     streams,
 		Metadata:    desc.Metadata,
 	}, srv)
 }
@@ -121,4 +146,23 @@ func wrapPublicHandler(fullMethod string, handler grpc.MethodHandler) grpc.Metho
 	return func(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 		return handler(srv, WithPublicOrigin(ctx, fullMethod), dec, interceptor)
 	}
+}
+
+// wrapPublicStreamHandler marks the stream context as public-originated so the
+// public stream interceptor can adapt the request like unary public methods.
+func wrapPublicStreamHandler(fullMethod string, handler grpc.StreamHandler) grpc.StreamHandler {
+	return func(srv any, stream grpc.ServerStream) error {
+		return handler(srv, &publicOriginStream{ServerStream: stream, fullMethod: fullMethod})
+	}
+}
+
+// publicOriginStream wraps a grpc.ServerStream so its Context carries the
+// public origin marker expected by the public stream interceptor.
+type publicOriginStream struct {
+	grpc.ServerStream
+	fullMethod string
+}
+
+func (s *publicOriginStream) Context() context.Context {
+	return WithPublicOrigin(s.ServerStream.Context(), s.fullMethod)
 }

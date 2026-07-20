@@ -4,6 +4,7 @@ package generated
 
 import (
 	"context"
+	"io"
 
 	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -34,6 +35,37 @@ func (c *AppClient) Invoke(ctx context.Context, request *AppInvokeRequest) (any,
 		return nil, err
 	}
 	return gestaltclient.DecodeAppResult(request.App, request.Operation, out.Status, out.Body)
+}
+
+func (c *AppClient) InvokeStream(ctx context.Context, request *AppInvokeRequest) (*InvokeStreamStream, error) {
+	wire := ToWireAppInvokeRequest(request)
+	recv, err := c.transport.ServerStream(ctx, MethodAppInvokeStream, wire)
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return &InvokeStreamStream{recv: recv}, nil
+}
+
+// InvokeStreamStream is the server-stream iterator for InvokeStream.
+type InvokeStreamStream struct {
+	recv ServerStreamRecvCloser
+}
+
+// Recv decodes the next InvokeFrame frame. It returns io.EOF when the stream is exhausted.
+func (s *InvokeStreamStream) Recv() (*InvokeFrame, error) {
+	out := &proto.InvokeFrame{}
+	if err := s.recv.Recv(out); err != nil {
+		if err == io.EOF {
+			return nil, err
+		}
+		return nil, toGestaltError(err)
+	}
+	return FromWireInvokeFrame(out), nil
+}
+
+// Close releases the underlying stream. It is safe to call after Recv returns io.EOF.
+func (s *InvokeStreamStream) Close() error {
+	return s.recv.Close()
 }
 
 func (c *AppClient) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {

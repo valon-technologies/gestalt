@@ -20,7 +20,8 @@ use crate::public::auth::Auth;
 use crate::public::generated::metadata::Method;
 use crate::public::generated::rpc_support::GestaltError;
 use crate::public::generated::unary_transport::{
-    GrpcCapable, SyncGrpcCapable, SyncUnaryTransport, UnaryTransport,
+    GrpcCapable, ServerStreamRecv, ServerStreamingTransport, SyncGrpcCapable,
+    SyncServerStreamingTransport, SyncUnaryTransport, UnaryTransport,
 };
 use crate::rpc_support::gestalt_error_code;
 
@@ -85,6 +86,24 @@ impl UnaryTransport for GrpcTransport {
 }
 
 impl GrpcCapable for GrpcTransport {}
+
+impl ServerStreamingTransport for GrpcTransport {
+    fn server_stream<Req, Resp>(
+        &self,
+        method: &Method,
+        request: &Req,
+    ) -> impl std::future::Future<Output = Result<Box<dyn ServerStreamRecv<Resp>>, GestaltError>> + Send
+    where
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static,
+    {
+        let service = self.service.clone();
+        let timeout = self.timeout;
+        let path = method.full_method.to_string();
+        let request = request.clone();
+        async move { server_stream_grpc_call::<Req, Resp>(&service, &path, request, timeout).await }
+    }
+}
 
 /// Sync gRPC transport implementing [`SyncUnaryTransport`] and
 /// [`SyncGrpcCapable`] for the full public surface.
@@ -176,6 +195,27 @@ impl SyncUnaryTransport for SyncGrpcTransport {
 }
 
 impl SyncGrpcCapable for SyncGrpcTransport {}
+
+impl SyncServerStreamingTransport for SyncGrpcTransport {
+    fn server_stream<Req, Resp>(
+        &self,
+        method: &Method,
+        request: &Req,
+    ) -> Result<Box<dyn ServerStreamRecv<Resp>>, GestaltError>
+    where
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static,
+    {
+        let service = self.service.clone();
+        let timeout = self.timeout;
+        let path = method.full_method.to_string();
+        let request = request.clone();
+        let _guard = self.runtime.enter();
+        self.runtime.block_on(server_stream_grpc_call::<Req, Resp>(
+            &service, &path, request, timeout,
+        ))
+    }
+}
 
 fn grpc_ready_error(err: tonic::transport::Error) -> GestaltError {
     GestaltError::new(gestalt_error_code::UNAVAILABLE, err.to_string())
@@ -274,4 +314,69 @@ where
 
     *response = wire_response;
     Ok(())
+}
+
+/// Shared inner async server-streaming call logic. Returns a ServerStreamRecv
+/// whose recv() yields decoded response frames.
+async fn server_stream_grpc_call<Req, Resp>(
+    service: &GrpcService,
+    path: &str,
+    request: Req,
+    timeout: Option<Duration>,
+) -> Result<Box<dyn ServerStreamRecv<Resp>>, GestaltError>
+where
+    Req: Message + Send + Sync + 'static,
+    Resp: Message + Default + Send + 'static,
+{
+    let path: PathAndQuery = path.parse().map_err(|err: http::uri::InvalidUri| {
+        GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string())
+    })?;
+    let mut tonic_request = Request::new(request);
+    if let Some(timeout) = timeout {
+        tonic_request.set_timeout(timeout);
+    }
+    let codec = ProstCodec::<Req, Resp>::default();
+    let streaming = match service {
+        GrpcService::Public(channel) => {
+            let mut client = Grpc::new(channel.clone());
+            client.ready().await.map_err(grpc_ready_error)?;
+            client
+                .server_streaming(tonic_request, path, codec)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner()
+        }
+        GrpcService::Bound(channel) => {
+            let mut client = Grpc::new(channel.clone());
+            client.ready().await.map_err(grpc_ready_error)?;
+            client
+                .server_streaming(tonic_request, path, codec)
+                .await
+                .map_err(GestaltError::from)?
+                .into_inner()
+        }
+    };
+    Ok(Box::new(GrpcServerStreamRecv { streaming }))
+}
+
+/// Adapter wrapping a tonic streaming response into ServerStreamRecv.
+struct GrpcServerStreamRecv<Resp: Message + Default + Send + 'static> {
+    streaming: tonic::Streaming<Resp>,
+}
+
+impl<Resp: Message + Default + Send + 'static> ServerStreamRecv<Resp>
+    for GrpcServerStreamRecv<Resp>
+{
+    fn recv(
+        &mut self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<Option<Resp>, GestaltError>> + Send + '_>>
+    {
+        Box::pin(async move {
+            match self.streaming.message().await {
+                Ok(Some(msg)) => Ok(Some(msg)),
+                Ok(None) => Ok(None),
+                Err(err) => Err(GestaltError::from(err)),
+            }
+        })
+    }
 }
