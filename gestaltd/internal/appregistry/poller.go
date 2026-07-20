@@ -349,7 +349,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		}
 	}
 
-	if err := p.AppRestarter.StartApp(ctx, appName); err != nil {
+	if err := p.AppRestarter.StartApp(ctx, appName, driverVersion); err != nil {
 		return fmt.Errorf("start app %s for %s@%s: %w", appName, appName, driverVersion, err)
 	}
 	restartedAt := p.now()

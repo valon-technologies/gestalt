@@ -18,10 +18,11 @@ Related docs:
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
-| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 20 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 10 |
+| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 21 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + steps 10–11 |
 | `internal/appregistry` | `materializer_test.go` | 5 | Unit | step 10 |
+| `internal/appregistry` | `mount_test.go` | 4 | Unit | step 11 |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
-| `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_lifecycle_test.go` | 6 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 11 |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -102,7 +103,35 @@ End-to-end test for fleet install convergence across replicas. Replaces isolated
 4. Poll each replica's `app_instance_materializations` (or a future admin list endpoint) until every replica has an ack row for `(app, version)`.
 5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
 
-**Not in scope for the first cut:** mount swap on restart — ack, materialize, and restart-only convergence.
+**Not in scope for the first cut:** end-to-end verification that every replica serves the newly mounted binary after restart.
+
+---
+
+## Registry mount tests
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/appregistry -run TestResolveInstalled -count=1
+go test ./internal/bootstrap -run TestAppProviderRestarterStartApp -count=1
+```
+
+### `mount_test.go`
+
+- **`TestResolveInstalledApp_returns_isolated_provider_entry`** — resolves command, manifest, and executable paths from a materialized registry package without mutating the deploy-time entry.
+- **`TestResolveInstalledAppIfPresent_uses_deploy_entry_when_install_missing`** — legacy restart-only rows keep the deploy-time pin when no local install exists.
+- **`TestResolveInstalledAppIfPresent_rejects_incomplete_existing_install`** — rejects manifest-only partial trees.
+- **`TestResolveInstalledApp_rejects_non_app_manifest`** — rejects packages whose manifest kind is not `app`.
+
+### `app_provider_restart_mount_test.go`
+
+- **`TestAppProviderRestarterStartAppDoesNotResolveWhenProviderRunning`** — idempotent `StartApp` does not resolve a registry install while the provider is already registered.
+- **`TestAppProviderRestarterStartAppMountsRegistryInstalledVersion`** — catalog restart rebuilds from the registry-materialized executable when the provider is absent.
+
+### `poller_materialize_test.go`
+
+- **`TestCatalogPollerStartAppPassesDriverVersion`** — the catalog poller passes the driver fleet version through to `StartApp`.
 
 ---
 
@@ -192,3 +221,4 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
 - Multi-replica materialization ack E2E (see [PLANNED] section above)
+- Deployed verification that catalog restarts serve the newly mounted binary

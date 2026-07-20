@@ -18,42 +18,51 @@ import (
 
 const providerStopTimeout = 10 * time.Second
 
+// RegistryInstalledResolver resolves an isolated provider entry backed by a
+// registry-materialized app package.
+type RegistryInstalledResolver interface {
+	ResolveInstalledApp(app string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error)
+}
+
 type pendingProviderClose struct {
 	provider core.Provider
 	done     <-chan error
 }
 
 type AppProviderRestarter struct {
-	cfg           *config.Config
-	deps          Deps
-	providers     *registry.ProviderMap[core.Provider]
-	authBuilds    []*preparedProviderBuilds
-	lifecycles    *appProviderLifecycles
-	held          map[string]func()
-	closing       map[string]pendingProviderClose
-	closeFailures map[string]error
+	cfg              *config.Config
+	deps             Deps
+	providers        *registry.ProviderMap[core.Provider]
+	authBuilds       []*preparedProviderBuilds
+	lifecycles       *appProviderLifecycles
+	registryResolver RegistryInstalledResolver
+	held             map[string]func()
+	closing          map[string]pendingProviderClose
+	closeFailures    map[string]error
 
 	lifecycleMu sync.Mutex
 }
 
 type AppProviderRestarterConfig struct {
-	Config     *config.Config
-	Deps       Deps
-	Providers  *registry.ProviderMap[core.Provider]
-	AuthBuilds []*preparedProviderBuilds
-	Lifecycles *appProviderLifecycles
+	Config           *config.Config
+	Deps             Deps
+	Providers        *registry.ProviderMap[core.Provider]
+	AuthBuilds       []*preparedProviderBuilds
+	Lifecycles       *appProviderLifecycles
+	RegistryResolver RegistryInstalledResolver
 }
 
 func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestarter {
 	return &AppProviderRestarter{
-		cfg:           cfg.Config,
-		deps:          cfg.Deps,
-		providers:     cfg.Providers,
-		authBuilds:    cfg.AuthBuilds,
-		lifecycles:    cfg.Lifecycles,
-		held:          make(map[string]func()),
-		closing:       make(map[string]pendingProviderClose),
-		closeFailures: make(map[string]error),
+		cfg:              cfg.Config,
+		deps:             cfg.Deps,
+		providers:        cfg.Providers,
+		authBuilds:       cfg.AuthBuilds,
+		lifecycles:       cfg.Lifecycles,
+		registryResolver: cfg.RegistryResolver,
+		held:             make(map[string]func()),
+		closing:          make(map[string]pendingProviderClose),
+		closeFailures:    make(map[string]error),
 	}
 }
 
@@ -116,11 +125,12 @@ func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
 	return r.awaitProviderClose(ctx, app, pending)
 }
 
-func (r *AppProviderRestarter) StartApp(ctx context.Context, app string) error {
+func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string) error {
 	if r == nil {
 		return fmt.Errorf("start app provider: restarter is not configured")
 	}
 	app = strings.TrimSpace(app)
+	version = strings.TrimSpace(version)
 	if app == "" {
 		return fmt.Errorf("start app provider: app is required")
 	}
@@ -147,6 +157,10 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app string) error {
 		return fmt.Errorf("start app provider: %w", getErr)
 	}
 
+	entry, err = r.resolveRegistryInstall(app, entry, version)
+	if err != nil {
+		return err
+	}
 	buildCtx, cancel := context.WithTimeout(ctx, providerInstallTimeout)
 	defer cancel()
 	buildCtx = invocation.WithCallerProvider(buildCtx, invocation.ProviderKindApp, app)
@@ -254,6 +268,20 @@ func (r *AppProviderRestarter) appEntry(app string) (*config.ProviderEntry, erro
 		return nil, fmt.Errorf("app %q is not configured", app)
 	}
 	return entry, nil
+}
+
+func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error) {
+	if r == nil || r.registryResolver == nil {
+		return entry, nil
+	}
+	resolved, err := r.registryResolver.ResolveInstalledApp(app, entry, version)
+	if err != nil {
+		return nil, fmt.Errorf("mount registry installed app %q@%s: %w", app, version, err)
+	}
+	if resolved == nil {
+		return nil, fmt.Errorf("mount registry installed app %q@%s: resolver returned nil provider entry", app, version)
+	}
+	return resolved, nil
 }
 
 func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderBuildResult) {

@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -59,8 +61,13 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 	}
 	factories.DevSupervisor = devSupervisor
 
+	var registryResolver bootstrap.RegistryInstalledResolver
+	if strings.TrimSpace(cfg.Server.ArtifactsDir) != "" && len(cfg.AppRegistries) > 0 {
+		registryResolver = &appregistry.MountService{ArtifactsDir: cfg.Server.ArtifactsDir}
+	}
 	result, err := bootstrap.BootstrapWithOptions(ctx, cfg, factories, bootstrap.BootstrapOptions{
 		DeferAppProviderStartup: true,
+		RegistryResolver:        registryResolver,
 	})
 	if err != nil {
 		if devSupervisor != nil {
