@@ -3,30 +3,30 @@
 class Gestalt < Formula
   desc "CLI for Gestalt API - authentication, integration management, and operation invocation"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.2-alpha.8"
+  version "0.0.2-alpha.9"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.8/gestalt-macos-arm64.tar.gz"
-      sha256 "8babebbda8a83ef942b0d8e206a7843cea948595e955ee64f606d5a2de1ccfe6"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.9/gestalt-macos-arm64.tar.gz"
+      sha256 "a961e3b3b3422e5a60faa41916ed61b0b31829cdcbfa418b039cc314fb6dc9c7"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.8/gestalt-macos-x86_64.tar.gz"
-      sha256 "2556ae74415e48e754448f4636a606fd19433352d889254e82664501f39f3fde"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.9/gestalt-macos-x86_64.tar.gz"
+      sha256 "0632156684b58be74eb11e9d3282c3142e85f26505ec5d133a777f99df24684e"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.8/gestalt-linux-arm64.tar.gz"
-      sha256 "3bfcfc9d5a571ad05f843d107d90ffaeba8763140e5ca8fc36aace807affe594"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.9/gestalt-linux-arm64.tar.gz"
+      sha256 "b00d1f14063aede1e1a70c3ba2da88f86279561e8c2fe914ec3ccd2eecfc483f"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.8/gestalt-linux-x86_64.tar.gz"
-      sha256 "e2af7bdb059acd4c228ac697d62b6a7114687076217e3267cd922e980b2a85e2"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.9/gestalt-linux-x86_64.tar.gz"
+      sha256 "bf7e4dc6283c3313a7926100c8bf5dd447d0cc638557bca372177972c90ef7c8"
     end
   end
 
