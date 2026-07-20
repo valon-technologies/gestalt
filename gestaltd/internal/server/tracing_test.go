@@ -196,7 +196,6 @@ func findSpan(spans tracetest.SpanStubs, name string) *tracetest.SpanStub {
 	}
 	return nil
 }
-
 func findSpanPrefix(spans tracetest.SpanStubs, prefix string) *tracetest.SpanStub {
 	for i := range spans {
 		if strings.HasPrefix(spans[i].Name, prefix) {

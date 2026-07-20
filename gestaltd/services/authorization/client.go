@@ -11,7 +11,6 @@ import (
 	rpcauthorization "github.com/valon-technologies/gestalt/server/rpc/authorization"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -28,7 +27,6 @@ type ExecConfig struct {
 	Cleanup                func()
 	HostServices           []runtimehost.HostService
 	Name                   string
-	Transport              providergateway.Transport
 	HostServiceGRPCOptions []grpc.ServerOption
 }
 
@@ -110,8 +108,7 @@ func NewFromExecutable(exec *Executable, cfg ExecConfig) (core.AuthorizationProv
 	}
 	client := rpcauthorization.NewConn(exec.Conn(), rpcauthorization.Options{
 		UnaryTimeout: runtimehost.ProviderRPCTimeout,
-		ProviderID:   cfg.Name,
-	}, cfg.Transport)
+	})
 	return &remoteAuthorizationProvider{Client: client, runtime: exec.Runtime(), closer: exec}, nil
 }
 
@@ -139,8 +136,7 @@ func NewRemote(client proto.AuthorizationClient, name string) (core.Authorizatio
 	}
 	return rpcauthorization.NewClient(client, rpcauthorization.Options{
 		UnaryTimeout: runtimehost.ProviderRPCTimeout,
-		ProviderID:   name,
-	}, providergateway.DirectTransport{}), nil
+	}), nil
 }
 
 func (r *remoteAuthorizationProvider) Ping(ctx context.Context) error {

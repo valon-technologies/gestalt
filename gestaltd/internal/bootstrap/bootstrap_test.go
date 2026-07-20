@@ -42,7 +42,6 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1312,7 +1311,6 @@ func validFactories() *bootstrap.FactoryRegistry {
 }
 
 type bootstrapTransportRecordingAuthorizationProvider struct {
-	transport             providergateway.Transport
 	setAuthorizationState *proto.SetAuthorizationStateRequest
 }
 
@@ -1899,10 +1897,10 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 		return &coretesting.StubSecretManager{Secrets: map[string]string{}}, nil
 	}
-	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
-		provider := &bootstrapTransportRecordingAuthorizationProvider{transport: deps.ProviderTransport}
+	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
+		provider := &bootstrapTransportRecordingAuthorizationProvider{}
 		built = append(built, provider)
-		return providerdrivers.AuthorizationBuildResult{Raw: provider}, nil
+		return providerdrivers.AuthorizationBuildResult{Raw: provider, Conn: &stubGatewayConn{}}, nil
 	}
 
 	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -1915,15 +1913,22 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 		t.Fatalf("authorization providers built = %d, want 1", len(built))
 	}
 	provider := built[0]
-	if _, ok := provider.transport.(providergateway.DirectTransport); !ok {
-		t.Fatalf("authorization provider transport = %T, want providergateway.DirectTransport", provider.transport)
-	}
 	if provider.setAuthorizationState == nil {
 		t.Fatal("authorization provider did not receive SetAuthorizationState")
 	}
 	if result.Authorization["authz"] != provider {
 		t.Fatal("bootstrapped authorization provider is not the runtime authorization provider")
 	}
+}
+
+type stubGatewayConn struct{}
+
+func (stubGatewayConn) Invoke(context.Context, string, any, any, ...grpc.CallOption) error {
+	return status.Error(codes.Unimplemented, "stubGatewayConn")
+}
+
+func (stubGatewayConn) NewStream(context.Context, *grpc.StreamDesc, string, ...grpc.CallOption) (grpc.ClientStream, error) {
+	return nil, status.Error(codes.Unimplemented, "stubGatewayConn")
 }
 
 func TestBootstrapResultClosesExtraCaches(t *testing.T) {

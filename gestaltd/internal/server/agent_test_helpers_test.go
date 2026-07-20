@@ -257,7 +257,6 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 	}
 	return cloneTurn(turn), nil
 }
-
 func (p *memoryAgentProvider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

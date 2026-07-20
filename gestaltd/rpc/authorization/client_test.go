@@ -2,28 +2,22 @@ package authorization
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func TestClientCheckAccessInvokesProviderGatewayBeforeGRPC(t *testing.T) {
-	gateway := &recordingGateway{}
+func TestClientCheckAccessCallsGRPCDirectly(t *testing.T) {
+	t.Parallel()
+
 	grpcClient := &recordingAuthorizationClient{
 		checkAccessResponse: &proto.CheckAccessResponse{Allowed: true, ModelId: "model-1"},
 	}
-	client := NewClient(grpcClient, Options{
-		ProviderID: "authz",
-	}, gateway)
+	client := NewClient(grpcClient, Options{})
 
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "user:checked"})
-	resp, err := client.CheckAccess(ctx, &proto.CheckAccessRequest{
+	resp, err := client.CheckAccess(context.Background(), &proto.CheckAccessRequest{
 		Subject:  &proto.Subject{Type: "subject", Id: "user:checked"},
 		Action:   &proto.Action{Name: "view"},
 		Resource: &proto.Resource{Type: "team", Id: "servicing"},
@@ -37,55 +31,6 @@ func TestClientCheckAccessInvokesProviderGatewayBeforeGRPC(t *testing.T) {
 	if grpcClient.checkAccessRequest.GetSubject().GetId() != "user:checked" {
 		t.Fatalf("grpc subject = %q, want user:checked", grpcClient.checkAccessRequest.GetSubject().GetId())
 	}
-
-	got := gateway.request
-	if got.ProviderID != "authz" {
-		t.Fatalf("ProviderID = %q, want authz", got.ProviderID)
-	}
-	if got.ProviderKind != providergateway.ProviderKindAuthorization {
-		t.Fatalf("ProviderKind = %q, want authorization", got.ProviderKind)
-	}
-	if got.ServiceName != "gestalt.provider.v1.Authorization" {
-		t.Fatalf("ServiceName = %q", got.ServiceName)
-	}
-	if got.Operation != "CheckAccess" {
-		t.Fatalf("Operation = %q", got.Operation)
-	}
-	var payload proto.CheckAccessRequest
-	if err := gproto.Unmarshal(got.Payload, &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	if payload.GetSubject().GetId() != "user:checked" {
-		t.Fatalf("payload subject = %q, want user:checked", payload.GetSubject().GetId())
-	}
-}
-
-func TestClientCheckAccessFailsWithoutProviderGateway(t *testing.T) {
-	grpcClient := &recordingAuthorizationClient{
-		checkAccessResponse: &proto.CheckAccessResponse{Allowed: true},
-	}
-	client := NewClient(grpcClient, Options{ProviderID: "authz"}, nil)
-
-	_, err := client.CheckAccess(context.Background(), &proto.CheckAccessRequest{
-		Subject:  &proto.Subject{Type: "subject", Id: "user:checked"},
-		Action:   &proto.Action{Name: "view"},
-		Resource: &proto.Resource{Type: "team", Id: "servicing"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "provider gateway is required") {
-		t.Fatalf("CheckAccess error = %v, want provider gateway required", err)
-	}
-	if grpcClient.checkAccessRequest != nil {
-		t.Fatalf("grpc CheckAccess was called without provider gateway")
-	}
-}
-
-type recordingGateway struct {
-	request providergateway.ProviderGatewayRequest
-}
-
-func (g *recordingGateway) Invoke(ctx context.Context, req providergateway.ProviderGatewayRequest, next providergateway.Next) (providergateway.ProviderGatewayResponse, error) {
-	g.request = req
-	return next(ctx, req)
 }
 
 type recordingAuthorizationClient struct {

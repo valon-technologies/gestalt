@@ -46,6 +46,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -190,7 +191,6 @@ type Deps struct {
 	HostServiceTLSCAFile    string
 	HostServiceTLSCAPEM     string
 	Telemetry               core.TelemetryProvider
-	ProviderTransport       providergateway.Transport
 	DevSupervisor           *providerdev.Supervisor
 	RemoteClients           *remote.ClientSet
 	RemoteToken             string
@@ -754,6 +754,7 @@ type preparedCore struct {
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.IdentityProvider
 	Authorization        map[string]core.AuthorizationProvider
+	AuthorizationConns   map[string]grpc.ClientConnInterface
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -1070,9 +1071,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 
-	providerTransport := providergateway.DirectTransport{}
-	deps.ProviderTransport = providerTransport
-
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
 		return nil, err
@@ -1132,6 +1130,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		SelectedAuthProvider: selectedAuthName,
 		AuthProviders:        authProviders,
 		Authorization:        authorizationProviders.Raw,
+		AuthorizationConns:   authorizationProviders.Conns,
 		Services:             svc,
 		ExtraIndexedDBs:      extraIndexedDBs,
 		ExtraCaches:          extraCaches,
@@ -1458,6 +1457,11 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	)
 	if err != nil {
 		return nil, err
+	}
+	if publicGatewayTransport != nil {
+		if err := registerAuthorizationGatewayRoutes(publicGatewayTransport, cfg, prepared.AuthorizationConns); err != nil {
+			return nil, err
+		}
 	}
 
 	closeProviders = false
@@ -2108,7 +2112,8 @@ func buildNamedAuthProvider(cfg *config.Config, name string, authEntry *config.P
 }
 
 type authorizationProviderSets struct {
-	Raw map[string]core.AuthorizationProvider
+	Raw   map[string]core.AuthorizationProvider
+	Conns map[string]grpc.ClientConnInterface
 }
 
 func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (authorizationProviderSets, error) {
@@ -2127,7 +2132,8 @@ func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factor
 		return authorizationProviderSets{}, err
 	}
 	return authorizationProviderSets{
-		Raw: map[string]core.AuthorizationProvider{name: providers.Raw},
+		Raw:   map[string]core.AuthorizationProvider{name: providers.Raw},
+		Conns: map[string]grpc.ClientConnInterface{name: providers.Conn},
 	}, nil
 }
 
@@ -2147,7 +2153,7 @@ func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, na
 		if err != nil {
 			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
-		return providerdrivers.AuthorizationBuildResult{Raw: provider}, nil
+		return providerdrivers.AuthorizationBuildResult{Raw: provider, Conn: nil}, nil
 	}
 	if factories.Authorization == nil {
 		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization factory is not registered")
@@ -2404,4 +2410,23 @@ func ProviderAuthorizationKinds(cfg *config.Config) map[string]invocation.Provid
 		kinds[name] = invocation.ProviderKindAgent
 	}
 	return kinds
+}
+
+func registerAuthorizationGatewayRoutes(
+	transport *providergateway.ProviderGatewayTransport,
+	cfg *config.Config,
+	conns map[string]grpc.ClientConnInterface,
+) error {
+	name, entry, _ := cfg.SelectedAuthorizationProvider()
+	if entry == nil || name == "" {
+		return nil
+	}
+	conn, ok := conns[name]
+	if !ok || conn == nil {
+		return nil
+	}
+	return transport.RegisterDirect(
+		providergateway.ProviderTarget{Kind: providergateway.ProviderKindAuthorization, Name: name},
+		providergateway.DirectEndpoint{Conn: conn},
+	)
 }

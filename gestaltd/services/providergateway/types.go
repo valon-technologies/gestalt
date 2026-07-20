@@ -1,45 +1,41 @@
 package providergateway
 
 import (
-	"context"
-
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc"
 )
 
 type ProviderKind string
 
 const (
 	ProviderKindAuthorization ProviderKind = "authorization"
+	ProviderKindApp           ProviderKind = "app"
+	ProviderKindWorkflow      ProviderKind = "workflow"
+	ProviderKindAgent         ProviderKind = "agent"
 )
+
+type ProviderTarget struct {
+	Kind ProviderKind
+	Name string
+}
+
+type DirectEndpoint struct {
+	Conn grpc.ClientConnInterface
+}
+
+type Gateway interface {
+	Conn(ProviderTarget) grpc.ClientConnInterface
+}
 
 type TransportPath string
 
 const (
-	TransportPathDirect          TransportPath = "direct"
-	TransportPathProviderGateway TransportPath = "provider_gateway"
+	TransportPathDirect     TransportPath = "direct"
+	TransportPathUnresolved TransportPath = "unresolved"
 )
 
-type RequestContext = proto.RequestContext
-
-type Transport interface {
-	Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error)
-}
-
-type AuthorizationProvider interface {
-	CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error)
-}
-
-type Next func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error)
-
 type ProviderGatewayRequest struct {
-	ProviderID     string
-	ProviderKind   ProviderKind
-	ServiceName    string
-	Operation      string
-	RequestContext *RequestContext
-	Payload        []byte
-}
-
-type ProviderGatewayResponse struct {
-	Payload []byte
+	ProviderID   string
+	ProviderKind ProviderKind
+	ServiceName  string
+	Operation    string
 }
