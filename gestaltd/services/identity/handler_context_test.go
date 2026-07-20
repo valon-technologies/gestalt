@@ -36,3 +36,21 @@ func TestProviderHandlerContextFallsBackToPrivateMetadata(t *testing.T) {
 		t.Fatalf("CallerSubjectID = %q, want user:bob", call.CallerSubjectID)
 	}
 }
+
+func TestProviderHandlerContextForwardsCallerBearerToken(t *testing.T) {
+	t.Parallel()
+
+	ctx := gestalt.WithTrustedCallerSubject(context.Background(), "user:alice")
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(
+		"authorization", "Bearer abc123",
+	))
+
+	enriched := providerHandlerContext(ctx)
+	call := gestalt.IdentityCallContextFromContext(enriched)
+	if call.CallerSubjectID != "user:alice" {
+		t.Fatalf("CallerSubjectID = %q, want user:alice", call.CallerSubjectID)
+	}
+	if call.CallerBearerToken != "abc123" {
+		t.Fatalf("CallerBearerToken = %q, want abc123", call.CallerBearerToken)
+	}
+}

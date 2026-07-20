@@ -30,6 +30,7 @@ impl AgentShell {
             model: args.model.clone(),
             client_ref: None,
             idempotency_key: None,
+            tools: args.tools.clone(),
             input: None,
         };
         let session = super::requests::create_session_info(client, &session_args)?;

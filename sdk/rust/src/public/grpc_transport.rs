@@ -181,23 +181,22 @@ fn grpc_ready_error(err: tonic::transport::Error) -> GestaltError {
     GestaltError::new(gestalt_error_code::UNAVAILABLE, err.to_string())
 }
 
+/// Builds a `tonic` endpoint for a public gRPC address from an https:// or
 /// Dials a public gRPC endpoint from an https:// or http:// address.
-pub fn dial_public_grpc(address: &str) -> Result<Channel, GestaltError> {
-    let endpoint = if let Some(rest) = address.strip_prefix("https://") {
+pub fn dial_public_grpc(address: &str) -> Result<tonic::transport::Endpoint, GestaltError> {
+    if let Some(rest) = address.strip_prefix("https://") {
         tonic::transport::Endpoint::from_shared(format!("https://{rest}"))
             .map_err(transport_error)?
             .tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
-            .map_err(transport_error)?
+            .map_err(transport_error)
     } else if let Some(rest) = address.strip_prefix("http://") {
-        tonic::transport::Endpoint::from_shared(format!("http://{rest}"))
-            .map_err(transport_error)?
+        tonic::transport::Endpoint::from_shared(format!("http://{rest}")).map_err(transport_error)
     } else {
-        return Err(GestaltError::new(
+        Err(GestaltError::new(
             gestalt_error_code::INVALID_ARGUMENT,
             format!("invalid gRPC address {address:?}"),
-        ));
-    };
-    Ok(endpoint.connect_lazy())
+        ))
+    }
 }
 
 fn auth_channel(channel: Channel, auth: Arc<dyn Auth>) -> AuthChannel {

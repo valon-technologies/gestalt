@@ -35,7 +35,7 @@ fn run() -> anyhow::Result<()> {
         },
         Commands::Authorization { command } => {
             let api = ApiClient::from_env(url)?;
-            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::new(
+            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::from_endpoint(
                 gestalt_sdk::public::grpc_transport::dial_public_grpc(api.base_url())?,
                 std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
             )
@@ -49,7 +49,7 @@ fn run() -> anyhow::Result<()> {
         Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
         Commands::Workflow { command } => {
             let api = ApiClient::from_env(url)?;
-            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::new(
+            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::from_endpoint(
                 gestalt_sdk::public::grpc_transport::dial_public_grpc(api.base_url())?,
                 std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
             )
@@ -69,11 +69,9 @@ fn dispatch_token_command(
 ) -> anyhow::Result<()> {
     let client = ApiClient::from_env(url)?;
     match command {
-        TokenCommands::Create {
-            name,
-            scopes,
-            expires_in,
-        } => commands::tokens::create(&client, name.as_deref(), &scopes, expires_in, format),
+        TokenCommands::Create { scopes, expires_in } => {
+            commands::tokens::create(&client, &scopes, expires_in, format)
+        }
         TokenCommands::List => commands::tokens::list(&client, format),
         TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
     }

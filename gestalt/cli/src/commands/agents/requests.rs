@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
 use std::io;
+use std::sync::Arc;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::api::ApiClient;
@@ -10,6 +11,19 @@ use crate::cli::{
 };
 use crate::output::{self, Format};
 use crate::params;
+
+use gestalt_sdk::public::auth::BearerAuth;
+use gestalt_sdk::public::generated::agent::agent_execution_status::*;
+use gestalt_sdk::public::generated::agent::agent_message_part_type::*;
+use gestalt_sdk::public::generated::agent::agent_session_state::*;
+use gestalt_sdk::public::generated::agent::{
+    AgentCatalogToolConfig, AgentExecutionStatus, AgentMessage, AgentMessagePart, AgentOutput,
+    AgentSessionState, AgentTextOutput, AgentToolConfig, AgentToolConfigSource,
+};
+use gestalt_sdk::public::generated::app::AgentToolRef;
+use gestalt_sdk::public::generated::app_client::AgentClient;
+use gestalt_sdk::public::grpc_transport::{SyncGrpcTransport, dial_public_grpc};
+use gestalt_sdk::rpc_support::GestaltError;
 
 use super::fields::decode_json;
 use super::format::table::{
@@ -22,22 +36,36 @@ use super::types::{
     AgentTurnEventInfo, AgentTurnInfo,
 };
 
-pub(crate) const SESSIONS_PATH: &str = "/api/v1/agent/sessions";
 pub(crate) const PROVIDERS_PATH: &str = "/api/v1/agent/providers";
 pub(crate) const TURNS_PATH: &str = "/api/v1/agent/turns";
 pub(crate) const DEFAULT_SESSION_LIST_LIMIT: usize = 50;
 pub(crate) const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
+
+fn agent_client(api: &ApiClient) -> Result<AgentClient<SyncGrpcTransport>> {
+    let transport = SyncGrpcTransport::from_endpoint(
+        dial_public_grpc(api.base_url())?,
+        Arc::new(BearerAuth::new(api.token())),
+    )
+    .with_timeout(std::time::Duration::from_secs(30));
+    Ok(AgentClient::new(transport))
+}
+
+fn map_sdk_error(err: GestaltError) -> anyhow::Error {
+    err.into()
+}
 
 pub fn create_session(
     client: &ApiClient,
     args: &AgentSessionCreateArgs,
     format: Format,
 ) -> Result<()> {
-    let body = build_session_create_body(args)?;
-    let resp = client
-        .post(SESSIONS_PATH, &body)
+    let agent = agent_client(client)?;
+    let request = build_create_session_request(args)?;
+    let resp = agent
+        .create_session_sync(request)
+        .map_err(map_sdk_error)
         .context("failed to create agent session")?;
-    print_session(&resp, format);
+    print_session(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
@@ -58,18 +86,33 @@ pub fn list_sessions(
         }
         Some(limit)
     };
-    let resp = client
-        .get(&sessions_path(provider, state, summary_limit))
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::ListAgentProviderSessionsRequest {
+        provider_name: provider.unwrap_or_default().to_string(),
+        state: parse_session_state(state),
+        limit: summary_limit.unwrap_or(0) as i32,
+        summary_only: summary_limit.is_some(),
+        ..Default::default()
+    };
+    let resp = agent
+        .list_sessions_sync(request)
+        .map_err(map_sdk_error)
         .context("failed to list agent sessions")?;
-    print_sessions(&resp, format);
+    print_sessions(&serde_json::to_value(&resp)?["sessions"], format);
     Ok(())
 }
 
 pub fn get_session(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .get(&format!("{SESSIONS_PATH}/{id}"))
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::GetAgentProviderSessionRequest {
+        session_id: id.to_string(),
+        ..Default::default()
+    };
+    let resp = agent
+        .get_session_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to get agent session {id}"))?;
-    print_session(&resp, format);
+    print_session(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
@@ -78,20 +121,24 @@ pub fn update_session(
     args: &AgentSessionUpdateArgs,
     format: Format,
 ) -> Result<()> {
-    let body = build_session_update_body(args)?;
-    let resp = client
-        .patch(&format!("{SESSIONS_PATH}/{}", args.id), &body)
+    let agent = agent_client(client)?;
+    let request = build_update_session_request(args)?;
+    let resp = agent
+        .update_session_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to update agent session {}", args.id))?;
-    print_session(&resp, format);
+    print_session(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
 pub fn create_turn(client: &ApiClient, args: &AgentTurnCreateArgs, format: Format) -> Result<()> {
-    let body = build_turn_create_body(args)?;
-    let resp = client
-        .post(&format!("{SESSIONS_PATH}/{}/turns", args.session_id), &body)
+    let agent = agent_client(client)?;
+    let request = build_create_turn_request(args)?;
+    let resp = agent
+        .create_turn_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to create agent turn in session {}", args.session_id))?;
-    print_turn(&resp, format);
+    print_turn(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
@@ -101,33 +148,54 @@ pub fn list_turns(
     status: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let resp = client
-        .get(&session_turns_path(session_id, status))
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::ListAgentProviderTurnsRequest {
+        session_id: session_id.to_string(),
+        status: parse_execution_status(status),
+        ..Default::default()
+    };
+    let resp = agent
+        .list_turns_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to list agent turns for session {session_id}"))?;
-    print_turns(&resp, format);
+    print_turns(&serde_json::to_value(&resp)?["turns"], format);
     Ok(())
 }
 
 pub fn get_turn(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .get(&format!("{TURNS_PATH}/{id}"))
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::GetAgentProviderTurnRequest {
+        turn_id: id.to_string(),
+        ..Default::default()
+    };
+    let resp = agent
+        .get_turn_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to get agent turn {id}"))?;
-    print_turn(&resp, format);
+    print_turn(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
 pub fn transcript_turn(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let turn = client
-        .get(&format!("{TURNS_PATH}/{id}"))
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::GetAgentProviderTurnRequest {
+        turn_id: id.to_string(),
+        ..Default::default()
+    };
+    let turn = agent
+        .get_turn_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to get agent turn {id}"))?;
+    let turn_value = serde_json::to_value(&turn)?;
     let event_values = list_turn_event_values(client, id)?;
+
     match format {
         Format::Json => output::print_json(&json!({
-            "turn": turn,
+            "turn": turn_value,
             "events": event_values,
         })),
         Format::Table => {
-            let turn = decode_json::<AgentTurnInfo>(turn)?;
+            let turn = decode_json::<AgentTurnInfo>(turn_value)?;
             let events: Vec<AgentTurnEventInfo> = event_values
                 .into_iter()
                 .map(decode_json)
@@ -144,14 +212,17 @@ pub fn cancel_turn(
     reason: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let body = match reason {
-        Some(reason) => json!({ "reason": reason }),
-        None => json!({}),
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::CancelAgentProviderTurnRequest {
+        turn_id: id.to_string(),
+        reason: reason.unwrap_or_default().to_string(),
+        ..Default::default()
     };
-    let resp = client
-        .post(&format!("{TURNS_PATH}/{id}/cancel"), &body)
+    let resp = agent
+        .cancel_turn_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to cancel agent turn {id}"))?;
-    print_turn(&resp, format);
+    print_turn(&serde_json::to_value(&resp)?, format);
     Ok(())
 }
 
@@ -160,12 +231,18 @@ pub fn list_turn_events(
     args: &AgentTurnEventListArgs,
     format: Format,
 ) -> Result<()> {
-    let resp = client
-        .get(&turn_events_path(
-            &args.id, false, args.after, args.limit, None,
-        ))
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::ListAgentProviderTurnEventsRequest {
+        turn_id: args.id.clone(),
+        after_seq: args.after.unwrap_or(0) as i64,
+        limit: args.limit.unwrap_or(0) as i32,
+        ..Default::default()
+    };
+    let resp = agent
+        .list_turn_events_sync(request)
+        .map_err(map_sdk_error)
         .with_context(|| format!("failed to list events for agent turn {}", args.id))?;
-    print_turn_events(&resp, format);
+    print_turn_events(&serde_json::to_value(&resp)?["events"], format);
     Ok(())
 }
 
@@ -185,34 +262,43 @@ pub(crate) fn cancel_turn_silent(
     id: &str,
     reason: &str,
 ) -> Result<AgentTurnInfo> {
-    decode_json(
-        client
-            .post(
-                &format!("{TURNS_PATH}/{id}/cancel"),
-                &json!({ "reason": reason }),
-            )
-            .with_context(|| format!("failed to cancel agent turn {id}"))?,
-    )
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::CancelAgentProviderTurnRequest {
+        turn_id: id.to_string(),
+        reason: reason.to_string(),
+        ..Default::default()
+    };
+    let resp = agent
+        .cancel_turn_sync(request)
+        .map_err(map_sdk_error)
+        .with_context(|| format!("failed to cancel agent turn {id}"))?;
+    decode_json(serde_json::to_value(&resp)?)
 }
 
 pub(crate) fn create_session_info(
     client: &ApiClient,
     args: &AgentSessionCreateArgs,
 ) -> Result<AgentSessionInfo> {
-    let body = build_session_create_body(args)?;
-    decode_json(
-        client
-            .post(SESSIONS_PATH, &body)
-            .context("failed to create agent session")?,
-    )
+    let agent = agent_client(client)?;
+    let request = build_create_session_request(args)?;
+    let resp = agent
+        .create_session_sync(request)
+        .map_err(map_sdk_error)
+        .context("failed to create agent session")?;
+    decode_json(serde_json::to_value(&resp)?)
 }
 
 pub(crate) fn get_session_info(client: &ApiClient, id: &str) -> Result<AgentSessionInfo> {
-    decode_json(
-        client
-            .get(&format!("{SESSIONS_PATH}/{id}"))
-            .with_context(|| format!("failed to get agent session {id}"))?,
-    )
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::GetAgentProviderSessionRequest {
+        session_id: id.to_string(),
+        ..Default::default()
+    };
+    let resp = agent
+        .get_session_sync(request)
+        .map_err(map_sdk_error)
+        .with_context(|| format!("failed to get agent session {id}"))?;
+    decode_json(serde_json::to_value(&resp)?)
 }
 
 pub(crate) fn list_agent_providers(client: &ApiClient) -> Result<Vec<AgentProviderInfo>> {
@@ -228,15 +314,20 @@ pub(crate) fn resume_latest_session_info(
     client: &ApiClient,
     provider: Option<&str>,
 ) -> Result<AgentSessionInfo> {
-    let sessions: Vec<AgentSessionInfo> = decode_json(
-        client
-            .get(&sessions_path(
-                provider,
-                Some("active"),
-                Some(DEFAULT_SESSION_LIST_LIMIT),
-            ))
-            .context("failed to list active agent sessions")?,
-    )?;
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::ListAgentProviderSessionsRequest {
+        provider_name: provider.unwrap_or_default().to_string(),
+        state: AGENT_SESSION_STATE_ACTIVE,
+        limit: DEFAULT_SESSION_LIST_LIMIT as i32,
+        summary_only: true,
+        ..Default::default()
+    };
+    let resp = agent
+        .list_sessions_sync(request)
+        .map_err(map_sdk_error)
+        .context("failed to list active agent sessions")?;
+    let sessions: Vec<AgentSessionInfo> =
+        decode_json(serde_json::to_value(&resp)?["sessions"].clone())?;
     sessions
         .into_iter()
         .filter(|session| session.state.is_empty() || session.state == "active")
@@ -275,33 +366,42 @@ pub(crate) fn create_turn_info(
     client: &ApiClient,
     args: &AgentTurnCreateArgs,
 ) -> Result<AgentTurnInfo> {
-    let body = build_turn_create_body(args)?;
-    decode_json(
-        client
-            .post(&format!("{SESSIONS_PATH}/{}/turns", args.session_id), &body)
-            .with_context(|| {
-                format!("failed to create agent turn in session {}", args.session_id)
-            })?,
-    )
+    let agent = agent_client(client)?;
+    let request = build_create_turn_request(args)?;
+    let resp = agent
+        .create_turn_sync(request)
+        .map_err(map_sdk_error)
+        .with_context(|| format!("failed to create agent turn in session {}", args.session_id))?;
+    decode_json(serde_json::to_value(&resp)?)
 }
 
 pub(crate) fn get_turn_info(client: &ApiClient, id: &str) -> Result<AgentTurnInfo> {
-    decode_json(
-        client
-            .get(&format!("{TURNS_PATH}/{id}"))
-            .with_context(|| format!("failed to get agent turn {id}"))?,
-    )
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::GetAgentProviderTurnRequest {
+        turn_id: id.to_string(),
+        ..Default::default()
+    };
+    let resp = agent
+        .get_turn_sync(request)
+        .map_err(map_sdk_error)
+        .with_context(|| format!("failed to get agent turn {id}"))?;
+    decode_json(serde_json::to_value(&resp)?)
 }
 
 pub(crate) fn list_interactions_info(
     client: &ApiClient,
     turn_id: &str,
 ) -> Result<Vec<AgentInteractionInfo>> {
-    decode_json(
-        client
-            .get(&format!("{TURNS_PATH}/{turn_id}/interactions"))
-            .with_context(|| format!("failed to list interactions for agent turn {turn_id}"))?,
-    )
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::ListAgentProviderInteractionsRequest {
+        turn_id: turn_id.to_string(),
+        ..Default::default()
+    };
+    let resp = agent
+        .list_interactions_sync(request)
+        .map_err(map_sdk_error)
+        .with_context(|| format!("failed to list interactions for agent turn {turn_id}"))?;
+    decode_json(serde_json::to_value(&resp)?["interactions"].clone())
 }
 
 pub(crate) fn resolve_interaction_info(
@@ -310,38 +410,43 @@ pub(crate) fn resolve_interaction_info(
     interaction_id: &str,
     resolution: Map<String, Value>,
 ) -> Result<AgentInteractionInfo> {
-    decode_json(
-        client
-            .post(
-                &format!("{TURNS_PATH}/{turn_id}/interactions/{interaction_id}/resolve"),
-                &json!({ "resolution": resolution }),
-            )
-            .with_context(|| format!("failed to resolve interaction {interaction_id}"))?,
-    )
+    let agent = agent_client(client)?;
+    let request = gestalt_sdk::public::generated::agent::ResolveAgentProviderInteractionRequest {
+        interaction_id: interaction_id.to_string(),
+        turn_id: turn_id.to_string(),
+        resolution: Some(resolution),
+        ..Default::default()
+    };
+    let resp = agent
+        .resolve_interaction_sync(request)
+        .map_err(map_sdk_error)
+        .with_context(|| format!("failed to resolve interaction {interaction_id}"))?;
+    decode_json(serde_json::to_value(&resp)?)
 }
 
 pub(crate) fn list_turn_event_values(client: &ApiClient, turn_id: &str) -> Result<Vec<Value>> {
+    let agent = agent_client(client)?;
     let mut events = Vec::new();
-    let mut after_seq = 0u64;
+    let mut after_seq = 0i64;
     loop {
-        let page: Vec<Value> = decode_json(
-            client
-                .get(&turn_events_path(
-                    turn_id,
-                    false,
-                    Some(after_seq),
-                    Some(DEFAULT_EVENT_PAGE_SIZE),
-                    None,
-                ))
-                .with_context(|| format!("failed to list events for agent turn {turn_id}"))?,
-        )?;
+        let request = gestalt_sdk::public::generated::agent::ListAgentProviderTurnEventsRequest {
+            turn_id: turn_id.to_string(),
+            after_seq,
+            limit: DEFAULT_EVENT_PAGE_SIZE as i32,
+            ..Default::default()
+        };
+        let resp = agent
+            .list_turn_events_sync(request)
+            .map_err(map_sdk_error)
+            .with_context(|| format!("failed to list events for agent turn {turn_id}"))?;
+        let page: Vec<Value> = decode_json(serde_json::to_value(&resp)?["events"].clone())?;
         if page.is_empty() {
             return Ok(events);
         }
 
         let next_after_seq = page
             .iter()
-            .filter_map(|event| event.get("seq").and_then(Value::as_u64))
+            .filter_map(|event| event.get("seq").and_then(Value::as_i64))
             .max()
             .unwrap_or(after_seq);
         events.extend(page);
@@ -352,177 +457,178 @@ pub(crate) fn list_turn_event_values(client: &ApiClient, turn_id: &str) -> Resul
     }
 }
 
-pub(crate) fn build_session_create_body(args: &AgentSessionCreateArgs) -> Result<Value> {
-    let mut body = match args.input.as_deref() {
-        Some(path) => params::load_input_file(path)?,
-        None => Map::new(),
+fn build_tool_config(tools: &[AgentToolArg]) -> Option<AgentToolConfig> {
+    if tools.is_empty() {
+        return None;
+    }
+    let refs: Vec<AgentToolRef> = tools
+        .iter()
+        .map(|tool| AgentToolRef {
+            app: tool.app.clone(),
+            operation: tool.operation.clone(),
+            ..Default::default()
+        })
+        .collect();
+    Some(AgentToolConfig {
+        source: Some(AgentToolConfigSource::Catalog(AgentCatalogToolConfig {
+            refs,
+            ..Default::default()
+        })),
+    })
+}
+
+fn build_create_session_request(
+    args: &AgentSessionCreateArgs,
+) -> Result<gestalt_sdk::public::generated::agent::CreateAgentProviderSessionRequest> {
+    let mut request = gestalt_sdk::public::generated::agent::CreateAgentProviderSessionRequest {
+        provider_name: args.provider.as_deref().unwrap_or_default().to_string(),
+        model: args.model.as_deref().unwrap_or_default().to_string(),
+        client_ref: args.client_ref.as_deref().unwrap_or_default().to_string(),
+        idempotency_key: args
+            .idempotency_key
+            .as_deref()
+            .unwrap_or_default()
+            .to_string(),
+        tools: build_tool_config(&args.tools),
+        ..Default::default()
     };
-
-    if let Some(provider) = args.provider.as_deref() {
-        body.insert("provider".to_string(), Value::String(provider.to_string()));
+    if let Some(path) = args.input.as_deref() {
+        let map = params::load_input_file(path)?;
+        let json = serde_json::Value::Object(map);
+        if let Some(meta) = json
+            .as_object()
+            .and_then(|obj| obj.get("metadata"))
+            .and_then(|v| v.as_object())
+        {
+            request.metadata = Some(meta.clone());
+        }
     }
-    if let Some(model) = args.model.as_deref() {
-        body.insert("model".to_string(), Value::String(model.to_string()));
-    }
-    if let Some(client_ref) = args.client_ref.as_deref() {
-        body.insert(
-            "clientRef".to_string(),
-            Value::String(client_ref.to_string()),
-        );
-    }
-    if let Some(idempotency_key) = args.idempotency_key.as_deref() {
-        body.insert(
-            "idempotencyKey".to_string(),
-            Value::String(idempotency_key.to_string()),
-        );
-    }
-
-    Ok(Value::Object(body))
+    Ok(request)
 }
 
-pub(crate) fn build_session_update_body(args: &AgentSessionUpdateArgs) -> Result<Value> {
-    let mut body = match args.input.as_deref() {
-        Some(path) => params::load_input_file(path)?,
-        None => Map::new(),
+fn build_update_session_request(
+    args: &AgentSessionUpdateArgs,
+) -> Result<gestalt_sdk::public::generated::agent::UpdateAgentProviderSessionRequest> {
+    let mut request = gestalt_sdk::public::generated::agent::UpdateAgentProviderSessionRequest {
+        session_id: args.id.clone(),
+        client_ref: args.client_ref.as_deref().unwrap_or_default().to_string(),
+        state: parse_session_state(args.state.as_deref()),
+        ..Default::default()
     };
-
-    body.remove("provider");
-    body.remove("model");
-
-    if let Some(client_ref) = args.client_ref.as_deref() {
-        body.insert(
-            "clientRef".to_string(),
-            Value::String(client_ref.to_string()),
-        );
+    if let Some(path) = args.input.as_deref() {
+        let map = params::load_input_file(path)?;
+        if let Some(meta) = map.get("metadata").and_then(|v| v.as_object()) {
+            request.metadata = Some(meta.clone());
+        }
     }
-    if let Some(state) = args.state.as_deref() {
-        body.insert("state".to_string(), Value::String(state.to_string()));
-    }
-
-    Ok(Value::Object(body))
+    Ok(request)
 }
 
-pub(crate) fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value> {
-    let mut body = match args.input.as_deref() {
-        Some(path) => params::load_input_file(path)?,
-        None => Map::new(),
+fn build_create_turn_request(
+    args: &AgentTurnCreateArgs,
+) -> Result<gestalt_sdk::public::generated::agent::CreateAgentProviderTurnRequest> {
+    let mut request = gestalt_sdk::public::generated::agent::CreateAgentProviderTurnRequest {
+        session_id: args.session_id.clone(),
+        model: args.model.as_deref().unwrap_or_default().to_string(),
+        idempotency_key: args
+            .idempotency_key
+            .as_deref()
+            .unwrap_or_default()
+            .to_string(),
+        timeout_seconds: args.timeout_seconds.unwrap_or(0),
+        messages: build_messages(&args.system, &args.messages),
+        output: Some(AgentOutput {
+            kind: Some(
+                gestalt_sdk::public::generated::agent::AgentOutputKind::Text(AgentTextOutput {}),
+            ),
+        }),
+        ..Default::default()
     };
-
-    body.remove("provider");
-    body.remove("clientRef");
-    body.remove("state");
-
-    if let Some(model) = args.model.as_deref() {
-        body.insert("model".to_string(), Value::String(model.to_string()));
+    if let Some(path) = args.input.as_deref() {
+        let map = params::load_input_file(path)?;
+        if let Some(meta) = map.get("metadata").and_then(|v| v.as_object()) {
+            request.metadata = Some(meta.clone());
+        }
+        if request.messages.is_empty()
+            && let Some(messages) = map.get("messages")
+        {
+            let parsed: Vec<AgentMessage> = serde_json::from_value(messages.clone())
+                .context("failed to decode messages from --input file")?;
+            if !parsed.is_empty() {
+                request.messages = parsed;
+            }
+        }
+        if let Some(model_options) = map.get("modelOptions").and_then(|v| v.as_object())
+            && !model_options.is_empty()
+        {
+            request.model_options = Some(model_options.clone());
+        }
+        if let Some(output) = map.get("output")
+            && let Ok(parsed) = serde_json::from_value::<AgentOutput>(output.clone())
+        {
+            request.output = Some(parsed);
+        }
     }
-    if let Some(idempotency_key) = args.idempotency_key.as_deref() {
-        body.insert(
-            "idempotencyKey".to_string(),
-            Value::String(idempotency_key.to_string()),
-        );
-    }
-    if let Some(timeout_seconds) = args.timeout_seconds {
-        body.insert(
-            "timeoutSeconds".to_string(),
-            Value::Number(timeout_seconds.into()),
-        );
-    }
-
-    let messages = build_messages(&args.system, &args.messages);
-    if !messages.is_empty() {
-        body.insert("messages".to_string(), Value::Array(messages));
-    }
-    if !args.tools.is_empty() {
-        body.insert(
-            "toolRefs".to_string(),
-            Value::Array(args.tools.iter().map(agent_tool_ref_value).collect()),
-        );
-    }
-    if !body.contains_key("output") {
-        body.insert("output".to_string(), json!({ "text": {} }));
-    }
-
-    validate_turn_create_body(&body)?;
-    Ok(Value::Object(body))
+    validate_turn_request(&request)?;
+    Ok(request)
 }
 
-fn validate_optional_timeout_seconds(body: &Map<String, Value>) -> Result<()> {
-    if let Some(value) = body.get("timeoutSeconds")
-        && value.as_i64().is_none_or(|seconds| seconds < 0)
-    {
-        bail!("timeoutSeconds must be a non-negative integer");
-    }
-    Ok(())
-}
-
-fn validate_turn_create_body(body: &Map<String, Value>) -> Result<()> {
-    validate_optional_timeout_seconds(body)?;
-    let has_messages = body
-        .get("messages")
-        .and_then(Value::as_array)
-        .is_some_and(|messages| !messages.is_empty());
-    if !has_messages {
+fn validate_turn_request(
+    request: &gestalt_sdk::public::generated::agent::CreateAgentProviderTurnRequest,
+) -> Result<()> {
+    if request.messages.is_empty() {
         bail!(
             "agent turns create requires at least one message; pass --message, --system, or --input with a non-empty messages array"
         );
     }
-    validate_turn_output_body(body)?;
     Ok(())
 }
 
-fn validate_turn_output_body(body: &Map<String, Value>) -> Result<()> {
-    let Some(output) = body.get("output") else {
-        bail!("agent turns create requires output.text or output.structured");
-    };
-    let Some(output) = output.as_object() else {
-        bail!("agent turns create output must be an object");
-    };
-    let has_text = output.contains_key("text");
-    let has_structured = output.contains_key("structured");
-    if has_text == has_structured {
-        bail!("agent turns create requires exactly one of output.text or output.structured");
-    }
-    Ok(())
-}
-
-fn build_messages(system: &[String], messages: &[String]) -> Vec<Value> {
+fn build_messages(system: &[String], messages: &[String]) -> Vec<AgentMessage> {
     let mut out = Vec::with_capacity(system.len() + messages.len());
     for text in system {
-        out.push(json!({ "role": "system", "text": text }));
+        out.push(AgentMessage {
+            role: "system".to_string(),
+            parts: vec![AgentMessagePart {
+                r#type: AGENT_MESSAGE_PART_TYPE_TEXT,
+                text: text.clone(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
     }
     for text in messages {
-        out.push(json!({ "role": "user", "text": text }));
+        out.push(AgentMessage {
+            role: "user".to_string(),
+            parts: vec![AgentMessagePart {
+                r#type: AGENT_MESSAGE_PART_TYPE_TEXT,
+                text: text.clone(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
     }
     out
 }
 
-fn agent_tool_ref_value(tool: &AgentToolArg) -> Value {
-    json!({
-        "app": tool.app,
-        "operation": tool.operation,
-    })
-}
-
-pub(crate) fn sessions_path(
-    provider: Option<&str>,
-    state: Option<&str>,
-    summary_limit: Option<usize>,
-) -> String {
-    let mut params = Vec::new();
-    crate::query::push_opt_param(&mut params, "provider", provider);
-    crate::query::push_opt_param(&mut params, "state", state);
-    if let Some(limit) = summary_limit {
-        params.push(("view".to_string(), "summary".to_string()));
-        params.push(("limit".to_string(), limit.to_string()));
+fn parse_session_state(value: Option<&str>) -> AgentSessionState {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some("active") => AGENT_SESSION_STATE_ACTIVE,
+        Some("closed") => AGENT_SESSION_STATE_ARCHIVED,
+        _ => AGENT_SESSION_STATE_UNSPECIFIED,
     }
-    crate::query::with_query(SESSIONS_PATH, &params)
 }
 
-pub(crate) fn session_turns_path(session_id: &str, status: Option<&str>) -> String {
-    let mut params = Vec::new();
-    crate::query::push_opt_param(&mut params, "status", status);
-    let path = format!("{SESSIONS_PATH}/{session_id}/turns");
-    crate::query::with_query(&path, &params)
+fn parse_execution_status(value: Option<&str>) -> AgentExecutionStatus {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some("pending") => AGENT_EXECUTION_STATUS_PENDING,
+        Some("running") => AGENT_EXECUTION_STATUS_RUNNING,
+        Some("succeeded") => AGENT_EXECUTION_STATUS_SUCCEEDED,
+        Some("failed") => AGENT_EXECUTION_STATUS_FAILED,
+        Some("canceled") | Some("cancelled") => AGENT_EXECUTION_STATUS_CANCELED,
+        Some("waiting_for_input") => AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+        _ => AGENT_EXECUTION_STATUS_UNSPECIFIED,
+    }
 }
 
 pub(crate) fn turn_events_path(
