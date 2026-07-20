@@ -3,7 +3,6 @@ package server_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,14 +11,11 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/observability"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -190,110 +186,6 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) {
 	if !foundError {
 		t.Error("expected an exception event on the broker span")
 	}
-}
-
-func TestTracing_AgentTurnTraceTree(t *testing.T) {
-	t.Parallel()
-
-	exporter := tracetest.NewInMemoryExporter()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
-
-	agentProvider := observability.InstrumentAgentProvider("managed", newMemoryAgentProvider())
-	services := testutil.NewStubServices(t)
-	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-		N:        "docs",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-			ID:       "search",
-			Title:    "Search",
-			ReadOnly: true,
-		}}},
-	})
-	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, invocation.WithTracerProvider(tp))
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = coretesting.NamedIntrospectIdentityStub("stub", func(_ context.Context, token string) (*core.UserIdentity, error) {
-			if token != "agent-session" {
-				return nil, core.ErrNotFound
-			}
-			return &core.UserIdentity{Email: "agent-trace@example.com", DisplayName: "Trace"}, nil
-		})
-		cfg.Services = services
-		cfg.Providers = providers
-		cfg.Invoker = broker
-		cfg.TracerProvider = tp
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: agentProvider},
-			Providers:  providers,
-			TurnScopes: newServerTestAgentTurnScopes(),
-			ToolIDs:    newServerTestAgentToolIDs(t),
-			Invoker:    broker,
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"claude-sonnet","tools":{"catalog":{"refs":[{"app":"docs","operation":"search"}]}}}`))
-	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(sessionResp.Body)
-		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, string(body))
-	}
-	var session map[string]any
-	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	sessionID, _ := session["id"].(string)
-	if sessionID == "" {
-		t.Fatalf("session response missing id: %#v", session)
-	}
-
-	turnBody := `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"search docs"}]}`
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(turnBody))
-	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
-	turnResp, err := http.DefaultClient.Do(turnReq)
-	if err != nil {
-		t.Fatalf("create turn: %v", err)
-	}
-	defer func() { _ = turnResp.Body.Close() }()
-	if turnResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(turnResp.Body)
-		t.Fatalf("create turn status = %d body=%s", turnResp.StatusCode, string(body))
-	}
-
-	_ = tp.ForceFlush(context.Background())
-	spans := exporter.GetSpans()
-	agentSpan := findSpanWithAttr(spans, "agent.operation", "gestalt.agent.operation", "create_turn")
-	if agentSpan == nil {
-		t.Fatalf("expected create_turn agent.operation span, got spans: %v", spanNames(spans))
-	}
-	sessionSpan := findSpanWithAttr(spans, "agent.operation", "gestalt.agent.operation", "create_session")
-	if sessionSpan == nil {
-		t.Fatalf("expected create_session agent.operation span, got spans: %v", spanNames(spans))
-	}
-	providerSpan := findSpanWithAttr(spans, "agent.provider.operation", "gestalt.agent.operation", "create_turn")
-	if providerSpan == nil {
-		t.Fatal("expected create_turn agent.provider.operation span")
-	}
-	catalogSpan := findSpan(spans, "catalog.operation.resolve")
-	if catalogSpan == nil {
-		t.Fatal("expected catalog.operation.resolve span")
-	}
-	if providerSpan.SpanContext.TraceID() != agentSpan.SpanContext.TraceID() {
-		t.Fatalf("span %q trace id = %s, want agent trace id %s", providerSpan.Name, providerSpan.SpanContext.TraceID(), agentSpan.SpanContext.TraceID())
-	}
-	if catalogSpan.SpanContext.TraceID() != sessionSpan.SpanContext.TraceID() {
-		t.Fatalf("span %q trace id = %s, want session trace id %s", catalogSpan.Name, catalogSpan.SpanContext.TraceID(), sessionSpan.SpanContext.TraceID())
-	}
-	assertSpanHasAttr(t, agentSpan, "gestalt.agent.provider", "managed")
-	assertSpanHasAttr(t, providerSpan, "gestalt.agent.provider", "managed")
-	assertSpanHasAttr(t, catalogSpan, "gestalt.provider", "docs")
-	assertSpanHasAttr(t, catalogSpan, "gestalt.operation", "search")
-	assertSpanHasAttr(t, catalogSpan, "gestalt.catalog.source", "static")
 }
 
 func findSpan(spans tracetest.SpanStubs, name string) *tracetest.SpanStub {

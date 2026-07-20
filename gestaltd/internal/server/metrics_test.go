@@ -617,29 +617,8 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	}
 	auditBuf.Reset()
 
-	tokensReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/tokens", nil)
-	tokensResp, err := client.Do(tokensReq)
-	if err != nil {
-		t.Fatalf("list tokens request: %v", err)
-	}
-	defer func() { _ = tokensResp.Body.Close() }()
-	if tokensResp.StatusCode != http.StatusOK {
-		t.Fatalf("list tokens status = %d, want %d", tokensResp.StatusCode, http.StatusOK)
-	}
-	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
-	if len(lines) != 1 {
-		t.Fatalf("expected exactly one audit record for api token inventory read, got %d\nraw: %s", len(lines), auditBuf.String())
-	}
-	var auditRecord map[string]any
-	if err := json.Unmarshal(lines[0], &auditRecord); err != nil {
-		t.Fatalf("parse audit record: %v\nraw: %s", err, auditBuf.String())
-	}
-	if auditRecord["operation"] != "grant.list" {
-		t.Fatalf("expected audit operation grant.list, got %v", auditRecord["operation"])
-	}
-	if auditRecord["allowed"] != true {
-		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
-	}
+	// Token listing was removed from v1 REST (migrated to gRPC); the audit
+	// and metrics assertions below no longer depend on a token operation.
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
@@ -650,7 +629,7 @@ func TestPlatformAuthMetrics(t *testing.T) {
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "token",
 	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 2, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "introspect",
 	})

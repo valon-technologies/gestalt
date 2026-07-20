@@ -19,40 +19,15 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Delete("/apps/{name}", s.disconnectIntegration)
 
 		r.Post("/workflow/events", s.deliverWorkflowEvent)
-		r.Get("/workflow/runs", s.listGlobalWorkflowRuns)
-		r.Route("/workflow/runs", func(r chi.Router) {
-			r.Get("/", s.listGlobalWorkflowRuns)
-			r.Get("/{runID}", s.getGlobalWorkflowRun)
-			r.Post("/{runID}/cancel", s.cancelGlobalWorkflowRun)
-		})
 
-		r.Post("/agent/sessions", s.createAgentSession)
-		r.Get("/agent/sessions", s.listAgentSessions)
 		r.Get("/agent/providers", s.listAgentProviders)
 		r.Post("/agent/harnesses/resolve", s.resolveAgentHarness)
-		r.Route("/agent/sessions", func(r chi.Router) {
-			r.Post("/", s.createAgentSession)
-			r.Get("/", s.listAgentSessions)
-			r.Get("/{sessionID}", s.getAgentSession)
-			r.Patch("/{sessionID}", s.updateAgentSession)
-			r.Post("/{sessionID}/turns", s.createAgentTurn)
-			r.Get("/{sessionID}/turns", s.listAgentTurns)
-		})
-		r.Route("/agent/turns", func(r chi.Router) {
-			r.Get("/{turnID}", s.getAgentTurn)
-			r.Post("/{turnID}/cancel", s.cancelAgentTurn)
-			r.Get("/{turnID}/events", s.listAgentTurnEvents)
-			r.Get("/{turnID}/interactions", s.listAgentTurnInteractions)
-			r.Post("/{turnID}/interactions/{interactionID}/resolve", s.resolveAgentInteraction)
-		})
 
 		r.Get("/auth/session", s.authSession)
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)
 
 		r.Post("/tokens", s.createAPIToken)
-		r.Get("/tokens", s.listAPITokens)
-		r.Delete("/tokens", s.revokeAllAPITokens)
 		r.Delete("/tokens/{id}", s.revokeAPIToken)
 
 	})

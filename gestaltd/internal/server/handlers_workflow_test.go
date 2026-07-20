@@ -61,22 +61,6 @@ func TestWorkflowValueRequestPreservesExplicitEmptyCollections(t *testing.T) {
 	}
 }
 
-func TestWorkflowRunInfoOmitsCreator(t *testing.T) {
-	t.Parallel()
-
-	info := workflowRunInfoFromCore(&coreworkflow.Run{
-		ID:        "run-1",
-		CreatedBy: "user:legacy",
-	}, "temporal")
-	payload, err := json.Marshal(info)
-	if err != nil {
-		t.Fatalf("MarshalJSON: %v", err)
-	}
-	if strings.Contains(string(payload), `"createdBy"`) {
-		t.Fatalf("workflow run response contains removed creator field: %s", payload)
-	}
-}
-
 func TestWorkflowStepWhenInfoPreservesNullEquals(t *testing.T) {
 	t.Parallel()
 
