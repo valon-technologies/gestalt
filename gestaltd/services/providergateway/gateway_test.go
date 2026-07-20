@@ -2,8 +2,8 @@ package providergateway
 
 import (
 	"context"
-	"io"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -443,12 +443,12 @@ func (c *stubStreamConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, m
 
 type stubClientStream struct{}
 
-func (s *stubClientStream) Header() (metadata.MD, error)             { return nil, nil }
-func (s *stubClientStream) Trailer() metadata.MD                     { return nil }
-func (s *stubClientStream) CloseSend() error                          { return nil }
-func (s *stubClientStream) Context() context.Context                 { return context.Background() }
-func (s *stubClientStream) SendMsg(m any) error                      { return nil }
-func (s *stubClientStream) RecvMsg(m any) error                      { return io.EOF }
+func (s *stubClientStream) Header() (metadata.MD, error) { return nil, nil }
+func (s *stubClientStream) Trailer() metadata.MD         { return nil }
+func (s *stubClientStream) CloseSend() error             { return nil }
+func (s *stubClientStream) Context() context.Context     { return context.Background() }
+func (s *stubClientStream) SendMsg(m any) error          { return nil }
+func (s *stubClientStream) RecvMsg(m any) error          { return io.EOF }
 
 func TestRoutingInvokeForwardsToEndpoint(t *testing.T) {
 	t.Parallel()
