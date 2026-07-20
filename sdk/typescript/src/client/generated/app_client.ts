@@ -32,13 +32,10 @@ import type {
   PublicAppInvokeStreamRequest,
   PublicAppInvokeGraphQLRequest,
 } from "./types.ts";
-import type {
-  UnaryTransport,
-  PublicUnaryCallOptions,
-} from "./unary_transport.ts";
+import type { Transport, PublicUnaryCallOptions } from "./transport.ts";
 
 export class AppClient {
-  constructor(private readonly transport: UnaryTransport) {}
+  constructor(private readonly transport: Transport) {}
 
   async invokeRaw(
     request: PublicAppInvokeRequest,
@@ -75,9 +72,6 @@ export class AppClient {
     request: PublicAppInvokeStreamRequest,
     callOptions?: PublicUnaryCallOptions,
   ): AsyncIterable<InvokeFrame> {
-    if (this.transport.serverStream === undefined) {
-      throw new Error("streaming is not supported by this transport");
-    }
     const frames = this.transport.serverStream(
       PUBLIC_METHODS.app.invokeStream,
       toWireAppInvokeRequest(request),

@@ -1,5 +1,5 @@
 // Package publicgo is the Go public gestaltd client emitter. It renders
-// native types, method metadata, UnaryTransport, and AppClient into
+// native types, method metadata, Transport, and AppClient into
 // sdk/go/publicclient.
 package publicgo
 

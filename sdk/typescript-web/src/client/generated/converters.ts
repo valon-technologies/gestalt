@@ -169,6 +169,7 @@ import type {
   PublicAgentUpdateSessionRequest,
   PublicAppInvokeGraphQLRequest,
   PublicAppInvokeRequest,
+  PublicAppInvokeStreamRequest,
   PublicAuthorizationAddRelationshipRequest,
   PublicAuthorizationCheckAccessManyRequest,
   PublicAuthorizationCheckAccessRequest,
@@ -217,7 +218,7 @@ export function toWireAppInvokeGraphQLRequest(
 }
 
 export function toWireAppInvokeRequest(
-  request: PublicAppInvokeRequest,
+  request: PublicAppInvokeRequest | PublicAppInvokeStreamRequest,
 ): AppInvokeRequest {
   return codecToWireAppInvokeRequest(request as Init<NativeAppInvokeRequest>);
 }

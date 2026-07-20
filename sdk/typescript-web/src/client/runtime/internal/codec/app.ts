@@ -7,6 +7,9 @@ import type {
   AgentToolRef,
   AppInvokeGraphQLRequest,
   AppInvokeRequest,
+  InvokeFrame,
+  InvokeFrameValue,
+  InvokeMetadata,
   OperationAnnotations,
   OperationResult,
   StringList,
@@ -105,6 +108,74 @@ export function fromWireAppInvokeRequest(
     instance: value.instance,
     idempotencyKey: value.idempotencyKey,
     credentialMode: value.credentialMode,
+  };
+}
+
+export function toWireInvokeFrame(value: Init<InvokeFrame>): wire.InvokeFrame {
+  return create(wire.InvokeFrameSchema, {
+    value: toWireInvokeFrameValue(value.value ?? { case: undefined }),
+  });
+}
+
+export function fromWireInvokeFrame(value: wire.InvokeFrame): InvokeFrame {
+  return {
+    value: fromWireInvokeFrameValue(value.value),
+  };
+}
+
+export function toWireInvokeFrameValue(
+  value: Init<InvokeFrameValue>,
+): wire.InvokeFrame["value"] {
+  switch (value.case) {
+    case "metadata":
+      return { case: "metadata", value: toWireInvokeMetadata(value.value) };
+    case "data":
+      return { case: "data", value: value.value };
+    default:
+      return { case: undefined };
+  }
+}
+
+export function fromWireInvokeFrameValue(
+  value: wire.InvokeFrame["value"],
+): InvokeFrameValue {
+  switch (value.case) {
+    case "metadata":
+      return { case: "metadata", value: fromWireInvokeMetadata(value.value) };
+    case "data":
+      return { case: "data", value: value.value };
+    default:
+      return { case: undefined };
+  }
+}
+
+export function toWireInvokeMetadata(
+  value: Init<InvokeMetadata>,
+): wire.InvokeMetadata {
+  return create(wire.InvokeMetadataSchema, {
+    status: value.status ?? 0,
+    headers: Object.fromEntries(
+      Object.entries(value.headers ?? {}).map(([key, item]) => [
+        key,
+        toWireStringList(item),
+      ]),
+    ),
+    mediaType: value.mediaType ?? "",
+  });
+}
+
+export function fromWireInvokeMetadata(
+  value: wire.InvokeMetadata,
+): InvokeMetadata {
+  return {
+    status: value.status,
+    headers: Object.fromEntries(
+      Object.entries(value.headers).map(([key, item]) => [
+        key,
+        fromWireStringList(item),
+      ]),
+    ),
+    mediaType: value.mediaType,
   };
 }
 

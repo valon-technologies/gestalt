@@ -27,7 +27,7 @@ func EmitPublicPlan(plan *publicsurface.EmitPlan, imports PublicImports) (*files
 		"methods.ts":              renderPublicMethods(plan.Methods),
 		"types.ts":                renderPublicTypes(plan.View, imports),
 		"converters.ts":           renderPublicConverters(plan.View, imports),
-		"unary_transport.ts":      renderPublicUnaryTransport(),
+		"transport.ts":             renderPublicTransport(),
 		"gateway_error.ts":        renderPublicGatewayError(imports),
 		"rest_request_mapping.ts": renderPublicRestRequestMapping(),
 		"transport_support.ts":    renderPublicTransportSupport(imports),

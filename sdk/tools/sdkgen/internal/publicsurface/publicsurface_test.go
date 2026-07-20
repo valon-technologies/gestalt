@@ -307,3 +307,82 @@ func fieldByName(m *model.Message, name string) *model.Field {
 	}
 	return nil
 }
+
+func TestFilterRESTIncludesServerStreamWithoutHTTPBinding(t *testing.T) {
+	t.Parallel()
+
+	view := &publicsurface.View{
+		Services: []*publicsurface.Service{{
+			Service: &model.Service{FullName: "gestalt.provider.v1.App"},
+			PublicMethods: []*model.Method{
+				{
+					Name:       "Invoke",
+					FullMethod: "/gestalt.provider.v1.App/Invoke",
+					Stream:     model.Unary,
+					HTTP:       &model.HTTPRule{Verb: "POST", Path: "/api/v2/app/{app}/operations/{operation}", Body: "*"},
+					Public:     true,
+					PublicPolicy: &model.PublicPolicy{Fill: []string{"context"}, Reject: []string{"run_as"}},
+				},
+				{
+					Name:       "InvokeStream",
+					FullMethod: "/gestalt.provider.v1.App/InvokeStream",
+					Stream:     model.ServerStream,
+					HTTP:       nil, // no HTTP binding — reachable via unified Invoke path
+					Public:     true,
+					PublicPolicy: &model.PublicPolicy{Fill: []string{"context"}, Reject: []string{"run_as"}},
+				},
+			},
+		}},
+	}
+
+	filtered := publicsurface.FilterREST(view)
+	if len(filtered.Services) != 1 {
+		t.Fatalf("services = %d, want 1", len(filtered.Services))
+	}
+	methods := filtered.Services[0].PublicMethods
+	if len(methods) != 2 {
+		t.Fatalf("methods = %d, want 2 (Invoke + InvokeStream)", len(methods))
+	}
+	var sawInvoke, sawInvokeStream bool
+	for _, m := range methods {
+		if m.Name == "Invoke" {
+			sawInvoke = true
+		}
+		if m.Name == "InvokeStream" {
+			sawInvokeStream = true
+			if m.Stream != model.ServerStream {
+				t.Errorf("InvokeStream stream = %v, want ServerStream", m.Stream)
+			}
+		}
+	}
+	if !sawInvoke {
+		t.Errorf("Invoke missing from filtered view")
+	}
+	if !sawInvokeStream {
+		t.Errorf("InvokeStream missing from filtered view — should be included as a server-stream method on a service with HTTP bindings")
+	}
+}
+
+func TestFilterRESTExcludesServerStreamWhenServiceHasNoHTTP(t *testing.T) {
+	t.Parallel()
+
+	view := &publicsurface.View{
+		Services: []*publicsurface.Service{{
+			Service: &model.Service{FullName: "gestalt.provider.v1.NoHTTP"},
+			PublicMethods: []*model.Method{
+				{
+					Name:       "StreamOnly",
+					FullMethod: "/gestalt.provider.v1.NoHTTP/StreamOnly",
+					Stream:     model.ServerStream,
+					HTTP:       nil,
+					Public:     true,
+				},
+			},
+		}},
+	}
+
+	filtered := publicsurface.FilterREST(view)
+	if len(filtered.Services) != 0 {
+		t.Fatalf("services = %d, want 0 (no HTTP-backed methods)", len(filtered.Services))
+	}
+}

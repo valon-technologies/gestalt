@@ -15,7 +15,7 @@ import {
 import { GestaltErrorCode } from "../src/client/runtime/rpc_support.ts";
 import { PUBLIC_METHODS } from "../src/client/generated/methods.ts";
 import { buildRestPath, buildRestBody } from "../src/client/generated/rest_request_mapping.ts";
-import { createRestUnaryTransport } from "../src/rest_transport.ts";
+import { createRestTransport } from "../src/rest_transport.ts";
 
 test("REST transport maps protobuf JSON requests and gateway errors", async () => {
   const calls: Array<{
@@ -26,7 +26,7 @@ test("REST transport maps protobuf JSON requests and gateway errors", async () =
     credentials?: RequestCredentials;
   }> = [];
 
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token-123"),
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -89,7 +89,7 @@ test("REST transport maps protobuf JSON requests and gateway errors", async () =
   expect(response.status).toBe(418);
   expect(new TextDecoder().decode(response.body)).toBe("teapot");
 
-  const gatewayTransport = createRestUnaryTransport({
+  const gatewayTransport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async () =>
@@ -116,7 +116,7 @@ test("REST transport maps protobuf JSON requests and gateway errors", async () =
 test("session auth sends credentials include without Authorization header", async () => {
   const calls: Array<{ authorization: string | null; credentials?: RequestCredentials }> =
     [];
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: session(),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -159,7 +159,7 @@ test("session auth sends credentials include without Authorization header", asyn
 test("bearer token provider is evaluated per invocation", async () => {
   let token = "first";
   const authorizations: string[] = [];
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(async () => token),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -203,7 +203,7 @@ test("bearer token provider is evaluated per invocation", async () => {
 test("unauthenticated auth omits Authorization header and credentials", async () => {
   const seen: Array<{ authorization: string | null; credentials?: RequestCredentials }> =
     [];
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: unauthenticated(),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -246,7 +246,7 @@ test("unauthenticated auth omits Authorization header and credentials", async ()
 test("AbortSignal cancels in-flight requests without retrying", async () => {
   const controller = new AbortController();
   controller.abort(new DOMException("canceled", "AbortError"));
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: unauthenticated(),
     fetch: (async () => {
@@ -279,7 +279,7 @@ test("AbortSignal cancels in-flight requests without retrying", async () => {
 });
 
 test("timeout surfaces DeadlineExceeded without retrying", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: unauthenticated(),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -375,7 +375,7 @@ test("bearer provider is not awaited after cancellation", async () => {
   let tokenCalls = 0;
   const controller = new AbortController();
   controller.abort(new DOMException("canceled", "AbortError"));
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(async () => {
       tokenCalls += 1;
@@ -413,7 +413,7 @@ test("bearer provider is not awaited after cancellation", async () => {
 
 test("timeout interrupts a hanging bearer token provider", async () => {
   let tokenCalls = 0;
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(async () => {
       tokenCalls += 1;
@@ -453,7 +453,7 @@ test("timeout interrupts a hanging bearer token provider", async () => {
 test("arbitrary abort reasons map to Canceled", async () => {
   const controller = new AbortController();
   controller.abort("user canceled");
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: unauthenticated(),
     fetch: (async () => {
@@ -487,7 +487,7 @@ test("arbitrary abort reasons map to Canceled", async () => {
 
 test("POST requests append sdkgen query fields", async () => {
   const seenUrls: string[] = [];
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async (input: RequestInfo | URL) => {
@@ -530,7 +530,7 @@ test("POST requests append sdkgen query fields", async () => {
 });
 
 test("REST transport maps body-read aborts to GestaltError", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async () =>
@@ -611,7 +611,7 @@ test("REST transport omits undefined optional params from sparse JSON bodies", a
 });
 
 test("REST transport maps 403 gateway errors to PermissionDenied", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async () =>
@@ -646,7 +646,7 @@ test("REST transport maps 403 gateway errors to PermissionDenied", async () => {
 });
 
 test("REST transport maps offline fetch failures to Unavailable", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async () => {
@@ -678,7 +678,7 @@ test("REST transport maps offline fetch failures to Unavailable", async () => {
 });
 
 test("REST transport rejects malformed success JSON bodies", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async () =>
@@ -709,7 +709,7 @@ test("REST transport rejects malformed success JSON bodies", async () => {
 });
 
 test("REST transport accepts empty 204 success responses", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async () => new Response(null, { status: 204 })) as unknown as typeof fetch,

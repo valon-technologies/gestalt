@@ -12,7 +12,7 @@ import {
   GestaltErrorCode,
 } from __RPC_SUPPORT_IMPORT__;
 
-import type { PublicUnaryCallOptions } from "./unary_transport.ts";
+import type { PublicUnaryCallOptions } from "./transport.ts";
 
 export function resolveEffectiveAbortSignal(
   callOptions?: PublicUnaryCallOptions,

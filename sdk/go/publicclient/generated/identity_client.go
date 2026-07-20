@@ -10,11 +10,11 @@ import (
 
 // IdentityClient is the transport-neutral client for the public Identity surface.
 type IdentityClient struct {
-	transport UnaryTransport
+	transport Transport
 }
 
 // NewIdentityClient creates a IdentityClient over the given transport.
-func NewIdentityClient(transport UnaryTransport) *IdentityClient {
+func NewIdentityClient(transport Transport) *IdentityClient {
 	return &IdentityClient{transport: transport}
 }
 

@@ -11,11 +11,11 @@ import (
 
 // ExternalCredentialsClient is the transport-neutral client for the public ExternalCredentials surface.
 type ExternalCredentialsClient struct {
-	transport UnaryTransport
+	transport Transport
 }
 
 // NewExternalCredentialsClient creates a ExternalCredentialsClient over the given transport.
-func NewExternalCredentialsClient(transport UnaryTransport) *ExternalCredentialsClient {
+func NewExternalCredentialsClient(transport Transport) *ExternalCredentialsClient {
 	return &ExternalCredentialsClient{transport: transport}
 }
 

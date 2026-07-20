@@ -59,13 +59,10 @@ import type {
   PublicIdentityGetGrantRequest,
   PublicIdentityRevokeGrantRequest,
 } from "./types.ts";
-import type {
-  UnaryTransport,
-  PublicUnaryCallOptions,
-} from "./unary_transport.ts";
+import type { Transport, PublicUnaryCallOptions } from "./transport.ts";
 
 export class IdentityClient {
-  constructor(private readonly transport: UnaryTransport) {}
+  constructor(private readonly transport: Transport) {}
 
   async authorize(
     request: PublicIdentityAuthorizeRequest,

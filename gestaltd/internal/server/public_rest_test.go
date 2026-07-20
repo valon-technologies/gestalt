@@ -358,3 +358,267 @@ func TestPublicRESTRouting(t *testing.T) {
 		}
 	})
 }
+
+// TestPublicRESTStreamingInvoke verifies that POST /api/v2/app/{app}/operations/{operation}
+// streams when the catalog operation declares a streaming response. The
+// metadata frame's media type becomes the HTTP Content-Type, and data frames
+// are written and flushed incrementally as raw bytes.
+func TestPublicRESTStreamingInvoke(t *testing.T) {
+	t.Parallel()
+
+	t.Run("ndjson stream", func(t *testing.T) {
+		t.Parallel()
+
+		ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "stream-app",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name: "stream-app",
+					Operations: []catalog.CatalogOperation{{
+						ID:     "events.watch",
+						Method: "POST",
+						Response: &catalog.OperationResponseSpec{
+							Stream: &catalog.StreamResponseSpec{
+								MediaType: "application/x-ndjson",
+							},
+						},
+					}},
+				},
+				StreamFn: func(_ context.Context, _ string, _ map[string]any, _ string) (core.StreamReader, error) {
+					return &sliceStreamReader{frames: []*core.InvokeFrame{
+						{Metadata: &core.InvokeMetadata{Status: http.StatusOK, MediaType: "application/x-ndjson"}},
+						{Data: []byte(`{"type":"started"}` + "\n")},
+						{Data: []byte(`{"type":"finished"}` + "\n")},
+					}}, nil
+				},
+			})
+		})
+
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v2/app/stream-app/operations/events.watch", bytes.NewReader([]byte(`{"params":{}}`)))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+publicRESTTestBearer("stream-app"))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST invoke: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, string(body))
+		}
+		if ct := resp.Header.Get("Content-Type"); ct != "application/x-ndjson" {
+			t.Fatalf("Content-Type = %q, want %q", ct, "application/x-ndjson")
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		want := `{"type":"started"}` + "\n" + `{"type":"finished"}` + "\n"
+		if string(body) != want {
+			t.Fatalf("body = %q, want %q", string(body), want)
+		}
+	})
+
+	t.Run("unary operation on same path is unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "mixed-app",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name: "mixed-app",
+					Operations: []catalog.CatalogOperation{{
+						ID:     "sync",
+						Method: "POST",
+					}},
+				},
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
+				},
+			})
+		})
+
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v2/app/mixed-app/operations/sync", bytes.NewReader([]byte(`{"params":{}}`)))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+publicRESTTestBearer("mixed-app"))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST invoke: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, string(body))
+		}
+		var payload struct {
+			Status int    `json:"status"`
+			Body   string `json:"body"`
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("unary response is not JSON envelope: %q: %v", string(body), err)
+		}
+		if payload.Status != http.StatusOK {
+			t.Fatalf("envelope status = %d, want %d", payload.Status, http.StatusOK)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(payload.Body)
+		if err != nil {
+			t.Fatalf("envelope body decode: %v", err)
+		}
+		if string(decoded) != `{"ok":true}` {
+			t.Fatalf("envelope body = %q, want %q", string(decoded), `{"ok":true}`)
+		}
+	})
+
+	t.Run("streaming operation with provider that does not implement StreamingExecutor", func(t *testing.T) {
+		t.Parallel()
+
+		ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &nonStreamingStub{
+				N:        "no-stream-app",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name: "no-stream-app",
+					Operations: []catalog.CatalogOperation{{
+						ID:     "events.watch",
+						Method: "POST",
+						Response: &catalog.OperationResponseSpec{
+							Stream: &catalog.StreamResponseSpec{
+								MediaType: "application/x-ndjson",
+							},
+						},
+					}},
+				},
+			})
+		})
+
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v2/app/no-stream-app/operations/events.watch", bytes.NewReader([]byte(`{"params":{}}`)))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+publicRESTTestBearer("no-stream-app"))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST invoke: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want %d (body=%s)", resp.StatusCode, http.StatusBadRequest, string(body))
+		}
+	})
+
+	t.Run("unauthenticated streaming request returns 401", func(t *testing.T) {
+		t.Parallel()
+
+		ts := startPublicRESTServer(t, server.RouteProfilePublic, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "auth-stream-app",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name: "auth-stream-app",
+					Operations: []catalog.CatalogOperation{{
+						ID:     "events.watch",
+						Method: "POST",
+						Response: &catalog.OperationResponseSpec{
+							Stream: &catalog.StreamResponseSpec{
+								MediaType: "application/x-ndjson",
+							},
+						},
+					}},
+				},
+				StreamFn: func(_ context.Context, _ string, _ map[string]any, _ string) (core.StreamReader, error) {
+					return &sliceStreamReader{frames: []*core.InvokeFrame{
+						{Metadata: &core.InvokeMetadata{Status: http.StatusOK, MediaType: "application/x-ndjson"}},
+						{Data: []byte("data\n")},
+					}}, nil
+				},
+			})
+		})
+
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v2/app/auth-stream-app/operations/events.watch", bytes.NewReader([]byte(`{"params":{}}`)))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST invoke: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want %d (body=%s)", resp.StatusCode, http.StatusUnauthorized, string(body))
+		}
+	})
+}
+
+// sliceStreamReader is a test StreamReader that yields a fixed slice of frames.
+type sliceStreamReader struct {
+	frames []*core.InvokeFrame
+	idx    int
+}
+
+func (r *sliceStreamReader) Recv() (*core.InvokeFrame, error) {
+	if r.idx >= len(r.frames) {
+		return nil, io.EOF
+	}
+	frame := r.frames[r.idx]
+	r.idx++
+	return frame, nil
+}
+
+// nonStreamingStub is a provider stub that declares a streaming operation in
+// its catalog but does NOT implement core.StreamingExecutor. This verifies the
+// broker rejects streaming invocations when the provider can't stream.
+type nonStreamingStub struct {
+	N          string
+	ConnMode   core.ConnectionMode
+	CatalogVal *catalog.Catalog
+}
+
+func (s *nonStreamingStub) Name() string        { return s.N }
+func (s *nonStreamingStub) DisplayName() string { return s.N }
+func (s *nonStreamingStub) Description() string { return "" }
+func (s *nonStreamingStub) ConnectionMode() core.ConnectionMode {
+	return core.NormalizeConnectionMode(s.ConnMode)
+}
+func (s *nonStreamingStub) AuthTypes() []string                                     { return nil }
+func (s *nonStreamingStub) ConnectionParamDefs() map[string]core.ConnectionParamDef { return nil }
+func (s *nonStreamingStub) CredentialFields() []core.CredentialFieldDef             { return nil }
+func (s *nonStreamingStub) DiscoveryConfig() *core.DiscoveryConfig                  { return nil }
+func (s *nonStreamingStub) ConnectionForOperation(string) string                    { return "" }
+func (s *nonStreamingStub) AuthorizationURL(string, []string) string                { return "" }
+func (s *nonStreamingStub) ExchangeCode(context.Context, string) (*core.OAuthTokenResponse, error) {
+	return nil, nil
+}
+func (s *nonStreamingStub) RefreshToken(context.Context, string) (*core.OAuthTokenResponse, error) {
+	return nil, nil
+}
+func (s *nonStreamingStub) Catalog() *catalog.Catalog { return s.CatalogVal }
+func (s *nonStreamingStub) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+	return nil, nil
+}
+
+// ExecuteStream is intentionally NOT implemented so the provider does not
+// satisfy core.StreamingExecutor.

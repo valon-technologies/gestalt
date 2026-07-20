@@ -371,6 +371,34 @@ export interface AppInvokeRequest {
   credentialMode: string;
 }
 
+export type InvokeFrameValue =
+  | { case: "metadata"; value: InvokeMetadata }
+  | { case: "data"; value: Uint8Array }
+  | { case: undefined; value?: undefined };
+
+/**
+ * InvokeFrame is one frame in a streaming invocation. The first frame is always
+ * metadata; subsequent frames carry data bytes produced by the operation
+ * handler (after encoding, for typed item streams). A mid-stream error (for
+ * example, a validation failure or a recovered panic) may emit a trailing
+ * metadata frame with a non-2xx status followed by a data frame carrying a
+ * JSON error body, after which the stream ends.
+ */
+export interface InvokeFrame {
+  value: InvokeFrameValue;
+}
+
+/**
+ * InvokeMetadata is the first frame of a streaming invocation. It carries the
+ * HTTP-shaped status, headers, and the response media type (from the
+ * operation's StreamResponseSpec).
+ */
+export interface InvokeMetadata {
+  status: number;
+  headers: { [key: string]: StringList };
+  mediaType: string;
+}
+
 /**
  * OperationAnnotations carries optional host hints about how an operation
  * behaves.

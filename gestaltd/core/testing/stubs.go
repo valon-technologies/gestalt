@@ -3,6 +3,7 @@ package coretesting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
@@ -238,6 +239,7 @@ type StubIntegration struct {
 	CatalogVal     *catalog.Catalog
 	ExchangeCodeFn func(context.Context, string) (*core.OAuthTokenResponse, error)
 	ExecuteFn      func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
+	StreamFn       func(context.Context, string, map[string]any, string) (core.StreamReader, error)
 }
 
 func (s *StubIntegration) Name() string        { return s.N }
@@ -273,4 +275,12 @@ func (s *StubIntegration) Execute(ctx context.Context, op string, params map[str
 		return s.ExecuteFn(ctx, op, params, token)
 	}
 	return nil, nil
+}
+
+// ExecuteStream implements core.StreamingExecutor.
+func (s *StubIntegration) ExecuteStream(ctx context.Context, op string, params map[string]any, token string) (core.StreamReader, error) {
+	if s.StreamFn != nil {
+		return s.StreamFn(ctx, op, params, token)
+	}
+	return nil, errors.New("streaming unsupported")
 }

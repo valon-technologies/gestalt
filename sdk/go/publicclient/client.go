@@ -147,7 +147,7 @@ func NewGRPC(opts AddressOptions) (*GrpcClient, error) {
 	return bindGrpcClient(grpcT, grpcT), nil
 }
 
-func bindRestClient(transport generated.UnaryTransport, closer interface{ Close() error }) *RestClient {
+func bindRestClient(transport generated.Transport, closer interface{ Close() error }) *RestClient {
 	return &RestClient{
 		App:           generated.NewAppClient(transport),
 		Agent:         generated.NewAgentClient(transport),
@@ -158,7 +158,7 @@ func bindRestClient(transport generated.UnaryTransport, closer interface{ Close(
 	}
 }
 
-func bindGrpcClient(transport generated.UnaryTransport, closer interface{ Close() error }) *GrpcClient {
+func bindGrpcClient(transport generated.Transport, closer interface{ Close() error }) *GrpcClient {
 	return &GrpcClient{
 		App:           generated.NewAppClient(transport),
 		Agent:         generated.NewAgentClient(transport),
@@ -171,7 +171,7 @@ func bindGrpcClient(transport generated.UnaryTransport, closer interface{ Close(
 	}
 }
 
-func bindBoundClient(transport generated.UnaryTransport, closer interface{ Close() error }) *BoundClient {
+func bindBoundClient(transport generated.Transport, closer interface{ Close() error }) *BoundClient {
 	return &BoundClient{
 		App:       generated.NewAppClient(transport),
 		transport: closer,

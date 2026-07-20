@@ -10,11 +10,11 @@ import (
 
 // AgentClient is the transport-neutral client for the public Agent surface.
 type AgentClient struct {
-	transport UnaryTransport
+	transport Transport
 }
 
 // NewAgentClient creates a AgentClient over the given transport.
-func NewAgentClient(transport UnaryTransport) *AgentClient {
+func NewAgentClient(transport Transport) *AgentClient {
 	return &AgentClient{transport: transport}
 }
 

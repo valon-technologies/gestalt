@@ -6,16 +6,21 @@
  * @module client/generated/app_client.ts
  */
 
-import type { OperationResult } from "../runtime/native-types.ts";
-import { fromWireOperationResult } from "../runtime/internal/codec/app.ts";
+import type { InvokeFrame, OperationResult } from "../runtime/native-types.ts";
+import {
+  fromWireInvokeFrame,
+  fromWireOperationResult,
+} from "../runtime/internal/codec/app.ts";
 import {
   AppInvokeGraphQLRequestSchema,
   AppInvokeRequestSchema,
+  InvokeFrameSchema,
   OperationResultSchema,
 } from "../runtime/internal/gen/v1/app_pb.ts";
 import {
   decodeAppResult,
   decodeGraphQLResult,
+  mapServerStreamFrames,
 } from "../runtime/invoke_support.ts";
 import {
   toWireAppInvokeGraphQLRequest,
@@ -25,14 +30,12 @@ import { PUBLIC_METHODS } from "./methods.ts";
 import type {
   PublicAppInvokeRequest,
   PublicAppInvokeGraphQLRequest,
+  PublicAppInvokeStreamRequest,
 } from "./types.ts";
-import type {
-  UnaryTransport,
-  PublicUnaryCallOptions,
-} from "./unary_transport.ts";
+import type { Transport, PublicUnaryCallOptions } from "./transport.ts";
 
 export class AppClient {
-  constructor(private readonly transport: UnaryTransport) {}
+  constructor(private readonly transport: Transport) {}
 
   async invokeRaw(
     request: PublicAppInvokeRequest,
@@ -94,6 +97,22 @@ export class AppClient {
   ): Promise<T> {
     const response = await this.invokeGraphQL(request, callOptions);
     return decodeGraphQLResult<T>(request.app ?? "", response);
+  }
+
+  invokeStream(
+    request: PublicAppInvokeStreamRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): AsyncIterable<InvokeFrame> {
+    const frames = this.transport.serverStream(
+      PUBLIC_METHODS.app.invokeStream,
+      toWireAppInvokeRequest(request),
+      AppInvokeRequestSchema,
+      InvokeFrameSchema,
+      callOptions,
+    );
+    return mapServerStreamFrames(frames, (f) =>
+      fromWireInvokeFrame(f as Parameters<typeof fromWireInvokeFrame>[0]),
+    );
   }
 }
 

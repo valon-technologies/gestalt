@@ -102,6 +102,10 @@ export type PublicAppInvokeGraphQLRequest = Init<
   Omit<AppInvokeGraphQLRequest, "context">
 >;
 
+export type PublicAppInvokeStreamRequest = Init<
+  Omit<AppInvokeRequest, "context" | "runAs">
+>;
+
 export type PublicAuthorizationCheckAccessRequest = Init<CheckAccessRequest>;
 
 export type PublicAuthorizationCheckAccessManyRequest =

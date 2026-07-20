@@ -7,7 +7,7 @@ import { authToProvider, bearer } from "../src/client/auth.ts";
 import { createGestaltClient, rest } from "../src/client/client.ts";
 import { GestaltErrorCode } from "../src/client/errors.ts";
 import type { PublicAppInvokeRequest } from "../src/client/generated/types.ts";
-import { createRestUnaryTransport } from "../src/client/rest_transport.ts";
+import { createRestTransport } from "../src/client/rest_transport.ts";
 import {
   AppInvokeRequestSchema,
   OperationResultSchema,
@@ -74,7 +74,7 @@ test("REST transport surfaces platform errors from gateway responses", async () 
   const gestaltError = platformCase.response.gestaltError;
   if (!gestaltError) throw new Error("missing gestalt error fixture");
 
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token")),
     fetch: (async () =>

@@ -5,7 +5,7 @@
  */
 
 import type { DescMessage, DescService, Message } from "@bufbuild/protobuf";
-import { createClient, type Client, type Transport } from "@connectrpc/connect";
+import { createClient, type Client } from "@connectrpc/connect";
 
 import { Agent } from "../internal/gen/v1/agent_pb.ts";
 import { App } from "../internal/gen/v1/app_pb.ts";
@@ -27,10 +27,10 @@ import {
 } from "./generated/transport_support.ts";
 import type {
   PublicUnaryCallOptions,
-  UnaryTransport,
-} from "./generated/unary_transport.ts";
+  Transport,
+} from "./generated/transport.ts";
 
-export interface GrpcUnaryTransportOptions {
+export interface GrpcTransportOptions {
   baseUrl: string;
   auth: AuthProvider;
 }
@@ -52,9 +52,9 @@ type ConnectGrpcTransport = ReturnType<
   typeof import("@connectrpc/connect-node").createGrpcTransport
 >;
 
-export async function createGrpcUnaryTransport(
-  options: GrpcUnaryTransportOptions,
-): Promise<UnaryTransport & { close(): Promise<void> }> {
+export async function createGrpcTransport(
+  options: GrpcTransportOptions,
+): Promise<Transport & { close(): Promise<void> }> {
   const { createGrpcTransport, Http2SessionManager } = await import(
     "@connectrpc/connect-node"
   );
