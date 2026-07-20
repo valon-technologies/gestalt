@@ -82,7 +82,7 @@ Failure and retry behavior:
 
 Apps with `source.registry` declare the app slot in deploy config; the running binary comes from the registry. See [config.md](./config.md#registry-only-app-source).
 
-At boot, `StartAppProviders` skips registry-only apps when `ListKnownVersionsByApp` is empty. When a fleet-known version exists, bootstrap materializes the latest (`LatestKnownVersion`) from `{artifactsDir}/registry-installed/{app}/{version}` if needed and starts the provider — the same mount path used by catalog-driven restarts. The catalog poller handles first install and upgrades for replicas that are not yet converged. See [config.md](./config.md#implementation-notes-step-12).
+At boot, `StartAppProviders` skips registry-only apps when `ListKnownVersionsByApp` is empty. When a fleet-known version exists, bootstrap materializes the latest (`LatestKnownVersion`) from `{artifactsDir}/registry-installed/{app}/{version}` if needed and starts the provider — the same mount path used by catalog-driven restarts. The catalog poller handles first install and upgrades for replicas that are not yet converged. See [plan.md](./plan.md#step-12-implementation-notes).
 
 ## Runtime
 

@@ -264,5 +264,53 @@ Core recovery paths must not depend on dynamically installed apps.
 9. Stop the running app and start the same app back up (restart machinery only; no binary change yet). Use a **1 minute** delay between stop and start during early rollout testing so operators can observe that the process started; production restart has no intentional wait.
 10. Download and materialize the new version artifact **before** bringing the app down. **Done:** catalog poller downloads registry archives to `{artifactsDir}/registry-installed/{app}/{version}` and records `materialized_at` before `StopApp`. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#artifact-materialization-tests).
 11. Mount the newly materialized binary instead of the old one when restarting. **Done:** catalog-driven `StartApp` resolves an isolated provider entry from `{artifactsDir}/registry-installed/{app}/{version}` before rebuilding the app. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#registry-mount-tests).
-12. Registry-only app config. See [config.md](./config.md#registry-only-app-source) (behavior + [implementation notes](./config.md#implementation-notes-step-12)).
+12. Registry-only app config. See [config.md](./config.md#registry-only-app-source). Implementation: [step 12 notes](#step-12-implementation-notes).
 13. Add install-time validation, fleet activation/rollback, and concurrency guards.
+
+### Step 12 implementation notes
+
+Ship as **one PR**. Reuse step 10–11 materialization and mount paths; do not query `app_rollouts` or `app_instance_materializations` for boot decisions.
+
+#### Config and lock
+
+| Area | Touch |
+|------|-------|
+| `ProviderSource` | Add `registry` field; `IsRegistry()` helper |
+| `config_validate.go` | Accept `source.registry` when it names a configured `appRegistries` entry; mutually exclusive with other source modes |
+| `internal/operator/lifecycle.go` | Skip snapshot resolve/download for registry-only apps in `gestalt lock` / `gestalt sync` |
+
+Lockfile entry — no `archives`, no manifest; record the registry binding only:
+
+```json
+{
+  "source": "registry",
+  "sourceRef": {
+    "type": "registry",
+    "resolvedGestaltRef": "toolshed"
+  }
+}
+```
+
+#### First install `from_version`
+
+`app_version_change_requests.from_version` is required on every row. Registry-only apps have no config pin, so the installer cannot fall back to `gestalt.lock.json` on the first fleet install.
+
+When `ListKnownVersionsByApp` is empty and the app has `source.registry`, write `from_version: "none"`. Upgrades continue to use `LatestKnownVersion` as today. Projection helpers must not treat `"none"` as a runnable version.
+
+#### Bootstrap startup
+
+Registry-only apps have no `ResolvedManifest` at deploy time — exclude them from the normal startup provider build loop (`provider_build.go`). At `StartAppProviders`, for each registry-only app:
+
+1. `known := ChangeRequests.ListKnownVersionsByApp(app)` — skip when empty.
+2. `version := LatestKnownVersion(known)`.
+3. `Materializer.Materialize(...)` if `{artifactsDir}/registry-installed/{app}/{version}` is missing.
+4. `AppRestarter.StartApp(ctx, app, version)` — same registry mount as the catalog poller (step 11).
+
+The catalog poller still handles first install and upgrades on replicas that were skipped at boot or join after a rollout.
+
+#### Tests
+
+- Config validation accepts `source.registry`; rejects unknown registry name and mixed source modes.
+- Installer first install with registry-only config records `from_version: "none"`.
+- Bootstrap starts a registry-only app when a known version exists; skips when the projection is empty.
+- Lock/sync leaves registry-only apps out of artifact download (lockfile shape above).
