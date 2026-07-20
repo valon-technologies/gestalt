@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
 	"reflect"
 	"strconv"
 	"testing"
@@ -14,7 +16,10 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
@@ -267,7 +272,7 @@ config:
 	if err != nil {
 		t.Fatalf("buildAuthorizationProviders: %v", err)
 	}
-	if providers.Raw["indexeddb"] == nil {
+	if providers["indexeddb"] == nil {
 		t.Fatal("raw authorization provider was not built")
 	}
 	if capturedName != "indexeddb" {
@@ -549,3 +554,82 @@ func TestProviderAuthorizationKindsSkipsDedicatedAppResourceTypes(t *testing.T) 
 		t.Fatalf("assistant kind = %v, want agent", got["assistant"])
 	}
 }
+
+func TestBootstrapAuthorizationProviderReceivesSharedGatewayTransport(t *testing.T) {
+	t.Parallel()
+
+	var capturedTransport *providergateway.ProviderGatewayTransport
+	factories := &FactoryRegistry{
+		Auth: func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (core.IdentityProvider, error) {
+			return &coretesting.StubAuthProvider{}, nil
+		},
+		Authorization: func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps Deps) (providerdrivers.AuthorizationBuildResult, error) {
+			capturedTransport = deps.GatewayTransport
+			return providerdrivers.AuthorizationBuildResult{Raw: &recordingAuthorizationProvider{}}, nil
+		},
+	}
+	factories.Secrets = map[string]SecretManagerFactory{
+		"stub": func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{Secrets: map[string]string{}}, nil
+		},
+	}
+	factories.Telemetry = map[string]TelemetryFactory{
+		"noop": func(yaml.Node) (core.TelemetryProvider, error) {
+			return telemetrynoopProvider{}, nil
+		},
+	}
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
+		return &coretesting.StubIndexedDB{}, nil
+	}
+	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (core.ExternalCredentialProvider, error) {
+		return coretesting.NewStubExternalCredentialProvider(), nil
+	}
+
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Identity: map[string]*config.ProviderEntry{
+				"default": {
+					Source: config.NewMetadataSource("https://example.invalid/auth/oidc/v0.0.1/provider-release.yaml"),
+					Config: yaml.Node{Kind: yaml.MappingNode},
+				},
+			},
+			Secrets: map[string]*config.ProviderEntry{
+				"default": {Source: config.ProviderSource{Builtin: "stub"}},
+			},
+			Telemetry: map[string]*config.ProviderEntry{
+				"default": {Source: config.ProviderSource{Builtin: "noop"}},
+			},
+			IndexedDB: map[string]*config.ProviderEntry{
+				"main": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml")},
+			},
+			Authorization: map[string]*config.ProviderEntry{
+				"authz": {Config: yaml.Node{Kind: yaml.MappingNode}},
+			},
+		},
+		Server: config.ServerConfig{
+			Providers:     config.ServerProvidersConfig{IndexedDB: "main"},
+			EncryptionKey: "test-key",
+		},
+	}
+
+	result, err := Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+
+	if capturedTransport == nil {
+		t.Fatal("factory did not receive a GatewayTransport in Deps")
+	}
+	if result.PublicGatewayTransport != capturedTransport {
+		t.Fatal("factory GatewayTransport is not the same instance as the public transport")
+	}
+}
+
+type telemetrynoopProvider struct{}
+
+func (telemetrynoopProvider) Logger() *slog.Logger                 { return slog.Default() }
+func (telemetrynoopProvider) PrometheusHandler() http.Handler      { return nil }
+func (telemetrynoopProvider) MeterProvider() metric.MeterProvider  { return nil }
+func (telemetrynoopProvider) TracerProvider() trace.TracerProvider { return nil }
+func (telemetrynoopProvider) Shutdown(context.Context) error       { return nil }

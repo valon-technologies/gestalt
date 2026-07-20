@@ -8,19 +8,20 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
-type AuthorizationDeps struct{}
-
-type AuthorizationBuildResult struct {
-	Raw  core.AuthorizationProvider
-	Conn grpc.ClientConnInterface
+type AuthorizationDeps struct {
+	Gateway *providergateway.ProviderGatewayTransport
 }
 
-func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ AuthorizationDeps) (AuthorizationBuildResult, error) {
+type AuthorizationBuildResult struct {
+	Raw core.AuthorizationProvider
+}
+
+func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps AuthorizationDeps) (AuthorizationBuildResult, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return AuthorizationBuildResult{}, fmt.Errorf("authorization provider: parsing config: %w", err)
@@ -54,14 +55,25 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		return AuthorizationBuildResult{}, err
 	}
 
-	raw, err := authorizationservice.NewFromExecutable(exec, execCfg)
+	if deps.Gateway != nil {
+		target := providergateway.ProviderTarget{Kind: providergateway.ProviderKindAuthorization, Name: name}
+		if err := deps.Gateway.RegisterDirect(target, providergateway.DirectEndpoint{Conn: exec.Conn()}); err != nil {
+			_ = exec.Close()
+			return AuthorizationBuildResult{}, err
+		}
+		raw, err := authorizationservice.NewFromExecutable(exec, deps.Gateway.Conn(target))
+		if err != nil {
+			_ = exec.Close()
+			return AuthorizationBuildResult{}, err
+		}
+		return AuthorizationBuildResult{Raw: raw}, nil
+	}
+
+	raw, err := authorizationservice.NewFromExecutable(exec, exec.Conn())
 	if err != nil {
 		_ = exec.Close()
 		return AuthorizationBuildResult{}, err
 	}
 
-	return AuthorizationBuildResult{
-		Raw:  raw,
-		Conn: exec.Conn(),
-	}, nil
+	return AuthorizationBuildResult{Raw: raw}, nil
 }
