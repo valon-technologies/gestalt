@@ -2,6 +2,7 @@ package providergateway
 
 import (
 	"context"
+	"io"
 	"errors"
 	"testing"
 
@@ -430,6 +431,25 @@ func (c *stubConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method 
 	return nil, status.Error(codes.Unimplemented, "stubConn does not support streaming")
 }
 
+type stubStreamConn struct{}
+
+func (c *stubStreamConn) Invoke(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error {
+	return nil
+}
+
+func (c *stubStreamConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	return &stubClientStream{}, nil
+}
+
+type stubClientStream struct{}
+
+func (s *stubClientStream) Header() (metadata.MD, error)             { return nil, nil }
+func (s *stubClientStream) Trailer() metadata.MD                     { return nil }
+func (s *stubClientStream) CloseSend() error                          { return nil }
+func (s *stubClientStream) Context() context.Context                 { return context.Background() }
+func (s *stubClientStream) SendMsg(m any) error                      { return nil }
+func (s *stubClientStream) RecvMsg(m any) error                      { return io.EOF }
+
 func TestRoutingInvokeForwardsToEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -603,12 +623,12 @@ func TestRoutingGatewayRecordsMetrics(t *testing.T) {
 	})
 }
 
-func TestRoutingNewStreamUnimplemented(t *testing.T) {
+func TestRoutingNewStreamForwardsToEndpoint(t *testing.T) {
 	t.Parallel()
 
 	transport := NewProviderGatewayTransport()
 	target := ProviderTarget{Kind: "test", Name: "stub"}
-	if err := transport.RegisterDirect(target, DirectEndpoint{Conn: &stubConn{}}); err != nil {
+	if err := transport.RegisterDirect(target, DirectEndpoint{Conn: &stubStreamConn{}}); err != nil {
 		t.Fatalf("RegisterDirect: %v", err)
 	}
 	stream, err := transport.Conn(target).NewStream(
@@ -616,10 +636,10 @@ func TestRoutingNewStreamUnimplemented(t *testing.T) {
 		&grpc.StreamDesc{ServerStreams: true},
 		"/test.Service/Stream",
 	)
-	if stream != nil {
-		t.Fatalf("NewStream stream = %v, want nil", stream)
+	if err != nil {
+		t.Fatalf("NewStream err = %v, want nil", err)
 	}
-	if status.Code(err) != codes.Unimplemented {
-		t.Fatalf("status.Code(err) = %v, want Unimplemented (%v)", status.Code(err), err)
+	if stream == nil {
+		t.Fatalf("NewStream stream = nil, want non-nil")
 	}
 }

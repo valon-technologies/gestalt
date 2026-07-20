@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -37,19 +38,19 @@ var ErrInvalidListSessionsPagination = errors.New("invalid list sessions paginat
 
 type HostedAppConn interface {
 	Lifecycle() proto.ProviderLifecycleClient
-	Integration() proto.AppProviderClient
+	Conn() grpc.ClientConnInterface
 	Close() error
 }
 
 type HostedAgentConn interface {
 	Lifecycle() proto.ProviderLifecycleClient
-	Agent() proto.AgentClient
+	Conn() grpc.ClientConnInterface
 	Close() error
 }
 
 type HostedWorkflowConn interface {
 	Lifecycle() proto.ProviderLifecycleClient
-	Workflow() proto.WorkflowClient
+	Conn() grpc.ClientConnInterface
 	Close() error
 }
 

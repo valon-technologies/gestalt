@@ -53,7 +53,7 @@ func TestDialHostedAppRecordsRPCClientDurationWithTelemetryAttrs(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	if _, err := conn.Integration().GetMetadata(context.Background(), &emptypb.Empty{}); err != nil {
+	if _, err := proto.NewAppProviderClient(conn.Conn()).GetMetadata(context.Background(), &emptypb.Empty{}); err != nil {
 		t.Fatalf("GetMetadata: %v", err)
 	}
 

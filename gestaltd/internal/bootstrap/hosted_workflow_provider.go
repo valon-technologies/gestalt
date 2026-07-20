@@ -14,6 +14,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -247,8 +248,13 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted workflow provider: %w", err)
 	}
+	gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindWorkflow, Name: name}, conn.Conn())
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
 	provider, err := workflowservice.NewRemote(ctx, workflowservice.RemoteConfig{
-		Client:  conn.Workflow(),
+		Client:  proto.NewWorkflowClient(gwConn),
 		Runtime: conn.Lifecycle(),
 		Closer: &runtimeBackedHostedCloser{
 			conn:         conn,

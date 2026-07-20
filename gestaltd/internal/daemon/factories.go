@@ -170,12 +170,14 @@ func buildFactories() *bootstrap.FactoryRegistry {
 		return providerdrivers.WorkflowFactory(ctx, name, node, hostServices, providerdrivers.WorkflowDeps{
 			EgressDefaultAction: deps.Egress.DefaultAction,
 			Telemetry:           deps.Telemetry,
+			Gateway:             deps.GatewayTransport,
 		})
 	}
 	factories.Agent = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		return providerdrivers.AgentFactory(ctx, name, node, hostServices, providerdrivers.AgentDeps{
 			EgressDefaultAction: deps.Egress.DefaultAction,
 			Telemetry:           deps.Telemetry,
+			Gateway:             deps.GatewayTransport,
 		})
 	}
 	factories.Secrets["env"] = secretsenv.Factory

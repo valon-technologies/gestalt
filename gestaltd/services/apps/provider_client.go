@@ -103,6 +103,7 @@ func WithRelayTokenManager(manager *runtimehost.HostServiceRelayTokenManager) Re
 }
 
 func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
+	ctx = invocation.WithInternalConnectionAccess(ctx)
 	support, err := getAppProviderSupportWithRetry(ctx, client)
 	if err != nil {
 		return nil, err

@@ -14,7 +14,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -32,6 +34,7 @@ type ExecConfig struct {
 	HostServices []runtimehost.HostService
 	Name         string
 	Telemetry    runtimehost.TelemetryProviders
+	Gateway      *providergateway.ProviderGatewayTransport
 }
 
 type RemoteConfig struct {
@@ -68,8 +71,17 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreworkflow.Provider, 
 		return nil, err
 	}
 
+	conn := grpc.ClientConnInterface(proc.Conn())
+	if cfg.Gateway != nil {
+		target := providergateway.ProviderTarget{Kind: providergateway.ProviderKindWorkflow, Name: cfg.Name}
+		if err := cfg.Gateway.ReplaceDirect(target, providergateway.DirectEndpoint{Conn: conn}); err != nil {
+			_ = proc.Close()
+			return nil, err
+		}
+		conn = cfg.Gateway.Conn(target)
+	}
 	runtimeClient := proc.Lifecycle()
-	workflowClient := proto.NewWorkflowClient(proc.Conn())
+	workflowClient := proto.NewWorkflowClient(conn)
 	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err
