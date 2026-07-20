@@ -406,6 +406,9 @@ func (r *renderer) renderMessage(m *model.Message) {
 			continue
 		}
 		r.docComment("    ", f.Doc)
+		if r.publicClient && fieldRef(f).Kind == model.KindTimestamp {
+			r.body.WriteString("    #[serde(with = \"crate::public::proto_json::system_time\")]\n")
+		}
 		if f.Presence == model.ExplicitPresence {
 			fmt.Fprintf(&r.body, "    /// The `%s` field; None when unset.\n", f.Name)
 			fmt.Fprintf(&r.body, "    pub %s: Option<%s>,\n", escapeIdent(f.Name), r.fieldType(f))

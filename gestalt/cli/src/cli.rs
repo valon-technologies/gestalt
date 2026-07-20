@@ -194,9 +194,6 @@ pub struct DescribeArgs {
 pub enum TokenCommands {
     /// Create a new API token
     Create {
-        /// Display name for the token
-        #[arg(long)]
-        name: Option<String>,
         /// OAuth scopes for the token (e.g. my-app or my-app:operation)
         #[arg(long, default_value = "")]
         scopes: String,
@@ -595,6 +592,10 @@ pub struct AgentSessionCreateArgs {
     /// Idempotency key for safe retries
     #[arg(long = "idempotency-key")]
     pub idempotency_key: Option<String>,
+
+    /// Add a tool in app:operation form to the session
+    #[arg(long = "tool", value_parser = AgentToolArg::parse)]
+    pub tools: Vec<AgentToolArg>,
 
     /// Load the JSON request body from a file (use "-" for stdin)
     #[arg(long = "input", alias = "request-file")]
