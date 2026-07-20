@@ -99,6 +99,24 @@ func (c *AgentClient) ListTurnEvents(ctx context.Context, request *ListAgentProv
 	return FromWireListAgentProviderTurnEventsResponse(out), nil
 }
 
+func (c *AgentClient) ListInteractions(ctx context.Context, request *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error) {
+	wire := ToWireListAgentProviderInteractionsRequest(request)
+	out := &proto.ListAgentProviderInteractionsResponse{}
+	if err := c.transport.Unary(ctx, MethodAgentListInteractions, wire, out); err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireListAgentProviderInteractionsResponse(out), nil
+}
+
+func (c *AgentClient) ResolveInteraction(ctx context.Context, request *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error) {
+	wire := ToWireResolveAgentProviderInteractionRequest(request)
+	out := &proto.AgentInteraction{}
+	if err := c.transport.Unary(ctx, MethodAgentResolveInteraction, wire, out); err != nil {
+		return nil, toGestaltError(err)
+	}
+	return FromWireAgentInteraction(out), nil
+}
+
 // AgentClientREST exposes only REST-backed methods for Agent.
 type AgentClientREST interface {
 	CreateSession(ctx context.Context, request *CreateAgentProviderSessionRequest) (*AgentSession, error)

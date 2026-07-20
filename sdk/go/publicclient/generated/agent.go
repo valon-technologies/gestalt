@@ -27,6 +27,36 @@ const (
 	AgentExecutionStatusWaitingForInput AgentExecutionStatus = 6
 )
 
+// AgentInteractionState is the gestalt.provider.v1.AgentInteractionState enum. It is open:
+// numeric values outside the named constants are preserved.
+type AgentInteractionState int32
+
+const (
+	// AgentInteractionStateUnspecified is the AGENT_INTERACTION_STATE_UNSPECIFIED value of AgentInteractionState.
+	AgentInteractionStateUnspecified AgentInteractionState = 0
+	// AgentInteractionStatePending is the AGENT_INTERACTION_STATE_PENDING value of AgentInteractionState.
+	AgentInteractionStatePending AgentInteractionState = 1
+	// AgentInteractionStateResolved is the AGENT_INTERACTION_STATE_RESOLVED value of AgentInteractionState.
+	AgentInteractionStateResolved AgentInteractionState = 2
+	// AgentInteractionStateCanceled is the AGENT_INTERACTION_STATE_CANCELED value of AgentInteractionState.
+	AgentInteractionStateCanceled AgentInteractionState = 3
+)
+
+// AgentInteractionType is the gestalt.provider.v1.AgentInteractionType enum. It is open:
+// numeric values outside the named constants are preserved.
+type AgentInteractionType int32
+
+const (
+	// AgentInteractionTypeUnspecified is the AGENT_INTERACTION_TYPE_UNSPECIFIED value of AgentInteractionType.
+	AgentInteractionTypeUnspecified AgentInteractionType = 0
+	// AgentInteractionTypeApproval is the AGENT_INTERACTION_TYPE_APPROVAL value of AgentInteractionType.
+	AgentInteractionTypeApproval AgentInteractionType = 1
+	// AgentInteractionTypeClarification is the AGENT_INTERACTION_TYPE_CLARIFICATION value of AgentInteractionType.
+	AgentInteractionTypeClarification AgentInteractionType = 2
+	// AgentInteractionTypeInput is the AGENT_INTERACTION_TYPE_INPUT value of AgentInteractionType.
+	AgentInteractionTypeInput AgentInteractionType = 3
+)
+
 // AgentMessagePartType is the gestalt.provider.v1.AgentMessagePartType enum. It is open:
 // numeric values outside the named constants are preserved.
 type AgentMessagePartType int32
@@ -63,6 +93,21 @@ const (
 type AgentCatalogToolConfig struct {
 	Refs  []*AgentToolRef
 	Tools []*ListedAgentTool
+}
+
+// AgentInteraction is the native message type for gestalt.provider.v1.AgentInteraction.
+type AgentInteraction struct {
+	Id         string
+	Type       AgentInteractionType
+	State      AgentInteractionState
+	Title      string
+	Prompt     string
+	Request    map[string]any
+	Resolution map[string]any
+	CreatedAt  *time.Time
+	ResolvedAt *time.Time
+	TurnId     string
+	SessionId  string
 }
 
 // AgentMessage is the native message type for gestalt.provider.v1.AgentMessage.
@@ -347,6 +392,17 @@ type GetAgentProviderTurnRequest struct {
 	SessionId    string
 }
 
+// ListAgentProviderInteractionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsRequest.
+type ListAgentProviderInteractionsRequest struct {
+	TurnId       string
+	ProviderName string
+}
+
+// ListAgentProviderInteractionsResponse is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsResponse.
+type ListAgentProviderInteractionsResponse struct {
+	Interactions []*AgentInteraction
+}
+
 // ListAgentProviderSessionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderSessionsRequest.
 type ListAgentProviderSessionsRequest struct {
 	SessionIds []string
@@ -417,6 +473,14 @@ type ListedAgentTool struct {
 type PreparedAgentWorkspace struct {
 	Root string
 	Cwd  string
+}
+
+// ResolveAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.ResolveAgentProviderInteractionRequest.
+type ResolveAgentProviderInteractionRequest struct {
+	InteractionId string
+	Resolution    map[string]any
+	TurnId        string
+	ProviderName  string
 }
 
 // UpdateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.UpdateAgentProviderSessionRequest.

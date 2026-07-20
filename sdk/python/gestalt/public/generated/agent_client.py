@@ -9,6 +9,7 @@ from typing import Protocol
 from ..._gen.v1 import agent_pb2 as _agent_pb2
 from ._codec import agent as _agent_codec
 from .agent import (
+    AgentInteraction,
     AgentSession,
     AgentTurn,
     CancelAgentProviderTurnRequest,
@@ -16,12 +17,15 @@ from .agent import (
     CreateAgentProviderTurnRequest,
     GetAgentProviderSessionRequest,
     GetAgentProviderTurnRequest,
+    ListAgentProviderInteractionsRequest,
+    ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsRequest,
     ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsRequest,
     ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsRequest,
     ListAgentProviderTurnsResponse,
+    ResolveAgentProviderInteractionRequest,
     UpdateAgentProviderSessionRequest,
 )
 from .metadata import (
@@ -30,9 +34,11 @@ from .metadata import (
     METHOD_AGENT_CREATE_TURN,
     METHOD_AGENT_GET_SESSION,
     METHOD_AGENT_GET_TURN,
+    METHOD_AGENT_LIST_INTERACTIONS,
     METHOD_AGENT_LIST_SESSIONS,
     METHOD_AGENT_LIST_TURN_EVENTS,
     METHOD_AGENT_LIST_TURNS,
+    METHOD_AGENT_RESOLVE_INTERACTION,
     METHOD_AGENT_UPDATE_SESSION,
 )
 from .unary_transport import AsyncUnaryTransport, UnaryTransport
@@ -144,6 +150,30 @@ class AgentClient:
         return _agent_codec.from_wire_list_agent_provider_turn_events_response(
             wire_response
         )
+
+    def list_interactions(
+        self, request: ListAgentProviderInteractionsRequest
+    ) -> ListAgentProviderInteractionsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_interactions_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_LIST_INTERACTIONS,
+            wire,
+            _agent_pb2.ListAgentProviderInteractionsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_interactions_response(
+            wire_response
+        )
+
+    def resolve_interaction(
+        self, request: ResolveAgentProviderInteractionRequest
+    ) -> AgentInteraction:
+        wire = _agent_codec.to_wire_resolve_agent_provider_interaction_request(request)
+        wire_response = self._transport.unary(
+            METHOD_AGENT_RESOLVE_INTERACTION,
+            wire,
+            _agent_pb2.AgentInteraction,
+        )
+        return _agent_codec.from_wire_agent_interaction(wire_response)
 
 
 class AgentClientREST(Protocol):
@@ -278,6 +308,30 @@ class AsyncAgentClient:
         return _agent_codec.from_wire_list_agent_provider_turn_events_response(
             wire_response
         )
+
+    async def list_interactions(
+        self, request: ListAgentProviderInteractionsRequest
+    ) -> ListAgentProviderInteractionsResponse:
+        wire = _agent_codec.to_wire_list_agent_provider_interactions_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_LIST_INTERACTIONS,
+            wire,
+            _agent_pb2.ListAgentProviderInteractionsResponse,
+        )
+        return _agent_codec.from_wire_list_agent_provider_interactions_response(
+            wire_response
+        )
+
+    async def resolve_interaction(
+        self, request: ResolveAgentProviderInteractionRequest
+    ) -> AgentInteraction:
+        wire = _agent_codec.to_wire_resolve_agent_provider_interaction_request(request)
+        wire_response = await self._transport.unary(
+            METHOD_AGENT_RESOLVE_INTERACTION,
+            wire,
+            _agent_pb2.AgentInteraction,
+        )
+        return _agent_codec.from_wire_agent_interaction(wire_response)
 
 
 class AsyncAgentClientREST(Protocol):

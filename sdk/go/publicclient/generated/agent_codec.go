@@ -34,6 +34,46 @@ func FromWireAgentCatalogToolConfig(value *proto.AgentCatalogToolConfig) *AgentC
 	return out
 }
 
+func ToWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
+	if value == nil {
+		return nil
+	}
+	out := &proto.AgentInteraction{
+		Id:         value.Id,
+		Type:       proto.AgentInteractionType(value.Type),
+		State:      proto.AgentInteractionState(value.State),
+		Title:      value.Title,
+		Prompt:     value.Prompt,
+		Request:    toWireStruct(value.Request),
+		Resolution: toWireStruct(value.Resolution),
+		CreatedAt:  toWireTimestamp(value.CreatedAt),
+		ResolvedAt: toWireTimestamp(value.ResolvedAt),
+		TurnId:     value.TurnId,
+		SessionId:  value.SessionId,
+	}
+	return out
+}
+
+func FromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
+	if value == nil {
+		return nil
+	}
+	out := &AgentInteraction{
+		Id:         value.Id,
+		Type:       AgentInteractionType(value.Type),
+		State:      AgentInteractionState(value.State),
+		Title:      value.Title,
+		Prompt:     value.Prompt,
+		Request:    fromWireStruct(value.Request),
+		Resolution: fromWireStruct(value.Resolution),
+		CreatedAt:  fromWireTimestamp(value.CreatedAt),
+		ResolvedAt: fromWireTimestamp(value.ResolvedAt),
+		TurnId:     value.TurnId,
+		SessionId:  value.SessionId,
+	}
+	return out
+}
+
 func ToWireAgentMessage(value *AgentMessage) *proto.AgentMessage {
 	if value == nil {
 		return nil
@@ -768,6 +808,50 @@ func FromWireGetAgentProviderTurnRequest(value *proto.GetAgentProviderTurnReques
 	return out
 }
 
+func ToWireListAgentProviderInteractionsRequest(value *ListAgentProviderInteractionsRequest) *proto.ListAgentProviderInteractionsRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ListAgentProviderInteractionsRequest{
+		TurnId:       value.TurnId,
+		ProviderName: value.ProviderName,
+	}
+	return out
+}
+
+func FromWireListAgentProviderInteractionsRequest(value *proto.ListAgentProviderInteractionsRequest) *ListAgentProviderInteractionsRequest {
+	if value == nil {
+		return nil
+	}
+	out := &ListAgentProviderInteractionsRequest{
+		TurnId:       value.TurnId,
+		ProviderName: value.ProviderName,
+	}
+	return out
+}
+
+func ToWireListAgentProviderInteractionsResponse(value *ListAgentProviderInteractionsResponse) *proto.ListAgentProviderInteractionsResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ListAgentProviderInteractionsResponse{}
+	for _, item := range value.Interactions {
+		out.Interactions = append(out.Interactions, ToWireAgentInteraction(item))
+	}
+	return out
+}
+
+func FromWireListAgentProviderInteractionsResponse(value *proto.ListAgentProviderInteractionsResponse) *ListAgentProviderInteractionsResponse {
+	if value == nil {
+		return nil
+	}
+	out := &ListAgentProviderInteractionsResponse{}
+	for _, item := range value.Interactions {
+		out.Interactions = append(out.Interactions, FromWireAgentInteraction(item))
+	}
+	return out
+}
+
 func ToWireListAgentProviderSessionsRequest(value *ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
 	if value == nil {
 		return nil
@@ -976,6 +1060,32 @@ func FromWirePreparedAgentWorkspace(value *proto.PreparedAgentWorkspace) *Prepar
 	out := &PreparedAgentWorkspace{
 		Root: value.Root,
 		Cwd:  value.Cwd,
+	}
+	return out
+}
+
+func ToWireResolveAgentProviderInteractionRequest(value *ResolveAgentProviderInteractionRequest) *proto.ResolveAgentProviderInteractionRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ResolveAgentProviderInteractionRequest{
+		InteractionId: value.InteractionId,
+		Resolution:    toWireStruct(value.Resolution),
+		TurnId:        value.TurnId,
+		ProviderName:  value.ProviderName,
+	}
+	return out
+}
+
+func FromWireResolveAgentProviderInteractionRequest(value *proto.ResolveAgentProviderInteractionRequest) *ResolveAgentProviderInteractionRequest {
+	if value == nil {
+		return nil
+	}
+	out := &ResolveAgentProviderInteractionRequest{
+		InteractionId: value.InteractionId,
+		Resolution:    fromWireStruct(value.Resolution),
+		TurnId:        value.TurnId,
+		ProviderName:  value.ProviderName,
 	}
 	return out
 }
