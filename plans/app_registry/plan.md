@@ -295,18 +295,7 @@ Lockfile entry — no `archives`, no manifest; record the registry binding only:
 
 `app_version_change_requests.from_version` is required on every row. Registry-only apps have no config pin, so the installer cannot fall back to `gestalt.lock.json` on the first fleet install.
 
-When `ListKnownVersionsByApp` is empty and the app has `source.registry`, write `from_version: "none"`. Upgrades continue to use `LatestKnownVersion` as today. Projection helpers must not treat `"none"` as a runnable version.
-
-#### Bootstrap startup
-
-Registry-only apps have no `ResolvedManifest` at deploy time — exclude them from the normal startup provider build loop (`provider_build.go`). At `StartAppProviders`, for each registry-only app:
-
-1. `known := ChangeRequests.ListKnownVersionsByApp(app)` — skip when empty.
-2. `version := LatestKnownVersion(known)`.
-3. `Materializer.Materialize(...)` if `{artifactsDir}/registry-installed/{app}/{version}` is missing.
-4. `AppRestarter.StartApp(ctx, app, version)` — same registry mount as the catalog poller (step 11).
-
-The catalog poller still handles first install and upgrades on replicas that were skipped at boot or join after a rollout.
+When `ListKnownVersionsByApp` is empty and the app has `source.registry`, write `from_version: "none"`. Upgrades continue to use `LatestKnownVersion` as today. Projection helpers must not treat `"none"` as a runnable version. Bootstrap startup for registry-only apps is documented in [lifecycle.md](./lifecycle.md#startup).
 
 #### Tests
 

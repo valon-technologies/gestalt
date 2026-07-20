@@ -135,7 +135,7 @@ apps:
 
 - **Config validation** — `source.registry` must name a configured `appRegistries` entry. No `ref`, `repo`, or `path` on the app entry.
 - **`gestalt lock` / `gestalt sync`** — skip snapshot resolution and artifact download. The lockfile records the app name and registry binding only.
-- **Bootstrap** — registry-only apps with an empty `ListKnownVersionsByApp` result are skipped by `StartAppProviders`. When a fleet-known version exists, start the latest (`LatestKnownVersion`) from `{artifactsDir}/registry-installed/{app}/{version}`. See [lifecycle.md](./lifecycle.md#registry-only-apps).
+- **Bootstrap** — registry-only apps with an empty `ListKnownVersionsByApp` result are skipped by `StartAppProviders`. When a fleet-known version exists, start the latest (`LatestKnownVersion`) from `{artifactsDir}/registry-installed/{app}/{version}`. See [lifecycle.md](./lifecycle.md#startup).
 - **First install** — `POST …/install` records the fleet version in IndexedDB; replicas materialize and start the app from the registry. No deploy-time pin is required.
 - **Upgrades** — catalog poller materializes the new artifact, then restarts the provider with the registry-mounted binary. See [lifecycle.md](./lifecycle.md#polling).
 

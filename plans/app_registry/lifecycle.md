@@ -37,7 +37,16 @@ When `gestaltd serve` starts:
 
 Bootstrap does not fetch registry indexes or prefetch version metadata. The source of truth for registry configuration remains the config file on disk; gestaltd does not persist `appRegistries` elsewhere.
 
-Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not bind installed apps into the provider graph.
+Apps with a deploy-time source pin (`source.git`, `source.path`, etc.) bind into the provider graph during the normal startup provider build. Registry-only apps (`source.registry`) are different — see [config.md](./config.md#registry-only-app-source). They have no resolved manifest or baked artifact at deploy time, so bootstrap excludes them from that build loop.
+
+At `StartAppProviders`, each registry-only app:
+
+1. Read fleet-known versions via `ListKnownVersionsByApp`. When the projection is empty, skip the app — nothing is running until the first `POST …/install`.
+2. Take the latest fleet-known version (`LatestKnownVersion`).
+3. Materialize the registry artifact to `{artifactsDir}/registry-installed/{app}/{version}` when the tree is missing or incomplete.
+4. Start the provider through `StartApp` with the registry-mounted binary — the same mount path used by catalog-driven restarts.
+
+The catalog poller still handles first install and upgrades on replicas that were skipped at boot or join after a rollout.
 
 ## Polling
 
@@ -77,12 +86,6 @@ Failure and retry behavior:
 2. If writing `stopped_at` fails after stop, the next poll retries the write without stopping the absent provider again.
 3. If writing `restarted_at` fails after start, the next poll retries the write without rebuilding the running provider.
 4. A version discovered while the app is stopped joins the current cycle and inherits its original `stopped_at`.
-
-## Registry-only apps
-
-Apps with `source.registry` declare the app slot in deploy config; the running binary comes from the registry. See [config.md](./config.md#registry-only-app-source).
-
-At boot, `StartAppProviders` skips registry-only apps when `ListKnownVersionsByApp` is empty. When a fleet-known version exists, bootstrap materializes the latest (`LatestKnownVersion`) from `{artifactsDir}/registry-installed/{app}/{version}` if needed and starts the provider — the same mount path used by catalog-driven restarts. The catalog poller handles first install and upgrades for replicas that are not yet converged. See [plan.md](./plan.md#step-12-implementation-notes).
 
 ## Runtime
 
