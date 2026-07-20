@@ -133,9 +133,23 @@ apps:
 
 ### Behavior
 
-- **Config validation** — `source.registry` must name a configured `appRegistries` entry. No `ref`, `repo`, or `path` on the app entry.
-- **`gestalt lock` / `gestalt sync`** — skip snapshot resolution and artifact download. The lockfile records the app name and registry binding only.
+- **Config validation** — `source.registry` must name a configured `appRegistries` entry. Mutually exclusive with `source.git`, `source.path`, and other source modes. No `ref`, `repo`, or `path` on the app entry.
+- **`gestalt lock` / `gestalt sync`** — skip snapshot resolution and artifact download for registry-only apps. The lockfile records the app name and registry binding only — no `archives` and no embedded manifest.
 - **Bootstrap** — registry-only apps with an empty `ListKnownVersionsByApp` result are skipped by `StartAppProviders`. When a fleet-known version exists, start the latest (`LatestKnownVersion`) from `{artifactsDir}/registry-installed/{app}/{version}`. See [lifecycle.md](./lifecycle.md#startup).
 - **First install** — `POST …/install` records the fleet version in IndexedDB; replicas materialize and start the app from the registry. No deploy-time pin is required. See [lifecycle.md](./lifecycle.md#first-install-from_version).
 - **Upgrades** — catalog poller materializes the new artifact, then restarts the provider with the registry-mounted binary. See [lifecycle.md](./lifecycle.md#polling).
+
+### Lockfile
+
+Registry-only apps appear in `gestalt.lock.json` with a registry binding and no baked artifacts:
+
+```json
+{
+  "source": "registry",
+  "sourceRef": {
+    "type": "registry",
+    "resolvedGestaltRef": "toolshed"
+  }
+}
+```
 

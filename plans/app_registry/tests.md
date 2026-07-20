@@ -23,6 +23,7 @@ Related docs:
 | `internal/appregistry` | `mount_test.go` | 4 | Unit | step 11 |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 11 |
+| `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -211,6 +212,40 @@ go test ./internal/appregistry -run 'Test(Installer|CatalogPollerRollout)' -coun
 
 - Install admission and app-scoped lock tests allow one active rollout per app while allowing different apps concurrently.
 - Poller tests cover enrollment, cohort completion, missed deadlines, and late-replica convergence.
+
+---
+
+## Registry-only app tests
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/config/... -run RegistryOnly -count=1
+go test ./internal/operator/... -run RegistryOnly -count=1
+go test ./internal/appregistry/... -run 'TestInstaller.*RegistryOnly|from_version' -count=1
+go test ./internal/bootstrap/... -run RegistryOnly -count=1
+```
+
+### Config validation
+
+- Accepts `source.registry` when the name matches a configured `appRegistries` entry.
+- Rejects an unknown registry name.
+- Rejects `source.registry` combined with `source.git`, `source.path`, or other source modes.
+
+### Install `from_version`
+
+- First install for a registry-only app with no fleet-known versions records `from_version: "none"`. See [lifecycle.md](./lifecycle.md#first-install-from_version).
+
+### Bootstrap startup
+
+- Starts a registry-only app at `StartAppProviders` when `ListKnownVersionsByApp` returns a fleet-known version.
+- Skips the app when the projection is empty.
+
+### Lock and sync
+
+- `gestalt lock` and `gestalt sync` omit snapshot resolution and artifact download for registry-only apps.
+- Lockfile entries record the registry binding only — see [config.md](./config.md#lockfile).
 
 ---
 
