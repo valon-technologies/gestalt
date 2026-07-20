@@ -224,7 +224,11 @@ export type LoadedProvider =
 type ProviderRuntimeEntry = {
   isProvider: (value: unknown) => value is LoadedProvider;
   protoKind: ProtoProviderKind;
-  registerService: (router: ConnectRouter, provider: LoadedProvider) => void;
+  registerService: (
+    router: ConnectRouter,
+    provider: LoadedProvider,
+    context?: HandlerContext,
+  ) => void;
 };
 
 const PROVIDER_RUNTIME_ENTRIES: Partial<
@@ -669,13 +673,25 @@ export function createProviderService(
         closeRequestGestaltScope(providerReq);
       }
     },
-    async resolveHTTPSubject(request: ProtoResolveHTTPSubjectRequest) {
-      let subject;
+    async resolveHTTPSubject(request: ProtoResolveHTTPSubjectRequest, context: HandlerContext) {
+      const { ctx, close } = providerHTTPSubjectResolutionContext(
+        request.context,
+        context.requestHeader.get(HOST_SERVICE_RELAY_TOKEN_HEADER)?.trim() ?? "",
+      );
       try {
-        subject = await provider.resolveHTTPSubject(
+        const subject = await provider.resolveHTTPSubject(
           providerHTTPSubjectRequest(request.request),
-          providerHTTPSubjectResolutionContext(request.context),
+          ctx,
         );
+        return create(ResolveHTTPSubjectResponseSchema, subject
+          ? {
+              subject: {
+                id: subject.id,
+                email: subject.email ?? "",
+                displayName: subject.displayName ?? "",
+              },
+            }
+          : {});
       } catch (error) {
         if (error instanceof HTTPSubjectResolutionError) {
           return create(ResolveHTTPSubjectResponseSchema, {
@@ -687,16 +703,9 @@ export function createProviderService(
           `resolve http subject: ${errorMessage(error)}`,
           Code.Unknown,
         );
+      } finally {
+        close();
       }
-      return create(ResolveHTTPSubjectResponseSchema, subject
-        ? {
-            subject: {
-              id: subject.id,
-              email: subject.email ?? "",
-              displayName: subject.displayName ?? "",
-            },
-          }
-        : {});
     },
     async getSessionCatalog(request: GetSessionCatalogRequest, context: HandlerContext) {
       const providerReq = providerRequest(
@@ -986,12 +995,14 @@ function providerRequest(
   requestContext?: ProtoRequestContext,
   idempotencyKey = "",
   rpc?: HandlerContext,
+  capability = "",
 ): Request {
   const credential = requestContext?.credential;
   const access = requestContext?.access;
   const host = requestContext?.host;
-  const invocationCapability =
-    rpc?.requestHeader.get(HOST_SERVICE_RELAY_TOKEN_HEADER)?.trim() ?? "";
+  const invocationCapability = capability.trim() !== ""
+    ? capability
+    : rpc?.requestHeader.get(HOST_SERVICE_RELAY_TOKEN_HEADER)?.trim() ?? "";
   return attachRequestHelpers({
     token,
     connectionParams: {
@@ -1076,14 +1087,26 @@ function providerHTTPSubjectRequest(
 
 function providerHTTPSubjectResolutionContext(
   requestContext?: ProtoRequestContext,
-): HTTPSubjectResolutionContext {
-  const request = providerRequest("", {}, requestContext);
+  invocationCapability?: string,
+): { ctx: HTTPSubjectResolutionContext; close(): void } {
+  const request = providerRequest(
+    "",
+    {},
+    requestContext,
+    "",
+    undefined,
+    invocationCapability,
+  );
   return {
-    subject: request.subject,
-    credential: request.credential,
-    access: request.access,
-    host: request.host,
-    workflow: request.workflow,
+    ctx: {
+      subject: request.subject,
+      credential: request.credential,
+      access: request.access,
+      host: request.host,
+      workflow: request.workflow,
+      gestalt: request.gestalt,
+    },
+    close: () => closeRequestGestaltScope(request),
   };
 }
 
