@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 
 use crate::cli::AgentToolArg;
@@ -90,57 +90,6 @@ where
     }
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AgentHarnessResolveRequest<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) provider: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) harness: Option<&'a str>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AgentHarnessPlan {
-    pub(crate) provider: String,
-    #[serde(default)]
-    pub(crate) harness: String,
-    pub(crate) command: String,
-    #[serde(default)]
-    pub(crate) args: Vec<String>,
-    #[serde(default)]
-    pub(crate) env: Map<String, Value>,
-    #[serde(default)]
-    pub(crate) working_directory: String,
-    #[serde(default)]
-    pub(crate) required_commands: Vec<String>,
-    pub(crate) install: Option<AgentHarnessInstallPlan>,
-}
-
-#[derive(Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AgentHarnessInstallPlan {
-    #[serde(default)]
-    pub(crate) instructions: String,
-    #[serde(default)]
-    pub(crate) commands: Vec<AgentHarnessInstallCommand>,
-}
-
-#[derive(Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AgentHarnessInstallCommand {
-    #[serde(default)]
-    pub(crate) description: String,
-    #[serde(default)]
-    pub(crate) command: String,
-    #[serde(default)]
-    pub(crate) args: Vec<String>,
-    #[serde(default)]
-    pub(crate) shell: String,
-    #[serde(default)]
-    pub(crate) env: Map<String, Value>,
-}
-
 pub(crate) fn deserialize_turn_display<'de, D>(
     deserializer: D,
 ) -> std::result::Result<Option<AgentTurnDisplayInfo>, D::Error>
@@ -174,21 +123,6 @@ pub(crate) struct AgentSessionInfo {
     pub(crate) created_at: String,
     #[serde(default)]
     pub(crate) updated_at: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AgentProviderListInfo {
-    #[serde(default)]
-    pub(crate) providers: Vec<AgentProviderInfo>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AgentProviderInfo {
-    pub(crate) name: String,
-    #[serde(default)]
-    pub(crate) default: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

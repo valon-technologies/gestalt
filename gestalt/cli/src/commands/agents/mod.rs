@@ -3,7 +3,6 @@ mod driver;
 mod events;
 mod fields;
 mod format;
-mod harness;
 mod render;
 mod requests;
 mod shell;
@@ -12,10 +11,9 @@ mod tui;
 mod types;
 mod wire;
 
-pub use harness::{doctor_local, launch_local};
 pub use requests::{
     cancel_turn, create_session, create_turn, get_session, get_turn, list_sessions,
-    list_turn_events, list_turns, stream_turn_events, transcript_turn, update_session,
+    list_turn_events, list_turns, transcript_turn, update_session,
 };
 pub use shell::{resume_interactive, run_interactive};
 

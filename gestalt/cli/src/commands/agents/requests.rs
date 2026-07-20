@@ -1,13 +1,12 @@
 use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
-use std::io;
 use std::sync::Arc;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::api::ApiClient;
 use crate::cli::{
     AgentSessionCreateArgs, AgentSessionUpdateArgs, AgentToolArg, AgentTurnCreateArgs,
-    AgentTurnEventListArgs, AgentTurnEventStreamArgs,
+    AgentTurnEventListArgs,
 };
 use crate::output::{self, Format};
 use crate::params;
@@ -31,13 +30,8 @@ use super::format::table::{
 };
 use super::render::stdout::render_turn_transcript;
 use super::stream::DEFAULT_EVENT_PAGE_SIZE;
-use super::types::{
-    AgentInteractionInfo, AgentProviderInfo, AgentProviderListInfo, AgentSessionInfo,
-    AgentTurnEventInfo, AgentTurnInfo,
-};
+use super::types::{AgentInteractionInfo, AgentSessionInfo, AgentTurnEventInfo, AgentTurnInfo};
 
-pub(crate) const PROVIDERS_PATH: &str = "/api/v1/agent/providers";
-pub(crate) const TURNS_PATH: &str = "/api/v1/agent/turns";
 pub(crate) const DEFAULT_SESSION_LIST_LIMIT: usize = 50;
 pub(crate) const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
 
@@ -187,7 +181,7 @@ pub fn transcript_turn(client: &ApiClient, id: &str, format: Format) -> Result<(
         .map_err(map_sdk_error)
         .with_context(|| format!("failed to get agent turn {id}"))?;
     let turn_value = serde_json::to_value(&turn)?;
-    let event_values = list_turn_event_values(client, id)?;
+    let event_values = list_turn_event_values(client, id, 0)?;
 
     match format {
         Format::Json => output::print_json(&json!({
@@ -246,17 +240,6 @@ pub fn list_turn_events(
     Ok(())
 }
 
-pub fn stream_turn_events(client: &ApiClient, args: &AgentTurnEventStreamArgs) -> Result<()> {
-    let mut resp = client
-        .get_stream(&turn_events_path(
-            &args.id, true, args.after, args.limit, None,
-        ))
-        .with_context(|| format!("failed to stream events for agent turn {}", args.id))?;
-    let mut stdout = io::stdout().lock();
-    io::copy(&mut resp, &mut stdout).context("failed to read agent turn event stream")?;
-    Ok(())
-}
-
 pub(crate) fn cancel_turn_silent(
     client: &ApiClient,
     id: &str,
@@ -299,15 +282,6 @@ pub(crate) fn get_session_info(client: &ApiClient, id: &str) -> Result<AgentSess
         .map_err(map_sdk_error)
         .with_context(|| format!("failed to get agent session {id}"))?;
     decode_json(serde_json::to_value(&resp)?)
-}
-
-pub(crate) fn list_agent_providers(client: &ApiClient) -> Result<Vec<AgentProviderInfo>> {
-    let resp: AgentProviderListInfo = decode_json(
-        client
-            .get(PROVIDERS_PATH)
-            .context("failed to list agent providers")?,
-    )?;
-    Ok(resp.providers)
 }
 
 pub(crate) fn resume_latest_session_info(
@@ -424,10 +398,14 @@ pub(crate) fn resolve_interaction_info(
     decode_json(serde_json::to_value(&resp)?)
 }
 
-pub(crate) fn list_turn_event_values(client: &ApiClient, turn_id: &str) -> Result<Vec<Value>> {
+pub(crate) fn list_turn_event_values(
+    client: &ApiClient,
+    turn_id: &str,
+    after_seq: u64,
+) -> Result<Vec<Value>> {
     let agent = agent_client(client)?;
     let mut events = Vec::new();
-    let mut after_seq = 0i64;
+    let mut after_seq = after_seq as i64;
     loop {
         let request = gestalt_sdk::public::generated::agent::ListAgentProviderTurnEventsRequest {
             turn_id: turn_id.to_string(),
@@ -629,20 +607,4 @@ fn parse_execution_status(value: Option<&str>) -> AgentExecutionStatus {
         Some("waiting_for_input") => AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
         _ => AGENT_EXECUTION_STATUS_UNSPECIFIED,
     }
-}
-
-pub(crate) fn turn_events_path(
-    id: &str,
-    stream: bool,
-    after: Option<u64>,
-    limit: Option<u32>,
-    until: Option<&str>,
-) -> String {
-    let mut params = Vec::new();
-    crate::query::push_opt_u64(&mut params, "after", after);
-    crate::query::push_opt_u32(&mut params, "limit", limit);
-    crate::query::push_opt_param(&mut params, "until", until);
-    let suffix = if stream { "/events/stream" } else { "/events" };
-    let path = format!("{TURNS_PATH}/{id}{suffix}");
-    crate::query::with_query(&path, &params)
 }
