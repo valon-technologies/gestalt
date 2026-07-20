@@ -78,6 +78,45 @@ Failure and retry behavior:
 3. If writing `restarted_at` fails after start, the next poll retries the write without rebuilding the running provider.
 4. A version discovered while the app is stopped joins the current cycle and inherits its original `stopped_at`.
 
+## Registry-only apps
+
+**Planned (step 12).** Steps 8–11 assume the app is already in `config.yaml` with a deploy-time `source.git` pin. The catalog poller upgrades an already-running provider to a registry-mounted binary. Our dev E2E confirmed that removing the app from config entirely blocks convergence (`app "g-issues" is not configured`) even when the install API succeeds.
+
+Step 12 closes that gap with two changes that **ship together**:
+
+### 1. Registry-only source (`source.registry`)
+
+Declare the app slot without a git SHA. See [config.md](./config.md#registry-only-app-source). Lock and image build skip artifact baking for that app.
+
+### 2. Conditional bootstrap
+
+Registry-only apps are excluded from `StartAppProviders` at boot **only when the fleet has no known version yet** (no `app_version_change_requests` row for that app). If IndexedDB already has a fleet-known version, bootstrap includes the app in `StartAppProviders` and starts it from the materialized registry package at `{artifactsDir}/registry-installed/{app}/{version}` — same mount path as catalog-driven restarts in step 11.
+
+| Phase | `source.git` (steps 8–11) | `source.registry` (step 12) |
+|-------|---------------------------|-----------------------------|
+| Image build | Bakes snapshot under `artifacts/providers/{app}` | No app artifact in image |
+| Boot (no fleet version in DB) | Starts from deploy pin | App absent until first `POST …/install` |
+| Boot (fleet version in DB) | Starts from deploy pin or registry mount after upgrade | Starts from registry materialization |
+| After `POST …/install` | Stop → mount registry binary → start | Materialize → start (or stop → start if already running) |
+| Config entry required | Yes | Yes (policies/bindings only) |
+
+### Why ship together
+
+Neither piece alone delivers the goal of decoupling config from binary version:
+
+- **Registry-only source without conditional bootstrap** — `gestaltd` still tries to resolve and start the app at boot from a missing git pin or baked artifact.
+- **Conditional bootstrap without registry-only source** — boot still requires a `source.git` SHA for lock/sync and the Docker image; config stays coupled to a commit.
+
+Implementation can land as two PRs in one milestone, but both must be deployed before valon-tools drops the `g-issues` git pin.
+
+**PR A — Registry-only source:** config validation, lock/sync skip, bootstrap `from_version` for first install.
+
+**PR B — Conditional bootstrap:** at `StartAppProviders`, call `ListKnownVersionsByApp` (or equivalent projection) per registry-only app. Skip startup when the result is empty; otherwise materialize the latest fleet-known version if needed and `StartApp` with the step 11 registry mount. New replicas and pod restarts therefore converge without waiting for the catalog poller's first pass, while brand-new apps stay absent until the first `POST …/install`.
+
+### First install
+
+When no fleet-known version exists yet, `Installer.Install` currently requires `from_version` from either the catalog or a config-pinned SHA. Step 12 allows a bootstrap `from_version` for registry-only apps (for example `""` or `"bootstrap"`) so the first `POST …/install` succeeds without a deploy-time pin. Stricter install-time validation remains step 13.
+
 ## Runtime
 
 Admin HTTP under `/admin/api/v1` on the same listener as the other admin API (for example `/admin/api/v1/runtime/providers`). In deployments that split public and management listeners, call the management base URL.

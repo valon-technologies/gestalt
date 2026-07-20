@@ -104,3 +104,62 @@ gestaltd provider package \
 ```
 
 `gestaltd app publish` would then read `sourceRef` from the release archives and drop `--ref`. That binds version to commit at build time and removes the chance of a mismatched ref at upload.
+
+---
+
+## Registry-only app source
+
+**Planned (step 12).** Today every app in `apps` must declare a resolvable `source` (`source.git` with a 40-character SHA, `source.path`, metadata URL, etc.). That couples deploy config to a baked binary even when the fleet version should come entirely from the app registry.
+
+Step 12 adds a registry-only source mode so deploy config can declare the **app slot** (authorization, indexeddb, static mount, MCP, etc.) without pinning a git ref or baking a snapshot into the gestaltd image.
+
+### Proposed shape
+
+```yaml
+apps:
+  g-issues:
+    authorizationPolicy: gIssues
+    indexeddb:
+      provider: main
+      db: g_issues
+    static:
+      mount: /g-issues
+    config:
+      appBasePath: /g-issues
+    mcp: true
+    source:
+      registry: toolshed   # key in appRegistries
+```
+
+| Field | Meaning |
+|-------|---------|
+| `source.registry` | Registry name from `appRegistries`. Mutually exclusive with `source.git`, `source.path`, and other source modes. |
+
+### Expected behavior
+
+- **Config validation** — `source.registry` is a valid `appRegistries` key; no `ref`, `repo`, or `path` required on the app entry.
+- **`gestalt lock` / `gestalt sync`** — skip snapshot resolution and artifact download for registry-only apps. The lockfile records the app name and registry binding only (no baked artifact SHA).
+- **Bootstrap** — registry-only apps with **no fleet-known version** in `app_version_change_requests` are skipped by `StartAppProviders`. Apps that already have a known version in IndexedDB are started at boot from the registry materialization path (step 11 mount logic). See [lifecycle.md](./lifecycle.md#registry-only-apps).
+- **First install** — `POST …/install` may use a bootstrap `from_version` (for example empty or `"bootstrap"`) when the app has no fleet-known version and no config-pinned SHA. Install-time validation (step 13) will tighten this.
+- **Convergence** — unchanged from steps 8–11: catalog poller materializes the registry artifact, then `StartApp` mounts `{artifactsDir}/registry-installed/{app}/{version}`.
+
+### Migration from `source.git`
+
+Replace the git pin with `source.registry` once step 12 is deployed:
+
+```yaml
+# before (step 11 and earlier)
+source:
+  git:
+    repo: https://github.com/valon-technologies/toolshed.git
+    ref: 1ed208b698280983d59e99f6f5e5ab27ace95692
+    path: valon-tools/apps/g-issues/manifest.yaml
+    materialization: snapshot
+    artifactRepository: valon
+
+# after (step 12)
+source:
+  registry: toolshed
+```
+
+Until step 12 ships, keep a `source.git` pin for image build and cold start even though runtime may already serve a newer registry-mounted binary (step 11).
