@@ -62,6 +62,10 @@ jobs:
         working-directory: sdk/typescript
         run: bun install --frozen-lockfile
 
+      - name: Build TypeScript client package
+        working-directory: sdk/typescript
+        run: bun run build:client
+
       - name: Build TypeScript API docs
         working-directory: sdk/typescript
         run: |
