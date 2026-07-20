@@ -72,6 +72,7 @@ type MountedHTTPBinding struct {
 	Path           string
 	Method         string
 	Target         string
+	Streaming      bool
 	CredentialMode core.ConnectionMode
 	RequestBody    *providermanifestv1.HTTPRequestBody
 	SecurityName   string

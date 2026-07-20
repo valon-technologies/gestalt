@@ -183,6 +183,11 @@ type StreamReader interface {
 	Recv() (*InvokeFrame, error)
 }
 
+// StreamReaderFunc is an adapter that lets a plain function implement StreamReader.
+type StreamReaderFunc func() (*InvokeFrame, error)
+
+func (f StreamReaderFunc) Recv() (*InvokeFrame, error) { return f() }
+
 // StreamingExecutor is implemented by providers that support streaming
 // operation responses. ExecuteStream is only called for operations whose
 // catalog response mode is stream.

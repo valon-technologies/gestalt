@@ -6752,3 +6752,55 @@ func workflowTestLiteralObjectValueConfig(input map[string]any) WorkflowValueCon
 	}
 	return WorkflowValueConfig{Object: fields}
 }
+
+func TestMergeHTTPBindingCopiesStreaming(t *testing.T) {
+	t.Parallel()
+
+	base := &HTTPBinding{
+		Path:      "/hooks/base",
+		Method:    "POST",
+		Target:    "baseOp",
+		Streaming: false,
+	}
+	override := &HTTPBinding{
+		Streaming: true,
+	}
+
+	merged := mergeHTTPBinding(base, override)
+	if merged == nil {
+		t.Fatal("mergeHTTPBinding returned nil")
+	}
+	if !merged.Streaming {
+		t.Fatalf("merged.Streaming = false, want true")
+	}
+	if merged.Path != base.Path || merged.Method != base.Method || merged.Target != base.Target {
+		t.Fatalf("mergeHTTPBinding overwrote base fields: got %+v", merged)
+	}
+}
+
+func TestEffectiveHTTPBindingsOverridesStreaming(t *testing.T) {
+	t.Parallel()
+
+	entry := &ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				HTTP: map[string]*HTTPBinding{
+					"echo": {
+						Path:      "/hooks/echo",
+						Method:    "POST",
+						Target:    "echo",
+						Streaming: false,
+					},
+				},
+			},
+		},
+		HTTP: map[string]*HTTPBinding{
+			"echo": {Streaming: true},
+		},
+	}
+
+	bindings := entry.EffectiveHTTPBindings()
+	if bindings["echo"] == nil || !bindings["echo"].Streaming {
+		t.Fatalf("EffectiveHTTPBindings did not apply override streaming: got %+v", bindings["echo"])
+	}
+}

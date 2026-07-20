@@ -17,6 +17,8 @@ const (
 
 var (
 	_ Invoker                   = (*GuardedInvoker)(nil)
+	_ StreamingInvoker          = (*GuardedInvoker)(nil)
+	_ MaybeStreamingInvoker     = (*GuardedInvoker)(nil)
 	_ GraphQLInvoker            = (*GuardedInvoker)(nil)
 	_ CapabilityLister          = (*GuardedInvoker)(nil)
 	_ TokenResolver             = (*GuardedInvoker)(nil)
@@ -169,6 +171,96 @@ func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Princip
 		}
 	}
 	return result, err
+}
+
+func (g *GuardedInvoker) InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error) {
+	streamInvoker, ok := g.inner.(StreamingInvoker)
+	if !ok {
+		return nil, fmt.Errorf("plugin invoker is not available")
+	}
+	ctx, meta := ensureMeta(ctx)
+	if p == nil {
+		p = principal.FromContext(ctx)
+	}
+	if p == nil {
+		p = &principal.Principal{}
+	}
+	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
+	ctx = withAuditEntry(ctx, &entry)
+	if err := g.check(meta, providerName, instance, operation); err != nil {
+		entry.Allowed = false
+		entry.Error = err.Error()
+		g.logAudit(ctx, entry)
+		return nil, err
+	}
+	entry.Allowed = true
+	defer func() {
+		g.logAudit(ctx, entry)
+	}()
+	chainInstance := instance
+	if chainInstance == "" {
+		chainInstance = "default"
+	}
+	chainKey := providerName + "/" + chainInstance + "/" + operation
+	next := &InvocationMeta{
+		RequestID: meta.RequestID,
+		Depth:     meta.Depth + 1,
+		CallChain: append(append([]string(nil), meta.CallChain...), chainKey),
+	}
+	ctx = ContextWithMeta(ctx, next)
+	reader, err := streamInvoker.InvokeStream(ctx, p, providerName, instance, operation, params)
+	if err != nil {
+		entry.Error = err.Error()
+		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
+			entry.Allowed = false
+		}
+	}
+	return reader, err
+}
+
+func (g *GuardedInvoker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*InvokeOutcome, error) {
+	maybeInvoker, ok := g.inner.(MaybeStreamingInvoker)
+	if !ok {
+		return nil, fmt.Errorf("plugin invoker is not available")
+	}
+	ctx, meta := ensureMeta(ctx)
+	if p == nil {
+		p = principal.FromContext(ctx)
+	}
+	if p == nil {
+		p = &principal.Principal{}
+	}
+	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
+	ctx = withAuditEntry(ctx, &entry)
+	if err := g.check(meta, providerName, instance, operation); err != nil {
+		entry.Allowed = false
+		entry.Error = err.Error()
+		g.logAudit(ctx, entry)
+		return nil, err
+	}
+	entry.Allowed = true
+	defer func() {
+		g.logAudit(ctx, entry)
+	}()
+	chainInstance := instance
+	if chainInstance == "" {
+		chainInstance = "default"
+	}
+	chainKey := providerName + "/" + chainInstance + "/" + operation
+	next := &InvocationMeta{
+		RequestID: meta.RequestID,
+		Depth:     meta.Depth + 1,
+		CallChain: append(append([]string(nil), meta.CallChain...), chainKey),
+	}
+	ctx = ContextWithMeta(ctx, next)
+	outcome, err := maybeInvoker.InvokeMaybeStream(ctx, p, providerName, instance, operation, params)
+	if err != nil {
+		entry.Error = err.Error()
+		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
+			entry.Allowed = false
+		}
+	}
+	return outcome, err
 }
 
 func (g *GuardedInvoker) ListCapabilities() []core.Capability {

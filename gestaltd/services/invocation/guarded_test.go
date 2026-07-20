@@ -3,6 +3,8 @@ package invocation_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -67,6 +69,8 @@ func (f funcInvoker) Invoke(ctx context.Context, p *principal.Principal, provide
 
 type optionalInvoker struct {
 	invoke              func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
+	invokeStream        func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error)
+	invokeMaybeStream   func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*invocation.InvokeOutcome, error)
 	invokeGraphQL       func(ctx context.Context, p *principal.Principal, providerName, instance string, request invocation.GraphQLRequest) (*core.OperationResult, error)
 	resolveToken        func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error)
 	resolveSubjectToken func(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string) (context.Context, string, error)
@@ -77,6 +81,20 @@ func (o *optionalInvoker) Invoke(ctx context.Context, p *principal.Principal, pr
 		return o.invoke(ctx, p, providerName, instance, operation, params)
 	}
 	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
+}
+
+func (o *optionalInvoker) InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error) {
+	if o.invokeStream == nil {
+		return nil, fmt.Errorf("plugin invoker is not available")
+	}
+	return o.invokeStream(ctx, p, providerName, instance, operation, params)
+}
+
+func (o *optionalInvoker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*invocation.InvokeOutcome, error) {
+	if o.invokeMaybeStream == nil {
+		return nil, fmt.Errorf("plugin invoker is not available")
+	}
+	return o.invokeMaybeStream(ctx, p, providerName, instance, operation, params)
 }
 
 func (o *optionalInvoker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request invocation.GraphQLRequest) (*core.OperationResult, error) {
@@ -511,5 +529,87 @@ func TestGuardedInvoker_OptionalDependenciesUnsupported(t *testing.T) {
 	}
 	if subjectCtx != ctx {
 		t.Fatal("expected unsupported subject token resolution to return original context")
+	}
+}
+
+func TestGuardedInvoker_StreamingDelegates(t *testing.T) {
+	t.Parallel()
+
+	sink := &capturingSink{}
+	streamFn := func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error) {
+		if providerName != "alpha" || operation != "stream" || p.SubjectID != "subject-1" {
+			t.Fatalf("unexpected stream call: provider=%s op=%s subject=%s", providerName, operation, p.SubjectID)
+		}
+		meta := invocation.MetaFromContext(ctx)
+		if meta == nil || meta.Depth != 2 {
+			t.Fatalf("expected depth 2, got %+v", meta)
+		}
+		return core.StreamReaderFunc(func() (*core.InvokeFrame, error) {
+			return nil, io.EOF
+		}), nil
+	}
+	base := &optionalInvoker{
+		invokeMaybeStream: func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*invocation.InvokeOutcome, error) {
+			reader, err := streamFn(ctx, p, providerName, instance, operation, params)
+			if err != nil {
+				return nil, err
+			}
+			return &invocation.InvokeOutcome{Stream: reader}, nil
+		},
+		invokeStream: streamFn,
+	}
+	guarded := invocation.NewGuarded(base, nil, "test", sink, invocation.WithAllowedProviders([]string{"alpha"}), invocation.WithoutRateLimit())
+
+	ctx := invocation.ContextWithMeta(context.Background(), &invocation.InvocationMeta{
+		RequestID: "req-1",
+		Depth:     1,
+		CallChain: []string{"root/default/ping"},
+	})
+	p := &principal.Principal{SubjectID: "subject-1"}
+
+	reader, err := guarded.InvokeStream(ctx, p, "alpha", "", "stream", nil)
+	if err != nil {
+		t.Fatalf("InvokeStream: %v", err)
+	}
+	if reader == nil {
+		t.Fatal("InvokeStream returned nil reader")
+	}
+	_, err = reader.Recv()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected EOF, got %v", err)
+	}
+
+	outcome, err := guarded.InvokeMaybeStream(ctx, p, "alpha", "", "stream", nil)
+	if err != nil {
+		t.Fatalf("InvokeMaybeStream: %v", err)
+	}
+	if outcome == nil || !outcome.IsStream() {
+		t.Fatalf("InvokeMaybeStream did not return stream outcome: %+v", outcome)
+	}
+
+	if len(sink.entries) != 2 {
+		t.Fatalf("expected 2 audit entries, got %d", len(sink.entries))
+	}
+	for i, entry := range sink.entries {
+		if entry.Provider != "alpha" || entry.Operation != "stream" || !entry.Allowed {
+			t.Fatalf("unexpected audit entry %d: %#v", i, entry)
+		}
+	}
+}
+
+func TestGuardedInvoker_StreamingUnsupported(t *testing.T) {
+	t.Parallel()
+
+	sink := &capturingSink{}
+	base := &optionalInvoker{}
+	guarded := invocation.NewGuarded(base, nil, "test", sink)
+
+	_, err := guarded.InvokeStream(context.Background(), nil, "alpha", "", "stream", nil)
+	if err == nil || err.Error() != "plugin invoker is not available" {
+		t.Fatalf("expected unsupported error, got %v", err)
+	}
+	_, err = guarded.InvokeMaybeStream(context.Background(), nil, "alpha", "", "stream", nil)
+	if err == nil || err.Error() != "plugin invoker is not available" {
+		t.Fatalf("expected unsupported error, got %v", err)
 	}
 }

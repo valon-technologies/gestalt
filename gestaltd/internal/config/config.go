@@ -1601,6 +1601,9 @@ func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
 	if override.Security != "" {
 		merged.Security = override.Security
 	}
+	if override.Streaming {
+		merged.Streaming = true
+	}
 	if override.Target != "" {
 		merged.Target = override.Target
 	}
