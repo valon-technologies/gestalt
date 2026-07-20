@@ -247,8 +247,8 @@ func (s *Server) requireGlobalWorkflowRunAccess(w http.ResponseWriter, r *http.R
 	if !s.requireAuthorizationProvider(w) {
 		return false
 	}
-	subjectID := principal.EffectiveCredentialSubjectID(p)
-	if subjectID == "" {
+	subjectID, err := principal.ResolveCredentialSubjectID(r.Context(), s.users, p)
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 		return false
 	}

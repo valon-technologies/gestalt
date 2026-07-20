@@ -148,8 +148,8 @@ func (t *ProviderGatewayTransport) runAuthorizationCheck(
 }
 
 func (t *ProviderGatewayTransport) authorizationSubject(ctx context.Context) (string, error) {
-	subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.FromContext(ctx)))
-	if subjectID == "" {
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, t.users, principal.FromContext(ctx))
+	if err != nil {
 		return "", fmt.Errorf("provider gateway: caller principal is required")
 	}
 	return subjectID, nil

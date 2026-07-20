@@ -27,7 +27,7 @@ func workflowCallerSubjectID(_ context.Context, reqCtx *proto.RequestContext, p 
 	if id := appaccessservice.SubjectIDFromRequestContext(reqCtx); id != "" {
 		return id, nil
 	}
-	if id := strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))); id != "" {
+	if id := strings.TrimSpace(principal.Canonicalized(p).SubjectID); id != "" {
 		return id, nil
 	}
 	return "", ErrWorkflowSubjectRequired

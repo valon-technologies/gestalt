@@ -283,8 +283,8 @@ func mountedUIAuthorizationSubject(p *principal.Principal, mounted MountedUI) (r
 	if resourceName == "" {
 		return "", "", false
 	}
-	subjectID = principal.EffectiveCredentialSubjectID(p)
-	if strings.TrimSpace(subjectID) == "" {
+	subjectID = strings.TrimSpace(principal.Canonicalized(p).SubjectID)
+	if subjectID == "" {
 		return "", "", false
 	}
 	return resourceName, subjectID, true

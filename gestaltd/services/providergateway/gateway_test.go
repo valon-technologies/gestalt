@@ -567,6 +567,27 @@ func TestPreparePublicRequest(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:       "app invoke canonicalizes email subject to persisted user id",
+			fullMethod: proto.App_Invoke_FullMethodName,
+			withOrigin: true,
+			introspect: &core.IntrospectResponse{Active: true, Subject: "user:alice@example.com"},
+			req:        &proto.AppInvokeRequest{App: "roadmap", Operation: "sync"},
+			setup: func(transport *ProviderGatewayTransport) {
+				transport.SetUserStore(stubGatewayUserStore{ids: map[string]string{"alice@example.com": "db-alice"}})
+			},
+			wantSubject: "user:db-alice",
+			checkAdapted: func(t *testing.T, adapted gproto.Message) {
+				t.Helper()
+				out, ok := adapted.(*proto.AppInvokeRequest)
+				if !ok {
+					t.Fatalf("adapted type = %T, want *proto.AppInvokeRequest", adapted)
+				}
+				if got := out.GetContext().GetSubject().GetId(); got != "user:db-alice" {
+					t.Fatalf("context subject = %q, want canonical user:db-alice", got)
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {

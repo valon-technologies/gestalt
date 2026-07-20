@@ -122,19 +122,6 @@ func IsNonUserPrincipal(p *Principal) bool {
 	return p != nil && p.Kind != "" && p.Kind != KindUser
 }
 
-func EffectiveCredentialSubjectID(p *Principal) string {
-	if p == nil {
-		return ""
-	}
-	if subjectID := strings.TrimSpace(p.SubjectID); subjectID != "" {
-		return subjectID
-	}
-	if userID := strings.TrimSpace(p.UserID); userID != "" {
-		return UserSubjectID(userID)
-	}
-	return ""
-}
-
 func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 	if len(perms) == 0 {
 		return nil

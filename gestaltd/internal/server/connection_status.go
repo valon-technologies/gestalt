@@ -374,7 +374,7 @@ func subjectConnectionActions(disconnectable, connectable, selectInstance bool) 
 }
 
 func ownerKindForPrincipal(p *principal.Principal) string {
-	subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
+	subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID)
 	if subjectID == "" {
 		return ownerKindUnknown
 	}

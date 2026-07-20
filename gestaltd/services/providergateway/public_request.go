@@ -64,14 +64,14 @@ func (t *ProviderGatewayTransport) PreparePublicRequest(
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := t.canonicalizePublicCredentialPrincipal(ctx, fullMethod, p); err != nil {
+		return nil, nil, err
+	}
 	resourceID, err := t.publicResourceID(req, fullMethod)
 	if err != nil {
 		return nil, nil, err
 	}
 	if err := t.enforcePublicAuthorization(ctx, p, resourceID, fullMethod); err != nil {
-		return nil, nil, err
-	}
-	if err := t.canonicalizePublicCredentialPrincipal(ctx, fullMethod, p); err != nil {
 		return nil, nil, err
 	}
 	adapted, err := adaptPublicRequest(ctx, t.publicBaseURL, t.users, p, req, policy, fullMethod)
@@ -110,8 +110,8 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 	if t == nil || t.authorization == nil {
 		return status.Error(codes.PermissionDenied, "authorization provider is not configured")
 	}
-	subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
-	if subjectID == "" {
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, t.users, p)
+	if err != nil {
 		return status.Error(codes.Unauthenticated, "authenticated subject is required")
 	}
 	allowed, _, err := t.runAuthorizationCheck(ctx, subjectID, providerID, fullMethod)
@@ -386,9 +386,6 @@ func bindPublicCredentialActorSubject(
 }
 
 func (t *ProviderGatewayTransport) canonicalizePublicCredentialPrincipal(ctx context.Context, fullMethod string, p *principal.Principal) error {
-	if !strings.HasPrefix(fullMethod, "/"+proto.ExternalCredentials_ServiceDesc.ServiceName+"/") {
-		return nil
-	}
 	subjectID, err := principal.ResolveCredentialSubjectID(ctx, t.users, p)
 	if err != nil {
 		switch err {
@@ -399,5 +396,6 @@ func (t *ProviderGatewayTransport) canonicalizePublicCredentialPrincipal(ctx con
 		}
 	}
 	p.SubjectID = subjectID
+	principal.Canonicalize(p)
 	return nil
 }

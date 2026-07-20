@@ -130,8 +130,8 @@ func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Reque
 	}
 	p := PrincipalFromContext(r.Context())
 	if principal.IsNonUserPrincipal(p) {
-		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
-		if subjectID == "" {
+		subjectID, err := principal.ResolveCredentialSubjectID(r.Context(), s.users, p)
+		if err != nil {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
 			return "", errNotAuthenticated
 		}
@@ -173,8 +173,8 @@ func (s *Server) authorizeServiceAccountCredentialManagement(ctx context.Context
 	if s == nil || s.authorization == nil {
 		return fmt.Errorf("authorization provider is required")
 	}
-	subjectID := principal.EffectiveCredentialSubjectID(p)
-	if subjectID == "" {
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, s.users, p)
+	if err != nil {
 		return fmt.Errorf("not authenticated")
 	}
 	allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, invocation.SubjectAccessRequest(subjectID, "manages", &proto.Resource{
@@ -250,7 +250,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
 	p := PrincipalFromContext(r.Context())
-	if subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)); subjectID != "" {
+	// Ingress already canonicalized p; read the subject directly to avoid
+	// re-querying the user store and surfacing duplicate-email errors.
+	if subjectID := strings.TrimSpace(principal.Canonicalized(p).SubjectID); subjectID != "" {
 		return s.connectedIntegrationsForSubject(r.Context(), subjectID)
 	}
 	if principal.IsNonUserPrincipal(p) {
