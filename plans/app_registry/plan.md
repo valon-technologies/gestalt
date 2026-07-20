@@ -264,5 +264,5 @@ Core recovery paths must not depend on dynamically installed apps.
 9. Stop the running app and start the same app back up (restart machinery only; no binary change yet). Use a **1 minute** delay between stop and start during early rollout testing so operators can observe that the process started; production restart has no intentional wait.
 10. Download and materialize the new version artifact **before** bringing the app down. **Done:** catalog poller downloads registry archives to `{artifactsDir}/registry-installed/{app}/{version}` and records `materialized_at` before `StopApp`. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#artifact-materialization-tests).
 11. Mount the newly materialized binary instead of the old one when restarting. **Done:** catalog-driven `StartApp` resolves an isolated provider entry from `{artifactsDir}/registry-installed/{app}/{version}` before rebuilding the app. See [lifecycle.md](./lifecycle.md#polling), [tests.md](./tests.md#registry-mount-tests).
-12. Registry-only app config. See [config.md](./config.md#registry-only-app-source).
+12. Registry-only app config. See [config.md](./config.md#registry-only-app-source) (behavior + [implementation notes](./config.md#implementation-notes-step-12)).
 13. Add install-time validation, fleet activation/rollback, and concurrency guards.
