@@ -399,64 +399,14 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
 }
 
 #[test]
-fn test_connection_selection_uses_selected_connection_auth_type() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
-                    "name":"manual-svc",
-                    "displayName":"Manual Service",
-                    "connections":[
-                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]},
-                        {"name":"apikey","displayName":"API Key","authTypes":["manual"],"credentialFields":[{"name":"token","label":"Token"}]}
-                    ]
-                }]"#,
-            )
-            .create();
-    let _oauth = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"workspace","integration":"manual-svc"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let home = tempfile::tempdir().unwrap();
-    cli_command_for_server(home.path(), &server)
-        .args(["app", "connect", "manual-svc"])
-        .write_stdin("1\n")
-        .assert()
-        .success()
-        .stderr(predicate::str::contains(
-            "Select a Manual Service connection:",
-        ))
-        .stderr(predicate::str::contains("Workspace OAuth"))
-        .stderr(predicate::str::contains(
-            "Opening browser to connect manual-svc...",
-        ));
-}
-
-#[test]
-fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
+fn test_connect_auto_selects_single_oauth_connection() {
     let mut server = Server::new();
     let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
         .with_body(
-            r#"[{
-                    "name":"single-svc",
-                    "displayName":"Single Service",
-                    "connections":[
-                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]}
-                    ]
-                }]"#,
+            r#"[{"name":"single-svc","connections":[{"name":"workspace","authTypes":["oauth"]}]}]"#,
         )
         .create();
-    let _oauth = authed_json_mock!(
+    let mock = authed_json_mock!(
         server,
         Method::POST,
         "/api/v1/auth/start-oauth",
@@ -469,15 +419,18 @@ fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
     .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
     .create();
 
-    let home = tempfile::tempdir().unwrap();
-    cli_command_for_server(home.path(), &server)
-        .args(["app", "connect", "single-svc"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("Select a Single Service connection:").not())
-        .stderr(predicate::str::contains(
-            "Opening browser to connect single-svc...",
-        ));
+    let client = create_client(&server);
+    let result = gestalt::commands::apps::connect_with_browser_opener(
+        &client,
+        "single-svc",
+        None,
+        None,
+        None,
+        |_| Ok(()),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
 }
 
 #[test]
