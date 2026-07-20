@@ -32,12 +32,11 @@
     "access": "public"
   },
   "scripts": {
-    "sync:runtime": "bun run scripts/sync-web-runtime.ts",
     "build": "tsup --config tsup.config.ts",
     "scan:browser-bundle": "bun run scripts/scan-browser-bundle.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun run scripts/run-tests.ts",
-    "check": "bun run sync:runtime && bun run build && bun run scan:browser-bundle && bun run test && bun run typecheck"
+    "check": "bun run build && bun run scan:browser-bundle && bun run test && bun run typecheck"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.11.0",

@@ -43,6 +43,7 @@ type renderer struct {
 	kind     moduleKind
 	features features
 	body     strings.Builder
+	imports  *PublicImports
 }
 
 func newRenderer(idx *index, base, wireBase string, kind moduleKind) *renderer {
@@ -957,23 +958,39 @@ func (r *renderer) assemble() string {
 		b.WriteString("\n")
 	}
 
-	for _, base := range sortedKeys2(r.features.crossPublic) {
-		names := r.features.crossPublic[base]
-		if r.kind == moduleCodec {
-			// Codec modules import native types type-only so the statement is
-			// erased and the value-level public -> codec edge stays acyclic.
-			fmt.Fprintf(&b, "import type { %s } from \"%s/%s.ts\";\n", strings.Join(sortedKeys(names), ", "), r.publicDir(), base)
-			continue
-		}
-		var specs []string
-		for _, name := range sortedKeys(names) {
-			if names[name] {
-				specs = append(specs, "type "+name)
-			} else {
-				specs = append(specs, name)
+	if r.kind == moduleCodec && r.imports != nil && r.imports.FixedNativeModule != "" {
+		var allNames []string
+		seen := map[string]bool{}
+		for _, base := range sortedKeys2(r.features.crossPublic) {
+			for _, name := range sortedKeys(r.features.crossPublic[base]) {
+				if !seen[name] {
+					seen[name] = true
+					allNames = append(allNames, name)
+				}
 			}
 		}
-		fmt.Fprintf(&b, "import { %s } from \"%s/%s.ts\";\n", strings.Join(specs, ", "), r.publicDir(), base)
+		if len(allNames) > 0 {
+			fmt.Fprintf(&b, "import type { %s } from \"%s/%s\";\n", strings.Join(allNames, ", "), r.imports.SupportPrefix, r.imports.FixedNativeModule)
+		}
+	} else {
+		for _, base := range sortedKeys2(r.features.crossPublic) {
+			names := r.features.crossPublic[base]
+			if r.kind == moduleCodec {
+				// Codec modules import native types type-only so the statement is
+				// erased and the value-level public -> codec edge stays acyclic.
+				fmt.Fprintf(&b, "import type { %s } from \"%s/%s.ts\";\n", strings.Join(sortedKeys(names), ", "), r.publicDir(), base)
+				continue
+			}
+			var specs []string
+			for _, name := range sortedKeys(names) {
+				if names[name] {
+					specs = append(specs, "type "+name)
+				} else {
+					specs = append(specs, name)
+				}
+			}
+			fmt.Fprintf(&b, "import { %s } from \"%s/%s.ts\";\n", strings.Join(specs, ", "), r.publicDir(), base)
+		}
 	}
 
 	for _, base := range sortedKeys2(r.features.crossCodec) {
@@ -1007,6 +1024,9 @@ func (r *renderer) wireDir() string {
 // rpc_support).
 func (r *renderer) publicDir() string {
 	if r.kind == moduleCodec {
+		if r.imports != nil {
+			return r.imports.SupportPrefix
+		}
 		return "../.."
 	}
 	return "."
