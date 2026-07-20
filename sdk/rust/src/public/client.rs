@@ -95,7 +95,7 @@ pub async fn create_gestalt_client<A: Auth + 'static>(
             Arc::clone(&auth),
         )))),
         Transport::Grpc => {
-            let channel = dial_public_grpc(&address)?;
+            let channel = dial_public_grpc(&address)?.connect_lazy();
             Ok(GestaltClient::Grpc(Box::new(AppClient::new(
                 GrpcTransport::new(channel, auth),
             ))))
@@ -120,7 +120,7 @@ pub async fn create_grpc_gestalt_client<A: Auth + 'static>(
 ) -> Result<GrpcGestaltClient, GestaltError> {
     let address = normalize_address(address.into())?;
     let auth: Arc<dyn Auth> = Arc::new(auth);
-    let channel = dial_public_grpc(&address)?;
+    let channel = dial_public_grpc(&address)?.connect_lazy();
     Ok(bind_grpc(GrpcTransport::new(channel, auth)))
 }
 

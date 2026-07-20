@@ -3,6 +3,80 @@ use serde_json::{Map, Value};
 
 use crate::cli::AgentToolArg;
 
+/// Deserializes a field that may be a string (v1 REST shape) or a number
+/// (SDK proto enum shape). Numbers are mapped to the CLI-expected string
+/// names via `map_fn`; strings pass through unchanged.
+fn enum_string<'de, D>(
+    deserializer: D,
+    map_fn: fn(i64) -> &'static str,
+) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    match value {
+        Value::String(s) => Ok(s),
+        Value::Number(n) => Ok(n
+            .as_i64()
+            .map(map_fn)
+            .filter(|name| !name.is_empty())
+            .unwrap_or_default()
+            .to_string()),
+        Value::Null => Ok(String::new()),
+        _ => Ok(value.to_string()),
+    }
+}
+
+fn deserialize_session_state<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    enum_string(deserializer, |v| match v {
+        1 => "active",
+        2 => "closed",
+        _ => "",
+    })
+}
+
+fn deserialize_execution_status<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    enum_string(deserializer, |v| match v {
+        1 => "pending",
+        2 => "running",
+        3 => "succeeded",
+        4 => "failed",
+        5 => "canceled",
+        6 => "waiting_for_input",
+        _ => "",
+    })
+}
+
+fn deserialize_interaction_state<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    enum_string(deserializer, |v| match v {
+        1 => "pending",
+        2 => "resolved",
+        3 => "canceled",
+        _ => "",
+    })
+}
+
+fn deserialize_interaction_type<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    enum_string(deserializer, |v| match v {
+        1 => "approval",
+        2 => "clarification",
+        3 => "input",
+        _ => "",
+    })
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AgentHarnessResolveRequest<'a> {
@@ -75,10 +149,11 @@ pub(crate) fn take_string_field(data: &mut Map<String, Value>, key: &str) -> Str
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AgentSessionInfo {
     pub(crate) id: String,
+    #[serde(alias = "providerName")]
     pub(crate) provider: String,
     #[serde(default)]
     pub(crate) model: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_session_state")]
     pub(crate) state: String,
     #[serde(default)]
     pub(crate) last_turn_at: String,
@@ -109,7 +184,7 @@ pub(crate) struct AgentTurnInfo {
     pub(crate) id: String,
     #[serde(default)]
     pub(crate) messages: Vec<AgentMessageInfo>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_execution_status")]
     pub(crate) status: String,
     #[serde(default)]
     pub(crate) output: Option<AgentTurnOutputInfo>,
@@ -248,9 +323,9 @@ pub(crate) struct AgentTurnDisplayInfo {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AgentInteractionInfo {
     pub(crate) id: String,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", deserialize_with = "deserialize_interaction_type")]
     pub(crate) interaction_type: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_interaction_state")]
     pub(crate) state: String,
     #[serde(default)]
     pub(crate) title: String,

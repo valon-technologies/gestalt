@@ -35,7 +35,7 @@ fn run() -> anyhow::Result<()> {
         },
         Commands::Authorization { command } => {
             let api = ApiClient::from_env(url)?;
-            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::new(
+            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::from_endpoint(
                 gestalt_sdk::public::grpc_transport::dial_public_grpc(api.base_url())?,
                 std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
             )
@@ -49,7 +49,7 @@ fn run() -> anyhow::Result<()> {
         Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
         Commands::Workflow { command } => {
             let api = ApiClient::from_env(url)?;
-            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::new(
+            let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::from_endpoint(
                 gestalt_sdk::public::grpc_transport::dial_public_grpc(api.base_url())?,
                 std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(api.token())),
             )

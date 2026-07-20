@@ -4,6 +4,51 @@ use crate::output::{self, Format};
 
 use super::transcript::{fallback_turn_event_data_summary, turn_event_display_summary_from_value};
 
+/// Reads a string field that may appear under either of two keys (v1 REST
+/// shape vs SDK proto shape).
+fn string_field(value: &Value, primary: &str, fallback: &str) -> String {
+    value[primary]
+        .as_str()
+        .or_else(|| value[fallback].as_str())
+        .unwrap_or("-")
+        .to_string()
+}
+
+/// Reads a field that may be a string (v1 REST) or a number (SDK proto enum),
+/// mapping the number to the CLI-expected string name via `map_fn`.
+fn enum_string(value: &Value, key: &str, map_fn: fn(i64) -> &'static str) -> String {
+    match &value[key] {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n
+            .as_i64()
+            .map(map_fn)
+            .filter(|name| !name.is_empty())
+            .unwrap_or("-")
+            .to_string(),
+        _ => "-".to_string(),
+    }
+}
+
+fn session_state_name(v: i64) -> &'static str {
+    match v {
+        1 => "active",
+        2 => "closed",
+        _ => "",
+    }
+}
+
+fn execution_status_name(v: i64) -> &'static str {
+    match v {
+        1 => "pending",
+        2 => "running",
+        3 => "succeeded",
+        4 => "failed",
+        5 => "canceled",
+        6 => "waiting_for_input",
+        _ => "",
+    }
+}
+
 pub(crate) fn print_session(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
@@ -80,9 +125,9 @@ fn event_headers() -> [&'static str; 7] {
 pub(crate) fn session_row(value: &Value) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
-        value["provider"].as_str().unwrap_or("-").to_string(),
+        string_field(value, "provider", "providerName"),
         value["model"].as_str().unwrap_or("-").to_string(),
-        value["state"].as_str().unwrap_or("-").to_string(),
+        enum_string(value, "state", session_state_name),
         value["clientRef"].as_str().unwrap_or("-").to_string(),
         value["updatedAt"].as_str().unwrap_or("-").to_string(),
     ]
@@ -92,9 +137,9 @@ pub(crate) fn turn_row(value: &Value) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
         value["sessionId"].as_str().unwrap_or("-").to_string(),
-        value["provider"].as_str().unwrap_or("-").to_string(),
+        string_field(value, "provider", "providerName"),
         value["model"].as_str().unwrap_or("-").to_string(),
-        value["status"].as_str().unwrap_or("-").to_string(),
+        enum_string(value, "status", execution_status_name),
         value["createdAt"].as_str().unwrap_or("-").to_string(),
     ]
 }
