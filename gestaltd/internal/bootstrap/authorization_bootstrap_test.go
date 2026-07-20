@@ -246,7 +246,7 @@ config:
 			capturedName = name
 			capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
 			provider := &recordingAuthorizationProvider{}
-			return providerdrivers.AuthorizationBuildResult{Raw: provider, Guarded: provider}, nil
+			return providerdrivers.AuthorizationBuildResult{Raw: provider}, nil
 		},
 	}
 	cfg := &config.Config{
@@ -268,9 +268,6 @@ config:
 	providers, err := buildAuthorizationProviders(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAuthorizationProviders: %v", err)
-	}
-	if providers.Guarded["indexeddb"] == nil {
-		t.Fatal("guarded authorization provider was not built")
 	}
 	if providers.Raw["indexeddb"] == nil {
 		t.Fatal("raw authorization provider was not built")
