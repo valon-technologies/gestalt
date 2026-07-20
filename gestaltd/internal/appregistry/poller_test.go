@@ -22,6 +22,7 @@ type recordingAppRestarter struct {
 	restartable    map[string]bool
 	restartableErr error
 	afterStop      func()
+	runningVersion string
 }
 
 func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
@@ -54,6 +55,10 @@ func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string)
 }
 
 func (r *recordingAppRestarter) AbortRestarts() {}
+
+func (r *recordingAppRestarter) RunningVersion(string) string {
+	return r.runningVersion
+}
 
 func TestCatalogPollerRolloutEnrollmentAndCompletion(t *testing.T) {
 	t.Parallel()
@@ -339,6 +344,86 @@ func TestCatalogPollerReconcileOnceAcknowledgesAndRestarts(t *testing.T) {
 	}
 	if got := len(restarter.startCalls); got != 1 {
 		t.Fatalf("startCalls after second pass = %d, want 1", got)
+	}
+}
+
+func TestCatalogPollerMarksBootstrapVersionConvergedWithoutRestart(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: RegistryFirstInstallVersion,
+		ToVersion:   "v1",
+		Timestamp:   now,
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	restarter := &recordingAppRestarter{runningVersion: "v1"}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return now },
+	})
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if len(restarter.stopCalls) != 0 || len(restarter.startCalls) != 0 {
+		t.Fatalf("restart calls: stop=%v start=%v", restarter.stopCalls, restarter.startCalls)
+	}
+	materialization, err := services.AppInstanceMaterializations.Get(context.Background(), "replica-a", "g-issues", "v1")
+	if err != nil {
+		t.Fatalf("Get materialization: %v", err)
+	}
+	if materialization.RestartedAt != now {
+		t.Fatalf("RestartedAt = %v, want %v", materialization.RestartedAt, now)
+	}
+}
+
+func TestCatalogPollerStopsOlderRunningVersionAfterRecordedStop(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "v0",
+		ToVersion:   "v1",
+		Timestamp:   now,
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.Acknowledge(context.Background(), &core.AppInstanceMaterialization{
+		InstanceID:     "replica-a",
+		App:            "g-issues",
+		Version:        "v1",
+		AcknowledgedAt: now,
+	}); err != nil {
+		t.Fatalf("Acknowledge: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.MarkStopped(context.Background(), "replica-a", "g-issues", "v1", now); err != nil {
+		t.Fatalf("MarkStopped: %v", err)
+	}
+	restarter := &recordingAppRestarter{runningVersion: "v0"}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:      services.AppVersionChangeRequests,
+		Materializations:    services.AppInstanceMaterializations,
+		Rollouts:            services.AppRollouts,
+		AppRestarter:        restarter,
+		InstanceID:          "replica-a",
+		DisableRestartDelay: true,
+		Now:                 func() time.Time { return now },
+	})
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if len(restarter.stopCalls) != 1 || len(restarter.startVersions) != 1 || restarter.startVersions[0] != "v1" {
+		t.Fatalf("restart calls: stop=%v start=%v", restarter.stopCalls, restarter.startVersions)
 	}
 }
 

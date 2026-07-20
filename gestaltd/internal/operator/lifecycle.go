@@ -483,6 +483,10 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if !providerRequiresCommittedLock(entry) {
 			continue
 		}
+		if entry.Source.IsRegistry() {
+			lock.Providers.App[name] = registryOnlyLockEntry(entry)
+			continue
+		}
 		configMap, err := config.NodeToMap(entry.Config)
 		if err != nil {
 			return nil, fmt.Errorf("decode provider config for provider %q: %w", name, err)
@@ -632,7 +636,14 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 
 	lock := newLockfile()
 	for name, entry := range cfg.Apps {
-		if entry == nil || !sourceBacked(entry) || entry.HasLocalSource() {
+		if entry == nil {
+			continue
+		}
+		if entry.Source.IsRegistry() {
+			lock.Providers.App[name] = registryOnlyLockEntry(entry)
+			continue
+		}
+		if !sourceBacked(entry) || entry.HasLocalSource() {
 			continue
 		}
 		configMap, err := config.NodeToMap(entry.Config)
@@ -1744,6 +1755,16 @@ func sourceBacked(entry *config.ProviderEntry) bool {
 	return entry != nil && (entry.HasRemoteSource() || entry.HasLocalSource() || entry.HasLocalReleaseSource())
 }
 
+func registryOnlyLockEntry(entry *config.ProviderEntry) LockEntry {
+	return LockEntry{
+		Source: "registry",
+		SourceRef: &LockSourceRef{
+			Type:               "registry",
+			ResolvedGestaltRef: strings.TrimSpace(entry.Source.Registry),
+		},
+	}
+}
+
 func runtimeSourceBacked(entry *config.RuntimeProviderEntry) bool {
 	return entry != nil && sourceBacked(&entry.ProviderEntry)
 }
@@ -1752,7 +1773,7 @@ func providerRequiresCommittedLock(entry *config.ProviderEntry) bool {
 	if entry == nil || entry.DevActive {
 		return false
 	}
-	return sourceBacked(entry) && !entry.HasLocalSource()
+	return entry.Source.IsRegistry() || (sourceBacked(entry) && !entry.HasLocalSource())
 }
 
 func runtimeRequiresCommittedLock(entry *config.RuntimeProviderEntry) bool {
@@ -1812,7 +1833,9 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 }
 
 func configHasProviderLoading(cfg *config.Config) bool {
-	return configHasMatchingProviderEntry(cfg, sourceBacked)
+	return configHasMatchingProviderEntry(cfg, func(entry *config.ProviderEntry) bool {
+		return sourceBacked(entry) || (entry != nil && entry.Source.IsRegistry())
+	})
 }
 
 func configRequiresCommittedLock(cfg *config.Config) bool {
@@ -2663,6 +2686,9 @@ func lockEntryMatches(paths lifecyclePaths, kind, name string, providerEntry *co
 	if !lockEntryMetadataMatches(paths, kind, name, providerEntry, entry, found) {
 		return false
 	}
+	if providerEntry != nil && providerEntry.Source.IsRegistry() {
+		return true
+	}
 	if len(entry.Archives) > 0 {
 		platform := providerpkg.CurrentPlatformString()
 		_, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
@@ -2712,6 +2738,12 @@ func lockEntryMatches(paths lifecyclePaths, kind, name string, providerEntry *co
 func lockEntryMetadataMatches(paths lifecyclePaths, kind, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool) bool {
 	if !found {
 		return false
+	}
+	if providerEntry != nil && providerEntry.Source.IsRegistry() {
+		return entry.Source == "registry" &&
+			entry.SourceRef != nil &&
+			entry.SourceRef.Type == "registry" &&
+			entry.SourceRef.ResolvedGestaltRef == strings.TrimSpace(providerEntry.Source.Registry)
 	}
 	fingerprintMatches, err := lockEntryFingerprintMatchesProvider(name, providerEntry, paths.configDir, entry)
 	if err != nil || !fingerprintMatches {
@@ -3409,7 +3441,7 @@ func validateResolvedStructureForCommittedLock(paths lifecyclePaths, cfg *config
 		Apps: make(map[string]*config.ProviderEntry),
 	}
 	for name, entry := range cfg.Apps {
-		if providerRequiresCommittedLock(entry) {
+		if providerRequiresCommittedLock(entry) && !entry.Source.IsRegistry() {
 			validation.Apps[name] = entry
 		}
 	}
@@ -3424,7 +3456,7 @@ func effectiveCatalogsForCommittedLock(ctx context.Context, cfg *config.Config, 
 		Apps: make(map[string]*appservice.ValidationApp, len(cfg.Apps)),
 	}
 	for name, entry := range cfg.Apps {
-		if entry == nil {
+		if entry == nil || entry.Source.IsRegistry() {
 			continue
 		}
 		if _, locked := lock.Providers.App[name]; locked {
@@ -3856,7 +3888,7 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 	}
 	l.prefetchLockedAppMaterializedCache(paths, lock, cfg, mode, opts.Parallelism)
 	for _, work := range ordered {
-		if work.entry.HasLocalSource() || work.entry.DevActive || !sourceBacked(work.entry) {
+		if work.entry.HasLocalSource() || work.entry.DevActive || work.entry.Source.IsRegistry() || !sourceBacked(work.entry) {
 			continue
 		}
 		if err := l.applyLockedProviderEntry(paths, lock, work.name, work.entry, work.configMap, mode); err != nil {
@@ -3887,6 +3919,9 @@ func (l *Lifecycle) resolveConfiguredAppStaticBindings(paths lifecyclePaths, wor
 		}
 		if err := resolveAppStaticTheme(paths, item.name, entry); err != nil {
 			return err
+		}
+		if entry.Source.IsRegistry() {
+			continue
 		}
 		if err := materializeAppStaticRoot(paths, item.name, entry); err != nil {
 			return err

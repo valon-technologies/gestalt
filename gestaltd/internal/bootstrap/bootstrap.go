@@ -255,6 +255,7 @@ type Result struct {
 	AgentManager           agentmanager.Service
 	StartupProvidersReady  <-chan struct{}
 	ProvidersReady         <-chan struct{}
+	RegistryMaterializer   RegistryAppMaterializer
 	ConnectionAuth         func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth   func() map[string]map[string]ManualTokenExchanger
 	Invoker                invocation.Invoker
@@ -269,6 +270,7 @@ type Result struct {
 	DevSupervisor          *providerdev.Supervisor
 	AppRestarter           interface {
 		Restartable(string) (bool, error)
+		ValidateInstallation(*core.AppInstallation) error
 		StopApp(context.Context, string) error
 		StartApp(context.Context, string, string) error
 		AbortRestarts()
@@ -284,6 +286,7 @@ type Result struct {
 	auditClose                          func(context.Context) error
 	appHostServiceCleanup               func()
 	startAppProviders                   func()
+	startRegistryAppProviders           func(context.Context) error
 	activateAppProviders                func(context.Context)
 	startup                             *deferredProviders
 	deferred                            *deferredProviders
@@ -317,6 +320,11 @@ func (r *Result) StartAppProviders(ctx context.Context) error {
 		case <-ready:
 		case <-ctx.Done():
 			return fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
+		}
+	}
+	if r.startRegistryAppProviders != nil {
+		if err := r.startRegistryAppProviders(ctx); err != nil {
+			slog.WarnContext(ctx, "registry app provider startup failed", "error", err)
 		}
 	}
 	r.startupWorkflowConfigReconcileOnce.Do(func() {
@@ -1205,6 +1213,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 type BootstrapOptions struct {
 	DeferAppProviderStartup bool
 	RegistryResolver        RegistryInstalledResolver
+	RegistryMaterializer    RegistryAppMaterializer
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
@@ -1486,6 +1495,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		AgentManager:           prepared.Deps.AgentManager,
 		StartupProvidersReady:  startup.ready(),
 		ProvidersReady:         deferred.ready(),
+		RegistryMaterializer:   opts.RegistryMaterializer,
 		ConnectionAuth:         connAuthResolver,
 		ManualConnectionAuth:   manualConnAuthResolver,
 		Invoker:                sharedInvoker,
@@ -1515,6 +1525,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		activateAppProviders:           activateAppProviders,
 		startup:                        startup,
 		deferred:                       deferred,
+	}
+	result.startRegistryAppProviders = func(ctx context.Context) error {
+		return startRegistryOnlyAppProviders(ctx, cfg, prepared.Services.AppVersionChangeRequests, opts.RegistryMaterializer, result.AppRestarter)
 	}
 	for _, pending := range updateBuilds.pending {
 		if pending.proxy != nil {
@@ -1632,7 +1645,7 @@ func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
 	if entry == nil {
 		return false
 	}
-	if entry.DevActive || entry.Local {
+	if entry.DevActive || entry.Local || entry.Source.IsRegistry() {
 		return true
 	}
 	return cfg == nil || strings.TrimSpace(cfg.Server.Remote) == ""

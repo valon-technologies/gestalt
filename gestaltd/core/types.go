@@ -36,6 +36,11 @@ type AppInstallation struct {
 	UpdatedAt          time.Time
 }
 
+type AppMaterializationResult struct {
+	Path    string
+	Changed bool
+}
+
 type AppVersionChangeRequest struct {
 	ID          string
 	App         string

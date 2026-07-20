@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"golang.org/x/sync/singleflight"
 )
 
 // Materializer downloads registry app artifacts and extracts them on the local
@@ -21,12 +22,10 @@ type Materializer struct {
 	Registries   map[string]config.AppRegistryConfig
 	Reader       *RegistryReader
 	ArtifactsDir string
+	group        singleflight.Group
 }
 
-type MaterializationResult struct {
-	Path    string
-	Changed bool
-}
+type MaterializationResult = core.AppMaterializationResult
 
 // MaterializedPath returns the on-disk directory for one installed app version.
 func MaterializedPath(artifactsDir, appName, version string) string {
@@ -54,7 +53,16 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	if artifactsDir == "" {
 		return nil, fmt.Errorf("artifacts directory is not configured")
 	}
+	value, err, _ := m.group.Do(registryName+"\x00"+appName+"\x00"+version, func() (any, error) {
+		return m.ensure(ctx, installation, artifactsDir, appName, version, registryName)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return value.(*MaterializationResult), nil
+}
 
+func (m *Materializer) ensure(ctx context.Context, installation *core.AppInstallation, artifactsDir, appName, version, registryName string) (*MaterializationResult, error) {
 	destDir := MaterializedPath(artifactsDir, appName, version)
 	if installedPackageReady(destDir, appName, version) {
 		return &MaterializationResult{Path: destDir}, nil

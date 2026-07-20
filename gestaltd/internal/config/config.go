@@ -179,6 +179,7 @@ type ProviderSource struct {
 	unsupported         string                  `yaml:"-"`
 	GitHubRelease       *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
 	Git                 *GitSourceDef           `yaml:"git,omitempty"`
+	Registry            string                  `yaml:"registry,omitempty"`
 	Path                string                  `yaml:"path,omitempty"`
 	Auth                *SourceAuthDef          `yaml:"auth,omitempty"`
 }
@@ -190,6 +191,7 @@ type providerSourceYAML struct {
 	Version       string                  `yaml:"version,omitempty"`
 	GitHubRelease *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
 	Git           *GitSourceDef           `yaml:"git,omitempty"`
+	Registry      string                  `yaml:"registry,omitempty"`
 	Path          string                  `yaml:"path,omitempty"`
 	Auth          *SourceAuthDef          `yaml:"auth,omitempty"`
 }
@@ -233,6 +235,7 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 		}
 		s.GitHubRelease = cloneGitHubReleaseSourceDef(raw.GitHubRelease)
 		s.Git = cloneGitSourceDef(raw.Git)
+		s.Registry = strings.TrimSpace(raw.Registry)
 		s.Path = strings.TrimSpace(raw.Path)
 		s.metadataURL = strings.TrimSpace(raw.URL)
 		s.packageRepo = strings.TrimSpace(raw.Repo)
@@ -247,6 +250,7 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 	}
 	s.GitHubRelease = cloneGitHubReleaseSourceDef(raw.GitHubRelease)
 	s.Git = cloneGitSourceDef(raw.Git)
+	s.Registry = strings.TrimSpace(raw.Registry)
 	s.Path = strings.TrimSpace(raw.Path)
 	s.metadataURL = strings.TrimSpace(raw.URL)
 	s.packageRepo = strings.TrimSpace(raw.Repo)
@@ -284,6 +288,9 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 			Auth: auth,
 		}, nil
 	}
+	if s.Registry != "" && s.Path == "" && s.metadataPath == "" && s.metadataURL == "" && s.packageName == "" && s.GitHubRelease == nil && s.Git == nil && auth == nil {
+		return providerSourceYAML{Registry: strings.TrimSpace(s.Registry)}, nil
+	}
 	if s.scalar != "" && s.Path == "" && s.metadataPath == "" && auth == nil {
 		return s.scalar, nil
 	}
@@ -297,6 +304,7 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 		Version:       strings.TrimSpace(s.packageVersion),
 		GitHubRelease: cloneGitHubReleaseSourceDef(s.GitHubRelease),
 		Git:           cloneGitSourceDef(s.Git),
+		Registry:      strings.TrimSpace(s.Registry),
 		Path:          s.Path,
 		Auth:          auth,
 	}, nil
@@ -306,6 +314,7 @@ func (s ProviderSource) IsBuiltin() bool       { return s.Builtin != "" }
 func (s ProviderSource) IsMetadataURL() bool   { return s.metadataURL != "" }
 func (s ProviderSource) IsGitHubRelease() bool { return s.GitHubRelease != nil }
 func (s ProviderSource) IsGit() bool           { return s.Git != nil }
+func (s ProviderSource) IsRegistry() bool      { return strings.TrimSpace(s.Registry) != "" }
 func (s ProviderSource) IsPackage() bool       { return s.packageName != "" }
 func (s ProviderSource) IsLocal() bool         { return s.Path != "" }
 func (s ProviderSource) IsLocalMetadataPath() bool {

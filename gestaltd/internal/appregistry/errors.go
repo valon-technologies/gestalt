@@ -11,5 +11,11 @@ var ErrAppRolloutActive = errors.New("app already has an active rollout")
 // ErrAppVersionAlreadyInstalled means the requested app version is already in the catalog.
 var ErrAppVersionAlreadyInstalled = errors.New("app version is already installed")
 
+var ErrAppCatalogNotEmpty = errors.New("app already has fleet-known versions")
+
+var ErrAppCatalogEmpty = errors.New("app has no fleet-known versions")
+
+var ErrAppRegistryBinding = errors.New("app registry binding does not match deploy config")
+
 // ErrInstallTimedOut means install work exceeded the bounded post-lock timeout.
 var ErrInstallTimedOut = errors.New("app version install timed out")

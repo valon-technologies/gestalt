@@ -1,6 +1,10 @@
 package appregistry
 
-import "context"
+import (
+	"context"
+
+	"github.com/valon-technologies/gestalt/server/core"
+)
 
 // AppRestarter stops and starts a configured app provider during fleet install
 // convergence. When version is non-empty and a registry install exists on disk,
@@ -10,4 +14,12 @@ type AppRestarter interface {
 	StopApp(ctx context.Context, app string) error
 	StartApp(ctx context.Context, app, version string) error
 	AbortRestarts()
+}
+
+type runningVersionReporter interface {
+	RunningVersion(app string) string
+}
+
+type installationValidator interface {
+	ValidateInstallation(*core.AppInstallation) error
 }

@@ -36,13 +36,16 @@ func TestInstaller_does_not_record_change_request_on_failure(t *testing.T) {
 		Registries: map[string]config.AppRegistryConfig{
 			"toolshed": registry,
 		},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		},
 		Reader:         registrytest.NewReaderForServer(t, registrySrv.URL),
 		ChangeRequests: svc.AppVersionChangeRequests,
 		Locks:          svc.AppVersionInstallLocks,
 		Rollouts:       svc.AppRollouts,
 	}
 
-	_, err = installer.Install(ctx, appregistry.InstallInput{
+	_, err = installer.Add(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  "missing-version",
@@ -74,7 +77,7 @@ func TestInstaller_does_not_materialize_locally(t *testing.T) {
 			"toolshed": fixture.Registry,
 		},
 		ConfigApps: map[string]*config.ProviderEntry{
-			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
@@ -82,7 +85,7 @@ func TestInstaller_does_not_materialize_locally(t *testing.T) {
 		Rollouts:       svc.AppRollouts,
 	}
 
-	_, err := installer.Install(ctx, appregistry.InstallInput{
+	_, err := installer.Add(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  fixture.Version,
@@ -112,7 +115,7 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 			"toolshed": fixture.Registry,
 		},
 		ConfigApps: map[string]*config.ProviderEntry{
-			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
@@ -126,11 +129,11 @@ func TestInstaller_rejects_already_installed_version(t *testing.T) {
 		Version:  fixture.Version,
 		Actor:    "user:alice",
 	}
-	if _, err := installer.Install(ctx, input); err != nil {
+	if _, err := installer.Add(ctx, input); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
 
-	_, err := installer.Install(ctx, input)
+	_, err := installer.Upgrade(ctx, input)
 	if err == nil {
 		t.Fatal("expected error for already installed version")
 	}
@@ -151,7 +154,7 @@ func TestInstaller_creates_one_active_rollout_per_app(t *testing.T) {
 			"toolshed": fixture.Registry,
 		},
 		ConfigApps: map[string]*config.ProviderEntry{
-			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
@@ -160,7 +163,7 @@ func TestInstaller_creates_one_active_rollout_per_app(t *testing.T) {
 		Now:            func() time.Time { return now },
 	}
 
-	if _, err := installer.Install(ctx, appregistry.InstallInput{
+	if _, err := installer.Add(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  fixture.Version,
@@ -181,7 +184,7 @@ func TestInstaller_creates_one_active_rollout_per_app(t *testing.T) {
 		t.Fatalf("Deadline = %v", rollout.Deadline)
 	}
 
-	_, err = installer.Install(ctx, appregistry.InstallInput{
+	_, err = installer.Upgrade(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  "another-version",
@@ -189,12 +192,6 @@ func TestInstaller_creates_one_active_rollout_per_app(t *testing.T) {
 	if !errors.Is(err, appregistry.ErrAppRolloutActive) {
 		t.Fatalf("second install error = %v, want %v", err, appregistry.ErrAppRolloutActive)
 	}
-}
-
-func configEntryWithResolvedVersion(version string) *config.ProviderEntry {
-	entry := &config.ProviderEntry{}
-	entry.Source.SetResolvedPackage("", version)
-	return entry
 }
 
 func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.T) {
@@ -209,7 +206,7 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 			"toolshed": fixture.Registry,
 		},
 		ConfigApps: map[string]*config.ProviderEntry{
-			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
@@ -217,7 +214,7 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 		Rollouts:       svc.AppRollouts,
 	}
 
-	if _, err := installer.Install(ctx, appregistry.InstallInput{
+	if _, err := installer.Add(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  fixture.Version,
@@ -233,10 +230,77 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 	if len(requests) != 1 {
 		t.Fatalf("requests = %#v", requests)
 	}
-	if requests[0].FromVersion != "0.0.0-config" {
-		t.Fatalf("first from_version = %q, want 0.0.0-config", requests[0].FromVersion)
+	if requests[0].FromVersion != appregistry.RegistryFirstInstallVersion {
+		t.Fatalf("first from_version = %q, want %q", requests[0].FromVersion, appregistry.RegistryFirstInstallVersion)
 	}
 	if requests[0].ToVersion != fixture.Version {
 		t.Fatalf("first to_version = %q, want %s", requests[0].ToVersion, fixture.Version)
+	}
+
+	if _, err := svc.AppRollouts.MarkComplete(ctx, "g-issues", fixture.Version, time.Now()); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
+	}
+	nextVersion := "0.0.0-snapshot.gdef456"
+	installer.Reader = fixture.NewDigestMismatchReader(t, nextVersion)
+	if _, err := installer.Upgrade(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  nextVersion,
+		Actor:    "user:alice",
+	}); err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	requests, err = svc.AppVersionChangeRequests.ListRequestsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListRequestsByApp after upgrade: %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("requests after upgrade = %#v", requests)
+	}
+	for _, request := range requests {
+		if request.ToVersion == nextVersion && request.FromVersion != fixture.Version {
+			t.Fatalf("upgrade from_version = %q, want %q", request.FromVersion, fixture.Version)
+		}
+	}
+}
+
+func TestInstallerAddAndUpgradeEnforceCatalogState(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: services.AppVersionChangeRequests,
+		Locks:          services.AppVersionInstallLocks,
+		Rollouts:       services.AppRollouts,
+	}
+	input := appregistry.InstallInput{Registry: "toolshed", App: "g-issues", Version: fixture.Version}
+	if _, err := installer.Upgrade(t.Context(), input); !errors.Is(err, appregistry.ErrAppCatalogEmpty) {
+		t.Fatalf("Upgrade error = %v, want %v", err, appregistry.ErrAppCatalogEmpty)
+	}
+	if _, err := installer.Add(t.Context(), input); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if _, err := installer.Add(t.Context(), input); !errors.Is(err, appregistry.ErrAppCatalogNotEmpty) {
+		t.Fatalf("Add error = %v, want %v", err, appregistry.ErrAppCatalogNotEmpty)
+	}
+}
+
+func TestInstallerAddRequiresRegistryBinding(t *testing.T) {
+	t.Parallel()
+
+	installer := &appregistry.Installer{}
+	_, err := installer.Add(t.Context(), appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  "1.0.0",
+	})
+	if !errors.Is(err, appregistry.ErrAppRegistryBinding) {
+		t.Fatalf("Add error = %v, want %v", err, appregistry.ErrAppRegistryBinding)
 	}
 }

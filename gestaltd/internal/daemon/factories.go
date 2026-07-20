@@ -62,12 +62,18 @@ func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.Canc
 	factories.DevSupervisor = devSupervisor
 
 	var registryResolver bootstrap.RegistryInstalledResolver
+	var registryMaterializer bootstrap.RegistryAppMaterializer
 	if strings.TrimSpace(cfg.Server.ArtifactsDir) != "" && len(cfg.AppRegistries) > 0 {
 		registryResolver = &appregistry.MountService{ArtifactsDir: cfg.Server.ArtifactsDir}
+		registryMaterializer = &appregistry.Materializer{
+			Registries:   cfg.AppRegistries,
+			ArtifactsDir: cfg.Server.ArtifactsDir,
+		}
 	}
 	result, err := bootstrap.BootstrapWithOptions(ctx, cfg, factories, bootstrap.BootstrapOptions{
 		DeferAppProviderStartup: true,
 		RegistryResolver:        registryResolver,
+		RegistryMaterializer:    registryMaterializer,
 	})
 	if err != nil {
 		if devSupervisor != nil {

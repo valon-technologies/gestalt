@@ -2,27 +2,29 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
-func appRegistryTestAppDefs(version string) map[string]*config.ProviderEntry {
-	entry := &config.ProviderEntry{}
-	entry.Source.SetResolvedPackage("", version)
+func appRegistryTestAppDefs() map[string]*config.ProviderEntry {
 	return map[string]*config.ProviderEntry{
-		"g-issues": entry,
+		"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 	}
 }
 
-func TestAdminAppRegistryInstall(t *testing.T) {
+func TestAdminAppRegistryAdd(t *testing.T) {
 	t.Parallel()
 
 	t.Run("installs_and_lists_known_version", func(t *testing.T) {
@@ -36,12 +38,12 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = fixture.Reader
 			cfg.ArtifactsDir = artifactsDir
-			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
+			cfg.AppDefs = appRegistryTestAppDefs()
 		})
 		testutil.CloseOnCleanup(t, ts)
 
 		body := []byte(`{"version":"` + fixture.Version + `","actor":"user:alice"}`)
-		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST install: %v", err)
 		}
@@ -106,12 +108,12 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = reader
 			cfg.ArtifactsDir = t.TempDir()
-			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
+			cfg.AppDefs = appRegistryTestAppDefs()
 		})
 		testutil.CloseOnCleanup(t, ts)
 
 		body := []byte(`{"version":"missing-version"}`)
-		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST install: %v", err)
 		}
@@ -133,12 +135,12 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = fixture.Reader
 			cfg.ArtifactsDir = artifactsDir
-			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
+			cfg.AppDefs = appRegistryTestAppDefs()
 		})
 		testutil.CloseOnCleanup(t, ts)
 
 		body := []byte(`{"version":"` + fixture.Version + `"}`)
-		first, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		first, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST first install: %v", err)
 		}
@@ -147,14 +149,14 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			t.Fatalf("first install status = %d", first.StatusCode)
 		}
 
-		second, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		second, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST second install: %v", err)
 		}
 		defer func() { _ = second.Body.Close() }()
-		if second.StatusCode != http.StatusBadRequest {
+		if second.StatusCode != http.StatusConflict {
 			raw, _ := io.ReadAll(second.Body)
-			t.Fatalf("second install status = %d, want 400: %s", second.StatusCode, raw)
+			t.Fatalf("second add status = %d, want 409: %s", second.StatusCode, raw)
 		}
 	})
 
@@ -169,12 +171,12 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			}
 			cfg.AppRegistryReader = fixture.Reader
 			cfg.ArtifactsDir = artifactsDir
-			cfg.AppDefs = appRegistryTestAppDefs("0.0.0-config")
+			cfg.AppDefs = appRegistryTestAppDefs()
 		})
 		testutil.CloseOnCleanup(t, ts)
 
 		installBody := []byte(`{"version":"` + fixture.Version + `"}`)
-		installResp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(installBody))
+		installResp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(installBody))
 		if err != nil {
 			t.Fatalf("POST install: %v", err)
 		}
@@ -201,6 +203,71 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		}
 		if installations[0]["app"] != "g-issues" {
 			t.Fatalf("installation = %#v", installations[0])
+		}
+	})
+
+	t.Run("upgrade_rejects_empty_catalog", func(t *testing.T) {
+		t.Parallel()
+
+		fixture := registrytest.NewInstallFixture(t)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+			cfg.AppRegistryReader = fixture.Reader
+			cfg.AppDefs = appRegistryTestAppDefs()
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := []byte(`{"version":"` + fixture.Version + `"}`)
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/upgrade", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST upgrade: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("upgrade status = %d, want 400: %s", resp.StatusCode, raw)
+		}
+	})
+
+	t.Run("upgrade_uses_latest_known_version", func(t *testing.T) {
+		t.Parallel()
+
+		fixture := registrytest.NewInstallFixture(t)
+		nextVersion := "0.0.0-snapshot.gdef456"
+		var changeRequests *coredata.AppVersionChangeRequestService
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.AppRegistries = map[string]config.AppRegistryConfig{"toolshed": fixture.Registry}
+			cfg.AppRegistryReader = fixture.NewDigestMismatchReader(t, nextVersion)
+			cfg.AppDefs = appRegistryTestAppDefs()
+			changeRequests = cfg.Services.AppVersionChangeRequests
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		now := time.Now().UTC()
+		if _, err := changeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+			App:         "g-issues",
+			FromVersion: "registry:first-install",
+			ToVersion:   fixture.Version,
+			Timestamp:   now,
+		}); err != nil {
+			t.Fatalf("AppendRequest: %v", err)
+		}
+		body := []byte(`{"version":"` + nextVersion + `"}`)
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/upgrade", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST upgrade: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(resp.Body)
+			t.Fatalf("upgrade status = %d: %s", resp.StatusCode, raw)
+		}
+		requests, err := changeRequests.ListRequestsByApp(context.Background(), "g-issues")
+		if err != nil {
+			t.Fatalf("ListRequestsByApp: %v", err)
+		}
+		if len(requests) != 2 || requests[1].FromVersion != fixture.Version || requests[1].ToVersion != nextVersion {
+			t.Fatalf("requests = %#v", requests)
 		}
 	})
 }

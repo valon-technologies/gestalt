@@ -128,22 +128,26 @@ func InstallationFromChangeRequest(request *core.AppVersionChangeRequest) *core.
 }
 
 func LatestKnownVersion(installations []*core.AppInstallation) string {
-	if len(installations) == 0 {
-		return ""
-	}
-	latest := installations[0]
-	for _, installation := range installations[1:] {
-		if installation == nil {
-			continue
-		}
-		if latest == nil || installation.UpdatedAt.After(latest.UpdatedAt) {
-			latest = installation
-		}
-	}
+	latest := LatestKnownInstallation(installations)
 	if latest == nil {
 		return ""
 	}
 	return strings.TrimSpace(latest.Version)
+}
+
+func LatestKnownInstallation(installations []*core.AppInstallation) *core.AppInstallation {
+	var latest *core.AppInstallation
+	for _, installation := range installations {
+		if installation == nil {
+			continue
+		}
+		if latest == nil ||
+			installation.UpdatedAt.After(latest.UpdatedAt) ||
+			(installation.UpdatedAt.Equal(latest.UpdatedAt) && installation.Version > latest.Version) {
+			latest = installation
+		}
+	}
+	return latest
 }
 
 func stringMeta(metadata map[string]any, key string) string {

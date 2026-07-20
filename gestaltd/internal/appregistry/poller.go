@@ -21,11 +21,15 @@ const (
 	DefaultCatalogRestartDelay = time.Minute
 )
 
+type InstallationMaterializer interface {
+	Ensure(context.Context, *core.AppInstallation) (*core.AppMaterializationResult, error)
+}
+
 type CatalogPoller struct {
 	ChangeRequests      *coredata.AppVersionChangeRequestService
 	Materializations    *coredata.AppInstanceMaterializationService
 	Rollouts            *coredata.AppRolloutService
-	AppMaterializer     *Materializer
+	AppMaterializer     InstallationMaterializer
 	AppRestarter        AppRestarter
 	InstanceID          string
 	Interval            time.Duration
@@ -48,7 +52,7 @@ type CatalogPollerConfig struct {
 	ChangeRequests      *coredata.AppVersionChangeRequestService
 	Materializations    *coredata.AppInstanceMaterializationService
 	Rollouts            *coredata.AppRolloutService
-	AppMaterializer     *Materializer
+	AppMaterializer     InstallationMaterializer
 	AppRestarter        AppRestarter
 	InstanceID          string
 	Interval            time.Duration
@@ -311,6 +315,13 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
+	if validator, ok := p.AppRestarter.(installationValidator); ok {
+		for _, installation := range pending {
+			if err := validator.ValidateInstallation(installation); err != nil {
+				return fmt.Errorf("validate installation for app %s: %w", appName, err)
+			}
+		}
+	}
 	if err := p.ensurePendingMaterialized(ctx, instanceID, pending); err != nil {
 		return fmt.Errorf("materialize pending versions for app %s: %w", appName, err)
 	}
@@ -320,10 +331,29 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	}
 
 	driverVersion := strings.TrimSpace(pending[len(pending)-1].Version)
+	runningVersion := ""
+	if running, ok := p.AppRestarter.(runningVersionReporter); ok {
+		runningVersion = running.RunningVersion(appName)
+	}
+	if runningVersion == driverVersion {
+		restartedAt := p.now()
+		if err := p.markAllRestarted(ctx, instanceID, appName, pending, restartedAt); err != nil {
+			return err
+		}
+		if rollout != nil && rollout.State == core.AppRolloutStateRestarting {
+			if _, err := p.updateRolloutOutcome(ctx, rollout); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
 	stoppedAt, alreadyStopped, err := p.earliestStoppedAt(ctx, instanceID, appName, pending)
 	if err != nil {
 		return err
+	}
+	if alreadyStopped && runningVersion != "" {
+		alreadyStopped = false
 	}
 	if !alreadyStopped {
 		if err := p.AppRestarter.StopApp(ctx, appName); err != nil {

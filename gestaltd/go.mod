@@ -39,6 +39,7 @@ require (
 	golang.org/x/mod v0.36.0
 	golang.org/x/net v0.55.0
 	golang.org/x/oauth2 v0.36.0
+	golang.org/x/sync v0.20.0
 	golang.org/x/time v0.15.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d
 	google.golang.org/grpc v1.81.1
@@ -53,7 +54,6 @@ require (
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/wundergraph/go-arena v1.1.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
 

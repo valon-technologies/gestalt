@@ -132,7 +132,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
-	catalogPoller := startAppRegistryCatalogPoller(ctx, cfg, result, restartDelay, disableRestartDelay)
+	catalogPoller := startAppRegistryCatalogPoller(ctx, result, restartDelay, disableRestartDelay)
 	if catalogPoller != nil {
 		defer catalogPoller.Stop()
 	}
@@ -421,7 +421,7 @@ func (h *switchableHandler) Set(handler http.Handler) {
 	h.mu.Unlock()
 }
 
-func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, result *bootstrap.Result, restartDelay time.Duration, disableRestartDelay bool) *appregistry.CatalogPoller {
+func startAppRegistryCatalogPoller(ctx context.Context, result *bootstrap.Result, restartDelay time.Duration, disableRestartDelay bool) *appregistry.CatalogPoller {
 	if result == nil || result.Services == nil {
 		return nil
 	}
@@ -431,21 +431,11 @@ func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, resu
 	if changeRequests == nil || materializations == nil || rollouts == nil {
 		return nil
 	}
-	var materializer *appregistry.Materializer
-	if cfg != nil && len(cfg.AppRegistries) > 0 {
-		artifactsDir := strings.TrimSpace(cfg.Server.ArtifactsDir)
-		if artifactsDir != "" {
-			materializer = &appregistry.Materializer{
-				Registries:   cfg.AppRegistries,
-				ArtifactsDir: artifactsDir,
-			}
-		}
-	}
 	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
 		ChangeRequests:      changeRequests,
 		Materializations:    materializations,
 		Rollouts:            rollouts,
-		AppMaterializer:     materializer,
+		AppMaterializer:     result.RegistryMaterializer,
 		AppRestarter:        result.AppRestarter,
 		InstanceID:          appregistry.ResolveInstanceID(),
 		RestartDelay:        restartDelay,

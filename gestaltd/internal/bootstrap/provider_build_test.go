@@ -75,6 +75,25 @@ func (p closeRecordingWorkflowProvider) Close() error {
 	return nil
 }
 
+func TestPrepareProviderBuildsSkipsRegistryOnlyApps(t *testing.T) {
+	t.Parallel()
+
+	builds, err := prepareProviderBuilds(&config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		},
+	}, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("prepareProviderBuilds: %v", err)
+	}
+	if len(builds.pending) != 0 {
+		t.Fatalf("pending builds = %#v", builds.pending)
+	}
+	if _, err := builds.providers.Get("g-issues"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("registry provider lookup error = %v", err)
+	}
+}
+
 func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.T) {
 	t.Parallel()
 

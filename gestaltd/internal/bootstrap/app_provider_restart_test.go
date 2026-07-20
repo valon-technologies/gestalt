@@ -30,6 +30,7 @@ func TestAppProviderRestarterRestartable(t *testing.T) {
 			"remote":         {},
 			"local-override": {Local: true},
 			"dev-active":     {DevActive: true},
+			"registry":       {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
 	}
 	restarter := bootstrap.NewAppProviderRestarter(bootstrap.AppProviderRestarterConfig{Config: cfg})
@@ -41,6 +42,7 @@ func TestAppProviderRestarterRestartable(t *testing.T) {
 		{app: "remote", want: false},
 		{app: "local-override", want: true},
 		{app: "dev-active", want: false},
+		{app: "registry", want: true},
 	} {
 		got, err := restarter.Restartable(tc.app)
 		if err != nil {
@@ -104,13 +106,17 @@ func TestAppProviderRestarterStartAppRegistersMissingProvider(t *testing.T) {
 	}
 
 	result.Providers.Remove("restart-app")
-	if err := result.AppRestarter.StartApp(context.Background(), "restart-app", ""); err != nil {
+	if err := result.AppRestarter.StartApp(context.Background(), "restart-app", "v1"); err != nil {
 		t.Fatalf("StartApp: %v", err)
 	}
 	if _, err := result.Providers.Get("restart-app"); err != nil {
 		t.Fatalf("Get after StartApp: %v", err)
 	}
-	if err := result.AppRestarter.StartApp(context.Background(), "restart-app", ""); err != nil {
+	reporter := result.AppRestarter.(interface{ RunningVersion(string) string })
+	if version := reporter.RunningVersion("restart-app"); version != "v1" {
+		t.Fatalf("RunningVersion = %q, want v1", version)
+	}
+	if err := result.AppRestarter.StartApp(context.Background(), "restart-app", "v1"); err != nil {
 		t.Fatalf("second StartApp: %v", err)
 	}
 }
