@@ -733,6 +733,35 @@ test("integration provider closes gestalt transport scope after execute and sess
     );
     expect(transportCreations).toBe(1);
     expect(transportCloses).toBe(1);
+
+    transportCreations = 0;
+    transportCloses = 0;
+
+    const resolveSubjectApp = defineApp({
+      async resolveHTTPSubject(_request, context) {
+        await context.gestalt();
+        return { id: "user:test" };
+      },
+      operations: [
+        {
+          id: "noop",
+          handler() {
+            return { ok: true };
+          },
+        },
+      ],
+    });
+    const resolveService = createProviderService(resolveSubjectApp);
+    await (resolveService.resolveHTTPSubject as any)(
+      create(ResolveHTTPSubjectRequestSchema, {
+        request: create(HTTPSubjectRequestSchema, {
+          binding: "command",
+        }),
+      }),
+      relayContext,
+    );
+    expect(transportCreations).toBe(1);
+    expect(transportCloses).toBe(1);
   } finally {
     createTransport.mockRestore();
     if (previousSocket === undefined) {
@@ -857,6 +886,12 @@ test("integration provider service resolves hosted HTTP subjects through the app
         },
       }),
     }),
+    {
+      requestHeader: {
+        get: (name: string) =>
+          name === HOST_SERVICE_RELAY_TOKEN_HEADER ? "relay-token" : undefined,
+      },
+    } as HandlerContext,
   );
   expect(resolved.subject).toMatchObject({
     id: "user:user-456",
@@ -912,6 +947,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
         binding: "command",
       },
     },
+    gestalt: expect.any(Function),
   });
 
   const fallback = await (service.resolveHTTPSubject as any)(
@@ -920,6 +956,12 @@ test("integration provider service resolves hosted HTTP subjects through the app
         binding: "events",
       }),
     }),
+    {
+      requestHeader: {
+        get: (name: string) =>
+          name === HOST_SERVICE_RELAY_TOKEN_HEADER ? "relay-token" : undefined,
+      },
+    } as HandlerContext,
   );
   expect(fallback.subject).toBeUndefined();
 
@@ -943,6 +985,12 @@ test("integration provider service resolves hosted HTTP subjects through the app
         binding: "command",
       }),
     }),
+    {
+      requestHeader: {
+        get: (name: string) =>
+          name === HOST_SERVICE_RELAY_TOKEN_HEADER ? "relay-token" : undefined,
+      },
+    } as HandlerContext,
   );
   expect(rejected.rejectStatus).toBe(403);
   expect(rejected.rejectMessage).toBe("unmapped slack subject");
@@ -968,6 +1016,12 @@ test("integration provider service resolves hosted HTTP subjects through the app
           binding: "command",
         }),
       }),
+      {
+        requestHeader: {
+          get: (name: string) =>
+            name === HOST_SERVICE_RELAY_TOKEN_HEADER ? "relay-token" : undefined,
+        },
+      } as HandlerContext,
     ),
     Code.Unknown,
   );

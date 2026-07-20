@@ -281,3 +281,6 @@ export function errorMessage(error: unknown): string {
   }
   return String(error);
 }
+
+
+export { type BoundGestalt, type RequestGestaltOptions } from "./bound-gestalt.ts";

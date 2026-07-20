@@ -1,8 +1,10 @@
 import type {
   Access,
+  BoundGestalt,
   Credential,
   Host,
   MaybePromise,
+  RequestGestaltOptions,
   Subject,
   SubjectInput,
 } from "./api.ts";
@@ -35,6 +37,10 @@ export interface HTTPSubjectResolutionContext {
   access: Access;
   host: Host;
   workflow: Record<string, unknown>;
+  /**
+   * Returns the bound Gestalt client for nested host-service calls.
+   */
+  gestalt(options?: RequestGestaltOptions): Promise<BoundGestalt>;
 }
 
 /**
@@ -107,6 +113,7 @@ export function cloneHTTPSubjectResolutionContext(
     host: {
       ...input.host,
     },
+    gestalt: input.gestalt,
     workflow: {
       ...input.workflow,
     },
