@@ -13,7 +13,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -32,6 +34,7 @@ type ExecConfig struct {
 	HostServices []runtimehost.HostService
 	Name         string
 	Telemetry    metricutil.TelemetryProviders
+	Gateway      *providergateway.ProviderGatewayTransport
 }
 
 var startAgentProviderProcess = runtimehost.StartAppProcess
@@ -68,8 +71,17 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreagent.Provider, err
 		return nil, err
 	}
 
+	conn := grpc.ClientConnInterface(proc.Conn())
+	if cfg.Gateway != nil {
+		target := providergateway.ProviderTarget{Kind: providergateway.ProviderKindAgent, Name: cfg.Name}
+		if err := cfg.Gateway.ReplaceDirect(target, providergateway.DirectEndpoint{Conn: conn}); err != nil {
+			_ = proc.Close()
+			return nil, err
+		}
+		conn = cfg.Gateway.Conn(target)
+	}
 	return NewRemote(ctx, RemoteConfig{
-		Client:  proto.NewAgentClient(proc.Conn()),
+		Client:  proto.NewAgentClient(conn),
 		Runtime: proc.Lifecycle(),
 		Closer:  proc,
 		Config:  cfg.Config,

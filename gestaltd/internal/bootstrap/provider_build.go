@@ -41,9 +41,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -149,7 +151,16 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
-		provider := appservice.NewGestaltRemote(clients.App, spec)
+		client := clients.App
+		if rawConn := clients.Conn(); rawConn != nil {
+			conn := grpc.ClientConnInterface(rawConn)
+			gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindApp, Name: name}, conn)
+			if err != nil {
+				return fmt.Errorf("remote app %q: %w", name, err)
+			}
+			client = proto.NewAppClient(gwConn)
+		}
+		provider := appservice.NewGestaltRemote(client, spec)
 		if provider == nil {
 			return fmt.Errorf("remote app %q: provider client is required", name)
 		}
@@ -1218,6 +1229,11 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted app: %w", err)
 	}
+	gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindApp, Name: name}, conn.Conn())
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
 	opts := []appservice.RemoteProviderOption{
 		appservice.WithCloser(&runtimeBackedHostedCloser{
 			conn:         conn,
@@ -1235,7 +1251,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		return nil, fmt.Errorf("init host service relay tokens: %w", err)
 	}
 	opts = append(opts, appservice.WithRelayTokenManager(tokenManager))
-	prov, err := appservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
+	prov, err := appservice.NewRemote(ctx, proto.NewAppProviderClient(gwConn), spec, pluginConfig, opts...)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -1313,6 +1329,14 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 		}
 		return nil, classifyErr
 	}
+	gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindApp, Name: name}, conn)
+	if err != nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		stopDevApp()
+		return nil, err
+	}
 	closer := closerFunc(func() error {
 		var closeErr error
 		if conn != nil {
@@ -1328,7 +1352,7 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 		appservice.WithRuntimeSessionID(runtimehost.DevProviderSessionID(name)),
 		appservice.WithRelayTokenManager(tokenManager),
 	}
-	prov, err := appservice.NewRemote(ctx, proto.NewAppProviderClient(conn), spec, pluginConfig, opts...)
+	prov, err := appservice.NewRemote(ctx, proto.NewAppProviderClient(gwConn), spec, pluginConfig, opts...)
 	if err != nil {
 		if conn != nil {
 			_ = conn.Close()
@@ -1577,9 +1601,14 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted agent provider: %w", err)
 	}
+	gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindAgent, Name: name}, conn.Conn())
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
 	phaseStarted = time.Now()
 	provider, err := agentservice.NewRemote(ctx, agentservice.RemoteConfig{
-		Client:  conn.Agent(),
+		Client:  proto.NewAgentClient(gwConn),
 		Runtime: conn.Lifecycle(),
 		Closer: &runtimeBackedHostedCloser{
 			conn:         conn,

@@ -46,7 +46,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
 	}
 	prov, err := NewRemote(
 		ctx,
-		process.Integration(),
+		proto.NewAppProviderClient(process.Conn()),
 		cfg.StaticSpec,
 		cfg.Config,
 		opts...,

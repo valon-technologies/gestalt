@@ -76,6 +76,13 @@ func (t *ProviderGatewayTransport) RegisterDirect(target ProviderTarget, endpoin
 	return t.registry.RegisterDirect(target, endpoint)
 }
 
+func (t *ProviderGatewayTransport) ReplaceDirect(target ProviderTarget, endpoint DirectEndpoint) error {
+	if t == nil {
+		return fmt.Errorf("provider gateway: transport is nil")
+	}
+	return t.registry.ReplaceDirect(target, endpoint)
+}
+
 func (t *ProviderGatewayTransport) Conn(target ProviderTarget) grpc.ClientConnInterface {
 	return &targetConn{gateway: t, target: target}
 }
@@ -98,6 +105,16 @@ func (r *LocalRegistry) RegisterDirect(target ProviderTarget, endpoint DirectEnd
 	if _, exists := r.direct[target]; exists {
 		return fmt.Errorf("provider gateway: direct endpoint for %s/%s already registered", target.Kind, target.Name)
 	}
+	r.direct[target] = endpoint
+	return nil
+}
+
+func (r *LocalRegistry) ReplaceDirect(target ProviderTarget, endpoint DirectEndpoint) error {
+	if endpoint.Conn == nil {
+		return fmt.Errorf("provider gateway: direct endpoint for %s/%s requires a connection", target.Kind, target.Name)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.direct[target] = endpoint
 	return nil
 }
@@ -137,12 +154,24 @@ func (c *targetConn) Invoke(ctx context.Context, method string, args any, reply 
 	return invokeErr
 }
 
-func (c *targetConn) NewStream(ctx context.Context, _ *grpc.StreamDesc, method string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+func (c *targetConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	startedAt := time.Now()
-	err := status.Error(codes.Unimplemented,
-		"providergateway: streaming routes land with PG-5 (issue-148); PG-1 is unary-only")
-	recordProviderGatewayOperation(ctx, startedAt, err, metricRequest(c.target, method), TransportPathUnresolved)
-	return nil, err
+	transportPath := TransportPathUnresolved
+	metricReq := metricRequest(c.target, method)
+
+	endpoint, err := c.gateway.registry.Resolve(c.target)
+	if err != nil {
+		recordProviderGatewayOperation(ctx, startedAt, err, metricReq, transportPath)
+		return nil, err
+	}
+	transportPath = TransportPathDirect
+	if err := authorizeRoutingCall(ctx, c.gateway.authorization, c.gateway.users, c.target, method); err != nil {
+		recordProviderGatewayOperation(ctx, startedAt, err, metricReq, transportPath)
+		return nil, err
+	}
+	stream, streamErr := endpoint.Conn.NewStream(ctx, desc, method, opts...)
+	recordProviderGatewayOperation(ctx, startedAt, streamErr, metricReq, transportPath)
+	return stream, streamErr
 }
 
 func metricRequest(target ProviderTarget, method string) ProviderGatewayRequest {
@@ -157,6 +186,9 @@ func metricRequest(target ProviderTarget, method string) ProviderGatewayRequest 
 
 func authorizeRoutingCall(ctx context.Context, authorization core.AuthorizationProvider, users principal.CredentialUserResolver, target ProviderTarget, fullMethod string) error {
 	if authorization == nil || target.Kind == ProviderKindAuthorization {
+		return nil
+	}
+	if invocation.InternalConnectionAccessFromContext(ctx) {
 		return nil
 	}
 	subjectID, err := authorizationSubject(ctx, users)

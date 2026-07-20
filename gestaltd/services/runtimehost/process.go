@@ -100,13 +100,6 @@ func (p *AppProcess) Lifecycle() proto.ProviderLifecycleClient {
 	return proto.NewProviderLifecycleClient(p.proc.conn)
 }
 
-func (p *AppProcess) Integration() proto.AppProviderClient {
-	if p == nil || p.proc == nil {
-		return nil
-	}
-	return proto.NewAppProviderClient(p.proc.conn)
-}
-
 func (p *AppProcess) Conn() *grpc.ClientConn {
 	if p == nil || p.proc == nil {
 		return nil

@@ -2260,8 +2260,17 @@ func buildWorkflow(ctx context.Context, cfg *config.Config, name string, entry *
 		if deps.RemoteClients == nil || deps.RemoteClients.Workflow == nil {
 			return nil, fmt.Errorf("bootstrap: remote workflow client is required when server.remote is configured")
 		}
+		client := deps.RemoteClients.Workflow
+		if rawConn := deps.RemoteClients.Conn(); rawConn != nil {
+			conn := grpc.ClientConnInterface(rawConn)
+			gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindWorkflow, Name: name}, conn)
+			if err != nil {
+				return nil, fmt.Errorf("bootstrap: remote workflow provider %q: %w", name, err)
+			}
+			client = proto.NewWorkflowClient(gwConn)
+		}
 		return workflowservice.NewRemote(ctx, workflowservice.RemoteConfig{
-			Client: deps.RemoteClients.Workflow,
+			Client: client,
 			Name:   name,
 		})
 	}
@@ -2324,8 +2333,17 @@ func buildAgent(ctx context.Context, cfg *config.Config, name string, entry *con
 		if deps.RemoteClients == nil || deps.RemoteClients.Agent == nil {
 			return nil, fmt.Errorf("bootstrap: remote agent client is required when server.remote is configured")
 		}
+		client := deps.RemoteClients.Agent
+		if rawConn := deps.RemoteClients.Conn(); rawConn != nil {
+			conn := grpc.ClientConnInterface(rawConn)
+			gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindAgent, Name: name}, conn)
+			if err != nil {
+				return nil, fmt.Errorf("bootstrap: remote agent provider %q: %w", name, err)
+			}
+			client = proto.NewAgentClient(gwConn)
+		}
 		return agentservice.NewRemote(ctx, agentservice.RemoteConfig{
-			Client: deps.RemoteClients.Agent,
+			Client: client,
 			Name:   name,
 		})
 	}
