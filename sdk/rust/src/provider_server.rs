@@ -14,6 +14,7 @@ use crate::catalog::{catalog_to_proto, object_map};
 use crate::codec::workflow::to_wire_workflow_definition_spec;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
+use crate::generated::gestalt::provider::v1::InvokeFrame;
 use crate::generated::v1::app_provider_server::AppProvider;
 use crate::generated::v1::{
     ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse, HttpSubjectRequest,
@@ -221,6 +222,28 @@ where
             headers: protocol::string_lists_to_proto(result.headers),
             body: result.body,
         }))
+    }
+
+    type ExecuteStreamStream = std::pin::Pin<
+        Box<
+            dyn tonic::codegen::tokio_stream::Stream<
+                    Item = std::result::Result<InvokeFrame, Status>,
+                > + Send
+                + 'static,
+        >,
+    >;
+
+    async fn execute_stream(
+        &self,
+        _request: GrpcRequest<ExecuteRequest>,
+    ) -> std::result::Result<GrpcResponse<Self::ExecuteStreamStream>, Status> {
+        // Streaming execution is not implemented for the generic Rust provider
+        // server. Providers that need streaming responses should implement the
+        // AppProvider trait directly. This satisfies the trait so the SDK
+        // compiles against the updated proto.
+        Err(Status::unimplemented(
+            "streaming execution is not available",
+        ))
     }
 
     async fn get_session_catalog(

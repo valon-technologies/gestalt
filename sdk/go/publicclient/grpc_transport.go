@@ -64,3 +64,53 @@ func withAuthContext(ctx context.Context, auth Auth) (context.Context, error) {
 	}
 	return ctx, nil
 }
+
+// grpcServerStream wraps a gRPC client stream as a ServerStreamRecvCloser.
+type grpcServerStream struct {
+	stream grpc.ClientStream
+}
+
+func (s *grpcServerStream) Recv(msg gproto.Message) error {
+	return s.stream.RecvMsg(msg)
+}
+
+func (s *grpcServerStream) Close() error {
+	// gRPC client streams are cleaned up by RecvMsg returning io.EOF; Close
+	// is a no-op. Attempting to call SendMsg/CloseSend on a server-stream is
+	// unnecessary and can race with background transport teardown.
+	return nil
+}
+
+// ServerStream invokes a server-streaming RPC over gRPC.
+func (t *grpcUnaryTransport) ServerStream(
+	ctx context.Context,
+	method generated.Method,
+	request gproto.Message,
+) (generated.ServerStreamRecvCloser, error) {
+	if t == nil || t.conn == nil {
+		return nil, &generated.GestaltError{
+			Code:    gestaltclient.GestaltErrorCodeInvalidArgument,
+			Message: "publicclient: gRPC transport is nil",
+		}
+	}
+	ctx, err := withAuthContext(ctx, t.auth)
+	if err != nil {
+		return nil, err
+	}
+	streamDesc := grpc.StreamDesc{
+		StreamName:    method.Name,
+		ServerStreams: true,
+	}
+	stream, err := t.conn.NewStream(ctx, &streamDesc, method.FullMethod)
+	if err != nil {
+		return nil, gestaltclient.ToGestaltError(err)
+	}
+	if err := stream.SendMsg(request); err != nil {
+		_ = stream.CloseSend()
+		return nil, gestaltclient.ToGestaltError(err)
+	}
+	if err := stream.CloseSend(); err != nil {
+		return nil, gestaltclient.ToGestaltError(err)
+	}
+	return &grpcServerStream{stream: stream}, nil
+}

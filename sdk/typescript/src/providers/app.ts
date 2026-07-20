@@ -35,6 +35,13 @@ import {
 } from "../workflow-define.ts";
 import type { WorkflowDefinitionSpec } from "./workflow.ts";
 import type { Schema } from "../schema.ts";
+import {
+  type StreamEncoder,
+  type StreamOutput,
+  encoders,
+  isStreamOutput,
+} from "./stream.ts";
+export { stream, encoders, type StreamEncoder, type StreamOutput } from "./stream.ts";
 
 const JSON_CONTENT_TYPE = "application/json";
 
@@ -70,8 +77,8 @@ export interface OperationOptions<In, Out> {
   readOnly?: boolean;
   visible?: boolean;
   input?: Schema<In>;
-  output?: Schema<Out>;
-  handler: (input: In, request: Request) => MaybePromise<Out | Response<Out>>;
+  output?: Schema<Out> | StreamOutput<Out>;
+  handler: (input: In, request: Request) => MaybePromise<Out | Response<Out> | AsyncIterable<Out>>;
 }
 
 /**
@@ -263,11 +270,24 @@ export class AppProvider extends ProviderBase {
           if (inputSchema !== undefined) {
             operationCatalog.inputSchema = inputSchema;
           }
-          const outputSchema = schemaToCatalogSchema(
-            entry.output as Schema<unknown> | undefined,
-          );
-          if (outputSchema !== undefined) {
-            operationCatalog.outputSchema = outputSchema;
+          if (isStreamOutput(entry.output)) {
+            const streamOutput = entry.output as StreamOutput<unknown>;
+            const itemSchema = schemaToCatalogSchema(
+              streamOutput.itemSchema as Schema<unknown> | undefined,
+            );
+            operationCatalog.response = {
+              stream: {
+                mediaType: streamOutput.mediaType,
+                ...(itemSchema !== undefined ? { itemSchema } : {}),
+              },
+            };
+          } else {
+            const outputSchema = schemaToCatalogSchema(
+              entry.output as Schema<unknown> | undefined,
+            );
+            if (outputSchema !== undefined) {
+              operationCatalog.response = { unary: { schema: outputSchema } };
+            }
           }
           if (entry.tags && entry.tags.length > 0) {
             operationCatalog.tags = [...entry.tags];
@@ -341,11 +361,28 @@ export class AppProvider extends ProviderBase {
     }
 
     try {
+      if (isStreamOutput(entry.output)) {
+        const streamOutput = entry.output as StreamOutput<unknown>;
+        const raw = await entry.handler(input, request);
+        // For the non-streaming Execute path, the handler may return an
+        // AsyncIterable which we encode and concatenate. The streaming
+        // ExecuteStream path is served separately by executeStream.
+        const items = raw as AsyncIterable<unknown>;
+        const headers = normalizeResponseHeaders(undefined);
+        headers["Content-Type"] = [streamOutput.mediaType];
+        const body = await encodeStreamToBytes(streamOutput, items);
+        return operationResult({
+          status: 200,
+          headers,
+          body,
+        });
+      }
       const raw = await entry.handler(input, request);
       const response = isResponse(raw) ? raw : undefined;
       const responseBody = response === undefined ? raw : response.body;
-      const body = entry.output
-        ? entry.output.parse(responseBody, "$response")
+      const outputSchema = entry.output as Schema<unknown> | undefined;
+      const body = outputSchema
+        ? outputSchema.parse(responseBody, "$response")
         : responseBody;
 
       return operationResult({
@@ -356,6 +393,46 @@ export class AppProvider extends ProviderBase {
     } catch (error) {
       return errorResult(500, errorMessage(error));
     }
+  }
+
+  /**
+   * Executes a streaming operation against validated input and request
+   * metadata. Returns a StreamReader yielding the metadata frame followed by
+   * encoded data frames. Only operations whose output is a StreamOutput are
+   * supported; other operations return an error metadata frame.
+   */
+  async executeStream(
+    operationId: string,
+    params: Record<string, unknown>,
+    request: Request,
+  ): Promise<StreamReader> {
+    const entry = this.operations.get(operationId);
+    if (!entry) {
+      return errorStreamReader(404, "unknown operation");
+    }
+    if (!isStreamOutput(entry.output)) {
+      return errorStreamReader(400, "operation does not stream");
+    }
+    let input: unknown = undefined;
+    try {
+      if (entry.input) {
+        input = entry.input.parse(
+          normalizeOperationInput(entry.input, params),
+          "$",
+        );
+      }
+    } catch (error) {
+      return errorStreamReader(400, errorMessage(error));
+    }
+    const streamOutput = entry.output as StreamOutput<unknown>;
+    let items: AsyncIterable<unknown>;
+    try {
+      const raw = await entry.handler(input, request);
+      items = (raw as AsyncIterable<unknown>) ?? emptyAsyncIterable();
+    } catch (error) {
+      return errorStreamReader(500, errorMessage(error));
+    }
+    return streamOutputReader(streamOutput, items);
   }
 }
 
@@ -526,4 +603,171 @@ export function encodeConnectionParam(value: ConnectionParamDefinition): {
     output.field = value.field;
   }
   return output;
+}
+
+
+async function encodeStreamToBytes(
+  output: StreamOutput<unknown>,
+  items: AsyncIterable<unknown>,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  const dataFrames = encodeStreamData(output, items);
+  for await (const chunk of dataFrames) {
+    chunks.push(chunk);
+    length += chunk.length;
+  }
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+function encodeStreamData(
+  output: StreamOutput<unknown>,
+  items: AsyncIterable<unknown>,
+): AsyncIterable<Uint8Array> {
+  const validated = validateStreamItems(output, items);
+  if (output.encoder) {
+    return output.encoder.encode(validated);
+  }
+  // Raw byte stream: items are Uint8Array chunks already.
+  return validated as AsyncIterable<Uint8Array>;
+}
+
+// validateStreamItems yields each item after validating it against the stream's
+// item schema (when declared). Validation failures surface as a thrown error
+// that the StreamReader recv() surfaces as a 500 metadata frame.
+async function* validateStreamItems(
+  output: StreamOutput<unknown>,
+  items: AsyncIterable<unknown>,
+): AsyncIterable<unknown> {
+  const schema = output.itemSchema as Schema<unknown> | undefined;
+  if (schema === undefined) {
+    for await (const item of items) {
+      yield item;
+    }
+    return;
+  }
+  for await (const item of items) {
+    yield schema.parse(item, "$item");
+  }
+}
+
+async function* emptyAsyncIterable<T>(): AsyncIterable<T> {
+  // Yields nothing.
+}
+
+/**
+ * StreamReader is a minimal frame iterator the runtime consumes for
+ * ExecuteStream. It mirrors the host-side core.StreamReader shape.
+ */
+export interface StreamReader {
+  recv(): Promise<{ metadata?: InvokeMetadataFrame; data?: Uint8Array } | null>;
+}
+
+interface InvokeMetadataFrame {
+  status: number;
+  headers: Record<string, string[]>;
+  mediaType: string;
+}
+
+function errorStreamReader(status: number, message: string): StreamReader {
+  let sent = false;
+  return {
+    async recv() {
+      if (sent) {
+        return null;
+      }
+      sent = true;
+      const body = new TextEncoder().encode(JSON.stringify({ error: message }));
+      return {
+        metadata: {
+          status,
+          headers: { "Content-Type": ["application/json"] },
+          mediaType: "application/json",
+        },
+        data: body,
+      };
+    },
+  };
+}
+
+function streamOutputReader(
+  output: StreamOutput<unknown>,
+  items: AsyncIterable<unknown>,
+): StreamReader {
+  let sentMeta = false;
+  let finished = false;
+  let iterator: AsyncIterator<Uint8Array> | undefined;
+  // Lazily create the encoded data iterator so validation/encoder errors
+  // surface before the metadata frame is committed. This ensures a
+  // validation failure on the first item produces a single 500 metadata
+  // frame, not a 200 followed by a second metadata frame.
+  const dataFrames = encodeStreamData(output, items);
+  return {
+    async recv() {
+      if (finished) {
+        return null;
+      }
+      if (!iterator) {
+        iterator = dataFrames[Symbol.asyncIterator]();
+      }
+      let next;
+      try {
+        next = await iterator.next();
+      } catch (error) {
+        // Mid-stream validation or encoder failures surface as a trailing 500
+        // metadata frame with a JSON error body, then end the stream. If the
+        // initial 200 metadata frame was already sent, the client sees
+        // metadata(200) → data → metadata(500) → data(error) → end, which the
+        // wire contract permits for mid-stream errors. The finished flag
+        // ensures no further frames (including a spurious 200) are emitted
+        // after the error.
+        finished = true;
+        sentMeta = true;
+        const body = new TextEncoder().encode(
+          JSON.stringify({ error: errorMessage(error) }),
+        );
+        return {
+          metadata: {
+            status: 500,
+            headers: { "Content-Type": ["application/json"] },
+            mediaType: "application/json",
+          },
+          data: body,
+        };
+      }
+      if (next.done) {
+        if (!sentMeta) {
+          // Empty stream: still emit a metadata frame so the client sees a
+          // well-formed response.
+          sentMeta = true;
+          return {
+            metadata: {
+              status: 200,
+              headers: { "Content-Type": [output.mediaType] },
+              mediaType: output.mediaType,
+            },
+          };
+        }
+        return null;
+      }
+      if (!sentMeta) {
+        sentMeta = true;
+        return {
+          metadata: {
+            status: 200,
+            headers: { "Content-Type": [output.mediaType] },
+            mediaType: output.mediaType,
+          },
+          data: next.value as Uint8Array,
+        };
+      }
+      return { data: next.value as Uint8Array };
+    },
+  };
 }

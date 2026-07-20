@@ -147,6 +147,15 @@ async fn grpc_transport_invoke_success() {
 
     #[tonic::async_trait]
     impl App for StubApp {
+        type InvokeStreamStream = std::pin::Pin<
+            Box<
+                dyn tonic::codegen::tokio_stream::Stream<
+                        Item = std::result::Result<generated::v1::InvokeFrame, Status>,
+                    > + Send
+                    + 'static,
+            >,
+        >;
+
         async fn invoke(
             &self,
             _request: Request<AppInvokeRequest>,
@@ -156,6 +165,13 @@ async fn grpc_transport_invoke_success() {
                 body: br#"{"status":"success","data":{"ok":true}}"#.to_vec(),
                 ..Default::default()
             }))
+        }
+
+        async fn invoke_stream(
+            &self,
+            _request: Request<AppInvokeRequest>,
+        ) -> Result<Response<Self::InvokeStreamStream>, Status> {
+            Err(Status::unimplemented("unused"))
         }
 
         async fn invoke_graph_ql(

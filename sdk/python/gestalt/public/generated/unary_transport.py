@@ -29,3 +29,34 @@ class AsyncUnaryTransport(Protocol):
         request: Message,
         response_type: type[ResponseT],
     ) -> ResponseT: ...
+
+
+class ServerStreamRecv(Protocol):
+    """Streaming frame iterator returned by ServerStreamingTransport.server_stream.
+
+    recv returns the next decoded frame, or raises StopIteration (sync) /
+    StopAsyncIteration (async) when the stream is exhausted. The response
+    deserializer is set when the stream is created, so recv takes no type
+    argument. Callers should close the iterator to release transport resources.
+    """
+
+    def recv(self) -> ResponseT: ...
+    def close(self) -> None: ...
+
+
+class ServerStreamingTransport(Protocol):
+    def server_stream(
+        self,
+        method: Method,
+        request: Message,
+        response_type: type[ResponseT],
+    ) -> ServerStreamRecv: ...
+
+
+class AsyncServerStreamingTransport(Protocol):
+    async def server_stream(
+        self,
+        method: Method,
+        request: Message,
+        response_type: type[ResponseT],
+    ) -> ServerStreamRecv: ...

@@ -47,6 +47,28 @@ class OperationAnnotations(_message.Message):
     open_world_hint: bool
     def __init__(self, read_only_hint: _Optional[bool] = ..., idempotent_hint: _Optional[bool] = ..., destructive_hint: _Optional[bool] = ..., open_world_hint: _Optional[bool] = ...) -> None: ...
 
+class UnaryResponseSpec(_message.Message):
+    __slots__ = ()
+    SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    schema: _struct_pb2.Struct
+    def __init__(self, schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+
+class StreamResponseSpec(_message.Message):
+    __slots__ = ()
+    MEDIA_TYPE_FIELD_NUMBER: _ClassVar[int]
+    ITEM_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    media_type: str
+    item_schema: _struct_pb2.Struct
+    def __init__(self, media_type: _Optional[str] = ..., item_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+
+class OperationResponseSpec(_message.Message):
+    __slots__ = ()
+    UNARY_FIELD_NUMBER: _ClassVar[int]
+    STREAM_FIELD_NUMBER: _ClassVar[int]
+    unary: UnaryResponseSpec
+    stream: StreamResponseSpec
+    def __init__(self, unary: _Optional[_Union[UnaryResponseSpec, _Mapping]] = ..., stream: _Optional[_Union[StreamResponseSpec, _Mapping]] = ...) -> None: ...
+
 class CatalogOperation(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
@@ -54,7 +76,6 @@ class CatalogOperation(_message.Message):
     TITLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     INPUT_SCHEMA_FIELD_NUMBER: _ClassVar[int]
-    OUTPUT_SCHEMA_FIELD_NUMBER: _ClassVar[int]
     ANNOTATIONS_FIELD_NUMBER: _ClassVar[int]
     PARAMETERS_FIELD_NUMBER: _ClassVar[int]
     REQUIRED_SCOPES_FIELD_NUMBER: _ClassVar[int]
@@ -63,12 +84,12 @@ class CatalogOperation(_message.Message):
     VISIBLE_FIELD_NUMBER: _ClassVar[int]
     TRANSPORT_FIELD_NUMBER: _ClassVar[int]
     ALLOWED_ROLES_FIELD_NUMBER: _ClassVar[int]
+    RESPONSE_FIELD_NUMBER: _ClassVar[int]
     id: str
     method: str
     title: str
     description: str
     input_schema: str
-    output_schema: str
     annotations: OperationAnnotations
     parameters: _containers.RepeatedCompositeFieldContainer[CatalogParameter]
     required_scopes: _containers.RepeatedScalarFieldContainer[str]
@@ -77,7 +98,8 @@ class CatalogOperation(_message.Message):
     visible: bool
     transport: str
     allowed_roles: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., method: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., input_schema: _Optional[str] = ..., output_schema: _Optional[str] = ..., annotations: _Optional[_Union[OperationAnnotations, _Mapping]] = ..., parameters: _Optional[_Iterable[_Union[CatalogParameter, _Mapping]]] = ..., required_scopes: _Optional[_Iterable[str]] = ..., tags: _Optional[_Iterable[str]] = ..., read_only: _Optional[bool] = ..., visible: _Optional[bool] = ..., transport: _Optional[str] = ..., allowed_roles: _Optional[_Iterable[str]] = ...) -> None: ...
+    response: OperationResponseSpec
+    def __init__(self, id: _Optional[str] = ..., method: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., input_schema: _Optional[str] = ..., annotations: _Optional[_Union[OperationAnnotations, _Mapping]] = ..., parameters: _Optional[_Iterable[_Union[CatalogParameter, _Mapping]]] = ..., required_scopes: _Optional[_Iterable[str]] = ..., tags: _Optional[_Iterable[str]] = ..., read_only: _Optional[bool] = ..., visible: _Optional[bool] = ..., transport: _Optional[str] = ..., allowed_roles: _Optional[_Iterable[str]] = ..., response: _Optional[_Union[OperationResponseSpec, _Mapping]] = ...) -> None: ...
 
 class Catalog(_message.Message):
     __slots__ = ()
@@ -155,6 +177,31 @@ class OperationResult(_message.Message):
     body: bytes
     headers: _containers.MessageMap[str, StringList]
     def __init__(self, status: _Optional[int] = ..., body: _Optional[bytes] = ..., headers: _Optional[_Mapping[str, StringList]] = ...) -> None: ...
+
+class InvokeMetadata(_message.Message):
+    __slots__ = ()
+    class HeadersEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: StringList
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[StringList, _Mapping]] = ...) -> None: ...
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    HEADERS_FIELD_NUMBER: _ClassVar[int]
+    MEDIA_TYPE_FIELD_NUMBER: _ClassVar[int]
+    status: int
+    headers: _containers.MessageMap[str, StringList]
+    media_type: str
+    def __init__(self, status: _Optional[int] = ..., headers: _Optional[_Mapping[str, StringList]] = ..., media_type: _Optional[str] = ...) -> None: ...
+
+class InvokeFrame(_message.Message):
+    __slots__ = ()
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    metadata: InvokeMetadata
+    data: bytes
+    def __init__(self, metadata: _Optional[_Union[InvokeMetadata, _Mapping]] = ..., data: _Optional[bytes] = ...) -> None: ...
 
 class AppInvokeRequest(_message.Message):
     __slots__ = ()

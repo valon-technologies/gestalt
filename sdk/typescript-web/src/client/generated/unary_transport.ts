@@ -23,4 +23,15 @@ export interface UnaryTransport {
     outputSchema: DescMessage,
     callOptions?: PublicUnaryCallOptions,
   ): Promise<Output>;
+
+  // serverStream invokes a server-streaming method and returns an async
+  // iterable of decoded response frames. The first frame is metadata. It is
+  // optional because REST-only transports do not support streaming.
+  serverStream?<Output extends Message>(
+    method: PublicMethod,
+    request: Message,
+    inputSchema: DescMessage,
+    outputSchema: DescMessage,
+    callOptions?: PublicUnaryCallOptions,
+  ): AsyncIterable<Output>;
 }

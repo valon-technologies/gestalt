@@ -13,6 +13,15 @@ func (r *renderer) renderUnaryTransport() {
 	r.body.WriteString("// handwritten publicclient transport layer.\n")
 	r.body.WriteString("type UnaryTransport interface {\n")
 	r.body.WriteString("\tUnary(ctx context.Context, method Method, request, response gproto.Message) error\n")
+	r.body.WriteString("\t// ServerStream invokes a server-streaming RPC. It returns a RecvCloser\n")
+	r.body.WriteString("\t// whose Recv method decodes one frame at a time; io.EOF ends the stream.\n")
+	r.body.WriteString("\tServerStream(ctx context.Context, method Method, request gproto.Message) (ServerStreamRecvCloser, error)\n")
+	r.body.WriteString("}\n")
+	r.body.WriteString("\n")
+	r.body.WriteString("// ServerStreamRecvCloser is a streaming frame iterator returned by ServerStream.\n")
+	r.body.WriteString("type ServerStreamRecvCloser interface {\n")
+	r.body.WriteString("\tRecv(msg gproto.Message) error\n")
+	r.body.WriteString("\tClose() error\n")
 	r.body.WriteString("}\n")
 }
 
@@ -52,6 +61,11 @@ func (r *renderer) renderServiceClient(svc *model.Service) {
 
 func (r *renderer) renderServiceClientMethod(clientName, wireName string, m *model.Method) {
 	constName := fmt.Sprintf("Method%s%s", wireName, m.Name)
+
+	if m.Stream == model.ServerStream {
+		r.renderServiceClientStreamMethod(clientName, m, constName)
+		return
+	}
 
 	if m.JsonResult != nil {
 		r.renderServiceClientUnaryMethod(clientName, m, constName, m.Name+"Raw")
@@ -126,6 +140,45 @@ func (r *renderer) renderServiceClientDecodedMethod(clientName string, m *model.
 	r.body.WriteString("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
 	fmt.Fprintf(&r.body, "\treturn gestaltclient.DecodeAppResult(%s, %s, out.%s, out.%s)\n",
 		appExpr, opExpr, fieldGoName(status), fieldGoName(body))
+	r.body.WriteString("}\n\n")
+}
+
+// renderServiceClientStreamMethod renders a server-streaming public method
+// that returns a frame iterator backed by the transport's ServerStream.
+func (r *renderer) renderServiceClientStreamMethod(clientName string, m *model.Method, constName string) {
+	if m.InputIsEmpty || m.OutputIsEmpty {
+		return
+	}
+	requestType := r.messageType(m.Input.FullName)
+	outputType := r.messageType(m.Output.FullName)
+	r.features.io = true
+	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context, request *%s) (*%sStream, error) {\n",
+		clientName, m.Name, requestType, m.Name)
+	fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWireFunc(requestType))
+	fmt.Fprintf(&r.body, "\trecv, err := c.transport.ServerStream(ctx, %s, wire)\n", constName)
+	r.body.WriteString("\tif err != nil {\n")
+	r.body.WriteString("\t\treturn nil, toGestaltError(err)\n")
+	r.body.WriteString("\t}\n")
+	fmt.Fprintf(&r.body, "\treturn &%sStream{recv: recv}, nil\n", m.Name)
+	r.body.WriteString("}\n\n")
+	fmt.Fprintf(&r.body, "// %sStream is the server-stream iterator for %s.\n", m.Name, m.Name)
+	fmt.Fprintf(&r.body, "type %sStream struct {\n", m.Name)
+	r.body.WriteString("\trecv ServerStreamRecvCloser\n")
+	r.body.WriteString("}\n\n")
+	fmt.Fprintf(&r.body, "// Recv decodes the next %s frame. It returns io.EOF when the stream is exhausted.\n", outputType)
+	fmt.Fprintf(&r.body, "func (s *%sStream) Recv() (*%s, error) {\n", m.Name, outputType)
+	fmt.Fprintf(&r.body, "\tout := &%s{}\n", wireMessage(m.Output.FullName))
+	r.body.WriteString("\tif err := s.recv.Recv(out); err != nil {\n")
+	r.body.WriteString("\t\tif err == io.EOF {\n")
+	r.body.WriteString("\t\t\treturn nil, err\n")
+	r.body.WriteString("\t\t}\n")
+	r.body.WriteString("\t\treturn nil, toGestaltError(err)\n")
+	r.body.WriteString("\t}\n")
+	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n", fromWireFunc(outputType))
+	r.body.WriteString("}\n\n")
+	fmt.Fprintf(&r.body, "// Close releases the underlying stream. It is safe to call after Recv returns io.EOF.\n")
+	fmt.Fprintf(&r.body, "func (s *%sStream) Close() error {\n", m.Name)
+	r.body.WriteString("\treturn s.recv.Close()\n")
 	r.body.WriteString("}\n\n")
 }
 
@@ -238,6 +291,7 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 	r.body.WriteString("\tHTTPQueryFields []PublicField\n")
 	r.body.WriteString("\tFill []string\n")
 	r.body.WriteString("\tReject []string\n")
+	r.body.WriteString("\tStream bool\n")
 	r.body.WriteString("}\n\n")
 	r.body.WriteString("// PublicField names one request field used by REST metadata.\n")
 	r.body.WriteString("type PublicField struct {\n")
@@ -263,6 +317,7 @@ func (r *renderer) renderMetadata(methods []publicsurface.PublicMethod) {
 			fmt.Fprintf(&r.body, "\tHTTPPathFields: %s,\n", goPublicFieldSlice(pm.REST.PathFields))
 			fmt.Fprintf(&r.body, "\tHTTPQueryFields: %s,\n", goPublicFieldSlice(pm.REST.QueryFields))
 		}
+		fmt.Fprintf(&r.body, "\tStream: %v,\n", pm.Stream == model.ServerStream)
 		r.body.WriteString("\tFill: " + goStringList(publicsurface.FieldNames(pm.ServerFilled)) + ",\n")
 		r.body.WriteString("\tReject: " + goStringList(publicsurface.FieldNames(pm.Rejected)) + ",\n")
 		r.body.WriteString("}\n\n")

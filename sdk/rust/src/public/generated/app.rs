@@ -69,6 +69,47 @@ pub struct AppInvokeRequest {
     pub credential_mode: String,
 }
 
+/// Values of the `value` oneof in `InvokeFrame`; the message field is None when unset.
+#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum InvokeFrameValue {
+    /// The `metadata` variant.
+    Metadata(InvokeMetadata),
+    /// The `data` variant.
+    Data(Vec<u8>),
+}
+
+/// InvokeFrame is one frame in a streaming invocation. The first frame is always
+/// metadata; subsequent frames carry data bytes produced by the operation
+/// handler (after encoding, for typed item streams). A mid-stream error (for
+/// example, a validation failure or a recovered panic) may emit a trailing
+/// metadata frame with a non-2xx status followed by a data frame carrying a
+/// JSON error body, after which the stream ends.
+///
+/// Native message type for `gestalt.provider.v1.InvokeFrame`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvokeFrame {
+    /// The `value` oneof; None when unset.
+    pub value: Option<InvokeFrameValue>,
+}
+
+/// InvokeMetadata is the first frame of a streaming invocation. It carries the
+/// HTTP-shaped status, headers, and the response media type (from the
+/// operation's StreamResponseSpec).
+///
+/// Native message type for `gestalt.provider.v1.InvokeMetadata`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InvokeMetadata {
+    /// The `status` field.
+    pub status: i32,
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, StringList>,
+    /// The `media_type` field.
+    pub media_type: String,
+}
+
 /// OperationAnnotations carries optional host hints about how an operation
 /// behaves.
 ///

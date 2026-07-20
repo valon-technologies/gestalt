@@ -12,7 +12,9 @@ use crate::public::generated::agent::{
     ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
     ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
 };
-use crate::public::generated::app::{AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult};
+use crate::public::generated::app::{
+    AppInvokeGraphQLRequest, AppInvokeRequest, InvokeFrame, OperationResult,
+};
 use crate::public::generated::authorization::{
     AddRelationshipRequest, AddRelationshipResponse, CheckAccessManyRequest,
     CheckAccessManyResponse, CheckAccessRequest, CheckAccessResponse, DeleteRelationshipRequest,
@@ -35,7 +37,8 @@ use crate::public::generated::codec::agent::{
     to_wire_update_agent_provider_session_request,
 };
 use crate::public::generated::codec::app::{
-    from_wire_operation_result, to_wire_app_invoke_graphql_request, to_wire_app_invoke_request,
+    from_wire_invoke_frame, from_wire_operation_result, to_wire_app_invoke_graphql_request,
+    to_wire_app_invoke_request,
 };
 use crate::public::generated::codec::authorization::{
     from_wire_add_relationship_response, from_wire_check_access_many_response,
@@ -542,6 +545,47 @@ impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AppClient
         let response = self.invoke_graphql_sync(request)?;
         decode_graphql_result(invoke_app.as_str(), response.status, &response.body)
             .map_err(InvokeError::from)
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::ServerStreamingTransport> AppClient<T> {
+    pub async fn invoke_stream(
+        &self,
+        request: AppInvokeRequest,
+    ) -> Result<InvokeFrameStream, GestaltError> {
+        let wire = to_wire_app_invoke_request(request);
+        let recv = self.transport.server_stream::<crate::generated::v1::AppInvokeRequest, crate::generated::v1::InvokeFrame>(&METHOD_APP_INVOKE_STREAM, &wire).await?;
+        Ok(InvokeFrameStream { recv })
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::SyncServerStreamingTransport> AppClient<T> {
+    pub fn invoke_stream_sync(
+        &self,
+        request: AppInvokeRequest,
+    ) -> Result<InvokeFrameStream, GestaltError> {
+        let wire = to_wire_app_invoke_request(request);
+        let recv = self.transport.server_stream::<crate::generated::v1::AppInvokeRequest, crate::generated::v1::InvokeFrame>(&METHOD_APP_INVOKE_STREAM, &wire)?;
+        Ok(InvokeFrameStream { recv })
+    }
+}
+
+/// InvokeFrameStream is the server-stream iterator for InvokeStream.
+pub struct InvokeFrameStream {
+    recv: Box<
+        dyn crate::public::generated::unary_transport::ServerStreamRecv<
+                crate::generated::v1::InvokeFrame,
+            >,
+    >,
+}
+
+impl InvokeFrameStream {
+    /// recv decodes the next InvokeFrame frame; None ends the stream.
+    pub async fn recv(&mut self) -> Result<Option<InvokeFrame>, GestaltError> {
+        match self.recv.recv().await? {
+            Some(wire) => Ok(Some(from_wire_invoke_frame(wire))),
+            None => Ok(None),
+        }
     }
 }
 

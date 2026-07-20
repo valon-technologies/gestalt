@@ -41,6 +41,49 @@ type AppInvokeRequest struct {
 	CredentialMode string
 }
 
+// InvokeFrameValue selects one variant of the value oneof of InvokeFrame.
+// A nil value means unset.
+type InvokeFrameValue interface {
+	isInvokeFrameValue()
+}
+
+// InvokeFrameValueMetadata is the metadata variant.
+type InvokeFrameValueMetadata struct {
+	Value *InvokeMetadata
+}
+
+func (*InvokeFrameValueMetadata) isInvokeFrameValue() {}
+
+// InvokeFrameValueData is the data variant.
+type InvokeFrameValueData struct {
+	Value []byte
+}
+
+func (*InvokeFrameValueData) isInvokeFrameValue() {}
+
+// InvokeFrame is the native message type for gestalt.provider.v1.InvokeFrame.
+//
+// InvokeFrame is one frame in a streaming invocation. The first frame is always
+// metadata; subsequent frames carry data bytes produced by the operation
+// handler (after encoding, for typed item streams). A mid-stream error (for
+// example, a validation failure or a recovered panic) may emit a trailing
+// metadata frame with a non-2xx status followed by a data frame carrying a
+// JSON error body, after which the stream ends.
+type InvokeFrame struct {
+	Value InvokeFrameValue
+}
+
+// InvokeMetadata is the native message type for gestalt.provider.v1.InvokeMetadata.
+//
+// InvokeMetadata is the first frame of a streaming invocation. It carries the
+// HTTP-shaped status, headers, and the response media type (from the
+// operation's StreamResponseSpec).
+type InvokeMetadata struct {
+	Status    int32
+	Headers   map[string]*StringList
+	MediaType string
+}
+
 // OperationAnnotations is the native message type for gestalt.provider.v1.OperationAnnotations.
 //
 // OperationAnnotations carries optional host hints about how an operation

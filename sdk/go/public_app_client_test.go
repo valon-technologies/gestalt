@@ -49,6 +49,10 @@ type recordingTransport struct {
 	lastRequest gproto.Message
 }
 
+func (t *recordingTransport) ServerStream(_ context.Context, method generated.Method, _ gproto.Message) (generated.ServerStreamRecvCloser, error) {
+	return nil, errors.New("streaming not supported by recording transport: " + method.Name)
+}
+
 func (t *recordingTransport) Unary(_ context.Context, method generated.Method, request, response gproto.Message) error {
 	t.calls++
 	t.lastRequest = request

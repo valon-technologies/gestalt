@@ -201,6 +201,14 @@ METHOD_APP_INVOKE = Method(
     reject=("run_as",),
 )
 
+METHOD_APP_INVOKE_STREAM = Method(
+    service="gestalt.provider.v1.App",
+    name="InvokeStream",
+    full_method="/gestalt.provider.v1.App/InvokeStream",
+    fill=("context",),
+    reject=("run_as",),
+)
+
 METHOD_APP_INVOKE_GRAPHQL = Method(
     service="gestalt.provider.v1.App",
     name="InvokeGraphQL",

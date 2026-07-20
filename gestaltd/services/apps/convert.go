@@ -7,6 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -28,8 +29,9 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 			Title:          op.GetTitle(),
 			Description:    op.GetDescription(),
 			InputSchema:    jsonRawFromString(op.GetInputSchema()),
-			OutputSchema:   jsonRawFromString(op.GetOutputSchema()),
+			Response:       responseSpecFromProto(op.GetResponse()),
 			AllowedRoles:   op.GetAllowedRoles(),
+			OutputSchema:   legacyOutputSchemaFromResponse(op.GetResponse()),
 			RequiredScopes: op.GetRequiredScopes(),
 			Tags:           op.GetTags(),
 			ReadOnly:       op.GetReadOnly(),
@@ -80,7 +82,7 @@ func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
 			Title:          op.Title,
 			Description:    op.Description,
 			InputSchema:    string(op.InputSchema),
-			OutputSchema:   string(op.OutputSchema),
+			Response:       responseSpecToProto(op.Response, op.OutputSchema),
 			AllowedRoles:   op.AllowedRoles,
 			RequiredScopes: op.RequiredScopes,
 			Tags:           op.Tags,
@@ -121,4 +123,93 @@ func jsonRawFromString(s string) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(s)
+}
+
+// legacyOutputSchemaFromResponse extracts the unary schema from a proto
+// OperationResponseSpec as a json.RawMessage, so legacy readers that still
+// inspect CatalogOperation.OutputSchema (MCP, appregistry, agent tools)
+// continue to see the schema after the output_schema → response migration.
+func legacyOutputSchemaFromResponse(resp *proto.OperationResponseSpec) json.RawMessage {
+	if resp == nil {
+		return nil
+	}
+	if u := resp.GetUnary(); u != nil {
+		return structToJSONRaw(u.GetSchema())
+	}
+	return nil
+}
+
+func responseSpecFromProto(resp *proto.OperationResponseSpec) *catalog.OperationResponseSpec {
+	if resp == nil {
+		return nil
+	}
+	out := &catalog.OperationResponseSpec{}
+	if u := resp.GetUnary(); u != nil {
+		out.Unary = &catalog.UnaryResponseSpec{Schema: structToJSONRaw(u.GetSchema())}
+	}
+	if s := resp.GetStream(); s != nil {
+		out.Stream = &catalog.StreamResponseSpec{
+			MediaType:  s.GetMediaType(),
+			ItemSchema: structToJSONRaw(s.GetItemSchema()),
+		}
+	}
+	return out
+}
+
+func responseSpecToProto(spec *catalog.OperationResponseSpec, legacyOutputSchema json.RawMessage) *proto.OperationResponseSpec {
+	if spec != nil {
+		if spec.Stream != nil {
+			return &proto.OperationResponseSpec{
+				Kind: &proto.OperationResponseSpec_Stream{
+					Stream: &proto.StreamResponseSpec{
+						MediaType:  spec.Stream.MediaType,
+						ItemSchema: jsonRawToStruct(spec.Stream.ItemSchema),
+					},
+				},
+			}
+		}
+		if spec.Unary != nil {
+			return &proto.OperationResponseSpec{
+				Kind: &proto.OperationResponseSpec_Unary{
+					Unary: &proto.UnaryResponseSpec{
+						Schema: jsonRawToStruct(spec.Unary.Schema),
+					},
+				},
+			}
+		}
+	}
+	if len(legacyOutputSchema) == 0 {
+		return nil
+	}
+	return &proto.OperationResponseSpec{
+		Kind: &proto.OperationResponseSpec_Unary{
+			Unary: &proto.UnaryResponseSpec{
+				Schema: jsonRawToStruct(legacyOutputSchema),
+			},
+		},
+	}
+}
+
+// structToJSONRaw converts a protobuf Struct to a JSON RawMessage.
+func structToJSONRaw(s *structpb.Struct) json.RawMessage {
+	if s == nil {
+		return nil
+	}
+	data, err := protojson.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	return json.RawMessage(data)
+}
+
+// jsonRawToStruct converts a JSON RawMessage to a protobuf Struct.
+func jsonRawToStruct(raw json.RawMessage) *structpb.Struct {
+	if len(raw) == 0 {
+		return nil
+	}
+	st := &structpb.Struct{}
+	if err := protojson.Unmarshal(raw, st); err != nil {
+		return nil
+	}
+	return st
 }

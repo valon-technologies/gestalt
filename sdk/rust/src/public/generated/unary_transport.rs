@@ -41,3 +41,37 @@ pub trait GrpcCapable: UnaryTransport {}
 
 /// Marker for sync transports that can call gRPC-only public methods.
 pub trait SyncGrpcCapable: SyncUnaryTransport {}
+
+/// A streaming frame iterator returned by [ServerStreamingTransport::server_stream].
+/// 'recv' decodes one frame and returns it; 'None' ends the stream. Callers
+/// should drop the handle to release transport resources.
+pub trait ServerStreamRecv<Resp: Message + Default + Send + 'static>: Send {
+    fn recv(
+        &mut self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<Option<Resp>, GestaltError>> + Send + '_>>;
+}
+
+/// Performs one server-streaming public App call. The transport returns a
+/// frame iterator whose 'recv' yields decoded response messages.
+pub trait ServerStreamingTransport: Send + Sync {
+    fn server_stream<Req, Resp>(
+        &self,
+        method: &Method,
+        request: &Req,
+    ) -> impl Future<Output = Result<Box<dyn ServerStreamRecv<Resp>>, GestaltError>> + Send
+    where
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static;
+}
+
+/// Performs one server-streaming public App call synchronously.
+pub trait SyncServerStreamingTransport: Send + Sync {
+    fn server_stream<Req, Resp>(
+        &self,
+        method: &Method,
+        request: &Req,
+    ) -> Result<Box<dyn ServerStreamRecv<Resp>>, GestaltError>
+    where
+        Req: Message + Clone + Send + Sync + 'static,
+        Resp: Message + Default + Send + 'static;
+}

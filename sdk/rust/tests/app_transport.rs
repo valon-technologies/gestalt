@@ -57,6 +57,15 @@ struct TestAppServer {
 
 #[async_trait]
 impl ProtoApp for TestAppServer {
+    type InvokeStreamStream = std::pin::Pin<
+        Box<
+            dyn tonic::codegen::tokio_stream::Stream<
+                    Item = std::result::Result<generated::v1::InvokeFrame, Status>,
+                > + Send
+                + 'static,
+        >,
+    >;
+
     async fn invoke(
         &self,
         request: GrpcRequest<AppInvokeRequest>,
@@ -108,6 +117,13 @@ impl ProtoApp for TestAppServer {
 			.to_string()
             .into_bytes(),
 		}))
+    }
+
+    async fn invoke_stream(
+        &self,
+        _request: GrpcRequest<AppInvokeRequest>,
+    ) -> std::result::Result<GrpcResponse<Self::InvokeStreamStream>, Status> {
+        Err(Status::unimplemented("unused"))
     }
 
     async fn invoke_graph_ql(

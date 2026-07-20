@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"net/http"
 	"time"
 )
@@ -153,4 +154,38 @@ type OperationResult struct {
 	// passthrough operations so the MCP handler can return it without losing
 	// fields like StructuredContent.
 	MCPResult any
+}
+
+// InvokeMetadata is the first frame of a streaming invocation: the HTTP-shaped
+// status, headers, and the response media type.
+type InvokeMetadata struct {
+	Status    int
+	Headers   http.Header
+	MediaType string
+}
+
+// InvokeFrame is one frame in a streaming invocation. The first frame is always
+// a Metadata frame; subsequent frames are Data byte chunks. A mid-stream error
+// may emit a trailing Metadata frame with a non-2xx status followed by a Data
+// frame carrying a JSON error body, after which the stream ends.
+type InvokeFrame struct {
+	Metadata *InvokeMetadata
+	Data     []byte
+}
+
+// IsMetadata reports whether this frame is the leading metadata frame.
+func (f *InvokeFrame) IsMetadata() bool {
+	return f != nil && f.Metadata != nil
+}
+
+// StreamReader yields InvokeFrame frames. io.EOF ends the stream.
+type StreamReader interface {
+	Recv() (*InvokeFrame, error)
+}
+
+// StreamingExecutor is implemented by providers that support streaming
+// operation responses. ExecuteStream is only called for operations whose
+// catalog response mode is stream.
+type StreamingExecutor interface {
+	ExecuteStream(ctx context.Context, operation string, params map[string]any, token string) (StreamReader, error)
 }

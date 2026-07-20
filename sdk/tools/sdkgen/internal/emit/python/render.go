@@ -52,6 +52,7 @@ type features struct {
 	metadataMethods map[string]bool        // public client: METHOD_* constants from metadata
 	unaryTransport  bool                   // public client: UnaryTransport from unary_transport
 	asyncTransport  bool                   // public client: AsyncUnaryTransport from unary_transport
+	serverStream    bool                   // public client: ServerStreamRecv from unary_transport
 	jsonFormat      bool                   // public client: google.protobuf.json_format
 	protocol        bool                   // public client: typing.Protocol for REST projections
 }
@@ -1224,13 +1225,22 @@ func (r *renderer) localImports() string {
 	if len(r.features.metadataMethods) > 0 {
 		locals = append(locals, localImport{module: ".metadata", lines: fromImport(".metadata", sortedKeys(r.features.metadataMethods))})
 	}
-	if r.features.unaryTransport || r.features.asyncTransport {
+	if r.features.unaryTransport || r.features.asyncTransport || r.features.serverStream {
 		var names []string
 		if r.features.asyncTransport {
 			names = append(names, "AsyncUnaryTransport")
 		}
 		if r.features.unaryTransport {
 			names = append(names, "UnaryTransport")
+		}
+		if r.features.serverStream {
+			names = append(names, "ServerStreamRecv")
+			if r.features.asyncTransport {
+				names = append(names, "AsyncServerStreamingTransport")
+			}
+			if r.features.unaryTransport {
+				names = append(names, "ServerStreamingTransport")
+			}
 		}
 		locals = append(locals, localImport{module: ".unary_transport", lines: fromImport(".unary_transport", names)})
 	}
@@ -1297,6 +1307,9 @@ func (r *renderer) assemble() string {
 	}
 	if r.features.protocol {
 		typingNames = append(typingNames, "Protocol")
+	}
+	if r.features.serverStream {
+		typingNames = append(typingNames, "cast")
 	}
 	if len(typingNames) > 0 {
 		stdlib = append(stdlib, fromImport("typing", typingNames))

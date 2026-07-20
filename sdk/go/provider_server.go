@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -19,9 +20,10 @@ import (
 // [ServeProvider] instead of constructing this directly.
 type ProviderServer struct {
 	proto.UnimplementedAppProviderServer
-	provider   Provider
-	executeFn  func(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
-	sessionCat func() (SessionCatalogProvider, bool)
+	provider        Provider
+	executeFn       func(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
+	streamExecuteFn func(ctx context.Context, operation string, params map[string]any, token string) (StreamReader, error)
+	sessionCat      func() (SessionCatalogProvider, bool)
 }
 
 // NewProviderServer adapts provider plus router into the gRPC integration
@@ -37,6 +39,12 @@ func NewProviderServer[P any, PP interface {
 				return nil, fmt.Errorf("router is nil")
 			}
 			return router.Execute(ctx, (*P)(provider), operation, params, token)
+		},
+		streamExecuteFn: func(ctx context.Context, operation string, params map[string]any, token string) (StreamReader, error) {
+			if router == nil {
+				return nil, fmt.Errorf("router is nil")
+			}
+			return router.ExecuteStream(ctx, (*P)(provider), operation, params, token)
 		},
 		sessionCat: func() (SessionCatalogProvider, bool) {
 			scp, ok := any(provider).(SessionCatalogProvider)
@@ -114,6 +122,77 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return operationResultProto(operationResult(http.StatusInternalServerError, nilResultMessage)), nil
 	}
 	return operationResultProto(result), nil
+}
+
+// ExecuteStream routes one streaming operation invocation to its handler and
+// forwards frames to stream. The first frame is always InvokeMetadata.
+func (s *ProviderServer) ExecuteStream(req *proto.ExecuteRequest, stream proto.AppProvider_ExecuteStreamServer) error {
+	if req == nil {
+		return status.Error(codes.InvalidArgument, "request is required")
+	}
+	ctx := stream.Context()
+	ctx = withRequestContext(ctx, req.GetContext())
+	ctx = WithIdempotencyKey(ctx, req.GetIdempotencyKey())
+	if len(req.GetConnectionParams()) > 0 {
+		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
+	}
+	if s.streamExecuteFn == nil {
+		return status.Error(codes.Unimplemented, "streaming execution is not available")
+	}
+	reader, err := s.streamExecuteFn(ctx, req.GetOperation(), req.GetParams().AsMap(), req.GetToken())
+	if err != nil {
+		return status.Errorf(codes.Internal, "%v", err)
+	}
+	for {
+		frame, err := reader.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return status.Errorf(codes.Internal, "%v", err)
+		}
+		pf := invokeFrameToProto(frame)
+		if pf == nil {
+			continue
+		}
+		if err := stream.Send(pf); err != nil {
+			return err
+		}
+	}
+}
+
+// invokeFrameToProto converts an SDK InvokeFrame to the proto InvokeFrame.
+// A nil frame surfaces as a 500 metadata frame so stream.Send never receives
+// a nil proto message. When both Metadata and Data are set (error frames),
+// the metadata variant is emitted; the data is carried by the next frame
+// from the reader.
+func invokeFrameToProto(frame *InvokeFrame) *proto.InvokeFrame {
+	if frame == nil {
+		return &proto.InvokeFrame{
+			Value: &proto.InvokeFrame_Metadata{
+				Metadata: &proto.InvokeMetadata{
+					Status:    http.StatusInternalServerError,
+					MediaType: "application/json",
+				},
+			},
+		}
+	}
+	if frame.Metadata != nil {
+		return &proto.InvokeFrame{
+			Value: &proto.InvokeFrame_Metadata{
+				Metadata: &proto.InvokeMetadata{
+					Status:    int32(frame.Metadata.Status),
+					Headers:   httpHeaderToProto(frame.Metadata.Headers),
+					MediaType: frame.Metadata.MediaType,
+				},
+			},
+		}
+	}
+	return &proto.InvokeFrame{
+		Value: &proto.InvokeFrame_Data{
+			Data: append([]byte(nil), frame.Data...),
+		},
+	}
 }
 
 // ResolveHTTPSubject resolves the acting subject of a hosted HTTP request.

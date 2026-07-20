@@ -2,8 +2,10 @@ package plugins
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -246,6 +248,88 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		Headers: protoutil.StringListsFromProto(resp.GetHeaders()),
 		Body:    resp.GetBody(),
 	}, nil
+}
+
+// ExecuteStream is the streaming counterpart of Execute. It calls the
+// provider's ExecuteStream RPC and wraps the gRPC stream into a StreamReader.
+func (p *remoteProviderBase) ExecuteStream(ctx context.Context, operation string, params map[string]any, token string) (core.StreamReader, error) {
+	msg, err := protoutil.StructFromMap(params)
+	if err != nil {
+		return nil, err
+	}
+	reqCtx, err := p.requestContextProto(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err = p.attachInvocationCapability(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := p.client.ExecuteStream(ctx, &proto.ExecuteRequest{
+		Operation:        operation,
+		Params:           msg,
+		Token:            token,
+		ConnectionParams: core.ConnectionParams(ctx),
+		InvocationId:     invocationIDFromContext(ctx),
+		IdempotencyKey:   invocation.IdempotencyKeyFromContext(ctx),
+		Context:          reqCtx,
+	})
+	if err != nil {
+		return nil, remoteProviderExecuteError(err)
+	}
+	return &remoteStreamReader{stream: stream}, nil
+}
+
+// remoteStreamReader adapts a gRPC ExecuteStream client stream into a
+// core.StreamReader yielding core.InvokeFrame frames.
+type remoteStreamReader struct {
+	stream proto.AppProvider_ExecuteStreamClient
+}
+
+func (r *remoteStreamReader) Recv() (*core.InvokeFrame, error) {
+	frame, err := r.stream.Recv()
+	if err != nil {
+		return nil, err
+	}
+	return invokeFrameFromProto(frame), nil
+}
+
+func invokeFrameFromProto(frame *proto.InvokeFrame) *core.InvokeFrame {
+	if frame == nil {
+		return errorFrame("received nil stream frame")
+	}
+	switch v := frame.GetValue().(type) {
+	case *proto.InvokeFrame_Metadata:
+		return &core.InvokeFrame{
+			Metadata: &core.InvokeMetadata{
+				Status:    int(v.Metadata.GetStatus()),
+				Headers:   protoutil.StringListsFromProto(v.Metadata.GetHeaders()),
+				MediaType: v.Metadata.GetMediaType(),
+			},
+		}
+	case *proto.InvokeFrame_Data:
+		return &core.InvokeFrame{Data: append([]byte(nil), v.Data...)}
+	}
+	// Unset oneof: surface as an error metadata frame rather than nil, so
+	// downstream Send never receives a nil proto message.
+	return errorFrame("stream frame has no value set")
+}
+
+// errorFrame returns an error frame with both Metadata and Data set. The
+// downstream invokeFrameToProto in app_server.go handles both-set frames by
+// emitting a metadata proto frame followed by a data proto frame, so the JSON
+// error body is preserved on the wire. The error message is also recorded in
+// the X-Gestalt-Error header as a fallback.
+func errorFrame(message string) *core.InvokeFrame {
+	body, _ := json.Marshal(map[string]string{"error": message})
+	return &core.InvokeFrame{
+		Metadata: &core.InvokeMetadata{
+			Status:    http.StatusInternalServerError,
+			MediaType: "application/json",
+			Headers:   http.Header{"Content-Type": []string{"application/json"}, "X-Gestalt-Error": []string{message}},
+		},
+		Data: body,
+	}
 }
 
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {

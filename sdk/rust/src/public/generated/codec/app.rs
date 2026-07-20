@@ -6,8 +6,9 @@
 
 use crate::generated::v1;
 use crate::public::generated::app::{
-    AgentToolRef, AppInvokeGraphQLRequest, AppInvokeRequest, OperationAnnotations, OperationResult,
-    StringList, SubjectContext, SubjectPermissionContext,
+    AgentToolRef, AppInvokeGraphQLRequest, AppInvokeRequest, InvokeFrame, InvokeFrameValue,
+    InvokeMetadata, OperationAnnotations, OperationResult, StringList, SubjectContext,
+    SubjectPermissionContext,
 };
 use crate::public::generated::codec::support::to_wire_struct;
 
@@ -523,6 +524,196 @@ pub(crate) fn decode_wire_app_invoke_request_json(
     })
 }
 
+/// Converts a wire `InvokeFrame` to its native message.
+pub(crate) fn from_wire_invoke_frame(value: v1::InvokeFrame) -> InvokeFrame {
+    InvokeFrame {
+        value: value.value.map(from_wire_invoke_frame_value),
+    }
+}
+
+pub(crate) fn from_wire_invoke_frame_value(value: v1::invoke_frame::Value) -> InvokeFrameValue {
+    match value {
+        v1::invoke_frame::Value::Metadata(value) => {
+            InvokeFrameValue::Metadata(from_wire_invoke_metadata(value))
+        }
+        v1::invoke_frame::Value::Data(value) => InvokeFrameValue::Data(value),
+    }
+}
+
+/// Encodes a wire `StringList` as protobuf JSON.
+pub(crate) fn encode_wire_string_list_json(value: &v1::StringList) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.values.is_empty() {
+        object.insert(
+            "values".into(),
+            serde_json::Value::Array(
+                value
+                    .values
+                    .iter()
+                    .map(|item| serde_json::Value::String(item.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `StringList`.
+pub(crate) fn decode_wire_string_list_json(
+    value: &serde_json::Value,
+) -> Result<v1::StringList, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::StringList {
+        values: match object.get("values") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for values")
+                })?
+                .iter()
+                .map(|item| {
+                    Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                        crate::public::proto_json::decode_string(item)?,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `InvokeMetadata` as protobuf JSON.
+pub(crate) fn encode_wire_invoke_metadata_json(value: &v1::InvokeMetadata) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if value.status != 0 {
+        object.insert("status".into(), serde_json::json!(value.status));
+    }
+    if !value.headers.is_empty() {
+        let mut map = serde_json::Map::new();
+        for (key, value) in &value.headers {
+            map.insert(key.clone(), encode_wire_string_list_json(value));
+        }
+        object.insert("headers".into(), serde_json::Value::Object(map));
+    }
+    if !value.media_type.is_empty() {
+        object.insert(
+            "mediaType".into(),
+            serde_json::Value::String(value.media_type.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `InvokeMetadata`.
+pub(crate) fn decode_wire_invoke_metadata_json(
+    value: &serde_json::Value,
+) -> Result<v1::InvokeMetadata, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::InvokeMetadata {
+        status: match object.get("status") {
+            Some(value) => crate::public::proto_json::decode_i32(value)?,
+            None => 0,
+        },
+        headers: match object.get("headers") {
+            Some(value) => {
+                let mut out = std::collections::BTreeMap::new();
+                let Some(entries) = value.as_object() else {
+                    return Err(crate::public::proto_json::invalid_proto_json(
+                        "expected object for map",
+                    ));
+                };
+                for (key, value) in entries {
+                    out.insert(
+                        Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                            key.to_string(),
+                        )?,
+                        decode_wire_string_list_json(value)?,
+                    );
+                }
+                out
+            }
+            None => std::collections::BTreeMap::new(),
+        },
+        media_type: match object.get("mediaType") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `InvokeFrame` as protobuf JSON.
+pub(crate) fn encode_wire_invoke_frame_json(value: &v1::InvokeFrame) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if let Some(active) = &value.value {
+        match active {
+            v1::invoke_frame::Value::Metadata(inner) => {
+                object.insert("metadata".into(), encode_wire_invoke_metadata_json(inner));
+            }
+            v1::invoke_frame::Value::Data(inner) => {
+                object.insert(
+                    "data".into(),
+                    crate::public::proto_json::encode_bytes(inner),
+                );
+            }
+        }
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `InvokeFrame`.
+pub(crate) fn decode_wire_invoke_frame_json(
+    value: &serde_json::Value,
+) -> Result<v1::InvokeFrame, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::InvokeFrame {
+        value: {
+            let mut active = None;
+            if let Some(value) = object.get("metadata") {
+                active = Some(v1::invoke_frame::Value::Metadata(
+                    decode_wire_invoke_metadata_json(value)?,
+                ));
+            }
+            if let Some(value) = object.get("data") {
+                active = Some(v1::invoke_frame::Value::Data(
+                    crate::public::proto_json::decode_bytes(value)?,
+                ));
+            }
+            active
+        },
+        ..Default::default()
+    })
+}
+
+/// Converts a wire `InvokeMetadata` to its native message.
+pub(crate) fn from_wire_invoke_metadata(value: v1::InvokeMetadata) -> InvokeMetadata {
+    InvokeMetadata {
+        status: value.status,
+        headers: value
+            .headers
+            .into_iter()
+            .map(|(key, item)| (key, from_wire_string_list(item)))
+            .collect(),
+        media_type: value.media_type,
+    }
+}
+
 /// Converts a native `OperationAnnotations` to its wire message.
 pub(crate) fn to_wire_operation_annotations(
     value: OperationAnnotations,
@@ -606,54 +797,6 @@ pub(crate) fn from_wire_operation_result(value: v1::OperationResult) -> Operatio
             .map(|(key, item)| (key, from_wire_string_list(item)))
             .collect(),
     }
-}
-
-/// Encodes a wire `StringList` as protobuf JSON.
-pub(crate) fn encode_wire_string_list_json(value: &v1::StringList) -> serde_json::Value {
-    let mut object = serde_json::Map::new();
-    if !value.values.is_empty() {
-        object.insert(
-            "values".into(),
-            serde_json::Value::Array(
-                value
-                    .values
-                    .iter()
-                    .map(|item| serde_json::Value::String(item.to_string()))
-                    .collect(),
-            ),
-        );
-    }
-    serde_json::Value::Object(object)
-}
-
-/// Decodes protobuf JSON into a wire `StringList`.
-pub(crate) fn decode_wire_string_list_json(
-    value: &serde_json::Value,
-) -> Result<v1::StringList, crate::public::generated::rpc_support::GestaltError> {
-    let Some(object) = value.as_object() else {
-        return Err(crate::public::generated::rpc_support::GestaltError::new(
-            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
-            "expected JSON object",
-        ));
-    };
-    Ok(v1::StringList {
-        values: match object.get("values") {
-            Some(value) => value
-                .as_array()
-                .ok_or_else(|| {
-                    crate::public::proto_json::invalid_proto_json("expected array for values")
-                })?
-                .iter()
-                .map(|item| {
-                    Ok::<String, crate::public::generated::rpc_support::GestaltError>(
-                        crate::public::proto_json::decode_string(item)?,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            None => Vec::new(),
-        },
-        ..Default::default()
-    })
 }
 
 /// Encodes a wire `OperationResult` as protobuf JSON.

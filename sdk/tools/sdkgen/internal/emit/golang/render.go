@@ -786,9 +786,63 @@ func (r *renderer) renderMethod(svcName string, m *model.Method) {
 	case m.Stream == model.Unary && (len(m.Signature) > 0 || len(m.OptionalSignature) > 0 || r.collapseOutput(m) != nil):
 		r.renderErgonomicUnary(svcName, m)
 		r.renderFaithfulMethod(svcName, m, true)
+	case m.Stream == model.ServerStream && (len(m.Signature) > 0 || len(m.OptionalSignature) > 0):
+		r.renderErgonomicServerStream(svcName, m)
+		r.renderFaithfulMethod(svcName, m, true)
 	default:
 		r.renderFaithfulMethod(svcName, m, false)
 	}
+}
+
+// renderErgonomicServerStream renders the flattened surface of a
+// server-streaming method with signature annotations: positional signature
+// parameters, a trailing options object from optional_signature, and a stream
+// iterator return. The faithful form is rendered under a Raw suffix.
+func (r *renderer) renderErgonomicServerStream(svcName string, m *model.Method) {
+	streamType := svcName + m.Name + "Stream"
+	params, arg, prep := r.methodRequest(m)
+	var requestLines []string
+	if len(m.Signature) > 0 || len(m.OptionalSignature) > 0 {
+		requestType := r.messageType(m.Input.FullName)
+		var decls, fields []string
+		inSignature := false
+		for _, name := range m.Signature {
+			f := findField(m.Input, name)
+			param := goParamName(f.JSONName)
+			decls = append(decls, param+" "+r.fieldType(f))
+			fields = append(fields, fieldGoName(f)+": "+param)
+			inSignature = true
+		}
+		if len(m.OptionalSignature) > 0 {
+			optionsType := r.renderOptionsStruct(svcName, m)
+			decls = append(decls, "opts *"+optionsType)
+			requestLines = append(requestLines, fmt.Sprintf("\tif opts == nil {\n\t\topts = &%s{}\n\t}\n", optionsType))
+			for _, name := range m.OptionalSignature {
+				f := findField(m.Input, name)
+				fields = append(fields, fieldGoName(f)+": opts."+fieldGoName(f))
+				inSignature = true
+			}
+		}
+		if ctxF := findField(m.Input, "context"); ctxF != nil && !inSignature {
+			fields = append(fields, fieldGoName(ctxF)+": c.context")
+			prep = nil
+		}
+		params = ", " + strings.Join(decls, ", ")
+		requestLines = append(requestLines, fmt.Sprintf("\trequest := &%s{%s}\n", requestType, strings.Join(fields, ", ")))
+		arg = toWireFunc(requestType) + "(request)"
+	}
+	r.writeIdentDoc("", fmt.Sprintf("%s is the ergonomic form of [%s.%sRaw].", m.Name, svcName, m.Name), m.Doc)
+	recv := fmt.Sprintf("func (c *%s) %s", svcName, m.Name)
+	fmt.Fprintf(&r.body, "%s(ctx context.Context%s) (*%s, error) {\n", recv, params, streamType)
+	for _, line := range requestLines {
+		r.body.WriteString(line + "\n")
+	}
+	for _, line := range prep {
+		r.body.WriteString(line + "\n")
+	}
+	fmt.Fprintf(&r.body, "\tstream, err := c.client.%s(ctx, %s)\n", m.Name, arg)
+	r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
+	fmt.Fprintf(&r.body, "\treturn &%s{stream: stream}, nil\n}\n\n", streamType)
 }
 
 // renderOptionsStruct renders the per-method options struct carrying a

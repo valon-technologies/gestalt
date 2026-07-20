@@ -104,6 +104,68 @@ func FromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
 	return out
 }
 
+func ToWireInvokeFrame(value *InvokeFrame) *proto.InvokeFrame {
+	if value == nil {
+		return nil
+	}
+	out := &proto.InvokeFrame{}
+	switch variant := value.Value.(type) {
+	case *InvokeFrameValueMetadata:
+		out.Value = &proto.InvokeFrame_Metadata{Metadata: ToWireInvokeMetadata(variant.Value)}
+	case *InvokeFrameValueData:
+		out.Value = &proto.InvokeFrame_Data{Data: variant.Value}
+	}
+	return out
+}
+
+func FromWireInvokeFrame(value *proto.InvokeFrame) *InvokeFrame {
+	if value == nil {
+		return nil
+	}
+	out := &InvokeFrame{}
+	switch variant := value.Value.(type) {
+	case *proto.InvokeFrame_Metadata:
+		out.Value = &InvokeFrameValueMetadata{Value: FromWireInvokeMetadata(variant.Metadata)}
+	case *proto.InvokeFrame_Data:
+		out.Value = &InvokeFrameValueData{Value: variant.Data}
+	}
+	return out
+}
+
+func ToWireInvokeMetadata(value *InvokeMetadata) *proto.InvokeMetadata {
+	if value == nil {
+		return nil
+	}
+	out := &proto.InvokeMetadata{
+		Status:    value.Status,
+		MediaType: value.MediaType,
+	}
+	if value.Headers != nil {
+		out.Headers = make(map[string]*proto.StringList, len(value.Headers))
+		for key, item := range value.Headers {
+			out.Headers[key] = ToWireStringList(item)
+		}
+	}
+	return out
+}
+
+func FromWireInvokeMetadata(value *proto.InvokeMetadata) *InvokeMetadata {
+	if value == nil {
+		return nil
+	}
+	out := &InvokeMetadata{
+		Status:    value.Status,
+		MediaType: value.MediaType,
+	}
+	if value.Headers != nil {
+		out.Headers = make(map[string]*StringList, len(value.Headers))
+		for key, item := range value.Headers {
+			out.Headers[key] = FromWireStringList(item)
+		}
+	}
+	return out
+}
+
 func ToWireOperationAnnotations(value *OperationAnnotations) *proto.OperationAnnotations {
 	if value == nil {
 		return nil

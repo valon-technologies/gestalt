@@ -136,6 +136,64 @@ export async function createGrpcUnaryTransport(
       }
     },
 
+    serverStream<Output extends Message>(
+      method: PublicMethod,
+      request: Message,
+      _requestSchema: DescMessage,
+      _responseSchema: DescMessage,
+      callOptions?: PublicUnaryCallOptions,
+    ): AsyncIterable<Output> {
+      const signal = resolveEffectiveAbortSignal(callOptions);
+      // The auth promise is awaited lazily inside the async generator so the
+      // call can be set up synchronously and aborted before the first frame.
+      return (async function* serverStreamFrames(): AsyncIterable<Output> {
+        let authorization: string | undefined;
+        try {
+          throwIfAborted(signal);
+          authorization = await raceWithAbort(
+            options.auth.getAuthorization(),
+            signal,
+            { removeListener: callOptions?.timeoutMs === undefined },
+          );
+        } catch (error) {
+          throw toTransportGestaltError(callOptions, error, signal);
+        }
+        const requestOptions = {
+          ...(signal !== undefined ? { signal } : {}),
+          ...(authorization
+            ? { headers: { Authorization: authorization } }
+            : {}),
+        };
+        const serviceName = method.service as PublicServiceName;
+        const service = PUBLIC_SERVICES[serviceName];
+        if (!service) {
+          throw new Error(`unknown public gRPC service ${method.service}`);
+        }
+        const client = getClient(serviceName, service);
+        const rpcName = lowerFirst(method.method);
+        const rpc = (client as Record<string, unknown>)[rpcName];
+        if (typeof rpc !== "function") {
+          throw new Error(`unknown public gRPC method ${method.grpcPath}`);
+        }
+        try {
+          const stream = (rpc as (req: Message, opts: object) => AsyncIterable<Output>).call(
+            client,
+            request,
+            requestOptions,
+          );
+          for await (const frame of stream) {
+            throwIfAborted(signal);
+            yield frame;
+          }
+        } catch (error) {
+          if (isAbortLike(error, signal)) {
+            throw toTransportGestaltError(callOptions, error, signal);
+          }
+          throw toGestaltError(error);
+        }
+      })();
+    },
+
     async close(): Promise<void> {
       sessionManager.abort();
       transport = undefined;

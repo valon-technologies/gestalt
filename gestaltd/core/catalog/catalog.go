@@ -31,25 +31,50 @@ type Catalog struct {
 	Operations  []CatalogOperation `yaml:"operations"             json:"operations"`
 }
 
+// OperationResponseSpec declares how an operation responds. Either Unary or
+// Stream is set; both nil means unary with no schema.
+type OperationResponseSpec struct {
+	Unary  *UnaryResponseSpec  `yaml:"unary,omitempty"  json:"unary,omitempty"`
+	Stream *StreamResponseSpec `yaml:"stream,omitempty" json:"stream,omitempty"`
+}
+
+// UnaryResponseSpec describes a unary operation response. Schema is a JSON
+// object (JSON Schema shape).
+type UnaryResponseSpec struct {
+	Schema json.RawMessage `yaml:"schema,omitempty" json:"schema,omitempty"`
+}
+
+// StreamResponseSpec describes a streaming operation response.
+type StreamResponseSpec struct {
+	MediaType  string          `yaml:"mediaType,omitempty"  json:"mediaType,omitempty"`
+	ItemSchema json.RawMessage `yaml:"itemSchema,omitempty" json:"itemSchema,omitempty"`
+}
+
+// IsStream reports whether this response spec declares a streaming response.
+func (r *OperationResponseSpec) IsStream() bool {
+	return r != nil && r.Stream != nil
+}
+
 type CatalogOperation struct {
-	ID             string                `yaml:"id"                       json:"id"`
-	ProviderID     string                `yaml:"providerId,omitempty"    json:"providerId,omitempty"`
-	Method         string                `yaml:"method"                   json:"method"`
-	Path           string                `yaml:"path"                     json:"path"`
-	Title          string                `yaml:"title,omitempty"          json:"title,omitempty"`
-	Description    string                `yaml:"description,omitempty"    json:"description,omitempty"`
-	InputSchema    json.RawMessage       `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
-	OutputSchema   json.RawMessage       `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
-	Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
-	AllowedRoles   []string              `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
-	Parameters     []CatalogParameter    `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
-	RequiredScopes []string              `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
-	Tags           []string              `yaml:"tags,omitempty"           json:"tags,omitempty"`
-	ReadOnly       bool                  `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
-	Visible        *bool                 `yaml:"visible,omitempty"        json:"visible,omitempty"`
-	Transport      string                `yaml:"transport,omitempty"      json:"transport,omitempty"`
-	Query          string                `yaml:"query,omitempty"          json:"query,omitempty"`
-	OperationName  string                `yaml:"operationName,omitempty"  json:"operationName,omitempty"`
+	ID             string                 `yaml:"id"                       json:"id"`
+	ProviderID     string                 `yaml:"providerId,omitempty"    json:"providerId,omitempty"`
+	Method         string                 `yaml:"method"                   json:"method"`
+	Path           string                 `yaml:"path"                     json:"path"`
+	Title          string                 `yaml:"title,omitempty"          json:"title,omitempty"`
+	Description    string                 `yaml:"description,omitempty"    json:"description,omitempty"`
+	InputSchema    json.RawMessage        `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
+	OutputSchema   json.RawMessage        `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
+	Response       *OperationResponseSpec `yaml:"response,omitempty"       json:"response,omitempty"`
+	Annotations    CapabilityAnnotations  `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
+	AllowedRoles   []string               `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
+	Parameters     []CatalogParameter     `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
+	RequiredScopes []string               `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
+	Tags           []string               `yaml:"tags,omitempty"           json:"tags,omitempty"`
+	ReadOnly       bool                   `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
+	Visible        *bool                  `yaml:"visible,omitempty"        json:"visible,omitempty"`
+	Transport      string                 `yaml:"transport,omitempty"      json:"transport,omitempty"`
+	Query          string                 `yaml:"query,omitempty"          json:"query,omitempty"`
+	OperationName  string                 `yaml:"operationName,omitempty"  json:"operationName,omitempty"`
 }
 
 func OperationVisibleByDefault(op CatalogOperation) bool {
@@ -91,6 +116,19 @@ func MergeTags(groups ...[]string) []string {
 }
 
 func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
+	// responseYAML is an intermediate type that accepts YAML maps for schema
+	// fields (json.RawMessage cannot unmarshal from YAML maps directly).
+	type unaryResponseYAML struct {
+		Schema any `yaml:"schema,omitempty"`
+	}
+	type streamResponseYAML struct {
+		MediaType  string `yaml:"mediaType,omitempty"`
+		ItemSchema any    `yaml:"itemSchema,omitempty"`
+	}
+	type responseYAML struct {
+		Unary  *unaryResponseYAML  `yaml:"unary,omitempty"`
+		Stream *streamResponseYAML `yaml:"stream,omitempty"`
+	}
 	type catalogOperationYAML struct {
 		ID             string                `yaml:"id"`
 		ProviderID     string                `yaml:"providerId,omitempty"`
@@ -100,6 +138,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Description    string                `yaml:"description,omitempty"`
 		InputSchema    any                   `yaml:"inputSchema,omitempty"`
 		OutputSchema   any                   `yaml:"outputSchema,omitempty"`
+		Response       *responseYAML         `yaml:"response,omitempty"`
 		Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"`
 		AllowedRoles   []string              `yaml:"allowedRoles,omitempty"`
 		Parameters     []CatalogParameter    `yaml:"parameters,omitempty"`
@@ -126,6 +165,35 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		return fmt.Errorf("marshal outputSchema: %w", err)
 	}
 
+	// Convert the intermediate response YAML into OperationResponseSpec.
+	var response *OperationResponseSpec
+	if aux.Response != nil {
+		response = &OperationResponseSpec{}
+		if aux.Response.Unary != nil {
+			schema, err := rawJSONFromValue(aux.Response.Unary.Schema)
+			if err != nil {
+				return fmt.Errorf("marshal response.unary.schema: %w", err)
+			}
+			response.Unary = &UnaryResponseSpec{Schema: schema}
+		}
+		if aux.Response.Stream != nil {
+			itemSchema, err := rawJSONFromValue(aux.Response.Stream.ItemSchema)
+			if err != nil {
+				return fmt.Errorf("marshal response.stream.itemSchema: %w", err)
+			}
+			response.Stream = &StreamResponseSpec{
+				MediaType:  aux.Response.Stream.MediaType,
+				ItemSchema: itemSchema,
+			}
+		}
+	}
+	// Map legacy outputSchema to response.unary.schema when response is unset.
+	if response == nil && len(outputSchema) > 0 {
+		response = &OperationResponseSpec{
+			Unary: &UnaryResponseSpec{Schema: outputSchema},
+		}
+	}
+
 	*o = CatalogOperation{
 		ID:             aux.ID,
 		ProviderID:     aux.ProviderID,
@@ -135,6 +203,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Description:    aux.Description,
 		InputSchema:    inputSchema,
 		OutputSchema:   outputSchema,
+		Response:       response,
 		Annotations:    aux.Annotations,
 		AllowedRoles:   aux.AllowedRoles,
 		Parameters:     aux.Parameters,
@@ -169,6 +238,27 @@ func CloneCapabilityAnnotations(a CapabilityAnnotations) CapabilityAnnotations {
 		DestructiveHint: destructive,
 		OpenWorldHint:   openWorld,
 	}
+}
+
+// cloneOperationResponseSpec returns a deep copy of spec.
+func cloneOperationResponseSpec(spec *OperationResponseSpec) *OperationResponseSpec {
+	if spec == nil {
+		return nil
+	}
+	out := &OperationResponseSpec{}
+	if spec.Unary != nil {
+		out.Unary = &UnaryResponseSpec{}
+		if spec.Unary.Schema != nil {
+			out.Unary.Schema = append(json.RawMessage(nil), spec.Unary.Schema...)
+		}
+	}
+	if spec.Stream != nil {
+		out.Stream = &StreamResponseSpec{MediaType: spec.Stream.MediaType}
+		if spec.Stream.ItemSchema != nil {
+			out.Stream.ItemSchema = append(json.RawMessage(nil), spec.Stream.ItemSchema...)
+		}
+	}
+	return out
 }
 
 type CatalogParameter struct {
@@ -208,6 +298,7 @@ func (c *Catalog) Clone() *Catalog {
 		if op.OutputSchema != nil {
 			outOp.OutputSchema = append(json.RawMessage(nil), op.OutputSchema...)
 		}
+		outOp.Response = cloneOperationResponseSpec(op.Response)
 		if op.AllowedRoles != nil {
 			outOp.AllowedRoles = append([]string(nil), op.AllowedRoles...)
 		}

@@ -38,6 +38,30 @@ export interface CatalogSchema {
 }
 
 /**
+ * UnaryResponseSpec describes a unary (fully materialized) operation response.
+ */
+export interface CatalogUnaryResponseSpec {
+  schema?: CatalogSchema;
+}
+
+/**
+ * StreamResponseSpec describes a streaming operation response.
+ */
+export interface CatalogStreamResponseSpec {
+  mediaType: string;
+  itemSchema?: CatalogSchema;
+}
+
+/**
+ * OperationResponseSpec declares how an operation responds. App authoring
+ * defaults to unary; emitted catalogs always declare either unary or stream.
+ */
+export interface CatalogResponseSpec {
+  unary?: CatalogUnaryResponseSpec;
+  stream?: CatalogStreamResponseSpec;
+}
+
+/**
  * Static operation metadata emitted by a provider catalog.
  */
 export interface CatalogOperation {
@@ -47,7 +71,12 @@ export interface CatalogOperation {
   description?: string;
   parameters?: CatalogParameter[];
   inputSchema?: CatalogSchema;
+  /**
+   * @deprecated Replaced by {@link CatalogOperation.response}. Catalogs that
+   * still set outputSchema are treated as unary with the given schema.
+   */
   outputSchema?: CatalogSchema;
+  response?: CatalogResponseSpec;
   annotations?: OperationAnnotations;
   requiredScopes?: string[];
   tags?: string[];
@@ -194,6 +223,9 @@ function toCatalogJsonObject(
       }
       if (operation.outputSchema !== undefined) {
         serialized.outputSchema = operation.outputSchema;
+      }
+      if (operation.response !== undefined) {
+        serialized.response = operation.response;
       }
       if (operation.annotations !== undefined) {
         serialized.annotations = operation.annotations;

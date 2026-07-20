@@ -6,8 +6,8 @@ package pipeline
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
+	"io"
 	"path"
 	"path/filepath"
 

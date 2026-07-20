@@ -3,7 +3,7 @@
 //! Generated native types and clients for app.proto.
 
 use crate::codec::app::{
-    from_wire_get_session_catalog_response, from_wire_operation_result,
+    from_wire_get_session_catalog_response, from_wire_invoke_frame, from_wire_operation_result,
     from_wire_provider_metadata, from_wire_resolve_http_subject_response,
     from_wire_start_provider_response, to_wire_app_invoke_graphql_request,
     to_wire_app_invoke_request, to_wire_execute_request, to_wire_get_session_catalog_request,
@@ -155,8 +155,6 @@ pub struct CatalogOperation {
     pub description: String,
     /// The `input_schema` field.
     pub input_schema: String,
-    /// The `output_schema` field.
-    pub output_schema: String,
     /// The `annotations` field; None when unset.
     pub annotations: Option<OperationAnnotations>,
     /// The `parameters` field.
@@ -173,6 +171,11 @@ pub struct CatalogOperation {
     pub transport: String,
     /// The `allowed_roles` field.
     pub allowed_roles: Vec<String>,
+    /// Response mode and schema for this operation. Replaces the former
+    /// output_schema string; absent is equivalent to unary with no schema.
+    ///
+    /// The `response` field; None when unset.
+    pub response: Option<OperationResponseSpec>,
 }
 
 /// CatalogParameter describes one input parameter surfaced in the generated
@@ -327,6 +330,45 @@ pub struct InvocationContext {
     pub connection: String,
 }
 
+/// Values of the `value` oneof in `InvokeFrame`; the message field is None when unset.
+#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum InvokeFrameValue {
+    /// The `metadata` variant.
+    Metadata(InvokeMetadata),
+    /// The `data` variant.
+    Data(Vec<u8>),
+}
+
+/// InvokeFrame is one frame in a streaming invocation. The first frame is always
+/// metadata; subsequent frames carry data bytes produced by the operation
+/// handler (after encoding, for typed item streams). A mid-stream error (for
+/// example, a validation failure or a recovered panic) may emit a trailing
+/// metadata frame with a non-2xx status followed by a data frame carrying a
+/// JSON error body, after which the stream ends.
+///
+/// Native message type for `gestalt.provider.v1.InvokeFrame`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InvokeFrame {
+    /// The `value` oneof; None when unset.
+    pub value: Option<InvokeFrameValue>,
+}
+
+/// InvokeMetadata is the first frame of a streaming invocation. It carries the
+/// HTTP-shaped status, headers, and the response media type (from the
+/// operation's StreamResponseSpec).
+///
+/// Native message type for `gestalt.provider.v1.InvokeMetadata`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InvokeMetadata {
+    /// The `status` field.
+    pub status: i32,
+    /// The `headers` field.
+    pub headers: std::collections::BTreeMap<String, StringList>,
+    /// The `media_type` field.
+    pub media_type: String,
+}
+
 /// OperationAnnotations carries optional host hints about how an operation
 /// behaves.
 ///
@@ -341,6 +383,26 @@ pub struct OperationAnnotations {
     pub destructive_hint: Option<bool>,
     /// The `open_world_hint` field; None when unset.
     pub open_world_hint: Option<bool>,
+}
+
+/// Values of the `kind` oneof in `OperationResponseSpec`; the message field is None when unset.
+#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum OperationResponseSpecKind {
+    /// The `unary` variant.
+    Unary(UnaryResponseSpec),
+    /// The `stream` variant.
+    Stream(StreamResponseSpec),
+}
+
+/// OperationResponseSpec declares how an operation responds. App authoring
+/// defaults to unary; emitted catalogs always declare either unary or stream.
+///
+/// Native message type for `gestalt.provider.v1.OperationResponseSpec`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OperationResponseSpec {
+    /// The `kind` oneof; None when unset.
+    pub kind: Option<OperationResponseSpecKind>,
 }
 
 /// OperationResult is the serialized result returned from an Execute call.
@@ -507,6 +569,19 @@ pub struct StartProviderResponse {
     pub protocol_version: i32,
 }
 
+/// StreamResponseSpec describes a streaming operation response. The media type
+/// names the representation (for example application/x-ndjson); the item schema
+/// is optional and describes one yielded item when the stream is typed.
+///
+/// Native message type for `gestalt.provider.v1.StreamResponseSpec`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StreamResponseSpec {
+    /// The `media_type` field.
+    pub media_type: String,
+    /// The `item_schema` field; None when unset.
+    pub item_schema: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
 /// StringList is a helper map value for repeated HTTP header and query values.
 ///
 /// Native message type for `gestalt.provider.v1.StringList`.
@@ -542,6 +617,15 @@ pub struct SubjectPermissionContext {
     pub operations: Vec<String>,
     /// The `all_operations` field.
     pub all_operations: bool,
+}
+
+/// UnaryResponseSpec describes a unary (fully materialized) operation response.
+///
+/// Native message type for `gestalt.provider.v1.UnaryResponseSpec`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UnaryResponseSpec {
+    /// The `schema` field; None when unset.
+    pub schema: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// Client for the `gestalt.provider.v1.App` service.
@@ -648,6 +732,31 @@ impl App {
         Ok(from_wire_operation_result(response.into_inner()))
     }
 
+    /// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+    /// REST binding) and shares Invoke's request shape, authorization, and
+    /// signature policy. The first response frame is always InvokeMetadata;
+    /// subsequent frames carry data bytes from the operation's stream response.
+    /// A mid-stream error may emit a trailing metadata frame with an error status
+    /// followed by a JSON error body, after which the stream ends.
+    ///
+    /// Calls `gestalt.provider.v1.App.InvokeStream`, returning a stream of converted frames.
+    pub async fn invoke_stream(
+        &mut self,
+        request: AppInvokeRequest,
+    ) -> Result<AppInvokeStreamStream, GestaltError> {
+        let mut request = request;
+        if request.context.is_none() {
+            request.context = self.context.clone();
+        }
+        let response = self
+            .inner
+            .invoke_stream(to_wire_app_invoke_request(request))
+            .await?;
+        Ok(AppInvokeStreamStream {
+            inner: response.into_inner(),
+        })
+    }
+
     /// Calls `gestalt.provider.v1.App.InvokeGraphQL`.
     pub async fn invoke_graphql(
         &mut self,
@@ -706,6 +815,22 @@ pub struct AppInvokeOptions {
     pub run_as: Option<SubjectContext>,
 }
 
+/// Optional parameters of [`App::invoke_stream`]; the default value leaves every
+/// option unset.
+#[derive(Clone, Debug, Default)]
+pub struct AppInvokeStreamOptions {
+    /// The `connection` field.
+    pub connection: String,
+    /// The `instance` field.
+    pub instance: String,
+    /// The `idempotency_key` field.
+    pub idempotency_key: String,
+    /// The `credential_mode` field.
+    pub credential_mode: String,
+    /// The `run_as` field; None when unset.
+    pub run_as: Option<SubjectContext>,
+}
+
 /// Optional parameters of [`App::invoke_graphql`]; the default value leaves every
 /// option unset.
 #[derive(Clone, Debug, Default)]
@@ -718,6 +843,25 @@ pub struct AppInvokeGraphQLOptions {
     pub idempotency_key: String,
     /// The `variables` field; None when unset.
     pub variables: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+/// REST binding) and shares Invoke's request shape, authorization, and
+/// signature policy. The first response frame is always InvokeMetadata;
+/// subsequent frames carry data bytes from the operation's stream response.
+/// A mid-stream error may emit a trailing metadata frame with an error status
+/// followed by a JSON error body, after which the stream ends.
+///
+/// Stream of converted `InvokeFrame` frames; transport errors convert to GestaltError.
+pub struct AppInvokeStreamStream {
+    inner: tonic::Streaming<v1::InvokeFrame>,
+}
+
+impl AppInvokeStreamStream {
+    /// Receives the next frame, or None when the stream ends.
+    pub async fn recv(&mut self) -> Result<Option<InvokeFrame>, GestaltError> {
+        Ok(self.inner.message().await?.map(from_wire_invoke_frame))
+    }
 }
 
 /// AppProvider models the shared Gestalt integration-provider protocol.
@@ -839,6 +983,29 @@ impl AppProvider {
         Ok(from_wire_operation_result(response.into_inner()))
     }
 
+    /// ExecuteStream is the streaming counterpart of Execute. The first response
+    /// frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+    /// A mid-stream error may emit a trailing metadata frame with an error status
+    /// followed by a JSON error body, after which the stream ends.
+    ///
+    /// Calls `gestalt.provider.v1.AppProvider.ExecuteStream`, returning a stream of converted frames.
+    pub async fn execute_stream(
+        &mut self,
+        request: ExecuteRequest,
+    ) -> Result<AppProviderExecuteStreamStream, GestaltError> {
+        let mut request = request;
+        if request.context.is_none() {
+            request.context = self.context.clone();
+        }
+        let response = self
+            .inner
+            .execute_stream(to_wire_execute_request(request))
+            .await?;
+        Ok(AppProviderExecuteStreamStream {
+            inner: response.into_inner(),
+        })
+    }
+
     /// Calls `gestalt.provider.v1.AppProvider.ResolveHTTPSubject`.
     pub async fn resolve_http_subject(
         &mut self,
@@ -897,5 +1064,22 @@ impl AppProvider {
         Ok(from_wire_get_session_catalog_response(
             response.into_inner(),
         ))
+    }
+}
+
+/// ExecuteStream is the streaming counterpart of Execute. The first response
+/// frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+/// A mid-stream error may emit a trailing metadata frame with an error status
+/// followed by a JSON error body, after which the stream ends.
+///
+/// Stream of converted `InvokeFrame` frames; transport errors convert to GestaltError.
+pub struct AppProviderExecuteStreamStream {
+    inner: tonic::Streaming<v1::InvokeFrame>,
+}
+
+impl AppProviderExecuteStreamStream {
+    /// Receives the next frame, or None when the stream ends.
+    pub async fn recv(&mut self) -> Result<Option<InvokeFrame>, GestaltError> {
+        Ok(self.inner.message().await?.map(from_wire_invoke_frame))
     }
 }

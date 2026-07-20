@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field, replace
-from typing import Any, overload
+from typing import Any, Iterator, overload
 
 import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
@@ -122,7 +122,6 @@ class CatalogOperation:
     title: str = ""
     description: str = ""
     input_schema: str = ""
-    output_schema: str = ""
     annotations: OperationAnnotations | None = None
     parameters: list[CatalogParameter] = field(default_factory=list)
     required_scopes: list[str] = field(default_factory=list)
@@ -131,6 +130,9 @@ class CatalogOperation:
     visible: bool | None = None
     transport: str = ""
     allowed_roles: list[str] = field(default_factory=list)
+    #: Response mode and schema for this operation. Replaces the former
+    #: output_schema string; absent is equivalent to unary with no schema.
+    response: OperationResponseSpec | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +238,44 @@ class InvocationContext:
 
 
 @dataclass(frozen=True, slots=True)
+class InvokeFrameMetadata:
+    value: InvokeMetadata
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeFrameData:
+    value: bytes
+
+
+InvokeFrameValue = InvokeFrameMetadata | InvokeFrameData | None
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeFrame:
+    """InvokeFrame is one frame in a streaming invocation. The first frame is always
+    metadata; subsequent frames carry data bytes produced by the operation
+    handler (after encoding, for typed item streams). A mid-stream error (for
+    example, a validation failure or a recovered panic) may emit a trailing
+    metadata frame with a non-2xx status followed by a data frame carrying a
+    JSON error body, after which the stream ends.
+    """
+
+    value: InvokeFrameValue = None
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeMetadata:
+    """InvokeMetadata is the first frame of a streaming invocation. It carries the
+    HTTP-shaped status, headers, and the response media type (from the
+    operation's StreamResponseSpec).
+    """
+
+    status: int = 0
+    headers: dict[str, StringList] = field(default_factory=dict)
+    media_type: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class OperationAnnotations:
     """OperationAnnotations carries optional host hints about how an operation
     behaves.
@@ -245,6 +285,30 @@ class OperationAnnotations:
     idempotent_hint: bool | None = None
     destructive_hint: bool | None = None
     open_world_hint: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OperationResponseSpecUnary:
+    value: UnaryResponseSpec
+
+
+@dataclass(frozen=True, slots=True)
+class OperationResponseSpecStream:
+    value: StreamResponseSpec
+
+
+OperationResponseSpecKind = (
+    OperationResponseSpecUnary | OperationResponseSpecStream | None
+)
+
+
+@dataclass(frozen=True, slots=True)
+class OperationResponseSpec:
+    """OperationResponseSpec declares how an operation responds. App authoring
+    defaults to unary; emitted catalogs always declare either unary or stream.
+    """
+
+    kind: OperationResponseSpecKind = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,6 +428,17 @@ class StartProviderResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class StreamResponseSpec:
+    """StreamResponseSpec describes a streaming operation response. The media type
+    names the representation (for example application/x-ndjson); the item schema
+    is optional and describes one yielded item when the stream is typed.
+    """
+
+    media_type: str = ""
+    item_schema: dict[str, JsonValue] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class StringList:
     """StringList is a helper map value for repeated HTTP header and query values."""
 
@@ -386,6 +461,13 @@ class SubjectPermissionContext:
     app: str = ""
     operations: list[str] = field(default_factory=list)
     all_operations: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class UnaryResponseSpec:
+    """UnaryResponseSpec describes a unary (fully materialized) operation response."""
+
+    schema: dict[str, JsonValue] | None = None
 
 
 class App:
@@ -516,6 +598,21 @@ class App:
             )
         )
         return _codec.from_wire_operation_result(response)
+
+    def invoke_stream(self, request: AppInvokeRequest) -> Iterator[InvokeFrame]:
+        """InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+        REST binding) and shares Invoke's request shape, authorization, and
+        signature policy. The first response frame is always InvokeMetadata;
+        subsequent frames carry data bytes from the operation's stream response.
+        A mid-stream error may emit a trailing metadata frame with an error status
+        followed by a JSON error body, after which the stream ends.
+        """
+        if request.context is None and self._context is not None:
+            request = replace(request, context=self._context)
+        return _support.map_recv(
+            self._stub.InvokeStream(_codec.to_wire_app_invoke_request(request)),
+            _codec.from_wire_invoke_frame,
+        )
 
     @overload
     def invoke_graphql(self, request: AppInvokeGraphQLRequest) -> OperationResult: ...
@@ -696,6 +793,19 @@ class AppProvider:
             )
         )
         return _codec.from_wire_operation_result(response)
+
+    def execute_stream(self, request: ExecuteRequest) -> Iterator[InvokeFrame]:
+        """ExecuteStream is the streaming counterpart of Execute. The first response
+        frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+        A mid-stream error may emit a trailing metadata frame with an error status
+        followed by a JSON error body, after which the stream ends.
+        """
+        if request.context is None and self._context is not None:
+            request = replace(request, context=self._context)
+        return _support.map_recv(
+            self._stub.ExecuteStream(_codec.to_wire_execute_request(request)),
+            _codec.from_wire_invoke_frame,
+        )
 
     def resolve_http_subject(
         self, request: ResolveHTTPSubjectRequest

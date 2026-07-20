@@ -144,8 +144,8 @@ func (b *builder) methodAnnotations(md protoreflect.MethodDescriptor, m *model.M
 		if m.Initial != nil {
 			b.add(md, "method", "signature and initial annotations cannot be combined")
 		}
-		if m.Stream != model.Unary {
-			b.add(md, "method", "signature annotation requires a unary method")
+		if m.Stream != model.Unary && m.Stream != model.ServerStream {
+			b.add(md, "method", "signature annotation requires a unary or server-streaming method")
 			return
 		}
 		if m.InputIsEmpty {
@@ -174,8 +174,8 @@ func (b *builder) methodAnnotations(md protoreflect.MethodDescriptor, m *model.M
 		switch {
 		case m.Initial != nil:
 			b.add(md, "method", "optional_signature and initial annotations cannot be combined")
-		case m.Stream != model.Unary:
-			b.add(md, "method", "optional_signature annotation requires a unary method")
+		case m.Stream != model.Unary && m.Stream != model.ServerStream:
+			b.add(md, "method", "optional_signature annotation requires a unary or server-streaming method")
 		case m.InputIsEmpty:
 			b.add(md, "method", "optional_signature annotation requires a request message")
 		default:

@@ -37,6 +37,37 @@ class AsyncUnaryTransport(Protocol):
         request: Message,
         response_type: type[ResponseT],
     ) -> ResponseT: ...
+
+
+class ServerStreamRecv(Protocol):
+    """Streaming frame iterator returned by ServerStreamingTransport.server_stream.
+
+    recv returns the next decoded frame, or raises StopIteration (sync) /
+    StopAsyncIteration (async) when the stream is exhausted. The response
+    deserializer is set when the stream is created, so recv takes no type
+    argument. Callers should close the iterator to release transport resources.
+    """
+
+    def recv(self) -> ResponseT: ...
+    def close(self) -> None: ...
+
+
+class ServerStreamingTransport(Protocol):
+    def server_stream(
+        self,
+        method: Method,
+        request: Message,
+        response_type: type[ResponseT],
+    ) -> ServerStreamRecv: ...
+
+
+class AsyncServerStreamingTransport(Protocol):
+    async def server_stream(
+        self,
+        method: Method,
+        request: Message,
+        response_type: type[ResponseT],
+    ) -> ServerStreamRecv: ...
 `
 
 // defKeyword returns the method prefix for async ("async def") or sync ("def").
@@ -99,6 +130,10 @@ func (r *renderer) renderAppClientFlavor(svc *model.Service, isAsync bool) {
 	r.body.WriteString("        self._transport = transport\n\n")
 
 	for _, m := range svc.Methods {
+		if m.Stream == model.ServerStream {
+			r.renderAppClientStreamMethod(svc, m, isAsync)
+			continue
+		}
 		if m.Stream != model.Unary {
 			continue
 		}
@@ -146,6 +181,42 @@ func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method, is
 	}
 
 	r.renderAppClientRawMethod(m, constName, methodName, isAsync)
+}
+
+// renderAppClientStreamMethod renders a server-streaming public method that
+// returns a ServerStreamRecv iterator yielding decoded frames.
+func (r *renderer) renderAppClientStreamMethod(svc *model.Service, m *model.Method, isAsync bool) {
+	if m.InputIsEmpty || m.OutputIsEmpty || m.Input == nil || m.Output == nil {
+		return
+	}
+	constName := appClientMethodConst(svc, m)
+	methodName := pyName(snakeCase(m.Name))
+	r.useMetadataMethod(constName)
+	r.features.wire = true
+	r.features.serverStream = true
+	requestType := r.messageType(m.Input.FullName)
+	outputType := r.messageType(m.Output.FullName)
+	wireOutputType := r.wireModule() + "." + localName(m.Output.FullName)
+	toWire := r.codecRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName))
+	if isAsync {
+		fmt.Fprintf(&r.body, "    async def %s(self, request: %s) -> ServerStreamRecv:\n", methodName, requestType)
+	} else {
+		fmt.Fprintf(&r.body, "    def %s(self, request: %s) -> ServerStreamRecv:\n", methodName, requestType)
+	}
+	r.writeDocstring("        ", fmt.Sprintf("Invoke the %s streaming RPC. Returns a ServerStreamRecv whose recv() yields %s frames.", m.Name, outputType))
+	fmt.Fprintf(&r.body, "        wire = %s(request)\n", toWire)
+	// server_stream is declared on the streaming transport protocol, not
+	// UnaryTransport; cast to the streaming protocol so type checkers accept
+	// the call.
+	transportProtocol := "ServerStreamingTransport"
+	if isAsync {
+		transportProtocol = "AsyncServerStreamingTransport"
+	}
+	// typing.cast(type, value): the protocol type comes first, then the
+	// transport instance, so type checkers accept the server_stream call.
+	fmt.Fprintf(&r.body, "        return %scast(%s, %s).server_stream(%s, wire, %s)\n",
+		awaitPrefix(isAsync), transportProtocol, "self._transport", constName, wireOutputType)
+	r.body.WriteString("\n")
 }
 
 func (r *renderer) renderAppClientRawMethod(m *model.Method, constName, methodName string, isAsync bool) {

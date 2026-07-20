@@ -168,7 +168,6 @@ def to_wire_catalog_operation(value: native.CatalogOperation) -> Any:
         title=value.title,
         description=value.description,
         input_schema=value.input_schema,
-        output_schema=value.output_schema,
         annotations=None
         if value.annotations is None
         else to_wire_operation_annotations(value.annotations),
@@ -179,6 +178,9 @@ def to_wire_catalog_operation(value: native.CatalogOperation) -> Any:
         visible=value.visible,
         transport=value.transport,
         allowed_roles=value.allowed_roles,
+        response=None
+        if value.response is None
+        else to_wire_operation_response_spec(value.response),
     )
 
 
@@ -189,7 +191,6 @@ def from_wire_catalog_operation(value: Any) -> native.CatalogOperation:
         title=value.title,
         description=value.description,
         input_schema=value.input_schema,
-        output_schema=value.output_schema,
         annotations=from_wire_operation_annotations(value.annotations)
         if value.HasField("annotations")
         else None,
@@ -200,6 +201,9 @@ def from_wire_catalog_operation(value: Any) -> native.CatalogOperation:
         visible=value.visible if value.HasField("visible") else None,
         transport=value.transport,
         allowed_roles=list(value.allowed_roles),
+        response=from_wire_operation_response_spec(value.response)
+        if value.HasField("response")
+        else None,
     )
 
 
@@ -397,6 +401,55 @@ def from_wire_invocation_context(value: Any) -> native.InvocationContext:
     )
 
 
+def to_wire_invoke_frame(value: native.InvokeFrame) -> Any:
+    return _app_pb2.InvokeFrame(
+        **to_wire_invoke_frame_value(value.value),
+    )
+
+
+def from_wire_invoke_frame(value: Any) -> native.InvokeFrame:
+    return native.InvokeFrame(
+        value=from_wire_invoke_frame_value(value),
+    )
+
+
+def to_wire_invoke_frame_value(value: native.InvokeFrameValue) -> dict[str, Any]:
+    if isinstance(value, native.InvokeFrameMetadata):
+        return {"metadata": to_wire_invoke_metadata(value.value)}
+    if isinstance(value, native.InvokeFrameData):
+        return {"data": value.value}
+    return {}
+
+
+def from_wire_invoke_frame_value(value: Any) -> native.InvokeFrameValue:
+    case = value.WhichOneof("value")
+    if case == "metadata":
+        return native.InvokeFrameMetadata(
+            value=from_wire_invoke_metadata(value.metadata)
+        )
+    if case == "data":
+        return native.InvokeFrameData(value=value.data)
+    return None
+
+
+def to_wire_invoke_metadata(value: native.InvokeMetadata) -> Any:
+    return _app_pb2.InvokeMetadata(
+        status=value.status,
+        headers={key: to_wire_string_list(item) for key, item in value.headers.items()},
+        media_type=value.media_type,
+    )
+
+
+def from_wire_invoke_metadata(value: Any) -> native.InvokeMetadata:
+    return native.InvokeMetadata(
+        status=value.status,
+        headers={
+            key: from_wire_string_list(item) for key, item in value.headers.items()
+        },
+        media_type=value.media_type,
+    )
+
+
 def to_wire_operation_annotations(value: native.OperationAnnotations) -> Any:
     return _app_pb2.OperationAnnotations(
         read_only_hint=value.read_only_hint,
@@ -421,6 +474,43 @@ def from_wire_operation_annotations(value: Any) -> native.OperationAnnotations:
         if value.HasField("open_world_hint")
         else None,
     )
+
+
+def to_wire_operation_response_spec(value: native.OperationResponseSpec) -> Any:
+    return _app_pb2.OperationResponseSpec(
+        **to_wire_operation_response_spec_kind(value.kind),
+    )
+
+
+def from_wire_operation_response_spec(value: Any) -> native.OperationResponseSpec:
+    return native.OperationResponseSpec(
+        kind=from_wire_operation_response_spec_kind(value),
+    )
+
+
+def to_wire_operation_response_spec_kind(
+    value: native.OperationResponseSpecKind,
+) -> dict[str, Any]:
+    if isinstance(value, native.OperationResponseSpecUnary):
+        return {"unary": to_wire_unary_response_spec(value.value)}
+    if isinstance(value, native.OperationResponseSpecStream):
+        return {"stream": to_wire_stream_response_spec(value.value)}
+    return {}
+
+
+def from_wire_operation_response_spec_kind(
+    value: Any,
+) -> native.OperationResponseSpecKind:
+    case = value.WhichOneof("kind")
+    if case == "unary":
+        return native.OperationResponseSpecUnary(
+            value=from_wire_unary_response_spec(value.unary)
+        )
+    if case == "stream":
+        return native.OperationResponseSpecStream(
+            value=from_wire_stream_response_spec(value.stream)
+        )
+    return None
 
 
 def to_wire_operation_result(value: native.OperationResult) -> Any:
@@ -655,6 +745,24 @@ def from_wire_start_provider_response(value: Any) -> native.StartProviderRespons
     )
 
 
+def to_wire_stream_response_spec(value: native.StreamResponseSpec) -> Any:
+    return _app_pb2.StreamResponseSpec(
+        media_type=value.media_type,
+        item_schema=None
+        if value.item_schema is None
+        else to_wire_struct(value.item_schema),
+    )
+
+
+def from_wire_stream_response_spec(value: Any) -> native.StreamResponseSpec:
+    return native.StreamResponseSpec(
+        media_type=value.media_type,
+        item_schema=from_wire_struct(value.item_schema)
+        if value.HasField("item_schema")
+        else None,
+    )
+
+
 def to_wire_string_list(value: native.StringList) -> Any:
     return _app_pb2.StringList(
         values=value.values,
@@ -704,4 +812,16 @@ def from_wire_subject_permission_context(value: Any) -> native.SubjectPermission
         app=value.app,
         operations=list(value.operations),
         all_operations=value.all_operations,
+    )
+
+
+def to_wire_unary_response_spec(value: native.UnaryResponseSpec) -> Any:
+    return _app_pb2.UnaryResponseSpec(
+        schema=None if value.schema is None else to_wire_struct(value.schema),
+    )
+
+
+def from_wire_unary_response_spec(value: Any) -> native.UnaryResponseSpec:
+    return native.UnaryResponseSpec(
+        schema=from_wire_struct(value.schema) if value.HasField("schema") else None,
     )

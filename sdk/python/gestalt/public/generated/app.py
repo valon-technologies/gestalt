@@ -50,6 +50,44 @@ class AppInvokeRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class InvokeFrameMetadata:
+    value: InvokeMetadata
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeFrameData:
+    value: bytes
+
+
+InvokeFrameValue = InvokeFrameMetadata | InvokeFrameData | None
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeFrame:
+    """InvokeFrame is one frame in a streaming invocation. The first frame is always
+    metadata; subsequent frames carry data bytes produced by the operation
+    handler (after encoding, for typed item streams). A mid-stream error (for
+    example, a validation failure or a recovered panic) may emit a trailing
+    metadata frame with a non-2xx status followed by a data frame carrying a
+    JSON error body, after which the stream ends.
+    """
+
+    value: InvokeFrameValue = None
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeMetadata:
+    """InvokeMetadata is the first frame of a streaming invocation. It carries the
+    HTTP-shaped status, headers, and the response media type (from the
+    operation's StreamResponseSpec).
+    """
+
+    status: int = 0
+    headers: dict[str, StringList] = field(default_factory=dict)
+    media_type: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class OperationAnnotations:
     """OperationAnnotations carries optional host hints about how an operation
     behaves.

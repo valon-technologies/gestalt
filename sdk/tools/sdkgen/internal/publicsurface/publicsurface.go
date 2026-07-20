@@ -22,8 +22,8 @@ type Service struct {
 	PublicMethods []*model.Method
 }
 
-// Build constructs the public view, retaining all PUBLIC unary methods in
-// stable descriptor order.
+// Build constructs the public view, retaining all PUBLIC unary and
+// server-streaming methods in stable descriptor order.
 func Build(schema *model.Schema) *View {
 	if schema == nil {
 		return &View{}
@@ -41,7 +41,7 @@ func Build(schema *model.Schema) *View {
 	for _, svc := range schema.Services {
 		var publicMethods []*model.Method
 		for _, m := range svc.Methods {
-			if !m.Public || m.Stream != model.Unary {
+			if !m.Public || !isPublicStreamable(m.Stream) {
 				continue
 			}
 			publicMethods = append(publicMethods, m)
@@ -66,6 +66,13 @@ func Build(schema *model.Schema) *View {
 	view := &View{Services: services}
 	view.Messages, view.Enums = Reachable(msgIndex, enumIndex, projected.Services)
 	return view
+}
+
+// isPublicStreamable reports whether a method's stream kind is allowed on the
+// public client surface. Unary and server-streaming methods are supported;
+// client-streaming and bidi-streaming methods are not.
+func isPublicStreamable(s model.StreamKind) bool {
+	return s == model.Unary || s == model.ServerStream
 }
 
 // RESTMethodCount returns public methods with HTTP annotations.

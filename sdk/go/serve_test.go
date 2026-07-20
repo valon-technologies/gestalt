@@ -13,9 +13,9 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
-	gproto "google.golang.org/protobuf/proto"
 )
 
 type stubProvider struct{}
@@ -381,8 +381,11 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 			t.Fatalf("AllowedRoles = %#v, want %#v", got, []string{"viewer"})
 		}
 		op := resp.GetCatalog().GetOperations()[0]
-		if op.GetInputSchema() == "" || op.GetOutputSchema() == "" {
-			t.Fatalf("schemas were not preserved: input=%q output=%q", op.GetInputSchema(), op.GetOutputSchema())
+		if op.GetInputSchema() == "" {
+			t.Fatalf("input schema was not preserved: input=%q", op.GetInputSchema())
+		}
+		if got := op.GetResponse(); got == nil || got.GetUnary() == nil || got.GetUnary().GetSchema() == nil {
+			t.Fatalf("output schema was not preserved as unary response: %+v", got)
 		}
 		if got := op.GetParameters()[0].GetDefault().GetNumberValue(); got != 5 {
 			t.Fatalf("parameter default = %v, want 5", got)
@@ -663,4 +666,187 @@ func TestProviderServerStartProvider(t *testing.T) {
 			t.Fatalf("provider config = %#v, want nil", prov.config)
 		}
 	})
+}
+
+func TestProviderServerExecuteStream(t *testing.T) {
+	t.Parallel()
+
+	type streamInput struct {
+		Prefix string `json:"prefix"`
+	}
+
+	router := gestalt.MustRouter(
+		gestalt.RegisterStream(
+			gestalt.StreamOperation[streamInput]{
+				ID:        "events.watch",
+				Method:    http.MethodGet,
+				MediaType: "application/x-ndjson",
+			},
+			func(p *stubProvider, ctx context.Context, in streamInput, req gestalt.Request) (gestalt.StreamReader, error) {
+				return &sliceStreamReader{
+					frames: []*gestalt.InvokeFrame{
+						{Metadata: &gestalt.InvokeMetadata{Status: 200, Headers: http.Header{"Content-Type": []string{"application/x-ndjson"}}, MediaType: "application/x-ndjson"}},
+						{Data: []byte(`{"event":"start","prefix":"` + in.Prefix + `"}` + "\n")},
+						{Data: []byte(`{"event":"end"}` + "\n")},
+					},
+				}, nil
+			},
+		),
+	)
+
+	prov := &stubProvider{}
+	server := gestalt.NewProviderServer(prov, router)
+
+	stream := &executeStreamServerStub{ctx: context.Background()}
+	err := server.ExecuteStream(&proto.ExecuteRequest{
+		Operation: "events.watch",
+		Params: func() *structpb.Struct {
+			params, _ := structpb.NewStruct(map[string]any{"prefix": "hello"})
+			return params
+		}(),
+		Token: "tok",
+	}, stream)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if len(stream.frames) != 3 {
+		t.Fatalf("frames = %d, want 3", len(stream.frames))
+	}
+	meta := stream.frames[0].GetMetadata()
+	if meta == nil {
+		t.Fatal("first frame is not metadata")
+	}
+	if meta.GetStatus() != 200 || meta.GetMediaType() != "application/x-ndjson" {
+		t.Fatalf("metadata = %+v, want status 200 mediaType application/x-ndjson", meta)
+	}
+	if string(stream.frames[1].GetData()) != `{"event":"start","prefix":"hello"}`+"\n" {
+		t.Fatalf("data frame 1 = %q", string(stream.frames[1].GetData()))
+	}
+	if string(stream.frames[2].GetData()) != `{"event":"end"}`+"\n" {
+		t.Fatalf("data frame 2 = %q", string(stream.frames[2].GetData()))
+	}
+}
+
+// sliceStreamReader yields a fixed list of frames then io.EOF.
+type sliceStreamReader struct {
+	frames []*gestalt.InvokeFrame
+	idx    int
+}
+
+func (r *sliceStreamReader) Recv() (*gestalt.InvokeFrame, error) {
+	if r.idx >= len(r.frames) {
+		return nil, io.EOF
+	}
+	frame := r.frames[r.idx]
+	r.idx++
+	return frame, nil
+}
+
+// executeStreamServerStub is a minimal AppProvider_ExecuteStreamServer for tests.
+type executeStreamServerStub struct {
+	proto.AppProvider_ExecuteStreamServer
+	ctx    context.Context
+	frames []*proto.InvokeFrame
+}
+
+func (s *executeStreamServerStub) Context() context.Context { return s.ctx }
+func (s *executeStreamServerStub) Send(frame *proto.InvokeFrame) error {
+	s.frames = append(s.frames, frame)
+	return nil
+}
+
+func TestProviderServerExecuteStreamRecoversPanic(t *testing.T) {
+	t.Parallel()
+
+	type streamInput struct {
+		Prefix string `json:"prefix"`
+	}
+
+	router := gestalt.MustRouter(
+		gestalt.RegisterStream(
+			gestalt.StreamOperation[streamInput]{
+				ID:        "panic.watch",
+				Method:    http.MethodGet,
+				MediaType: "application/x-ndjson",
+			},
+			func(p *stubProvider, ctx context.Context, in streamInput, req gestalt.Request) (gestalt.StreamReader, error) {
+				panic("boom")
+			},
+		),
+	)
+
+	prov := &stubProvider{}
+	server := gestalt.NewProviderServer(prov, router)
+
+	stream := &executeStreamServerStub{ctx: context.Background()}
+	err := server.ExecuteStream(&proto.ExecuteRequest{
+		Operation: "panic.watch",
+		Params: func() *structpb.Struct {
+			params, _ := structpb.NewStruct(map[string]any{"prefix": "hello"})
+			return params
+		}(),
+		Token: "tok",
+	}, stream)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	// A recovered panic must surface as a metadata frame with HTTP 500, not a
+	// nil reader that would panic again on Recv.
+	if len(stream.frames) < 1 {
+		t.Fatalf("frames = %d, want at least 1 (metadata)", len(stream.frames))
+	}
+	meta := stream.frames[0].GetMetadata()
+	if meta == nil {
+		t.Fatalf("first frame is not metadata: %+v", stream.frames[0])
+	}
+	if meta.GetStatus() != http.StatusInternalServerError {
+		t.Fatalf("metadata status = %d, want %d", meta.GetStatus(), http.StatusInternalServerError)
+	}
+}
+
+func TestRouterWithNamePreservesStreamHandlers(t *testing.T) {
+	t.Parallel()
+
+	type streamInput struct{}
+
+	router := gestalt.MustRouter(
+		gestalt.RegisterStream(
+			gestalt.StreamOperation[streamInput]{
+				ID:        "events.watch",
+				Method:    http.MethodGet,
+				MediaType: "application/x-ndjson",
+			},
+			func(p *stubProvider, ctx context.Context, in streamInput, req gestalt.Request) (gestalt.StreamReader, error) {
+				return &sliceStreamReader{
+					frames: []*gestalt.InvokeFrame{
+						{Metadata: &gestalt.InvokeMetadata{Status: 200, MediaType: "application/x-ndjson"}},
+						{Data: []byte(`{"event":"ok"}` + "\n")},
+					},
+				}, nil
+			},
+		),
+	).WithName("renamed")
+
+	prov := &stubProvider{}
+	reader, err := router.ExecuteStream(context.Background(), prov, "events.watch", map[string]any{}, "tok")
+	if err != nil {
+		t.Fatalf("ExecuteStream after WithName: %v", err)
+	}
+	meta, err := reader.Recv()
+	if err != nil {
+		t.Fatalf("Recv metadata: %v", err)
+	}
+	if meta.Metadata == nil || meta.Metadata.Status != 200 {
+		t.Fatalf("metadata = %+v, want status 200", meta)
+	}
+	data, err := reader.Recv()
+	if err != nil {
+		t.Fatalf("Recv data: %v", err)
+	}
+	if string(data.Data) != `{"event":"ok"}`+"\n" {
+		t.Fatalf("data = %q", string(data.Data))
+	}
+	if router.Catalog().Name != "renamed" {
+		t.Fatalf("catalog name = %q, want renamed", router.Catalog().Name)
+	}
 }

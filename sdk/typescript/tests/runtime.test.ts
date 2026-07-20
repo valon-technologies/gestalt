@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { jsonObjectFromStruct } from "../src/protocol.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -195,7 +196,7 @@ export const app = defineApp({
     expect(catalog).toContain("visible: false");
     expect(catalog).toContain("inputSchema:");
     expect(catalog).toContain("projectId:");
-    expect(catalog).toContain("outputSchema:");
+    expect(catalog).toContain("response:");
     expect(catalog).not.toContain("display_name:");
     expect(catalog).not.toContain("input_schema:");
     expect(catalog).not.toContain("output_schema:");
@@ -492,8 +493,13 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const inputSchema = JSON.parse(helloOperation?.inputSchema ?? "{}");
   expect(inputSchema.properties.name.default).toBe("World");
   expect(inputSchema.properties.name.description).toBe("Name to greet");
-  const outputSchema = JSON.parse(helloOperation?.outputSchema ?? "{}");
-  expect(outputSchema.properties.message.type).toBe("string");
+  const unarySchema = helloOperation?.response?.kind?.case === "unary"
+    ? helloOperation.response.kind.value?.schema
+    : undefined;
+  const outputSchema = jsonObjectFromStruct((unarySchema as any) ?? {}) as {
+    properties?: { message?: { type?: string } };
+  };
+  expect(outputSchema.properties?.message?.type).toBe("string");
   const nameParameter = helloOperation?.parameters?.find(
     (parameter: any) => parameter.name === "name",
   );

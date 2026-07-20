@@ -228,6 +228,12 @@ export {
   type SessionCatalogHandler,
 } from "./providers/app.ts";
 export {
+  stream,
+  encoders,
+  type StreamEncoder,
+  type StreamOutput,
+} from "./providers/stream.ts";
+export {
   MigrationError,
   providerMigrationLedgerStore,
   runMigrations,

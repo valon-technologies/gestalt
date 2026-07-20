@@ -12,4 +12,13 @@ import (
 // handwritten publicclient transport layer.
 type UnaryTransport interface {
 	Unary(ctx context.Context, method Method, request, response gproto.Message) error
+	// ServerStream invokes a server-streaming RPC. It returns a RecvCloser
+	// whose Recv method decodes one frame at a time; io.EOF ends the stream.
+	ServerStream(ctx context.Context, method Method, request gproto.Message) (ServerStreamRecvCloser, error)
+}
+
+// ServerStreamRecvCloser is a streaming frame iterator returned by ServerStream.
+type ServerStreamRecvCloser interface {
+	Recv(msg gproto.Message) error
+	Close() error
 }

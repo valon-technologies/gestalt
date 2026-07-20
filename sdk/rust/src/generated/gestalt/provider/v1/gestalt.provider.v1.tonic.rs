@@ -148,6 +148,32 @@ pub mod app_provider_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        /** ExecuteStream is the streaming counterpart of Execute. The first response
+         frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+         A mid-stream error may emit a trailing metadata frame with an error status
+         followed by a JSON error body, after which the stream ends.
+        */
+        pub async fn execute_stream(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ExecuteRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::InvokeFrame>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AppProvider/ExecuteStream",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AppProvider",
+                "ExecuteStream",
+            ));
+            self.inner.server_streaming(req, path, codec).await
+        }
         ///
         pub async fn resolve_http_subject(
             &mut self,
@@ -218,6 +244,20 @@ pub mod app_provider_server {
             &self,
             request: tonic::Request<super::ExecuteRequest>,
         ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status>;
+        /// Server streaming response type for the ExecuteStream method.
+        type ExecuteStreamStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::InvokeFrame, tonic::Status>,
+            > + std::marker::Send
+            + 'static;
+        /** ExecuteStream is the streaming counterpart of Execute. The first response
+         frame is always InvokeMetadata; subsequent frames carry encoded data bytes.
+         A mid-stream error may emit a trailing metadata frame with an error status
+         followed by a JSON error body, after which the stream ends.
+        */
+        async fn execute_stream(
+            &self,
+            request: tonic::Request<super::ExecuteRequest>,
+        ) -> std::result::Result<tonic::Response<Self::ExecuteStreamStream>, tonic::Status>;
         ///
         async fn resolve_http_subject(
             &self,
@@ -415,6 +455,50 @@ pub mod app_provider_server {
                                 max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AppProvider/ExecuteStream" => {
+                    #[allow(non_camel_case_types)]
+                    struct ExecuteStreamSvc<T: AppProvider>(pub Arc<T>);
+                    impl<T: AppProvider>
+                        tonic::server::ServerStreamingService<super::ExecuteRequest>
+                        for ExecuteStreamSvc<T>
+                    {
+                        type Response = super::InvokeFrame;
+                        type ResponseStream = T::ExecuteStreamStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ExecuteRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AppProvider>::execute_stream(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ExecuteStreamSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
@@ -639,6 +723,31 @@ pub mod app_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.App", "Invoke"));
             self.inner.unary(req, path, codec).await
         }
+        /** InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+         REST binding) and shares Invoke's request shape, authorization, and
+         signature policy. The first response frame is always InvokeMetadata;
+         subsequent frames carry data bytes from the operation's stream response.
+         A mid-stream error may emit a trailing metadata frame with an error status
+         followed by a JSON error body, after which the stream ends.
+        */
+        pub async fn invoke_stream(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AppInvokeRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::InvokeFrame>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.App/InvokeStream");
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.App", "InvokeStream"));
+            self.inner.server_streaming(req, path, codec).await
+        }
         ///
         pub async fn invoke_graph_ql(
             &mut self,
@@ -674,6 +783,22 @@ pub mod app_server {
             &self,
             request: tonic::Request<super::AppInvokeRequest>,
         ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status>;
+        /// Server streaming response type for the InvokeStream method.
+        type InvokeStreamStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::InvokeFrame, tonic::Status>,
+            > + std::marker::Send
+            + 'static;
+        /** InvokeStream is the streaming counterpart of Invoke. It is gRPC-only (no
+         REST binding) and shares Invoke's request shape, authorization, and
+         signature policy. The first response frame is always InvokeMetadata;
+         subsequent frames carry data bytes from the operation's stream response.
+         A mid-stream error may emit a trailing metadata frame with an error status
+         followed by a JSON error body, after which the stream ends.
+        */
+        async fn invoke_stream(
+            &self,
+            request: tonic::Request<super::AppInvokeRequest>,
+        ) -> std::result::Result<tonic::Response<Self::InvokeStreamStream>, tonic::Status>;
         ///
         async fn invoke_graph_ql(
             &self,
@@ -787,6 +912,46 @@ pub mod app_server {
                                 max_encoding_message_size,
                             );
                         let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.App/InvokeStream" => {
+                    #[allow(non_camel_case_types)]
+                    struct InvokeStreamSvc<T: App>(pub Arc<T>);
+                    impl<T: App> tonic::server::ServerStreamingService<super::AppInvokeRequest> for InvokeStreamSvc<T> {
+                        type Response = super::InvokeFrame;
+                        type ResponseStream = T::InvokeStreamStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AppInvokeRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut =
+                                async move { <T as App>::invoke_stream(&inner, request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = InvokeStreamSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

@@ -5,7 +5,7 @@
     "rust",
     "typescript"
   ],
-  "grpcMethodCount": 71,
+  "grpcMethodCount": 72,
   "restMethodCount": 41,
   "methods": [
     {
@@ -540,6 +540,37 @@
       },
       "fill": [
         "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "App",
+      "method": "InvokeStream",
+      "streamingKind": "server_stream",
+      "grpcPath": "/gestalt.provider.v1.App/InvokeStream",
+      "symbols": {
+        "go": {
+          "service": "AppClient",
+          "method": "InvokeStream"
+        },
+        "python": {
+          "service": "AppClient",
+          "method": "invoke_stream"
+        },
+        "rust": {
+          "service": "AppClient",
+          "method": "invoke_stream"
+        },
+        "typescript": {
+          "service": "AppClient",
+          "method": "invokeStream"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "reject": [
+        "run_as"
       ],
       "requestPolicy": "omit"
     },

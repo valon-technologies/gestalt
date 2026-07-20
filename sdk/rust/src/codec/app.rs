@@ -6,12 +6,14 @@ use crate::app::{
     AccessContext, AgentInvocationContext, AgentToolRef, AppInvokeGraphQLRequest, AppInvokeRequest,
     Catalog, CatalogOperation, CatalogParameter, ConnectionParamDef, CredentialContext,
     ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse, HTTPSubjectRequest,
-    HostContext, InvocationContext, OperationAnnotations, OperationResult, ProviderContext,
-    ProviderMetadata, RequestContext, RequestMetaContext, ResolveHTTPSubjectRequest,
-    ResolveHTTPSubjectResponse, StartProviderRequest, StartProviderResponse, StringList,
-    SubjectContext, SubjectPermissionContext,
+    HostContext, InvocationContext, InvokeFrame, InvokeFrameValue, InvokeMetadata,
+    OperationAnnotations, OperationResponseSpec, OperationResponseSpecKind, OperationResult,
+    ProviderContext, ProviderMetadata, RequestContext, RequestMetaContext,
+    ResolveHTTPSubjectRequest, ResolveHTTPSubjectResponse, StartProviderRequest,
+    StartProviderResponse, StreamResponseSpec, StringList, SubjectContext,
+    SubjectPermissionContext, UnaryResponseSpec,
 };
-use crate::codec::support::{from_wire_value, to_wire_struct};
+use crate::codec::support::{from_wire_struct, from_wire_value, to_wire_struct};
 use crate::generated::v1;
 
 /// Converts a native `AccessContext` to its wire message.
@@ -116,7 +118,6 @@ pub(crate) fn from_wire_catalog_operation(value: v1::CatalogOperation) -> Catalo
         title: value.title,
         description: value.description,
         input_schema: value.input_schema,
-        output_schema: value.output_schema,
         annotations: value.annotations.map(from_wire_operation_annotations),
         parameters: value
             .parameters
@@ -129,6 +130,7 @@ pub(crate) fn from_wire_catalog_operation(value: v1::CatalogOperation) -> Catalo
         visible: value.visible,
         transport: value.transport,
         allowed_roles: value.allowed_roles,
+        response: value.response.map(from_wire_operation_response_spec),
     }
 }
 
@@ -242,6 +244,35 @@ pub(crate) fn to_wire_invocation_context(value: InvocationContext) -> v1::Invoca
     }
 }
 
+/// Converts a wire `InvokeFrame` to its native message.
+pub(crate) fn from_wire_invoke_frame(value: v1::InvokeFrame) -> InvokeFrame {
+    InvokeFrame {
+        value: value.value.map(from_wire_invoke_frame_value),
+    }
+}
+
+pub(crate) fn from_wire_invoke_frame_value(value: v1::invoke_frame::Value) -> InvokeFrameValue {
+    match value {
+        v1::invoke_frame::Value::Metadata(value) => {
+            InvokeFrameValue::Metadata(from_wire_invoke_metadata(value))
+        }
+        v1::invoke_frame::Value::Data(value) => InvokeFrameValue::Data(value),
+    }
+}
+
+/// Converts a wire `InvokeMetadata` to its native message.
+pub(crate) fn from_wire_invoke_metadata(value: v1::InvokeMetadata) -> InvokeMetadata {
+    InvokeMetadata {
+        status: value.status,
+        headers: value
+            .headers
+            .into_iter()
+            .map(|(key, item)| (key, from_wire_string_list(item)))
+            .collect(),
+        media_type: value.media_type,
+    }
+}
+
 /// Converts a native `OperationAnnotations` to its wire message.
 pub(crate) fn to_wire_operation_annotations(
     value: OperationAnnotations,
@@ -263,6 +294,28 @@ pub(crate) fn from_wire_operation_annotations(
         idempotent_hint: value.idempotent_hint,
         destructive_hint: value.destructive_hint,
         open_world_hint: value.open_world_hint,
+    }
+}
+
+/// Converts a wire `OperationResponseSpec` to its native message.
+pub(crate) fn from_wire_operation_response_spec(
+    value: v1::OperationResponseSpec,
+) -> OperationResponseSpec {
+    OperationResponseSpec {
+        kind: value.kind.map(from_wire_operation_response_spec_kind),
+    }
+}
+
+pub(crate) fn from_wire_operation_response_spec_kind(
+    value: v1::operation_response_spec::Kind,
+) -> OperationResponseSpecKind {
+    match value {
+        v1::operation_response_spec::Kind::Unary(value) => {
+            OperationResponseSpecKind::Unary(from_wire_unary_response_spec(value))
+        }
+        v1::operation_response_spec::Kind::Stream(value) => {
+            OperationResponseSpecKind::Stream(from_wire_stream_response_spec(value))
+        }
     }
 }
 
@@ -380,6 +433,14 @@ pub(crate) fn from_wire_start_provider_response(
     }
 }
 
+/// Converts a wire `StreamResponseSpec` to its native message.
+pub(crate) fn from_wire_stream_response_spec(value: v1::StreamResponseSpec) -> StreamResponseSpec {
+    StreamResponseSpec {
+        media_type: value.media_type,
+        item_schema: value.item_schema.map(from_wire_struct),
+    }
+}
+
 /// Converts a native `StringList` to its wire message.
 pub(crate) fn to_wire_string_list(value: StringList) -> v1::StringList {
     v1::StringList {
@@ -443,5 +504,12 @@ pub(crate) fn from_wire_subject_permission_context(
         app: value.app,
         operations: value.operations,
         all_operations: value.all_operations,
+    }
+}
+
+/// Converts a wire `UnaryResponseSpec` to its native message.
+pub(crate) fn from_wire_unary_response_spec(value: v1::UnaryResponseSpec) -> UnaryResponseSpec {
+    UnaryResponseSpec {
+        schema: value.schema.map(from_wire_struct),
     }
 }
