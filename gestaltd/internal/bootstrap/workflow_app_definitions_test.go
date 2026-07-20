@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 type fakeWorkflowProvider struct {
@@ -162,6 +163,79 @@ func testWorkflowReconcileEnv(t *testing.T) (*config.Config, *workflowRuntime, *
 	provider := &fakeWorkflowProvider{}
 	runtime.PublishProvider("temporal", provider)
 	return cfg, runtime, provider, newAppWorkflowDeclarations()
+}
+
+type principalCapturingProvider struct {
+	*fakeWorkflowProvider
+	getSubject    string
+	getOK         bool
+	applySubject  string
+	applyOK       bool
+	listSubject   string
+	listOK        bool
+	deleteSubject string
+	deleteOK      bool
+}
+
+func (p *principalCapturingProvider) GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	if pp := principal.FromContext(ctx); pp != nil {
+		p.getSubject, p.getOK = pp.SubjectID, true
+	}
+	return p.fakeWorkflowProvider.GetDefinition(ctx, req)
+}
+
+func (p *principalCapturingProvider) ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	if pp := principal.FromContext(ctx); pp != nil {
+		p.applySubject, p.applyOK = pp.SubjectID, true
+	}
+	return p.fakeWorkflowProvider.ApplyDefinition(ctx, req)
+}
+
+func (p *principalCapturingProvider) ListDefinitions(ctx context.Context, req *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error) {
+	if pp := principal.FromContext(ctx); pp != nil {
+		p.listSubject, p.listOK = pp.SubjectID, true
+	}
+	return p.fakeWorkflowProvider.ListDefinitions(ctx, req)
+}
+
+func (p *principalCapturingProvider) DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) error {
+	if pp := principal.FromContext(ctx); pp != nil {
+		p.deleteSubject, p.deleteOK = pp.SubjectID, true
+	}
+	return p.fakeWorkflowProvider.DeleteDefinition(ctx, req)
+}
+
+func TestReconcileWorkflowConfigDefinitions_AttachesBootstrapPrincipal(t *testing.T) {
+	t.Parallel()
+
+	cfg, runtime, inner, decls := testWorkflowReconcileEnv(t)
+	provider := &principalCapturingProvider{fakeWorkflowProvider: inner}
+	runtime.providers["temporal"] = provider
+
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	if !provider.getOK || provider.getSubject != workflowConfigOwnerSubjectID() {
+		t.Fatalf("GetDefinition principal = (%q, %v), want (%q, true)", provider.getSubject, provider.getOK, workflowConfigOwnerSubjectID())
+	}
+	if !provider.applyOK || provider.applySubject != workflowConfigOwnerSubjectID() {
+		t.Fatalf("ApplyDefinition principal = (%q, %v), want (%q, true)", provider.applySubject, provider.applyOK, workflowConfigOwnerSubjectID())
+	}
+	if !provider.listOK || provider.listSubject != workflowConfigOwnerSubjectID() {
+		t.Fatalf("ListDefinitions principal = (%q, %v), want (%q, true)", provider.listSubject, provider.listOK, workflowConfigOwnerSubjectID())
+	}
+	// DeleteDefinition runs only when a definition is removed. Remove the app
+	// config-managed backup definition from the config and reconcile again
+	// to trigger cleanup. App-managed definitions are protected from cleanup
+	// when their app stops reporting, so removing an app decl does not delete.
+	delete(cfg.Workflows.Definitions, "backup")
+	if err := reconcileWorkflowConfigDefinitions(context.Background(), cfg, runtime, decls, nil); err != nil {
+		t.Fatalf("reconcile cleanup: %v", err)
+	}
+	if !provider.deleteOK || provider.deleteSubject != workflowConfigOwnerSubjectID() {
+		t.Fatalf("DeleteDefinition principal = (%q, %v), want (%q, true)", provider.deleteSubject, provider.deleteOK, workflowConfigOwnerSubjectID())
+	}
 }
 
 func TestReconcileAppWorkflowDefinitions(t *testing.T) {

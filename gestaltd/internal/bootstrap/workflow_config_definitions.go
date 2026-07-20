@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -34,6 +35,7 @@ func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config,
 	if cfg == nil || runtime == nil {
 		return nil
 	}
+	ctx = principal.WithPrincipal(ctx, &principal.Principal{SubjectID: workflowConfigOwnerSubjectID()})
 	cfgDesired, err := desiredWorkflowConfigDefinitions(cfg)
 	if err != nil {
 		return err
