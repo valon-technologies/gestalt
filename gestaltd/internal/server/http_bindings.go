@@ -90,7 +90,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				if _, ok := operationIDs[target]; !ok {
 					return nil, fmt.Errorf("http binding %s.%s target %q is not in provider catalog", pluginName, bindingName, target)
 				}
-				if relativePathConflictsWithGenericOperation(relativePath, operationIDs) {
+				if relativePathConflictsWithGenericOperation(relativePath, target, operationIDs) {
 					return nil, fmt.Errorf("http binding %s.%s path %q conflicts with the generic operation route", pluginName, bindingName, binding.Path)
 				}
 			}
@@ -145,9 +145,12 @@ func mountedHTTPBindingPath(pluginName, relativePath string) string {
 	return base + relativePath
 }
 
-func relativePathConflictsWithGenericOperation(relativePath string, operationIDs map[string]struct{}) bool {
+func relativePathConflictsWithGenericOperation(relativePath, target string, operationIDs map[string]struct{}) bool {
 	trimmed := strings.Trim(strings.TrimSpace(relativePath), "/")
 	if trimmed == "" || strings.Contains(trimmed, "/") {
+		return false
+	}
+	if trimmed == target {
 		return false
 	}
 	_, ok := operationIDs[trimmed]

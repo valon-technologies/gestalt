@@ -9826,6 +9826,48 @@ func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 	}
 }
 
+func TestHostedHTTPBinding_AllowsOverrideOfGenericOperationRoute(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "llm",
+			ConnMode: core.ConnectionModeNone,
+		},
+		ops: []core.Operation{
+			{Name: "responses", Method: http.MethodPost},
+		},
+	})
+	cfg := server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   providers,
+		Invoker:     invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		AppDefs: map[string]*config.ProviderEntry{
+			"llm": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"none": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"responses": {
+						Path:      "/responses",
+						Method:    http.MethodPost,
+						Security:  "none",
+						Target:    "responses",
+						Streaming: true,
+					},
+				},
+			},
+		},
+	}
+
+	if _, err := server.New(cfg); err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+}
+
 func TestHostedHTTPBinding_AddsRequestHeadersToWorkflowContext(t *testing.T) {
 	t.Parallel()
 
