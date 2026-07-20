@@ -516,6 +516,7 @@ type HTTPBinding struct {
 	Path           string           `json:"path" yaml:"path"`
 	Method         string           `json:"method" yaml:"method"`
 	CredentialMode ConnectionMode   `json:"credentialMode,omitempty" yaml:"credentialMode,omitempty"`
+	Streaming      bool             `json:"streaming,omitempty" yaml:"streaming,omitempty"`
 	RequestBody    *HTTPRequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
 	Security       string           `json:"security,omitempty" yaml:"security,omitempty"`
 	Target         string           `json:"target" yaml:"target"`

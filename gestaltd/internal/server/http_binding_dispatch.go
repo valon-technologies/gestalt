@@ -62,7 +62,10 @@ func httpBindingContextValue(binding MountedHTTPBinding, r *http.Request, verifi
 	return map[string]any{"http": value}
 }
 
-func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding MountedHTTPBinding, r *http.Request, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*core.OperationResult, error) {
+// httpBindingInvocation resolves a binding request to an InvokeOutcome,
+// dispatching through the streaming-aware entry point when available and
+// falling back to unary Invoke otherwise. The caller branches on IsStream.
+func (s *Server) httpBindingInvocation(ctx context.Context, binding MountedHTTPBinding, r *http.Request, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*invocation.InvokeOutcome, error) {
 	params := map[string]any{}
 	if parsed != nil && parsed.Params != nil {
 		params = cloneAnyMap(parsed.Params)
@@ -78,7 +81,18 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 	if binding.CredentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, binding.CredentialMode)
 	}
-	return s.invoker.Invoke(ctx, p, binding.AppName, "", binding.Target, params)
+	if !binding.Streaming {
+		result, err := s.invoker.Invoke(ctx, p, binding.AppName, "", binding.Target, params)
+		if err != nil {
+			return nil, err
+		}
+		return &invocation.InvokeOutcome{Unary: result}, nil
+	}
+	maybeInvoker, ok := s.invoker.(invocation.MaybeStreamingInvoker)
+	if !ok {
+		return nil, invocation.ErrStreamingUnsupported
+	}
+	return maybeInvoker.InvokeMaybeStream(ctx, p, binding.AppName, "", binding.Target, params)
 }
 
 func cloneAnyMap(src map[string]any) map[string]any {

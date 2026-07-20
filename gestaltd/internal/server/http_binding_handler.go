@@ -58,12 +58,16 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 		return
 	}
 
-	result, err := s.httpBindingOperationInvocation(r.Context(), binding, r, resolvedPrincipal, verified, parsed)
+	outcome, err := s.httpBindingInvocation(r.Context(), binding, r, resolvedPrincipal, verified, parsed)
 	if err != nil {
 		s.writeInvocationError(w, r, binding.AppName, binding.Target, err)
 		return
 	}
-	writeOperationResult(w, result)
+	if outcome.IsStream() {
+		writeStreamingOperationResult(w, r, outcome.Stream)
+		return
+	}
+	writeOperationResult(w, outcome.Unary)
 }
 
 func readHTTPBindingBody(r *http.Request) ([]byte, error) {

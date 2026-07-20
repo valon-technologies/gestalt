@@ -105,6 +105,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				Path:           mountedHTTPBindingPath(pluginName, relativePath),
 				Method:         method,
 				Target:         target,
+				Streaming:      binding.Streaming,
 				CredentialMode: core.ConnectionMode(binding.CredentialMode),
 				RequestBody:    binding.RequestBody,
 				SecurityName:   securityName,
