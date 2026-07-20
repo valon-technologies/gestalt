@@ -1900,12 +1900,9 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 		return &coretesting.StubSecretManager{Secrets: map[string]string{}}, nil
 	}
 	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
-		raw := &bootstrapTransportRecordingAuthorizationProvider{transport: deps.ProviderTransport}
-		guardedTransport := providergateway.NewProviderGatewayTransport()
-		guardedTransport.SetAuthorizationProvider(raw)
-		guarded := &bootstrapTransportRecordingAuthorizationProvider{transport: guardedTransport}
-		built = append(built, raw, guarded)
-		return providerdrivers.AuthorizationBuildResult{Raw: raw, Guarded: guarded}, nil
+		provider := &bootstrapTransportRecordingAuthorizationProvider{transport: deps.ProviderTransport}
+		built = append(built, provider)
+		return providerdrivers.AuthorizationBuildResult{Raw: provider}, nil
 	}
 
 	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -1914,29 +1911,18 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	}
 	t.Cleanup(func() { _ = result.Close(context.Background()) })
 
-	if len(built) != 2 {
-		t.Fatalf("authorization providers built = %d, want 2", len(built))
+	if len(built) != 1 {
+		t.Fatalf("authorization providers built = %d, want 1", len(built))
 	}
-	rawProvider := built[0]
-	guardedProvider := built[1]
-	if _, ok := rawProvider.transport.(providergateway.DirectTransport); !ok {
-		t.Fatalf("raw authorization provider transport = %T, want providergateway.DirectTransport", rawProvider.transport)
+	provider := built[0]
+	if _, ok := provider.transport.(providergateway.DirectTransport); !ok {
+		t.Fatalf("authorization provider transport = %T, want providergateway.DirectTransport", provider.transport)
 	}
-	transportGateway, ok := guardedProvider.transport.(*providergateway.ProviderGatewayTransport)
-	if !ok {
-		t.Fatalf("guarded authorization provider transport = %T, want *providergateway.ProviderGatewayTransport", guardedProvider.transport)
+	if provider.setAuthorizationState == nil {
+		t.Fatal("authorization provider did not receive SetAuthorizationState")
 	}
-	if rawProvider.setAuthorizationState == nil {
-		t.Fatal("raw authorization provider did not receive SetAuthorizationState")
-	}
-	if guardedProvider.setAuthorizationState != nil {
-		t.Fatal("guarded authorization provider unexpectedly received SetAuthorizationState")
-	}
-	if result.Authorization["authz"] != rawProvider {
-		t.Fatal("bootstrapped authorization provider is not the raw runtime authorization provider")
-	}
-	if transportGateway != guardedProvider.transport {
-		t.Fatal("guarded authorization provider was not built with the runtime provider gateway")
+	if result.Authorization["authz"] != provider {
+		t.Fatal("bootstrapped authorization provider is not the runtime authorization provider")
 	}
 }
 

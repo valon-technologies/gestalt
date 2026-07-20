@@ -18,8 +18,7 @@ type AuthorizationDeps struct {
 }
 
 type AuthorizationBuildResult struct {
-	Raw     core.AuthorizationProvider
-	Guarded core.AuthorizationProvider
+	Raw core.AuthorizationProvider
 }
 
 func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps AuthorizationDeps) (AuthorizationBuildResult, error) {
@@ -67,18 +66,7 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		return AuthorizationBuildResult{}, err
 	}
 
-	gatewayTransport := providergateway.NewProviderGatewayTransport()
-	gatewayTransport.SetAuthorizationProvider(raw)
-
-	execCfg.Transport = gatewayTransport
-	guarded, err := authorizationservice.NewFromExecutable(exec, execCfg)
-	if err != nil {
-		_ = exec.Close()
-		return AuthorizationBuildResult{}, err
-	}
-
 	return AuthorizationBuildResult{
-		Raw:     raw,
-		Guarded: guarded,
+		Raw: raw,
 	}, nil
 }
