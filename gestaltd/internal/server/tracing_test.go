@@ -197,28 +197,6 @@ func findSpan(spans tracetest.SpanStubs, name string) *tracetest.SpanStub {
 	return nil
 }
 
-func findSpanWithAttr(spans tracetest.SpanStubs, name string, key string, value string) *tracetest.SpanStub {
-	for i := range spans {
-		if spans[i].Name != name {
-			continue
-		}
-		for _, attr := range spans[i].Attributes {
-			if string(attr.Key) == key && attr.Value.AsString() == value {
-				return &spans[i]
-			}
-		}
-	}
-	return nil
-}
-
-func spanNames(spans tracetest.SpanStubs) []string {
-	names := make([]string, 0, len(spans))
-	for _, span := range spans {
-		names = append(names, span.Name)
-	}
-	return names
-}
-
 func findSpanPrefix(spans tracetest.SpanStubs, prefix string) *tracetest.SpanStub {
 	for i := range spans {
 		if strings.HasPrefix(spans[i].Name, prefix) {
