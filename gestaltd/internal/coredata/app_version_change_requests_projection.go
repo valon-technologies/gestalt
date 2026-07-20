@@ -91,6 +91,9 @@ func knownVersionsFromRequests(requests []*core.AppVersionChangeRequest) []*core
 		if out[i].AppName != out[j].AppName {
 			return out[i].AppName < out[j].AppName
 		}
+		if !out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].UpdatedAt.Before(out[j].UpdatedAt)
+		}
 		return out[i].Version < out[j].Version
 	})
 	return out

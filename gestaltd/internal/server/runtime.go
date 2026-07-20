@@ -132,7 +132,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
-	catalogPoller := startAppRegistryCatalogPoller(ctx, result, restartDelay, disableRestartDelay)
+	catalogPoller := newAppRegistryCatalogPoller(result, restartDelay, disableRestartDelay)
 	if catalogPoller != nil {
 		defer catalogPoller.Stop()
 	}
@@ -205,7 +205,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 		})
 	}
 
-	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady)
+	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, catalogPoller, devSupervisor, onReady)
 }
 
 type indexedDBPinger interface {
@@ -232,7 +232,7 @@ func runtimeReadinessStatus(workflowProvidersReady <-chan struct{}, services ind
 	}
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor, readyCallback func()) error {
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, catalogPoller *appregistry.CatalogPoller, devSupervisor *providerdev.Supervisor, readyCallback func()) error {
 	if devSupervisor != nil {
 		defer devSupervisor.Stop()
 	}
@@ -288,6 +288,9 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 				workflowErr <- err
 			}
 			return
+		}
+		if catalogPoller != nil {
+			catalogPoller.Start(ctx)
 		}
 		if err := result.StartWorkflowProviders(ctx); err != nil {
 			workflowErr <- err
@@ -421,7 +424,7 @@ func (h *switchableHandler) Set(handler http.Handler) {
 	h.mu.Unlock()
 }
 
-func startAppRegistryCatalogPoller(ctx context.Context, result *bootstrap.Result, restartDelay time.Duration, disableRestartDelay bool) *appregistry.CatalogPoller {
+func newAppRegistryCatalogPoller(result *bootstrap.Result, restartDelay time.Duration, disableRestartDelay bool) *appregistry.CatalogPoller {
 	if result == nil || result.Services == nil {
 		return nil
 	}
@@ -442,7 +445,6 @@ func startAppRegistryCatalogPoller(ctx context.Context, result *bootstrap.Result
 		DisableRestartDelay: disableRestartDelay,
 		RestartReady:        result.StartupProvidersReady,
 	})
-	poller.Start(ctx)
 	return poller
 }
 
