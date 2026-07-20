@@ -11,11 +11,11 @@ import (
 
 // IndexedDBClient is the transport-neutral client for the public IndexedDB surface.
 type IndexedDBClient struct {
-	transport UnaryTransport
+	transport Transport
 }
 
 // NewIndexedDBClient creates a IndexedDBClient over the given transport.
-func NewIndexedDBClient(transport UnaryTransport) *IndexedDBClient {
+func NewIndexedDBClient(transport Transport) *IndexedDBClient {
 	return &IndexedDBClient{transport: transport}
 }
 

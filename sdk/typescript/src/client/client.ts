@@ -18,8 +18,8 @@ import { IdentityClient } from "./generated/identity_client.ts";
 import { IndexedDBClient } from "./generated/indexedDB_client.ts";
 import type { WorkflowClientREST } from "./generated/workflow_client.ts";
 import { WorkflowClient } from "./generated/workflow_client.ts";
-import { createRestUnaryTransport } from "./rest_transport.ts";
-import type { UnaryTransport } from "./generated/unary_transport.ts";
+import { createRestTransport } from "./rest_transport.ts";
+import type { Transport } from "./generated/transport.ts";
 
 export {
   bearer,
@@ -94,7 +94,7 @@ interface CoreGestaltClients {
   readonly authorization: AuthorizationClient;
 }
 
-function bindCoreClients(transport: UnaryTransport): CoreGestaltClients {
+function bindCoreClients(transport: Transport): CoreGestaltClients {
   return {
     app: new AppClient(transport),
     agent: new AgentClient(transport),
@@ -110,7 +110,7 @@ function asRestGestaltClient(
   return clients;
 }
 
-function bindGrpcClients(transport: UnaryTransport): Omit<GrpcGestaltClient, "close"> {
+function bindGrpcClients(transport: Transport): Omit<GrpcGestaltClient, "close"> {
   return {
     ...bindCoreClients(transport),
     indexedDB: new IndexedDBClient(transport),
@@ -132,12 +132,12 @@ export async function createGestaltClient(
 ): Promise<GestaltClient | RestGestaltClient | GrpcGestaltClient> {
   const baseUrl = normalizeAddress(options.address);
   const auth = authToProvider(options.auth);
-  let transport: UnaryTransport;
+  let transport: Transport;
   let close: () => Promise<void> = async () => {};
 
   if (options.transport.kind === "rest") {
     const restOptions = options as RestClientOptions;
-    transport = createRestUnaryTransport({
+    transport = createRestTransport({
       baseUrl,
       auth,
       ...(restOptions.fetch !== undefined ? { fetch: restOptions.fetch } : {}),
@@ -149,8 +149,8 @@ export async function createGestaltClient(
   }
 
   if (options.transport.kind === "grpc") {
-    const { createGrpcUnaryTransport } = await import("./grpc_transport.ts");
-    const grpcTransport = await createGrpcUnaryTransport({
+    const { createGrpcTransport } = await import("./grpc_transport.ts");
+    const grpcTransport = await createGrpcTransport({
       baseUrl,
       auth,
     });

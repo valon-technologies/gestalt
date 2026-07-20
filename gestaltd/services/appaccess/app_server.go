@@ -157,6 +157,54 @@ func (s *AppServer) InvokeStream(req *proto.AppInvokeRequest, stream proto.App_I
 	}
 }
 
+// InvokeMaybeStream resolves and authorizes a request the same way Invoke
+// does, then dispatches to the broker unified unary-or-stream entry point.
+func (s *AppServer) InvokeMaybeStream(ctx context.Context, req *proto.AppInvokeRequest) (*invocation.InvokeOutcome, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	targetApp := strings.TrimSpace(req.GetApp())
+	targetOperation := strings.TrimSpace(req.GetOperation())
+	if targetApp == "" {
+		return nil, status.Error(codes.InvalidArgument, "app is required")
+	}
+	if targetOperation == "" {
+		return nil, status.Error(codes.InvalidArgument, "operation is required")
+	}
+	callCtx, err := s.requestContextForInvoke(ctx, req.GetContext(), targetApp, targetOperation, req.GetConnection(), req.GetInstance(), req.GetCredentialMode(), req.GetRunAs())
+	if err != nil {
+		return nil, err
+	}
+	invokeCtx, instance, err := prepareInvocationSelectors(ctx, callCtx, req.GetConnection(), req.GetInstance())
+	if err != nil {
+		return nil, err
+	}
+	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
+	params := map[string]any{}
+	if raw := req.GetParams(); raw != nil {
+		params = raw.AsMap()
+	}
+	invokePrincipal := callCtx.principal
+	invokeCtx, invokePrincipal = invocation.ApplyDelegation(
+		invokeCtx,
+		invokePrincipal,
+		callCtx.delegationRunAs,
+	)
+	maybeInvoker, ok := s.invoker.(invocation.MaybeStreamingInvoker)
+	if !ok {
+		result, err := s.invoker.Invoke(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
+		if err != nil {
+			return nil, invocationStatusError(err)
+		}
+		return &invocation.InvokeOutcome{Unary: result}, nil
+	}
+	outcome, err := maybeInvoker.InvokeMaybeStream(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
+	if err != nil {
+		return nil, appStreamError(err)
+	}
+	return outcome, nil
+}
+
 // invokeFrameToProto converts a core InvokeFrame into one or two proto
 // InvokeFrame messages. A frame with both Metadata and Data (used by error
 // readers) yields a metadata frame followed by a data frame so the JSON error

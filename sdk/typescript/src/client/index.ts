@@ -44,4 +44,4 @@ export { WorkflowClient } from "./generated/workflow_client.ts";
 export { PUBLIC_METHODS } from "./generated/methods.ts";
 export type { PublicMethod, PublicMethodHttp } from "./generated/methods.ts";
 export type * from "./generated/types.ts";
-export type { UnaryTransport, PublicUnaryCallOptions } from "./generated/unary_transport.ts";
+export type { Transport, PublicUnaryCallOptions } from "./generated/transport.ts";

@@ -8,10 +8,10 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
 
-func (r *renderer) renderUnaryTransport() {
-	r.body.WriteString("// UnaryTransport performs one unary public RPC. Implementations live in the\n")
+func (r *renderer) renderTransport() {
+	r.body.WriteString("// Transport performs public RPCs. Implementations live in the Implementations live in the\n")
 	r.body.WriteString("// handwritten publicclient transport layer.\n")
-	r.body.WriteString("type UnaryTransport interface {\n")
+	r.body.WriteString("type Transport interface {\n")
 	r.body.WriteString("\tUnary(ctx context.Context, method Method, request, response gproto.Message) error\n")
 	r.body.WriteString("\t// ServerStream invokes a server-streaming RPC. It returns a RecvCloser\n")
 	r.body.WriteString("\t// whose Recv method decodes one frame at a time; io.EOF ends the stream.\n")
@@ -25,7 +25,7 @@ func (r *renderer) renderUnaryTransport() {
 	r.body.WriteString("}\n")
 }
 
-func (r *renderer) assembleUnaryTransport() string {
+func (r *renderer) assembleTransport() string {
 	return `package generated
 
 import (
@@ -45,10 +45,10 @@ func (r *renderer) renderServiceClient(svc *model.Service) {
 	clientName := localName(svc.FullName) + "Client"
 	r.body.WriteString("// " + clientName + " is the transport-neutral client for the public " + svc.Name + " surface.\n")
 	fmt.Fprintf(&r.body, "type %s struct {\n", clientName)
-	r.body.WriteString("\ttransport UnaryTransport\n")
+	r.body.WriteString("\ttransport Transport\n")
 	r.body.WriteString("}\n\n")
 	fmt.Fprintf(&r.body, "// New%s creates a %s over the given transport.\n", clientName, clientName)
-	fmt.Fprintf(&r.body, "func New%s(transport UnaryTransport) *%s {\n", clientName, clientName)
+	fmt.Fprintf(&r.body, "func New%s(transport Transport) *%s {\n", clientName, clientName)
 	fmt.Fprintf(&r.body, "\treturn &%s{transport: transport}\n", clientName)
 	r.body.WriteString("}\n\n")
 

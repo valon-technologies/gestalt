@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { bearer, createGestaltClient } from "../src/client.ts";
 import { GestaltErrorCode } from "../src/client/runtime/rpc_support.ts";
 import type { PublicAppInvokeRequest } from "../src/client/generated/types.ts";
-import { createRestUnaryTransport } from "../src/rest_transport.ts";
+import { createRestTransport } from "../src/rest_transport.ts";
 import {
   AppInvokeRequestSchema,
   OperationResultSchema,
@@ -68,7 +68,7 @@ test("REST transport surfaces platform errors from gateway responses", async () 
   const gestaltError = platformCase.response.gestaltError;
   if (!gestaltError) throw new Error("missing gestalt error fixture");
 
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: bearer(() => "token"),
     fetch: (async () =>

@@ -11,11 +11,11 @@ import (
 
 // WorkflowClient is the transport-neutral client for the public Workflow surface.
 type WorkflowClient struct {
-	transport UnaryTransport
+	transport Transport
 }
 
 // NewWorkflowClient creates a WorkflowClient over the given transport.
-func NewWorkflowClient(transport UnaryTransport) *WorkflowClient {
+func NewWorkflowClient(transport Transport) *WorkflowClient {
 	return &WorkflowClient{transport: transport}
 }
 

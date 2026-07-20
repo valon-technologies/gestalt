@@ -55,13 +55,10 @@ import type {
   PublicExternalCredentialsResolveCredentialRequest,
   PublicExternalCredentialsExchangeCredentialRequest,
 } from "./types.ts";
-import type {
-  UnaryTransport,
-  PublicUnaryCallOptions,
-} from "./unary_transport.ts";
+import type { Transport, PublicUnaryCallOptions } from "./transport.ts";
 
 export class ExternalCredentialsClient {
-  constructor(private readonly transport: UnaryTransport) {}
+  constructor(private readonly transport: Transport) {}
 
   async createCredential(
     request: PublicExternalCredentialsCreateCredentialRequest,

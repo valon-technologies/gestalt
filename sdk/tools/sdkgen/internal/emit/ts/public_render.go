@@ -288,11 +288,11 @@ func (c *publicWireConverter) requestTypesSet() map[string]bool {
 	return out
 }
 
-func renderPublicUnaryTransport() string {
+func renderPublicTransport() string {
 	return `/**
- * Transport-neutral unary RPC interface for public clients.
+ * Transport-neutral RPC interface for public clients.
  *
- * @module client/generated/unary_transport
+ * @module client/generated/transport
  */
 
 import type { DescMessage, Message } from "@bufbuild/protobuf";
@@ -304,7 +304,7 @@ export interface PublicUnaryCallOptions {
   timeoutMs?: number;
 }
 
-export interface UnaryTransport {
+export interface Transport {
   unary<Output extends Message>(
     method: PublicMethod,
     request: Message,
@@ -314,9 +314,8 @@ export interface UnaryTransport {
   ): Promise<Output>;
 
   // serverStream invokes a server-streaming method and returns an async
-  // iterable of decoded response frames. The first frame is metadata. It is
-  // optional because REST-only transports do not support streaming.
-  serverStream?<Output extends Message>(
+  // iterable of decoded response frames. The first frame is metadata.
+  serverStream<Output extends Message>(
     method: PublicMethod,
     request: Message,
     inputSchema: DescMessage,
@@ -432,10 +431,10 @@ func renderPublicServiceClient(svc *model.Service, paths PublicImports) string {
 	if len(requestTypes) > 0 {
 		b.WriteString("import type {\n  " + strings.Join(requestTypes, ",\n  ") + ",\n} from \"./types.ts\";\n")
 	}
-	b.WriteString("import type { UnaryTransport, PublicUnaryCallOptions } from \"./unary_transport.ts\";\n\n")
+	b.WriteString("import type { Transport, PublicUnaryCallOptions } from \"./transport.ts\";\n\n")
 
 	fmt.Fprintf(&b, "export class %s {\n", clientName)
-	b.WriteString("  constructor(private readonly transport: UnaryTransport) {}\n\n")
+	b.WriteString("  constructor(private readonly transport: Transport) {}\n\n")
 	serviceKey := lowerFirst(svc.Name)
 	for _, m := range svc.Methods {
 		renderPublicServiceClientMethod(&b, svc, m, serviceKey, paths)
@@ -623,7 +622,6 @@ func renderPublicServiceClientStreamMethod(b *strings.Builder, svc *model.Servic
 
 	fmt.Fprintf(b, "  %s(request: %s, callOptions?: PublicUnaryCallOptions): AsyncIterable<%s> {\n",
 		methodKey, typeName, outputNative)
-	fmt.Fprintf(b, "    if (this.transport.serverStream === undefined) {\n      throw new Error(\"streaming is not supported by this transport\");\n    }\n")
 	fmt.Fprintf(b, "    const frames = this.transport.serverStream(\n      %s,\n      %s,\n      %s,\n      %s,\n      callOptions,\n    );\n",
 		methodRef, wireExpr, inputSchema, outputSchema)
 	fmt.Fprintf(b, "    return mapServerStreamFrames(frames, (f) => %s(f as Parameters<typeof %s>[0]));\n  }\n\n",

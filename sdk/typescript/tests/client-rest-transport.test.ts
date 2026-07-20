@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 
 import {
   AppInvokeRequestSchema,
+  InvokeFrameSchema,
   OperationResultSchema,
   type OperationResult,
 } from "../src/internal/gen/v1/app_pb.ts";
@@ -11,7 +12,7 @@ import { createGestaltClient, rest } from "../src/client/client.ts";
 import { GestaltErrorCode } from "../src/client/errors.ts";
 import { PUBLIC_METHODS } from "../src/client/generated/methods.ts";
 import { buildRestPath } from "../src/client/generated/rest_request_mapping.ts";
-import { createRestUnaryTransport } from "../src/client/rest_transport.ts";
+import { createRestTransport } from "../src/client/rest_transport.ts";
 
 test("REST transport maps protobuf JSON requests and gateway errors", async () => {
   const calls: Array<{
@@ -22,7 +23,7 @@ test("REST transport maps protobuf JSON requests and gateway errors", async () =
     credentials?: RequestCredentials;
   }> = [];
 
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token-123")),
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -85,7 +86,7 @@ test("REST transport maps protobuf JSON requests and gateway errors", async () =
   expect(response.status).toBe(418);
   expect(new TextDecoder().decode(response.body)).toBe("teapot");
 
-  const gatewayTransport = createRestUnaryTransport({
+  const gatewayTransport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token")),
     fetch: (async () =>
@@ -112,7 +113,7 @@ test("REST transport maps protobuf JSON requests and gateway errors", async () =
 test("bearer rotation is evaluated per invocation", async () => {
   let token = "first";
   const authorizations: string[] = [];
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(async () => token)),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -155,7 +156,7 @@ test("bearer rotation is evaluated per invocation", async () => {
 
 test("unauthenticated auth omits Authorization header", async () => {
   const seen: Array<string | null> = [];
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(unauthenticated()),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -226,7 +227,7 @@ test("REST path templates use sdkgen path field metadata", () => {
 
 test("POST requests append sdkgen query fields", async () => {
   const seenUrls: string[] = [];
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token")),
     fetch: (async (input: RequestInfo | URL) => {
@@ -269,7 +270,7 @@ test("POST requests append sdkgen query fields", async () => {
 });
 
 test("REST transport maps malformed success bodies to GestaltError", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token")),
     fetch: (async () =>
@@ -307,7 +308,7 @@ test("REST transport propagates cancellation and deadlines", async () => {
   const controller = new AbortController();
   controller.abort();
 
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token")),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -345,7 +346,7 @@ test("REST transport propagates cancellation and deadlines", async () => {
     code: GestaltErrorCode.Canceled,
   });
 
-  const slowTransport = createRestUnaryTransport({
+  const slowTransport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token")),
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -389,7 +390,7 @@ test("REST transport propagates cancellation and deadlines", async () => {
 
 test("timeout interrupts a hanging bearer token provider", async () => {
   let tokenCalls = 0;
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(
       bearer(async () => {
@@ -433,7 +434,7 @@ test("bearer provider is not awaited after cancellation", async () => {
   const controller = new AbortController();
   controller.abort();
 
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(
       bearer(async () => {
@@ -475,7 +476,7 @@ test("arbitrary abort reasons map to Canceled", async () => {
   const controller = new AbortController();
   controller.abort(new Error("stop"));
 
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(unauthenticated()),
     fetch: (async () => {
@@ -508,7 +509,7 @@ test("arbitrary abort reasons map to Canceled", async () => {
 });
 
 test("REST transport maps body-read aborts to GestaltError", async () => {
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: "https://gestalt.test/",
     auth: authToProvider(bearer(() => "token")),
     fetch: (async () =>
@@ -541,4 +542,124 @@ test("REST transport maps body-read aborts to GestaltError", async () => {
     name: "GestaltError",
     code: GestaltErrorCode.Canceled,
   });
+});
+
+test("REST transport serverStream posts to Invoke path and yields metadata + data frames", async () => {
+  const calls: Array<{
+    method: string;
+    url: string;
+    body: string;
+    authorization?: string;
+  }> = [];
+
+  const ndjsonBody = `{"event":"start"}\n{"event":"end"}\n`;
+  const encoder = new TextEncoder();
+
+  const transport = createRestTransport({
+    baseUrl: "https://gestalt.test/",
+    auth: authToProvider(bearer(() => "token-stream")),
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        method: init?.method ?? "GET",
+        url: String(input),
+        body: typeof init?.body === "string" ? init.body : "",
+        ...(init?.headers instanceof Headers &&
+        init.headers.get("Authorization")
+          ? { authorization: init.headers.get("Authorization")! }
+          : {}),
+      });
+      return new Response(ndjsonBody, {
+        status: 200,
+        headers: { "Content-Type": "application/x-ndjson" },
+      });
+    }) as unknown as typeof fetch,
+  });
+
+  const request = create(AppInvokeRequestSchema, {
+    app: "stream-app",
+    operation: "events.watch",
+    params: {},
+    connection: "",
+    instance: "",
+    idempotencyKey: "",
+    credentialMode: "",
+  });
+
+  const frames: Array<{ case: string; data?: Uint8Array | undefined; mediaType?: string | undefined }> =
+    [];
+  const stream = transport.serverStream!(
+    PUBLIC_METHODS.app.invokeStream,
+    request,
+    AppInvokeRequestSchema,
+    InvokeFrameSchema,
+  );
+  for await (const frame of stream) {
+    const wire = frame as {
+      value?: { case: string; value: unknown };
+    };
+    const c = wire.value?.case ?? "unknown";
+    if (c === "metadata") {
+      const meta = wire.value!.value as { mediaType?: string };
+      frames.push({ case: "metadata", mediaType: meta.mediaType });
+    } else if (c === "data") {
+      frames.push({ case: "data", data: wire.value!.value as Uint8Array });
+    } else {
+      frames.push({ case: c });
+    }
+  }
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.method).toBe("POST");
+  expect(calls[0]?.url).toBe(
+    "https://gestalt.test/api/v2/app/stream-app/operations/events.watch",
+  );
+  expect(calls[0]?.authorization).toBe("Bearer token-stream");
+
+  expect(frames[0]?.case).toBe("metadata");
+  expect(frames[0]?.mediaType).toBe("application/x-ndjson");
+
+  const dataFrames = frames.filter((f) => f.case === "data");
+  expect(dataFrames.length).toBeGreaterThan(0);
+  const reassembled = dataFrames
+    .map((f) => new TextDecoder().decode(f.data))
+    .join("");
+  expect(reassembled).toBe(ndjsonBody);
+});
+
+test("REST transport serverStream throws GestaltError on non-2xx", async () => {
+  const transport = createRestTransport({
+    baseUrl: "https://gestalt.test/",
+    auth: authToProvider(bearer(() => "token-err")),
+    fetch: (async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return new Response(
+        JSON.stringify({ error: "not found", code: "NotFound" }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch,
+  });
+
+  const request = create(AppInvokeRequestSchema, {
+    app: "err-app",
+    operation: "missing",
+    params: {},
+    connection: "",
+    instance: "",
+    idempotencyKey: "",
+    credentialMode: "",
+  });
+
+  let thrown = false;
+  try {
+    const stream = transport.serverStream!(
+      PUBLIC_METHODS.app.invokeStream,
+      request,
+      AppInvokeRequestSchema,
+      InvokeFrameSchema,
+    );
+    for await (const _frame of stream) {
+    }
+  } catch {
+    thrown = true;
+  }
+  expect(thrown).toBe(true);
 });

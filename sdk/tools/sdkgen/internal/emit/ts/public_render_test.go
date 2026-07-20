@@ -218,13 +218,13 @@ func TestRenderPublicRestRequestMappingUsesPublicMethodMetadata(t *testing.T) {
 func TestRenderPublicUnaryTransportIncludesCallOptions(t *testing.T) {
 	t.Parallel()
 
-	out := renderPublicUnaryTransport()
+	out := renderPublicTransport()
 	for _, want := range []string{
 		"export interface PublicUnaryCallOptions",
 		"callOptions?: PublicUnaryCallOptions",
 	} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in unary_transport:\n%s", want, out)
+			t.Fatalf("missing %q in transport:\n%s", want, out)
 		}
 	}
 }
@@ -235,7 +235,7 @@ func TestRenderPublicTransportSupportServerImports(t *testing.T) {
 	out := renderPublicTransportSupport(ServerPublicImports())
 	for _, want := range []string{
 		`from "../../rpc_support.ts"`,
-		`from "./unary_transport.ts"`,
+		`from "./transport.ts"`,
 		"export function resolveEffectiveAbortSignal",
 		"export async function raceWithAbort",
 		"export function toTransportGestaltError",

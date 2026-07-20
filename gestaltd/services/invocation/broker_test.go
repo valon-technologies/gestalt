@@ -683,3 +683,161 @@ func (r *sliceCoreStreamReader) Recv() (*core.InvokeFrame, error) {
 	r.idx++
 	return f, nil
 }
+
+func TestBrokerInvokeMaybeStreamDispatchesStreaming(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "events",
+		Operations: []catalog.CatalogOperation{{
+			ID:        "events.watch",
+			Method:    "GET",
+			Transport: catalog.TransportApp,
+			Response: &catalog.OperationResponseSpec{
+				Stream: &catalog.StreamResponseSpec{MediaType: "application/x-ndjson"},
+			},
+		}},
+	}
+	provider := &streamingStub{
+		StubIntegration: &coretesting.StubIntegration{
+			N:          "events",
+			ConnMode:   core.ConnectionModeNone,
+			CatalogVal: cat,
+		},
+		executeStream: func(_ context.Context, op string, _ map[string]any, _ string) (core.StreamReader, error) {
+			return &sliceCoreStreamReader{
+				frames: []*core.InvokeFrame{
+					{Metadata: &core.InvokeMetadata{Status: 200, MediaType: "application/x-ndjson"}},
+					{Data: []byte(`{"event":"start"}` + "\n")},
+				},
+			}, nil
+		},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+
+	outcome, err := broker.InvokeMaybeStream(
+		context.Background(),
+		&principal.Principal{SubjectID: principal.UserSubjectID("u-events"), UserID: "u-events", Kind: principal.KindUser},
+		"events",
+		"",
+		"events.watch",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InvokeMaybeStream: %v", err)
+	}
+	if !outcome.IsStream() {
+		t.Fatalf("outcome should be stream, got unary %+v", outcome.Unary)
+	}
+	meta, err := outcome.Stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv metadata: %v", err)
+	}
+	if meta.Metadata == nil || meta.Metadata.MediaType != "application/x-ndjson" {
+		t.Fatalf("metadata = %+v, want mediaType application/x-ndjson", meta)
+	}
+	data, err := outcome.Stream.Recv()
+	if err != nil {
+		t.Fatalf("Recv data: %v", err)
+	}
+	if string(data.Data) != `{"event":"start"}`+"\n" {
+		t.Fatalf("data = %q", string(data.Data))
+	}
+}
+
+func TestBrokerInvokeMaybeStreamDispatchesUnary(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "sync",
+		Operations: []catalog.CatalogOperation{{
+			ID:        "sync.op",
+			Method:    "POST",
+			Transport: catalog.TransportApp,
+		}},
+	}
+	provider := &streamingStub{
+		StubIntegration: &coretesting.StubIntegration{
+			N:          "sync",
+			ConnMode:   core.ConnectionModeNone,
+			CatalogVal: cat,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: 200, Body: []byte(`{"ok":true}`)}, nil
+			},
+		},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+
+	outcome, err := broker.InvokeMaybeStream(
+		context.Background(),
+		&principal.Principal{SubjectID: principal.UserSubjectID("u-sync"), UserID: "u-sync", Kind: principal.KindUser},
+		"sync",
+		"",
+		"sync.op",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InvokeMaybeStream: %v", err)
+	}
+	if outcome.IsStream() {
+		t.Fatalf("outcome should be unary, got stream")
+	}
+	if outcome.Unary == nil || outcome.Unary.Status != 200 {
+		t.Fatalf("unary result = %+v, want status 200", outcome.Unary)
+	}
+	if string(outcome.Unary.Body) != `{"ok":true}` {
+		t.Fatalf("unary body = %q, want %q", string(outcome.Unary.Body), `{"ok":true}`)
+	}
+}
+
+func TestBrokerInvokeMaybeStreamRejectsNonStreamingProvider(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "broken-stream",
+		Operations: []catalog.CatalogOperation{{
+			ID:        "events.watch",
+			Method:    "GET",
+			Transport: catalog.TransportApp,
+			Response: &catalog.OperationResponseSpec{
+				Stream: &catalog.StreamResponseSpec{MediaType: "application/x-ndjson"},
+			},
+		}},
+	}
+	provider := &coretesting.StubIntegration{
+		N:          "broken-stream",
+		ConnMode:   core.ConnectionModeNone,
+		CatalogVal: cat,
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+
+	_, err := broker.InvokeMaybeStream(
+		context.Background(),
+		&principal.Principal{SubjectID: principal.UserSubjectID("u-broken"), UserID: "u-broken", Kind: principal.KindUser},
+		"broken-stream",
+		"",
+		"events.watch",
+		nil,
+	)
+	if err == nil {
+		t.Fatalf("expected error for non-streaming provider")
+	}
+	if !strings.Contains(err.Error(), "streaming unsupported") && !errors.Is(err, ErrStreamingUnsupported) {
+		t.Fatalf("error = %v, want streaming unsupported", err)
+	}
+}

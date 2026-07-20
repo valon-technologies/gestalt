@@ -222,6 +222,14 @@ export const PUBLIC_METHODS = {
         queryFields: [],
       },
     },
+    invokeStream: {
+      service: "App",
+      method: "InvokeStream",
+      grpcPath: "/gestalt.provider.v1.App/InvokeStream",
+      fill: ["context"],
+      reject: ["run_as"],
+      stream: true,
+    },
   },
   authorization: {
     addRelationship: {

@@ -11,7 +11,7 @@ import type { DescMessage, JsonValue, Message } from "@bufbuild/protobuf";
 
 import { GestaltError, GestaltErrorCode } from "../runtime/rpc_support.ts";
 
-import type { PublicUnaryCallOptions } from "./unary_transport.ts";
+import type { PublicUnaryCallOptions } from "./transport.ts";
 
 export function resolveEffectiveAbortSignal(
   callOptions?: PublicUnaryCallOptions,

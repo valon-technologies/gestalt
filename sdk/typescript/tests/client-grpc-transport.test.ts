@@ -6,7 +6,7 @@ import {
   OperationResultSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import { authToProvider, bearer } from "../src/client/auth.ts";
-import { createGrpcUnaryTransport } from "../src/client/grpc_transport.ts";
+import { createGrpcTransport } from "../src/client/grpc_transport.ts";
 import { PUBLIC_METHODS } from "../src/client/generated/methods.ts";
 import { GestaltErrorCode } from "../src/rpc_support.ts";
 
@@ -22,7 +22,7 @@ const invokeRequest = () =>
   });
 
 test("gRPC transport dispatches typed App methods and maps errors", async () => {
-  const transport = await createGrpcUnaryTransport({
+  const transport = await createGrpcTransport({
     baseUrl: "https://gestalt.test",
     auth: authToProvider(bearer(() => "token")),
   });
@@ -43,7 +43,7 @@ test("gRPC transport dispatches typed App methods and maps errors", async () => 
 });
 
 test("gRPC transport maps bearer provider failures to Unavailable", async () => {
-  const transport = await createGrpcUnaryTransport({
+  const transport = await createGrpcTransport({
     baseUrl: "https://gestalt.test",
     auth: authToProvider(
       bearer(async () => {
@@ -70,7 +70,7 @@ test("gRPC transport maps bearer provider failures to Unavailable", async () => 
 
 test("gRPC transport timeout interrupts hanging bearer resolution", async () => {
   let tokenCalls = 0;
-  const transport = await createGrpcUnaryTransport({
+  const transport = await createGrpcTransport({
     baseUrl: "https://gestalt.test",
     auth: authToProvider(
       bearer(async () => {
@@ -101,7 +101,7 @@ test("gRPC transport timeout interrupts hanging bearer resolution", async () => 
 });
 
 test("gRPC transport close aborts the owned HTTP/2 session", async () => {
-  const transport = await createGrpcUnaryTransport({
+  const transport = await createGrpcTransport({
     baseUrl: "https://gestalt.test",
     auth: authToProvider(bearer(() => "token")),
   });
@@ -122,7 +122,7 @@ test("gRPC transport close aborts the owned HTTP/2 session", async () => {
 });
 
 test("gRPC transport forwards call options to Connect", async () => {
-  const transport = await createGrpcUnaryTransport({
+  const transport = await createGrpcTransport({
     baseUrl: "https://gestalt.test",
     auth: authToProvider(bearer(() => "token")),
   });

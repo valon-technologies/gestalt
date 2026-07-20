@@ -49,5 +49,5 @@ export type { PublicMethod, PublicMethodHttp } from "./client/generated/methods.
 export type * from "./client/generated/types.ts";
 export type {
   PublicUnaryCallOptions,
-  UnaryTransport,
-} from "./client/generated/unary_transport.ts";
+  Transport,
+} from "./client/generated/transport.ts";

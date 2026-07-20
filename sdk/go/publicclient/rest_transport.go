@@ -193,7 +193,7 @@ func messageToJSONMap(msg pb.Message) (map[string]any, error) {
 // methods require the gRPC transport. Callers that construct a REST-only
 // client never see streaming methods because REST-only clients expose only
 // REST-bound methods. This stub exists so *restUnaryTransport satisfies the
-// generated.UnaryTransport interface.
+// generated.Transport interface.
 func (t *restUnaryTransport) ServerStream(
 	_ context.Context,
 	method generated.Method,

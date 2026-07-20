@@ -42,8 +42,8 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 
 	transport := newPublicRenderer(idx)
-	transport.renderUnaryTransport()
-	if err := set.Add("generated/unary_transport.go", []byte(transport.assembleUnaryTransport())); err != nil {
+	transport.renderTransport()
+	if err := set.Add("generated/transport.go", []byte(transport.assembleTransport())); err != nil {
 		return nil, err
 	}
 

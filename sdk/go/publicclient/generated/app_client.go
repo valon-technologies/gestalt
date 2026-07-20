@@ -12,11 +12,11 @@ import (
 
 // AppClient is the transport-neutral client for the public App surface.
 type AppClient struct {
-	transport UnaryTransport
+	transport Transport
 }
 
 // NewAppClient creates a AppClient over the given transport.
-func NewAppClient(transport UnaryTransport) *AppClient {
+func NewAppClient(transport Transport) *AppClient {
 	return &AppClient{transport: transport}
 }
 

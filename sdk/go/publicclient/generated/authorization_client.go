@@ -11,11 +11,11 @@ import (
 
 // AuthorizationClient is the transport-neutral client for the public Authorization surface.
 type AuthorizationClient struct {
-	transport UnaryTransport
+	transport Transport
 }
 
 // NewAuthorizationClient creates a AuthorizationClient over the given transport.
-func NewAuthorizationClient(transport UnaryTransport) *AuthorizationClient {
+func NewAuthorizationClient(transport Transport) *AuthorizationClient {
 	return &AuthorizationClient{transport: transport}
 }
 

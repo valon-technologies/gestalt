@@ -8,9 +8,9 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 )
 
-// UnaryTransport performs one unary public RPC. Implementations live in the
+// Transport performs public RPCs. Implementations live in the Implementations live in the
 // handwritten publicclient transport layer.
-type UnaryTransport interface {
+type Transport interface {
 	Unary(ctx context.Context, method Method, request, response gproto.Message) error
 	// ServerStream invokes a server-streaming RPC. It returns a RecvCloser
 	// whose Recv method decodes one frame at a time; io.EOF ends the stream.

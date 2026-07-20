@@ -59,13 +59,10 @@ import type {
   PublicAgentCancelTurnRequest,
   PublicAgentListTurnEventsRequest,
 } from "./types.ts";
-import type {
-  UnaryTransport,
-  PublicUnaryCallOptions,
-} from "./unary_transport.ts";
+import type { Transport, PublicUnaryCallOptions } from "./transport.ts";
 
 export class AgentClient {
-  constructor(private readonly transport: UnaryTransport) {}
+  constructor(private readonly transport: Transport) {}
 
   async createSession(
     request: PublicAgentCreateSessionRequest,

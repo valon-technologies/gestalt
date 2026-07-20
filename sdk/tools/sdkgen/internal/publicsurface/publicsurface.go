@@ -97,8 +97,13 @@ func GRPCMethodCount(view *View) int {
 	return n
 }
 
-// FilterREST returns a view with only HTTP-backed public methods. Services
-// without REST bindings are omitted.
+// FilterREST returns a view with HTTP-backed public methods plus any
+// server-streaming public methods on services that have at least one HTTP
+// binding. Server-streaming methods without their own HTTP binding are
+// reachable over REST via a unified route (for example App/InvokeStream is
+// served by the App/Invoke REST path with catalog-driven branching), so they
+// must appear in the REST emit plan for transports that support serverStream.
+// Services without REST bindings are omitted.
 func FilterREST(view *View) *View {
 	if view == nil {
 		return &View{}
@@ -106,13 +111,20 @@ func FilterREST(view *View) *View {
 	var services []*Service
 	for _, svc := range view.Services {
 		var restMethods []*model.Method
+		hasHTTP := false
 		for _, m := range svc.PublicMethods {
 			if m.HTTP != nil {
 				restMethods = append(restMethods, m)
+				hasHTTP = true
 			}
 		}
-		if len(restMethods) == 0 {
+		if !hasHTTP {
 			continue
+		}
+		for _, m := range svc.PublicMethods {
+			if m.HTTP == nil && m.Stream == model.ServerStream {
+				restMethods = append(restMethods, m)
+			}
 		}
 		services = append(services, &Service{
 			Service:       svc.Service,

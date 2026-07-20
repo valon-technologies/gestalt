@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { AppClient } from "../src/client/generated/app_client.ts";
 import { PUBLIC_METHODS } from "../src/client/generated/methods.ts";
 import type { PublicAppInvokeRequest } from "../src/client/generated/types.ts";
-import type { UnaryTransport } from "../src/client/generated/unary_transport.ts";
+import type { Transport } from "../src/client/generated/transport.ts";
 import {
   OperationResultSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
@@ -31,7 +31,7 @@ type ClientCase = {
   };
 };
 
-class RecordingTransport implements UnaryTransport {
+class RecordingTransport implements Transport {
   calls = 0;
   err: GestaltError | undefined;
   body = new Uint8Array();
@@ -55,6 +55,10 @@ class RecordingTransport implements UnaryTransport {
       status: 200,
       body: this.body,
     }) as unknown as Output;
+  }
+
+  async *serverStream<Output extends Message>(): AsyncIterable<Output> {
+    throw new Error("serverStream not implemented in RecordingTransport");
   }
 }
 

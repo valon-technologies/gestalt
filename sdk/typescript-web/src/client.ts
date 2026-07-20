@@ -13,9 +13,9 @@ import { WorkflowClient } from "./client/generated/workflow_client.ts";
 import type { PublicAppInvokeRequest } from "./client/generated/types.ts";
 import type {
   PublicUnaryCallOptions,
-  UnaryTransport,
-} from "./client/generated/unary_transport.ts";
-import { createRestUnaryTransport } from "./rest_transport.ts";
+  Transport,
+} from "./client/generated/transport.ts";
+import { createRestTransport } from "./rest_transport.ts";
 
 export interface SessionAuth {
   readonly kind: "session";
@@ -85,7 +85,7 @@ export function unauthenticated(): Unauthenticated {
 
 export function createGestaltClient(options: ClientOptions): GestaltClient {
   const address = resolveAddress(options.address);
-  const transport = createRestUnaryTransport({
+  const transport = createRestTransport({
     baseUrl: address,
     auth: options.auth,
     ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),

@@ -85,6 +85,12 @@ type StreamingInvoker interface {
 	InvokeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (core.StreamReader, error)
 }
 
+// MaybeStreamingInvoker is implemented by invokers that resolve unary-vs-stream
+// in a single catalog lookup.
+type MaybeStreamingInvoker interface {
+	InvokeMaybeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*InvokeOutcome, error)
+}
+
 type GraphQLRequest = core.GraphQLRequest
 
 type GraphQLInvoker interface {
@@ -515,6 +521,185 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 		operation:    opMeta.ID,
 		transport:    metricutil.AttrValue(transport),
 	}, nil
+}
+
+// InvokeOutcome is the discriminated result of InvokeMaybeStream. Exactly one
+// of Unary or Stream is set.
+type InvokeOutcome struct {
+	Unary  *core.OperationResult
+	Stream core.StreamReader
+}
+
+// IsStream reports whether this outcome carries a streaming response.
+func (o *InvokeOutcome) IsStream() bool { return o != nil && o.Stream != nil }
+
+// InvokeMaybeStream resolves and authorizes an invocation once, then dispatches
+// to the unary or streaming executor based on the catalog response mode.
+func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*InvokeOutcome, error) {
+	startedAt := time.Now()
+	metricProvider := metricutil.UnknownAttrValue
+	metricOperation := metricutil.UnknownAttrValue
+	metricTransport := metricutil.UnknownAttrValue
+	metricConnectionMode := metricutil.UnknownAttrValue
+	var dispatchErr error
+	var unaryResult *core.OperationResult
+
+	ctx, span := b.tracer().Start(ctx, "broker.invoke_maybe_stream",
+		trace.WithSpanKind(trace.SpanKindInternal),
+	)
+	spanOwned := false
+	defer func() {
+		if !spanOwned {
+			span.End()
+		}
+		resultStatus := operationResultStatus(unaryResult, dispatchErr)
+		recordOperationMetrics(
+			ctx,
+			startedAt,
+			metricProvider,
+			metricOperation,
+			metricTransport,
+			metricConnectionMode,
+			resultStatus,
+			operationResultFailed(resultStatus, dispatchErr),
+		)
+	}()
+
+	span.SetAttributes(
+		attrProvider.String(providerName),
+		attrOperation.String(operation),
+	)
+
+	fail := func(err error) (*InvokeOutcome, error) {
+		dispatchErr = err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	setSubjectAttribute := func(p *principal.Principal) {
+		if p == nil {
+			return
+		}
+		subjectID := strings.TrimSpace(p.SubjectID)
+		if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+			subjectID = principal.UserSubjectID(strings.TrimSpace(p.UserID))
+		}
+		if subjectID != "" {
+			span.SetAttributes(attrSubjectID.String(subjectID))
+		}
+	}
+
+	prov, err := b.providers.Get(providerName)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return fail(fmt.Errorf("%w: %q", ErrProviderNotFound, providerName))
+		}
+		return fail(fmt.Errorf("%w: looking up provider: %v", ErrInternal, err))
+	}
+
+	metricProvider = providerName
+
+	if p == nil {
+		return fail(ErrNotAuthenticated)
+	}
+	setSubjectAttribute(p)
+
+	if !principal.AllowsProviderPermission(p, providerName) {
+		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
+	}
+	p = principal.Canonicalized(p)
+	setSubjectAttribute(p)
+	ctx = withResolvedPrincipal(ctx, p)
+	conn := ConnectionFromContext(ctx)
+	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
+	if err != nil {
+		return fail(err)
+	}
+	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
+		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+	}
+	if !providerDelegatesRemoteAuthorization(prov) {
+		if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+			return fail(err)
+		}
+	}
+	metricOperation = operation
+	metricTransport = metricutil.AttrValue(transport)
+	span.SetAttributes(attrTransport.String(metricTransport))
+	ctx = WithCatalogOperation(ctx, providerName, opMeta)
+
+	operationConnection := resolvedConnection
+	if strings.TrimSpace(conn) != "" {
+		if operationConnection == "" {
+			operationConnection, err = ResolveOperationConnection(prov, opMeta.ID, params)
+			if err != nil {
+				return fail(err)
+			}
+		}
+		operationConnection = core.ResolveConnectionAlias(operationConnection)
+		explicitConnection := core.ResolveConnectionAlias(conn)
+		overrideAllowed := transport == catalog.TransportApp || OperationConnectionOverrideAllowed(prov, opMeta.ID, params)
+		if operationConnection != "" && operationConnection != explicitConnection && !overrideAllowed {
+			return fail(fmt.Errorf(
+				"%w: operation %q on integration %q uses connection %q; omit the connection override or use that connection instead of %q",
+				ErrInvalidInvocation,
+				opMeta.ID,
+				providerName,
+				operationConnection,
+				conn,
+			))
+		}
+	}
+	if conn == "" {
+		conn = operationConnection
+	}
+	if conn == "" {
+		operationConnection, err = ResolveOperationConnection(prov, opMeta.ID, params)
+		if err != nil {
+			return fail(err)
+		}
+		conn = operationConnection
+	}
+	if conn == "" && b.connMapper != nil {
+		conn = b.connMapper.ConnectionForProvider(providerName)
+	}
+	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
+	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
+
+	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
+	if err != nil {
+		return fail(err)
+	}
+
+	if opMeta.Response != nil && opMeta.Response.IsStream() {
+		streamExec, ok := prov.(core.StreamingExecutor)
+		if !ok {
+			return fail(fmt.Errorf("%w: %s.%s does not support streaming", ErrStreamingUnsupported, providerName, opMeta.ID))
+		}
+		reader, err := streamExec.ExecuteStream(ctx, operation, params, accessToken)
+		if err != nil {
+			return fail(err)
+		}
+		spanOwned = true
+		return &InvokeOutcome{Stream: &observingStreamReader{
+			inner:        reader,
+			broker:       b,
+			ctx:          ctx,
+			span:         span,
+			principal:    p,
+			providerName: providerName,
+			operation:    opMeta.ID,
+			transport:    metricutil.AttrValue(transport),
+		}}, nil
+	}
+
+	result, err := prov.Execute(ctx, operation, params, accessToken)
+	if err != nil {
+		return fail(err)
+	}
+	b.observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
+	unaryResult = result
+	return &InvokeOutcome{Unary: result}, nil
 }
 
 // observingStreamReader wraps a StreamReader and inspects the first metadata
