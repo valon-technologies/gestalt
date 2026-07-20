@@ -310,6 +310,12 @@ Synchronous on the handling instance. The HTTP response is sent after the catalo
    5. Release the install lock (always, via defer). On failure before step 4, return an HTTP error; no change request is written.
 4. Respond `200` with `{ registry, app, installation }`.
 
+##### First install `from_version`
+
+Every change request row requires `from_version`. On upgrade, the installer sets it to the latest fleet-known `to_version` (`LatestKnownVersion`). On the first install for an app with a deploy-time pin, it falls back to the version in `config.yaml` / `gestalt.lock.json`.
+
+Registry-only apps have no config pin. When `ListKnownVersionsByApp` is empty and the app has `source.registry`, the first install writes `from_version: "none"`. Upgrades continue to use `LatestKnownVersion`. Projection helpers must not treat `"none"` as a runnable version.
+
 Per-replica convergence is planned via the background catalog controller (see Polling). IndexedDB write on the handling instance for install.
 
 #### `GET /admin/api/v1/app-installations`

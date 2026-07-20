@@ -85,7 +85,7 @@ Services.DB                         ← underlying main-db handle
 
 ## Store: `app_version_change_requests` (accepted version changes)
 
-Append-only fleet requests to move one app from `from_version` to `to_version`. `from_version` is required on every row. The installer resolves it from the latest fleet-known `to_version`, or falls back to the app's pinned version in `config.yaml` / `gestalt.lock.json` when the app has not been installed via the registry yet. For registry-only apps (`source.registry`) with no fleet-known version, the first install uses `from_version: "none"` — see [plan.md](./plan.md#step-12-implementation-notes).
+Append-only fleet requests to move one app from `from_version` to `to_version`. `from_version` is required on every row. The installer resolves it from the latest fleet-known `to_version`, or falls back to the app's pinned version in `config.yaml` / `gestalt.lock.json` when the app has not been installed via the registry yet. For registry-only apps (`source.registry`) with no fleet-known version, the first install uses `from_version: "none"` — see [lifecycle.md](./lifecycle.md#first-install-from_version).
 
 ```text
 app_version_change_requests

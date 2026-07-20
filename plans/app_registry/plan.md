@@ -291,15 +291,9 @@ Lockfile entry — no `archives`, no manifest; record the registry binding only:
 }
 ```
 
-#### First install `from_version`
-
-`app_version_change_requests.from_version` is required on every row. Registry-only apps have no config pin, so the installer cannot fall back to `gestalt.lock.json` on the first fleet install.
-
-When `ListKnownVersionsByApp` is empty and the app has `source.registry`, write `from_version: "none"`. Upgrades continue to use `LatestKnownVersion` as today. Projection helpers must not treat `"none"` as a runnable version. Bootstrap startup for registry-only apps is documented in [lifecycle.md](./lifecycle.md#startup).
-
 #### Tests
 
 - Config validation accepts `source.registry`; rejects unknown registry name and mixed source modes.
-- Installer first install with registry-only config records `from_version: "none"`.
+- Installer first install with registry-only config records `from_version: "none"` — see [lifecycle.md](./lifecycle.md#first-install-from_version).
 - Bootstrap starts a registry-only app when a known version exists; skips when the projection is empty.
 - Lock/sync leaves registry-only apps out of artifact download (lockfile shape above).
