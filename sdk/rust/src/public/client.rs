@@ -8,7 +8,7 @@ use crate::public::generated::app_client::{
     IndexedDBClient, WorkflowClient,
 };
 use crate::public::generated::rpc_support::GestaltError;
-use crate::public::grpc_transport::{GrpcTransport, dial_public_grpc};
+use crate::public::grpc_transport::{GrpcTransport, dial_public_grpc_endpoint};
 use crate::public::rest_transport::RestTransport;
 use crate::rpc_support::gestalt_error_code;
 
@@ -95,7 +95,7 @@ pub async fn create_gestalt_client<A: Auth + 'static>(
             Arc::clone(&auth),
         )))),
         Transport::Grpc => {
-            let channel = dial_public_grpc(&address)?;
+            let channel = dial_public_grpc_endpoint(&address)?.connect_lazy();
             Ok(GestaltClient::Grpc(Box::new(AppClient::new(
                 GrpcTransport::new(channel, auth),
             ))))
@@ -120,7 +120,7 @@ pub async fn create_grpc_gestalt_client<A: Auth + 'static>(
 ) -> Result<GrpcGestaltClient, GestaltError> {
     let address = normalize_address(address.into())?;
     let auth: Arc<dyn Auth> = Arc::new(auth);
-    let channel = dial_public_grpc(&address)?;
+    let channel = dial_public_grpc_endpoint(&address)?.connect_lazy();
     Ok(bind_grpc(GrpcTransport::new(channel, auth)))
 }
 

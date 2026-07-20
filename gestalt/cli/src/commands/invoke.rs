@@ -211,37 +211,39 @@ fn execute(
         param_map = params::merge_params(file_map, param_map);
     }
 
-    if let Some(connection) = options.connection {
-        param_map.insert(
-            "_connection".to_string(),
-            serde_json::Value::String(connection.to_string()),
-        );
-    }
-    if let Some(instance) = options.instance {
-        param_map.insert(
-            "_instance".to_string(),
-            serde_json::Value::String(instance.to_string()),
-        );
-    }
+    let transport = gestalt_sdk::public::grpc_transport::SyncGrpcTransport::from_endpoint(
+        gestalt_sdk::public::grpc_transport::dial_public_grpc_endpoint(client.base_url())?,
+        std::sync::Arc::new(gestalt_sdk::public::auth::BearerAuth::new(client.token())),
+    )
+    .with_timeout(std::time::Duration::from_secs(30));
+    let app_client = gestalt_sdk::public::generated::app_client::AppClient::new(transport);
 
-    let path = format!("/api/v1/{}/{}", plugin, operation);
-    let resp = (if param_map.is_empty() {
-        client.get(&path)
-    } else {
-        client.post(&path, &serde_json::Value::Object(param_map))
-    })
-    .map_err(|err| {
-        app_errors::rewrite_connect_error(
-            client,
-            err,
-            plugin,
-            operation,
-            options.connection,
-            options.instance,
-            app_errors::SelectorCommand::Invoke,
-        )
-    })
-    .with_context(|| format!("failed to invoke {}.{}", plugin, operation))?;
+    let request = gestalt_sdk::public::generated::app::AppInvokeRequest {
+        app: plugin.to_string(),
+        operation: operation.to_string(),
+        params: if param_map.is_empty() {
+            None
+        } else {
+            Some(param_map)
+        },
+        connection: options.connection.unwrap_or_default().to_string(),
+        instance: options.instance.unwrap_or_default().to_string(),
+        ..Default::default()
+    };
+    let resp = app_client
+        .invoke_sync(request)
+        .map_err(|err| {
+            app_errors::rewrite_connect_error(
+                client,
+                anyhow::anyhow!("{}", err),
+                plugin,
+                operation,
+                options.connection,
+                options.instance,
+                app_errors::SelectorCommand::Invoke,
+            )
+        })
+        .with_context(|| format!("failed to invoke {}.{}", plugin, operation))?;
 
     let output_value = match options.select {
         Some(sel_path) => output::select_path(&resp, sel_path)?,
