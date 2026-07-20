@@ -48,7 +48,9 @@ func (s *Server) authSession(w http.ResponseWriter, r *http.Request) {
 		subjectID = strings.TrimSpace(p.SubjectID)
 	}
 	if subjectID == "" && p != nil {
-		subjectID = strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
+		if resolved, err := principal.ResolveCredentialSubjectID(r.Context(), s.users, p); err == nil {
+			subjectID = resolved
+		}
 	}
 	if subjectID == "" && p != nil && p.Identity != nil {
 		if email := strings.TrimSpace(p.Identity.Email); email != "" {

@@ -13,16 +13,13 @@ type CredentialUserResolver interface {
 	FindOrCreateUser(ctx context.Context, email string) (*core.User, error)
 }
 
-// ResolveCredentialSubjectID returns the subject ID used to scope stored external
-// credentials. Non-user principals use their token subject. Human principals are
-// resolved through the user store so credentials align with HTTP routes.
 func ResolveCredentialSubjectID(ctx context.Context, users CredentialUserResolver, p *Principal) (string, error) {
 	p = Canonicalized(p)
 	if p == nil {
 		return "", ErrCredentialSubjectRequired
 	}
 	if IsNonUserPrincipal(p) {
-		subjectID := strings.TrimSpace(EffectiveCredentialSubjectID(p))
+		subjectID := strings.TrimSpace(p.SubjectID)
 		if subjectID == "" {
 			return "", ErrCredentialSubjectRequired
 		}

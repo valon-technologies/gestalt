@@ -248,7 +248,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			ctx = principal.WithPrincipal(ctx, tc.principal)
 			ctx = invocation.WithCredentialContext(ctx, invocation.CredentialContext{
 				Mode:       core.ConnectionModeSubject,
-				SubjectID:  principal.EffectiveCredentialSubjectID(tc.principal),
+				SubjectID:  principal.Canonicalized(tc.principal).SubjectID,
 				Connection: "workspace",
 				Instance:   "default",
 			})

@@ -16,7 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *testing.T) {
+func TestBrokerResolveToken_ConnectionModeNoneDoesNotCanonicalizeUserSubject(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -28,7 +28,10 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 		svc.Users,
 		svc.ExternalCredentials,
 	)
+	const userID = "28542db5-ae88-404f-a231-a0034cb9212c"
 	p := &principal.Principal{
+		UserID:    userID,
+		SubjectID: principal.UserSubjectID(userID),
 		Identity: &core.UserIdentity{
 			Email: "user@example.com",
 		},
@@ -43,11 +46,11 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 	if token != "" {
 		t.Fatalf("token = %q, want empty", token)
 	}
-	if p.UserID == "" {
-		t.Fatal("expected resolved user ID")
+	if p.UserID != userID {
+		t.Fatalf("user ID = %q, want %q (broker must not mutate caller principal)", p.UserID, userID)
 	}
-	if got := p.SubjectID; got != principal.UserSubjectID(p.UserID) {
-		t.Fatalf("subject ID = %q, want %q", got, principal.UserSubjectID(p.UserID))
+	if got := p.SubjectID; got != principal.UserSubjectID(userID) {
+		t.Fatalf("subject ID = %q, want %q", got, principal.UserSubjectID(userID))
 	}
 	if got := CredentialContextFromContext(ctx).Mode; got != core.ConnectionModeNone {
 		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)

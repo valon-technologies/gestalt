@@ -90,8 +90,8 @@ func (s *externalCredentialProviderServer) DeleteCredential(ctx context.Context,
 	}
 	if _, ok := publicrpc.PublicOriginFromContext(ctx); ok {
 		p := principal.FromContext(ctx)
-		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.Canonicalized(p)))
-		if subjectID == "" {
+		subjectID, err := principal.ResolveCredentialSubjectID(ctx, nil, p)
+		if err != nil {
 			return nil, status.Error(codes.Unauthenticated, "not authenticated")
 		}
 		credentials, err := s.provider.ListCredentials(ctx, subjectID, "")

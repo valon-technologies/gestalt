@@ -272,11 +272,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
-	if err := b.resolveUserPrincipal(ctx, p); err != nil {
-		return fail(err)
-	}
-	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+	ctx = withResolvedPrincipal(ctx, p)
 	conn := ConnectionFromContext(ctx)
 	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
@@ -427,11 +424,8 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
-	if err := b.resolveUserPrincipal(ctx, p); err != nil {
-		return fail(err)
-	}
-	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+	ctx = withResolvedPrincipal(ctx, p)
 	conn := ConnectionFromContext(ctx)
 	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
@@ -694,11 +688,8 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	if !principal.AllowsOperationPermission(p, providerName, graphQLOperationID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, graphQLOperationID))
 	}
-	if err := b.resolveUserPrincipal(ctx, p); err != nil {
-		return fail(err)
-	}
-	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+	ctx = withResolvedPrincipal(ctx, p)
 	if !providerDelegatesRemoteAuthorization(prov) {
 		if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
 			return fail(err)
@@ -755,9 +746,6 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return ctx, "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
 	}
-	if err := b.resolveUserPrincipal(ctx, p); err != nil {
-		return ctx, "", err
-	}
 	ctx = withResolvedPrincipal(ctx, p)
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
@@ -789,7 +777,11 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 	if b == nil || b.authorization == nil {
 		return nil
 	}
-	allowed, err := CheckSubjectAccess(ctx, b.authorization, accessRequest(b.providerKinds, p, providerName, operationID))
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+	if err != nil {
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+	}
+	allowed, err := CheckSubjectAccess(ctx, b.authorization, accessRequest(b.providerKinds, p, subjectID, providerName, operationID))
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
@@ -819,14 +811,14 @@ func (b *Broker) CheckProviderAccess(ctx context.Context, p *principal.Principal
 	return b.checkAuthorizationAccess(ctx, p, providerName, providerName)
 }
 
-func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, providerName, action string) *proto.CheckAccessRequest {
+func accessRequest(kinds map[string]ProviderKind, p *principal.Principal, subjectID, providerName, action string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
 	properties, _ := structpb.NewStruct(map[string]any{
 		"scope":     strings.Join(p.Scopes, " "),
 		"client_id": strings.TrimSpace(p.ClientID),
 		"audience":  append([]string(nil), p.Audience...),
 	})
-	req := SubjectAccessRequest(principal.EffectiveCredentialSubjectID(p), action, AuthorizationResource(providerName, kinds))
+	req := SubjectAccessRequest(subjectID, action, AuthorizationResource(providerName, kinds))
 	req.Subject.Properties = properties
 	return req
 }
@@ -864,9 +856,6 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return nil, fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
 	}
-	if err := b.resolveUserPrincipal(ctx, p); err != nil {
-		return nil, err
-	}
 	ctx = withResolvedPrincipal(ctx, p)
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
@@ -881,9 +870,9 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
 		return nil, fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
 	}
-	subjectID := principal.EffectiveCredentialSubjectID(p)
-	if subjectID == "" {
-		return nil, fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
+	subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUserResolution, err)
 	}
 
 	expanded := make([]CatalogResolutionTarget, 0, len(targets))
@@ -936,17 +925,6 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 }
 
 func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-	resolved := principal.FromContext(ctx)
-	if resolved != nil {
-		p = resolved
-	}
-	if resolved == nil {
-		if err := b.resolveUserPrincipal(ctx, p); err != nil {
-			return ctx, "", err
-		}
-		ctx = withResolvedPrincipal(ctx, p)
-	}
-
 	mode := b.resolveConnectionMode(ctx, prov, providerName, connection)
 	switch mode {
 	case core.ConnectionModeNone:
@@ -955,9 +933,9 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		return ctx, "", nil
 
 	case core.ConnectionModeSubject:
-		subjectID := principal.EffectiveCredentialSubjectID(p)
-		if subjectID == "" {
-			return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
+		subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+		if err != nil {
+			return ctx, "", fmt.Errorf("%w: %v", ErrUserResolution, err)
 		}
 		if delegated, ok := prov.(RemoteCredentialDelegated); ok && delegated.RemoteCredentialDelegated() {
 			connection = core.ResolveConnectionAlias(connection)
@@ -1003,13 +981,9 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 		return ctx, ConnectionRuntimeCredential{}, info, nil
 
 	case core.ConnectionModeSubject:
-		if err := b.resolveUserPrincipal(ctx, p); err != nil {
-			return ctx, ConnectionRuntimeCredential{}, info, err
-		}
-		ctx = withResolvedPrincipal(ctx, p)
-		subjectID := principal.EffectiveCredentialSubjectID(p)
-		if subjectID == "" {
-			return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
+		subjectID, err := principal.ResolveCredentialSubjectID(ctx, b.users, p)
+		if err != nil {
+			return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: %v", ErrUserResolution, err)
 		}
 		resolvedCtx, credential, err := b.resolveSubjectRuntimeCredential(ctx, nil, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 		return resolvedCtx, credential, info, err
@@ -1017,32 +991,6 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 	default:
 		return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: unknown connection mode %q", ErrInternal, info.Mode)
 	}
-}
-
-func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
-	p = principal.Canonicalize(p)
-	if p == nil || p.UserID != "" || principal.IsNonUserPrincipal(p) || p.Identity == nil || p.Identity.Email == "" {
-		return nil
-	}
-	if b.users == nil {
-		return fmt.Errorf("%w: no user service configured", ErrUserResolution)
-	}
-	dbUser, err := b.users.FindOrCreateUser(ctx, p.Identity.Email)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUserResolution, err)
-	}
-	if dbUser == nil || dbUser.ID == "" {
-		return fmt.Errorf("%w: no user record returned", ErrUserResolution)
-	}
-	p.UserID = dbUser.ID
-	if p.Kind == "" {
-		p.Kind = principal.KindUser
-	}
-	principal.Canonicalize(p)
-	if p.Identity != nil && p.Identity.DisplayName == "" {
-		p.Identity.DisplayName = dbUser.DisplayName
-	}
-	return nil
 }
 
 func (b *Broker) resolveSubjectCredential(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
