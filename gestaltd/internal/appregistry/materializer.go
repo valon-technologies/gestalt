@@ -13,7 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
-	"golang.org/x/sync/singleflight"
 )
 
 // Materializer downloads registry app artifacts and extracts them on the local
@@ -22,7 +21,6 @@ type Materializer struct {
 	Registries   map[string]config.AppRegistryConfig
 	Reader       *RegistryReader
 	ArtifactsDir string
-	group        singleflight.Group
 }
 
 type MaterializationResult = core.AppMaterializationResult
@@ -53,13 +51,7 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	if artifactsDir == "" {
 		return nil, fmt.Errorf("artifacts directory is not configured")
 	}
-	value, err, _ := m.group.Do(registryName+"\x00"+appName+"\x00"+version, func() (any, error) {
-		return m.ensure(ctx, installation, artifactsDir, appName, version, registryName)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return value.(*MaterializationResult), nil
+	return m.ensure(ctx, installation, artifactsDir, appName, version, registryName)
 }
 
 func (m *Materializer) ensure(ctx context.Context, installation *core.AppInstallation, artifactsDir, appName, version, registryName string) (*MaterializationResult, error) {
