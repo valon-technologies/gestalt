@@ -581,7 +581,7 @@ impl TuiApp {
                     .push_system(agent_session_lines(&self.shell).join("\n"));
             }
             "model" => {
-                let lines = agent_model_lines(&self.client, &mut self.shell, args);
+                let lines = agent_model_lines(&mut self.shell, args);
                 if !args.is_empty() {
                     self.state.model = self.shell.effective_model_label().to_string();
                 }

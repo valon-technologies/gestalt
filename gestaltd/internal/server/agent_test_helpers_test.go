@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/google/uuid"
@@ -257,53 +256,6 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 		session.UpdatedAt = &now
 	}
 	return cloneTurn(turn), nil
-}
-
-func (p *memoryAgentProvider) capturedGetSessionRequests() []*proto.GetAgentProviderSessionRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	return append([]*proto.GetAgentProviderSessionRequest(nil), p.getSessionRequests...)
-}
-
-func (p *memoryAgentProvider) capturedTurnRequests() []*proto.CreateAgentProviderTurnRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	out := make([]*proto.CreateAgentProviderTurnRequest, 0, len(p.turnRequests))
-	for _, req := range p.turnRequests {
-		out = append(out, cloneCreateTurnRequest(req))
-	}
-	return out
-}
-
-func (p *memoryAgentProvider) capturedGetTurnRequests() []*proto.GetAgentProviderTurnRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	return append([]*proto.GetAgentProviderTurnRequest(nil), p.getTurnRequests...)
-}
-
-func (p *memoryAgentProvider) capturedListSessionRequests() []*proto.ListAgentProviderSessionsRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	out := make([]*proto.ListAgentProviderSessionsRequest, 0, len(p.listSessionRequests))
-	for _, req := range p.listSessionRequests {
-		out = append(out, cloneListSessionsRequest(req))
-	}
-	return out
-}
-
-func (p *memoryAgentProvider) capturedListTurnRequests() []*proto.ListAgentProviderTurnsRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	out := make([]*proto.ListAgentProviderTurnsRequest, 0, len(p.listTurnRequests))
-	for _, req := range p.listTurnRequests {
-		out = append(out, cloneListTurnsRequest(req))
-	}
-	return out
 }
 
 func (p *memoryAgentProvider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
@@ -604,35 +556,4 @@ func cloneInteraction(src *coreagent.Interaction) *coreagent.Interaction {
 	dst.Request = cloneMap(src.Request)
 	dst.Resolution = cloneMap(src.Resolution)
 	return &dst
-}
-
-func assertHTTPAgentEventDisplay(t *testing.T, event map[string]any, kind, phase, label, text string) {
-	t.Helper()
-	display, ok := event["display"].(map[string]any)
-	if !ok {
-		t.Fatalf("event display = %#v, want object", event["display"])
-	}
-	if display["kind"] != kind {
-		t.Fatalf("display kind = %#v, want %q", display["kind"], kind)
-	}
-	if display["phase"] != phase {
-		t.Fatalf("display phase = %#v, want %q", display["phase"], phase)
-	}
-	if label != "" && display["label"] != label {
-		t.Fatalf("display label = %#v, want %q", display["label"], label)
-	}
-	if text != "" && display["text"] != text {
-		t.Fatalf("display text = %#v, want %q", display["text"], text)
-	}
-}
-
-func findHTTPAgentEvent(t *testing.T, events []map[string]any, eventType string) map[string]any {
-	t.Helper()
-	for _, event := range events {
-		if event["type"] == eventType {
-			return event
-		}
-	}
-	t.Fatalf("events = %#v, want type %q", events, eventType)
-	return nil
 }

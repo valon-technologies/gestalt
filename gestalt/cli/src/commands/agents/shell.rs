@@ -9,7 +9,6 @@ use crate::interactive::{
 use serde_json::{Map, Value};
 
 use super::render::stdout::InterruptState;
-use super::requests::list_agent_providers;
 use super::tui;
 use super::types::{AgentInteractionInfo, AgentShell};
 
@@ -151,7 +150,7 @@ pub(crate) fn run_shell_interactive(
         if trimmed.is_empty() {
             continue;
         }
-        if handle_agent_slash_command(client, &mut shell, trimmed)? {
+        if handle_agent_slash_command(&mut shell, trimmed)? {
             continue;
         }
         shell.submit_turn(client, vec![line], &interrupts)?;
@@ -170,11 +169,7 @@ fn print_resume_command(session_id: &str, timeout_seconds: Option<i32>) -> Resul
     Ok(())
 }
 
-fn handle_agent_slash_command(
-    client: &ApiClient,
-    shell: &mut AgentShell,
-    trimmed: &str,
-) -> Result<bool> {
+fn handle_agent_slash_command(shell: &mut AgentShell, trimmed: &str) -> Result<bool> {
     let Some((command, args)) = parse_agent_slash_command(trimmed) else {
         return Ok(false);
     };
@@ -190,7 +185,7 @@ fn handle_agent_slash_command(
             }
         }
         "model" => {
-            for line in agent_model_lines(client, shell, args) {
+            for line in agent_model_lines(shell, args) {
                 eprintln!("{line}");
             }
         }
@@ -276,37 +271,17 @@ pub(crate) fn agent_session_lines(shell: &AgentShell) -> Vec<String> {
     vec![format!("session {}", shell.session.id), resume_command]
 }
 
-pub(crate) fn agent_model_lines(
-    client: &ApiClient,
-    shell: &mut AgentShell,
-    args: &str,
-) -> Vec<String> {
+pub(crate) fn agent_model_lines(shell: &mut AgentShell, args: &str) -> Vec<String> {
     let requested = args.trim();
     if !requested.is_empty() {
         shell.set_model_override(requested);
         return vec![format!("model {requested} selected for future turns")];
     }
 
-    let mut lines = vec![
+    vec![
         format!("current provider: {}", shell.session.provider),
         format!("current model: {}", shell.effective_model_label()),
-    ];
-    match list_agent_providers(client) {
-        Ok(providers) if providers.is_empty() => {
-            lines.push("configured providers: none".to_string());
-        }
-        Ok(providers) => {
-            lines.push("configured providers:".to_string());
-            for provider in providers {
-                let suffix = if provider.default { " (default)" } else { "" };
-                lines.push(format!("  {}{}", provider.name, suffix));
-            }
-        }
-        Err(err) => {
-            lines.push(format!("configured providers unavailable: {err}"));
-        }
-    }
-    lines
+    ]
 }
 fn prompt_agent_message(input: &mut InteractiveLineReader) -> Result<Option<String>> {
     let mut lines = Vec::new();

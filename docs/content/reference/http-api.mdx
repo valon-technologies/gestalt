@@ -163,7 +163,6 @@ workflow providers through the provider RPC contract.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/agent/turns/{turnID}/events/stream` | Stream turn events as server-sent events. Supports optional `after` sequence cursor, `limit`, and `until=terminal\|blocked_or_terminal`. |
 
 Session creation accepts `provider`, `model`, optional `clientRef`, optional
 `metadata`, optional `workspace`, and optional `idempotencyKey`.
@@ -367,14 +366,6 @@ curl -H 'Authorization: Bearer <api-grant>' \
 # List turn events after sequence 0
 curl -H 'Authorization: Bearer <api-grant>' \
   'http://localhost:8080/api/v1/agent/turns/turn-123/events?after=0&limit=100'
-
-# Stream turn events until the turn reaches a terminal state
-curl -N -H 'Authorization: Bearer <api-grant>' \
-  'http://localhost:8080/api/v1/agent/turns/turn-123/events/stream?after=0'
-
-# Stream turn events until the turn is terminal or waiting on an interaction
-curl -N -H 'Authorization: Bearer <api-grant>' \
-  'http://localhost:8080/api/v1/agent/turns/turn-123/events/stream?after=0&until=blocked_or_terminal'
 
 # List pending turn interactions
 curl -H 'Authorization: Bearer <api-grant>' \

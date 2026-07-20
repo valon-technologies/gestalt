@@ -339,18 +339,6 @@ pub struct AgentArgs {
     #[command(subcommand)]
     pub command: Option<AgentCommands>,
 
-    /// Run the agent harness locally (default for `gestalt agent`)
-    #[arg(long, conflicts_with = "cloud")]
-    pub local: bool,
-
-    /// Run through the configured Gestalt server
-    #[arg(long, conflicts_with = "local")]
-    pub cloud: bool,
-
-    /// Agent harness name for local launch; defaults to the server-selected harness
-    #[arg(long)]
-    pub harness: Option<String>,
-
     /// Agent provider name for a new session
     #[arg(long)]
     pub provider: Option<String>,
@@ -378,8 +366,6 @@ pub struct AgentArgs {
 
 #[derive(Subcommand)]
 pub enum AgentCommands {
-    /// Check the configured local agent harness
-    Doctor(AgentDoctorArgs),
     /// Resume an interactive agent session
     Resume(AgentResumeArgs),
     /// Inspect and control agent sessions
@@ -392,17 +378,6 @@ pub enum AgentCommands {
         #[command(subcommand)]
         command: AgentTurnCommands,
     },
-}
-
-#[derive(Args)]
-pub struct AgentDoctorArgs {
-    /// Agent provider name; defaults to the configured default
-    #[arg(long)]
-    pub provider: Option<String>,
-
-    /// Agent harness name; defaults to the server-selected harness
-    #[arg(long)]
-    pub harness: Option<String>,
 }
 
 #[derive(Args)]
@@ -536,8 +511,6 @@ pub enum AgentTurnCommands {
 pub enum AgentTurnEventCommands {
     /// List stored events for an agent turn
     List(AgentTurnEventListArgs),
-    /// Stream events for an agent turn as server-sent events
-    Stream(AgentTurnEventStreamArgs),
 }
 
 #[derive(Subcommand)]
@@ -664,20 +637,6 @@ pub struct AgentTurnEventListArgs {
     pub after: Option<u64>,
 
     /// Maximum number of events to return
-    #[arg(long)]
-    pub limit: Option<u32>,
-}
-
-#[derive(Args)]
-pub struct AgentTurnEventStreamArgs {
-    /// Turn ID
-    pub id: String,
-
-    /// Stream events after this event sequence number
-    #[arg(long)]
-    pub after: Option<u64>,
-
-    /// Maximum number of events to fetch per server poll
     #[arg(long)]
     pub limit: Option<u32>,
 }

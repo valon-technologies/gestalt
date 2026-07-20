@@ -110,7 +110,6 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 		ConnectionAuth:         result.ConnectionAuth,
 		ManualConnectionAuth:   result.ManualConnectionAuth,
 		AppDefs:                cfg.Apps,
-		AgentDefs:              cfg.Providers.Agent,
 		PublicBaseURL:          cfg.Server.BaseURL,
 		PublicGatewayTransport: result.PublicGatewayTransport,
 		ManagementBaseURL:      cfg.Server.ManagementBaseURL(),

@@ -112,14 +112,12 @@ type Server struct {
 	invoker                invocation.Invoker
 	pluginInvoker          invocation.Invoker
 	apiRouteTimeout        time.Duration
-	agentStreamHeartbeat   time.Duration
 	defaultConnection      map[string]string
 	catalogConnection      map[string]string
 	mcpConnection          map[string]string
 	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
 	manualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
 	pluginDefs             map[string]*config.ProviderEntry
-	agentDefs              map[string]*config.ProviderEntry
 	noAuth                 bool
 	anonymousPrincipal     *principal.Principal
 	publicBaseURL          string
@@ -184,13 +182,11 @@ type Config struct {
 	ConnectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
 	ManualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
 	AppDefs                map[string]*config.ProviderEntry
-	AgentDefs              map[string]*config.ProviderEntry
 	PublicBaseURL          string
 	ManagementBaseURL      string
 	SecureCookies          bool
 	StateSecret            []byte
 	APIRouteTimeout        time.Duration
-	AgentStreamHeartbeat   time.Duration
 	Now                    func() time.Time
 	Readiness              ReadinessChecker
 	PrometheusMetrics      http.Handler
@@ -253,10 +249,6 @@ func New(cfg Config) (*Server, error) {
 	apiRouteTimeout := cfg.APIRouteTimeout
 	if apiRouteTimeout <= 0 {
 		apiRouteTimeout = defaultAPIRouteTimeout
-	}
-	agentStreamHeartbeat := cfg.AgentStreamHeartbeat
-	if agentStreamHeartbeat <= 0 {
-		agentStreamHeartbeat = defaultAgentTurnEventStreamHeartbeatInterval
 	}
 	defaultAdminResource := ""
 	if !noAuth && cfg.Authorization != nil {
@@ -369,14 +361,12 @@ func New(cfg Config) (*Server, error) {
 		invoker:                cfg.Invoker,
 		pluginInvoker:          pluginInvoker,
 		apiRouteTimeout:        apiRouteTimeout,
-		agentStreamHeartbeat:   agentStreamHeartbeat,
 		defaultConnection:      cfg.DefaultConnection,
 		catalogConnection:      cfg.CatalogConnection,
 		mcpConnection:          cfg.MCPConnection,
 		connectionAuth:         cfg.ConnectionAuth,
 		manualConnectionAuth:   cfg.ManualConnectionAuth,
 		pluginDefs:             cfg.AppDefs,
-		agentDefs:              cfg.AgentDefs,
 		noAuth:                 noAuth,
 		publicBaseURL:          strings.TrimRight(cfg.PublicBaseURL, "/"),
 		managementBaseURL:      strings.TrimRight(cfg.ManagementBaseURL, "/"),

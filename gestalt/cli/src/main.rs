@@ -83,29 +83,8 @@ fn dispatch_agent(
     _url_was_explicit: bool,
     format: gestalt::output::Format,
 ) -> anyhow::Result<()> {
-    if matches!(&args.command, Some(AgentCommands::Doctor(_))) {
-        reject_agent_doctor_root_options(&args)?;
-        if args.cloud {
-            anyhow::bail!("agent doctor checks the local agent harness; omit --cloud");
-        }
-        if let Some(AgentCommands::Doctor(doctor)) = args.command {
-            let client = ApiClient::from_env(url)?;
-            return commands::agents::doctor_local(
-                &client,
-                doctor.provider.as_deref(),
-                doctor.harness.as_deref(),
-            );
-        }
-        unreachable!();
-    }
-
     if args.command.is_some() {
         reject_agent_interactive_options(&args)?;
-        if args.local {
-            anyhow::bail!(
-                "agent resource subcommands do not support --local; omit --local to use the configured server"
-            );
-        }
         let client = ApiClient::from_env(url)?;
         return match args.command {
             Some(AgentCommands::Resume(resume)) => {
@@ -115,82 +94,11 @@ fn dispatch_agent(
             None => unreachable!(),
         };
     }
-
-    let run_local = args.local || !args.cloud;
-    if run_local {
-        reject_local_agent_options(&args)?;
-        let client = ApiClient::from_env(url)?;
-        return commands::agents::launch_local(
-            &client,
-            args.provider.as_deref(),
-            args.harness.as_deref(),
-        );
-    }
-    if args.harness.is_some() {
-        anyhow::bail!("--harness is only supported for local agent launch and `agent doctor`");
-    }
     let client = ApiClient::from_env(url)?;
     commands::agents::run_interactive(&client, &args)
 }
 
-fn reject_agent_doctor_root_options(args: &AgentArgs) -> anyhow::Result<()> {
-    if args.provider.is_some() {
-        anyhow::bail!("--provider for agent doctor must be passed after `doctor`");
-    }
-    if args.harness.is_some() {
-        anyhow::bail!("--harness for agent doctor must be passed after `doctor`");
-    }
-    if args.model.is_some() {
-        anyhow::bail!("--model is not supported with agent doctor");
-    }
-    if !args.system.is_empty() {
-        anyhow::bail!("--system is not supported with agent doctor");
-    }
-    if !args.messages.is_empty() {
-        anyhow::bail!("--message is not supported with agent doctor");
-    }
-    if !args.tools.is_empty() {
-        anyhow::bail!("--tool is not supported with agent doctor");
-    }
-    if args.timeout_seconds.is_some() {
-        anyhow::bail!("--timeout-seconds is not supported with agent doctor");
-    }
-    Ok(())
-}
-
-fn reject_local_agent_options(args: &AgentArgs) -> anyhow::Result<()> {
-    if args.model.is_some() {
-        anyhow::bail!(
-            "--model is not supported in local agent mode; use --cloud for server-backed agent sessions"
-        );
-    }
-    if !args.system.is_empty() {
-        anyhow::bail!(
-            "--system is not supported in local agent mode; use --cloud for server-backed agent sessions"
-        );
-    }
-    if !args.messages.is_empty() {
-        anyhow::bail!(
-            "--message is not supported in local agent mode; use --cloud for server-backed agent sessions"
-        );
-    }
-    if !args.tools.is_empty() {
-        anyhow::bail!(
-            "--tool is not supported in local agent mode; use --cloud for server-backed agent sessions"
-        );
-    }
-    if args.timeout_seconds.is_some() {
-        anyhow::bail!(
-            "--timeout-seconds is not supported in local agent mode; use --cloud for server-backed agent sessions"
-        );
-    }
-    Ok(())
-}
-
 fn reject_agent_interactive_options(args: &AgentArgs) -> anyhow::Result<()> {
-    if args.harness.is_some() {
-        anyhow::bail!("--harness is only supported for local agent launch and `agent doctor`");
-    }
     if args.model.is_some() {
         anyhow::bail!("--model must be passed before a prompt or after `agent resume`");
     }
@@ -219,7 +127,6 @@ fn dispatch_agent_command(
 ) -> anyhow::Result<()> {
     match command {
         AgentCommands::Resume(_) => anyhow::bail!("agent resume is interactive"),
-        AgentCommands::Doctor(_) => anyhow::bail!("agent doctor is local-only"),
         AgentCommands::Sessions { command } => match command {
             AgentSessionCommands::Create(args) => {
                 commands::agents::create_session(client, &args, format)
@@ -257,9 +164,6 @@ fn dispatch_agent_command(
             AgentTurnCommands::Events { command } => match command {
                 AgentTurnEventCommands::List(args) => {
                     commands::agents::list_turn_events(client, &args, format)
-                }
-                AgentTurnEventCommands::Stream(args) => {
-                    commands::agents::stream_turn_events(client, &args)
                 }
             },
         },
