@@ -7,20 +7,25 @@
  */
 
 import type {
+  AgentInteraction,
   AgentSession,
   AgentTurn,
+  ListAgentProviderInteractionsResponse,
   ListAgentProviderSessionsResponse,
   ListAgentProviderTurnEventsResponse,
   ListAgentProviderTurnsResponse,
 } from "../../agent.ts";
 import {
+  fromWireAgentInteraction,
   fromWireAgentSession,
   fromWireAgentTurn,
+  fromWireListAgentProviderInteractionsResponse,
   fromWireListAgentProviderSessionsResponse,
   fromWireListAgentProviderTurnEventsResponse,
   fromWireListAgentProviderTurnsResponse,
 } from "../../internal/codec/agent.ts";
 import {
+  AgentInteractionSchema,
   AgentSessionSchema,
   AgentTurnSchema,
   CancelAgentProviderTurnRequestSchema,
@@ -28,12 +33,15 @@ import {
   CreateAgentProviderTurnRequestSchema,
   GetAgentProviderSessionRequestSchema,
   GetAgentProviderTurnRequestSchema,
+  ListAgentProviderInteractionsRequestSchema,
+  ListAgentProviderInteractionsResponseSchema,
   ListAgentProviderSessionsRequestSchema,
   ListAgentProviderSessionsResponseSchema,
   ListAgentProviderTurnEventsRequestSchema,
   ListAgentProviderTurnEventsResponseSchema,
   ListAgentProviderTurnsRequestSchema,
   ListAgentProviderTurnsResponseSchema,
+  ResolveAgentProviderInteractionRequestSchema,
   UpdateAgentProviderSessionRequestSchema,
 } from "../../internal/gen/v1/agent_pb.ts";
 import {
@@ -42,9 +50,11 @@ import {
   toWireCreateAgentProviderTurnRequest,
   toWireGetAgentProviderSessionRequest,
   toWireGetAgentProviderTurnRequest,
+  toWireListAgentProviderInteractionsRequest,
   toWireListAgentProviderSessionsRequest,
   toWireListAgentProviderTurnEventsRequest,
   toWireListAgentProviderTurnsRequest,
+  toWireResolveAgentProviderInteractionRequest,
   toWireUpdateAgentProviderSessionRequest,
 } from "./converters.ts";
 import { PUBLIC_METHODS } from "./methods.ts";
@@ -58,6 +68,8 @@ import type {
   PublicAgentListTurnsRequest,
   PublicAgentCancelTurnRequest,
   PublicAgentListTurnEventsRequest,
+  PublicAgentListInteractionsRequest,
+  PublicAgentResolveInteractionRequest,
 } from "./types.ts";
 import type {
   UnaryTransport,
@@ -197,6 +209,36 @@ export class AgentClient {
         toWireListAgentProviderTurnEventsRequest(request),
         ListAgentProviderTurnEventsRequestSchema,
         ListAgentProviderTurnEventsResponseSchema,
+        callOptions,
+      ),
+    );
+  }
+
+  async listInteractions(
+    request: PublicAgentListInteractionsRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<ListAgentProviderInteractionsResponse> {
+    return fromWireListAgentProviderInteractionsResponse(
+      await this.transport.unary(
+        PUBLIC_METHODS.agent.listInteractions,
+        toWireListAgentProviderInteractionsRequest(request),
+        ListAgentProviderInteractionsRequestSchema,
+        ListAgentProviderInteractionsResponseSchema,
+        callOptions,
+      ),
+    );
+  }
+
+  async resolveInteraction(
+    request: PublicAgentResolveInteractionRequest,
+    callOptions?: PublicUnaryCallOptions,
+  ): Promise<AgentInteraction> {
+    return fromWireAgentInteraction(
+      await this.transport.unary(
+        PUBLIC_METHODS.agent.resolveInteraction,
+        toWireResolveAgentProviderInteractionRequest(request),
+        ResolveAgentProviderInteractionRequestSchema,
+        AgentInteractionSchema,
         callOptions,
       ),
     );

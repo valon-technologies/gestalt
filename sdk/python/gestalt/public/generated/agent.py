@@ -28,6 +28,32 @@ class AgentExecutionStatusValues:
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
+AgentInteractionState = int
+
+
+class AgentInteractionStateValues:
+    """Named values for the open AgentInteractionState enum."""
+
+    UNSPECIFIED: AgentInteractionState = 0
+    PENDING: AgentInteractionState = 1
+    RESOLVED: AgentInteractionState = 2
+    CANCELED: AgentInteractionState = 3
+
+
+# Open enum: unknown numeric values are preserved, so the type is int.
+AgentInteractionType = int
+
+
+class AgentInteractionTypeValues:
+    """Named values for the open AgentInteractionType enum."""
+
+    UNSPECIFIED: AgentInteractionType = 0
+    APPROVAL: AgentInteractionType = 1
+    CLARIFICATION: AgentInteractionType = 2
+    INPUT: AgentInteractionType = 3
+
+
+# Open enum: unknown numeric values are preserved, so the type is int.
 AgentMessagePartType = int
 
 
@@ -58,6 +84,21 @@ class AgentSessionStateValues:
 class AgentCatalogToolConfig:
     refs: list[AgentToolRef] = field(default_factory=list)
     tools: list[ListedAgentTool] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentInteraction:
+    id: str = ""
+    type: AgentInteractionType = 0
+    state: AgentInteractionState = 0
+    title: str = ""
+    prompt: str = ""
+    request: dict[str, JsonValue] | None = None
+    resolution: dict[str, JsonValue] | None = None
+    created_at: datetime.datetime | None = None
+    resolved_at: datetime.datetime | None = None
+    turn_id: str = ""
+    session_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,6 +367,17 @@ class GetAgentProviderTurnRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ListAgentProviderInteractionsRequest:
+    turn_id: str = ""
+    provider_name: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ListAgentProviderInteractionsResponse:
+    interactions: list[AgentInteraction] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
 class ListAgentProviderSessionsRequest:
     session_ids: list[str] = field(default_factory=list)
     state: AgentSessionState = 0
@@ -395,6 +447,14 @@ class ListedAgentTool:
 class PreparedAgentWorkspace:
     root: str = ""
     cwd: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ResolveAgentProviderInteractionRequest:
+    interaction_id: str = ""
+    resolution: dict[str, JsonValue] | None = None
+    turn_id: str = ""
+    provider_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -34,6 +34,50 @@ def from_wire_agent_catalog_tool_config(value: Any) -> native.AgentCatalogToolCo
     )
 
 
+def to_wire_agent_interaction(value: native.AgentInteraction) -> Any:
+    return _agent_pb2.AgentInteraction(
+        id=value.id,
+        type=to_wire_enum(value.type),
+        state=to_wire_enum(value.state),
+        title=value.title,
+        prompt=value.prompt,
+        request=None if value.request is None else to_wire_struct(value.request),
+        resolution=None
+        if value.resolution is None
+        else to_wire_struct(value.resolution),
+        created_at=None
+        if value.created_at is None
+        else to_wire_timestamp(value.created_at),
+        resolved_at=None
+        if value.resolved_at is None
+        else to_wire_timestamp(value.resolved_at),
+        turn_id=value.turn_id,
+        session_id=value.session_id,
+    )
+
+
+def from_wire_agent_interaction(value: Any) -> native.AgentInteraction:
+    return native.AgentInteraction(
+        id=value.id,
+        type=value.type,
+        state=value.state,
+        title=value.title,
+        prompt=value.prompt,
+        request=from_wire_struct(value.request) if value.HasField("request") else None,
+        resolution=from_wire_struct(value.resolution)
+        if value.HasField("resolution")
+        else None,
+        created_at=from_wire_timestamp(value.created_at)
+        if value.HasField("created_at")
+        else None,
+        resolved_at=from_wire_timestamp(value.resolved_at)
+        if value.HasField("resolved_at")
+        else None,
+        turn_id=value.turn_id,
+        session_id=value.session_id,
+    )
+
+
 def to_wire_agent_message(value: native.AgentMessage) -> Any:
     return _agent_pb2.AgentMessage(
         role=value.role,
@@ -697,6 +741,40 @@ def from_wire_get_agent_provider_turn_request(
     )
 
 
+def to_wire_list_agent_provider_interactions_request(
+    value: native.ListAgentProviderInteractionsRequest,
+) -> Any:
+    return _agent_pb2.ListAgentProviderInteractionsRequest(
+        turn_id=value.turn_id,
+        provider_name=value.provider_name,
+    )
+
+
+def from_wire_list_agent_provider_interactions_request(
+    value: Any,
+) -> native.ListAgentProviderInteractionsRequest:
+    return native.ListAgentProviderInteractionsRequest(
+        turn_id=value.turn_id,
+        provider_name=value.provider_name,
+    )
+
+
+def to_wire_list_agent_provider_interactions_response(
+    value: native.ListAgentProviderInteractionsResponse,
+) -> Any:
+    return _agent_pb2.ListAgentProviderInteractionsResponse(
+        interactions=[to_wire_agent_interaction(item) for item in value.interactions],
+    )
+
+
+def from_wire_list_agent_provider_interactions_response(
+    value: Any,
+) -> native.ListAgentProviderInteractionsResponse:
+    return native.ListAgentProviderInteractionsResponse(
+        interactions=[from_wire_agent_interaction(item) for item in value.interactions],
+    )
+
+
 def to_wire_list_agent_provider_sessions_request(
     value: native.ListAgentProviderSessionsRequest,
 ) -> Any:
@@ -864,6 +942,32 @@ def from_wire_prepared_agent_workspace(value: Any) -> native.PreparedAgentWorksp
     return native.PreparedAgentWorkspace(
         root=value.root,
         cwd=value.cwd,
+    )
+
+
+def to_wire_resolve_agent_provider_interaction_request(
+    value: native.ResolveAgentProviderInteractionRequest,
+) -> Any:
+    return _agent_pb2.ResolveAgentProviderInteractionRequest(
+        interaction_id=value.interaction_id,
+        resolution=None
+        if value.resolution is None
+        else to_wire_struct(value.resolution),
+        turn_id=value.turn_id,
+        provider_name=value.provider_name,
+    )
+
+
+def from_wire_resolve_agent_provider_interaction_request(
+    value: Any,
+) -> native.ResolveAgentProviderInteractionRequest:
+    return native.ResolveAgentProviderInteractionRequest(
+        interaction_id=value.interaction_id,
+        resolution=from_wire_struct(value.resolution)
+        if value.HasField("resolution")
+        else None,
+        turn_id=value.turn_id,
+        provider_name=value.provider_name,
     )
 
 

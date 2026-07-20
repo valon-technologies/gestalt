@@ -958,6 +958,7 @@ pub mod agent_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        ///
         pub async fn create_session(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateAgentProviderSessionRequest>,
@@ -1206,6 +1207,7 @@ pub mod agent_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AgentServer.
     #[async_trait]
     pub trait Agent: std::marker::Send + std::marker::Sync + 'static {
+        ///
         async fn create_session(
             &self,
             request: tonic::Request<super::CreateAgentProviderSessionRequest>,

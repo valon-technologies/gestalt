@@ -25,6 +25,36 @@ pub mod agent_execution_status {
     pub const AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT: i32 = 6;
 }
 
+/// Open enum for `gestalt.provider.v1.AgentInteractionState`; unknown numeric values are preserved.
+pub type AgentInteractionState = i32;
+
+/// Named values of `AgentInteractionState`.
+pub mod agent_interaction_state {
+    /// AGENT_INTERACTION_STATE_UNSPECIFIED.
+    pub const AGENT_INTERACTION_STATE_UNSPECIFIED: i32 = 0;
+    /// AGENT_INTERACTION_STATE_PENDING.
+    pub const AGENT_INTERACTION_STATE_PENDING: i32 = 1;
+    /// AGENT_INTERACTION_STATE_RESOLVED.
+    pub const AGENT_INTERACTION_STATE_RESOLVED: i32 = 2;
+    /// AGENT_INTERACTION_STATE_CANCELED.
+    pub const AGENT_INTERACTION_STATE_CANCELED: i32 = 3;
+}
+
+/// Open enum for `gestalt.provider.v1.AgentInteractionType`; unknown numeric values are preserved.
+pub type AgentInteractionType = i32;
+
+/// Named values of `AgentInteractionType`.
+pub mod agent_interaction_type {
+    /// AGENT_INTERACTION_TYPE_UNSPECIFIED.
+    pub const AGENT_INTERACTION_TYPE_UNSPECIFIED: i32 = 0;
+    /// AGENT_INTERACTION_TYPE_APPROVAL.
+    pub const AGENT_INTERACTION_TYPE_APPROVAL: i32 = 1;
+    /// AGENT_INTERACTION_TYPE_CLARIFICATION.
+    pub const AGENT_INTERACTION_TYPE_CLARIFICATION: i32 = 2;
+    /// AGENT_INTERACTION_TYPE_INPUT.
+    pub const AGENT_INTERACTION_TYPE_INPUT: i32 = 3;
+}
+
 /// Open enum for `gestalt.provider.v1.AgentMessagePartType`; unknown numeric values are preserved.
 pub type AgentMessagePartType = i32;
 
@@ -65,6 +95,34 @@ pub struct AgentCatalogToolConfig {
     pub refs: Vec<AgentToolRef>,
     /// The `tools` field.
     pub tools: Vec<ListedAgentTool>,
+}
+
+/// Native message type for `gestalt.provider.v1.AgentInteraction`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentInteraction {
+    /// The `id` field.
+    pub id: String,
+    /// The `type` field.
+    pub r#type: AgentInteractionType,
+    /// The `state` field.
+    pub state: AgentInteractionState,
+    /// The `title` field.
+    pub title: String,
+    /// The `prompt` field.
+    pub prompt: String,
+    /// The `request` field; None when unset.
+    pub request: Option<serde_json::Map<String, serde_json::Value>>,
+    /// The `resolution` field; None when unset.
+    pub resolution: Option<serde_json::Map<String, serde_json::Value>>,
+    /// The `created_at` field; None when unset.
+    pub created_at: Option<std::time::SystemTime>,
+    /// The `resolved_at` field; None when unset.
+    pub resolved_at: Option<std::time::SystemTime>,
+    /// The `turn_id` field.
+    pub turn_id: String,
+    /// The `session_id` field.
+    pub session_id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.AgentMessage`.
@@ -486,6 +544,24 @@ pub struct GetAgentProviderTurnRequest {
     pub session_id: String,
 }
 
+/// Native message type for `gestalt.provider.v1.ListAgentProviderInteractionsRequest`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentProviderInteractionsRequest {
+    /// The `turn_id` field.
+    pub turn_id: String,
+    /// The `provider_name` field.
+    pub provider_name: String,
+}
+
+/// Native message type for `gestalt.provider.v1.ListAgentProviderInteractionsResponse`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentProviderInteractionsResponse {
+    /// The `interactions` field.
+    pub interactions: Vec<AgentInteraction>,
+}
+
 /// Native message type for `gestalt.provider.v1.ListAgentProviderSessionsRequest`.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -607,6 +683,20 @@ pub struct PreparedAgentWorkspace {
     pub root: String,
     /// The `cwd` field.
     pub cwd: String,
+}
+
+/// Native message type for `gestalt.provider.v1.ResolveAgentProviderInteractionRequest`.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveAgentProviderInteractionRequest {
+    /// The `interaction_id` field.
+    pub interaction_id: String,
+    /// The `resolution` field; None when unset.
+    pub resolution: Option<serde_json::Map<String, serde_json::Value>>,
+    /// The `turn_id` field.
+    pub turn_id: String,
+    /// The `provider_name` field.
+    pub provider_name: String,
 }
 
 /// Native message type for `gestalt.provider.v1.UpdateAgentProviderSessionRequest`.

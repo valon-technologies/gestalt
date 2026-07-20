@@ -16,10 +16,10 @@ use gestalt_sdk::public::generated::authorization::{
     ListActiveModelResourceTypesRequest, ListRelationshipsRequest, RelationshipFilter,
     RelationshipTarget, RelationshipTargetKind, Resource, Subject,
 };
-use gestalt_sdk::public::rest_transport::SyncRestTransport;
+use gestalt_sdk::public::grpc_transport::SyncGrpcTransport;
 
 pub fn dispatch(
-    authz: &AuthorizationClient<SyncRestTransport>,
+    authz: &AuthorizationClient<SyncGrpcTransport>,
     command: AuthorizationCommands,
     format: Format,
 ) -> Result<()> {

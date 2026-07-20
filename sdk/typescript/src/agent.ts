@@ -1065,15 +1065,13 @@ export class Agent {
 
   async resolveInteraction(
     interactionId: string,
+    turnId: string,
     resolution?: JsonObjectInput,
-    options?: {
-      turnId?: string | undefined;
-      providerName?: string | undefined;
-    },
+    options?: { providerName?: string | undefined },
   ): Promise<AgentInteraction> {
     const request = {
       interactionId,
-      turnId: options?.turnId ?? "",
+      turnId,
       providerName: options?.providerName ?? "",
       ...(resolution !== undefined ? { resolution } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),

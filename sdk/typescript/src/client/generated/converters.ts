@@ -12,9 +12,11 @@ import {
   toWireCreateAgentProviderTurnRequest as codecToWireCreateAgentProviderTurnRequest,
   toWireGetAgentProviderSessionRequest as codecToWireGetAgentProviderSessionRequest,
   toWireGetAgentProviderTurnRequest as codecToWireGetAgentProviderTurnRequest,
+  toWireListAgentProviderInteractionsRequest as codecToWireListAgentProviderInteractionsRequest,
   toWireListAgentProviderSessionsRequest as codecToWireListAgentProviderSessionsRequest,
   toWireListAgentProviderTurnEventsRequest as codecToWireListAgentProviderTurnEventsRequest,
   toWireListAgentProviderTurnsRequest as codecToWireListAgentProviderTurnsRequest,
+  toWireResolveAgentProviderInteractionRequest as codecToWireResolveAgentProviderInteractionRequest,
   toWireUpdateAgentProviderSessionRequest as codecToWireUpdateAgentProviderSessionRequest,
 } from "../../internal/codec/agent.ts";
 import {
@@ -83,9 +85,11 @@ import type {
   CreateAgentProviderTurnRequest as NativeCreateAgentProviderTurnRequest,
   GetAgentProviderSessionRequest as NativeGetAgentProviderSessionRequest,
   GetAgentProviderTurnRequest as NativeGetAgentProviderTurnRequest,
+  ListAgentProviderInteractionsRequest as NativeListAgentProviderInteractionsRequest,
   ListAgentProviderSessionsRequest as NativeListAgentProviderSessionsRequest,
   ListAgentProviderTurnEventsRequest as NativeListAgentProviderTurnEventsRequest,
   ListAgentProviderTurnsRequest as NativeListAgentProviderTurnsRequest,
+  ResolveAgentProviderInteractionRequest as NativeResolveAgentProviderInteractionRequest,
   UpdateAgentProviderSessionRequest as NativeUpdateAgentProviderSessionRequest,
 } from "../../agent.ts";
 import type {
@@ -154,9 +158,11 @@ import type {
   CreateAgentProviderTurnRequest,
   GetAgentProviderSessionRequest,
   GetAgentProviderTurnRequest,
+  ListAgentProviderInteractionsRequest,
   ListAgentProviderSessionsRequest,
   ListAgentProviderTurnEventsRequest,
   ListAgentProviderTurnsRequest,
+  ResolveAgentProviderInteractionRequest,
   UpdateAgentProviderSessionRequest,
 } from "../../internal/gen/v1/agent_pb.ts";
 import type {
@@ -226,9 +232,11 @@ import type {
   PublicAgentCreateTurnRequest,
   PublicAgentGetSessionRequest,
   PublicAgentGetTurnRequest,
+  PublicAgentListInteractionsRequest,
   PublicAgentListSessionsRequest,
   PublicAgentListTurnEventsRequest,
   PublicAgentListTurnsRequest,
+  PublicAgentResolveInteractionRequest,
   PublicAgentUpdateSessionRequest,
   PublicAppInvokeGraphQLRequest,
   PublicAppInvokeRequest,
@@ -535,6 +543,14 @@ export function toWireListActiveModelResourceTypesRequest(
   );
 }
 
+export function toWireListAgentProviderInteractionsRequest(
+  request: PublicAgentListInteractionsRequest,
+): ListAgentProviderInteractionsRequest {
+  return codecToWireListAgentProviderInteractionsRequest(
+    request as Init<NativeListAgentProviderInteractionsRequest>,
+  );
+}
+
 export function toWireListAgentProviderSessionsRequest(
   request: PublicAgentListSessionsRequest,
 ): ListAgentProviderSessionsRequest {
@@ -632,6 +648,14 @@ export function toWireRecordRequest(
   request: PublicIndexedDBAddRequest | PublicIndexedDBPutRequest,
 ): RecordRequest {
   return codecToWireRecordRequest(request as Init<NativeRecordRequest>);
+}
+
+export function toWireResolveAgentProviderInteractionRequest(
+  request: PublicAgentResolveInteractionRequest,
+): ResolveAgentProviderInteractionRequest {
+  return codecToWireResolveAgentProviderInteractionRequest(
+    request as Init<NativeResolveAgentProviderInteractionRequest>,
+  );
 }
 
 export function toWireResolveExternalCredentialRequest(

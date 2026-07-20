@@ -3,12 +3,14 @@
 //! Generated transport-neutral App client for the public gestaltd surface.
 
 use crate::public::generated::agent::{
-    AgentSession, AgentTurn, CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
-    CreateAgentProviderTurnRequest, GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    AgentInteraction, AgentSession, AgentTurn, CancelAgentProviderTurnRequest,
+    CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest,
+    GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
-    UpdateAgentProviderSessionRequest,
+    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
 };
 use crate::public::generated::app::{AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult};
 use crate::public::generated::authorization::{
@@ -20,13 +22,17 @@ use crate::public::generated::authorization::{
     SetAuthorizationStateResponse,
 };
 use crate::public::generated::codec::agent::{
-    from_wire_agent_session, from_wire_agent_turn, from_wire_list_agent_provider_sessions_response,
+    from_wire_agent_interaction, from_wire_agent_session, from_wire_agent_turn,
+    from_wire_list_agent_provider_interactions_response,
+    from_wire_list_agent_provider_sessions_response,
     from_wire_list_agent_provider_turn_events_response,
     from_wire_list_agent_provider_turns_response, to_wire_cancel_agent_provider_turn_request,
     to_wire_create_agent_provider_session_request, to_wire_create_agent_provider_turn_request,
     to_wire_get_agent_provider_session_request, to_wire_get_agent_provider_turn_request,
-    to_wire_list_agent_provider_sessions_request, to_wire_list_agent_provider_turn_events_request,
-    to_wire_list_agent_provider_turns_request, to_wire_update_agent_provider_session_request,
+    to_wire_list_agent_provider_interactions_request, to_wire_list_agent_provider_sessions_request,
+    to_wire_list_agent_provider_turn_events_request, to_wire_list_agent_provider_turns_request,
+    to_wire_resolve_agent_provider_interaction_request,
+    to_wire_update_agent_provider_session_request,
 };
 use crate::public::generated::codec::app::{
     from_wire_operation_result, to_wire_app_invoke_graphql_request, to_wire_app_invoke_request,
@@ -353,6 +359,62 @@ impl<T: crate::public::generated::unary_transport::SyncUnaryTransport> AgentClie
         Ok(from_wire_list_agent_provider_turn_events_response(
             wire_response,
         ))
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::GrpcCapable> AgentClient<T> {
+    pub async fn list_interactions(
+        &self,
+        request: ListAgentProviderInteractionsRequest,
+    ) -> Result<ListAgentProviderInteractionsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_interactions_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListAgentProviderInteractionsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_INTERACTIONS, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_list_agent_provider_interactions_response(
+            wire_response,
+        ))
+    }
+
+    pub async fn resolve_interaction(
+        &self,
+        request: ResolveAgentProviderInteractionRequest,
+    ) -> Result<AgentInteraction, GestaltError> {
+        let wire = to_wire_resolve_agent_provider_interaction_request(request);
+        let mut wire_response = crate::generated::v1::AgentInteraction::default();
+        self.transport
+            .unary(&METHOD_AGENT_RESOLVE_INTERACTION, &wire, &mut wire_response)
+            .await?;
+        Ok(from_wire_agent_interaction(wire_response))
+    }
+}
+
+impl<T: crate::public::generated::unary_transport::SyncGrpcCapable> AgentClient<T> {
+    pub fn list_interactions_sync(
+        &self,
+        request: ListAgentProviderInteractionsRequest,
+    ) -> Result<ListAgentProviderInteractionsResponse, GestaltError> {
+        let wire = to_wire_list_agent_provider_interactions_request(request);
+        let mut wire_response =
+            crate::generated::v1::ListAgentProviderInteractionsResponse::default();
+        self.transport
+            .unary(&METHOD_AGENT_LIST_INTERACTIONS, &wire, &mut wire_response)?;
+        Ok(from_wire_list_agent_provider_interactions_response(
+            wire_response,
+        ))
+    }
+
+    pub fn resolve_interaction_sync(
+        &self,
+        request: ResolveAgentProviderInteractionRequest,
+    ) -> Result<AgentInteraction, GestaltError> {
+        let wire = to_wire_resolve_agent_provider_interaction_request(request);
+        let mut wire_response = crate::generated::v1::AgentInteraction::default();
+        self.transport
+            .unary(&METHOD_AGENT_RESOLVE_INTERACTION, &wire, &mut wire_response)?;
+        Ok(from_wire_agent_interaction(wire_response))
     }
 }
 

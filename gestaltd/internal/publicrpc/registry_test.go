@@ -136,8 +136,6 @@ func TestRegistryDoesNotExposeInternalMethods(t *testing.T) {
 
 	internal := []string{
 		gestaltproto.Agent_GetInteraction_FullMethodName,
-		gestaltproto.Agent_ListInteractions_FullMethodName,
-		gestaltproto.Agent_ResolveInteraction_FullMethodName,
 		gestaltproto.Agent_GetCapabilities_FullMethodName,
 		gestaltproto.AppProvider_GetMetadata_FullMethodName,
 	}

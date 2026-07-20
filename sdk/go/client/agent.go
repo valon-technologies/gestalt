@@ -983,16 +983,15 @@ func (c *Agent) ListInteractionsRaw(ctx context.Context, request *ListAgentProvi
 // AgentResolveInteractionOptions carries the optional parameters of [Agent.ResolveInteraction].
 // A nil options value is equivalent to the zero value.
 type AgentResolveInteractionOptions struct {
-	TurnId       string
 	ProviderName string
 }
 
 // ResolveInteraction is the ergonomic form of [Agent.ResolveInteractionRaw].
-func (c *Agent) ResolveInteraction(ctx context.Context, interactionId string, resolution map[string]any, opts *AgentResolveInteractionOptions) (*AgentInteraction, error) {
+func (c *Agent) ResolveInteraction(ctx context.Context, interactionId string, turnId string, resolution map[string]any, opts *AgentResolveInteractionOptions) (*AgentInteraction, error) {
 	if opts == nil {
 		opts = &AgentResolveInteractionOptions{}
 	}
-	request := &ResolveAgentProviderInteractionRequest{InteractionId: interactionId, Resolution: resolution, TurnId: opts.TurnId, ProviderName: opts.ProviderName, Context: c.context}
+	request := &ResolveAgentProviderInteractionRequest{InteractionId: interactionId, TurnId: turnId, Resolution: resolution, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ResolveInteraction(ctx, ToWireResolveAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

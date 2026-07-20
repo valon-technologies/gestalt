@@ -5,7 +5,7 @@
     "rust",
     "typescript"
   ],
-  "grpcMethodCount": 69,
+  "grpcMethodCount": 71,
   "restMethodCount": 41,
   "methods": [
     {
@@ -207,6 +207,34 @@
     },
     {
       "service": "Agent",
+      "method": "ListInteractions",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.Agent/ListInteractions",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "ListInteractions"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "list_interactions"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "list_interactions"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "listInteractions"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
       "method": "ListSessions",
       "streamingKind": "unary",
       "restVerb": "GET",
@@ -362,6 +390,34 @@
         "typescript": {
           "service": "AgentClient",
           "method": "listTurns"
+        }
+      },
+      "fill": [
+        "context"
+      ],
+      "requestPolicy": "omit"
+    },
+    {
+      "service": "Agent",
+      "method": "ResolveInteraction",
+      "streamingKind": "unary",
+      "grpcPath": "/gestalt.provider.v1.Agent/ResolveInteraction",
+      "symbols": {
+        "go": {
+          "service": "AgentClient",
+          "method": "ResolveInteraction"
+        },
+        "python": {
+          "service": "AgentClient",
+          "method": "resolve_interaction"
+        },
+        "rust": {
+          "service": "AgentClient",
+          "method": "resolve_interaction"
+        },
+        "typescript": {
+          "service": "AgentClient",
+          "method": "resolveInteraction"
         }
       },
       "fill": [

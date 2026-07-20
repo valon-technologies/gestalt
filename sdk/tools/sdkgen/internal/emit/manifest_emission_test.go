@@ -145,7 +145,14 @@ func restSurfaceFile(output, lang, service string) string {
 		if idx < 0 {
 			return ""
 		}
-		return output[idx:]
+		// Stop at the next impl block (SyncUnaryTransport, GrpcCapable, etc.)
+		// so gRPC-only methods are not included in the REST surface.
+		rest := output[idx:]
+		nextImpl := strings.Index(rest[1:], "\nimpl<")
+		if nextImpl >= 0 {
+			return rest[:1+nextImpl]
+		}
+		return rest
 	case "ts":
 		marker := fmt.Sprintf("export interface %sREST {", clientName)
 		idx := strings.Index(output, marker)

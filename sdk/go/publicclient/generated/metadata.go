@@ -141,6 +141,22 @@ var MethodAgentListTurnEvents = Method{
 	Reject:          nil,
 }
 
+var MethodAgentListInteractions = Method{
+	Service:    "gestalt.provider.v1.Agent",
+	Name:       "ListInteractions",
+	FullMethod: "/gestalt.provider.v1.Agent/ListInteractions",
+	Fill:       []string{"context"},
+	Reject:     nil,
+}
+
+var MethodAgentResolveInteraction = Method{
+	Service:    "gestalt.provider.v1.Agent",
+	Name:       "ResolveInteraction",
+	FullMethod: "/gestalt.provider.v1.Agent/ResolveInteraction",
+	Fill:       []string{"context"},
+	Reject:     nil,
+}
+
 var MethodAppInvoke = Method{
 	Service:         "gestalt.provider.v1.App",
 	Name:            "Invoke",

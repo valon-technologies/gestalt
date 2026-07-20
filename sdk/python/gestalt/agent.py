@@ -1150,8 +1150,8 @@ class Agent:
         self,
         *,
         interaction_id: str = ...,
-        resolution: dict[str, JsonValue] | None = ...,
         turn_id: str = ...,
+        resolution: dict[str, JsonValue] | None = ...,
         provider_name: str = ...,
     ) -> AgentInteraction: ...
 
@@ -1160,21 +1160,21 @@ class Agent:
         request: ResolveAgentProviderInteractionRequest | None = None,
         *,
         interaction_id: str | None = None,
-        resolution: dict[str, JsonValue] | None = None,
         turn_id: str | None = None,
+        resolution: dict[str, JsonValue] | None = None,
         provider_name: str | None = None,
     ) -> AgentInteraction:
         if request is None:
             request = ResolveAgentProviderInteractionRequest(
                 interaction_id=interaction_id or "",
-                resolution=resolution,
                 turn_id=turn_id or "",
+                resolution=resolution,
                 provider_name=provider_name or "",
             )
         elif (
             interaction_id is not None
-            or resolution is not None
             or turn_id is not None
+            or resolution is not None
             or provider_name is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")

@@ -599,13 +599,25 @@ service Agent {
     option (signature) = "interaction_id";
   }
   rpc ListInteractions(ListAgentProviderInteractionsRequest) returns (ListAgentProviderInteractionsResponse) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "turn_id";
     option (optional_signature) = "provider_name";
   }
   rpc ResolveInteraction(ResolveAgentProviderInteractionRequest) returns (AgentInteraction) {
+    option (google.api.method_visibility) = {
+      restriction: "PUBLIC"
+    };
+    option (public) = {
+      fill: "context"
+    };
     option (signature) = "interaction_id";
+    option (signature) = "turn_id";
     option (signature) = "resolution";
-    option (optional_signature) = "turn_id";
     option (optional_signature) = "provider_name";
   }
   rpc GetCapabilities(GetAgentProviderCapabilitiesRequest) returns (AgentProviderCapabilities);

@@ -169,6 +169,22 @@ METHOD_AGENT_LIST_TURN_EVENTS = Method(
     reject=(),
 )
 
+METHOD_AGENT_LIST_INTERACTIONS = Method(
+    service="gestalt.provider.v1.Agent",
+    name="ListInteractions",
+    full_method="/gestalt.provider.v1.Agent/ListInteractions",
+    fill=("context",),
+    reject=(),
+)
+
+METHOD_AGENT_RESOLVE_INTERACTION = Method(
+    service="gestalt.provider.v1.Agent",
+    name="ResolveInteraction",
+    full_method="/gestalt.provider.v1.Agent/ResolveInteraction",
+    fill=("context",),
+    reject=(),
+)
+
 METHOD_APP_INVOKE = Method(
     service="gestalt.provider.v1.App",
     name="Invoke",

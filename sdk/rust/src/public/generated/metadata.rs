@@ -13,7 +13,8 @@ pub struct Empty {}
 
 use crate::generated::v1;
 use crate::public::generated::codec::agent::{
-    decode_wire_agent_session_json, decode_wire_agent_turn_json,
+    decode_wire_agent_interaction_json, decode_wire_agent_session_json,
+    decode_wire_agent_turn_json, decode_wire_list_agent_provider_interactions_response_json,
     decode_wire_list_agent_provider_sessions_response_json,
     decode_wire_list_agent_provider_turn_events_response_json,
     decode_wire_list_agent_provider_turns_response_json,
@@ -22,9 +23,11 @@ use crate::public::generated::codec::agent::{
     encode_wire_create_agent_provider_turn_request_json,
     encode_wire_get_agent_provider_session_request_json,
     encode_wire_get_agent_provider_turn_request_json,
+    encode_wire_list_agent_provider_interactions_request_json,
     encode_wire_list_agent_provider_sessions_request_json,
     encode_wire_list_agent_provider_turn_events_request_json,
     encode_wire_list_agent_provider_turns_request_json,
+    encode_wire_resolve_agent_provider_interaction_request_json,
     encode_wire_update_agent_provider_session_request_json,
 };
 use crate::public::generated::codec::app::{
@@ -229,6 +232,32 @@ fn encode_list_turn_events_request_json(bytes: &[u8]) -> Result<Value, GestaltEr
 
 fn decode_list_turn_events_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
     let wire = decode_wire_list_agent_provider_turn_events_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_list_interactions_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ListAgentProviderInteractionsRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_list_agent_provider_interactions_request_json(
+        &wire,
+    ))
+}
+
+fn decode_list_interactions_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_list_agent_provider_interactions_response_json(value)?;
+    Ok(wire.encode_to_vec())
+}
+
+fn encode_resolve_interaction_request_json(bytes: &[u8]) -> Result<Value, GestaltError> {
+    let wire = v1::ResolveAgentProviderInteractionRequest::decode(bytes)
+        .map_err(|err| GestaltError::new(gestalt_error_code::INVALID_ARGUMENT, err.to_string()))?;
+    Ok(encode_wire_resolve_agent_provider_interaction_request_json(
+        &wire,
+    ))
+}
+
+fn decode_resolve_interaction_response_json(value: &Value) -> Result<Vec<u8>, GestaltError> {
+    let wire = decode_wire_agent_interaction_json(value)?;
     Ok(wire.encode_to_vec())
 }
 
@@ -1130,6 +1159,36 @@ pub const METHOD_AGENT_LIST_TURN_EVENTS: Method = Method {
     reject: &[],
     encode_request_json: Some(encode_list_turn_events_request_json),
     decode_response_json: Some(decode_list_turn_events_response_json),
+};
+
+pub const METHOD_AGENT_LIST_INTERACTIONS: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "ListInteractions",
+    full_method: "/gestalt.provider.v1.Agent/ListInteractions",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_list_interactions_request_json),
+    decode_response_json: Some(decode_list_interactions_response_json),
+};
+
+pub const METHOD_AGENT_RESOLVE_INTERACTION: Method = Method {
+    service: "gestalt.provider.v1.Agent",
+    name: "ResolveInteraction",
+    full_method: "/gestalt.provider.v1.Agent/ResolveInteraction",
+    http_verb: "",
+    http_path: "",
+    http_body: "",
+    http_path_fields: &[],
+    http_query_fields: &[],
+    fill: &["context"],
+    reject: &[],
+    encode_request_json: Some(encode_resolve_interaction_request_json),
+    decode_response_json: Some(decode_resolve_interaction_response_json),
 };
 
 pub const METHOD_APP_INVOKE: Method = Method {

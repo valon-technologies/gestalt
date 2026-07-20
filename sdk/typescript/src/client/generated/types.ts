@@ -12,9 +12,11 @@ import type {
   CreateAgentProviderTurnRequest,
   GetAgentProviderSessionRequest,
   GetAgentProviderTurnRequest,
+  ListAgentProviderInteractionsRequest,
   ListAgentProviderSessionsRequest,
   ListAgentProviderTurnEventsRequest,
   ListAgentProviderTurnsRequest,
+  ResolveAgentProviderInteractionRequest,
   UpdateAgentProviderSessionRequest,
 } from "../../agent.ts";
 import type { AppInvokeGraphQLRequest, AppInvokeRequest } from "../../app.ts";
@@ -117,6 +119,16 @@ export type PublicAgentCancelTurnRequest = Omit<
 
 export type PublicAgentListTurnEventsRequest = Omit<
   ListAgentProviderTurnEventsRequest,
+  "context"
+>;
+
+export type PublicAgentListInteractionsRequest = Omit<
+  ListAgentProviderInteractionsRequest,
+  "context"
+>;
+
+export type PublicAgentResolveInteractionRequest = Omit<
+  ResolveAgentProviderInteractionRequest,
   "context"
 >;
 

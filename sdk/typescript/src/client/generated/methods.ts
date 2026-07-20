@@ -101,6 +101,13 @@ export const PUBLIC_METHODS = {
         queryFields: [{ name: "provider_name", jsonName: "providerName" }],
       },
     },
+    listInteractions: {
+      service: "Agent",
+      method: "ListInteractions",
+      grpcPath: "/gestalt.provider.v1.Agent/ListInteractions",
+      fill: ["context"],
+      reject: [],
+    },
     listSessions: {
       service: "Agent",
       method: "ListSessions",
@@ -161,6 +168,13 @@ export const PUBLIC_METHODS = {
           { name: "provider_name", jsonName: "providerName" },
         ],
       },
+    },
+    resolveInteraction: {
+      service: "Agent",
+      method: "ResolveInteraction",
+      grpcPath: "/gestalt.provider.v1.Agent/ResolveInteraction",
+      fill: ["context"],
+      reject: [],
     },
     updateSession: {
       service: "Agent",
