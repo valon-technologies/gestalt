@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -21,11 +22,24 @@ type Materializer struct {
 	Registries   map[string]config.AppRegistryConfig
 	Reader       *RegistryReader
 	ArtifactsDir string
+
+	mu    sync.Mutex
+	locks map[string]*materializationLock
+}
+
+type materializationLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 type MaterializationResult struct {
 	Path    string
 	Changed bool
+}
+
+func (m *Materializer) MaterializeApp(ctx context.Context, installation *core.AppInstallation) error {
+	_, err := m.Ensure(ctx, installation)
+	return err
 }
 
 // MaterializedPath returns the on-disk directory for one installed app version.
@@ -54,6 +68,8 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	if artifactsDir == "" {
 		return nil, fmt.Errorf("artifacts directory is not configured")
 	}
+	unlock := m.lockMaterialization(appName + "\x00" + version)
+	defer unlock()
 
 	destDir := MaterializedPath(artifactsDir, appName, version)
 	if installedPackageReady(destDir, appName, version) {
@@ -95,6 +111,31 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 		return nil, fmt.Errorf("materialize app artifact: %w", err)
 	}
 	return &MaterializationResult{Path: destDir, Changed: true}, nil
+}
+
+func (m *Materializer) lockMaterialization(key string) func() {
+	m.mu.Lock()
+	if m.locks == nil {
+		m.locks = make(map[string]*materializationLock)
+	}
+	lock := m.locks[key]
+	if lock == nil {
+		lock = &materializationLock{}
+		m.locks[key] = lock
+	}
+	lock.refs++
+	m.mu.Unlock()
+
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		m.mu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(m.locks, key)
+		}
+		m.mu.Unlock()
+	}
 }
 
 func installedPackageReady(destDir, appName, version string) bool {

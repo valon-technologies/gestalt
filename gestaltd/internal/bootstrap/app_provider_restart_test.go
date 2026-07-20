@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 )
 
 type restartCloseFailureProvider struct {
@@ -20,6 +21,19 @@ type restartCloseFailureProvider struct {
 }
 
 func (p *restartCloseFailureProvider) Close() error { return p.err }
+
+type recordingRegistryResolver struct {
+	activations int
+}
+
+func (r *recordingRegistryResolver) ResolveInstalledApp(_ string, entry *config.ProviderEntry, _ string) (*config.ProviderEntry, error) {
+	return entry, nil
+}
+
+func (r *recordingRegistryResolver) ActivateInstalledApp(_, _ string) error {
+	r.activations++
+	return nil
+}
 
 func TestAppProviderRestarterRestartable(t *testing.T) {
 	t.Parallel()
@@ -30,6 +44,7 @@ func TestAppProviderRestarterRestartable(t *testing.T) {
 			"remote":         {},
 			"local-override": {Local: true},
 			"dev-active":     {DevActive: true},
+			"registry":       {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
 	}
 	restarter := bootstrap.NewAppProviderRestarter(bootstrap.AppProviderRestarterConfig{Config: cfg})
@@ -41,6 +56,7 @@ func TestAppProviderRestarterRestartable(t *testing.T) {
 		{app: "remote", want: false},
 		{app: "local-override", want: true},
 		{app: "dev-active", want: false},
+		{app: "registry", want: true},
 	} {
 		got, err := restarter.Restartable(tc.app)
 		if err != nil {
@@ -58,6 +74,26 @@ func TestAppProviderRestarterRestartable(t *testing.T) {
 	}
 	if !got {
 		t.Error("packaged app should be restartable when server.remote is unset")
+	}
+}
+
+func TestAppProviderRestarterDoesNotActivateRegistryMountForLegacyCatalogVersion(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{Apps: map[string]*config.ProviderEntry{"legacy": {}}}
+	providers := registry.New()
+	if err := providers.Providers.Register("legacy", &coretesting.StubIntegration{N: "legacy"}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	resolver := &recordingRegistryResolver{}
+	restarter := bootstrap.NewAppProviderRestarter(bootstrap.AppProviderRestarterConfig{
+		Config: cfg, Providers: &providers.Providers, RegistryResolver: resolver,
+	})
+	if err := restarter.StartApp(t.Context(), "legacy", "legacy-version"); err != nil {
+		t.Fatalf("StartApp: %v", err)
+	}
+	if resolver.activations != 0 {
+		t.Fatalf("registry activations = %d, want 0", resolver.activations)
 	}
 }
 

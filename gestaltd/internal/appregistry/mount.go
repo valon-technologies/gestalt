@@ -1,10 +1,12 @@
 package appregistry
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -18,6 +20,8 @@ type MountService struct {
 	ArtifactsDir string
 }
 
+const activeVersionFile = "active-version"
+
 // ResolveInstalledApp returns a provider entry backed by the requested
 // registry install. The deploy-time entry is returned unchanged when no local
 // install exists, which preserves restart-only convergence for legacy rows.
@@ -26,6 +30,105 @@ func (m *MountService) ResolveInstalledApp(name string, entry *config.ProviderEn
 		return entry, nil
 	}
 	return ResolveInstalledAppIfPresent(name, entry, m.ArtifactsDir, version)
+}
+
+// ActivateInstalledApp atomically records the locally running version used by
+// dynamic registry static mounts.
+func (m *MountService) ActivateInstalledApp(name, version string) error {
+	if m == nil {
+		return fmt.Errorf("registry mount service is not configured")
+	}
+	name = strings.TrimSpace(name)
+	version = strings.TrimSpace(version)
+	if name == "" || version == "" {
+		return fmt.Errorf("app name and version are required")
+	}
+	destDir := MaterializedPath(m.ArtifactsDir, name, version)
+	if err := operator.ValidateInstalledPublishedPackage(destDir, name, version); err != nil {
+		return fmt.Errorf("validate active registry app %q@%s: %w", name, version, err)
+	}
+	appDir := filepath.Dir(destDir)
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		return fmt.Errorf("create registry app directory: %w", err)
+	}
+	temp, err := os.CreateTemp(appDir, activeVersionFile+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create active registry version marker: %w", err)
+	}
+	tempPath := temp.Name()
+	defer func() { _ = os.Remove(tempPath) }()
+	if _, err := temp.WriteString(version + "\n"); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("write active registry version marker: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("close active registry version marker: %w", err)
+	}
+	activePath := filepath.Join(appDir, activeVersionFile)
+	if err := replaceActiveVersionMarker(tempPath, activePath); err != nil {
+		return fmt.Errorf("activate registry app version: %w", err)
+	}
+	return nil
+}
+
+func replaceActiveVersionMarker(tempPath, activePath string) error {
+	return replaceActiveVersionMarkerForOS(tempPath, activePath, runtime.GOOS)
+}
+
+func replaceActiveVersionMarkerForOS(tempPath, activePath, goos string) error {
+	if goos != "windows" {
+		return os.Rename(tempPath, activePath)
+	}
+	backup, err := os.CreateTemp(filepath.Dir(activePath), activeVersionFile+".backup-*")
+	if err != nil {
+		return err
+	}
+	backupPath := backup.Name()
+	if err := backup.Close(); err != nil {
+		_ = os.Remove(backupPath)
+		return err
+	}
+	if err := os.Remove(backupPath); err != nil {
+		return err
+	}
+
+	movedExisting := false
+	if err := os.Rename(activePath, backupPath); err == nil {
+		movedExisting = true
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Rename(tempPath, activePath); err != nil {
+		if movedExisting {
+			restoreErr := os.Rename(backupPath, activePath)
+			return errors.Join(err, restoreErr)
+		}
+		return err
+	}
+	if movedExisting {
+		_ = os.Remove(backupPath)
+	}
+	return nil
+}
+
+func (m *MountService) DeactivateInstalledApp(name string) error {
+	if m == nil {
+		return nil
+	}
+	path := filepath.Join(strings.TrimSpace(m.ArtifactsDir), RegistryInstallSubdir, strings.TrimSpace(name), activeVersionFile)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("deactivate registry app version: %w", err)
+	}
+	return nil
+}
+
+func ActiveInstalledVersion(artifactsDir, name string) (string, error) {
+	path := filepath.Join(strings.TrimSpace(artifactsDir), RegistryInstallSubdir, strings.TrimSpace(name), activeVersionFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 // ResolveInstalledAppIfPresent returns an entry backed by a materialized

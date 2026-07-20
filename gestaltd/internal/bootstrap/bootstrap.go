@@ -254,7 +254,9 @@ type Result struct {
 	AgentControl           AgentControl
 	AgentManager           agentmanager.Service
 	StartupProvidersReady  <-chan struct{}
+	RegistryProvidersReady <-chan struct{}
 	ProvidersReady         <-chan struct{}
+	RegistryMaterializer   RegistryAppMaterializer
 	ConnectionAuth         func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth   func() map[string]map[string]ManualTokenExchanger
 	Invoker                invocation.Invoker
@@ -284,6 +286,9 @@ type Result struct {
 	auditClose                          func(context.Context) error
 	appHostServiceCleanup               func()
 	startAppProviders                   func()
+	startRegistryAppProviders           func(context.Context) error
+	registryProvidersReady              chan struct{}
+	registryProvidersReadyOnce          sync.Once
 	activateAppProviders                func(context.Context)
 	startup                             *deferredProviders
 	deferred                            *deferredProviders
@@ -318,6 +323,18 @@ func (r *Result) StartAppProviders(ctx context.Context) error {
 		case <-ctx.Done():
 			return fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
 		}
+	}
+	var registryStartErr error
+	if r.startRegistryAppProviders != nil {
+		registryStartErr = r.startRegistryAppProviders(ctx)
+	}
+	r.registryProvidersReadyOnce.Do(func() {
+		if r.registryProvidersReady != nil {
+			close(r.registryProvidersReady)
+		}
+	})
+	if registryStartErr != nil {
+		slog.WarnContext(ctx, "one or more registry app providers failed to start; core services remain available", "error", registryStartErr)
 	}
 	r.startupWorkflowConfigReconcileOnce.Do(func() {
 		if r.startupWorkflowConfigReconcile != nil {
@@ -1205,6 +1222,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 type BootstrapOptions struct {
 	DeferAppProviderStartup bool
 	RegistryResolver        RegistryInstalledResolver
+	RegistryMaterializer    RegistryAppMaterializer
 }
 
 func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*Result, error) {
@@ -1468,6 +1486,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	closeAudit = false
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
+	registryProvidersReady := make(chan struct{})
 	result := &Result{
 		Auth:                   prepared.Auth,
 		SelectedAuthProvider:   prepared.SelectedAuthProvider,
@@ -1485,7 +1504,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		AgentControl:           prepared.Deps.AgentRuntime,
 		AgentManager:           prepared.Deps.AgentManager,
 		StartupProvidersReady:  startup.ready(),
+		RegistryProvidersReady: registryProvidersReady,
 		ProvidersReady:         deferred.ready(),
+		RegistryMaterializer:   opts.RegistryMaterializer,
 		ConnectionAuth:         connAuthResolver,
 		ManualConnectionAuth:   manualConnAuthResolver,
 		Invoker:                sharedInvoker,
@@ -1512,9 +1533,14 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		auditClose:                     auditClose,
 		appHostServiceCleanup:          appHostServiceCleanup,
 		startAppProviders:              startAppProviders,
+		registryProvidersReady:         registryProvidersReady,
 		activateAppProviders:           activateAppProviders,
 		startup:                        startup,
 		deferred:                       deferred,
+	}
+	registryMaterializer := opts.RegistryMaterializer
+	result.startRegistryAppProviders = func(ctx context.Context) error {
+		return startRegistryOnlyAppProviders(ctx, cfg, prepared.Services.AppVersionChangeRequests, registryMaterializer, result.AppRestarter)
 	}
 	for _, pending := range updateBuilds.pending {
 		if pending.proxy != nil {

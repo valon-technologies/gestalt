@@ -234,7 +234,7 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 
 	if rollout != nil {
 		version := strings.TrimSpace(rollout.Version)
-		if findInstallation(installations, version) == nil {
+		if coredata.KnownInstallationByVersion(installations, version) == nil {
 			if !p.now().Before(rollout.Deadline) {
 				if _, err := p.Rollouts.MarkFailed(ctx, appName, version, p.now()); err != nil {
 					return fmt.Errorf("fail rollout without accepted version %s@%s: %w", appName, version, err)
@@ -311,6 +311,16 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
+	driverVersion := coredata.LatestKnownVersion(pending)
+	driverInstallation := coredata.KnownInstallationByVersion(pending, driverVersion)
+	if driverInstallation == nil {
+		return fmt.Errorf("resolve driver installation for app %s", appName)
+	}
+	if validator, ok := p.AppRestarter.(appRegistryBindingValidator); ok {
+		if err := validator.ValidateRegistryBinding(appName, driverInstallation.Registry); err != nil {
+			return fmt.Errorf("validate registry binding for app %s: %w", appName, err)
+		}
+	}
 	if err := p.ensurePendingMaterialized(ctx, instanceID, pending); err != nil {
 		return fmt.Errorf("materialize pending versions for app %s: %w", appName, err)
 	}
@@ -319,11 +329,39 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
-	driverVersion := strings.TrimSpace(pending[len(pending)-1].Version)
+	runningVersion := ""
+	running := false
+	if reporter, ok := p.AppRestarter.(appRunningVersionReporter); ok {
+		runningVersion, running = reporter.RunningVersion(appName)
+	}
+	if running && strings.TrimSpace(runningVersion) == driverVersion {
+		restartedAt := p.now()
+		if err := p.markAllRestarted(ctx, instanceID, appName, pending, restartedAt); err != nil {
+			return err
+		}
+		p.forgetStoppedAt(appName)
+		if rollout != nil && rollout.State == core.AppRolloutStateRestarting {
+			if _, err := p.updateRolloutOutcome(ctx, rollout); err != nil {
+				return err
+			}
+		}
+		slog.Info(
+			"app registry catalog poller observed app provider already running",
+			"app", appName,
+			"version", driverVersion,
+			"pending_versions", len(pending),
+			"instance_id", instanceID,
+			"restarted_at", restartedAt,
+		)
+		return nil
+	}
 
 	stoppedAt, alreadyStopped, err := p.earliestStoppedAt(ctx, instanceID, appName, pending)
 	if err != nil {
 		return err
+	}
+	if alreadyStopped && running && strings.TrimSpace(runningVersion) != driverVersion {
+		alreadyStopped = false
 	}
 	if !alreadyStopped {
 		if err := p.AppRestarter.StopApp(ctx, appName); err != nil {
@@ -373,16 +411,6 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	return nil
 }
 
-func findInstallation(installations []*core.AppInstallation, version string) *core.AppInstallation {
-	version = strings.TrimSpace(version)
-	for _, installation := range installations {
-		if installation != nil && strings.TrimSpace(installation.Version) == version {
-			return installation
-		}
-	}
-	return nil
-}
-
 func (p *CatalogPoller) updateRolloutOutcome(ctx context.Context, rollout *core.AppRollout) (bool, error) {
 	materializations, err := p.Materializations.ListByAppVersion(ctx, rollout.App, rollout.Version)
 	if err != nil {
@@ -423,6 +451,14 @@ func (p *CatalogPoller) restartReady() bool {
 	default:
 		return false
 	}
+}
+
+type appRunningVersionReporter interface {
+	RunningVersion(app string) (string, bool)
+}
+
+type appRegistryBindingValidator interface {
+	ValidateRegistryBinding(app, registry string) error
 }
 
 func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceID string, pending []*core.AppInstallation) error {

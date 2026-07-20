@@ -131,12 +131,14 @@ func LatestKnownVersion(installations []*core.AppInstallation) string {
 	if len(installations) == 0 {
 		return ""
 	}
-	latest := installations[0]
-	for _, installation := range installations[1:] {
+	var latest *core.AppInstallation
+	for _, installation := range installations {
 		if installation == nil {
 			continue
 		}
-		if latest == nil || installation.UpdatedAt.After(latest.UpdatedAt) {
+		if latest == nil ||
+			installation.UpdatedAt.After(latest.UpdatedAt) ||
+			(installation.UpdatedAt.Equal(latest.UpdatedAt) && installation.Version > latest.Version) {
 			latest = installation
 		}
 	}
@@ -144,6 +146,16 @@ func LatestKnownVersion(installations []*core.AppInstallation) string {
 		return ""
 	}
 	return strings.TrimSpace(latest.Version)
+}
+
+func KnownInstallationByVersion(installations []*core.AppInstallation, version string) *core.AppInstallation {
+	version = strings.TrimSpace(version)
+	for _, installation := range installations {
+		if installation != nil && strings.TrimSpace(installation.Version) == version {
+			return installation
+		}
+	}
+	return nil
 }
 
 func stringMeta(metadata map[string]any, key string) string {

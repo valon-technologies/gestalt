@@ -16,13 +16,13 @@ import (
 
 func appRegistryTestAppDefs(version string) map[string]*config.ProviderEntry {
 	entry := &config.ProviderEntry{}
-	entry.Source.SetResolvedPackage("", version)
+	entry.Source.Registry = "toolshed"
 	return map[string]*config.ProviderEntry{
 		"g-issues": entry,
 	}
 }
 
-func TestAdminAppRegistryInstall(t *testing.T) {
+func TestAdminAppRegistryAdd(t *testing.T) {
 	t.Parallel()
 
 	t.Run("installs_and_lists_known_version", func(t *testing.T) {
@@ -41,7 +41,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		body := []byte(`{"version":"` + fixture.Version + `","actor":"user:alice"}`)
-		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST install: %v", err)
 		}
@@ -111,7 +111,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		body := []byte(`{"version":"missing-version"}`)
-		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST install: %v", err)
 		}
@@ -138,7 +138,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		body := []byte(`{"version":"` + fixture.Version + `"}`)
-		first, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		first, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST first install: %v", err)
 		}
@@ -147,14 +147,14 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			t.Fatalf("first install status = %d", first.StatusCode)
 		}
 
-		second, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(body))
+		second, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatalf("POST second install: %v", err)
 		}
 		defer func() { _ = second.Body.Close() }()
-		if second.StatusCode != http.StatusBadRequest {
+		if second.StatusCode != http.StatusConflict {
 			raw, _ := io.ReadAll(second.Body)
-			t.Fatalf("second install status = %d, want 400: %s", second.StatusCode, raw)
+			t.Fatalf("second add status = %d, want 409: %s", second.StatusCode, raw)
 		}
 	})
 
@@ -174,7 +174,7 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		installBody := []byte(`{"version":"` + fixture.Version + `"}`)
-		installResp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/install", "application/json", bytes.NewReader(installBody))
+		installResp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/add", "application/json", bytes.NewReader(installBody))
 		if err != nil {
 			t.Fatalf("POST install: %v", err)
 		}
@@ -203,4 +203,53 @@ func TestAdminAppRegistryInstall(t *testing.T) {
 			t.Fatalf("installation = %#v", installations[0])
 		}
 	})
+}
+
+func TestAdminAppRegistryUpgradeRejectsEmptyCatalog(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AppRegistries = map[string]config.AppRegistryConfig{
+			"toolshed": fixture.Registry,
+		}
+		cfg.AppRegistryReader = fixture.Reader
+		cfg.AppDefs = appRegistryTestAppDefs("")
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := []byte(`{"version":"` + fixture.Version + `"}`)
+	resp, err := http.Post(ts.URL+"/admin/api/v1/app-registries/toolshed/apps/g-issues/upgrade", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST upgrade: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("upgrade status = %d, want 400: %s", resp.StatusCode, raw)
+	}
+}
+
+func TestRegistryOnlyStaticMountStartsBeforeFirstAdd(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.ArtifactsDir = t.TempDir()
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"g-issues": {
+				Source: config.ProviderSource{Registry: "toolshed"},
+				Static: &config.AppStaticConfig{Mount: "/g-issues"},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/g-issues/")
+	if err != nil {
+		t.Fatalf("GET registry static mount: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 before first add", resp.StatusCode)
+	}
 }

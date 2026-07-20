@@ -432,7 +432,10 @@ func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, resu
 		return nil
 	}
 	var materializer *appregistry.Materializer
-	if cfg != nil && len(cfg.AppRegistries) > 0 {
+	if shared, ok := result.RegistryMaterializer.(*appregistry.Materializer); ok {
+		materializer = shared
+	}
+	if materializer == nil && cfg != nil && len(cfg.AppRegistries) > 0 {
 		artifactsDir := strings.TrimSpace(cfg.Server.ArtifactsDir)
 		if artifactsDir != "" {
 			materializer = &appregistry.Materializer{
@@ -450,7 +453,7 @@ func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, resu
 		InstanceID:          appregistry.ResolveInstanceID(),
 		RestartDelay:        restartDelay,
 		DisableRestartDelay: disableRestartDelay,
-		RestartReady:        result.StartupProvidersReady,
+		RestartReady:        result.RegistryProvidersReady,
 	})
 	poller.Start(ctx)
 	return poller

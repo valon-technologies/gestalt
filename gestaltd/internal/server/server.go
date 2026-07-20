@@ -263,7 +263,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
 	mountedUIs := append([]MountedUI(nil), cfg.MountedUIs...)
-	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlerResolver)
+	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlerResolver, cfg.ArtifactsDir, cfg.Providers)
 	if err != nil {
 		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)
 	}

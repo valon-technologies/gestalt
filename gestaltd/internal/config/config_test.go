@@ -143,6 +143,101 @@ func singletonProviderEntry(entry *ProviderEntry) map[string]*ProviderEntry {
 	}
 }
 
+func TestLoadConfigRegistryOnlyAppSource(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v8
+appRegistries:
+  toolshed:
+    kind: gcs
+    gcs:
+      bucket: gestalt-app-registry
+apps:
+  g-issues:
+    source:
+      registry: toolshed
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Apps["g-issues"].Source.Registry; got != "toolshed" {
+		t.Fatalf("source.registry = %q, want toolshed", got)
+	}
+}
+
+func TestLoadConfigRegistryOnlyAppRejectsUnknownRegistry(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v8
+apps:
+  g-issues:
+    source:
+      registry: missing
+`)
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), `unknown app registry "missing"`) {
+		t.Fatalf("Load error = %v, want unknown registry", err)
+	}
+}
+
+func TestLoadConfigRegistryOnlyAppRejectsMixedSources(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v8
+appRegistries:
+  toolshed:
+    kind: gcs
+    gcs:
+      bucket: gestalt-app-registry
+apps:
+  g-issues:
+    source:
+      registry: toolshed
+      path: ./manifest.yaml
+`)
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("Load error = %v, want mutually exclusive sources", err)
+	}
+}
+
+func TestRegistrySourceRejectedOnLocalRuntimeProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Runtime: RuntimeConfig{
+			Providers: map[string]*RuntimeProviderEntry{
+				"local": {
+					Driver: RuntimeProviderDriverLocal,
+					ProviderEntry: ProviderEntry{
+						Source: ProviderSource{Registry: "toolshed"},
+					},
+				},
+			},
+		},
+	}
+	if err := validateRuntimeConfig(cfg); err == nil || !strings.Contains(err.Error(), "source is not supported") {
+		t.Fatalf("validateRuntimeConfig error = %v, want unsupported source", err)
+	}
+}
+
+func TestAppValidationConfigOmitsRegistryOnlyApps(t *testing.T) {
+	t.Parallel()
+
+	validation := AppValidationConfig(&Config{Apps: map[string]*ProviderEntry{
+		"registry": {Source: ProviderSource{Registry: "toolshed"}},
+		"pinned":   {},
+	}})
+	if _, ok := validation.Apps["registry"]; ok {
+		t.Fatal("registry-only app was included in static app validation")
+	}
+	if _, ok := validation.Apps["pinned"]; !ok {
+		t.Fatal("pinned app was omitted from static app validation")
+	}
+}
+
 func TestLoadConfigProviderLocalFlag(t *testing.T) {
 	t.Parallel()
 

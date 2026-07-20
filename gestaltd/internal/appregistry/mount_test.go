@@ -70,6 +70,40 @@ func TestResolveInstalledApp_returns_isolated_provider_entry(t *testing.T) {
 	}
 }
 
+func TestMountServiceActivateInstalledAppRecordsActiveVersion(t *testing.T) {
+	t.Parallel()
+
+	fixture := registrytest.NewInstallFixture(t)
+	artifactsDir := t.TempDir()
+	materializer := &appregistry.Materializer{
+		Registries:   map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		Reader:       fixture.Reader,
+		ArtifactsDir: artifactsDir,
+	}
+	if _, err := materializer.Ensure(t.Context(), &core.AppInstallation{
+		AppName: "g-issues", Version: fixture.Version, Registry: "toolshed",
+	}); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	mounts := &appregistry.MountService{ArtifactsDir: artifactsDir}
+	if err := mounts.ActivateInstalledApp("g-issues", fixture.Version); err != nil {
+		t.Fatalf("ActivateInstalledApp: %v", err)
+	}
+	version, err := appregistry.ActiveInstalledVersion(artifactsDir, "g-issues")
+	if err != nil {
+		t.Fatalf("ActiveInstalledVersion: %v", err)
+	}
+	if version != fixture.Version {
+		t.Fatalf("active version = %q, want %q", version, fixture.Version)
+	}
+	if err := mounts.DeactivateInstalledApp("g-issues"); err != nil {
+		t.Fatalf("DeactivateInstalledApp: %v", err)
+	}
+	if _, err := appregistry.ActiveInstalledVersion(artifactsDir, "g-issues"); !os.IsNotExist(err) {
+		t.Fatalf("active marker after deactivation error = %v, want not exist", err)
+	}
+}
+
 func TestResolveInstalledAppIfPresent_uses_deploy_entry_when_install_missing(t *testing.T) {
 	t.Parallel()
 

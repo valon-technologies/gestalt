@@ -45,7 +45,8 @@ func (s *Server) mountAdminAppInstallReadRoutes(r chi.Router) {
 }
 
 func (s *Server) mountAdminAppInstallWriteRoutes(r chi.Router) {
-	r.Post("/app-registries/{registry}/apps/{app}/install", s.installAdminAppRegistryApp)
+	r.Post("/app-registries/{registry}/apps/{app}/add", s.addAdminAppRegistryApp)
+	r.Post("/app-registries/{registry}/apps/{app}/upgrade", s.upgradeAdminAppRegistryApp)
 }
 
 func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +96,15 @@ func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Request) {
+func (s *Server) addAdminAppRegistryApp(w http.ResponseWriter, r *http.Request) {
+	s.changeAdminAppRegistryApp(w, r, true)
+}
+
+func (s *Server) upgradeAdminAppRegistryApp(w http.ResponseWriter, r *http.Request) {
+	s.changeAdminAppRegistryApp(w, r, false)
+}
+
+func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Request, add bool) {
 	if s.appRegistryInstaller == nil {
 		writeError(w, http.StatusServiceUnavailable, "app registry installer is unavailable")
 		return
@@ -134,12 +143,19 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	result, err := s.appRegistryInstaller.Install(r.Context(), appregistry.InstallInput{
+	input := appregistry.InstallInput{
 		Registry: registryName,
 		App:      appName,
 		Version:  version,
 		Actor:    strings.TrimSpace(req.Actor),
-	})
+	}
+	var result *appregistry.InstallOutput
+	var err error
+	if add {
+		result, err = s.appRegistryInstaller.Add(r.Context(), input)
+	} else {
+		result, err = s.appRegistryInstaller.Upgrade(r.Context(), input)
+	}
 	if err != nil {
 		status := http.StatusBadGateway
 		switch {
@@ -157,6 +173,12 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppRolloutActive):
 			status = http.StatusConflict
+		case errors.Is(err, appregistry.ErrAppCatalogNotEmpty):
+			status = http.StatusConflict
+		case errors.Is(err, appregistry.ErrAppCatalogEmpty):
+			status = http.StatusBadRequest
+		case errors.Is(err, appregistry.ErrAppRegistryBinding):
+			status = http.StatusBadRequest
 		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
 			status = http.StatusBadRequest
 		case errors.Is(err, context.DeadlineExceeded):

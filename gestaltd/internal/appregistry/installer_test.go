@@ -209,7 +209,7 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 			"toolshed": fixture.Registry,
 		},
 		ConfigApps: map[string]*config.ProviderEntry{
-			"g-issues": configEntryWithResolvedVersion("0.0.0-config"),
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
 		Reader:         fixture.Reader,
 		ChangeRequests: svc.AppVersionChangeRequests,
@@ -217,7 +217,7 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 		Rollouts:       svc.AppRollouts,
 	}
 
-	if _, err := installer.Install(ctx, appregistry.InstallInput{
+	if _, err := installer.Add(ctx, appregistry.InstallInput{
 		Registry: "toolshed",
 		App:      "g-issues",
 		Version:  fixture.Version,
@@ -233,10 +233,84 @@ func TestInstaller_records_from_version_on_first_install_and_upgrade(t *testing.
 	if len(requests) != 1 {
 		t.Fatalf("requests = %#v", requests)
 	}
-	if requests[0].FromVersion != "0.0.0-config" {
-		t.Fatalf("first from_version = %q, want 0.0.0-config", requests[0].FromVersion)
+	if requests[0].FromVersion != appregistry.RegistryFirstInstallVersion {
+		t.Fatalf("first from_version = %q, want %q", requests[0].FromVersion, appregistry.RegistryFirstInstallVersion)
 	}
 	if requests[0].ToVersion != fixture.Version {
 		t.Fatalf("first to_version = %q, want %s", requests[0].ToVersion, fixture.Version)
+	}
+
+	if _, err := svc.AppRollouts.MarkComplete(ctx, "g-issues", fixture.Version, time.Now()); err != nil {
+		t.Fatalf("MarkComplete: %v", err)
+	}
+	nextVersion := "0.0.0-snapshot.gdef456"
+	installer.Reader = fixture.NewDigestMismatchReader(t, nextVersion)
+	if _, err := installer.Upgrade(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  nextVersion,
+		Actor:    "user:alice",
+	}); err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	requests, err = svc.AppVersionChangeRequests.ListRequestsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListRequestsByApp after upgrade: %v", err)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("requests after upgrade = %#v", requests)
+	}
+	var upgradeRequest *core.AppVersionChangeRequest
+	for _, request := range requests {
+		if request.ToVersion == nextVersion {
+			upgradeRequest = request
+			break
+		}
+	}
+	if upgradeRequest == nil || upgradeRequest.FromVersion != fixture.Version {
+		t.Fatalf("upgrade request = %#v, want from_version %q", upgradeRequest, fixture.Version)
+	}
+}
+
+func TestInstaller_add_and_upgrade_enforce_catalog_state(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixture(t)
+	installer := &appregistry.Installer{
+		Registries: map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps: map[string]*config.ProviderEntry{
+			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
+		},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+	}
+	input := appregistry.InstallInput{Registry: "toolshed", App: "g-issues", Version: fixture.Version}
+
+	if _, err := installer.Upgrade(ctx, input); !errors.Is(err, appregistry.ErrAppCatalogEmpty) {
+		t.Fatalf("upgrade empty catalog error = %v, want %v", err, appregistry.ErrAppCatalogEmpty)
+	}
+	if _, err := installer.Add(ctx, input); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if _, err := installer.Add(ctx, input); !errors.Is(err, appregistry.ErrAppCatalogNotEmpty) {
+		t.Fatalf("add non-empty catalog error = %v, want %v", err, appregistry.ErrAppCatalogNotEmpty)
+	}
+}
+
+func TestInstaller_add_requires_deploy_registry_binding(t *testing.T) {
+	t.Parallel()
+
+	installer := &appregistry.Installer{}
+	_, err := installer.Add(t.Context(), appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  "1.0.0",
+	})
+	if !errors.Is(err, appregistry.ErrAppRegistryBinding) {
+		t.Fatalf("Add error = %v, want %v", err, appregistry.ErrAppRegistryBinding)
 	}
 }

@@ -55,6 +55,16 @@ func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string)
 
 func (r *recordingAppRestarter) AbortRestarts() {}
 
+type versionReportingAppRestarter struct {
+	*recordingAppRestarter
+	runningVersion string
+	running        bool
+}
+
+func (r *versionReportingAppRestarter) RunningVersion(string) (string, bool) {
+	return r.runningVersion, r.running
+}
+
 func TestCatalogPollerRolloutEnrollmentAndCompletion(t *testing.T) {
 	t.Parallel()
 
@@ -611,6 +621,87 @@ func TestCatalogPollerReconcileOnceRetriesStartAfterRecordedStop(t *testing.T) {
 		t.Fatalf("RestartedAt = %v, want %v", materialization.RestartedAt, now)
 	}
 }
+
+func TestCatalogPollerRecordsAlreadyRunningVersionWithoutRestart(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	version := "0.0.0-snapshot.gabc123"
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App: "g-issues", FromVersion: "registry:first-install", ToVersion: version, Timestamp: now,
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	recording := &recordingAppRestarter{}
+	restarter := &versionReportingAppRestarter{
+		recordingAppRestarter: recording,
+		runningVersion:        version,
+		running:               true,
+	}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests: services.AppVersionChangeRequests, Materializations: services.AppInstanceMaterializations,
+		Rollouts: services.AppRollouts, AppRestarter: restarter, InstanceID: "replica-a",
+		DisableRestartDelay: true, Now: func() time.Time { return now },
+	})
+
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if len(recording.stopCalls) != 0 || len(recording.startCalls) != 0 {
+		t.Fatalf("restart calls: stop=%v start=%v, want none", recording.stopCalls, recording.startCalls)
+	}
+	materialization, err := services.AppInstanceMaterializations.Get(context.Background(), "replica-a", "g-issues", version)
+	if err != nil {
+		t.Fatalf("Get materialization: %v", err)
+	}
+	if materialization.RestartedAt != now {
+		t.Fatalf("RestartedAt = %v, want %v", materialization.RestartedAt, now)
+	}
+}
+
+func TestCatalogPollerStopsRunningOldVersionDespiteRecordedStop(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	version := "0.0.0-snapshot.gnew"
+	if _, err := services.AppVersionChangeRequests.AppendRequest(context.Background(), &core.AppVersionChangeRequest{
+		App: "g-issues", FromVersion: "0.0.0-snapshot.gold", ToVersion: version, Timestamp: now,
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.Acknowledge(context.Background(), &core.AppInstanceMaterialization{
+		InstanceID: "replica-a", App: "g-issues", Version: version, AcknowledgedAt: now,
+	}); err != nil {
+		t.Fatalf("Acknowledge: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.MarkStopped(context.Background(), "replica-a", "g-issues", version, now); err != nil {
+		t.Fatalf("MarkStopped: %v", err)
+	}
+	recording := &recordingAppRestarter{}
+	restarter := &versionReportingAppRestarter{
+		recordingAppRestarter: recording,
+		runningVersion:        "0.0.0-snapshot.gold",
+		running:               true,
+	}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests: services.AppVersionChangeRequests, Materializations: services.AppInstanceMaterializations,
+		Rollouts: services.AppRollouts, AppRestarter: restarter, InstanceID: "replica-a",
+		DisableRestartDelay: true, Now: func() time.Time { return now },
+	})
+
+	if err := poller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if len(recording.stopCalls) != 1 || len(recording.startCalls) != 1 {
+		t.Fatalf("restart calls: stop=%v start=%v, want one each", recording.stopCalls, recording.startCalls)
+	}
+	if got := recording.startVersions; len(got) != 1 || got[0] != version {
+		t.Fatalf("startVersions = %v, want [%s]", got, version)
+	}
+}
+
 func TestCatalogPollerReconcileOnceDoesNotResetRestartDelayForNewVersion(t *testing.T) {
 	t.Parallel()
 

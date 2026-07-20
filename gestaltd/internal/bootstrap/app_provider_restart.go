@@ -24,6 +24,14 @@ type RegistryInstalledResolver interface {
 	ResolveInstalledApp(app string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error)
 }
 
+type registryInstalledActivator interface {
+	ActivateInstalledApp(app, version string) error
+}
+
+type registryInstalledDeactivator interface {
+	DeactivateInstalledApp(app string) error
+}
+
 type pendingProviderClose struct {
 	provider core.Provider
 	done     <-chan error
@@ -39,6 +47,7 @@ type AppProviderRestarter struct {
 	held             map[string]func()
 	closing          map[string]pendingProviderClose
 	closeFailures    map[string]error
+	runningVersions  map[string]string
 
 	lifecycleMu sync.Mutex
 }
@@ -63,6 +72,7 @@ func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestart
 		held:             make(map[string]func()),
 		closing:          make(map[string]pendingProviderClose),
 		closeFailures:    make(map[string]error),
+		runningVersions:  make(map[string]string),
 	}
 }
 
@@ -77,8 +87,46 @@ func (r *AppProviderRestarter) Restartable(app string) (bool, error) {
 	return appProviderRestartable(r.cfg, entry), nil
 }
 
+func (r *AppProviderRestarter) RunningVersion(app string) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	app = strings.TrimSpace(app)
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	version, ok := r.runningVersions[app]
+	if !ok || r.providers == nil {
+		return "", false
+	}
+	if _, err := r.providers.Get(app); err != nil {
+		delete(r.runningVersions, app)
+		return "", false
+	}
+	return version, true
+}
+
+func (r *AppProviderRestarter) ValidateRegistryBinding(app, registryName string) error {
+	entry, err := r.appEntry(strings.TrimSpace(app))
+	if err != nil {
+		return err
+	}
+	configuredRegistry := strings.TrimSpace(entry.Source.Registry)
+	if !entry.Source.IsRegistry() {
+		return nil
+	}
+	if configuredRegistry != strings.TrimSpace(registryName) {
+		return fmt.Errorf(
+			"app %q registry binding %q does not match deploy config %q",
+			app,
+			strings.TrimSpace(registryName),
+			configuredRegistry,
+		)
+	}
+	return nil
+}
+
 func appProviderRestartable(cfg *config.Config, entry *config.ProviderEntry) bool {
-	return entry != nil && !entry.DevActive && providerBuildsLocal(cfg, entry)
+	return entry != nil && !entry.DevActive && (entry.Source.IsRegistry() || providerBuildsLocal(cfg, entry))
 }
 
 func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
@@ -114,15 +162,37 @@ func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
 	provider, err := r.providers.Get(app)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
+			delete(r.runningVersions, app)
+			if err := r.deactivateRegistryInstall(app, entry); err != nil {
+				return err
+			}
 			return nil
 		}
 		r.releaseLifecycleLease(app)
 		return fmt.Errorf("stop app provider: %w", err)
 	}
+	if err := r.deactivateRegistryInstall(app, entry); err != nil {
+		return err
+	}
 	r.providers.Remove(app)
+	delete(r.runningVersions, app)
 	pending := pendingProviderClose{provider: provider, done: closeProviderForRestart(provider)}
 	r.closing[app] = pending
 	return r.awaitProviderClose(ctx, app, pending)
+}
+
+func (r *AppProviderRestarter) DeactivateApp(_ context.Context, app string) error {
+	if r == nil {
+		return nil
+	}
+	entry, err := r.appEntry(strings.TrimSpace(app))
+	if err != nil {
+		return err
+	}
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	delete(r.runningVersions, app)
+	return r.deactivateRegistryInstall(app, entry)
 }
 
 func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string) error {
@@ -151,6 +221,12 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	}
 
 	if _, getErr := r.providers.Get(app); getErr == nil {
+		if entry.Source.IsRegistry() && r.runningVersions[app] != version {
+			return fmt.Errorf("start app provider %q: provider is already running version %q, not %q", app, r.runningVersions[app], version)
+		}
+		if err := r.activateRegistryInstall(app, entry, version); err != nil {
+			return err
+		}
 		r.releaseLifecycleLease(app)
 		return nil
 	} else if !errors.Is(getErr, core.ErrNotFound) {
@@ -180,9 +256,17 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		closeIfPossible(result.Provider)
 		return fmt.Errorf("start app provider %q: %w", app, err)
 	}
+	if err := r.activateRegistryInstall(app, entry, version); err != nil {
+		closeIfPossible(result.Provider)
+		return err
+	}
 	if err := r.providers.Register(app, result.Provider); err != nil {
 		closeIfPossible(result.Provider)
-		return fmt.Errorf("start app provider %q: %w", app, err)
+		deactivateErr := r.deactivateRegistryInstall(app, entry)
+		return errors.Join(fmt.Errorf("start app provider %q: %w", app, err), deactivateErr)
+	}
+	if entry.Source.IsRegistry() {
+		r.runningVersions[app] = version
 	}
 	r.storeConnectionAuth(app, result)
 	if r.deps.AppWorkflowDeclarations != nil {
@@ -282,6 +366,34 @@ func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.
 		return nil, fmt.Errorf("mount registry installed app %q@%s: resolver returned nil provider entry", app, version)
 	}
 	return resolved, nil
+}
+
+func (r *AppProviderRestarter) activateRegistryInstall(app string, entry *config.ProviderEntry, version string) error {
+	if r == nil || entry == nil || !entry.Source.IsRegistry() || strings.TrimSpace(version) == "" {
+		return nil
+	}
+	activator, ok := r.registryResolver.(registryInstalledActivator)
+	if !ok {
+		return nil
+	}
+	if err := activator.ActivateInstalledApp(app, version); err != nil {
+		return fmt.Errorf("activate registry installed app %q@%s: %w", app, version, err)
+	}
+	return nil
+}
+
+func (r *AppProviderRestarter) deactivateRegistryInstall(app string, entry *config.ProviderEntry) error {
+	if r == nil || entry == nil || !entry.Source.IsRegistry() {
+		return nil
+	}
+	deactivator, ok := r.registryResolver.(registryInstalledDeactivator)
+	if !ok {
+		return nil
+	}
+	if err := deactivator.DeactivateInstalledApp(app); err != nil {
+		return fmt.Errorf("deactivate registry installed app %q: %w", app, err)
+	}
+	return nil
 }
 
 func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderBuildResult) {

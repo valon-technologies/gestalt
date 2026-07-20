@@ -105,7 +105,7 @@ func prepareProviderBuilds(
 
 	for name := range cfg.Apps {
 		entry := cfg.Apps[name]
-		if !providerBuildsLocal(cfg, entry) {
+		if entry == nil || entry.Source.IsRegistry() || !providerBuildsLocal(cfg, entry) {
 			continue
 		}
 		sha := currentAppSHA(entry)
@@ -144,7 +144,7 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 	}
 	for name, entry := range cfg.Apps {
 		name = strings.TrimSpace(name)
-		if name == "" || entry == nil || providerBuildsLocal(cfg, entry) {
+		if name == "" || entry == nil || entry.Source.IsRegistry() || providerBuildsLocal(cfg, entry) {
 			continue
 		}
 		spec, _, err := buildStartupProviderSpec(name, entry)

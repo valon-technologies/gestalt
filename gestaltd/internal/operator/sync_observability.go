@@ -106,7 +106,7 @@ func (l *Lifecycle) materializedCacheRequestsForProviders(paths lifecyclePaths, 
 	var requests []materializedCacheRequest
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		entry := entries[name]
-		if !providerRequiresCommittedLock(entry) {
+		if !providerRequiresCommittedLock(entry) || entry.Source.IsRegistry() {
 			continue
 		}
 		lockEntry, ok := lockEntries[name]
@@ -234,7 +234,7 @@ func preparedArtifactRoots(paths lifecyclePaths, cfg *config.Config) []PreparedA
 	}
 	var roots []PreparedArtifactRoot
 	for name, entry := range cfg.Apps {
-		if entry != nil {
+		if entry != nil && !entry.Source.IsRegistry() {
 			roots = append(roots, PreparedArtifactRoot{
 				Subject: "provider " + strconv.Quote(name),
 				Kind:    providermanifestv1.KindApp,
