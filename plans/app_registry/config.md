@@ -131,7 +131,7 @@ apps:
 |-------|---------|
 | `source.registry` | Registry name from `appRegistries`. Must name a configured entry. Mutually exclusive with `source.git`, `source.path`, and other source modes. |
 
-`source.registry` is valid only for entries under `apps`; runtime-provider entries cannot use it. The deploy entry remains the authoritative app-slot contract across upgrades:
+`source.registry` is valid only for entries under `apps`; runtime-provider entries cannot use it. Across upgrades, the app's entry in the Gestalt YAML deploy configuration remains authoritative for how the app integrates with Gestalt. The registry package supplies the version-specific executable and static assets:
 
 | Deploy-time slot field | Registry package responsibility |
 |------------------------|---------------------------------|
