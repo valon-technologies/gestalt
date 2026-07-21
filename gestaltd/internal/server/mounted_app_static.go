@@ -8,12 +8,18 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 )
 
-func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHandlerResolver func(string) http.Handler) ([]MountedUI, error) {
+type AppVersionReporter interface {
+	RunningVersion(app string) string
+}
+
+func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHandlerResolver func(string) http.Handler, artifactsDir string, versions AppVersionReporter) ([]MountedUI, error) {
 	names := make([]string, 0, len(apps))
 	for name, entry := range apps {
 		if entry == nil || entry.Static == nil {
@@ -48,6 +54,20 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 			continue
 		}
 
+		if entry.Source.IsRegistry() {
+			mounted = append(mounted, MountedUI{
+				Name:                mountedName,
+				Path:                mount,
+				AppName:             name,
+				AuthorizationPolicy: entry.AuthorizationPolicy,
+				AppLevelAuth:        !entry.Static.Public,
+				Handler:             registryAppStaticHandler(name, entry, mount, artifactsDir, versions),
+				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
+				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+			})
+			continue
+		}
+
 		if strings.TrimSpace(entry.ResolvedStaticRoot) == "" {
 			return nil, fmt.Errorf("app %q static configured but asset root not resolved", name)
 		}
@@ -74,6 +94,58 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, devHand
 	}
 
 	return mounted, nil
+}
+
+func registryAppStaticHandler(appName string, entry *config.ProviderEntry, mount, artifactsDir string, versions AppVersionReporter) http.Handler {
+	var mu sync.Mutex
+	var cachedVersion string
+	var cachedHandler http.Handler
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if versions == nil || strings.TrimSpace(artifactsDir) == "" {
+			http.Error(w, "registry app runtime is unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		version := strings.TrimSpace(versions.RunningVersion(appName))
+		if version == "" {
+			http.Error(w, "registry app is not running", http.StatusServiceUnavailable)
+			return
+		}
+
+		mu.Lock()
+		handler := cachedHandler
+		if handler == nil || cachedVersion != version {
+			resolved, err := appregistry.ResolveInstalledApp(
+				appName,
+				entry,
+				appregistry.MaterializedPath(artifactsDir, appName, version),
+				version,
+			)
+			if err != nil {
+				mu.Unlock()
+				http.Error(w, "registry app artifacts are unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			handler, err = ui.StaticHandler(ui.StaticConfig{
+				FS:           os.DirFS(resolved.ResolvedStaticRoot),
+				DynamicIndex: true,
+				RenderIndex:  injectBaseHref(mount),
+			})
+			if err != nil {
+				mu.Unlock()
+				http.Error(w, "registry app static handler is unavailable", http.StatusInternalServerError)
+				return
+			}
+			cachedVersion = version
+			cachedHandler = handler
+		}
+		mu.Unlock()
+
+		if strings.TrimSpace(versions.RunningVersion(appName)) != version {
+			http.Error(w, "registry app version changed during request", http.StatusServiceUnavailable)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 }
 
 func injectBaseHref(mount string) func([]byte) []byte {

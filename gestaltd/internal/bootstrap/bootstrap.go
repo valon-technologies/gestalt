@@ -271,6 +271,7 @@ type Result struct {
 	AppRestarter           interface {
 		Restartable(string) (bool, error)
 		ValidateInstallation(*core.AppInstallation) error
+		RunningVersion(string) string
 		StopApp(context.Context, string) error
 		StartApp(context.Context, string, string) error
 		AbortRestarts()

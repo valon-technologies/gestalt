@@ -182,6 +182,7 @@ type Config struct {
 	ConnectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
 	ManualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
 	AppDefs                map[string]*config.ProviderEntry
+	AppRunningVersions     AppVersionReporter
 	PublicBaseURL          string
 	ManagementBaseURL      string
 	SecureCookies          bool
@@ -262,7 +263,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
 	mountedUIs := append([]MountedUI(nil), cfg.MountedUIs...)
-	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlerResolver)
+	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlerResolver, cfg.ArtifactsDir, cfg.AppRunningVersions)
 	if err != nil {
 		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)
 	}

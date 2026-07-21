@@ -42,6 +42,7 @@ type AppProviderRestarter struct {
 	runningVersions  map[string]string
 
 	lifecycleMu sync.Mutex
+	versionsMu  sync.RWMutex
 }
 
 type AppProviderRestarterConfig struct {
@@ -88,16 +89,19 @@ func (r *AppProviderRestarter) RunningVersion(app string) string {
 		return ""
 	}
 	app = strings.TrimSpace(app)
-	r.lifecycleMu.Lock()
-	defer r.lifecycleMu.Unlock()
-	if r.providers == nil {
-		return ""
-	}
-	if _, err := r.providers.Get(app); err != nil {
-		delete(r.runningVersions, app)
-		return ""
-	}
+	r.versionsMu.RLock()
+	defer r.versionsMu.RUnlock()
 	return r.runningVersions[app]
+}
+
+func (r *AppProviderRestarter) setRunningVersion(app, version string) {
+	r.versionsMu.Lock()
+	defer r.versionsMu.Unlock()
+	if version == "" {
+		delete(r.runningVersions, app)
+		return
+	}
+	r.runningVersions[app] = version
 }
 
 func (r *AppProviderRestarter) ValidateInstallation(installation *core.AppInstallation) error {
@@ -147,14 +151,14 @@ func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
 	provider, err := r.providers.Get(app)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			delete(r.runningVersions, app)
+			r.setRunningVersion(app, "")
 			return nil
 		}
 		r.releaseLifecycleLease(app)
 		return fmt.Errorf("stop app provider: %w", err)
 	}
 	r.providers.Remove(app)
-	delete(r.runningVersions, app)
+	r.setRunningVersion(app, "")
 	pending := pendingProviderClose{provider: provider, done: closeProviderForRestart(provider)}
 	r.closing[app] = pending
 	return r.awaitProviderClose(ctx, app, pending)
@@ -186,6 +190,12 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	}
 
 	if _, getErr := r.providers.Get(app); getErr == nil {
+		if entry.Source.IsRegistry() {
+			runningVersion := r.RunningVersion(app)
+			if runningVersion != version {
+				return fmt.Errorf("start app provider %q: provider is already running version %q, not %q", app, runningVersion, version)
+			}
+		}
 		r.releaseLifecycleLease(app)
 		return nil
 	} else if !errors.Is(getErr, core.ErrNotFound) {
@@ -201,6 +211,9 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	buildCtx = invocation.WithCallerProvider(buildCtx, invocation.ProviderKindApp, app)
 	result, err := buildProvider(buildCtx, app, entry, r.deps)
 	if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
+		if version != "" {
+			r.setRunningVersion(app, version)
+		}
 		r.storeConnectionAuth(app, &ProviderBuildResult{})
 		if r.deps.AppWorkflowDeclarations != nil {
 			r.deps.AppWorkflowDeclarations.Set(app, []*proto.WorkflowDefinitionSpec{})
@@ -220,7 +233,7 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		return fmt.Errorf("start app provider %q: %w", app, err)
 	}
 	if version != "" {
-		r.runningVersions[app] = version
+		r.setRunningVersion(app, version)
 	}
 	r.storeConnectionAuth(app, result)
 	if r.deps.AppWorkflowDeclarations != nil {
@@ -310,6 +323,9 @@ func (r *AppProviderRestarter) appEntry(app string) (*config.ProviderEntry, erro
 
 func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error) {
 	if r == nil || r.registryResolver == nil {
+		if entry != nil && entry.Source.IsRegistry() && strings.TrimSpace(version) != "" {
+			return nil, fmt.Errorf("mount registry installed app %q@%s: registry resolver is not configured", app, version)
+		}
 		return entry, nil
 	}
 	resolved, err := r.registryResolver.ResolveInstalledApp(app, entry, version)
@@ -318,6 +334,9 @@ func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.
 	}
 	if resolved == nil {
 		return nil, fmt.Errorf("mount registry installed app %q@%s: resolver returned nil provider entry", app, version)
+	}
+	if entry.Source.IsRegistry() && resolved == entry {
+		return nil, fmt.Errorf("mount registry installed app %q@%s: materialized package is unavailable", app, version)
 	}
 	return resolved, nil
 }

@@ -61,9 +61,13 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			}
 		}
 
-		operationIDs, err := providerOperationIDs(providers, pluginName)
-		if err != nil {
-			return nil, fmt.Errorf("resolve http bindings for %s: %w", pluginName, err)
+		var operationIDs map[string]struct{}
+		if !entry.Source.IsRegistry() {
+			var err error
+			operationIDs, err = providerOperationIDs(providers, pluginName)
+			if err != nil {
+				return nil, fmt.Errorf("resolve http bindings for %s: %w", pluginName, err)
+			}
 		}
 
 		bindingNames := make([]string, 0, len(bindings))

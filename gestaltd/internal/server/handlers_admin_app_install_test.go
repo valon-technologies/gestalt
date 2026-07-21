@@ -266,7 +266,14 @@ func TestAdminAppRegistryAdd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListRequestsByApp: %v", err)
 		}
-		if len(requests) != 2 || requests[1].FromVersion != fixture.Version || requests[1].ToVersion != nextVersion {
+		var upgradeRequest *core.AppVersionChangeRequest
+		for _, request := range requests {
+			if request.ToVersion == nextVersion {
+				upgradeRequest = request
+				break
+			}
+		}
+		if len(requests) != 2 || upgradeRequest == nil || upgradeRequest.FromVersion != fixture.Version {
 			t.Fatalf("requests = %#v", requests)
 		}
 	})
