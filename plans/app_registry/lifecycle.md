@@ -70,7 +70,7 @@ Bootstrap finishes its registry-app startup attempts before the catalog poller b
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
 4. The poller then starts and runs its first reconciliation pass immediately.
 5. If the desired version is already running, the poller sets `restarted_at` on each pending `app_instance_materializations` row without stopping and restarting the app.
-6. A pending `app_instance_materializations` row may contain a historical `stopped_at` even though this process is now running a different version. In that case, the poller trusts the current process state: it stops the running provider before starting the desired version.
+6. To determine whether a provider is currently running and which version it serves, the poller uses this process's provider registry and running-version map. `app_instance_materializations` only says which rollout-progress writes were recorded previously. Therefore, a historical `stopped_at` does not prove that the provider is still absent. If local runtime state shows a version other than the desired version, the poller stops that provider, starts the desired version, and then updates the rollout-progress row.
 7. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
 
 A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
