@@ -139,7 +139,7 @@ apps:
 | `static.mount`, visibility, and theme | Defines the URL, access policy, and theme for the app's UI. These remain unchanged across package upgrades. | Supplies the version-specific HTML, JavaScript, CSS, and other static assets served at that URL. |
 | `source.registry` | Defines the registry from which this app may be installed. | Must come from that registry. Catalog history associated with a different registry is not eligible to run. |
 
-Because no package exists during config loading, validation must not require a resolved provider manifest, operation catalog, or static root for a registry-only app. `server.artifactsDir` is resolved from config defaults and CLI overrides before materialization; registry source validation does not require that the raw YAML contain an explicit path.
+Because no package exists during config loading, validation must not require a resolved provider manifest, operation catalog, or static root for a registry-only app.
 
 `gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](./lifecycle.md).
 
