@@ -135,7 +135,7 @@ apps:
 
 | Gestalt YAML fields | Gestalt YAML responsibility | Registry package responsibility |
 |---------------------|----------------------------|---------------------------------|
-| `authorizationPolicy`, `indexeddb`, `mcp`, `http`, and `config` | Defines the app's capabilities and integration settings. These remain unchanged across package upgrades. | Runs within the configured capabilities and cannot override these settings. |
+| `authorizationPolicy`, `indexeddb`, `mcp`, `http`, and `config` | Defines the app's capabilities and integration settings. These remain unchanged across package upgrades. | None — controlled entirely by Gestalt YAML. |
 | `static.mount`, visibility, and theme | Defines the URL, access policy, and theme for the app's UI. These remain unchanged across package upgrades. | Supplies the version-specific HTML, JavaScript, CSS, and other static assets served at that URL. |
 | `source.registry` | Defines the registry from which this app may be installed. | Must come from that registry. Catalog history associated with a different registry is not eligible to run. |
 
