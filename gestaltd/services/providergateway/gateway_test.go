@@ -617,8 +617,8 @@ func TestRoutingGatewayRecordsMetrics(t *testing.T) {
 		"gd.allowed":               "false",
 		"gd.caller_token_provided": "true",
 		"gd.subject":               "subject/user:alice",
-		"gd.resource":              "provider/parity",
-		"gd.action":                "/test.Service/Echo",
+		"gd.resource":              "test/parity",
+		"gd.action":                "parity",
 		"gd.entry":                 "internal",
 	})
 }

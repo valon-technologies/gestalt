@@ -195,7 +195,7 @@ func authorizeRoutingCall(ctx context.Context, authorization core.AuthorizationP
 	if err != nil {
 		return status.Error(codes.Unauthenticated, "provider gateway: caller principal is required")
 	}
-	allowed, req, checkErr := runAuthorizationCheck(ctx, authorization, subjectID, target.Name, fullMethod)
+	allowed, req, checkErr := runAuthorizationCheck(ctx, authorization, subjectID, target)
 	recordProviderGatewayAuthorizationCheck(ctx, allowed, principal.FromContext(ctx) != nil, req)
 	if checkErr != nil {
 		return status.Errorf(codes.Internal, "provider gateway: authorize: %v", checkErr)
@@ -209,16 +209,17 @@ func authorizeRoutingCall(ctx context.Context, authorization core.AuthorizationP
 func runAuthorizationCheck(
 	ctx context.Context,
 	authorization core.AuthorizationProvider,
-	subjectID, providerID, operation string,
+	subjectID string,
+	target ProviderTarget,
 ) (bool, *proto.CheckAccessRequest, error) {
 	if authorization == nil {
 		return true, nil, nil
 	}
-	resource, err := authorizationResource(providerID, operation)
+	resource, err := authorizationResource(target)
 	if err != nil {
 		return false, nil, err
 	}
-	action, err := authorizationAction(operation)
+	action, err := authorizationAction(target)
 	if err != nil {
 		return false, nil, err
 	}
@@ -235,28 +236,27 @@ func authorizationSubject(ctx context.Context, users principal.CredentialUserRes
 	return subjectID, nil
 }
 
-func authorizationResource(providerID, operation string) (*proto.Resource, error) {
-	providerID = strings.TrimSpace(providerID)
-	if providerID == "" {
-		return nil, fmt.Errorf("provider gateway: provider id is required")
-	}
-	resourceType := "provider"
-	if service, _ := splitFullMethod(operation); service == proto.Workflow_ServiceDesc.ServiceName {
-		resourceType = "workflow"
-	}
+func authorizationResource(target ProviderTarget) (*proto.Resource, error) {
 	return &proto.Resource{
-		Type: resourceType,
-		Id:   providerID,
+		Type: string(target.Kind),
+		Id:   strings.TrimSpace(target.Name),
 	}, nil
 }
 
-func authorizationAction(operation string) (*proto.Action, error) {
-	operation = strings.TrimSpace(operation)
-	if operation == "" {
-		return nil, fmt.Errorf("provider gateway: operation is required")
+func authorizationAction(target ProviderTarget) (*proto.Action, error) {
+	return &proto.Action{Name: strings.TrimSpace(target.Name)}, nil
+}
+
+func providerKindFromFullMethod(fullMethod string) ProviderKind {
+	service, _ := splitFullMethod(fullMethod)
+	switch service {
+	case proto.App_ServiceDesc.ServiceName:
+		return ProviderKindApp
+	case proto.Workflow_ServiceDesc.ServiceName:
+		return ProviderKindWorkflow
+	case proto.Agent_ServiceDesc.ServiceName:
+		return ProviderKindAgent
+	default:
+		return ProviderKind(service)
 	}
-	if service, method := splitFullMethod(operation); service == proto.Workflow_ServiceDesc.ServiceName {
-		return &proto.Action{Name: method}, nil
-	}
-	return &proto.Action{Name: operation}, nil
 }
