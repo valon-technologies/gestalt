@@ -66,7 +66,7 @@ Bootstrap and the poller must both use `LatestKnownVersion` to select the same d
 Bootstrap finishes its registry-app startup attempts before the catalog poller begins:
 
 1. Bootstrap materializes and starts the desired fleet-known version without writing rollout or materialization progress.
-2. A successful start publishes local running-version state only after the exact package has been validated and the provider is ready. A failed start must not advertise that version.
+2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither local state may identify the requested version as running.
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
 4. The poller then starts and runs its first reconciliation pass immediately.
 5. If the desired version is already running, the poller records pending progress as converged without stopping and restarting the app.
