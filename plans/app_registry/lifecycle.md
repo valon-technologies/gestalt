@@ -8,6 +8,7 @@ Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
 - [validation.md](./validation.md) — install-time validation
+- [admin.md](./admin.md) — admin UI and rollout read APIs
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
@@ -233,6 +234,8 @@ List/get install endpoints project known versions from `app_version_change_reque
 | `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/upgrade` | Record a new fleet-known version when the app is already in the catalog |
 | `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
 | `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
+
+Planned read routes for rollout observability (step 14): see [Admin observability API](#admin-observability-api) and [admin.md](./admin.md).
 
 List routes are read-only (`GET` only). `add` and `upgrade` use `POST` on a separate route group with a longer request timeout (10 minutes).
 
@@ -465,6 +468,25 @@ Returns **known versions** for one app.
 5. Otherwise map results to the same installation object shape and respond `200` with a JSON array.
 
 IndexedDB read only. No GCS fetch.
+
+IndexedDB read only. No GCS fetch.
+
+### Admin observability API
+
+**Status:** planned. Full shapes and UI wireframes: [admin.md](./admin.md).
+
+These routes expose IndexedDB rollout state that the catalog poller already writes. They do not change install or convergence behavior.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/admin/api/v1/registry-apps` | Registry-managed apps from deploy config, merged with desired version and rollout summary |
+| `GET` | `/admin/api/v1/registry-apps/{app}` | One app: known versions, rollout, optional latest published registry version |
+| `GET` | `/admin/api/v1/app-rollouts` | List active and recent terminal rollouts |
+| `GET` | `/admin/api/v1/app-rollouts/{app}/materializations` | Per-replica convergence rows for one `(app, version)` |
+
+**Phase 2 (optional):** `GET /admin/api/v1/app-rollouts/{app}/runtime` — per-replica **observed** running version when heartbeat rows exist. Until then, materialization `restarted_at` is the best fleet-wide signal; it records rollout accounting, not live process state. See [admin.md](./admin.md#runtime-heartbeats-phase-2).
+
+The embedded `/admin` UI gains an **App Registry** section that consumes these endpoints. Today `/admin` only shows Prometheus metrics.
 
 ### Errors
 
