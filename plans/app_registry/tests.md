@@ -140,7 +140,7 @@ go test ./internal/bootstrap -run TestAppProviderRestarterStartApp -count=1
 
 ### `poller_materialize_test.go`
 
-- **`TestCatalogPollerStartAppPassesDriverVersion`** — the catalog poller passes the driver fleet version through to `StartApp`.
+- **`TestCatalogPollerStartAppPassesDriverVersion`** — the catalog poller passes the desired version selected by `LatestKnownVersion` to `StartApp`.
 
 ---
 
@@ -229,33 +229,47 @@ Run:
 
 ```bash
 cd gestaltd
-go test ./internal/config/... -run RegistryOnly -count=1
+go test ./internal/config/... -run 'RegistryOnly|AppRegistry' -count=1
 go test ./internal/operator/... -run RegistryOnly -count=1
-go test ./internal/appregistry/... -run 'TestInstaller.*RegistryOnly|TestInstallerAdd|TestInstallerUpgrade' -count=1
+go test ./internal/appregistry/... -run 'TestInstaller.*RegistryOnly|TestInstallerAdd|TestInstallerUpgrade|TestCatalogPoller|TestMaterializer' -count=1
 go test ./internal/bootstrap/... -run RegistryOnly -count=1
+go test ./internal/coredata/... -run 'LatestKnown|AppInstanceMaterialization' -count=1
+go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 ```
 
 ### Config validation
 
-- Accepts `source.registry` when the name matches a configured `appRegistries` entry.
-- Rejects an unknown registry name.
-- Rejects `source.registry` combined with `source.git`, `source.path`, or other source modes.
+- Accepts a registry-only app without package-derived metadata; rejects an unknown registry, use outside `apps`, or combination with another source mode.
+- Defaults `server.appRegistry.maxReconcileAttempts` to `3`, accepts positive overrides, and rejects zero or negative values.
 
 ### Add and upgrade
 
-- **`add`** — accepts the first fleet-known version when `ListKnownVersionsByApp` is empty; returns **409** when the app is already in the catalog.
-- **`upgrade`** — accepts a new version when the app has fleet-known versions; sets `from_version` to `LatestKnownVersion`; returns **400** when the catalog is empty.
-- **`add`** records `from_version: "registry:first-install"` server-side (audit only; not a runnable version). See [lifecycle.md](./lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
+- **`add`** accepts only an empty catalog, records server-written `from_version: "registry:first-install"`, and returns **409** when a version is already known.
+- **`upgrade`** requires a non-empty catalog, sets `from_version` to `LatestKnownVersion`, and returns **400** when the catalog is empty.
 
 ### Bootstrap startup
 
-- Starts a registry-only app at `StartAppProviders` when `ListKnownVersionsByApp` returns a fleet-known version.
-- Skips the app when the projection is empty.
+- Starts the same deterministic latest version as the poller only when its registry matches `source.registry`; an empty projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
+- Attempts every registry app without consulting rollout-progress rows, keeps core boot available after an individual failure, and starts the poller only after all startup attempts finish.
+- A replica that misses rollout enrollment during bootstrap converges on its first poll without reopening the terminal rollout.
+
+### Provider lifecycle and concurrency
+
+- Serializes materialization per app on each replica while allowing different apps to materialize concurrently.
+- Starting the already-running desired version is idempotent. A different or unknown version is stopped and replaced; any failed start cleans up the provider registry, running-version map, and `active-version` marker.
+- A version already started by bootstrap is marked restarted without another restart, while a historical `stopped_at` cannot hide a different provider that is actually running.
+- A failed reconciliation durably records its error, releases the app lease, and does not block other apps. Retries are idempotent and stop at the configured limit; a newly accepted version starts with a fresh attempt count.
+- Unrecoverable local provider state marks Gestalt unhealthy and terminates the process.
+
+### Runtime surfaces
+
+- Server construction accepts both a backend-only registry app and configured static or HTTP surfaces before any package or provider exists.
+- Static requests return **503** until the provider registry, running-version map, and `active-version` marker agree on one version, and also during a concurrent version change.
+- YAML-declared HTTP bindings mount before provider startup and become invocable afterward; stopping the provider makes all configured surfaces unavailable and clears its running-version map entry and `active-version` marker.
 
 ### Lock and sync
 
-- `gestalt lock` and `gestalt sync` omit snapshot resolution and artifact download for registry-only apps.
-- Lockfile entries record the registry binding only — see [config.md](./config.md#lockfile).
+- `gestalt lock` and `gestalt sync` omit artifact resolution for registry-only apps and record only the registry binding.
 
 ---
 

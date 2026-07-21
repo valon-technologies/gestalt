@@ -48,9 +48,46 @@ At `StartAppProviders`, each registry-only app:
 
 The catalog poller still handles first install and upgrades on replicas that were skipped at boot or join after a rollout.
 
+### Runtime version invariants
+
+The lifecycle uses four distinct states. They must not be treated as interchangeable:
+
+- **Fleet-known** — an accepted `(app, version)` projected from `app_version_change_requests`.
+- **Materialized** — a complete, validated package exists at `{artifactsDir}/registry-installed/{app}/{version}` on this replica.
+- **Running** — this replica successfully built and registered the provider from that exact materialized package.
+- **Converged** — the poller recorded `restarted_at` for the replica and version. This is rollout accounting, not proof by itself that a provider is currently running.
+
+This document uses these names for local runtime state:
+
+- **Provider registry** — the in-process collection of providers available for operation invocation.
+- **Running-version map** — the in-process `app → version` record for registered registry-app providers.
+- **`active-version` marker** — the local file that selects the materialized static bundle for an app.
+- **Rollout-progress row** — an `app_instance_materializations` record; it describes previously recorded rollout work, not current provider state.
+
+Bootstrap and the poller must both use `LatestKnownVersion` to select the same desired installation. See [indexeddb.md](./indexeddb.md#accepted-changes-and-projections) for the version-ordering rule.
+
+`app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
+
+### Bootstrap before polling
+
+Bootstrap finishes its registry-app startup attempts before the catalog poller begins:
+
+1. Bootstrap materializes and starts the desired fleet-known version without updating `app_rollouts` or `app_instance_materializations`; the poller owns those rollout-accounting writes.
+2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither the running-version map nor the `active-version` marker may identify the requested version as running.
+3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
+4. The poller then starts and runs its first reconciliation pass immediately.
+5. The poller compares the desired version from `app_version_change_requests` with this process's provider registry and running-version map:
+   - **Match** — the desired version is already running, so the poller sets `restarted_at` on each pending `app_instance_materializations` row without restarting the app.
+   - **Missing or different** — if another version is running, the poller stops it; then it starts the desired version and updates the rollout-progress rows. A historical `stopped_at` in `app_instance_materializations` does not prove that the provider is still absent, because those rows record previous rollout writes rather than current process state.
+6. An empty fleet-known projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
+
+A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
+
+The selected installation's registry must match deploy `source.registry` before materialization or start.
+
 ## Polling
 
-Every replica starts one background catalog controller during `gestaltd serve` startup: one reconcile pass immediately, then every **1 minute** on a single loop goroutine.
+After startup-provider initialization completes, every replica starts one background catalog controller: one reconcile pass immediately, then every **1 minute** on a single loop goroutine.
 
 The controller is **pull-based** and **local**: each replica reads `app_version_change_requests` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
@@ -73,19 +110,40 @@ Each pass:
 1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
 2. Group pending versions by app.
 3. Download and extract each pending registry artifact to the canonical `{artifactsDir}/registry-installed/{app}/{version}` path, recording `materialized_at` while the provider is still running. Re-validate that path on every pass; if the tree is missing or corrupt, re-download before `StopApp`.
-4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. `StartApp` receives the driver fleet version and, when a complete registry install exists on disk, builds the provider from that materialized package instead of the deploy-time pin.
+4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. `StartApp` receives the desired version selected by `LatestKnownVersion` and, when a complete registry install exists on disk, builds the provider from that materialized package instead of the deploy-time pin.
 5. Mark non-restartable apps converged without a local stop/start.
 
 A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
 
-App bootstrapping when `gestaltd` starts and catalog-driven restarts share the same per-app lifecycle lease. `StopApp` holds the lease until `StartApp` completes, preventing concurrent builds or replacements.
+`StopApp` holds the per-app lifecycle lease until `StartApp` completes, preventing overlapping builds or replacements. On each replica, materialization is serialized per app: two versions of the same app cannot materialize concurrently, but different apps may.
+
+`StartApp(app, version)` is strict for registry-only apps:
+
+1. The materialized package must exist and pass package validation. Registry-only apps never fall back to an unresolved deploy-time provider entry.
+2. If a provider is already registered and the local running-version map says it is serving the requested version, `StartApp` may return success without rebuilding it. If the recorded version is missing or different, Gestalt must not relabel the existing provider as the requested version; it must stop the existing provider and start the requested version.
+3. If provider build, registration, or activation fails, Gestalt must clean up any partial state from that start attempt. The provider must not remain registered as the requested version, and static or runtime handlers must not serve it.
+4. Stopping or removing a provider clears its running-version map entry and `active-version` marker, including when the provider was already absent.
 
 Failure and retry behavior:
 
-1. If `Close` fails, the provider stays absent because it may be partially closed. Later polls retain the error; shutdown releases the lease.
-2. If writing `stopped_at` fails after stop, the next poll retries the write without stopping the absent provider again.
-3. If writing `restarted_at` fails after start, the next poll retries the write without rebuilding the running provider.
-4. A version discovered while the app is stopped joins the current cycle and inherits its original `stopped_at`.
+1. Reconciliation operations are idempotent: materializing an already valid package, stopping an absent provider, starting the already-running desired version, and repeating a rollout-progress write must succeed without duplicating work.
+2. When an app reconciliation fails, the poller calls `RecordFailure` on the desired version's `app_instance_materializations` row. This atomically increments `attempt_count` and stores `last_error_at` and `last_error_message`. The poller then releases that app's lifecycle lease and continues reconciling other apps. If the failure itself cannot be written to IndexedDB, the poller logs that write error.
+3. While `attempt_count` is below `server.appRegistry.maxReconcileAttempts`, the next poll retries that app from the beginning. It inspects the current provider registry, running-version map, `active-version` marker, and rollout-progress rows rather than relying on in-memory progress from the failed attempt. If stopping had begun, the app may remain unavailable until retry succeeds.
+4. When `attempt_count` reaches the configured maximum, the poller stops retrying that desired version on this replica. A newly accepted desired version gets a new row and a fresh attempt count. Increasing the configured maximum also permits retry when the stored count is below the new value.
+5. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
+6. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it.
+
+### Runtime behavior of configured app surfaces
+
+A registry-only app does not have to expose a static UI, HTTP bindings, MCP, or any other particular surface. The following rules apply only to surfaces enabled for that app in the Gestalt YAML deploy configuration.
+
+Gestalt constructs its HTTP server before it downloads or starts a registry package. Server construction must therefore succeed without a package manifest, operation catalog, static root, or running provider.
+
+- **Static UI** — Gestalt creates the mount declared in YAML, but returns **503 Service Unavailable** until the provider registry, running-version map, and `active-version` marker agree on one version. It then serves the static bundle from that version's materialized package. If the version changes while a request is being resolved, Gestalt returns **503** rather than combining one version's UI with another version's provider. Theme files declared in YAML are resolved independently of the package.
+- **HTTP bindings** — Gestalt mounts routes declared in YAML when it constructs the server, without requiring the package's operation catalog. Requests may be unavailable until the provider starts. A package cannot add routes to the already-constructed server, so every required HTTP binding must be declared in YAML.
+- **MCP and operation invocation** — these resolve against the provider registry. They become available after `StartApp` registers the provider and unavailable when the provider is removed.
+
+Runtime handlers determine availability from the local provider registry, running-version map, and `active-version` marker. They never use `app_instance_materializations`, whose rows record rollout progress rather than current runtime state.
 
 ## Runtime
 

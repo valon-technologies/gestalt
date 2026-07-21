@@ -31,7 +31,11 @@ Implementation:
 
 `AppInstallation` in `core/types.go` is the projected shape returned by admin HTTP and install handlers, not a direct IndexedDB row.
 
-There is **no fleet head**, **no promotion**, and **no rollback** in the step 6 catalog model. Activation and rollback are planned for later steps.
+IndexedDB stores accepted version changes and each replica's rollout progress. It does not store a single "current fleet version" or "currently running version."
+
+Gestalt derives the desired version from the latest change-request timestamp. If two requests have the same timestamp, it chooses the lexicographically greatest version string so every replica selects the same version. Bootstrap and polling both compare the requests using this rule; they do not assume that the first or last record returned by IndexedDB is the newest.
+
+Each Gestalt process separately tracks the version its provider is currently serving. It uses an in-process running-version map and a local `active-version` marker in the artifacts directory, and updates both with provider start and stop. `app_instance_materializations` is not used for current runtime state because it contains historical rollout progress for multiple versions and can become stale after a process exits or crashes.
 
 ---
 
@@ -265,11 +269,16 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
   "acknowledged_at": "2026-07-13T21:00:00Z",
   "materialized_at": "2026-07-13T21:00:02Z",
   "stopped_at": "2026-07-13T21:00:05Z",
-  "restarted_at": "2026-07-13T21:01:05Z"
+  "restarted_at": "2026-07-13T21:01:05Z",
+  "attempt_count": 1,
+  "last_error_at": "2026-07-13T21:00:30Z",
+  "last_error_message": "start provider: executable exited before registration"
 }
 ```
 
 `instance_id` defaults to the process hostname (`os.Hostname()`).
+
+`attempt_count` counts failed reconciliation attempts for this replica, app, and version. `last_error_at` and `last_error_message` retain the most recent failure for diagnosis, including after a later attempt succeeds. They do not determine whether the version is currently running.
 
 ### Service API
 
@@ -284,5 +293,8 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 | `ListByAppVersion(ctx, app, version)` | List the replicas that acknowledged one rollout. |
 | `MarkStopped(ctx, instanceID, app, version, stoppedAt)` | Record when the app provider was stopped for this fleet version. |
 | `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the app provider restart cycle completed for this fleet version. |
+| `RecordFailure(ctx, instanceID, app, version, failedAt, message)` | Atomically increment `attempt_count` and replace the last-error fields. |
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).
+
+`app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the latest fleet-known version without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that latest version, the poller records convergence without stopping and restarting the app again.
