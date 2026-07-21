@@ -126,11 +126,11 @@ A provider is **restartable** when this replica builds it locally from the confi
 
 Failure and retry behavior:
 
-1. If `Close` fails, the provider stays absent because it may be partially closed. Later polls retain the error; shutdown releases the lease.
-2. If writing `stopped_at` fails after stop, the next poll retries the write without stopping the absent provider again.
-3. If writing `restarted_at` fails after start, the next poll retries the write without rebuilding the running provider.
-4. A version discovered while the app is stopped joins the current cycle and inherits its original `stopped_at`.
-5. Replacing the local `active-version` marker preserves the prior valid marker if the replacement cannot be committed. Temporary files and backups may be cleaned only after replacement or restoration succeeds.
+1. Reconciliation operations are idempotent: materializing an already valid package, stopping an absent provider, starting the already-running desired version, and repeating a rollout-progress write must succeed without duplicating work.
+2. When an app reconciliation fails, the poller logs the error, increments an error metric, releases that app's lifecycle lease, and continues reconciling other apps. If stopping had begun, the failed app may remain unavailable until retry.
+3. On the next poll, reconciliation for that app starts again from the beginning and inspects the current provider registry, running-version map, `active-version` marker, and rollout-progress rows rather than relying on in-memory progress from the failed attempt.
+4. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
+5. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it. Registry, package-download, and IndexedDB failures use the per-app retry behavior instead.
 
 ### Runtime surfaces for registry-only app slots
 

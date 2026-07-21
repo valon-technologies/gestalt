@@ -271,6 +271,9 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 - Build, registration, activation, and stop failures leave the provider registry, running-version map, and `active-version` marker consistent.
 - A stale stopped row cannot cause the poller to overwrite a different running provider without stopping it.
 - A version already started by bootstrap is marked converged by the poller without an extra restart.
+- A failed app reconciliation logs an error, increments a metric, releases its lifecycle lease, and does not prevent other apps from reconciling.
+- The next poll retries the failed app from the beginning; repeated materialize, stop, start-same-version, and rollout-progress operations are idempotent.
+- Unrecoverable local provider state marks Gestalt unhealthy and terminates the process, while registry, download, and IndexedDB failures remain per-app retries.
 
 ### Runtime surfaces
 
