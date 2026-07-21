@@ -22,6 +22,10 @@ func (p *remoteProviderBase) ResolveHTTPSubject(ctx context.Context, req *core.H
 	if err != nil {
 		return nil, err
 	}
+	ctx, err = p.attachInvocationCapability(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	httpReq, err := httpSubjectRequestProto(req)
 	if err != nil {
