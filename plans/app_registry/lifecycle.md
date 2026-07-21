@@ -65,12 +65,12 @@ Bootstrap and the poller must both use `LatestKnownVersion` to select the same d
 
 Bootstrap finishes its registry-app startup attempts before the catalog poller begins:
 
-1. Bootstrap materializes and starts the desired fleet-known version without writing rollout or materialization progress.
+1. Bootstrap materializes and starts the desired fleet-known version without updating `app_rollouts` or `app_instance_materializations`; the poller owns those rollout-accounting writes.
 2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither local state may identify the requested version as running.
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
 4. The poller then starts and runs its first reconciliation pass immediately.
-5. If the desired version is already running, the poller records pending progress as converged without stopping and restarting the app.
-6. If progress rows say the app was stopped but a different version is actually running, runtime state wins: the poller stops that provider before starting the desired version.
+5. If the desired version is already running, the poller sets `restarted_at` on each pending `app_instance_materializations` row without stopping and restarting the app.
+6. A pending `app_instance_materializations` row may contain a historical `stopped_at` even though this process is now running a different version. In that case, the poller trusts the current process state: it stops the running provider before starting the desired version.
 7. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
 
 A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
