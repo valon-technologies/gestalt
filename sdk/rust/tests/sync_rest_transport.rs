@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use gestalt::public::auth::BearerAuth;
-use gestalt::public::generated::app_client::AuthorizationClient;
 use gestalt::authorization::{
     Action, CheckAccessRequest, ListRelationshipsRequest, RelationshipFilter, Resource, Subject,
 };
+use gestalt::public::auth::BearerAuth;
+use gestalt::public::generated::app_client::AuthorizationClient;
 use gestalt::public::rest_transport::SyncRestTransport;
 use gestalt::rpc_support::gestalt_error_code;
 use serde_json::json;

@@ -423,6 +423,9 @@ func (r *renderer) renderMessage(m *model.Message) {
  		if fieldRef(f).Kind == model.KindTimestamp {
 			r.body.WriteString("    #[serde(with = \"crate::serde_time\")]\n")
 		}
+ 		if fieldRef(f).Kind == model.KindDuration {
+ 			r.body.WriteString("    #[serde(with = \"crate::serde_duration\")]\n")
+ 		}
 		if f.Presence == model.ExplicitPresence {
 			fmt.Fprintf(&r.body, "    /// The `%s` field; None when unset.\n", f.Name)
 			fmt.Fprintf(&r.body, "    pub %s: Option<%s>,\n", escapeIdent(f.Name), r.fieldType(f))

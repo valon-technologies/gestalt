@@ -11,7 +11,8 @@ use crate::public::generated::codec::agent::{
     decode_wire_agent_output_json, encode_wire_agent_output_json,
 };
 use crate::public::generated::codec::app::{
-    decode_wire_agent_tool_ref_json, encode_wire_agent_tool_ref_json,
+    decode_wire_agent_tool_ref_json, decode_wire_request_context_json,
+    encode_wire_agent_tool_ref_json, encode_wire_request_context_json,
 };
 use crate::public::generated::workflow::{
     ApplyWorkflowProviderDefinitionRequest, CancelWorkflowProviderRunRequest,
@@ -31,6 +32,7 @@ pub(crate) fn to_wire_apply_workflow_provider_definition_request(
         provider: value.provider,
         spec: value.spec.map(to_wire_workflow_definition_spec),
         idempotency_key: value.idempotency_key,
+        context: None,
         ..Default::default()
     }
 }
@@ -1133,6 +1135,9 @@ pub(crate) fn encode_wire_apply_workflow_provider_definition_request_json(
             serde_json::Value::String(value.idempotency_key.to_string()),
         );
     }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -1162,6 +1167,10 @@ pub(crate) fn decode_wire_apply_workflow_provider_definition_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         ..Default::default()
     })
 }
@@ -1173,6 +1182,7 @@ pub(crate) fn to_wire_cancel_workflow_provider_run_request(
     v1::CancelWorkflowProviderRunRequest {
         run_id: value.run_id,
         reason: value.reason,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1194,6 +1204,9 @@ pub(crate) fn encode_wire_cancel_workflow_provider_run_request_json(
             "reason".into(),
             serde_json::Value::String(value.reason.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -1224,6 +1237,10 @@ pub(crate) fn decode_wire_cancel_workflow_provider_run_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -1238,6 +1255,7 @@ pub(crate) fn to_wire_delete_workflow_provider_definition_request(
 ) -> v1::DeleteWorkflowProviderDefinitionRequest {
     v1::DeleteWorkflowProviderDefinitionRequest {
         definition_id: value.definition_id,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1253,6 +1271,9 @@ pub(crate) fn encode_wire_delete_workflow_provider_definition_request_json(
             "definitionId".into(),
             serde_json::Value::String(value.definition_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -1281,6 +1302,10 @@ pub(crate) fn decode_wire_delete_workflow_provider_definition_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -1295,6 +1320,7 @@ pub(crate) fn to_wire_get_workflow_provider_definition_request(
 ) -> v1::GetWorkflowProviderDefinitionRequest {
     v1::GetWorkflowProviderDefinitionRequest {
         definition_id: value.definition_id,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1310,6 +1336,9 @@ pub(crate) fn encode_wire_get_workflow_provider_definition_request_json(
             "definitionId".into(),
             serde_json::Value::String(value.definition_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -1338,6 +1367,10 @@ pub(crate) fn decode_wire_get_workflow_provider_definition_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -1352,6 +1385,7 @@ pub(crate) fn to_wire_get_workflow_provider_run_events_request(
 ) -> v1::GetWorkflowProviderRunEventsRequest {
     v1::GetWorkflowProviderRunEventsRequest {
         run_id: value.run_id,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1367,6 +1401,9 @@ pub(crate) fn encode_wire_get_workflow_provider_run_events_request_json(
             "runId".into(),
             serde_json::Value::String(value.run_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -1395,6 +1432,10 @@ pub(crate) fn decode_wire_get_workflow_provider_run_events_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -1538,6 +1579,7 @@ pub(crate) fn to_wire_get_workflow_provider_run_output_request(
 ) -> v1::GetWorkflowProviderRunOutputRequest {
     v1::GetWorkflowProviderRunOutputRequest {
         run_id: value.run_id,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1553,6 +1595,9 @@ pub(crate) fn encode_wire_get_workflow_provider_run_output_request_json(
             "runId".into(),
             serde_json::Value::String(value.run_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -1581,6 +1626,10 @@ pub(crate) fn decode_wire_get_workflow_provider_run_output_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -1631,6 +1680,7 @@ pub(crate) fn to_wire_get_workflow_provider_run_request(
 ) -> v1::GetWorkflowProviderRunRequest {
     v1::GetWorkflowProviderRunRequest {
         run_id: value.run_id,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1646,6 +1696,9 @@ pub(crate) fn encode_wire_get_workflow_provider_run_request_json(
             "runId".into(),
             serde_json::Value::String(value.run_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -1672,6 +1725,10 @@ pub(crate) fn decode_wire_get_workflow_provider_run_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -1685,6 +1742,7 @@ pub(crate) fn to_wire_list_workflow_provider_definitions_request(
     value: ListWorkflowProviderDefinitionsRequest,
 ) -> v1::ListWorkflowProviderDefinitionsRequest {
     v1::ListWorkflowProviderDefinitionsRequest {
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1695,6 +1753,9 @@ pub(crate) fn encode_wire_list_workflow_provider_definitions_request_json(
     value: &v1::ListWorkflowProviderDefinitionsRequest,
 ) -> serde_json::Value {
     let mut object = serde_json::Map::new();
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
     if !value.provider.is_empty() {
         object.insert(
             "provider".into(),
@@ -1718,6 +1779,10 @@ pub(crate) fn decode_wire_list_workflow_provider_definitions_request_json(
         ));
     };
     Ok(v1::ListWorkflowProviderDefinitionsRequest {
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -1904,6 +1969,7 @@ pub(crate) fn to_wire_list_workflow_provider_runs_request(
         page_token: value.page_token,
         status: value.status,
         target_app: value.target_app,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -1946,6 +2012,9 @@ pub(crate) fn encode_wire_list_workflow_provider_runs_request_json(
             "targetApp".into(),
             serde_json::Value::String(value.target_app.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -2018,6 +2087,10 @@ pub(crate) fn decode_wire_list_workflow_provider_runs_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -2960,6 +3033,7 @@ pub(crate) fn to_wire_set_workflow_provider_activation_paused_request(
         definition_id: value.definition_id,
         activation_id: value.activation_id,
         paused: value.paused,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -2984,6 +3058,9 @@ pub(crate) fn encode_wire_set_workflow_provider_activation_paused_request_json(
     }
     if value.paused {
         object.insert("paused".into(), serde_json::Value::Bool(value.paused));
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -3020,6 +3097,10 @@ pub(crate) fn decode_wire_set_workflow_provider_activation_paused_request_json(
             Some(value) => crate::public::proto_json::decode_bool(value)?,
             None => false,
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -3035,6 +3116,7 @@ pub(crate) fn to_wire_set_workflow_provider_definition_paused_request(
     v1::SetWorkflowProviderDefinitionPausedRequest {
         definition_id: value.definition_id,
         paused: value.paused,
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -3053,6 +3135,9 @@ pub(crate) fn encode_wire_set_workflow_provider_definition_paused_request_json(
     }
     if value.paused {
         object.insert("paused".into(), serde_json::Value::Bool(value.paused));
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -3085,6 +3170,10 @@ pub(crate) fn decode_wire_set_workflow_provider_definition_paused_request_json(
             Some(value) => crate::public::proto_json::decode_bool(value)?,
             None => false,
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -3105,6 +3194,7 @@ pub(crate) fn to_wire_signal_or_start_workflow_provider_run_request(
         definition_id: value.definition_id,
         input: value.input.map(to_wire_struct),
         expected_definition_generation: value.expected_definition_generation,
+        context: None,
         ..Default::default()
     }
 }
@@ -3241,6 +3331,9 @@ pub(crate) fn encode_wire_signal_or_start_workflow_provider_run_request_json(
             crate::public::proto_json::encode_i64(value.expected_definition_generation),
         );
     }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -3286,6 +3379,10 @@ pub(crate) fn decode_wire_signal_or_start_workflow_provider_run_request_json(
             Some(value) => crate::public::proto_json::decode_i64(value)?,
             None => 0,
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         ..Default::default()
     })
 }
@@ -3297,6 +3394,7 @@ pub(crate) fn to_wire_signal_workflow_provider_run_request(
     v1::SignalWorkflowProviderRunRequest {
         run_id: value.run_id,
         signal: value.signal.map(to_wire_workflow_signal),
+        context: None,
         provider: value.provider,
         ..Default::default()
     }
@@ -3315,6 +3413,9 @@ pub(crate) fn encode_wire_signal_workflow_provider_run_request_json(
     }
     if let Some(inner) = &value.signal {
         object.insert("signal".into(), encode_wire_workflow_signal_json(inner));
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider.is_empty() {
         object.insert(
@@ -3344,6 +3445,10 @@ pub(crate) fn decode_wire_signal_workflow_provider_run_request_json(
         signal: object
             .get("signal")
             .map(|value| decode_wire_workflow_signal_json(value))
+            .transpose()?,
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
             .transpose()?,
         provider: match object.get("provider") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
@@ -3421,6 +3526,7 @@ pub(crate) fn to_wire_start_workflow_provider_run_request(
         definition_id: value.definition_id,
         input: value.input.map(to_wire_struct),
         expected_definition_generation: value.expected_definition_generation,
+        context: None,
         ..Default::default()
     }
 }
@@ -3466,6 +3572,9 @@ pub(crate) fn encode_wire_start_workflow_provider_run_request_json(
             crate::public::proto_json::encode_i64(value.expected_definition_generation),
         );
     }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -3505,6 +3614,10 @@ pub(crate) fn decode_wire_start_workflow_provider_run_request_json(
             Some(value) => crate::public::proto_json::decode_i64(value)?,
             None => 0,
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         ..Default::default()
     })
 }

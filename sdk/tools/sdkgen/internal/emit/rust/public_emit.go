@@ -129,7 +129,7 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	reachableMessages := plan.ReachableMessages
 	enums := plan.ReachableEnums
 	methods := plan.Methods
-	for _, m := range reachableMessages {
+ 	for _, m := range schema.Messages {
 		idx.wireMessages[m.FullName] = m
 	}
 	markPublicWireJSONFromMessages(idx, reachableMessages)

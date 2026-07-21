@@ -19,7 +19,8 @@ use crate::public::generated::agent::{
 };
 use crate::public::generated::codec::app::{
     decode_wire_agent_tool_ref_json, decode_wire_operation_annotations_json,
-    encode_wire_agent_tool_ref_json, encode_wire_operation_annotations_json,
+    decode_wire_request_context_json, encode_wire_agent_tool_ref_json,
+    encode_wire_operation_annotations_json, encode_wire_request_context_json,
 };
 
 /// Encodes a wire `ListedAgentTool` as protobuf JSON.
@@ -1989,6 +1990,7 @@ pub(crate) fn to_wire_cancel_agent_provider_turn_request(
     v1::CancelAgentProviderTurnRequest {
         turn_id: value.turn_id,
         reason: value.reason,
+        context: None,
         provider_name: value.provider_name,
         session_id: value.session_id,
         ..Default::default()
@@ -2011,6 +2013,9 @@ pub(crate) fn encode_wire_cancel_agent_provider_turn_request_json(
             "reason".into(),
             serde_json::Value::String(value.reason.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -2047,6 +2052,10 @@ pub(crate) fn decode_wire_cancel_agent_provider_turn_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -2074,6 +2083,7 @@ pub(crate) fn to_wire_create_agent_provider_session_request(
             .map(to_wire_prepared_agent_workspace),
         provider_name: value.provider_name,
         workspace: value.workspace.map(to_wire_agent_workspace),
+        context: None,
         tools: value.tools.map(to_wire_agent_tool_config),
         ..Default::default()
     }
@@ -2172,6 +2182,9 @@ pub(crate) fn encode_wire_create_agent_provider_session_request_json(
     if let Some(inner) = &value.workspace {
         object.insert("workspace".into(), encode_wire_agent_workspace_json(inner));
     }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
     if let Some(inner) = &value.tools {
         object.insert("tools".into(), encode_wire_agent_tool_config_json(inner));
     }
@@ -2224,6 +2237,10 @@ pub(crate) fn decode_wire_create_agent_provider_session_request_json(
             .get("workspace")
             .map(|value| decode_wire_agent_workspace_json(value))
             .transpose()?,
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         tools: object
             .get("tools")
             .map(|value| decode_wire_agent_tool_config_json(value))
@@ -2251,6 +2268,7 @@ pub(crate) fn to_wire_create_agent_provider_turn_request(
         model_options: value.model_options.map(to_wire_struct),
         timeout_seconds: value.timeout_seconds,
         output: value.output.map(to_wire_agent_output),
+        context: None,
         provider_name: value.provider_name,
         ..Default::default()
     }
@@ -2324,6 +2342,9 @@ pub(crate) fn encode_wire_create_agent_provider_turn_request_json(
     if let Some(inner) = &value.output {
         object.insert("output".into(), encode_wire_agent_output_json(inner));
     }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
     if !value.provider_name.is_empty() {
         object.insert(
             "providerName".into(),
@@ -2392,6 +2413,10 @@ pub(crate) fn decode_wire_create_agent_provider_turn_request_json(
             .get("output")
             .map(|value| decode_wire_agent_output_json(value))
             .transpose()?,
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -2406,6 +2431,7 @@ pub(crate) fn to_wire_get_agent_provider_session_request(
 ) -> v1::GetAgentProviderSessionRequest {
     v1::GetAgentProviderSessionRequest {
         session_id: value.session_id,
+        context: None,
         provider_name: value.provider_name,
         ..Default::default()
     }
@@ -2421,6 +2447,9 @@ pub(crate) fn encode_wire_get_agent_provider_session_request_json(
             "sessionId".into(),
             serde_json::Value::String(value.session_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -2447,6 +2476,10 @@ pub(crate) fn decode_wire_get_agent_provider_session_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -2461,6 +2494,7 @@ pub(crate) fn to_wire_get_agent_provider_turn_request(
 ) -> v1::GetAgentProviderTurnRequest {
     v1::GetAgentProviderTurnRequest {
         turn_id: value.turn_id,
+        context: None,
         provider_name: value.provider_name,
         session_id: value.session_id,
         ..Default::default()
@@ -2477,6 +2511,9 @@ pub(crate) fn encode_wire_get_agent_provider_turn_request_json(
             "turnId".into(),
             serde_json::Value::String(value.turn_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -2508,6 +2545,10 @@ pub(crate) fn decode_wire_get_agent_provider_turn_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -2526,6 +2567,7 @@ pub(crate) fn to_wire_list_agent_provider_interactions_request(
 ) -> v1::ListAgentProviderInteractionsRequest {
     v1::ListAgentProviderInteractionsRequest {
         turn_id: value.turn_id,
+        context: None,
         provider_name: value.provider_name,
         ..Default::default()
     }
@@ -2541,6 +2583,9 @@ pub(crate) fn encode_wire_list_agent_provider_interactions_request_json(
             "turnId".into(),
             serde_json::Value::String(value.turn_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -2569,6 +2614,10 @@ pub(crate) fn decode_wire_list_agent_provider_interactions_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -2636,6 +2685,7 @@ pub(crate) fn to_wire_list_agent_provider_sessions_request(
         limit: value.limit,
         summary_only: value.summary_only,
         provider_name: value.provider_name,
+        context: None,
         ..Default::default()
     }
 }
@@ -2686,6 +2736,9 @@ pub(crate) fn encode_wire_list_agent_provider_sessions_request_json(
             "providerName".into(),
             serde_json::Value::String(value.provider_name.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     serde_json::Value::Object(object)
 }
@@ -2758,6 +2811,10 @@ pub(crate) fn decode_wire_list_agent_provider_sessions_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         ..Default::default()
     })
 }
@@ -2819,6 +2876,7 @@ pub(crate) fn to_wire_list_agent_provider_turn_events_request(
         turn_id: value.turn_id,
         after_seq: value.after_seq,
         limit: value.limit,
+        context: None,
         provider_name: value.provider_name,
         session_id: value.session_id,
         ..Default::default()
@@ -2844,6 +2902,9 @@ pub(crate) fn encode_wire_list_agent_provider_turn_events_request_json(
     }
     if value.limit != 0 {
         object.insert("limit".into(), serde_json::json!(value.limit));
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -2886,6 +2947,10 @@ pub(crate) fn decode_wire_list_agent_provider_turn_events_request_json(
             Some(value) => crate::public::proto_json::decode_i32(value)?,
             None => 0,
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -2957,6 +3022,7 @@ pub(crate) fn to_wire_list_agent_provider_turns_request(
         status: value.status,
         limit: value.limit,
         summary_only: value.summary_only,
+        context: None,
         provider_name: value.provider_name,
         ..Default::default()
     }
@@ -3012,6 +3078,9 @@ pub(crate) fn encode_wire_list_agent_provider_turns_request_json(
             "summaryOnly".into(),
             serde_json::Value::Bool(value.summary_only),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -3102,6 +3171,10 @@ pub(crate) fn decode_wire_list_agent_provider_turns_request_json(
             Some(value) => crate::public::proto_json::decode_bool(value)?,
             None => false,
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -3165,6 +3238,7 @@ pub(crate) fn to_wire_resolve_agent_provider_interaction_request(
         interaction_id: value.interaction_id,
         resolution: value.resolution.map(to_wire_struct),
         turn_id: value.turn_id,
+        context: None,
         provider_name: value.provider_name,
         ..Default::default()
     }
@@ -3192,6 +3266,9 @@ pub(crate) fn encode_wire_resolve_agent_provider_interaction_request_json(
             "turnId".into(),
             serde_json::Value::String(value.turn_id.to_string()),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -3228,6 +3305,10 @@ pub(crate) fn decode_wire_resolve_agent_provider_interaction_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
@@ -3245,6 +3326,7 @@ pub(crate) fn to_wire_update_agent_provider_session_request(
         client_ref: value.client_ref,
         state: value.state,
         metadata: value.metadata.map(to_wire_struct),
+        context: None,
         provider_name: value.provider_name,
         ..Default::default()
     }
@@ -3287,6 +3369,9 @@ pub(crate) fn encode_wire_update_agent_provider_session_request_json(
             "metadata".into(),
             crate::public::proto_json::encode_struct(inner),
         );
+    }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
     }
     if !value.provider_name.is_empty() {
         object.insert(
@@ -3351,6 +3436,10 @@ pub(crate) fn decode_wire_update_agent_provider_session_request_json(
         metadata: object
             .get("metadata")
             .map(|value| crate::public::proto_json::decode_struct(value))
+            .transpose()?,
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
             .transpose()?,
         provider_name: match object.get("providerName") {
             Some(value) => crate::public::proto_json::decode_string(value)?,

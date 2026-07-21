@@ -129,6 +129,7 @@ pub struct CacheSetEntry {
 pub struct CacheSetManyRequest {
     /// The `entries` field.
     pub entries: Vec<CacheSetEntry>,
+    #[serde(with = "crate::serde_duration")]
     /// The `ttl` field; None when unset.
     pub ttl: Option<std::time::Duration>,
 }
@@ -145,6 +146,7 @@ pub struct CacheSetRequest {
     pub value: Vec<u8>,
     /// ttl applies an optional expiration to the entry.
     ///
+    #[serde(with = "crate::serde_duration")]
     /// The `ttl` field; None when unset.
     pub ttl: Option<std::time::Duration>,
 }
@@ -157,6 +159,7 @@ pub struct CacheSetRequest {
 pub struct CacheTouchRequest {
     /// The `key` field.
     pub key: String,
+    #[serde(with = "crate::serde_duration")]
     /// The `ttl` field; None when unset.
     pub ttl: Option<std::time::Duration>,
 }

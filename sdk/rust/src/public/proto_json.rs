@@ -556,4 +556,3 @@ mod tests {
         assert!(decode_f64(&encoded).expect("decode nan").is_nan());
     }
 }
-
