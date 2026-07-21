@@ -222,10 +222,10 @@ Full specification: [validation.md](./validation.md).
 
 Activation is phased:
 
-1. Validate the candidate version against registry metadata and append a change request to `app_version_change_requests` (fleet declaration) — step 7; extended validation in step 13 before the write.
-2. Each replica acknowledges the catalog row, then progressively downloads, restarts, and mounts the new binary — steps 8–11. See [lifecycle.md](./lifecycle.md#polling).
+1. Validate the candidate version against registry metadata (including install-time validation; see [validation.md](./validation.md)) and append a change request to `app_version_change_requests` (fleet declaration).
+2. Each replica acknowledges the catalog row, then progressively downloads, restarts, and mounts the new binary. See [lifecycle.md](./lifecycle.md#polling).
 
-Fleet rollout admission and per-replica convergence shipped in steps 8–12 (rollouts, install locks, catalog poller).
+Fleet rollout admission and per-replica convergence are shipped (rollouts, install locks, catalog poller).
 
 ### Runtime Materialization
 
