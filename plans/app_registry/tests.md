@@ -5,6 +5,7 @@ Reference for behavioral tests in the app registry plan.
 Related docs:
 
 - [plan.md](./plan.md) — implementation path and goals
+- [validation.md](./validation.md) — install-time validation (step 13)
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
@@ -24,6 +25,8 @@ Related docs:
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 11 |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
+| `internal/appregistry` | `install_validator_test.go` | — | Unit | step 13 (planned) |
+| `internal/server` | `handlers_admin_app_install_validation_test.go` | — | HTTP integration | step 13 (planned) |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -274,11 +277,44 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ---
 
+## Install-time validation tests
+
+Planned for step 13. Rules: [validation.md](./validation.md). Pipeline: [lifecycle.md](./lifecycle.md#install-time-validation).
+
+Run (once implemented):
+
+```bash
+cd gestaltd
+go test ./internal/appregistry/... -run TestInstallValidator -count=1
+go test ./internal/server/... -run TestAdminAppInstallValidation -count=1
+```
+
+### `install_validator_test.go` (planned)
+
+Unit tests with stub fleet catalog and synthetic `Entry` documents:
+
+- **`TestInstallValidator_rejects_missing_platform_artifact`** — no `linux/amd64` (or host platform) artifact.
+- **`TestInstallValidator_rejects_incompatible_gestaltd`** — `minGestaltdVersion` above running server version.
+- **`TestInstallValidator_rejects_missing_dependency`** — `requires.apps.slack` with no fleet-known slack version.
+- **`TestInstallValidator_rejects_dependency_version_range`** — installed slack version outside declared range.
+- **`TestInstallValidator_rejects_missing_required_operation`** — dependency published `interface` lacks declared operation.
+- **`TestInstallValidator_accepts_satisfied_dependencies`** — happy path when catalog and entry align.
+
+### `handlers_admin_app_install_validation_test.go` (planned)
+
+HTTP integration on `POST …/add` and `POST …/upgrade`:
+
+- Validation failure returns **400** and does not create rollout or change-request rows.
+- Successful path unchanged from existing install tests once validator passes.
+
+---
+
 ## What is not covered yet
 
 Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover the happy path, 404 on missing version, and get-by-app — but not:
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
+- Install-time validation failure modes (step 13)
 - Multi-replica materialization ack E2E (see [PLANNED] section above)
 - Deployed verification that catalog restarts serve the newly mounted binary
