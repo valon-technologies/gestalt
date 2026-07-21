@@ -108,7 +108,6 @@ func TestCatalogPollerAtRetryLimitRecordsObservedConvergence(t *testing.T) {
 		FromVersion: "previous",
 		ToVersion:   "v1",
 		Timestamp:   now,
-		Metadata:    map[string]any{"registry": "toolshed"},
 	}); err != nil {
 		t.Fatalf("AppendRequest: %v", err)
 	}
@@ -119,9 +118,6 @@ func TestCatalogPollerAtRetryLimitRecordsObservedConvergence(t *testing.T) {
 		AcknowledgedAt: now,
 	}); err != nil {
 		t.Fatalf("Acknowledge: %v", err)
-	}
-	if _, err := services.AppInstanceMaterializations.MarkMaterialized(ctx, "replica-a", "g-issues", "v1", now); err != nil {
-		t.Fatalf("MarkMaterialized: %v", err)
 	}
 	if _, err := services.AppInstanceMaterializations.RecordFailure(ctx, "replica-a", "g-issues", "v1", now, "prior failure"); err != nil {
 		t.Fatalf("RecordFailure: %v", err)
