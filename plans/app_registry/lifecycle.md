@@ -69,9 +69,10 @@ Bootstrap finishes its registry-app startup attempts before the catalog poller b
 2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither local state may identify the requested version as running.
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
 4. The poller then starts and runs its first reconciliation pass immediately.
-5. If the desired version is already running, the poller sets `restarted_at` on each pending `app_instance_materializations` row without stopping and restarting the app.
-6. To determine whether a provider is currently running and which version it serves, the poller uses this process's provider registry and running-version map. `app_instance_materializations` only says which rollout-progress writes were recorded previously. Therefore, a historical `stopped_at` does not prove that the provider is still absent. If local runtime state shows a version other than the desired version, the poller stops that provider, starts the desired version, and then updates the rollout-progress row.
-7. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
+5. The poller compares the desired version from `app_version_change_requests` with this process's provider registry and running-version map:
+   - **Match** — the desired version is already running, so the poller sets `restarted_at` on each pending `app_instance_materializations` row without restarting the app.
+   - **Missing or different** — if another version is running, the poller stops it; then it starts the desired version and updates the rollout-progress rows. A historical `stopped_at` in `app_instance_materializations` does not prove that the provider is still absent, because those rows record previous rollout writes rather than current process state.
+6. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
 
 A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
 
