@@ -114,8 +114,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		return set, nil
 	}
 
- 	// Build local-name and codec-function-name sets for shared types so
- 	// renderers can route imports to the provider modules.
 	sharedLocal := map[string]bool{}
 	sharedCodecFn := map[string]bool{}
 	for fullName := range plan.SharedMessages {
@@ -123,7 +121,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		sharedCodecFn[toWireFunc(fullName)] = true
 		sharedCodecFn[fromWireFunc(fullName)] = true
 	}
- 	// Enums are always shared: the public surface never projects enum values.
  	for _, e := range plan.ReachableEnums {
  		sharedLocal[localName(e.FullName)] = true
  	}
@@ -156,9 +153,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
  	codecModules := []string{}
 	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
  		public := newRenderer(idx, g.base, g.base, modulePublic, true, sharedLocal, sharedCodecFn)
- 		// Enums and shared messages are referenced from the provider modules;
- 		// only projected messages (with stripped fill/reject fields) get
- 		// local definitions.
  		hasProjected := false
 		for _, m := range g.messages {
  			if plan.SharedMessages[m.FullName] {
@@ -172,8 +166,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 				return nil, err
 			}
 		}
- 		// Generate codec files when there are projected messages (needing
- 		// to_wire) or shared messages needing wire JSON helpers for REST.
  		needCodec := hasProjected
  		if !needCodec {
  			for _, m := range g.messages {
@@ -365,8 +357,6 @@ func (r *renderer) renderPublicMetadata(methods []publicsurface.PublicMethod) {
 	for _, pm := range methods {
 		collectWireJSONCodecImports(pm, codecImports)
 	}
- 	// Split codec imports: shared functions come from the provider codec,
- 	// projected functions from the public generated codec.
  	for _, base := range sortedKeys2(codecImports) {
  		var shared, projected []string
  		for _, name := range sortedKeys(codecImports[base]) {

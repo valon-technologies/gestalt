@@ -12,8 +12,6 @@ import (
 // aliased proto to match the handwritten sdk/go transport code.
 const wireImport = `proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"`
 
-// gestaltClientAlias is the import alias for the provider client package,
-// used by the public renderer to reference shared types defined in client.
 const gestaltClientAlias = "gestaltclient."
 
 // features tracks which imports a generated file needs; the import header is
@@ -77,8 +75,6 @@ func wireEnum(fullName string) string {
 	return "proto." + localName(fullName)
 }
 
-// toWireFuncName renders the converter function name for a message, prefixed
-// with the client package alias when the type is shared (defined in client).
 func (r *renderer) toWireFuncName(fullName string) string {
 	if r.publicClient && r.shared[fullName] {
  		r.features.gestaltclient = true
@@ -87,8 +83,6 @@ func (r *renderer) toWireFuncName(fullName string) string {
 	return toWireFunc(r.messageType(fullName))
 }
 
-// fromWireFuncName renders the converter function name for a message, prefixed
-// with the client package alias when the type is shared (defined in client).
 func (r *renderer) fromWireFuncName(fullName string) string {
 	if r.publicClient && r.shared[fullName] {
  		r.features.gestaltclient = true
@@ -97,10 +91,6 @@ func (r *renderer) fromWireFuncName(fullName string) string {
 	return fromWireFunc(r.messageType(fullName))
 }
 
-// codecHelper renders the name of a well-known-type codec helper
-// (toWireStruct, fromWireTimestamp, etc.), prefixed with the client package
-// alias when rendering the public client. The public tree has no
-// support_codec.go; it imports these from the client package.
 func (r *renderer) codecHelper(name string) string {
 	if r.publicClient {
  		r.features.gestaltclient = true

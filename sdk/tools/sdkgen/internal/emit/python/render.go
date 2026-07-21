@@ -47,10 +47,10 @@ type features struct {
 	invokeNames map[string]bool            // public: names from invoke_support
 	support     map[string]bool            // codec: converter names from _codec.support
 	crossNative map[string]map[string]bool // public: generated module base -> imported type names
- 	crossShared map[string]map[string]bool // public: provider module base -> imported shared type names
+ 	crossShared map[string]map[string]bool
 	codecBases  map[string]bool            // public: codec module bases referenced by the client
 	crossCodec  map[string]bool            // codec: sibling codec module bases referenced
- 	crossSharedCodec map[string]bool      // codec: provider codec module bases referenced
+ 	crossSharedCodec map[string]bool
 	metadataMethods map[string]bool        // public client: METHOD_* constants from metadata
 	unaryTransport  bool                   // public client: UnaryTransport from unary_transport
 	asyncTransport  bool                   // public client: AsyncUnaryTransport from unary_transport
@@ -65,8 +65,8 @@ type renderer struct {
 	wireBase     string
 	kind         moduleKind
 	publicClient bool
-	shared       map[string]bool // shared type local names: defined in provider package
- 	sharedCodec  map[string]bool // shared codec function names: defined in provider codec
+	shared       map[string]bool
+	sharedCodec  map[string]bool
 	docIntro     string
 	features     features
 	body         strings.Builder
@@ -148,7 +148,6 @@ func (r *renderer) wireGrpcModule() string {
 // the current file are not imports.
 func (r *renderer) crossRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
- 	// Shared types are defined in the provider module, not public/generated.
  	if r.publicClient && r.shared != nil && r.shared[name] {
  		if r.features.crossShared[base] == nil {
  			r.features.crossShared[base] = map[string]bool{}
@@ -190,7 +189,6 @@ func (r *renderer) codecAlias(base string) string {
 // object, which keeps the circular import resolvable.
 func (r *renderer) codecRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
- 	// Shared codec functions live in the provider codec module.
  	if r.publicClient && r.sharedCodec != nil && r.sharedCodec[name] {
  		r.features.crossSharedCodec[base] = true
  		return "_" + base + "_provider_codec." + name
@@ -554,8 +552,6 @@ func (r *renderer) renderConversions(m *model.Message) {
 		r.body.WriteString("    )\n\n\n")
 	}
 
- 	// Public clients only convert requests to wire; responses use the
- 	// provider codec directly.
  	if r.publicClient {
  		for _, o := range m.Oneofs {
  			r.renderOneofConverters(m, o)
@@ -1224,7 +1220,6 @@ func (r *renderer) localImports() string {
 			codecModules["support"] = "_support"
 		}
 	}
- 	// Shared codec modules are imported from the provider package.
  	for _, base := range sortedKeys(r.features.crossSharedCodec) {
  		fmt.Fprintf(&b, "from gestalt._codec import %s as _%s_provider_codec\n", base, base)
  	}

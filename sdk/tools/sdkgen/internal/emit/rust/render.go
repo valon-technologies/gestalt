@@ -31,9 +31,9 @@ type features struct {
 	invokeUses   map[string]bool            // imported from the public invoke_support module
 	prostTypes   bool                       // google.protobuf.Empty via prost_types
 	crossPublic  map[string]map[string]bool // public module base -> imported native type names
- 	crossShared  map[string]map[string]bool // provider module base -> imported shared type names
+ 	crossShared  map[string]map[string]bool
 	crossCodec   map[string]map[string]bool // codec module base -> imported converter names
- 	crossSharedCodec map[string]map[string]bool // provider codec base -> imported shared converter names
+ 	crossSharedCodec map[string]map[string]bool
 	wireJSONDone map[string]bool            // wire message full names with protobuf JSON helpers
 }
 
@@ -110,7 +110,6 @@ func (r *renderer) useInvoke(name string) {
 // types from their public siblings.
 func (r *renderer) typeRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
-	// Shared types are defined in the provider module, not public/generated.
 	if r.publicClient && r.shared != nil && r.shared[name] {
 		if r.features.crossShared[base] == nil {
 			r.features.crossShared[base] = map[string]bool{}
@@ -143,7 +142,6 @@ func (r *renderer) hostRef(name string) string {
 // converters are not imports.
 func (r *renderer) convRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
-	// Shared codec functions live in the provider codec module.
 	if r.publicClient && r.sharedCodec != nil && r.sharedCodec[name] {
 		if r.features.crossSharedCodec[base] == nil {
 			r.features.crossSharedCodec[base] = map[string]bool{}
@@ -446,22 +444,17 @@ func (r *renderer) renderMessage(m *model.Message) {
 func (r *renderer) renderConversions(m *model.Message) {
 	needTo := r.idx.needToWire[m.FullName]
 	needFrom := r.idx.needFromWire[m.FullName]
- 	// Shared types are defined in the provider module; skip to_wire/from_wire
- 	// generation but still emit wire JSON helpers for REST transport.
  	isShared := r.publicClient && r.shared != nil && r.shared[localName(m.FullName)]
  	if isShared {
  		needTo = false
  		needFrom = false
  	}
 	if !needTo && !needFrom {
- 		// Still may need wire JSON helpers.
  		if r.publicClient && r.idx.needWireJSON[m.FullName] {
  			r.ensureWireProtoJSON(m.FullName)
  		}
  		return
 	}
-	// Public clients only convert requests to wire; responses use the
-	// provider codec directly.
 	if r.publicClient {
 		needFrom = false
 	}

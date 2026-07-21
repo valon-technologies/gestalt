@@ -46,9 +46,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 
 	for _, g := range groupFiles(plan.Filtered.Services, plan.ReachableMessages, plan.ReachableEnums) {
  		types := newPublicRenderer(idx, plan.SharedMessages)
- 		// Enums are always shared — referenced from the client package, not
- 		// regenerated. Only projected messages (with stripped fill/reject
- 		// fields) get local type definitions.
  		hasProjected := false
 		for _, m := range g.messages {
  			if plan.SharedMessages[m.FullName] {

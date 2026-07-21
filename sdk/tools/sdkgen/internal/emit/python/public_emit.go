@@ -22,7 +22,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		return set, nil
 	}
 
- 	// Build local-name and codec-function-name sets for shared types.
  	sharedLocal := map[string]bool{}
  	sharedCodecFn := map[string]bool{}
  	for fullName := range plan.SharedMessages {
@@ -30,7 +29,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
  		sharedCodecFn[toWireFunc(fullName)] = true
  		sharedCodecFn[fromWireFunc(fullName)] = true
  	}
- 	// Enums are always shared.
  	for _, e := range plan.ReachableEnums {
  		sharedLocal[localName(e.FullName)] = true
  	}
@@ -65,8 +63,6 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 		public.publicClient = true
  		public.shared = sharedLocal
  		public.sharedCodec = sharedCodecFn
- 		// Enums and shared messages are referenced from the provider modules;
- 		// only projected messages get local definitions.
  		hasProjected := false
 		for _, m := range g.messages {
  			if plan.SharedMessages[m.FullName] {

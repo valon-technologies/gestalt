@@ -13,11 +13,6 @@ type EmitPlan struct {
 	ReachableMessages []*model.Message
 	ReachableEnums    []*model.Enum
 
-	// SharedMessages maps each reachable message full name to true when the
-	// message is field-identical to the provider schema (no fill/reject
-	// omission). Emitters reference the provider type for shared messages
-	// instead of regenerating it. Projected messages (absent from the map or
-	// false) have stripped fields and must be defined locally.
 	SharedMessages map[string]bool
 }
 
@@ -70,10 +65,6 @@ func PrepareRESTEmit(schema *model.Schema) (*EmitPlan, error) {
 	return prepareEmitFromView(FilterREST(Build(schema)), schema)
 }
 
-// classifySharedMessages returns a set of reachable message full names that
-// are field-identical to the provider schema — no fill/reject fields omitted.
-// These messages can be referenced from the provider package instead of
-// regenerated in the public client tree.
 func classifySharedMessages(view *View, reachable []*model.Message) map[string]bool {
 	omitByInput, err := inputFieldPolicies(view)
 	if err != nil {
