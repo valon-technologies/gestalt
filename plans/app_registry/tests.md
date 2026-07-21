@@ -298,6 +298,7 @@ One table-driven test, `TestInstallValidator`, with stub fleet catalog and synth
 | `rejects_missing_platform_artifact` | No artifact for host platform |
 | `rejects_incompatible_gestaltd` | `minGestaltdVersion` above running server version |
 | `rejects_unsatisfied_dependency` | Missing dependency app, version outside declared range, or required operation absent from published `interface` |
+| `rejects_broken_reverse_dependent` | Another fleet-known app's `requires.apps.{app}` would break on the candidate `interface` |
 
 ### `handlers_admin_app_install_test.go` (extend)
 

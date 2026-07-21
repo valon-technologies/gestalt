@@ -19,7 +19,7 @@ Implementation (planned): `gestaltd/internal/appregistry/install_validator.go`; 
 | Dependency present | Each `entry.requires.apps` entry has a fleet-known version, or a deploy-pinned non-registry provider | **400** |
 | Dependency version | Fleet-known version satisfies `requires.apps.{app}.version` | **400** |
 | Dependency operations | Dependency published `interface` exposes each required operation; `inputSchemaHash` matches when set | **400** |
-| Reverse dependents (optional) | No other fleet-known app has a `requires.apps.{app}` entry broken by the candidate `interface` | **400** |
+| Reverse dependents | No other fleet-known app has a `requires.apps.{app}` entry broken by the candidate `interface` | **400** |
 
 Registry-only dependencies are validated against the fleet-known version's published metadata (`versions/{version}.json`).
 
