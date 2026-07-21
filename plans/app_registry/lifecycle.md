@@ -477,8 +477,6 @@ Before `Rollouts.Create` and `AppendRequest`, the install handler runs `InstallV
 | Declared `requires.apps` | Fleet-known dependency versions + published `interface` | **400** |
 | Reverse dependents (optional) | Other known apps' `requires` on this app | **400** |
 
-**Revert:** operators call `POST …/upgrade` with an older `version` from the registry catalog. No `rollback` route.
-
 Replica materialization and package validation remain unchanged; install-time validation is an early reject on the handling instance only.
 
 ### Errors
