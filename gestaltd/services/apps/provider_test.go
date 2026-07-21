@@ -884,4 +884,3 @@ func TestRemoteProviderDeclaredWorkflowDefinitions(t *testing.T) {
 		t.Fatal("expected corrupt workflow_definition_specs to fail NewRemote")
 	}
 }
-
