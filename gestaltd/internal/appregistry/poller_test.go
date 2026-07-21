@@ -22,6 +22,7 @@ type recordingAppRestarter struct {
 	restartable    map[string]bool
 	restartableErr error
 	afterStop      func()
+	runningVersion string
 }
 
 func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
@@ -54,6 +55,10 @@ func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string)
 }
 
 func (r *recordingAppRestarter) AbortRestarts() {}
+
+func (r *recordingAppRestarter) RunningVersion(string) (string, bool) {
+	return r.runningVersion, r.runningVersion != ""
+}
 
 func TestCatalogPollerStopsRetryingAtConfiguredLimit(t *testing.T) {
 	t.Parallel()
@@ -90,6 +95,60 @@ func TestCatalogPollerStopsRetryingAtConfiguredLimit(t *testing.T) {
 	}
 	if got := len(restarter.startCalls); got != 2 {
 		t.Fatalf("start calls = %d, want 2", got)
+	}
+}
+
+func TestCatalogPollerAtRetryLimitRecordsObservedConvergence(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	services := testutil.NewStubServices(t)
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	if _, err := services.AppVersionChangeRequests.AppendRequest(ctx, &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "previous",
+		ToVersion:   "v1",
+		Timestamp:   now,
+		Metadata:    map[string]any{"registry": "toolshed"},
+	}); err != nil {
+		t.Fatalf("AppendRequest: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.Acknowledge(ctx, &core.AppInstanceMaterialization{
+		InstanceID:     "replica-a",
+		App:            "g-issues",
+		Version:        "v1",
+		AcknowledgedAt: now,
+	}); err != nil {
+		t.Fatalf("Acknowledge: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.MarkMaterialized(ctx, "replica-a", "g-issues", "v1", now); err != nil {
+		t.Fatalf("MarkMaterialized: %v", err)
+	}
+	if _, err := services.AppInstanceMaterializations.RecordFailure(ctx, "replica-a", "g-issues", "v1", now, "prior failure"); err != nil {
+		t.Fatalf("RecordFailure: %v", err)
+	}
+	restarter := &recordingAppRestarter{runningVersion: "v1"}
+	poller := NewCatalogPoller(CatalogPollerConfig{
+		ChangeRequests:       services.AppVersionChangeRequests,
+		Materializations:     services.AppInstanceMaterializations,
+		Rollouts:             services.AppRollouts,
+		AppRestarter:         restarter,
+		InstanceID:           "replica-a",
+		MaxReconcileAttempts: 1,
+		Now:                  func() time.Time { return now },
+	})
+
+	if err := poller.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	row, err := services.AppInstanceMaterializations.Get(ctx, "replica-a", "g-issues", "v1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if row.RestartedAt.IsZero() {
+		t.Fatal("RestartedAt is zero")
+	}
+	if len(restarter.stopCalls) != 0 || len(restarter.startCalls) != 0 {
+		t.Fatalf("unexpected restart calls: stop=%v start=%v", restarter.stopCalls, restarter.startCalls)
 	}
 }
 

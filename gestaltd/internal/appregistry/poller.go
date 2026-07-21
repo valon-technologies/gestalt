@@ -316,10 +316,9 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			return fmt.Errorf("registry for %s@%s does not match configured source", appName, driverVersion)
 		}
 	}
+	retryLimitReached := false
 	if materialization, err := p.Materializations.Get(ctx, instanceID, appName, driverVersion); err == nil {
-		if materialization.AttemptCount >= p.maxReconcileAttempts() {
-			return nil
-		}
+		retryLimitReached = materialization.AttemptCount >= p.maxReconcileAttempts()
 	}
 
 	if p.AppRestarter == nil {
@@ -342,6 +341,22 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			"instance_id", instanceID,
 			"restarted_at", convergedAt,
 		)
+		return nil
+	}
+
+	if retryLimitReached {
+		if inspector, ok := p.AppRestarter.(interface {
+			RunningVersion(string) (string, bool)
+		}); ok {
+			running, found := inspector.RunningVersion(appName)
+			materialized, err := p.pendingRegistryVersionsMaterialized(ctx, instanceID, pending)
+			if err != nil {
+				return err
+			}
+			if found && running == driverVersion && materialized {
+				return p.markAllRestarted(ctx, instanceID, appName, pending, p.now())
+			}
+		}
 		return nil
 	}
 
@@ -418,6 +433,24 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		"restarted_at", restartedAt,
 	)
 	return nil
+}
+
+func (p *CatalogPoller) pendingRegistryVersionsMaterialized(ctx context.Context, instanceID string, pending []*core.AppInstallation) (bool, error) {
+	for _, installation := range pending {
+		if installation == nil || strings.TrimSpace(installation.Registry) == "" {
+			continue
+		}
+		appName := strings.TrimSpace(installation.AppName)
+		version := strings.TrimSpace(installation.Version)
+		materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
+		if err != nil {
+			return false, fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
+		}
+		if materialization.MaterializedAt.IsZero() {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func findInstallation(installations []*core.AppInstallation, version string) *core.AppInstallation {
