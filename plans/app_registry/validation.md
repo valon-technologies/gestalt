@@ -4,7 +4,7 @@ Validate registry app candidates on `POST …/add` and `POST …/upgrade` **befo
 
 Related docs:
 
-- [plan.md](./plan.md) — implementation path (step 13)
+- [plan.md](./plan.md) — implementation path
 - [lifecycle.md](./lifecycle.md#install-time-validation) — where validation runs in the install handler
 - [models.md](./models.md) — `requires` and `compatibility` on published version JSON
 - [tests.md](./tests.md#install-time-validation-tests) — planned handler and installer tests
@@ -18,15 +18,15 @@ Implementation (planned):
 
 ## Goals
 
-Step 13 closes the gap between **publish-time** checks (manifest, static dependency declarations) and **runtime** checks (each replica materializes and starts the package). Install-time validation answers: *should the fleet accept this version declaration before replicas spend work converging?*
+Install-time validation closes the gap between **publish-time** checks (manifest, static dependency declarations) and **runtime** checks (each replica materializes and starts the package). It answers: *should the fleet accept this version declaration before replicas spend work converging?*
 
 Operators recover from a bad rollout by **`POST …/upgrade` with an older published version** — the same route used for forward upgrades. There is no separate rollback API, fleet head, or promotion step.
 
 ---
 
-## Already shipped (steps 7–12)
+## Already shipped
 
-Fleet **activation** and **concurrency** are not step 13 work. They landed with the catalog poller and installer:
+Fleet **activation** and **concurrency** are not part of install-time validation. They landed with the catalog poller and installer:
 
 | Concern | Where |
 |---------|--------|
@@ -39,7 +39,7 @@ Fleet **activation** and **concurrency** are not step 13 work. They landed with 
 | Per-replica materialize + package validation | Poller + `ValidateInstalledPublishedPackage` at materialize/start |
 | Per-app provider lifecycle lease | `StopApp` / `StartApp` serialization in poller |
 
-Step 13 adds **fleet admission validation** only: extra checks on the handling instance before `Rollouts.Create` and `AppendRequest`.
+Install-time validation adds **fleet admission validation** only: extra checks on the handling instance before `Rollouts.Create` and `AppendRequest`.
 
 ---
 
@@ -49,7 +49,7 @@ Step 13 adds **fleet admission validation** only: extra checks on the handling i
 
 1. **Admission** (existing) — registry binding, `add`/`upgrade` mode, no active rollout, lock held.
 2. **Registry fetch** (existing) — `FetchEntry` for `(app, version)`; **404** when missing.
-3. **Install-time validation** (step 13, new) — `InstallValidator.Validate(ctx, ValidateInput)` using the fetched `Entry`, deploy config, and fleet-known catalog. **400** on failure.
+3. **Install-time validation** (planned) — `InstallValidator.Validate(ctx, ValidateInput)` using the fetched `Entry`, deploy config, and fleet-known catalog. **400** on failure.
 4. **Fleet write** (existing) — `Rollouts.Create`, `ChangeRequests.AppendRequest`; roll back rollout to `failed` if append fails.
 
 Validation must be **read-only** with respect to fleet state except for the install lock already held. It must not download artifacts or start providers on the handling instance.
@@ -58,17 +58,17 @@ Validation must be **read-only** with respect to fleet state except for the inst
 Client POST add/upgrade
   → acquire install lock
   → fetch PublishedVersion from registry
-  → InstallValidator.Validate     ← step 13
+  → InstallValidator.Validate
   → create rollout + append change request
   → release install lock
   → 200 + installation projection
 ```
 
-Replicas still re-validate the package when materializing (steps 10–11). Install-time validation is an early reject for problems visible from registry metadata and the current fleet catalog.
+Replicas still re-validate the package when materializing. Install-time validation is an early reject for problems visible from registry metadata and the current fleet catalog.
 
 ---
 
-## Checks (step 13)
+## Checks
 
 ### 1. Runtime platform artifact
 
@@ -111,7 +111,7 @@ This can be deferred after checks 1–3 if dependency graphs stay small. Documen
 
 ---
 
-## Explicitly out of scope (step 13)
+## Explicitly out of scope
 
 | Topic | Rationale |
 |-------|-----------|
@@ -129,7 +129,7 @@ To roll back fleet-wide:
 
 1. Confirm the target version is still listed in `GET …/app-registries/{registry}/apps/{app}/versions`.
 2. `POST …/upgrade` with `{"version":"<older-version>","actor":"..."}`.
-3. Wait for rollout convergence (step 14 UI makes this observable).
+3. Wait for rollout convergence (admin UI makes this observable once shipped).
 
 No new HTTP method. Catalog history retains both versions; `from_version` on the new change request reflects the previous fleet-known version.
 
@@ -161,7 +161,7 @@ See [tests.md](./tests.md#install-time-validation-tests). Summary:
 
 ---
 
-## Follow-up (not step 13)
+## Follow-up
 
-- **Step 14** — admin read APIs and UI for rollout and replica convergence ([admin.md](./admin.md))
+- Admin read APIs and UI for rollout and replica convergence ([admin.md](./admin.md))
 - **Future** — validate against live provider operation catalogs without an extra registry fetch; dry-run materialization on the handling instance (heavier, rarely needed)

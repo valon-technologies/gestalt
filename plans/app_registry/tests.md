@@ -5,7 +5,7 @@ Reference for behavioral tests in the app registry plan.
 Related docs:
 
 - [plan.md](./plan.md) — implementation path and goals
-- [validation.md](./validation.md) — install-time validation (step 13)
+- [validation.md](./validation.md) — install-time validation
 - [models.md](./models.md) — JSON documents exercised by publish and install
 - [service.md](./service.md) — Go API behind the CLI
 - [config.md](./config.md) — `appRegistries` deploy reader config
@@ -19,14 +19,14 @@ Related docs:
 |---------|------|-------|-------|-----|
 | `internal/daemon/e2e/appregistry` | `appregistry_test.go` | 1 | E2E (CLI) | [gestalt#2709](https://github.com/valon-technologies/gestalt/pull/2709) |
 | `internal/server` | `handlers_admin_app_install_test.go` | 3 | HTTP integration | [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) |
-| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 21 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + steps 10–11 |
-| `internal/appregistry` | `materializer_test.go` | 5 | Unit | step 10 |
-| `internal/appregistry` | `mount_test.go` | 4 | Unit | step 11 |
+| `internal/appregistry` | `poller_test.go`, `poller_materialize_test.go` | 21 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
+| `internal/appregistry` | `materializer_test.go` | 5 | Unit | — |
+| `internal/appregistry` | `mount_test.go` | 4 | Unit | — |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
-| `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 11 |
+| `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
-| `internal/appregistry` | `install_validator_test.go` | — | Unit | step 13 (planned) |
-| `internal/server` | `handlers_admin_app_install_validation_test.go` | — | HTTP integration | step 13 (planned) |
+| `internal/appregistry` | `install_validator_test.go` | — | Unit | planned |
+| `internal/server` | `handlers_admin_app_install_validation_test.go` | — | HTTP integration | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -279,7 +279,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ## Install-time validation tests
 
-Planned for step 13. Rules: [validation.md](./validation.md). Pipeline: [lifecycle.md](./lifecycle.md#install-time-validation).
+Planned. Rules: [validation.md](./validation.md). Pipeline: [lifecycle.md](./lifecycle.md#install-time-validation).
 
 Run (once implemented):
 
@@ -315,6 +315,6 @@ Publish tests validate **CLI dry-run behavior** only. Install HTTP tests cover t
 
 - Real GCS upload integration
 - Re-install idempotency (no duplicate change request)
-- Install-time validation failure modes (step 13)
+- Install-time validation failure modes
 - Multi-replica materialization ack E2E (see [PLANNED] section above)
 - Deployed verification that catalog restarts serve the newly mounted binary

@@ -7,7 +7,7 @@ Install is change-request-only; per-replica convergence (ack → download → re
 Related docs:
 
 - [plan.md](./plan.md) — install flow, catalog model, rollout steps
-- [validation.md](./validation.md) — install-time validation (step 13)
+- [validation.md](./validation.md) — install-time validation
 - [indexeddb.md](./indexeddb.md) — `app_version_change_requests`, `app_instance_materializations`, install locks
 - [config.md](./config.md) — `appRegistries` deploy reader config
 - [models.md](./models.md) — index and published version JSON stored in GCS
@@ -410,10 +410,10 @@ Synchronous on the handling instance. The HTTP response is sent after the catalo
    2. **`add`** — reject when `ListKnownVersionsByApp` is non-empty (`409`). **`upgrade`** — reject when the projection is empty (`400`).
    3. If `(app, version)` is already known in `app_version_change_requests`, return `400`.
    4. `RegistryReader.FetchEntry` — HTTP `GET` the published version document from the configured registry (validate the version exists; **no artifact download**).
-   5. **`InstallValidator.Validate`** — reject incompatible or unsatisfied candidates (**400**); see [validation.md](./validation.md). **(step 13)**
+   5. **`InstallValidator.Validate`** — reject incompatible or unsatisfied candidates (**400**); see [validation.md](./validation.md).
    6. `Rollouts.Create` — start fleet rollout (`409` when another rollout is active).
    7. Append `change request` to `app_version_change_requests`. Set `from_version` server-side: `registry:first-install` on `add`, `LatestKnownVersion` on `upgrade`. Callers never send `from_version`. Mark rollout `failed` if append fails.
-   8. Release the install lock (always, via defer). On failure before step 7, return an HTTP error; no change request is written.
+   8. Release the install lock (always, via defer). On failure before the change request is appended, return an HTTP error; no change request is written.
 4. Respond `200` with `{ registry, app, installation }`.
 
 Per-replica convergence via the background catalog controller (see Polling). IndexedDB write on the handling instance for add/upgrade.
@@ -468,7 +468,7 @@ IndexedDB read only. No GCS fetch.
 
 ### Install-time validation
 
-**Status:** planned (step 13). Full rules: [validation.md](./validation.md).
+**Status:** planned. Full rules: [validation.md](./validation.md).
 
 Before `Rollouts.Create` and `AppendRequest`, the install handler runs `InstallValidator.Validate` on the fetched `PublishedVersion` entry. Failure returns **400** (or **404** when the registry entry is missing) and writes no rollout or change request.
 
@@ -481,7 +481,7 @@ Before `Rollouts.Create` and `AppendRequest`, the install handler runs `InstallV
 
 **Revert:** operators call `POST …/upgrade` with an older `version` from the registry catalog. No `rollback` route.
 
-Replica materialization and package validation (steps 10–11) remain unchanged; install-time validation is an early reject on the handling instance only.
+Replica materialization and package validation remain unchanged; install-time validation is an early reject on the handling instance only.
 
 ### Errors
 
@@ -489,7 +489,7 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 
 | Status | When |
 |--------|------|
-| `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed (step 13)** |
+| `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions; **install-time validation failed** |
 | `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
 | `409` | Another instance is already installing this `(app, version)` (install lock held and not expired); `add` called when the app already has fleet-known versions |
 | `502` | Published version fetch failed; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
