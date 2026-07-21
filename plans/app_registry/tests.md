@@ -233,6 +233,8 @@ go test ./internal/config/... -run RegistryOnly -count=1
 go test ./internal/operator/... -run RegistryOnly -count=1
 go test ./internal/appregistry/... -run 'TestInstaller.*RegistryOnly|TestInstallerAdd|TestInstallerUpgrade' -count=1
 go test ./internal/bootstrap/... -run RegistryOnly -count=1
+go test ./internal/coredata/... -run LatestKnown -count=1
+go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 ```
 
 ### Config validation
@@ -240,6 +242,8 @@ go test ./internal/bootstrap/... -run RegistryOnly -count=1
 - Accepts `source.registry` when the name matches a configured `appRegistries` entry.
 - Rejects an unknown registry name.
 - Rejects `source.registry` combined with `source.git`, `source.path`, or other source modes.
+- Rejects `source.registry` outside the `apps` map.
+- Allows configured static and HTTP surfaces without a deploy-time resolved manifest, operation catalog, or static root.
 
 ### Add and upgrade
 
@@ -249,8 +253,30 @@ go test ./internal/bootstrap/... -run RegistryOnly -count=1
 
 ### Bootstrap startup
 
-- Starts a registry-only app at `StartAppProviders` when `ListKnownVersionsByApp` returns a fleet-known version.
-- Skips the app when the projection is empty.
+- Starts the deterministic latest fleet-known version at `StartAppProviders`.
+- Uses the same latest-version ordering as the poller, including equal-timestamp tie-breaking.
+- Skips the app and clears stale local activation when the projection is empty.
+- Rejects a projected installation whose registry differs from deploy `source.registry`; it does not fall back to another source.
+- Does not gate startup on rollout or per-replica materialization rows.
+- Keeps core boot available when an individual registry app cannot materialize or start.
+
+### Provider lifecycle and concurrency
+
+- Bootstrap and polling serialize materialization of the same `(app, version)` while allowing unrelated versions to materialize concurrently.
+- Starting an already-running exact version is idempotent; starting over a different or unknown recorded version does not relabel the existing provider.
+- A registry-only start requires the exact validated package and never falls back to a deploy-time provider build.
+- Build, registration, activation, and stop failures leave provider visibility, running-version state, and active-static state consistent.
+- A stale stopped row cannot cause the poller to overwrite a different running provider without stopping it.
+- A version already started by bootstrap is marked converged by the poller without an extra restart.
+
+### Runtime surfaces
+
+- Server construction accepts a registry app with configured static and HTTP mounts before any package or provider exists.
+- Static requests return **503** while the provider is absent or changing, then serve the bundle for the exact running version.
+- A concurrent version change cannot combine a static bundle from one version with a provider from another.
+- Static request handling does not block on a long-running provider lifecycle operation.
+- Deploy-config HTTP bindings mount without startup-time provider catalog lookup and become invocable after the provider starts.
+- Stopping or removing the provider immediately makes static, MCP, and operation surfaces unavailable and removes stale active state.
 
 ### Lock and sync
 

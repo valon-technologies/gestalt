@@ -31,7 +31,9 @@ Implementation:
 
 `AppInstallation` in `core/types.go` is the projected shape returned by admin HTTP and install handlers, not a direct IndexedDB row.
 
-There is **no fleet head**, **no promotion**, and **no rollback** in the step 6 catalog model. Activation and rollback are planned for later steps.
+There is **no persisted fleet head**, **no promotion**, and **no rollback** in the catalog model. `LatestKnownVersion` selects the greatest request `UpdatedAt`, with the lexicographically greatest version as the deterministic tie-break for equal timestamps. Bootstrap and polling use that same projection; storage iteration order is never version order.
+
+Runtime activation is deliberately local and is not a new IndexedDB projection. A replica records which exact materialized version its provider is serving and couples that state to provider start/stop. This local state controls runtime/static availability, while `app_version_change_requests` remains fleet intent and `app_instance_materializations` remains convergence accounting.
 
 ---
 
@@ -286,3 +288,5 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 | `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the app provider restart cycle completed for this fleet version. |
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).
+
+These rows do not gate bootstrap and are not the source of truth for a provider's current local version. A replica may start the latest fleet-known version before it has a materialization row; the poller later records convergence without forcing another restart when that version is already running.

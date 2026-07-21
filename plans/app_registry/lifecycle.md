@@ -48,6 +48,32 @@ At `StartAppProviders`, each registry-only app:
 
 The catalog poller still handles first install and upgrades on replicas that were skipped at boot or join after a rollout.
 
+### Runtime version invariants
+
+The lifecycle uses four distinct states. They must not be treated as interchangeable:
+
+- **Fleet-known** — an accepted `(app, version)` projected from `app_version_change_requests`.
+- **Materialized** — a complete, validated package exists at `{artifactsDir}/registry-installed/{app}/{version}` on this replica.
+- **Running** — this replica successfully built and registered the provider from that exact materialized package.
+- **Converged** — the poller recorded `restarted_at` for the replica and version. This is rollout accounting, not proof by itself that a provider is currently running.
+
+Both bootstrap and the poller select the same **driver installation**: the fleet-known installation with the greatest `UpdatedAt`. Equal timestamps are broken deterministically by version string, choosing the lexicographically greatest version. The tie-break is for deterministic ordering only; it is not semantic-version comparison. Neither path may select a driver from slice or map iteration order.
+
+`app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
+
+### Bootstrap-to-poller handoff
+
+Bootstrap and polling may observe the same fleet-known versions, so their handoff is explicit:
+
+1. Bootstrap materializes and starts the selected driver without writing rollout or materialization convergence.
+2. A successful start publishes local running-version state only after the exact package has been validated and the provider is ready. A failed start must not advertise that version.
+3. The poller may acknowledge and materialize while startup is in progress, but it must not replace a startup provider until startup-provider readiness is closed.
+4. If the poller observes that the selected driver is already running, it records all pending rows as restarted without an avoidable stop/start.
+5. If persisted rows say the app was stopped but a different version is actually running, runtime state wins: the poller stops that provider before starting the driver.
+6. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
+
+The selected installation's registry must match deploy `source.registry` before materialization or start. A registry rename does not authorize an old catalog entry from the previous binding. Binding mismatch leaves the app unavailable and clears stale activation state; it does not fall back to a deploy-time source.
+
 ## Polling
 
 Every replica starts one background catalog controller during `gestaltd serve` startup: one reconcile pass immediately, then every **1 minute** on a single loop goroutine.
@@ -78,7 +104,14 @@ Each pass:
 
 A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
 
-App bootstrapping when `gestaltd` starts and catalog-driven restarts share the same per-app lifecycle lease. `StopApp` holds the lease until `StartApp` completes, preventing concurrent builds or replacements.
+App bootstrapping when `gestaltd` starts and catalog-driven restarts share the same per-app lifecycle lease. `StopApp` holds the lease until `StartApp` completes, preventing concurrent builds or replacements. Materialization of the same `(app, version)` is also serialized so bootstrap and polling cannot write the same destination concurrently; unrelated app versions may materialize concurrently.
+
+`StartApp(app, version)` is strict for registry-only apps:
+
+1. The materialized package must exist and pass package validation. Registry-only apps never fall back to an unresolved deploy-time provider entry.
+2. If a provider is already registered, idempotent success is allowed only when its recorded running version equals `version`. Empty or different running-version state requires a real stop/start and must not be overwritten optimistically.
+3. Provider build, registration, and activation act as one observable transition. On failure, the provider must not remain registered as the requested version and static/runtime surfaces must not advertise it.
+4. Stopping or removing a provider clears its running-version and active-static state, including the already-absent-provider path.
 
 Failure and retry behavior:
 
@@ -86,6 +119,17 @@ Failure and retry behavior:
 2. If writing `stopped_at` fails after stop, the next poll retries the write without stopping the absent provider again.
 3. If writing `restarted_at` fails after start, the next poll retries the write without rebuilding the running provider.
 4. A version discovered while the app is stopped joins the current cycle and inherits its original `stopped_at`.
+5. Replacing local active-version state preserves the prior valid value if the replacement cannot be committed. Temporary files and backups may be cleaned only after replacement or restoration succeeds.
+
+### Runtime surfaces for registry-only app slots
+
+The HTTP server is constructed before registry packages are available. Registry-only app slots therefore must not require a deploy-time resolved manifest, static root, provider catalog, or running provider merely to construct the server.
+
+- **Static UI** — create the configured mount lazily. A request is served only when the app has a running version and the corresponding materialized package resolves a static bundle. The handler must reject a version change observed during resolution rather than mixing frontend and provider generations. Not-yet-running, stopping, or changing versions return **503 Service Unavailable**, not a permanent **404**. Deploy-config theme files are resolved independently of the package and remain available to the mount.
+- **HTTP bindings** — bindings declared in deploy config are mounted before the provider starts and do not require startup-time provider-catalog validation. Invocation may return unavailable until the provider is running. Package-only bindings cannot mutate the already-built HTTP router; registry-only apps that need mounted HTTP routes must declare those bindings in deploy config.
+- **MCP and generic operation invocation** — resolve against the currently registered provider. They become available after successful `StartApp` and unavailable immediately when the provider is removed.
+
+No surface may infer the running version from `app_instance_materializations`. Static serving uses local active/running state tied to provider lifecycle; convergence rows remain accounting records.
 
 ## Runtime
 

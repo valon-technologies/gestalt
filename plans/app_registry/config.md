@@ -131,6 +131,16 @@ apps:
 |-------|---------|
 | `source.registry` | Registry name from `appRegistries`. Must name a configured entry. Mutually exclusive with `source.git`, `source.path`, and other source modes. |
 
+`source.registry` is valid only for entries under `apps`; runtime-provider entries cannot use it. The deploy entry remains the authoritative app-slot contract across upgrades:
+
+| Deploy-time slot field | Registry package responsibility |
+|------------------------|---------------------------------|
+| `authorizationPolicy`, `indexeddb`, `mcp`, `http`, and `config` | The package runs within these configured capabilities; installing a package does not rewrite them. |
+| `static.mount`, visibility, and theme | The mount and policy are fixed at server construction. The selected package supplies the version-specific static bundle. |
+| `source.registry` | Every selected installation must name this same registry. Catalog history from another binding is not eligible to run. |
+
+Because no package exists during config loading, validation must not require a resolved provider manifest, operation catalog, or static root for a registry-only app. `server.artifactsDir` is resolved from config defaults and CLI overrides before materialization; registry source validation does not require that the raw YAML contain an explicit path.
+
 `gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](./lifecycle.md).
 
 ### Lockfile
