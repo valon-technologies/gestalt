@@ -108,7 +108,7 @@ Each pass:
 
 A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
 
-`StopApp` holds the per-app lifecycle lease until `StartApp` completes, preventing overlapping builds or replacements. Materialization of the same `(app, version)` is serialized; unrelated app versions may materialize concurrently.
+`StopApp` holds the per-app lifecycle lease until `StartApp` completes, preventing overlapping builds or replacements. On each replica, materialization is serialized per app: two versions of the same app cannot materialize concurrently, but different apps may.
 
 `StartApp(app, version)` is strict for registry-only apps:
 

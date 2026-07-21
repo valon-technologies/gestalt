@@ -265,7 +265,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ### Provider lifecycle and concurrency
 
-- Serializes materialization of the same `(app, version)` while allowing unrelated versions to materialize concurrently.
+- Serializes materialization per app on each replica, including different versions of the same app, while allowing different apps to materialize concurrently.
 - Starting an already-running exact version is idempotent; starting over a different or unknown recorded version does not relabel the existing provider.
 - A registry-only start requires the exact validated package and never falls back to a deploy-time provider build.
 - Build, registration, activation, and stop failures leave provider visibility, running-version state, and active-static state consistent.
