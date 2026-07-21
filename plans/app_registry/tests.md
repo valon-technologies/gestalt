@@ -250,7 +250,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 ### Bootstrap startup
 
 - Starts the same deterministic latest version as the poller only when its registry matches `source.registry`; an empty projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
-- Attempts every registry app without consulting rollout-progress rows, keeps core boot available after an individual failure, and starts the poller only after all startup attempts finish.
+- Attempts every registry app without consulting rollout-progress rows or `attempt_count`, including after the poller reached its retry limit; keeps core boot available after an individual failure; and starts the poller only after all startup attempts finish.
 - A replica that misses rollout enrollment during bootstrap converges on its first poll without reopening the terminal rollout.
 
 ### Provider lifecycle and concurrency
