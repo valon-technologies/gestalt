@@ -396,10 +396,10 @@ pub struct WorkflowDefinition {
     pub activations: Vec<WorkflowActivation>,
     /// The `paused` field.
     pub paused: bool,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
     /// The `provider` field.
@@ -438,7 +438,7 @@ pub struct WorkflowEvent {
     pub r#type: String,
     /// The `subject` field.
     pub subject: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `time` field; None when unset.
     pub time: Option<std::time::SystemTime>,
     /// The `datacontenttype` field.
@@ -512,13 +512,13 @@ pub struct WorkflowRun {
     pub target: Option<BoundWorkflowTarget>,
     /// The `trigger` field; None when unset.
     pub trigger: Option<WorkflowRunTrigger>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
     /// The `status_message` field.
@@ -557,7 +557,7 @@ pub struct WorkflowRunEvent {
     pub r#type: String,
     /// The `data` field; None when unset.
     pub data: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
 }
@@ -598,7 +598,7 @@ pub struct WorkflowScheduleActivation {
 pub struct WorkflowScheduleTrigger {
     /// The `activation_id` field.
     pub activation_id: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `scheduled_for` field; None when unset.
     pub scheduled_for: Option<std::time::SystemTime>,
 }
@@ -615,7 +615,7 @@ pub struct WorkflowSignal {
     pub payload: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `metadata` field; None when unset.
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
     /// The `idempotency_key` field.
@@ -708,10 +708,10 @@ pub struct WorkflowStepAttempt {
     pub output: Option<serde_json::Value>,
     /// The `status_message` field.
     pub status_message: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
 }
@@ -734,10 +734,10 @@ pub struct WorkflowStepExecution {
     pub status_message: String,
     /// The `skip_reason` field.
     pub skip_reason: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
 }

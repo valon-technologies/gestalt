@@ -421,7 +421,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 		}
 		r.docComment("    ", f.Doc)
  		if fieldRef(f).Kind == model.KindTimestamp {
-			r.body.WriteString("    #[serde(with = \"crate::public::proto_json::system_time\")]\n")
+			r.body.WriteString("    #[serde(with = \"crate::serde_time\")]\n")
 		}
 		if f.Presence == model.ExplicitPresence {
 			fmt.Fprintf(&r.body, "    /// The `%s` field; None when unset.\n", f.Name)

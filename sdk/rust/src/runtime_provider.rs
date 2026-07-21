@@ -138,13 +138,13 @@ pub struct RuntimeSession {
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSessionLifecycle {
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `recommended_drain_at` field; None when unset.
     pub recommended_drain_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
 }

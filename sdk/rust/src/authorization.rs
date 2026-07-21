@@ -91,7 +91,7 @@ pub struct AuthorizationModelRef {
     pub id: String,
     /// The `version` field.
     pub version: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
 }

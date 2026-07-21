@@ -106,7 +106,7 @@ pub struct CreateObjectAccessURLResponse {
     pub url: String,
     /// The `method` field.
     pub method: PresignMethod,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
     /// The `headers` field.
@@ -207,7 +207,7 @@ pub struct PresignObjectResponse {
     pub url: String,
     /// The `method` field.
     pub method: PresignMethod,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
     /// The `headers` field.
@@ -248,10 +248,10 @@ pub struct ReadObjectRequest {
     pub if_match: String,
     /// The `if_none_match` field.
     pub if_none_match: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `if_modified_since` field; None when unset.
     pub if_modified_since: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `if_unmodified_since` field; None when unset.
     pub if_unmodified_since: Option<std::time::SystemTime>,
 }
@@ -270,7 +270,7 @@ pub struct S3ObjectMeta {
     pub size: i64,
     /// The `content_type` field.
     pub content_type: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `last_modified` field; None when unset.
     pub last_modified: Option<std::time::SystemTime>,
     /// The `metadata` field.

@@ -145,10 +145,10 @@ pub struct AgentInteraction {
     pub request: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `resolution` field; None when unset.
     pub resolution: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `resolved_at` field; None when unset.
     pub resolved_at: Option<std::time::SystemTime>,
     /// The `turn_id` field.
@@ -296,13 +296,13 @@ pub struct AgentSession {
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
     /// The `created_by_subject_id` field.
     pub created_by_subject_id: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `last_turn_at` field; None when unset.
     pub last_turn_at: Option<std::time::SystemTime>,
 }
@@ -406,13 +406,13 @@ pub struct AgentTurn {
     pub status_message: String,
     /// The `created_by_subject_id` field.
     pub created_by_subject_id: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `started_at` field; None when unset.
     pub started_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `completed_at` field; None when unset.
     pub completed_at: Option<std::time::SystemTime>,
     /// The `execution_ref` field.
@@ -469,7 +469,7 @@ pub struct AgentTurnEvent {
     pub visibility: String,
     /// The `data` field; None when unset.
     pub data: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
     /// The `display` field; None when unset.

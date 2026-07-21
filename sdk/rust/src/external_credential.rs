@@ -89,10 +89,10 @@ pub struct ExternalCredential {
     pub qualifier: String,
     /// The `metadata_json` field.
     pub metadata_json: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
     /// The `credential` oneof; None when unset.
@@ -149,7 +149,7 @@ pub struct ExternalCredentialClientInfo {
     pub client_id: String,
     /// The `client_secret` field.
     pub client_secret: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `client_secret_expires_at` field; None when unset.
     pub client_secret_expires_at: Option<std::time::SystemTime>,
 }
@@ -164,10 +164,10 @@ pub struct ExternalCredentialGrant {
     pub refresh_token: String,
     /// The `scope` field.
     pub scope: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `last_refreshed_at` field; None when unset.
     pub last_refreshed_at: Option<std::time::SystemTime>,
     /// The `refresh_error_count` field.
@@ -278,7 +278,7 @@ pub struct ResolveExternalCredentialRequest {
 pub struct ResolveExternalCredentialResponse {
     /// The `token` field.
     pub token: String,
-    #[serde(with = "crate::public::proto_json::system_time")]
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
     /// The `metadata_json` field.

@@ -58,6 +58,7 @@ pub mod s3_provider;
 pub mod secrets;
 mod secrets_provider;
 mod secrets_server;
+mod serde_time;
 /// OpenTelemetry helpers for provider-authored GenAI instrumentation.
 pub mod telemetry;
 /// Generated Test client and native types.
