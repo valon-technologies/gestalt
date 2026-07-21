@@ -57,7 +57,7 @@ The lifecycle uses four distinct states. They must not be treated as interchange
 - **Running** — this replica successfully built and registered the provider from that exact materialized package.
 - **Converged** — the poller recorded `restarted_at` for the replica and version. This is rollout accounting, not proof by itself that a provider is currently running.
 
-Both bootstrap and the poller select the same **driver installation**: the fleet-known installation with the greatest `UpdatedAt`. Equal timestamps are broken deterministically by version string, choosing the lexicographically greatest version. The tie-break is for deterministic ordering only; it is not semantic-version comparison. Neither path may select a driver from slice or map iteration order.
+Bootstrap and the poller must both use `LatestKnownVersion` to select the same desired installation. See [indexeddb.md](./indexeddb.md#accepted-changes-and-projections) for the version-ordering rule.
 
 `app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
 
