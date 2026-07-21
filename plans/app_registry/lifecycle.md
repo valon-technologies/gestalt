@@ -133,15 +133,17 @@ Failure and retry behavior:
 5. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
 6. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it.
 
-### Runtime surfaces for registry-only app slots
+### Runtime behavior of configured app surfaces
 
-The HTTP server is constructed before registry packages are available. Registry-only app slots therefore must not require a deploy-time resolved manifest, static root, provider catalog, or running provider merely to construct the server.
+A registry-only app does not have to expose a static UI, HTTP bindings, MCP, or any other particular surface. The following rules apply only to surfaces enabled for that app in the Gestalt YAML deploy configuration.
 
-- **Static UI** — create the configured mount lazily. A request is served only when the provider registry, running-version map, and `active-version` marker agree on the version, and that materialized package resolves a static bundle. The handler must reject a version change observed during resolution rather than mixing frontend and provider generations. Not-yet-running, stopping, or changing versions return **503 Service Unavailable**, not a permanent **404**. Deploy-config theme files are resolved independently of the package and remain available to the mount.
-- **HTTP bindings** — bindings declared in deploy config are mounted before the provider starts and do not require startup-time provider-catalog validation. Invocation may return unavailable until the provider is running. Package-only bindings cannot mutate the already-built HTTP router; registry-only apps that need mounted HTTP routes must declare those bindings in deploy config.
-- **MCP and generic operation invocation** — resolve against the currently registered provider. They become available after successful `StartApp` and unavailable immediately when the provider is removed.
+Gestalt constructs its HTTP server before it downloads or starts a registry package. Server construction must therefore succeed without a package manifest, operation catalog, static root, or running provider.
 
-No surface may infer the running version from `app_instance_materializations`. Static serving uses the local provider registry, running-version map, and `active-version` marker; rollout-progress rows remain accounting records.
+- **Static UI** — Gestalt creates the mount declared in YAML, but returns **503 Service Unavailable** until the provider registry, running-version map, and `active-version` marker agree on one version. It then serves the static bundle from that version's materialized package. If the version changes while a request is being resolved, Gestalt returns **503** rather than combining one version's UI with another version's provider. Theme files declared in YAML are resolved independently of the package.
+- **HTTP bindings** — Gestalt mounts routes declared in YAML when it constructs the server, without requiring the package's operation catalog. Requests may be unavailable until the provider starts. A package cannot add routes to the already-constructed server, so every required HTTP binding must be declared in YAML.
+- **MCP and operation invocation** — these resolve against the provider registry. They become available after `StartApp` registers the provider and unavailable when the provider is removed.
+
+Runtime handlers determine availability from the local provider registry, running-version map, and `active-version` marker. They never use `app_instance_materializations`, whose rows record rollout progress rather than current runtime state.
 
 ## Runtime
 
