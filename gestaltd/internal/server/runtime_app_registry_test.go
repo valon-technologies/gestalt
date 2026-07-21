@@ -2,10 +2,13 @@ package server
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/appregistry/registrytest"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -53,12 +56,17 @@ func TestRegistryAppStartupMaterializesAndStartsKnownVersion(t *testing.T) {
 		t.Fatalf("AppendRequest: %v", err)
 	}
 	restarter := &startupRecordingRestarter{}
+	artifactsDir := t.TempDir()
+	oldPath := appregistry.MaterializedPath(artifactsDir, "g-issues", "old")
+	if err := os.MkdirAll(oldPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll old version: %v", err)
+	}
 	cfg := &config.Config{
 		AppRegistries: map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
 		Apps: map[string]*config.ProviderEntry{
 			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
-		Server: config.ServerConfig{ArtifactsDir: t.TempDir()},
+		Server: config.ServerConfig{ArtifactsDir: artifactsDir},
 	}
 	result := &bootstrap.Result{Services: services, AppRestarter: restarter}
 
@@ -67,15 +75,27 @@ func TestRegistryAppStartupMaterializesAndStartsKnownVersion(t *testing.T) {
 	if restarter.startedApp != "g-issues" || restarter.startedVersion != fixture.Version {
 		t.Fatalf("started = %s@%s", restarter.startedApp, restarter.startedVersion)
 	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old version stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(appregistry.MaterializedPath(artifactsDir, "g-issues", fixture.Version), "manifest.yaml")); err != nil {
+		t.Fatalf("desired manifest: %v", err)
+	}
 }
 
 func TestRegistryAppStartupStopsEmptyProjection(t *testing.T) {
 	t.Parallel()
 	restarter := &startupRecordingRestarter{}
+	artifactsDir := t.TempDir()
+	oldPath := appregistry.MaterializedPath(artifactsDir, "g-issues", "old")
+	if err := os.MkdirAll(oldPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll old version: %v", err)
+	}
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
 			"g-issues": {Source: config.ProviderSource{Registry: "toolshed"}},
 		},
+		Server: config.ServerConfig{ArtifactsDir: artifactsDir},
 	}
 	result := &bootstrap.Result{Services: testutil.NewStubServices(t), AppRestarter: restarter}
 
@@ -83,5 +103,8 @@ func TestRegistryAppStartupStopsEmptyProjection(t *testing.T) {
 
 	if restarter.stoppedApp != "g-issues" {
 		t.Fatalf("stopped app = %q", restarter.stoppedApp)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old version stat error = %v, want not exist", err)
 	}
 }

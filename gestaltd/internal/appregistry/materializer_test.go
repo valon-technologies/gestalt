@@ -59,6 +59,50 @@ func TestMaterializer_serializes_same_app(t *testing.T) {
 	}
 }
 
+func TestMaterializerPruneSupersededRetainsOnlyDesiredVersion(t *testing.T) {
+	t.Parallel()
+	artifactsDir := t.TempDir()
+	appDir := filepath.Join(artifactsDir, appregistry.RegistryInstallSubdir, "g-issues")
+	desiredDir := filepath.Join(appDir, "v2")
+	oldDir := filepath.Join(appDir, "v1")
+	for _, path := range []string{desiredDir, oldDir} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", path, err)
+		}
+	}
+	marker := filepath.Join(appDir, "active-version")
+	if err := os.WriteFile(marker, []byte("v2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(active-version): %v", err)
+	}
+	materializer := &appregistry.Materializer{ArtifactsDir: artifactsDir}
+
+	pruned, err := materializer.SupersededPruned("g-issues", "v2")
+	if err != nil {
+		t.Fatalf("SupersededPruned before cleanup: %v", err)
+	}
+	if pruned {
+		t.Fatal("SupersededPruned before cleanup = true, want false")
+	}
+	if err := materializer.PruneSuperseded("g-issues", "v2"); err != nil {
+		t.Fatalf("PruneSuperseded: %v", err)
+	}
+	for _, path := range []string{desiredDir, marker} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("retained path %s: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("old version stat error = %v, want not exist", err)
+	}
+	pruned, err = materializer.SupersededPruned("g-issues", "v2")
+	if err != nil {
+		t.Fatalf("SupersededPruned: %v", err)
+	}
+	if !pruned {
+		t.Fatal("SupersededPruned = false, want true")
+	}
+}
+
 func TestMaterializer_downloads_and_extracts_artifact(t *testing.T) {
 	t.Parallel()
 

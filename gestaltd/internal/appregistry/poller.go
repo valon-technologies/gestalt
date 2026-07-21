@@ -308,11 +308,14 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	if driverVersion == "" {
 		return fmt.Errorf("select desired version for app %s", appName)
 	}
+	desired := findInstallation(installations, driverVersion)
+	if desired == nil {
+		return fmt.Errorf("find desired installation for app %s@%s", appName, driverVersion)
+	}
 	if acceptor, ok := p.AppRestarter.(interface {
 		AcceptsRegistry(string, string) bool
 	}); ok {
-		desired := findInstallation(installations, driverVersion)
-		if desired == nil || !acceptor.AcceptsRegistry(appName, desired.Registry) {
+		if !acceptor.AcceptsRegistry(appName, desired.Registry) {
 			return fmt.Errorf("registry for %s@%s does not match configured source", appName, driverVersion)
 		}
 	}
@@ -349,25 +352,32 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 			RunningVersion(string) (string, bool)
 		}); ok {
 			running, found := inspector.RunningVersion(appName)
-			materialized, err := p.pendingRegistryVersionsMaterialized(ctx, instanceID, pending)
+			materialized, err := p.desiredVersionMaterialized(ctx, instanceID, desired)
 			if err != nil {
 				return err
 			}
-			if found && running == driverVersion && materialized {
+			pruned, err := p.supersededPruned(appName, driverVersion)
+			if err != nil {
+				return err
+			}
+			if found && running == driverVersion && materialized && pruned {
 				return p.markAllRestarted(ctx, instanceID, appName, pending, p.now())
 			}
 		}
 		return nil
 	}
 
-	if err := p.ensurePendingMaterialized(ctx, instanceID, pending); err != nil {
-		return fmt.Errorf("materialize pending versions for app %s: %w", appName, err)
+	if err := p.ensureDesiredMaterialized(ctx, instanceID, desired); err != nil {
+		return fmt.Errorf("materialize desired version for app %s: %w", appName, err)
 	}
 
 	if inspector, ok := p.AppRestarter.(interface {
 		RunningVersion(string) (string, bool)
 	}); ok {
 		if running, found := inspector.RunningVersion(appName); found && running == driverVersion {
+			if err := p.pruneSuperseded(appName, driverVersion); err != nil {
+				return err
+			}
 			return p.markAllRestarted(ctx, instanceID, appName, pending, p.now())
 		}
 	}
@@ -414,6 +424,9 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	if err := p.AppRestarter.StartApp(ctx, appName, driverVersion); err != nil {
 		return fmt.Errorf("start app %s for %s@%s: %w", appName, appName, driverVersion, err)
 	}
+	if err := p.pruneSuperseded(appName, driverVersion); err != nil {
+		return err
+	}
 	restartedAt := p.now()
 	if err := p.markAllRestarted(ctx, instanceID, appName, pending, restartedAt); err != nil {
 		return err
@@ -435,22 +448,21 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	return nil
 }
 
-func (p *CatalogPoller) pendingRegistryVersionsMaterialized(ctx context.Context, instanceID string, pending []*core.AppInstallation) (bool, error) {
-	for _, installation := range pending {
-		if installation == nil || strings.TrimSpace(installation.Registry) == "" {
-			continue
-		}
-		appName := strings.TrimSpace(installation.AppName)
-		version := strings.TrimSpace(installation.Version)
-		materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
-		if err != nil {
-			return false, fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
-		}
-		if materialization.MaterializedAt.IsZero() {
-			return false, nil
-		}
+func (p *CatalogPoller) desiredVersionMaterialized(ctx context.Context, instanceID string, desired *core.AppInstallation) (bool, error) {
+	if desired == nil || strings.TrimSpace(desired.Registry) == "" {
+		return true, nil
 	}
-	return true, nil
+	appName := strings.TrimSpace(desired.AppName)
+	version := strings.TrimSpace(desired.Version)
+	materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
+	if err != nil {
+		return false, fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
+	}
+	if materialization.MaterializedAt.IsZero() || p.AppMaterializer == nil {
+		return false, nil
+	}
+	path := MaterializedPath(p.AppMaterializer.ArtifactsDir, appName, version)
+	return installedPackageReady(path, appName, version), nil
 }
 
 func findInstallation(installations []*core.AppInstallation, version string) *core.AppInstallation {
@@ -517,55 +529,63 @@ func channelReady(ready <-chan struct{}) bool {
 	}
 }
 
-func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceID string, pending []*core.AppInstallation) error {
-	if p == nil || len(pending) == 0 {
+func (p *CatalogPoller) ensureDesiredMaterialized(ctx context.Context, instanceID string, desired *core.AppInstallation) error {
+	if p == nil || desired == nil {
+		return nil
+	}
+	appName := strings.TrimSpace(desired.AppName)
+	version := strings.TrimSpace(desired.Version)
+	if appName == "" || version == "" || strings.TrimSpace(desired.Registry) == "" {
 		return nil
 	}
 	if p.AppMaterializer == nil {
-		for _, installation := range pending {
-			if installation != nil && strings.TrimSpace(installation.Registry) != "" {
-				return fmt.Errorf("app registry materializer is required for %s@%s", installation.AppName, installation.Version)
-			}
-		}
+		return fmt.Errorf("app registry materializer is required for %s@%s", appName, version)
+	}
+	materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
+	if err != nil {
+		return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
+	}
+	result, err := p.AppMaterializer.Ensure(ctx, desired)
+	if err != nil {
+		return fmt.Errorf("materialize %s@%s: %w", appName, version, err)
+	}
+	if !result.Changed && !materialization.MaterializedAt.IsZero() {
 		return nil
 	}
-	for _, installation := range pending {
-		if installation == nil {
-			continue
-		}
-		appName := strings.TrimSpace(installation.AppName)
-		version := strings.TrimSpace(installation.Version)
-		if appName == "" || version == "" {
-			continue
-		}
-		if strings.TrimSpace(installation.Registry) == "" {
-			continue
-		}
-		materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
-		if err != nil {
-			return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
-		}
-		result, err := p.AppMaterializer.Ensure(ctx, installation)
-		if err != nil {
-			return fmt.Errorf("materialize %s@%s: %w", appName, version, err)
-		}
-		if !result.Changed && !materialization.MaterializedAt.IsZero() {
-			continue
-		}
-		materializedAt := p.now()
-		if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, materializedAt); err != nil {
-			return fmt.Errorf("record materialization for %s@%s: %w", appName, version, err)
-		}
-		slog.Info(
-			"app registry catalog poller materialized app artifact",
-			"app", appName,
-			"version", version,
-			"instance_id", instanceID,
-			"materialized_path", result.Path,
-			"materialized_at", materializedAt,
-		)
+	materializedAt := p.now()
+	if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, materializedAt); err != nil {
+		return fmt.Errorf("record materialization for %s@%s: %w", appName, version, err)
+	}
+	slog.Info(
+		"app registry catalog poller materialized app artifact",
+		"app", appName,
+		"version", version,
+		"instance_id", instanceID,
+		"materialized_path", result.Path,
+		"materialized_at", materializedAt,
+	)
+	return nil
+}
+
+func (p *CatalogPoller) pruneSuperseded(appName, desiredVersion string) error {
+	if p == nil || p.AppMaterializer == nil {
+		return nil
+	}
+	if err := p.AppMaterializer.PruneSuperseded(appName, desiredVersion); err != nil {
+		return fmt.Errorf("prune superseded versions for app %s: %w", appName, err)
 	}
 	return nil
+}
+
+func (p *CatalogPoller) supersededPruned(appName, desiredVersion string) (bool, error) {
+	if p == nil || p.AppMaterializer == nil {
+		return true, nil
+	}
+	pruned, err := p.AppMaterializer.SupersededPruned(appName, desiredVersion)
+	if err != nil {
+		return false, fmt.Errorf("inspect superseded versions for app %s: %w", appName, err)
+	}
+	return pruned, nil
 }
 
 func (p *CatalogPoller) markCatalogConverged(ctx context.Context, instanceID, appName string, pending []*core.AppInstallation, convergedAt time.Time) error {

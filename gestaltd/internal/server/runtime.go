@@ -242,6 +242,8 @@ func registryAppStartup(cfg *config.Config, result *bootstrap.Result, reader *ap
 			if version == "" {
 				if err := result.AppRestarter.StopApp(ctx, appName); err != nil {
 					slog.Warn("registry app bootstrap could not clear stopped app", "app", appName, "error", err)
+				} else if err := materializer.PruneSuperseded(appName, ""); err != nil {
+					slog.Warn("registry app bootstrap could not remove stale packages", "app", appName, "error", err)
 				}
 				result.AppRestarter.AbortRestarts()
 				continue
@@ -263,6 +265,10 @@ func registryAppStartup(cfg *config.Config, result *bootstrap.Result, reader *ap
 			}
 			if err := result.AppRestarter.StartApp(ctx, appName, version); err != nil {
 				slog.Warn("registry app bootstrap could not start app", "app", appName, "version", version, "error", err)
+				continue
+			}
+			if err := materializer.PruneSuperseded(appName, version); err != nil {
+				slog.Warn("registry app bootstrap could not remove superseded packages", "app", appName, "version", version, "error", err)
 			}
 		}
 	}
