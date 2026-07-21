@@ -468,8 +468,6 @@ IndexedDB read only. No GCS fetch.
 
 ### Install-time validation
 
-**Status:** planned. Full rules: [validation.md](./validation.md).
-
 Before `Rollouts.Create` and `AppendRequest`, the install handler runs `InstallValidator.Validate` on the fetched `PublishedVersion` entry. Failure returns **400** (or **404** when the registry entry is missing) and writes no rollout or change request.
 
 | Check | Source | Failure |
