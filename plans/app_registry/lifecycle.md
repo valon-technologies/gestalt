@@ -127,10 +127,11 @@ A provider is **restartable** when this replica builds it locally from the confi
 Failure and retry behavior:
 
 1. Reconciliation operations are idempotent: materializing an already valid package, stopping an absent provider, starting the already-running desired version, and repeating a rollout-progress write must succeed without duplicating work.
-2. When an app reconciliation fails, the poller logs the error, increments an error metric, releases that app's lifecycle lease, and continues reconciling other apps. If stopping had begun, the failed app may remain unavailable until retry.
-3. On the next poll, reconciliation for that app starts again from the beginning and inspects the current provider registry, running-version map, `active-version` marker, and rollout-progress rows rather than relying on in-memory progress from the failed attempt.
-4. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
-5. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it. Registry, package-download, and IndexedDB failures use the per-app retry behavior instead.
+2. When an app reconciliation fails, the poller calls `RecordFailure` on the desired version's `app_instance_materializations` row. This atomically increments `attempt_count` and stores `last_error_at` and `last_error_message`. The poller then releases that app's lifecycle lease and continues reconciling other apps. If the failure itself cannot be written to IndexedDB, the poller logs that write error.
+3. While `attempt_count` is below `server.appRegistry.maxReconcileAttempts`, the next poll retries that app from the beginning. It inspects the current provider registry, running-version map, `active-version` marker, and rollout-progress rows rather than relying on in-memory progress from the failed attempt. If stopping had begun, the app may remain unavailable until retry succeeds.
+4. When `attempt_count` reaches the configured maximum, the poller stops retrying that desired version on this replica. A newly accepted desired version gets a new row and a fresh attempt count. Increasing the configured maximum also permits retry when the stored count is below the new value.
+5. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
+6. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it.
 
 ### Runtime surfaces for registry-only app slots
 

@@ -143,6 +143,16 @@ Because no package exists during config loading, validation must not require a r
 
 `gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](./lifecycle.md).
 
+### Reconciliation retry limit
+
+```yaml
+server:
+  appRegistry:
+    maxReconcileAttempts: 3
+```
+
+`server.appRegistry.maxReconcileAttempts` is the maximum failed reconciliation attempts for one `(replica, app, desired version)`. It defaults to `3` and must be a positive integer. When the corresponding `app_instance_materializations.attempt_count` reaches this value, that replica stops retrying the desired version. A newly accepted desired version uses a new materialization row and starts with zero failed attempts. Increasing the configured limit allows rows below the new limit to resume retrying.
+
 ### Lockfile
 
 Registry-only apps appear in `gestalt.lock.json` with a registry binding and no baked artifacts:

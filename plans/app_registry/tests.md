@@ -244,6 +244,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 - Rejects `source.registry` combined with `source.git`, `source.path`, or other source modes.
 - Rejects `source.registry` outside the `apps` map.
 - Allows configured static and HTTP surfaces without a deploy-time resolved manifest, operation catalog, or static root.
+- Defaults `server.appRegistry.maxReconcileAttempts` to `3`, accepts positive overrides, and rejects zero or negative values.
 
 ### Add and upgrade
 
@@ -271,9 +272,12 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 - Build, registration, activation, and stop failures leave the provider registry, running-version map, and `active-version` marker consistent.
 - A stale stopped row cannot cause the poller to overwrite a different running provider without stopping it.
 - A version already started by bootstrap is marked converged by the poller without an extra restart.
-- A failed app reconciliation logs an error, increments a metric, releases its lifecycle lease, and does not prevent other apps from reconciling.
+- A failed app reconciliation atomically increments `attempt_count`, replaces `last_error_at` and `last_error_message`, releases its lifecycle lease, and does not prevent other apps from reconciling.
 - The next poll retries the failed app from the beginning; repeated materialize, stop, start-same-version, and rollout-progress operations are idempotent.
-- Unrecoverable local provider state marks Gestalt unhealthy and terminates the process, while registry, download, and IndexedDB failures remain per-app retries.
+- Stops retrying one desired version when its `attempt_count` reaches `server.appRegistry.maxReconcileAttempts`, which defaults to `3`.
+- A new desired-version row starts with zero attempts; increasing the configured limit resumes rows whose count is below the new limit.
+- Logs the error when `RecordFailure` itself cannot write to IndexedDB.
+- Unrecoverable local provider state marks Gestalt unhealthy and terminates the process.
 
 ### Runtime surfaces
 

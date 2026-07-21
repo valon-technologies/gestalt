@@ -269,11 +269,16 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
   "acknowledged_at": "2026-07-13T21:00:00Z",
   "materialized_at": "2026-07-13T21:00:02Z",
   "stopped_at": "2026-07-13T21:00:05Z",
-  "restarted_at": "2026-07-13T21:01:05Z"
+  "restarted_at": "2026-07-13T21:01:05Z",
+  "attempt_count": 1,
+  "last_error_at": "2026-07-13T21:00:30Z",
+  "last_error_message": "start provider: executable exited before registration"
 }
 ```
 
 `instance_id` defaults to the process hostname (`os.Hostname()`).
+
+`attempt_count` counts failed reconciliation attempts for this replica, app, and version. `last_error_at` and `last_error_message` retain the most recent failure for diagnosis, including after a later attempt succeeds. They do not determine whether the version is currently running.
 
 ### Service API
 
@@ -288,6 +293,7 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 | `ListByAppVersion(ctx, app, version)` | List the replicas that acknowledged one rollout. |
 | `MarkStopped(ctx, instanceID, app, version, stoppedAt)` | Record when the app provider was stopped for this fleet version. |
 | `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the app provider restart cycle completed for this fleet version. |
+| `RecordFailure(ctx, instanceID, app, version, failedAt, message)` | Atomically increment `attempt_count` and replace the last-error fields. |
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).
 
