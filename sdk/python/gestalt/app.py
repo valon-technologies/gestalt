@@ -493,11 +493,12 @@ class App:
         *,
         context: RequestContext | None = None,
         timeout: float | None = None,
+        relay_token: str = "",
     ) -> App:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
+        token = relay_token.strip() or os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         channel = host_service_channel(
             "app", target, token=token.strip(), binding=(name or "").strip()
         )

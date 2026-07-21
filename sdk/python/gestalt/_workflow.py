@@ -2382,7 +2382,7 @@ class Workflow:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"workflow: {ENV_HOST_SERVICE_SOCKET} is not set")
-        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
+        relay_token = request.relay_token.strip() or os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
         self._channel = host_service_channel("workflow", target, token=relay_token)
         self._stub = pb_grpc.WorkflowStub(self._channel)

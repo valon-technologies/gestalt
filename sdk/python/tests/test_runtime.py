@@ -323,6 +323,40 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.workflow, {})
         self.assertEqual(request.idempotency_key, "")
         self.assertIsNone(request.context)
+        self.assertEqual(request.relay_token, "")
+
+    def test_relay_token_field_defaults_to_empty(self) -> None:
+        request = Request()
+        self.assertEqual(request.relay_token, "")
+
+    def test_relay_token_field_can_be_set(self) -> None:
+        request = Request(relay_token="test-capability-token")
+        self.assertEqual(request.relay_token, "test-capability-token")
+
+
+class RelayTokenExtractionTests(unittest.TestCase):
+    def test_extracts_relay_token_from_grpc_metadata(self) -> None:
+        from gestalt._runtime import _relay_token_from_context
+
+        class FakeContext:
+            def invocation_metadata(self):
+                return [("x-gestalt-host-service-relay-token", "cap-token-123")]
+
+        self.assertEqual(_relay_token_from_context(FakeContext()), "cap-token-123")
+
+    def test_returns_empty_when_no_relay_token_in_metadata(self) -> None:
+        from gestalt._runtime import _relay_token_from_context
+
+        class FakeContext:
+            def invocation_metadata(self):
+                return [("other-header", "value")]
+
+        self.assertEqual(_relay_token_from_context(FakeContext()), "")
+
+    def test_returns_empty_when_context_is_none(self) -> None:
+        from gestalt._runtime import _relay_token_from_context
+
+        self.assertEqual(_relay_token_from_context(None), "")
 
 
 class MainEntrypointTests(unittest.TestCase):

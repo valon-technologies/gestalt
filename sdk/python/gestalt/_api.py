@@ -123,6 +123,7 @@ class Request:
     host: Host = dataclasses.field(default_factory=Host)
     agent_subject: Subject = dataclasses.field(default_factory=Subject)
     context: Any | None = None
+    relay_token: str = ""
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""
@@ -135,7 +136,7 @@ class Request:
 
         from .app import App
 
-        return App.connect(context=self._native_context(), timeout=timeout)
+        return App.connect(context=self._native_context(), timeout=timeout, relay_token=self.relay_token)
 
     def gestalt(self) -> "BoundGestaltClient":
         """Return the public Gestalt client bound to this request's relay context."""
@@ -150,7 +151,7 @@ class Request:
 
         from .agent import Agent
 
-        return Agent.connect(context=self._native_context(), timeout=timeout)
+        return Agent.connect(context=self._native_context(), timeout=timeout, relay_token=self.relay_token)
 
     def workflows(self, *, timeout: float | None = None) -> "Workflow":
         from ._workflow import Workflow

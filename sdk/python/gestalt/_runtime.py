@@ -1418,7 +1418,7 @@ def _provider_servicer(*, app: App) -> Any:
                 protocol_version=CURRENT_PROTOCOL_VERSION
             )
 
-        def Execute(self, request: Any, _context: Any) -> Any:
+        def Execute(self, request: Any, context: Any) -> Any:
             try:
                 result = app.execute(
                     request.operation,
@@ -1427,7 +1427,7 @@ def _provider_servicer(*, app: App) -> Any:
                         message=request.params,
                         request=request,
                     ),
-                    _plugin_request(request),
+                    _plugin_request(request, _relay_token_from_context(context)),
                 )
             except Exception as error:
                 traceback.print_exception(error)
@@ -1451,7 +1451,7 @@ def _provider_servicer(*, app: App) -> Any:
             try:
                 subject = app.resolve_http_subject(
                     _http_subject_request(getattr(request, "request", None)),
-                    _plugin_request(request),
+                    _plugin_request(request, _relay_token_from_context(context)),
                 )
             except HTTPSubjectResolutionError as error:
                 return app_pb2.ResolveHTTPSubjectResponse(
@@ -1483,7 +1483,7 @@ def _provider_servicer(*, app: App) -> Any:
                 )
 
             try:
-                catalog = app.catalog_for_request(_plugin_request(request))
+                catalog = app.catalog_for_request(_plugin_request(request, _relay_token_from_context(context)))
             except Exception as error:
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,
@@ -1896,7 +1896,27 @@ def _cache_servicer(*, provider: AppProvider) -> Any:
     return CacheServicer()
 
 
-def _plugin_request(request: Any) -> Request:
+_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
+
+
+def _relay_token_from_context(context: Any) -> str:
+    """Extract the host-service relay token from incoming gRPC metadata."""
+    if context is None:
+        return ""
+    try:
+        metadata = context.invocation_metadata()
+    except Exception:
+        return ""
+    try:
+        for key, value in metadata:
+            if key.lower() == _RELAY_TOKEN_HEADER:
+                return value.strip()
+    except (TypeError, ValueError):
+        pass
+    return ""
+
+
+def _plugin_request(request: Any, relay_token: str = "") -> Request:
     request_context = getattr(request, "context", None)
     tool_refs, tool_refs_set = _tool_refs_from_proto(request_context)
     return Request(
@@ -1912,6 +1932,7 @@ def _plugin_request(request: Any) -> Request:
         tool_refs_set=tool_refs_set,
         idempotency_key=getattr(request, "idempotency_key", "").strip(),
         context=request_context,
+        relay_token=relay_token,
     )
 
 

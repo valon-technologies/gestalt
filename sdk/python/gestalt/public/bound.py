@@ -43,7 +43,8 @@ def gestalt_from_request(
     target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "").strip()
     if not target:
         raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-    token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
+    relay_token = getattr(request, "relay_token", "").strip()
+    token = relay_token or os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
     channel = host_service_channel("app", target, token=token)
     native = native_request_context(getattr(request, "context", None))
     wire_context = to_wire_request_context(native) if native is not None else None
