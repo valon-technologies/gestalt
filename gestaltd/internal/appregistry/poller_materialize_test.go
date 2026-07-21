@@ -17,9 +17,10 @@ import (
 )
 
 type recordingAppRestarter struct {
-	stopCalls     []string
-	startCalls    []string
-	startVersions []string
+	stopCalls      []string
+	startCalls     []string
+	startVersions  []string
+	runningVersion string
 }
 
 func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
@@ -38,6 +39,10 @@ func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string)
 }
 
 func (r *recordingAppRestarter) AbortRestarts() {}
+
+func (r *recordingAppRestarter) RunningVersion(string) (string, bool) {
+	return r.runningVersion, r.runningVersion != ""
+}
 
 type pollerMaterializationHarness struct {
 	ctx          context.Context
@@ -209,5 +214,28 @@ func TestCatalogPollerStartAppPassesDriverVersion(t *testing.T) {
 	}
 	if got := h.restarter.startVersions; len(got) != 1 || got[0] != h.fixture.Version {
 		t.Fatalf("startVersions = %#v, want [%q]", got, h.fixture.Version)
+	}
+}
+
+func TestCatalogPollerMaterializesPendingVersionsBeforeMarkingRunningVersionRestarted(t *testing.T) {
+	t.Parallel()
+	h := newPollerMaterializationHarness(t, "toolshed", true)
+	h.restarter.runningVersion = h.fixture.Version
+
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(h.materializedPath(), "manifest.yaml")); err != nil {
+		t.Fatalf("stat materialized manifest: %v", err)
+	}
+	materialization := h.materialization(t)
+	if materialization.MaterializedAt.IsZero() {
+		t.Fatal("MaterializedAt is zero")
+	}
+	if materialization.RestartedAt.IsZero() {
+		t.Fatal("RestartedAt is zero")
+	}
+	if len(h.restarter.stopCalls) != 0 || len(h.restarter.startCalls) != 0 {
+		t.Fatalf("unexpected restart calls: stop=%v start=%v", h.restarter.stopCalls, h.restarter.startCalls)
 	}
 }

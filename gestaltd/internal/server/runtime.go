@@ -88,6 +88,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 	if strings.TrimSpace(cfg.Server.Remote) == "" && result.Services != nil {
 		publicIndexedDB = result.Services.DB
 	}
+	appRuntimeState, _ := result.AppRestarter.(AppRuntimeState)
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
@@ -126,8 +127,9 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
-		AppRegistries: cfg.AppRegistries,
-		ArtifactsDir:  cfg.Server.ArtifactsDir,
+		AppRegistries:   cfg.AppRegistries,
+		ArtifactsDir:    cfg.Server.ArtifactsDir,
+		AppRuntimeState: appRuntimeState,
 	}
 
 	result.RegistryAppStartup = registryAppStartup(cfg, result, nil)

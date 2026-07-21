@@ -45,7 +45,7 @@ type AppProviderRestarter struct {
 	closeFailures    map[string]error
 	runningVersions  map[string]string
 
-	lifecycleMu sync.Mutex
+	lifecycleMu sync.RWMutex
 }
 
 type AppProviderRestarterConfig struct {
@@ -130,6 +130,7 @@ func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			r.clearRunningVersion(app)
+			r.clearRuntimeBindings(app)
 			return nil
 		}
 		r.releaseLifecycleLease(app)
@@ -137,6 +138,7 @@ func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
 	}
 	r.providers.Remove(app)
 	r.clearRunningVersion(app)
+	r.clearRuntimeBindings(app)
 	pending := pendingProviderClose{provider: provider, done: closeProviderForRestart(provider)}
 	r.closing[app] = pending
 	err = r.awaitProviderClose(ctx, app, pending)
@@ -185,6 +187,7 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		}
 		r.providers.Remove(app)
 		r.clearRunningVersion(app)
+		r.clearRuntimeBindings(app)
 		pending := pendingProviderClose{provider: provider, done: closeProviderForRestart(provider)}
 		r.closing[app] = pending
 		if err := r.awaitProviderClose(ctx, app, pending); err != nil {
@@ -222,6 +225,15 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		r.clearRunningVersion(app)
 		return fmt.Errorf("start app provider %q: %w", app, err)
 	}
+	if version != "" {
+		if err := r.setRunningVersion(app, version); err != nil {
+			r.providers.Remove(app)
+			closeIfPossible(result.Provider)
+			r.clearRunningVersion(app)
+			r.clearRuntimeBindings(app)
+			return fmt.Errorf("start app provider %q: record running version: %w", app, err)
+		}
+	}
 	r.storeConnectionAuth(app, result)
 	if r.deps.AppWorkflowDeclarations != nil {
 		decls := result.WorkflowDeclarations
@@ -229,14 +241,6 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 			decls = []*proto.WorkflowDefinitionSpec{}
 		}
 		r.deps.AppWorkflowDeclarations.Set(app, decls)
-	}
-	if version != "" {
-		if err := r.setRunningVersion(app, version); err != nil {
-			r.providers.Remove(app)
-			closeIfPossible(result.Provider)
-			r.clearRunningVersion(app)
-			return fmt.Errorf("start app provider %q: record running version: %w", app, err)
-		}
 	}
 	r.releaseLifecycleLease(app)
 	return nil
@@ -246,10 +250,23 @@ func (r *AppProviderRestarter) RunningVersion(app string) (string, bool) {
 	if r == nil {
 		return "", false
 	}
-	r.lifecycleMu.Lock()
-	defer r.lifecycleMu.Unlock()
+	r.lifecycleMu.RLock()
+	defer r.lifecycleMu.RUnlock()
 	version, ok := r.runningVersions[strings.TrimSpace(app)]
 	return version, ok && version != ""
+}
+
+func (r *AppProviderRestarter) WithRunningVersion(app string, fn func(string) error) error {
+	if r == nil || fn == nil {
+		return fmt.Errorf("app runtime state is not configured")
+	}
+	r.lifecycleMu.RLock()
+	defer r.lifecycleMu.RUnlock()
+	version := strings.TrimSpace(r.runningVersions[strings.TrimSpace(app)])
+	if version == "" {
+		return fmt.Errorf("app %q has no running registry version", app)
+	}
+	return fn(version)
 }
 
 func (r *AppProviderRestarter) AcceptsRegistry(app, registryName string) bool {
@@ -406,5 +423,12 @@ func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.
 func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderBuildResult) {
 	for _, builds := range r.authBuilds {
 		builds.storeConnectionAuth(app, result)
+	}
+}
+
+func (r *AppProviderRestarter) clearRuntimeBindings(app string) {
+	r.storeConnectionAuth(app, &ProviderBuildResult{})
+	if r.deps.AppWorkflowDeclarations != nil {
+		r.deps.AppWorkflowDeclarations.Set(app, []*proto.WorkflowDefinitionSpec{})
 	}
 }
