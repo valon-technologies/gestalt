@@ -35,6 +35,8 @@ IndexedDB stores accepted version changes and each replica's rollout progress. I
 
 Gestalt derives the desired version from the latest change-request timestamp. If two requests have the same timestamp, it chooses the lexicographically greatest version string so every replica selects the same version. Bootstrap and polling both compare the requests using this rule; they do not assume that the first or last record returned by IndexedDB is the newest.
 
+Each replica materializes and retains only this desired version. Older projected versions remain catalog history; their per-replica rows may be acknowledged and marked restarted when the replica reconciles past them without ever receiving `materialized_at`.
+
 Each Gestalt process separately tracks the version its provider is currently serving. It uses an in-process running-version map and a local `active-version` marker in the artifacts directory, and updates both with provider start and stop. `app_instance_materializations` is not used for current runtime state because it contains historical rollout progress for multiple versions and can become stale after a process exits or crashes.
 
 ---
@@ -256,7 +258,7 @@ A terminal record may be replaced when the next version is admitted. A non-termi
 
 ## Store: `app_instance_materializations` (per-replica convergence)
 
-Records one replica's acknowledgement and restart progress for a fleet-known `(app, version)`.
+Records one replica's acknowledgement and catalog-convergence progress for a fleet-known `(app, version)`.
 
 Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforced by the `by_instance_app_version` index.
 
@@ -278,6 +280,8 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 
 `instance_id` defaults to the process hostname (`os.Hostname()`).
 
+`materialized_at` is set only when that version was the replica's desired version and its package was validated locally. A superseded row can have `restarted_at` without `materialized_at`: this means the replica reconciled past that catalog change while running a newer desired version, not that the superseded version ran.
+
 `attempt_count` counts failed reconciliation attempts for this replica, app, and version. `last_error_at` and `last_error_message` retain the most recent failure for diagnosis, including after a later attempt succeeds. They do not determine whether the version is currently running.
 
 ### Service API
@@ -292,9 +296,9 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 | `MarkMaterialized(ctx, instanceID, app, version, materializedAt)` | Record when download and extraction completed at the canonical local path. |
 | `ListByAppVersion(ctx, app, version)` | List the replicas that acknowledged one rollout. |
 | `MarkStopped(ctx, instanceID, app, version, stoppedAt)` | Record when the app provider was stopped for this fleet version. |
-| `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the app provider restart cycle completed for this fleet version. |
+| `MarkRestarted(ctx, instanceID, app, version, restartedAt)` | Record when the replica reconciled through this catalog version; a newer desired version may be the one that actually started. |
 | `RecordFailure(ctx, instanceID, app, version, failedAt, message)` | Atomically increment `attempt_count` and replace the last-error fields. |
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).
 
-`app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the latest fleet-known version without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that latest version, the poller records convergence without stopping and restarting the app again.
+`app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the latest fleet-known version without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that latest version, the poller validates and records materialization for that desired version, marks superseded pending rows converged without downloading them, and does not restart the app again.

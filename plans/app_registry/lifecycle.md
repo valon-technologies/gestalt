@@ -55,7 +55,7 @@ The lifecycle uses four distinct states. They must not be treated as interchange
 - **Fleet-known** — an accepted `(app, version)` projected from `app_version_change_requests`.
 - **Materialized** — a complete, validated package exists at `{artifactsDir}/registry-installed/{app}/{version}` on this replica.
 - **Running** — this replica successfully built and registered the provider from that exact materialized package.
-- **Converged** — the poller recorded `restarted_at` for the replica and version. This is rollout accounting, not proof by itself that a provider is currently running.
+- **Converged** — the poller recorded `restarted_at` for the replica and version, meaning the replica reconciled through that catalog change. This is rollout accounting, not proof that the provider ran that exact version or is currently running it.
 
 This document uses these names for local runtime state:
 
@@ -65,6 +65,8 @@ This document uses these names for local runtime state:
 - **Rollout-progress row** — an `app_instance_materializations` record; it describes previously recorded rollout work, not current provider state.
 
 Bootstrap and the poller must both use `LatestKnownVersion` to select the same desired installation. See [indexeddb.md](./indexeddb.md#accepted-changes-and-projections) for the version-ordering rule.
+
+Each replica materializes and retains only that latest desired version. Older fleet-known versions remain visible in catalog history, but a replica that advances past them does not download their artifacts. After the desired version starts successfully, Gestalt removes superseded registry-installed package directories for that app.
 
 `app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
 
@@ -77,7 +79,7 @@ Bootstrap finishes its registry-app startup attempts before the catalog poller b
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
 4. The poller then starts and runs its first reconciliation pass immediately.
 5. The poller compares the desired version from `app_version_change_requests` with this process's provider registry and running-version map:
-   - **Match** — the desired version is already running, so the poller sets `restarted_at` on each pending `app_instance_materializations` row without restarting the app.
+   - **Match** — the desired version is already running. The poller validates that version's local package and records its `materialized_at`, then sets `restarted_at` on every pending row without downloading superseded versions or restarting the app.
    - **Missing or different** — if another version is running, the poller stops it; then it starts the desired version and updates the rollout-progress rows. A historical `stopped_at` in `app_instance_materializations` does not prove that the provider is still absent, because those rows record previous rollout writes rather than current process state.
 6. An empty fleet-known projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
 
@@ -108,10 +110,11 @@ Replicas that do not acknowledge before enrollment closes are not cohort members
 Each pass:
 
 1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
-2. Group pending versions by app.
-3. Download and extract each pending registry artifact to the canonical `{artifactsDir}/registry-installed/{app}/{version}` path, recording `materialized_at` while the provider is still running. Re-validate that path on every pass; if the tree is missing or corrupt, re-download before `StopApp`.
-4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. `StartApp` receives the desired version selected by `LatestKnownVersion` and, when a complete registry install exists on disk, builds the provider from that materialized package instead of the deploy-time pin.
-5. Mark non-restartable apps converged without a local stop/start.
+2. Group pending versions by app and select one desired version with `LatestKnownVersion`.
+3. Download and extract only the desired registry artifact to the canonical `{artifactsDir}/registry-installed/{app}/{desiredVersion}` path, recording `materialized_at` on that version's row while the provider is still running. Superseded pending rows remain without `materialized_at`. Re-validate the desired path on every pass; if the tree is missing or corrupt, re-download it before `StopApp`.
+4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. These timestamps mean the replica reconciled past those catalog changes; they do not mean every superseded version ran. `StartApp` receives the desired version and builds the provider from that materialized package instead of the deploy-time pin.
+5. After the desired version is active, remove older registry-installed package directories for that app.
+6. Mark non-restartable apps converged without a local stop/start.
 
 A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
 
@@ -129,7 +132,7 @@ Failure and retry behavior:
 1. Reconciliation operations are idempotent: materializing an already valid package, stopping an absent provider, starting the already-running desired version, and repeating a rollout-progress write must succeed without duplicating work.
 2. When an app reconciliation fails, the poller calls `RecordFailure` on the desired version's `app_instance_materializations` row. This atomically increments `attempt_count` and stores `last_error_at` and `last_error_message`. The poller then releases that app's lifecycle lease and continues reconciling other apps. If the failure itself cannot be written to IndexedDB, the poller logs that write error.
 3. While `attempt_count` is below `server.appRegistry.maxReconcileAttempts`, the next poll retries that app from the beginning. It inspects the current provider registry, running-version map, `active-version` marker, and rollout-progress rows rather than relying on in-memory progress from the failed attempt. If stopping had begun, the app may remain unavailable until retry succeeds.
-4. When `attempt_count` reaches the configured maximum, the poller stops retrying that desired version on this replica. A newly accepted desired version gets a new row and a fresh attempt count. Increasing the configured maximum also permits retry when the stored count is below the new value.
+4. When `attempt_count` reaches the configured maximum, the poller stops retrying materialization and provider lifecycle work for that desired version on this replica. It may still record convergence when no retryable work remains—for example, when the desired package is already materialized and running, or the app is non-restartable. A newly accepted desired version gets a new row and a fresh attempt count. Increasing the configured maximum also permits retry when the stored count is below the new value.
 5. Updates to the local `active-version` marker are atomic. A failed replacement leaves the previous valid marker in place.
 6. If Gestalt cannot determine or clean up the local provider state safely, it marks the process unhealthy and terminates so the process supervisor can restart it.
 
