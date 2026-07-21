@@ -278,7 +278,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ## Install-time validation tests
 
-Planned. Rules: [validation.md](./validation.md). Pipeline: [validation.md](./validation.md#validation-pipeline).
+Planned. Checks: [validation.md](./validation.md).
 
 Run (once implemented):
 
@@ -298,8 +298,6 @@ One table-driven test, `TestInstallValidator`, with stub fleet catalog and synth
 | `rejects_missing_platform_artifact` | No artifact for host platform |
 | `rejects_incompatible_gestaltd` | `minGestaltdVersion` above running server version |
 | `rejects_unsatisfied_dependency` | Missing dependency app, version outside declared range, or required operation absent from published `interface` |
-
-Reverse-dependents (optional first cut) can defer to a follow-up subtest if needed.
 
 ### `handlers_admin_app_install_test.go` (extend)
 

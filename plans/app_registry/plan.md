@@ -194,7 +194,7 @@ Non-core app installation state should live in IndexedDB.
 
 - **Known versions** — projected from change requests via `ListKnownVersionsByApp` and `ListAllKnownVersions`, one entry per `(app, to_version)` pair. Admin HTTP list/get endpoints read these projections.
 
-There is **no fleet head** or **promotion**. Reverting to an older version uses `POST …/upgrade` with a previously published version (see [validation.md](./validation.md#reverting-to-an-older-version)).
+There is **no fleet head** or **promotion**. Reverting to an older version uses `POST …/upgrade` with a previously published version.
 
 Store schema and service API: [indexeddb.md](./indexeddb.md#store-app_version_change_requests-source-of-truth).
 
@@ -209,16 +209,7 @@ Publish-time validation should ensure:
 - the app manifest is valid
 - app invokes operations that exist for the dependencies declared
 
-At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation.
-
-Install-time validation should ensure:
-
-- the selected app version exists in a configured registry — **done** (registry fetch on install)
-- the candidate is compatible with the running `gestaltd` and deployment platform
-- declared app dependencies are satisfied by the current fleet catalog
-- activating the candidate does not break existing installed dependents (optional first cut)
-
-Full specification: [validation.md](./validation.md).
+At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation. See [validation.md](./validation.md).
 
 Activation is phased:
 
@@ -240,7 +231,7 @@ Dynamic app failures should not prevent Gestalt from booting core functionality.
 If an installed non-core app fails to materialize or load:
 
 - Gestalt should continue serving core apps.
-- The failed app should be marked unhealthy; operators can `upgrade` to a prior published version. See [validation.md](./validation.md#reverting-to-an-older-version).
+- The failed app should be marked unhealthy; operators can `POST …/upgrade` with a previously published version.
 
 Core recovery paths must not depend on dynamically installed apps.
 
