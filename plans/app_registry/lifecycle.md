@@ -75,7 +75,7 @@ Bootstrap finishes its registry-app startup attempts before the catalog poller b
 
 A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
 
-The selected installation's registry must match deploy `source.registry` before materialization or start. A registry rename does not authorize an old catalog entry from the previous binding. Binding mismatch leaves the app unavailable and clears stale activation state; it does not fall back to a deploy-time source.
+The selected installation's registry must match deploy `source.registry` before materialization or start.
 
 ## Polling
 
