@@ -210,7 +210,16 @@ Publish-time validation should ensure:
 - the app manifest is valid
 - app invokes operations that exist for the dependencies declared
 
-At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation. See [validation.md](./validation.md).
+At install or upgrade time, Gestalt should validate the candidate against the actual runtime environment before activation.
+
+Install-time validation should ensure:
+
+- the selected app version exists in a configured registry — **done** (registry fetch on install)
+- the candidate is compatible with the running `gestaltd` and deployment platform
+- declared app dependencies are satisfied by the current fleet catalog
+- activating the candidate does not break existing installed dependents (optional first cut)
+
+Full specification: [validation.md](./validation.md).
 
 Activation is phased:
 
