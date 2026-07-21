@@ -289,3 +289,22 @@ func (r *Restricted) OperationConnectionOverrideAllowed(operation string, params
 	}
 	return false
 }
+
+// ExecuteStream forwards the streaming execution to the inner provider if it
+// implements core.StreamingExecutor. This keeps the StreamingExecutor interface
+// visible through the operation-exposure wrapper so the broker's streaming
+// dispatch path can reach the underlying remote provider.
+func (r *Restricted) ExecuteStream(ctx context.Context, operation string, params map[string]any, token string) (core.StreamReader, error) {
+	if _, ok := r.allowed[operation]; !ok {
+		return nil, fmt.Errorf("operation %q is not allowed", operation)
+	}
+	innerName := operation
+	if alias, ok := r.aliases[operation]; ok {
+		innerName = alias
+	}
+	streamExec, ok := r.inner.(core.StreamingExecutor)
+	if !ok {
+		return nil, fmt.Errorf("inner provider does not support streaming")
+	}
+	return streamExec.ExecuteStream(ctx, innerName, params, token)
+}
