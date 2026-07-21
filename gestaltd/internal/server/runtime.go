@@ -85,7 +85,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 		authorizationProvider = result.Authorization[authorizationName]
 	}
 	var publicIndexedDB indexeddb.IndexedDB
-	if strings.TrimSpace(cfg.Server.Remote) == "" && result.Services != nil {
+	if _, indexedDBEntry, err := cfg.SelectedIndexedDBProvider(); err == nil && config.EntryBuildsLocal(indexedDBEntry) && result.Services != nil {
 		publicIndexedDB = result.Services.DB
 	}
 	appRuntimeState, _ := result.AppRestarter.(AppRuntimeState)

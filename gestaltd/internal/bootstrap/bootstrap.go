@@ -192,7 +192,7 @@ type Deps struct {
 	HostServiceTLSCAPEM     string
 	Telemetry               core.TelemetryProvider
 	DevSupervisor           *providerdev.Supervisor
-	RemoteClients           *remote.ClientSet
+	RemoteClientSets        remote.ClientSets
 	RemoteToken             string
 	GatewayTransport        *providergateway.ProviderGatewayTransport
 
@@ -952,6 +952,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 
+	closeRemoteClients := false
 	deps := Deps{
 		EncryptionKey:        encKey,
 		BaseURL:              cfg.Server.BaseURL,
@@ -963,15 +964,32 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
-	if remoteURL := strings.TrimSpace(cfg.Server.Remote); remoteURL != "" {
-		deps.RemoteToken = cfg.Server.RemoteToken
-		deps.RemoteClients, err = remote.NewClientSet(ctx, remote.Config{
-			URL:   remoteURL,
-			Token: cfg.Server.RemoteToken,
-		})
+	if hasRemotePlacement(cfg) {
+		remoteConfigs := make(map[string]remote.Config)
+		for _, name := range cfg.ReferencedRemoteNames() {
+			remoteCfg := cfg.Server.Remotes[name]
+			if remoteCfg == nil {
+				return nil, fmt.Errorf("bootstrap: remote %q is not configured under server.remotes", name)
+			}
+			remoteConfigs[name] = remote.Config{
+				URL:   remoteCfg.URL,
+				Token: remoteCfg.Token,
+			}
+		}
+		var err error
+		deps.RemoteClientSets, err = remote.NewClientSets(ctx, remoteConfigs)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: remote client: %w", err)
 		}
+		closeRemoteClients = true
+		defer func() {
+			if closeRemoteClients && deps.RemoteClientSets != nil {
+				_ = deps.RemoteClientSets.Close()
+			}
+		}()
+	}
+	if _, defaultRemote, ok := cfg.DefaultRemoteEntry(); ok && defaultRemote != nil {
+		deps.RemoteToken = defaultRemote.Token
 	}
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
@@ -1010,7 +1028,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
 	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
-	skipSchemaBootstrap := !providerBuildsLocal(cfg, def)
+	skipSchemaBootstrap := !config.EntryBuildsLocal(def)
 	svc, svcErr := coredata.NewWithOptions(ctx, store, coredata.NewOptions{SkipSchemaBootstrap: skipSchemaBootstrap})
 	if svcErr != nil {
 		_ = store.Close()
@@ -1147,6 +1165,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeExtraS3s = false
 	closeAuthorizationOnError = false
 	closeExternalCredentialsOnError = false
+	closeRemoteClients = false
 	return &preparedCore{
 		Auth:                 auth,
 		SelectedAuthProvider: selectedAuthName,
@@ -1201,7 +1220,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		authCloseErr,
 		authorizationCloseErr,
 		externalCredentialsCloseErr,
-		p.Deps.RemoteClients.Close(),
+		p.Deps.RemoteClientSets.Close(),
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeCaches(p.ExtraCaches...),
@@ -1654,16 +1673,6 @@ func failPendingStartupProviders(deps Deps, err error) {
 	}
 }
 
-func providerBuildsLocal(cfg *config.Config, entry *config.ProviderEntry) bool {
-	if entry == nil {
-		return false
-	}
-	if entry.DevActive || entry.Local {
-		return true
-	}
-	return cfg == nil || strings.TrimSpace(cfg.Server.Remote) == ""
-}
-
 func buildConfiguredProviders[T any](
 	ctx context.Context,
 	entries map[string]*config.ProviderEntry,
@@ -2108,11 +2117,15 @@ func buildNamedAuthProvider(cfg *config.Config, name string, authEntry *config.P
 	if authEntry == nil {
 		return nil, nil
 	}
-	if !providerBuildsLocal(cfg, authEntry) {
-		if deps.RemoteClients == nil || deps.RemoteClients.Identity == nil {
+	if !config.EntryBuildsLocal(authEntry) {
+		clients, err := remoteClientsForEntry(cfg, authEntry, deps)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: identity provider %q: %w", name, err)
+		}
+		if clients.Identity == nil {
 			return nil, fmt.Errorf("bootstrap: remote identity client is required when server.remote is configured")
 		}
-		return identityservice.NewRemote(deps.RemoteClients.Identity, name)
+		return identityservice.NewRemote(clients.Identity, name)
 	}
 	if factories.Auth == nil {
 		return nil, fmt.Errorf("bootstrap: authentication factory is not registered")
@@ -2162,11 +2175,15 @@ func buildNamedAuthorizationProvider(ctx context.Context, cfg *config.Config, na
 	if entry == nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
 	}
-	if !providerBuildsLocal(cfg, entry) {
-		if deps.RemoteClients == nil || deps.RemoteClients.Authorization == nil {
+	if !config.EntryBuildsLocal(entry) {
+		clients, err := remoteClientsForEntry(cfg, entry, deps)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		}
+		if clients.Authorization == nil {
 			return nil, fmt.Errorf("bootstrap: remote authorization client is required when server.remote is configured")
 		}
-		conn := grpc.ClientConnInterface(deps.RemoteClients.Conn())
+		conn := grpc.ClientConnInterface(clients.Conn())
 		if deps.GatewayTransport != nil {
 			target := providergateway.ProviderTarget{Kind: providergateway.ProviderKindAuthorization, Name: logicalName}
 			if err := deps.GatewayTransport.RegisterDirect(target, providergateway.DirectEndpoint{Conn: conn}); err != nil {
@@ -2206,12 +2223,16 @@ func buildIndexedDB(cfg *config.Config, name string, entry *config.ProviderEntry
 	if entry == nil {
 		return nil, fmt.Errorf("indexeddb provider is required")
 	}
-	if !providerBuildsLocal(cfg, entry) {
-		if deps.RemoteClients == nil || deps.RemoteClients.IndexedDB == nil {
+	if !config.EntryBuildsLocal(entry) {
+		clients, err := remoteClientsForEntry(cfg, entry, deps)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: indexeddb provider %q: %w", name, err)
+		}
+		if clients.IndexedDB == nil {
 			return nil, fmt.Errorf("bootstrap: remote indexeddb client is required when server.remote is configured")
 		}
 		return indexeddbpkg.NewRemote(indexeddbpkg.RemoteConfig{
-			Client: deps.RemoteClients.IndexedDB,
+			Client: clients.IndexedDB,
 			Name:   name,
 		})
 	}
@@ -2282,12 +2303,16 @@ func buildWorkflow(ctx context.Context, cfg *config.Config, name string, entry *
 	if entry == nil {
 		return nil, fmt.Errorf("workflow provider is required")
 	}
-	if !providerBuildsLocal(cfg, entry) {
-		if deps.RemoteClients == nil || deps.RemoteClients.Workflow == nil {
+	if !config.EntryBuildsLocal(entry) {
+		clients, err := remoteClientsForEntry(cfg, entry, deps)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: workflow provider %q: %w", name, err)
+		}
+		if clients.Workflow == nil {
 			return nil, fmt.Errorf("bootstrap: remote workflow client is required when server.remote is configured")
 		}
-		client := deps.RemoteClients.Workflow
-		if rawConn := deps.RemoteClients.Conn(); rawConn != nil {
+		client := clients.Workflow
+		if rawConn := clients.Conn(); rawConn != nil {
 			conn := grpc.ClientConnInterface(rawConn)
 			gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindWorkflow, Name: name}, conn)
 			if err != nil {
@@ -2355,12 +2380,16 @@ func buildAgent(ctx context.Context, cfg *config.Config, name string, entry *con
 	if entry == nil {
 		return nil, fmt.Errorf("agent provider is required")
 	}
-	if !providerBuildsLocal(cfg, entry) {
-		if deps.RemoteClients == nil || deps.RemoteClients.Agent == nil {
+	if !config.EntryBuildsLocal(entry) {
+		clients, err := remoteClientsForEntry(cfg, entry, deps)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: agent provider %q: %w", name, err)
+		}
+		if clients.Agent == nil {
 			return nil, fmt.Errorf("bootstrap: remote agent client is required when server.remote is configured")
 		}
-		client := deps.RemoteClients.Agent
-		if rawConn := deps.RemoteClients.Conn(); rawConn != nil {
+		client := clients.Agent
+		if rawConn := clients.Conn(); rawConn != nil {
 			conn := grpc.ClientConnInterface(rawConn)
 			gwConn, err := gatewayConn(deps.GatewayTransport, providergateway.ProviderTarget{Kind: providergateway.ProviderKindAgent, Name: name}, conn)
 			if err != nil {

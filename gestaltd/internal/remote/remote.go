@@ -170,3 +170,55 @@ func bearerTokenInterceptors(token string) (grpc.UnaryClientInterceptor, grpc.St
 	}
 	return unary, stream
 }
+
+// ClientSets maps named remotes to typed public gRPC clients.
+type ClientSets map[string]*ClientSet
+
+// NewClientSets dials every configured remote and returns typed clients keyed by
+// remote name.
+func NewClientSets(ctx context.Context, configs map[string]Config) (ClientSets, error) {
+	if len(configs) == 0 {
+		return nil, nil
+	}
+	sets := make(ClientSets, len(configs))
+	for name, cfg := range configs {
+		remoteName := strings.TrimSpace(name)
+		if remoteName == "" {
+			return nil, fmt.Errorf("remote: name is required")
+		}
+		clients, err := NewClientSet(ctx, cfg)
+		if err != nil {
+			for _, existing := range sets {
+				_ = existing.Close()
+			}
+			return nil, fmt.Errorf("remote %q: %w", remoteName, err)
+		}
+		sets[remoteName] = clients
+	}
+	return sets, nil
+}
+
+// Close releases every underlying gRPC connection.
+func (sets ClientSets) Close() error {
+	if len(sets) == 0 {
+		return nil
+	}
+	var first error
+	for name, clients := range sets {
+		if clients == nil {
+			continue
+		}
+		if err := clients.Close(); err != nil && first == nil {
+			first = fmt.Errorf("remote %q: %w", name, err)
+		}
+	}
+	return first
+}
+
+// Get returns the client set for a named remote.
+func (sets ClientSets) Get(name string) *ClientSet {
+	if len(sets) == 0 {
+		return nil
+	}
+	return sets[strings.TrimSpace(name)]
+}

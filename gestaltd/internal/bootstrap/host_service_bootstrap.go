@@ -249,7 +249,7 @@ func registerConfiguredAppPublicHostServices(cfg *config.Config, deps Deps) func
 	var cleanups []func()
 	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
-		if !providerBuildsLocal(cfg, entry) {
+		if !config.EntryBuildsLocal(entry) {
 			continue
 		}
 		if entry != nil && entry.DevActive && deps.DevSupervisor != nil {

@@ -410,6 +410,10 @@ func validateConfig(configFlags []string, lockfilePath, artifactsDir string, opt
 }
 
 func logConfigSummary(paths []string, cfg *config.Config) {
+	var remoteURL, remoteToken string
+	if _, r, ok := cfg.DefaultRemoteEntry(); ok && r != nil {
+		remoteURL, remoteToken = r.URL, r.Token
+	}
 	currentCLIReporter().Verbose(formatCLIFields("config loaded",
 		"config_files", paths,
 		"server_port", cfg.Server.PublicListener().Port,
@@ -417,8 +421,8 @@ func logConfigSummary(paths []string, cfg *config.Config) {
 		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
-		"server_remote", maskEmpty(cfg.Server.Remote),
-		"server_remote_token", maskSecret(cfg.Server.RemoteToken),
+		"server_remote", maskEmpty(remoteURL),
+		"server_remote_token", maskSecret(remoteToken),
 		"authentication_provider", selectedProviderLabel(cfg.SelectedIdentityProvider()),
 		"runtime_secrets_provider", selectedProviderLabel(cfg.SelectedSecretsProvider()),
 		"telemetry_provider", selectedProviderLabel(cfg.SelectedTelemetryProvider()),

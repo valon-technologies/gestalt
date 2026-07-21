@@ -25,9 +25,13 @@ func TestAppProviderRestarterRestartable(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
-		Server: config.ServerConfig{Remote: "https://remote.test"},
+		Server: config.ServerConfig{
+			Remotes: map[string]*config.RemoteConfig{
+				config.DefaultRemoteName: {URL: "https://remote.test", Default: true},
+			},
+		},
 		Apps: map[string]*config.ProviderEntry{
-			"remote":         {},
+			"remote":         {Remote: config.DefaultRemoteName},
 			"local-override": {Local: true},
 			"dev-active":     {DevActive: true},
 		},
@@ -51,7 +55,8 @@ func TestAppProviderRestarterRestartable(t *testing.T) {
 		}
 	}
 
-	cfg.Server.Remote = ""
+	cfg.Server.Remotes = nil
+	cfg.Apps["remote"].Remote = ""
 	got, err := restarter.Restartable("remote")
 	if err != nil {
 		t.Fatalf("Restartable without server.remote: %v", err)

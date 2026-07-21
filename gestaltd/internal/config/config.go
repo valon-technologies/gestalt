@@ -503,8 +503,10 @@ type ProviderEntry struct {
 	Config  yaml.Node      `yaml:"config,omitempty"`
 	Default bool           `yaml:"default,omitempty"`
 	// Local forces this provider to build in-process locally even when
-	// server.remote delegates other host providers to a remote gestaltd.
-	Local           bool                                   `yaml:"local,omitempty"`
+	// another entry names a remote gestaltd for delegation.
+	Local bool `yaml:"local,omitempty"`
+	// Remote names a server.remotes entry for forward delegation.
+	Remote          string                                 `yaml:"remote,omitempty"`
 	Env             map[string]string                      `yaml:"env,omitempty"`
 	Egress          *ProviderEgressConfig                  `yaml:"egress,omitempty"`
 	DisplayName     string                                 `yaml:"displayName,omitempty"`
@@ -1944,6 +1946,7 @@ type ServerConfig struct {
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Remote        string                   `yaml:"remote,omitempty" json:"remote,omitempty"`
 	RemoteToken   string                   `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`
+	Remotes       map[string]*RemoteConfig `yaml:"remotes,omitempty"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`

@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/remote"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -108,7 +109,7 @@ func prepareProviderBuilds(
 		if entry != nil && entry.Source.IsRegistry() {
 			continue
 		}
-		if !providerBuildsLocal(cfg, entry) {
+		if !config.EntryBuildsLocal(entry) {
 			continue
 		}
 		sha := currentAppSHA(entry)
@@ -138,17 +139,20 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 	if providers == nil || cfg == nil {
 		return nil
 	}
-	if strings.TrimSpace(cfg.Server.Remote) == "" {
+	if !hasRemotePlacement(cfg) {
 		return nil
-	}
-	clients := deps.RemoteClients
-	if clients == nil || clients.App == nil {
-		return fmt.Errorf("bootstrap: remote client is required when server.remote is configured")
 	}
 	for name, entry := range cfg.Apps {
 		name = strings.TrimSpace(name)
-		if name == "" || entry == nil || entry.Source.IsRegistry() || providerBuildsLocal(cfg, entry) {
+		if name == "" || entry == nil || entry.Source.IsRegistry() || config.EntryBuildsLocal(entry) {
 			continue
+		}
+		clients, err := remoteClientsForEntry(cfg, entry, deps)
+		if err != nil {
+			return fmt.Errorf("remote app %q: %w", name, err)
+		}
+		if clients.App == nil {
+			return fmt.Errorf("remote app %q: provider client is required", name)
 		}
 		spec, _, err := buildStartupProviderSpec(name, entry)
 		if err != nil {
@@ -170,7 +174,7 @@ func registerRemoteApps(providers *registry.ProviderMap[core.Provider], cfg *con
 		if err := providers.Register(name, provider); err != nil {
 			return fmt.Errorf("remote app %q: %w", name, err)
 		}
-		slog.Debug("registered remote app provider", "provider", name)
+		slog.Debug("registered remote app provider", "provider", name, "remote", config.EntryPlacementRemote(entry))
 	}
 	return nil
 }
@@ -2522,4 +2526,23 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, deps Deps) *
 		ClientID:     conn.Auth.ClientID,
 		ClientSecret: conn.Auth.ClientSecret,
 	})
+}
+
+func remoteClientsForEntry(cfg *config.Config, entry *config.ProviderEntry, deps Deps) (*remote.ClientSet, error) {
+	remoteName := config.EntryPlacementRemote(entry)
+	if remoteName == "" {
+		return nil, fmt.Errorf("bootstrap: remote client is required for remote placement")
+	}
+	clients := deps.RemoteClientSets.Get(remoteName)
+	if clients == nil {
+		return nil, fmt.Errorf("bootstrap: remote client %q is required when server.remotes.%s is referenced", remoteName, remoteName)
+	}
+	return clients, nil
+}
+
+func hasRemotePlacement(cfg *config.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	return len(cfg.ReferencedRemoteNames()) > 0
 }
