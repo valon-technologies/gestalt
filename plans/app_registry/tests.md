@@ -239,61 +239,37 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ### Config validation
 
-- Accepts `source.registry` when the name matches a configured `appRegistries` entry.
-- Rejects an unknown registry name.
-- Rejects `source.registry` combined with `source.git`, `source.path`, or other source modes.
-- Rejects `source.registry` outside the `apps` map.
-- Allows configured static and HTTP surfaces without a deploy-time resolved manifest, operation catalog, or static root.
+- Accepts a registry-only app without package-derived metadata; rejects an unknown registry, use outside `apps`, or combination with another source mode.
 - Defaults `server.appRegistry.maxReconcileAttempts` to `3`, accepts positive overrides, and rejects zero or negative values.
 
 ### Add and upgrade
 
-- **`add`** — accepts the first fleet-known version when `ListKnownVersionsByApp` is empty; returns **409** when the app is already in the catalog.
-- **`upgrade`** — accepts a new version when the app has fleet-known versions; sets `from_version` to `LatestKnownVersion`; returns **400** when the catalog is empty.
-- **`add`** records `from_version: "registry:first-install"` server-side (audit only; not a runnable version). See [lifecycle.md](./lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
+- **`add`** accepts only an empty catalog, records server-written `from_version: "registry:first-install"`, and returns **409** when a version is already known.
+- **`upgrade`** requires a non-empty catalog, sets `from_version` to `LatestKnownVersion`, and returns **400** when the catalog is empty.
 
 ### Bootstrap startup
 
-- Starts the deterministic latest fleet-known version at `StartAppProviders`.
-- Uses the same latest-version ordering as the poller, including equal-timestamp tie-breaking.
-- Skips the app and clears any stale running-version map entry and `active-version` marker when the projection is empty.
-- Rejects a projected installation whose registry differs from deploy `source.registry`; it does not fall back to another source.
-- Does not gate startup on rollout or per-replica materialization rows.
-- Keeps core boot available when an individual registry app cannot materialize or start.
-- Does not start the catalog poller until all startup-provider initialization attempts finish.
-- Starts the poller's first reconciliation pass immediately after startup-provider initialization.
-- Allows a replica that missed rollout enrollment during bootstrap to converge locally without reopening the rollout.
+- Starts the same deterministic latest version as the poller only when its registry matches `source.registry`; an empty projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
+- Attempts every registry app without consulting rollout-progress rows, keeps core boot available after an individual failure, and starts the poller only after all startup attempts finish.
+- A replica that misses rollout enrollment during bootstrap converges on its first poll without reopening the terminal rollout.
 
 ### Provider lifecycle and concurrency
 
-- Serializes materialization per app on each replica, including different versions of the same app, while allowing different apps to materialize concurrently.
-- Starting an already-running exact version is idempotent; starting over a different or unknown recorded version does not relabel the existing provider.
-- A registry-only start requires the exact validated package and never falls back to a deploy-time provider build.
-- Failures while building or registering a provider, updating its running-version map entry or `active-version` marker, or stopping it leave those three local runtime records consistent.
-- A stale stopped row cannot cause the poller to overwrite a different running provider without stopping it.
-- A version already started by bootstrap is marked converged by the poller without an extra restart.
-- A failed app reconciliation atomically increments `attempt_count`, replaces `last_error_at` and `last_error_message`, releases its lifecycle lease, and does not prevent other apps from reconciling.
-- The next poll retries the failed app from the beginning; repeated materialize, stop, start-same-version, and rollout-progress operations are idempotent.
-- Stops retrying one desired version when its `attempt_count` reaches `server.appRegistry.maxReconcileAttempts`, which defaults to `3`.
-- A new desired-version row starts with zero attempts; increasing the configured limit resumes rows whose count is below the new limit.
-- Successful convergence retains the row's previous `attempt_count`, `last_error_at`, and `last_error_message` for diagnosis.
-- Logs the error when `RecordFailure` itself cannot write to IndexedDB.
+- Serializes materialization per app on each replica while allowing different apps to materialize concurrently.
+- Starting the already-running desired version is idempotent. A different or unknown version is stopped and replaced; any failed start cleans up the provider registry, running-version map, and `active-version` marker.
+- A version already started by bootstrap is marked restarted without another restart, while a historical `stopped_at` cannot hide a different provider that is actually running.
+- A failed reconciliation durably records its error, releases the app lease, and does not block other apps. Retries are idempotent and stop at the configured limit; a newly accepted version starts with a fresh attempt count.
 - Unrecoverable local provider state marks Gestalt unhealthy and terminates the process.
 
 ### Runtime surfaces
 
-- Accepts a registry-only app with none of the optional static UI, HTTP, or MCP surfaces configured.
-- Server construction accepts a registry app with configured static and HTTP mounts before any package or provider exists.
-- Static requests return **503** while the provider is absent or changing, then serve the bundle for the exact running version.
-- A concurrent version change cannot combine a static bundle from one version with a provider from another.
-- Static request handling does not block on a long-running provider lifecycle operation.
-- Deploy-config HTTP bindings mount without startup-time provider catalog lookup and become invocable after the provider starts.
-- Stopping or removing the provider immediately makes static, MCP, and operation surfaces unavailable and clears its running-version map entry and `active-version` marker.
+- Server construction accepts both a backend-only registry app and configured static or HTTP surfaces before any package or provider exists.
+- Static requests return **503** until the provider registry, running-version map, and `active-version` marker agree on one version, and also during a concurrent version change.
+- YAML-declared HTTP bindings mount before provider startup and become invocable afterward; stopping the provider makes all configured surfaces unavailable and clears its running-version map entry and `active-version` marker.
 
 ### Lock and sync
 
-- `gestalt lock` and `gestalt sync` omit snapshot resolution and artifact download for registry-only apps.
-- Lockfile entries record the registry binding only — see [config.md](./config.md#lockfile).
+- `gestalt lock` and `gestalt sync` omit artifact resolution for registry-only apps and record only the registry binding.
 
 ---
 
