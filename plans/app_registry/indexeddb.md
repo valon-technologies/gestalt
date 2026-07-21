@@ -291,4 +291,4 @@ Primary key: `id` (UUID). Uniqueness for `(instance_id, app, version)` is enforc
 
 Written by the background catalog poller (`gestaltd/internal/appregistry/poller.go`).
 
-These rows do not gate bootstrap and are not the source of truth for a provider's current local version. A replica may start the latest fleet-known version before it has a materialization row; the poller later records convergence without forcing another restart when that version is already running.
+`app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the latest fleet-known version without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that latest version, the poller records convergence without stopping and restarting the app again.
