@@ -35,7 +35,7 @@ IndexedDB stores accepted version changes and each replica's rollout progress. I
 
 Gestalt derives the desired version from the latest change-request timestamp. If two requests have the same timestamp, it chooses the lexicographically greatest version string so every replica selects the same version. Bootstrap and polling both compare the requests using this rule; they do not assume that the first or last record returned by IndexedDB is the newest.
 
-Each Gestalt process separately tracks the version its provider is currently serving, using in-memory state and a local marker in the artifacts directory. This state is updated with provider start and stop. `app_instance_materializations` is not used for this because it contains historical progress for multiple versions and can become stale after a process exits or crashes.
+Each Gestalt process separately tracks the version its provider is currently serving. It uses an in-process running-version map and a local `active-version` marker in the artifacts directory, and updates both with provider start and stop. `app_instance_materializations` is not used for current runtime state because it contains historical rollout progress for multiple versions and can become stale after a process exits or crashes.
 
 ---
 

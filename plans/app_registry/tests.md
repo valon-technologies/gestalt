@@ -140,7 +140,7 @@ go test ./internal/bootstrap -run TestAppProviderRestarterStartApp -count=1
 
 ### `poller_materialize_test.go`
 
-- **`TestCatalogPollerStartAppPassesDriverVersion`** — the catalog poller passes the driver fleet version through to `StartApp`.
+- **`TestCatalogPollerStartAppPassesDriverVersion`** — the catalog poller passes the desired version selected by `LatestKnownVersion` to `StartApp`.
 
 ---
 
@@ -255,7 +255,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 - Starts the deterministic latest fleet-known version at `StartAppProviders`.
 - Uses the same latest-version ordering as the poller, including equal-timestamp tie-breaking.
-- Skips the app and clears stale local activation when the projection is empty.
+- Skips the app and clears any stale running-version map entry and `active-version` marker when the projection is empty.
 - Rejects a projected installation whose registry differs from deploy `source.registry`; it does not fall back to another source.
 - Does not gate startup on rollout or per-replica materialization rows.
 - Keeps core boot available when an individual registry app cannot materialize or start.
@@ -268,7 +268,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 - Serializes materialization per app on each replica, including different versions of the same app, while allowing different apps to materialize concurrently.
 - Starting an already-running exact version is idempotent; starting over a different or unknown recorded version does not relabel the existing provider.
 - A registry-only start requires the exact validated package and never falls back to a deploy-time provider build.
-- Build, registration, activation, and stop failures leave provider visibility, running-version state, and active-static state consistent.
+- Build, registration, activation, and stop failures leave the provider registry, running-version map, and `active-version` marker consistent.
 - A stale stopped row cannot cause the poller to overwrite a different running provider without stopping it.
 - A version already started by bootstrap is marked converged by the poller without an extra restart.
 
@@ -279,7 +279,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 - A concurrent version change cannot combine a static bundle from one version with a provider from another.
 - Static request handling does not block on a long-running provider lifecycle operation.
 - Deploy-config HTTP bindings mount without startup-time provider catalog lookup and become invocable after the provider starts.
-- Stopping or removing the provider immediately makes static, MCP, and operation surfaces unavailable and removes stale active state.
+- Stopping or removing the provider immediately makes static, MCP, and operation surfaces unavailable and clears its running-version map entry and `active-version` marker.
 
 ### Lock and sync
 

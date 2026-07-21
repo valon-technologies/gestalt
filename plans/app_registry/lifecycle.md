@@ -57,6 +57,13 @@ The lifecycle uses four distinct states. They must not be treated as interchange
 - **Running** — this replica successfully built and registered the provider from that exact materialized package.
 - **Converged** — the poller recorded `restarted_at` for the replica and version. This is rollout accounting, not proof by itself that a provider is currently running.
 
+This document uses these names for local runtime state:
+
+- **Provider registry** — the in-process collection of providers available for operation invocation.
+- **Running-version map** — the in-process `app → version` record for registered registry-app providers.
+- **`active-version` marker** — the local file that selects the materialized static bundle for an app.
+- **Rollout-progress row** — an `app_instance_materializations` record; it describes previously recorded rollout work, not current provider state.
+
 Bootstrap and the poller must both use `LatestKnownVersion` to select the same desired installation. See [indexeddb.md](./indexeddb.md#accepted-changes-and-projections) for the version-ordering rule.
 
 `app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
@@ -66,13 +73,13 @@ Bootstrap and the poller must both use `LatestKnownVersion` to select the same d
 Bootstrap finishes its registry-app startup attempts before the catalog poller begins:
 
 1. Bootstrap materializes and starts the desired fleet-known version without updating `app_rollouts` or `app_instance_materializations`; the poller owns those rollout-accounting writes.
-2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither local state may identify the requested version as running.
+2. After the exact package is validated and its provider starts successfully, bootstrap records the app and version in this process's running-version map and local `active-version` marker. Static and runtime handlers may then serve that version. If provider startup fails, neither the running-version map nor the `active-version` marker may identify the requested version as running.
 3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
 4. The poller then starts and runs its first reconciliation pass immediately.
 5. The poller compares the desired version from `app_version_change_requests` with this process's provider registry and running-version map:
    - **Match** — the desired version is already running, so the poller sets `restarted_at` on each pending `app_instance_materializations` row without restarting the app.
    - **Missing or different** — if another version is running, the poller stops it; then it starts the desired version and updates the rollout-progress rows. A historical `stopped_at` in `app_instance_materializations` does not prove that the provider is still absent, because those rows record previous rollout writes rather than current process state.
-6. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
+6. An empty fleet-known projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
 
 A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
 
@@ -103,7 +110,7 @@ Each pass:
 1. Acknowledge each new `(app, version)` in `app_instance_materializations`.
 2. Group pending versions by app.
 3. Download and extract each pending registry artifact to the canonical `{artifactsDir}/registry-installed/{app}/{version}` path, recording `materialized_at` while the provider is still running. Re-validate that path on every pass; if the tree is missing or corrupt, re-download before `StopApp`.
-4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. `StartApp` receives the driver fleet version and, when a complete registry install exists on disk, builds the provider from that materialized package instead of the deploy-time pin.
+4. Stop and restart each restartable app once, recording `stopped_at` and `restarted_at` on every pending row. `StartApp` receives the desired version selected by `LatestKnownVersion` and, when a complete registry install exists on disk, builds the provider from that materialized package instead of the deploy-time pin.
 5. Mark non-restartable apps converged without a local stop/start.
 
 A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
@@ -115,7 +122,7 @@ A provider is **restartable** when this replica builds it locally from the confi
 1. The materialized package must exist and pass package validation. Registry-only apps never fall back to an unresolved deploy-time provider entry.
 2. If a provider is already registered and the local running-version map says it is serving the requested version, `StartApp` may return success without rebuilding it. If the recorded version is missing or different, Gestalt must not relabel the existing provider as the requested version; it must stop the existing provider and start the requested version.
 3. If provider build, registration, or activation fails, Gestalt must clean up any partial state from that start attempt. The provider must not remain registered as the requested version, and static or runtime handlers must not serve it.
-4. Stopping or removing a provider clears its running-version and active-static state, including the already-absent-provider path.
+4. Stopping or removing a provider clears its running-version map entry and `active-version` marker, including when the provider was already absent.
 
 Failure and retry behavior:
 
@@ -123,17 +130,17 @@ Failure and retry behavior:
 2. If writing `stopped_at` fails after stop, the next poll retries the write without stopping the absent provider again.
 3. If writing `restarted_at` fails after start, the next poll retries the write without rebuilding the running provider.
 4. A version discovered while the app is stopped joins the current cycle and inherits its original `stopped_at`.
-5. Replacing local active-version state preserves the prior valid value if the replacement cannot be committed. Temporary files and backups may be cleaned only after replacement or restoration succeeds.
+5. Replacing the local `active-version` marker preserves the prior valid marker if the replacement cannot be committed. Temporary files and backups may be cleaned only after replacement or restoration succeeds.
 
 ### Runtime surfaces for registry-only app slots
 
 The HTTP server is constructed before registry packages are available. Registry-only app slots therefore must not require a deploy-time resolved manifest, static root, provider catalog, or running provider merely to construct the server.
 
-- **Static UI** — create the configured mount lazily. A request is served only when the app has a running version and the corresponding materialized package resolves a static bundle. The handler must reject a version change observed during resolution rather than mixing frontend and provider generations. Not-yet-running, stopping, or changing versions return **503 Service Unavailable**, not a permanent **404**. Deploy-config theme files are resolved independently of the package and remain available to the mount.
+- **Static UI** — create the configured mount lazily. A request is served only when the provider registry, running-version map, and `active-version` marker agree on the version, and that materialized package resolves a static bundle. The handler must reject a version change observed during resolution rather than mixing frontend and provider generations. Not-yet-running, stopping, or changing versions return **503 Service Unavailable**, not a permanent **404**. Deploy-config theme files are resolved independently of the package and remain available to the mount.
 - **HTTP bindings** — bindings declared in deploy config are mounted before the provider starts and do not require startup-time provider-catalog validation. Invocation may return unavailable until the provider is running. Package-only bindings cannot mutate the already-built HTTP router; registry-only apps that need mounted HTTP routes must declare those bindings in deploy config.
 - **MCP and generic operation invocation** — resolve against the currently registered provider. They become available after successful `StartApp` and unavailable immediately when the provider is removed.
 
-No surface may infer the running version from `app_instance_materializations`. Static serving uses local active/running state tied to provider lifecycle; convergence rows remain accounting records.
+No surface may infer the running version from `app_instance_materializations`. Static serving uses the local provider registry, running-version map, and `active-version` marker; rollout-progress rows remain accounting records.
 
 ## Runtime
 
