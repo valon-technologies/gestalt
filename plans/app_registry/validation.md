@@ -155,9 +155,8 @@ Validation errors must not create or advance `app_rollouts` or `app_version_chan
 
 See [tests.md](./tests.md#install-time-validation-tests). Summary:
 
-- HTTP integration tests on `add` / `upgrade` for each failure mode
-- Unit tests on `InstallValidator` with stub catalog and registry entries
-- Confirm failed validation leaves rollout and change-request stores unchanged
+- One table-driven unit test on `InstallValidator` (accept + failure modes)
+- One HTTP case in the existing install handler tests confirming **400** and no fleet writes on validation failure
 
 ---
 

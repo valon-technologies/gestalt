@@ -26,7 +26,6 @@ Related docs:
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
 | `internal/appregistry` | `install_validator_test.go` | — | Unit | planned |
-| `internal/server` | `handlers_admin_app_install_validation_test.go` | — | HTTP integration | planned |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -286,26 +285,27 @@ Run (once implemented):
 ```bash
 cd gestaltd
 go test ./internal/appregistry/... -run TestInstallValidator -count=1
-go test ./internal/server/... -run TestAdminAppInstallValidation -count=1
+go test ./internal/server/... -run TestAdminAppRegistryInstall -count=1
 ```
 
 ### `install_validator_test.go` (planned)
 
-Unit tests with stub fleet catalog and synthetic `Entry` documents:
+One table-driven test, `TestInstallValidator`, with stub fleet catalog and synthetic `Entry` documents:
 
-- **`TestInstallValidator_rejects_missing_platform_artifact`** — no `linux/amd64` (or host platform) artifact.
-- **`TestInstallValidator_rejects_incompatible_gestaltd`** — `minGestaltdVersion` above running server version.
-- **`TestInstallValidator_rejects_missing_dependency`** — `requires.apps.slack` with no fleet-known slack version.
-- **`TestInstallValidator_rejects_dependency_version_range`** — installed slack version outside declared range.
-- **`TestInstallValidator_rejects_missing_required_operation`** — dependency published `interface` lacks declared operation.
-- **`TestInstallValidator_accepts_satisfied_dependencies`** — happy path when catalog and entry align.
+| Subtest | Covers |
+|---------|--------|
+| `accepts_satisfied_dependencies` | Happy path when catalog, entry, and dependency metadata align |
+| `rejects_missing_platform_artifact` | No artifact for host platform |
+| `rejects_incompatible_gestaltd` | `minGestaltdVersion` above running server version |
+| `rejects_unsatisfied_dependency` | Missing dependency app, version outside declared range, or required operation absent from published `interface` |
 
-### `handlers_admin_app_install_validation_test.go` (planned)
+Reverse-dependents (optional first cut) can defer to a follow-up subtest if needed.
 
-HTTP integration on `POST …/add` and `POST …/upgrade`:
+### `handlers_admin_app_install_test.go` (extend)
 
-- Validation failure returns **400** and does not create rollout or change-request rows.
-- Successful path unchanged from existing install tests once validator passes.
+Add one HTTP case to the existing install test file (same harness as today):
+
+- **`validation_failure`** on `POST …/upgrade` — inject a validator failure, assert **400**, and assert no `app_rollouts` or `app_version_change_requests` rows were created. `add` shares the same `Installer.install` path, so it does not need a separate case.
 
 ---
 
