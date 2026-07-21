@@ -250,15 +250,16 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 ### Bootstrap startup
 
 - Starts the same deterministic latest version as the poller only when its registry matches `source.registry`; an empty projection leaves the app stopped and clears any stale running-version map entry and `active-version` marker.
-- Attempts every registry app without consulting rollout-progress rows, keeps core boot available after an individual failure, and starts the poller only after all startup attempts finish.
+- Attempts every registry app without consulting rollout-progress rows or `attempt_count`, including after the poller reached its retry limit; keeps core boot available after an individual failure; and starts the poller only after all startup attempts finish.
 - A replica that misses rollout enrollment during bootstrap converges on its first poll without reopening the terminal rollout.
 
 ### Provider lifecycle and concurrency
 
 - Serializes materialization per app on each replica while allowing different apps to materialize concurrently.
+- When multiple versions are pending for one app, materializes and retains only the desired version selected by `LatestKnownVersion`; superseded versions are not downloaded, and older local package directories are removed only after the desired version is active.
 - Starting the already-running desired version is idempotent. A different or unknown version is stopped and replaced; any failed start cleans up the provider registry, running-version map, and `active-version` marker.
-- A version already started by bootstrap is marked restarted without another restart, while a historical `stopped_at` cannot hide a different provider that is actually running.
-- A failed reconciliation durably records its error, releases the app lease, and does not block other apps. Retries are idempotent and stop at the configured limit; a newly accepted version starts with a fresh attempt count.
+- A version already started by bootstrap has its desired package validated and `materialized_at` recorded before pending rows are marked restarted without another restart. Superseded rows are marked converged without materialization, while a historical `stopped_at` cannot hide a different provider that is actually running.
+- A failed reconciliation durably records its error, releases the app lease, and does not block other apps. Retries are idempotent and stop at the configured limit; passive convergence accounting remains allowed when no retryable work remains, and a newly accepted version starts with a fresh attempt count.
 - Unrecoverable local provider state marks Gestalt unhealthy and terminates the process.
 
 ### Runtime surfaces

@@ -151,7 +151,11 @@ server:
     maxReconcileAttempts: 3
 ```
 
-`server.appRegistry.maxReconcileAttempts` is the maximum failed reconciliation attempts for one `(replica, app, desired version)`. It defaults to `3` and must be a positive integer. When the corresponding `app_instance_materializations.attempt_count` reaches this value, that replica stops retrying the desired version. A newly accepted desired version uses a new materialization row and starts with zero failed attempts. Increasing the configured limit allows rows below the new limit to resume retrying.
+`server.appRegistry.maxReconcileAttempts` is the maximum failed background-poller reconciliation attempts for one `(replica, app, desired version)`. It defaults to `3` and must be a positive integer. When the corresponding `app_instance_materializations.attempt_count` reaches this value, the poller stops retrying materialization and provider lifecycle work for that desired version.
+
+This limit does not apply to bootstrap. Bootstrap never consults rollout-progress rows or `attempt_count`, so a process restart still attempts to start the latest fleet-known version. If bootstrap succeeds, the poller may record that observed convergence despite its retry limit because no additional materialization or provider lifecycle attempt is required.
+
+A newly accepted desired version uses a new materialization row and starts with zero failed attempts. Increasing the configured limit allows rows below the new limit to resume retrying.
 
 ### Lockfile
 
