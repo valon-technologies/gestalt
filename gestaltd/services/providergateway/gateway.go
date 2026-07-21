@@ -10,7 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -145,10 +144,6 @@ func (c *targetConn) Invoke(ctx context.Context, method string, args any, reply 
 		return err
 	}
 	transportPath = TransportPathDirect
-	if err := authorizeRoutingCall(ctx, c.gateway.authorization, c.gateway.users, c.target, method); err != nil {
-		recordProviderGatewayOperation(ctx, startedAt, err, metricReq, transportPath)
-		return err
-	}
 	invokeErr := endpoint.Conn.Invoke(ctx, method, args, reply, opts...)
 	recordProviderGatewayOperation(ctx, startedAt, invokeErr, metricReq, transportPath)
 	return invokeErr
@@ -165,10 +160,6 @@ func (c *targetConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, metho
 		return nil, err
 	}
 	transportPath = TransportPathDirect
-	if err := authorizeRoutingCall(ctx, c.gateway.authorization, c.gateway.users, c.target, method); err != nil {
-		recordProviderGatewayOperation(ctx, startedAt, err, metricReq, transportPath)
-		return nil, err
-	}
 	stream, streamErr := endpoint.Conn.NewStream(ctx, desc, method, opts...)
 	recordProviderGatewayOperation(ctx, startedAt, streamErr, metricReq, transportPath)
 	return stream, streamErr
@@ -184,28 +175,6 @@ func metricRequest(target ProviderTarget, method string) ProviderGatewayRequest 
 	}
 }
 
-func authorizeRoutingCall(ctx context.Context, authorization core.AuthorizationProvider, users principal.CredentialUserResolver, target ProviderTarget, fullMethod string) error {
-	if authorization == nil || target.Kind == ProviderKindAuthorization {
-		return nil
-	}
-	if invocation.InternalConnectionAccessFromContext(ctx) {
-		return nil
-	}
-	subjectID, err := authorizationSubject(ctx, users)
-	if err != nil {
-		return status.Error(codes.Unauthenticated, "provider gateway: caller principal is required")
-	}
-	allowed, req, checkErr := runAuthorizationCheck(ctx, authorization, subjectID, target)
-	recordProviderGatewayAuthorizationCheck(ctx, allowed, principal.FromContext(ctx) != nil, req)
-	if checkErr != nil {
-		return status.Errorf(codes.Internal, "provider gateway: authorize: %v", checkErr)
-	}
-	if !allowed {
-		return status.Error(codes.PermissionDenied, "provider gateway: unauthorized")
-	}
-	return nil
-}
-
 func runAuthorizationCheck(
 	ctx context.Context,
 	authorization core.AuthorizationProvider,
@@ -215,36 +184,11 @@ func runAuthorizationCheck(
 	if authorization == nil {
 		return true, nil, nil
 	}
-	resource, err := authorizationResource(target)
-	if err != nil {
-		return false, nil, err
-	}
-	action, err := authorizationAction(target)
-	if err != nil {
-		return false, nil, err
-	}
+	resource := &proto.Resource{Type: string(target.Kind), Id: strings.TrimSpace(target.Name)}
+	action := &proto.Action{Name: strings.TrimSpace(target.Name)}
 	req := invocation.SubjectAccessRequest(subjectID, action.GetName(), resource)
 	allowed, err := invocation.CheckSubjectAccess(ctx, authorization, req)
 	return allowed, req, err
-}
-
-func authorizationSubject(ctx context.Context, users principal.CredentialUserResolver) (string, error) {
-	subjectID, err := principal.ResolveCredentialSubjectID(ctx, users, principal.FromContext(ctx))
-	if err != nil {
-		return "", fmt.Errorf("provider gateway: caller principal is required")
-	}
-	return subjectID, nil
-}
-
-func authorizationResource(target ProviderTarget) (*proto.Resource, error) {
-	return &proto.Resource{
-		Type: string(target.Kind),
-		Id:   strings.TrimSpace(target.Name),
-	}, nil
-}
-
-func authorizationAction(target ProviderTarget) (*proto.Action, error) {
-	return &proto.Action{Name: strings.TrimSpace(target.Name)}, nil
 }
 
 func providerKindFromFullMethod(fullMethod string) ProviderKind {
