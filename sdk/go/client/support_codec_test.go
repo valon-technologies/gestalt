@@ -12,7 +12,7 @@ func TestToWireStructNormalizesTypedContainers(t *testing.T) {
 			{"id": "generateTeam", "kind": "app", "app": "delta", "operation": "generate.teamWorkflow"},
 		},
 	}
-	out := fromWireStruct(toWireStruct(in))
+	out := FromWireStruct(ToWireStruct(in))
 	want := map[string]any{
 		"kind": "steps",
 		"steps": []any{

@@ -40,7 +40,7 @@ func TestMixedServiceCapabilityProjection(t *testing.T) {
 			"gestalt.provider.v1.GrpcOnlyMethodRequest":   svc.Methods[1].Input,
 			"gestalt.provider.v1.GrpcOnlyMethodResponse":  svc.Methods[1].Output,
 		},
-	}, "mixed", "mixed", modulePublic, true)
+	}, "mixed", "mixed", modulePublic, true, nil, nil)
 	r.renderAppClient(svc)
 	out := r.assembleGenerated()
 

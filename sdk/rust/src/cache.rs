@@ -16,7 +16,8 @@ use crate::rpc_support::GestaltError;
 /// CacheDeleteManyRequest removes multiple cache keys in one RPC.
 ///
 /// Native message type for `gestalt.provider.v1.CacheDeleteManyRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheDeleteManyRequest {
     /// The `keys` field.
     pub keys: Vec<String>,
@@ -25,7 +26,8 @@ pub struct CacheDeleteManyRequest {
 /// CacheDeleteManyResponse reports how many keys were deleted.
 ///
 /// Native message type for `gestalt.provider.v1.CacheDeleteManyResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheDeleteManyResponse {
     /// The `deleted` field.
     pub deleted: i64,
@@ -34,7 +36,8 @@ pub struct CacheDeleteManyResponse {
 /// CacheDeleteRequest removes one cache key.
 ///
 /// Native message type for `gestalt.provider.v1.CacheDeleteRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheDeleteRequest {
     /// The `key` field.
     pub key: String,
@@ -43,7 +46,8 @@ pub struct CacheDeleteRequest {
 /// CacheDeleteResponse reports whether one key existed and was deleted.
 ///
 /// Native message type for `gestalt.provider.v1.CacheDeleteResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheDeleteResponse {
     /// The `deleted` field.
     pub deleted: bool,
@@ -52,7 +56,8 @@ pub struct CacheDeleteResponse {
 /// CacheGetManyRequest loads multiple cache keys in one RPC.
 ///
 /// Native message type for `gestalt.provider.v1.CacheGetManyRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheGetManyRequest {
     /// The `keys` field.
     pub keys: Vec<String>,
@@ -61,7 +66,8 @@ pub struct CacheGetManyRequest {
 /// CacheGetManyResponse returns every lookup result for GetMany.
 ///
 /// Native message type for `gestalt.provider.v1.CacheGetManyResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheGetManyResponse {
     /// The `entries` field.
     pub entries: Vec<CacheResult>,
@@ -70,7 +76,8 @@ pub struct CacheGetManyResponse {
 /// CacheGetRequest loads one cache key.
 ///
 /// Native message type for `gestalt.provider.v1.CacheGetRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheGetRequest {
     /// The `key` field.
     pub key: String,
@@ -79,7 +86,8 @@ pub struct CacheGetRequest {
 /// CacheGetResponse is the result of looking up one cache key.
 ///
 /// Native message type for `gestalt.provider.v1.CacheGetResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheGetResponse {
     /// The `found` field.
     pub found: bool,
@@ -90,7 +98,8 @@ pub struct CacheGetResponse {
 /// CacheResult is one lookup result returned by GetMany.
 ///
 /// Native message type for `gestalt.provider.v1.CacheResult`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheResult {
     /// The `key` field.
     pub key: String,
@@ -103,7 +112,8 @@ pub struct CacheResult {
 /// CacheSetEntry is one key/value pair written by SetMany.
 ///
 /// Native message type for `gestalt.provider.v1.CacheSetEntry`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheSetEntry {
     /// The `key` field.
     pub key: String,
@@ -114,10 +124,12 @@ pub struct CacheSetEntry {
 /// CacheSetManyRequest writes multiple cache keys in one RPC.
 ///
 /// Native message type for `gestalt.provider.v1.CacheSetManyRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheSetManyRequest {
     /// The `entries` field.
     pub entries: Vec<CacheSetEntry>,
+    #[serde(with = "crate::serde_duration")]
     /// The `ttl` field; None when unset.
     pub ttl: Option<std::time::Duration>,
 }
@@ -125,7 +137,8 @@ pub struct CacheSetManyRequest {
 /// CacheSetRequest writes one cache key.
 ///
 /// Native message type for `gestalt.provider.v1.CacheSetRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheSetRequest {
     /// The `key` field.
     pub key: String,
@@ -133,6 +146,7 @@ pub struct CacheSetRequest {
     pub value: Vec<u8>,
     /// ttl applies an optional expiration to the entry.
     ///
+    #[serde(with = "crate::serde_duration")]
     /// The `ttl` field; None when unset.
     pub ttl: Option<std::time::Duration>,
 }
@@ -140,10 +154,12 @@ pub struct CacheSetRequest {
 /// CacheTouchRequest extends the TTL for one cache key.
 ///
 /// Native message type for `gestalt.provider.v1.CacheTouchRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheTouchRequest {
     /// The `key` field.
     pub key: String,
+    #[serde(with = "crate::serde_duration")]
     /// The `ttl` field; None when unset.
     pub ttl: Option<std::time::Duration>,
 }
@@ -151,7 +167,8 @@ pub struct CacheTouchRequest {
 /// CacheTouchResponse reports whether a key existed and had its TTL updated.
 ///
 /// Native message type for `gestalt.provider.v1.CacheTouchResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CacheTouchResponse {
     /// The `touched` field.
     pub touched: bool,

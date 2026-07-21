@@ -8,6 +8,17 @@ from typing import Any, Protocol
 
 from google.protobuf import empty_pb2 as _empty_pb2
 
+from gestalt._codec import workflow as _workflow_provider_codec
+from gestalt.workflow import (
+    GetWorkflowProviderRunEventsResponse,
+    GetWorkflowProviderRunOutputResponse,
+    ListWorkflowProviderDefinitionsResponse,
+    ListWorkflowProviderRunsResponse,
+    SignalWorkflowRunResponse,
+    WorkflowDefinition,
+    WorkflowRun,
+)
+
 from ..._gen.v1 import workflow_pb2 as _workflow_pb2
 from ._codec import workflow as _workflow_codec
 from .metadata import (
@@ -33,22 +44,15 @@ from .workflow import (
     DeleteWorkflowProviderDefinitionRequest,
     GetWorkflowProviderDefinitionRequest,
     GetWorkflowProviderRunEventsRequest,
-    GetWorkflowProviderRunEventsResponse,
     GetWorkflowProviderRunOutputRequest,
-    GetWorkflowProviderRunOutputResponse,
     GetWorkflowProviderRunRequest,
     ListWorkflowProviderDefinitionsRequest,
-    ListWorkflowProviderDefinitionsResponse,
     ListWorkflowProviderRunsRequest,
-    ListWorkflowProviderRunsResponse,
     SetWorkflowProviderActivationPausedRequest,
     SetWorkflowProviderDefinitionPausedRequest,
     SignalOrStartWorkflowProviderRunRequest,
     SignalWorkflowProviderRunRequest,
-    SignalWorkflowRunResponse,
     StartWorkflowProviderRunRequest,
-    WorkflowDefinition,
-    WorkflowRun,
 )
 
 _empty: Any = _empty_pb2
@@ -71,7 +75,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     def get_definition(
         self, request: GetWorkflowProviderDefinitionRequest
@@ -82,7 +86,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     def list_definitions(
         self, request: ListWorkflowProviderDefinitionsRequest
@@ -95,7 +99,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.ListWorkflowProviderDefinitionsResponse,
         )
-        return _workflow_codec.from_wire_list_workflow_provider_definitions_response(
+        return _workflow_provider_codec.from_wire_list_workflow_provider_definitions_response(
             wire_response
         )
 
@@ -110,7 +114,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     def set_activation_paused(
         self, request: SetWorkflowProviderActivationPausedRequest
@@ -123,7 +127,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     def delete_definition(
         self, request: DeleteWorkflowProviderDefinitionRequest
@@ -144,7 +148,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.WorkflowRun,
         )
-        return _workflow_codec.from_wire_workflow_run(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_run(wire_response)
 
     def list_runs(
         self, request: ListWorkflowProviderRunsRequest
@@ -155,7 +159,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.ListWorkflowProviderRunsResponse,
         )
-        return _workflow_codec.from_wire_list_workflow_provider_runs_response(
+        return _workflow_provider_codec.from_wire_list_workflow_provider_runs_response(
             wire_response
         )
 
@@ -166,7 +170,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.WorkflowRun,
         )
-        return _workflow_codec.from_wire_workflow_run(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_run(wire_response)
 
     def get_run_events(
         self, request: GetWorkflowProviderRunEventsRequest
@@ -177,7 +181,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.GetWorkflowProviderRunEventsResponse,
         )
-        return _workflow_codec.from_wire_get_workflow_provider_run_events_response(
+        return _workflow_provider_codec.from_wire_get_workflow_provider_run_events_response(
             wire_response
         )
 
@@ -190,7 +194,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.GetWorkflowProviderRunOutputResponse,
         )
-        return _workflow_codec.from_wire_get_workflow_provider_run_output_response(
+        return _workflow_provider_codec.from_wire_get_workflow_provider_run_output_response(
             wire_response
         )
 
@@ -201,7 +205,7 @@ class WorkflowClient:
             wire,
             _workflow_pb2.WorkflowRun,
         )
-        return _workflow_codec.from_wire_workflow_run(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_run(wire_response)
 
     def signal_run(
         self, request: SignalWorkflowProviderRunRequest
@@ -212,7 +216,9 @@ class WorkflowClient:
             wire,
             _workflow_pb2.SignalWorkflowRunResponse,
         )
-        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+        return _workflow_provider_codec.from_wire_signal_workflow_run_response(
+            wire_response
+        )
 
     def signal_or_start_run(
         self, request: SignalOrStartWorkflowProviderRunRequest
@@ -225,7 +231,9 @@ class WorkflowClient:
             wire,
             _workflow_pb2.SignalWorkflowRunResponse,
         )
-        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+        return _workflow_provider_codec.from_wire_signal_workflow_run_response(
+            wire_response
+        )
 
 
 class WorkflowClientREST(Protocol):
@@ -286,7 +294,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     async def get_definition(
         self, request: GetWorkflowProviderDefinitionRequest
@@ -297,7 +305,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     async def list_definitions(
         self, request: ListWorkflowProviderDefinitionsRequest
@@ -310,7 +318,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.ListWorkflowProviderDefinitionsResponse,
         )
-        return _workflow_codec.from_wire_list_workflow_provider_definitions_response(
+        return _workflow_provider_codec.from_wire_list_workflow_provider_definitions_response(
             wire_response
         )
 
@@ -325,7 +333,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     async def set_activation_paused(
         self, request: SetWorkflowProviderActivationPausedRequest
@@ -338,7 +346,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.WorkflowDefinition,
         )
-        return _workflow_codec.from_wire_workflow_definition(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_definition(wire_response)
 
     async def delete_definition(
         self, request: DeleteWorkflowProviderDefinitionRequest
@@ -359,7 +367,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.WorkflowRun,
         )
-        return _workflow_codec.from_wire_workflow_run(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_run(wire_response)
 
     async def list_runs(
         self, request: ListWorkflowProviderRunsRequest
@@ -370,7 +378,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.ListWorkflowProviderRunsResponse,
         )
-        return _workflow_codec.from_wire_list_workflow_provider_runs_response(
+        return _workflow_provider_codec.from_wire_list_workflow_provider_runs_response(
             wire_response
         )
 
@@ -381,7 +389,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.WorkflowRun,
         )
-        return _workflow_codec.from_wire_workflow_run(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_run(wire_response)
 
     async def get_run_events(
         self, request: GetWorkflowProviderRunEventsRequest
@@ -392,7 +400,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.GetWorkflowProviderRunEventsResponse,
         )
-        return _workflow_codec.from_wire_get_workflow_provider_run_events_response(
+        return _workflow_provider_codec.from_wire_get_workflow_provider_run_events_response(
             wire_response
         )
 
@@ -405,7 +413,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.GetWorkflowProviderRunOutputResponse,
         )
-        return _workflow_codec.from_wire_get_workflow_provider_run_output_response(
+        return _workflow_provider_codec.from_wire_get_workflow_provider_run_output_response(
             wire_response
         )
 
@@ -418,7 +426,7 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.WorkflowRun,
         )
-        return _workflow_codec.from_wire_workflow_run(wire_response)
+        return _workflow_provider_codec.from_wire_workflow_run(wire_response)
 
     async def signal_run(
         self, request: SignalWorkflowProviderRunRequest
@@ -429,7 +437,9 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.SignalWorkflowRunResponse,
         )
-        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+        return _workflow_provider_codec.from_wire_signal_workflow_run_response(
+            wire_response
+        )
 
     async def signal_or_start_run(
         self, request: SignalOrStartWorkflowProviderRunRequest
@@ -442,7 +452,9 @@ class AsyncWorkflowClient:
             wire,
             _workflow_pb2.SignalWorkflowRunResponse,
         )
-        return _workflow_codec.from_wire_signal_workflow_run_response(wire_response)
+        return _workflow_provider_codec.from_wire_signal_workflow_run_response(
+            wire_response
+        )
 
 
 class AsyncWorkflowClientREST(Protocol):

@@ -31,7 +31,9 @@ type features struct {
 	invokeUses   map[string]bool            // imported from the public invoke_support module
 	prostTypes   bool                       // google.protobuf.Empty via prost_types
 	crossPublic  map[string]map[string]bool // public module base -> imported native type names
+ 	crossShared  map[string]map[string]bool
 	crossCodec   map[string]map[string]bool // codec module base -> imported converter names
+ 	crossSharedCodec map[string]map[string]bool
 	wireJSONDone map[string]bool            // wire message full names with protobuf JSON helpers
 }
 
@@ -41,12 +43,14 @@ type renderer struct {
 	wireBase     string
 	kind         moduleKind
 	publicClient bool
+	shared       map[string]bool
+ 	sharedCodec  map[string]bool
 	docIntro     string
 	features     features
 	body         strings.Builder
 }
 
-func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicClient bool) *renderer {
+ func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicClient bool, shared, sharedCodec map[string]bool) *renderer {
 	if wireBase == "" {
 		wireBase = base
 	}
@@ -56,12 +60,16 @@ func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicClien
 		wireBase:     wireBase,
 		kind:         kind,
 		publicClient: publicClient,
+		shared:       shared,
+ 		sharedCodec:  sharedCodec,
 		features: features{
 			supportTypes: map[string]bool{},
 			supportFns:   map[string]bool{},
 			invokeUses:   map[string]bool{},
 			crossPublic:  map[string]map[string]bool{},
+ 			crossShared:  map[string]map[string]bool{},
 			crossCodec:   map[string]map[string]bool{},
+ 			crossSharedCodec: map[string]map[string]bool{},
 			wireJSONDone: map[string]bool{},
 		},
 	}
@@ -102,9 +110,16 @@ func (r *renderer) useInvoke(name string) {
 // types from their public siblings.
 func (r *renderer) typeRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
-	if r.kind == modulePublic && base == r.base {
+	if r.publicClient && r.shared != nil && r.shared[name] {
+		if r.features.crossShared[base] == nil {
+			r.features.crossShared[base] = map[string]bool{}
+		}
+		r.features.crossShared[base][name] = true
 		return name
 	}
+ 	if r.kind == modulePublic && base == r.base {
+ 		return name
+ 	}
 	if r.features.crossPublic[base] == nil {
 		r.features.crossPublic[base] = map[string]bool{}
 	}
@@ -127,9 +142,16 @@ func (r *renderer) hostRef(name string) string {
 // converters are not imports.
 func (r *renderer) convRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
-	if r.kind == moduleCodec && base == r.base {
+	if r.publicClient && r.sharedCodec != nil && r.sharedCodec[name] {
+		if r.features.crossSharedCodec[base] == nil {
+			r.features.crossSharedCodec[base] = map[string]bool{}
+		}
+		r.features.crossSharedCodec[base][name] = true
 		return name
 	}
+ 	if r.kind == moduleCodec && base == r.base {
+ 		return name
+ 	}
 	if r.features.crossCodec[base] == nil {
 		r.features.crossCodec[base] = map[string]bool{}
 	}
@@ -375,11 +397,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 	for _, o := range m.Oneofs {
 		fmt.Fprintf(&r.body, "/// Values of the `%s` oneof in `%s`; the message field is None when unset.\n", o.Name, name)
 		r.body.WriteString("#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]\n")
-		if r.publicClient {
-			r.body.WriteString("#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]\n")
-		} else {
-			r.body.WriteString("#[derive(Clone, Debug, PartialEq)]\n")
-		}
+ 		r.body.WriteString("#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]\n")
 		fmt.Fprintf(&r.body, "pub enum %s {\n", oneofTypeName(m, o))
 		for _, f := range oneofFields(m, o) {
 			r.docComment("    ", f.Doc)
@@ -394,21 +412,20 @@ func (r *renderer) renderMessage(m *model.Message) {
 	}
 	r.docComment("", m.Doc)
 	fmt.Fprintf(&r.body, "/// Native message type for `%s`.\n", m.FullName)
-	if r.publicClient {
-		r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]\n")
-		r.body.WriteString("#[serde(rename_all = \"camelCase\")]\n")
-	} else {
-		r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq)]\n")
-	}
+ 	r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]\n")
+ 	r.body.WriteString("#[serde(rename_all = \"camelCase\")]\n")
 	fmt.Fprintf(&r.body, "pub struct %s {\n", name)
 	for _, f := range m.Fields {
 		if f.OneofIndex >= 0 {
 			continue
 		}
 		r.docComment("    ", f.Doc)
-		if r.publicClient && fieldRef(f).Kind == model.KindTimestamp {
-			r.body.WriteString("    #[serde(with = \"crate::public::proto_json::system_time\")]\n")
+ 		if fieldRef(f).Kind == model.KindTimestamp {
+			r.body.WriteString("    #[serde(with = \"crate::serde_time\")]\n")
 		}
+ 		if fieldRef(f).Kind == model.KindDuration {
+ 			r.body.WriteString("    #[serde(with = \"crate::serde_duration\")]\n")
+ 		}
 		if f.Presence == model.ExplicitPresence {
 			fmt.Fprintf(&r.body, "    /// The `%s` field; None when unset.\n", f.Name)
 			fmt.Fprintf(&r.body, "    pub %s: Option<%s>,\n", escapeIdent(f.Name), r.fieldType(f))
@@ -430,8 +447,19 @@ func (r *renderer) renderMessage(m *model.Message) {
 func (r *renderer) renderConversions(m *model.Message) {
 	needTo := r.idx.needToWire[m.FullName]
 	needFrom := r.idx.needFromWire[m.FullName]
+ 	isShared := r.publicClient && r.shared != nil && r.shared[localName(m.FullName)]
+ 	if isShared {
+ 		needTo = false
+ 		needFrom = false
+ 	}
 	if !needTo && !needFrom {
-		return
+ 		if r.publicClient && r.idx.needWireJSON[m.FullName] {
+ 			r.ensureWireProtoJSON(m.FullName)
+ 		}
+ 		return
+	}
+	if r.publicClient {
+		needFrom = false
 	}
 	name := r.typeRef(m.ProtoFile, localName(m.FullName))
 	wireName := wireTypeName(m.FullName)
@@ -1314,6 +1342,10 @@ func (r *renderer) assemble() string {
 			uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
 		}
 	}
+ 	for _, base := range sortedKeys2(r.features.crossShared) {
+ 		names := sortedKeys(r.features.crossShared[base])
+ 		uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
+ 	}
 	for _, base := range sortedKeys2(r.features.crossCodec) {
 		names := sortedKeys(r.features.crossCodec[base])
 		if r.publicClient {
@@ -1322,12 +1354,12 @@ func (r *renderer) assemble() string {
 			uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
 		}
 	}
+ 	for _, base := range sortedKeys2(r.features.crossSharedCodec) {
+ 		names := sortedKeys(r.features.crossSharedCodec[base])
+ 		uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
+ 	}
 	if len(r.features.supportFns) > 0 {
-		if r.publicClient {
-			uses = append(uses, fmt.Sprintf("use crate::public::generated::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
-		} else {
-			uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
-		}
+ 		uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
 	}
 	if len(r.features.supportTypes) > 0 {
 		rpcPath := "crate::rpc_support"

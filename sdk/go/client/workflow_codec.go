@@ -228,7 +228,7 @@ func ToWireGetWorkflowProviderRunOutputResponse(value *GetWorkflowProviderRunOut
 		return nil
 	}
 	out := &proto.GetWorkflowProviderRunOutputResponse{
-		Output: toWireValue(value.Output),
+		Output: ToWireValue(value.Output),
 	}
 	return out
 }
@@ -238,7 +238,7 @@ func FromWireGetWorkflowProviderRunOutputResponse(value *proto.GetWorkflowProvid
 		return nil
 	}
 	out := &GetWorkflowProviderRunOutputResponse{
-		Output: fromWireValue(value.Output),
+		Output: FromWireValue(value.Output),
 	}
 	return out
 }
@@ -431,7 +431,7 @@ func ToWireSignalOrStartWorkflowProviderRunRequest(value *SignalOrStartWorkflowP
 		Signal:                       ToWireWorkflowSignal(value.Signal),
 		Provider:                     value.Provider,
 		DefinitionId:                 value.DefinitionId,
-		Input:                        toWireStruct(value.Input),
+		Input:                        ToWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      ToWireRequestContext(value.Context),
 	}
@@ -448,7 +448,7 @@ func FromWireSignalOrStartWorkflowProviderRunRequest(value *proto.SignalOrStartW
 		Signal:                       FromWireWorkflowSignal(value.Signal),
 		Provider:                     value.Provider,
 		DefinitionId:                 value.DefinitionId,
-		Input:                        fromWireStruct(value.Input),
+		Input:                        FromWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      FromWireRequestContext(value.Context),
 	}
@@ -516,7 +516,7 @@ func ToWireStartWorkflowProviderRunRequest(value *StartWorkflowProviderRunReques
 		WorkflowKey:                  value.WorkflowKey,
 		Provider:                     value.Provider,
 		DefinitionId:                 value.DefinitionId,
-		Input:                        toWireStruct(value.Input),
+		Input:                        ToWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      ToWireRequestContext(value.Context),
 	}
@@ -532,7 +532,7 @@ func FromWireStartWorkflowProviderRunRequest(value *proto.StartWorkflowProviderR
 		WorkflowKey:                  value.WorkflowKey,
 		Provider:                     value.Provider,
 		DefinitionId:                 value.DefinitionId,
-		Input:                        fromWireStruct(value.Input),
+		Input:                        FromWireStruct(value.Input),
 		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
 		Context:                      FromWireRequestContext(value.Context),
 	}
@@ -582,7 +582,7 @@ func ToWireWorkflowAgentMessage(value *WorkflowAgentMessage) *proto.WorkflowAgen
 	out := &proto.WorkflowAgentMessage{
 		Role:     value.Role,
 		Text:     ToWireWorkflowText(value.Text),
-		Metadata: toWireStruct(value.Metadata),
+		Metadata: ToWireStruct(value.Metadata),
 	}
 	return out
 }
@@ -594,7 +594,7 @@ func FromWireWorkflowAgentMessage(value *proto.WorkflowAgentMessage) *WorkflowAg
 	out := &WorkflowAgentMessage{
 		Role:     value.Role,
 		Text:     FromWireWorkflowText(value.Text),
-		Metadata: fromWireStruct(value.Metadata),
+		Metadata: FromWireStruct(value.Metadata),
 	}
 	return out
 }
@@ -630,8 +630,8 @@ func ToWireWorkflowDefinition(value *WorkflowDefinition) *proto.WorkflowDefiniti
 		Generation: value.Generation,
 		Target:     ToWireBoundWorkflowTarget(value.Target),
 		Paused:     value.Paused,
-		CreatedAt:  toWireTimestamp(value.CreatedAt),
-		UpdatedAt:  toWireTimestamp(value.UpdatedAt),
+		CreatedAt:  ToWireTimestamp(value.CreatedAt),
+		UpdatedAt:  ToWireTimestamp(value.UpdatedAt),
 		Provider:   value.Provider,
 		RunAs:      value.RunAs,
 	}
@@ -650,8 +650,8 @@ func FromWireWorkflowDefinition(value *proto.WorkflowDefinition) *WorkflowDefini
 		Generation: value.Generation,
 		Target:     FromWireBoundWorkflowTarget(value.Target),
 		Paused:     value.Paused,
-		CreatedAt:  fromWireTimestamp(value.CreatedAt),
-		UpdatedAt:  fromWireTimestamp(value.UpdatedAt),
+		CreatedAt:  FromWireTimestamp(value.CreatedAt),
+		UpdatedAt:  FromWireTimestamp(value.UpdatedAt),
 		Provider:   value.Provider,
 		RunAs:      value.RunAs,
 	}
@@ -703,14 +703,14 @@ func ToWireWorkflowEvent(value *WorkflowEvent) *proto.WorkflowEvent {
 		SpecVersion:     value.SpecVersion,
 		Type:            value.Type,
 		Subject:         value.Subject,
-		Time:            toWireTimestamp(value.Time),
+		Time:            ToWireTimestamp(value.Time),
 		Datacontenttype: value.Datacontenttype,
-		Data:            toWireStruct(value.Data),
+		Data:            ToWireStruct(value.Data),
 	}
 	if value.Extensions != nil {
 		out.Extensions = make(map[string]*structpb.Value, len(value.Extensions))
 		for key, item := range value.Extensions {
-			out.Extensions[key] = toWireValue(item)
+			out.Extensions[key] = ToWireValue(item)
 		}
 	}
 	return out
@@ -726,14 +726,14 @@ func FromWireWorkflowEvent(value *proto.WorkflowEvent) *WorkflowEvent {
 		SpecVersion:     value.SpecVersion,
 		Type:            value.Type,
 		Subject:         value.Subject,
-		Time:            fromWireTimestamp(value.Time),
+		Time:            FromWireTimestamp(value.Time),
 		Datacontenttype: value.Datacontenttype,
-		Data:            fromWireStruct(value.Data),
+		Data:            FromWireStruct(value.Data),
 	}
 	if value.Extensions != nil {
 		out.Extensions = make(map[string]any, len(value.Extensions))
 		for key, item := range value.Extensions {
-			out.Extensions[key] = fromWireValue(item)
+			out.Extensions[key] = FromWireValue(item)
 		}
 	}
 	return out
@@ -878,16 +878,16 @@ func ToWireWorkflowRun(value *WorkflowRun) *proto.WorkflowRun {
 		Status:               proto.WorkflowRunStatus(value.Status),
 		Target:               ToWireBoundWorkflowTarget(value.Target),
 		Trigger:              ToWireWorkflowRunTrigger(value.Trigger),
-		CreatedAt:            toWireTimestamp(value.CreatedAt),
-		StartedAt:            toWireTimestamp(value.StartedAt),
-		CompletedAt:          toWireTimestamp(value.CompletedAt),
+		CreatedAt:            ToWireTimestamp(value.CreatedAt),
+		StartedAt:            ToWireTimestamp(value.StartedAt),
+		CompletedAt:          ToWireTimestamp(value.CompletedAt),
 		StatusMessage:        value.StatusMessage,
-		Output:               toWireValue(value.Output),
+		Output:               ToWireValue(value.Output),
 		WorkflowKey:          value.WorkflowKey,
 		Provider:             value.Provider,
 		DefinitionId:         value.DefinitionId,
 		RunAs:                value.RunAs,
-		Input:                toWireStruct(value.Input),
+		Input:                ToWireStruct(value.Input),
 		DefinitionGeneration: value.DefinitionGeneration,
 		CurrentStepId:        value.CurrentStepId,
 	}
@@ -906,16 +906,16 @@ func FromWireWorkflowRun(value *proto.WorkflowRun) *WorkflowRun {
 		Status:               WorkflowRunStatus(value.Status),
 		Target:               FromWireBoundWorkflowTarget(value.Target),
 		Trigger:              FromWireWorkflowRunTrigger(value.Trigger),
-		CreatedAt:            fromWireTimestamp(value.CreatedAt),
-		StartedAt:            fromWireTimestamp(value.StartedAt),
-		CompletedAt:          fromWireTimestamp(value.CompletedAt),
+		CreatedAt:            FromWireTimestamp(value.CreatedAt),
+		StartedAt:            FromWireTimestamp(value.StartedAt),
+		CompletedAt:          FromWireTimestamp(value.CompletedAt),
 		StatusMessage:        value.StatusMessage,
-		Output:               fromWireValue(value.Output),
+		Output:               FromWireValue(value.Output),
 		WorkflowKey:          value.WorkflowKey,
 		Provider:             value.Provider,
 		DefinitionId:         value.DefinitionId,
 		RunAs:                value.RunAs,
-		Input:                fromWireStruct(value.Input),
+		Input:                FromWireStruct(value.Input),
 		DefinitionGeneration: value.DefinitionGeneration,
 		CurrentStepId:        value.CurrentStepId,
 	}
@@ -934,8 +934,8 @@ func ToWireWorkflowRunEvent(value *WorkflowRunEvent) *proto.WorkflowRunEvent {
 		RunId:     value.RunId,
 		StepId:    value.StepId,
 		Type:      value.Type,
-		Data:      toWireStruct(value.Data),
-		CreatedAt: toWireTimestamp(value.CreatedAt),
+		Data:      ToWireStruct(value.Data),
+		CreatedAt: ToWireTimestamp(value.CreatedAt),
 	}
 	return out
 }
@@ -949,8 +949,8 @@ func FromWireWorkflowRunEvent(value *proto.WorkflowRunEvent) *WorkflowRunEvent {
 		RunId:     value.RunId,
 		StepId:    value.StepId,
 		Type:      value.Type,
-		Data:      fromWireStruct(value.Data),
-		CreatedAt: fromWireTimestamp(value.CreatedAt),
+		Data:      FromWireStruct(value.Data),
+		CreatedAt: FromWireTimestamp(value.CreatedAt),
 	}
 	return out
 }
@@ -1015,7 +1015,7 @@ func ToWireWorkflowScheduleTrigger(value *WorkflowScheduleTrigger) *proto.Workfl
 	}
 	out := &proto.WorkflowScheduleTrigger{
 		ActivationId: value.ActivationId,
-		ScheduledFor: toWireTimestamp(value.ScheduledFor),
+		ScheduledFor: ToWireTimestamp(value.ScheduledFor),
 	}
 	return out
 }
@@ -1026,7 +1026,7 @@ func FromWireWorkflowScheduleTrigger(value *proto.WorkflowScheduleTrigger) *Work
 	}
 	out := &WorkflowScheduleTrigger{
 		ActivationId: value.ActivationId,
-		ScheduledFor: fromWireTimestamp(value.ScheduledFor),
+		ScheduledFor: FromWireTimestamp(value.ScheduledFor),
 	}
 	return out
 }
@@ -1038,9 +1038,9 @@ func ToWireWorkflowSignal(value *WorkflowSignal) *proto.WorkflowSignal {
 	out := &proto.WorkflowSignal{
 		Id:             value.Id,
 		Name:           value.Name,
-		Payload:        toWireStruct(value.Payload),
-		Metadata:       toWireStruct(value.Metadata),
-		CreatedAt:      toWireTimestamp(value.CreatedAt),
+		Payload:        ToWireStruct(value.Payload),
+		Metadata:       ToWireStruct(value.Metadata),
+		CreatedAt:      ToWireTimestamp(value.CreatedAt),
 		IdempotencyKey: value.IdempotencyKey,
 		Sequence:       value.Sequence,
 	}
@@ -1054,9 +1054,9 @@ func FromWireWorkflowSignal(value *proto.WorkflowSignal) *WorkflowSignal {
 	out := &WorkflowSignal{
 		Id:             value.Id,
 		Name:           value.Name,
-		Payload:        fromWireStruct(value.Payload),
-		Metadata:       fromWireStruct(value.Metadata),
-		CreatedAt:      fromWireTimestamp(value.CreatedAt),
+		Payload:        FromWireStruct(value.Payload),
+		Metadata:       FromWireStruct(value.Metadata),
+		CreatedAt:      FromWireTimestamp(value.CreatedAt),
 		IdempotencyKey: value.IdempotencyKey,
 		Sequence:       value.Sequence,
 	}
@@ -1071,7 +1071,7 @@ func ToWireWorkflowStep(value *WorkflowStep) *proto.WorkflowStep {
 		Id:             value.Id,
 		When:           ToWireWorkflowStepWhen(value.When),
 		TimeoutSeconds: value.TimeoutSeconds,
-		Metadata:       toWireStruct(value.Metadata),
+		Metadata:       ToWireStruct(value.Metadata),
 	}
 	if value.Inputs != nil {
 		out.Inputs = make(map[string]*proto.WorkflowValue, len(value.Inputs))
@@ -1096,7 +1096,7 @@ func FromWireWorkflowStep(value *proto.WorkflowStep) *WorkflowStep {
 		Id:             value.Id,
 		When:           FromWireWorkflowStepWhen(value.When),
 		TimeoutSeconds: value.TimeoutSeconds,
-		Metadata:       fromWireStruct(value.Metadata),
+		Metadata:       FromWireStruct(value.Metadata),
 	}
 	if value.Inputs != nil {
 		out.Inputs = make(map[string]*WorkflowValue, len(value.Inputs))
@@ -1123,7 +1123,7 @@ func ToWireWorkflowStepAgentTurn(value *WorkflowStepAgentTurn) *proto.WorkflowSt
 		SessionKey:   value.SessionKey,
 		Prompt:       ToWireWorkflowText(value.Prompt),
 		Output:       ToWireAgentOutput(value.Output),
-		ModelOptions: toWireStruct(value.ModelOptions),
+		ModelOptions: ToWireStruct(value.ModelOptions),
 	}
 	for _, item := range value.Messages {
 		out.Messages = append(out.Messages, ToWireWorkflowAgentMessage(item))
@@ -1144,7 +1144,7 @@ func FromWireWorkflowStepAgentTurn(value *proto.WorkflowStepAgentTurn) *Workflow
 		SessionKey:   value.SessionKey,
 		Prompt:       FromWireWorkflowText(value.Prompt),
 		Output:       FromWireAgentOutput(value.Output),
-		ModelOptions: fromWireStruct(value.ModelOptions),
+		ModelOptions: FromWireStruct(value.ModelOptions),
 	}
 	for _, item := range value.Messages {
 		out.Messages = append(out.Messages, FromWireWorkflowAgentMessage(item))
@@ -1193,11 +1193,11 @@ func ToWireWorkflowStepAttempt(value *WorkflowStepAttempt) *proto.WorkflowStepAt
 		Id:             value.Id,
 		Status:         proto.WorkflowStepStatus(value.Status),
 		IdempotencyKey: value.IdempotencyKey,
-		Input:          toWireValue(value.Input),
-		Output:         toWireValue(value.Output),
+		Input:          ToWireValue(value.Input),
+		Output:         ToWireValue(value.Output),
 		StatusMessage:  value.StatusMessage,
-		StartedAt:      toWireTimestamp(value.StartedAt),
-		CompletedAt:    toWireTimestamp(value.CompletedAt),
+		StartedAt:      ToWireTimestamp(value.StartedAt),
+		CompletedAt:    ToWireTimestamp(value.CompletedAt),
 	}
 	return out
 }
@@ -1210,11 +1210,11 @@ func FromWireWorkflowStepAttempt(value *proto.WorkflowStepAttempt) *WorkflowStep
 		Id:             value.Id,
 		Status:         WorkflowStepStatus(value.Status),
 		IdempotencyKey: value.IdempotencyKey,
-		Input:          fromWireValue(value.Input),
-		Output:         fromWireValue(value.Output),
+		Input:          FromWireValue(value.Input),
+		Output:         FromWireValue(value.Output),
 		StatusMessage:  value.StatusMessage,
-		StartedAt:      fromWireTimestamp(value.StartedAt),
-		CompletedAt:    fromWireTimestamp(value.CompletedAt),
+		StartedAt:      FromWireTimestamp(value.StartedAt),
+		CompletedAt:    FromWireTimestamp(value.CompletedAt),
 	}
 	return out
 }
@@ -1226,12 +1226,12 @@ func ToWireWorkflowStepExecution(value *WorkflowStepExecution) *proto.WorkflowSt
 	out := &proto.WorkflowStepExecution{
 		StepId:        value.StepId,
 		Status:        proto.WorkflowStepStatus(value.Status),
-		Input:         toWireValue(value.Input),
-		Output:        toWireValue(value.Output),
+		Input:         ToWireValue(value.Input),
+		Output:        ToWireValue(value.Output),
 		StatusMessage: value.StatusMessage,
 		SkipReason:    value.SkipReason,
-		StartedAt:     toWireTimestamp(value.StartedAt),
-		CompletedAt:   toWireTimestamp(value.CompletedAt),
+		StartedAt:     ToWireTimestamp(value.StartedAt),
+		CompletedAt:   ToWireTimestamp(value.CompletedAt),
 	}
 	for _, item := range value.Attempts {
 		out.Attempts = append(out.Attempts, ToWireWorkflowStepAttempt(item))
@@ -1246,12 +1246,12 @@ func FromWireWorkflowStepExecution(value *proto.WorkflowStepExecution) *Workflow
 	out := &WorkflowStepExecution{
 		StepId:        value.StepId,
 		Status:        WorkflowStepStatus(value.Status),
-		Input:         fromWireValue(value.Input),
-		Output:        fromWireValue(value.Output),
+		Input:         FromWireValue(value.Input),
+		Output:        FromWireValue(value.Output),
 		StatusMessage: value.StatusMessage,
 		SkipReason:    value.SkipReason,
-		StartedAt:     fromWireTimestamp(value.StartedAt),
-		CompletedAt:   fromWireTimestamp(value.CompletedAt),
+		StartedAt:     FromWireTimestamp(value.StartedAt),
+		CompletedAt:   FromWireTimestamp(value.CompletedAt),
 	}
 	for _, item := range value.Attempts {
 		out.Attempts = append(out.Attempts, FromWireWorkflowStepAttempt(item))
@@ -1309,7 +1309,7 @@ func ToWireWorkflowStepWhen(value *WorkflowStepWhen) *proto.WorkflowStepWhen {
 	}
 	out := &proto.WorkflowStepWhen{
 		Value:  ToWireWorkflowValue(value.Value),
-		Equals: toWireValue(value.Equals),
+		Equals: ToWireValue(value.Equals),
 	}
 	return out
 }
@@ -1320,7 +1320,7 @@ func FromWireWorkflowStepWhen(value *proto.WorkflowStepWhen) *WorkflowStepWhen {
 	}
 	out := &WorkflowStepWhen{
 		Value:  FromWireWorkflowValue(value.Value),
-		Equals: fromWireValue(value.Equals),
+		Equals: FromWireValue(value.Equals),
 	}
 	return out
 }
@@ -1352,7 +1352,7 @@ func ToWireWorkflowValue(value *WorkflowValue) *proto.WorkflowValue {
 	out := &proto.WorkflowValue{}
 	switch variant := value.Kind.(type) {
 	case *WorkflowValueKindLiteral:
-		out.Kind = &proto.WorkflowValue_Literal{Literal: toWireValue(variant.Value)}
+		out.Kind = &proto.WorkflowValue_Literal{Literal: ToWireValue(variant.Value)}
 	case *WorkflowValueKindObject:
 		out.Kind = &proto.WorkflowValue_Object{Object: ToWireWorkflowObject(variant.Value)}
 	case *WorkflowValueKindArray:
@@ -1378,7 +1378,7 @@ func FromWireWorkflowValue(value *proto.WorkflowValue) *WorkflowValue {
 	out := &WorkflowValue{}
 	switch variant := value.Kind.(type) {
 	case *proto.WorkflowValue_Literal:
-		out.Kind = &WorkflowValueKindLiteral{Value: fromWireValue(variant.Literal)}
+		out.Kind = &WorkflowValueKindLiteral{Value: FromWireValue(variant.Literal)}
 	case *proto.WorkflowValue_Object:
 		out.Kind = &WorkflowValueKindObject{Value: FromWireWorkflowObject(variant.Object)}
 	case *proto.WorkflowValue_Array:

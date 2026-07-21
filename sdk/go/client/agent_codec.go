@@ -44,10 +44,10 @@ func ToWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
 		State:      proto.AgentInteractionState(value.State),
 		Title:      value.Title,
 		Prompt:     value.Prompt,
-		Request:    toWireStruct(value.Request),
-		Resolution: toWireStruct(value.Resolution),
-		CreatedAt:  toWireTimestamp(value.CreatedAt),
-		ResolvedAt: toWireTimestamp(value.ResolvedAt),
+		Request:    ToWireStruct(value.Request),
+		Resolution: ToWireStruct(value.Resolution),
+		CreatedAt:  ToWireTimestamp(value.CreatedAt),
+		ResolvedAt: ToWireTimestamp(value.ResolvedAt),
 		TurnId:     value.TurnId,
 		SessionId:  value.SessionId,
 	}
@@ -64,10 +64,10 @@ func FromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
 		State:      AgentInteractionState(value.State),
 		Title:      value.Title,
 		Prompt:     value.Prompt,
-		Request:    fromWireStruct(value.Request),
-		Resolution: fromWireStruct(value.Resolution),
-		CreatedAt:  fromWireTimestamp(value.CreatedAt),
-		ResolvedAt: fromWireTimestamp(value.ResolvedAt),
+		Request:    FromWireStruct(value.Request),
+		Resolution: FromWireStruct(value.Resolution),
+		CreatedAt:  FromWireTimestamp(value.CreatedAt),
+		ResolvedAt: FromWireTimestamp(value.ResolvedAt),
 		TurnId:     value.TurnId,
 		SessionId:  value.SessionId,
 	}
@@ -81,7 +81,7 @@ func ToWireAgentMessage(value *AgentMessage) *proto.AgentMessage {
 	out := &proto.AgentMessage{
 		Role:     value.Role,
 		Text:     value.Text,
-		Metadata: toWireStruct(value.Metadata),
+		Metadata: ToWireStruct(value.Metadata),
 	}
 	for _, item := range value.Parts {
 		out.Parts = append(out.Parts, ToWireAgentMessagePart(item))
@@ -96,7 +96,7 @@ func FromWireAgentMessage(value *proto.AgentMessage) *AgentMessage {
 	out := &AgentMessage{
 		Role:     value.Role,
 		Text:     value.Text,
-		Metadata: fromWireStruct(value.Metadata),
+		Metadata: FromWireStruct(value.Metadata),
 	}
 	for _, item := range value.Parts {
 		out.Parts = append(out.Parts, FromWireAgentMessagePart(item))
@@ -111,7 +111,7 @@ func ToWireAgentMessagePart(value *AgentMessagePart) *proto.AgentMessagePart {
 	out := &proto.AgentMessagePart{
 		Type:       proto.AgentMessagePartType(value.Type),
 		Text:       value.Text,
-		Json:       toWireStruct(value.Json),
+		Json:       ToWireStruct(value.Json),
 		ToolCall:   ToWireAgentMessagePartToolCall(value.ToolCall),
 		ToolResult: ToWireAgentMessagePartToolResult(value.ToolResult),
 		ImageRef:   ToWireAgentMessagePartImageRef(value.ImageRef),
@@ -126,7 +126,7 @@ func FromWireAgentMessagePart(value *proto.AgentMessagePart) *AgentMessagePart {
 	out := &AgentMessagePart{
 		Type:       AgentMessagePartType(value.Type),
 		Text:       value.Text,
-		Json:       fromWireStruct(value.Json),
+		Json:       FromWireStruct(value.Json),
 		ToolCall:   FromWireAgentMessagePartToolCall(value.ToolCall),
 		ToolResult: FromWireAgentMessagePartToolResult(value.ToolResult),
 		ImageRef:   FromWireAgentMessagePartImageRef(value.ImageRef),
@@ -163,7 +163,7 @@ func ToWireAgentMessagePartToolCall(value *AgentMessagePartToolCall) *proto.Agen
 	out := &proto.AgentMessagePartToolCall{
 		Id:        value.Id,
 		ToolId:    value.ToolId,
-		Arguments: toWireStruct(value.Arguments),
+		Arguments: ToWireStruct(value.Arguments),
 	}
 	return out
 }
@@ -175,7 +175,7 @@ func FromWireAgentMessagePartToolCall(value *proto.AgentMessagePartToolCall) *Ag
 	out := &AgentMessagePartToolCall{
 		Id:        value.Id,
 		ToolId:    value.ToolId,
-		Arguments: fromWireStruct(value.Arguments),
+		Arguments: FromWireStruct(value.Arguments),
 	}
 	return out
 }
@@ -188,7 +188,7 @@ func ToWireAgentMessagePartToolResult(value *AgentMessagePartToolResult) *proto.
 		ToolCallId: value.ToolCallId,
 		Status:     value.Status,
 		Content:    value.Content,
-		Output:     toWireStruct(value.Output),
+		Output:     ToWireStruct(value.Output),
 	}
 	return out
 }
@@ -201,7 +201,7 @@ func FromWireAgentMessagePartToolResult(value *proto.AgentMessagePartToolResult)
 		ToolCallId: value.ToolCallId,
 		Status:     value.Status,
 		Content:    value.Content,
-		Output:     fromWireStruct(value.Output),
+		Output:     FromWireStruct(value.Output),
 	}
 	return out
 }
@@ -302,11 +302,11 @@ func ToWireAgentSession(value *AgentSession) *proto.AgentSession {
 		Model:              value.Model,
 		ClientRef:          value.ClientRef,
 		State:              proto.AgentSessionState(value.State),
-		Metadata:           toWireStruct(value.Metadata),
+		Metadata:           ToWireStruct(value.Metadata),
 		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          toWireTimestamp(value.CreatedAt),
-		UpdatedAt:          toWireTimestamp(value.UpdatedAt),
-		LastTurnAt:         toWireTimestamp(value.LastTurnAt),
+		CreatedAt:          ToWireTimestamp(value.CreatedAt),
+		UpdatedAt:          ToWireTimestamp(value.UpdatedAt),
+		LastTurnAt:         ToWireTimestamp(value.LastTurnAt),
 	}
 	return out
 }
@@ -321,11 +321,11 @@ func FromWireAgentSession(value *proto.AgentSession) *AgentSession {
 		Model:              value.Model,
 		ClientRef:          value.ClientRef,
 		State:              AgentSessionState(value.State),
-		Metadata:           fromWireStruct(value.Metadata),
+		Metadata:           FromWireStruct(value.Metadata),
 		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          fromWireTimestamp(value.CreatedAt),
-		UpdatedAt:          fromWireTimestamp(value.UpdatedAt),
-		LastTurnAt:         fromWireTimestamp(value.LastTurnAt),
+		CreatedAt:          FromWireTimestamp(value.CreatedAt),
+		UpdatedAt:          FromWireTimestamp(value.UpdatedAt),
+		LastTurnAt:         FromWireTimestamp(value.LastTurnAt),
 	}
 	return out
 }
@@ -411,7 +411,7 @@ func ToWireAgentStructuredOutput(value *AgentStructuredOutput) *proto.AgentStruc
 		return nil
 	}
 	out := &proto.AgentStructuredOutput{
-		Schema: toWireStruct(value.Schema),
+		Schema: ToWireStruct(value.Schema),
 	}
 	return out
 }
@@ -421,7 +421,7 @@ func FromWireAgentStructuredOutput(value *proto.AgentStructuredOutput) *AgentStr
 		return nil
 	}
 	out := &AgentStructuredOutput{
-		Schema: fromWireStruct(value.Schema),
+		Schema: FromWireStruct(value.Schema),
 	}
 	return out
 }
@@ -482,9 +482,9 @@ func ToWireAgentTurn(value *AgentTurn) *proto.AgentTurn {
 		Status:             proto.AgentExecutionStatus(value.Status),
 		StatusMessage:      value.StatusMessage,
 		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          toWireTimestamp(value.CreatedAt),
-		StartedAt:          toWireTimestamp(value.StartedAt),
-		CompletedAt:        toWireTimestamp(value.CompletedAt),
+		CreatedAt:          ToWireTimestamp(value.CreatedAt),
+		StartedAt:          ToWireTimestamp(value.StartedAt),
+		CompletedAt:        ToWireTimestamp(value.CompletedAt),
 		ExecutionRef:       value.ExecutionRef,
 	}
 	for _, item := range value.Messages {
@@ -511,9 +511,9 @@ func FromWireAgentTurn(value *proto.AgentTurn) *AgentTurn {
 		Status:             AgentExecutionStatus(value.Status),
 		StatusMessage:      value.StatusMessage,
 		CreatedBySubjectId: value.CreatedBySubjectId,
-		CreatedAt:          fromWireTimestamp(value.CreatedAt),
-		StartedAt:          fromWireTimestamp(value.StartedAt),
-		CompletedAt:        fromWireTimestamp(value.CompletedAt),
+		CreatedAt:          FromWireTimestamp(value.CreatedAt),
+		StartedAt:          FromWireTimestamp(value.StartedAt),
+		CompletedAt:        FromWireTimestamp(value.CompletedAt),
 		ExecutionRef:       value.ExecutionRef,
 	}
 	for _, item := range value.Messages {
@@ -539,9 +539,9 @@ func ToWireAgentTurnDisplay(value *AgentTurnDisplay) *proto.AgentTurnDisplay {
 		Label:     value.Label,
 		Ref:       value.Ref,
 		ParentRef: value.ParentRef,
-		Input:     toWireValue(value.Input),
-		Output:    toWireValue(value.Output),
-		Error:     toWireValue(value.Error),
+		Input:     ToWireValue(value.Input),
+		Output:    ToWireValue(value.Output),
+		Error:     ToWireValue(value.Error),
 		Action:    value.Action,
 		Format:    value.Format,
 		Language:  value.Language,
@@ -560,9 +560,9 @@ func FromWireAgentTurnDisplay(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
 		Label:     value.Label,
 		Ref:       value.Ref,
 		ParentRef: value.ParentRef,
-		Input:     fromWireValue(value.Input),
-		Output:    fromWireValue(value.Output),
-		Error:     fromWireValue(value.Error),
+		Input:     FromWireValue(value.Input),
+		Output:    FromWireValue(value.Output),
+		Error:     FromWireValue(value.Error),
 		Action:    value.Action,
 		Format:    value.Format,
 		Language:  value.Language,
@@ -581,8 +581,8 @@ func ToWireAgentTurnEvent(value *AgentTurnEvent) *proto.AgentTurnEvent {
 		Type:       value.Type,
 		Source:     value.Source,
 		Visibility: value.Visibility,
-		Data:       toWireStruct(value.Data),
-		CreatedAt:  toWireTimestamp(value.CreatedAt),
+		Data:       ToWireStruct(value.Data),
+		CreatedAt:  ToWireTimestamp(value.CreatedAt),
 		Display:    ToWireAgentTurnDisplay(value.Display),
 	}
 	return out
@@ -599,8 +599,8 @@ func FromWireAgentTurnEvent(value *proto.AgentTurnEvent) *AgentTurnEvent {
 		Type:       value.Type,
 		Source:     value.Source,
 		Visibility: value.Visibility,
-		Data:       fromWireStruct(value.Data),
-		CreatedAt:  fromWireTimestamp(value.CreatedAt),
+		Data:       FromWireStruct(value.Data),
+		CreatedAt:  FromWireTimestamp(value.CreatedAt),
 		Display:    FromWireAgentTurnDisplay(value.Display),
 	}
 	return out
@@ -612,7 +612,7 @@ func ToWireAgentTurnStructuredOutput(value *AgentTurnStructuredOutput) *proto.Ag
 	}
 	out := &proto.AgentTurnStructuredOutput{
 		Text:  value.Text,
-		Value: toWireStruct(value.Value),
+		Value: ToWireStruct(value.Value),
 	}
 	return out
 }
@@ -623,7 +623,7 @@ func FromWireAgentTurnStructuredOutput(value *proto.AgentTurnStructuredOutput) *
 	}
 	out := &AgentTurnStructuredOutput{
 		Text:  value.Text,
-		Value: fromWireStruct(value.Value),
+		Value: FromWireStruct(value.Value),
 	}
 	return out
 }
@@ -734,7 +734,7 @@ func ToWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRe
 		IdempotencyKey:    value.IdempotencyKey,
 		Model:             value.Model,
 		ClientRef:         value.ClientRef,
-		Metadata:          toWireStruct(value.Metadata),
+		Metadata:          ToWireStruct(value.Metadata),
 		SessionStart:      ToWireAgentSessionStartConfig(value.SessionStart),
 		PreparedWorkspace: ToWirePreparedAgentWorkspace(value.PreparedWorkspace),
 		ProviderName:      value.ProviderName,
@@ -753,7 +753,7 @@ func FromWireCreateAgentProviderSessionRequest(value *proto.CreateAgentProviderS
 		IdempotencyKey:    value.IdempotencyKey,
 		Model:             value.Model,
 		ClientRef:         value.ClientRef,
-		Metadata:          fromWireStruct(value.Metadata),
+		Metadata:          FromWireStruct(value.Metadata),
 		SessionStart:      FromWireAgentSessionStartConfig(value.SessionStart),
 		PreparedWorkspace: FromWirePreparedAgentWorkspace(value.PreparedWorkspace),
 		ProviderName:      value.ProviderName,
@@ -773,9 +773,9 @@ func ToWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest)
 		SessionId:      value.SessionId,
 		IdempotencyKey: value.IdempotencyKey,
 		Model:          value.Model,
-		Metadata:       toWireStruct(value.Metadata),
+		Metadata:       ToWireStruct(value.Metadata),
 		ExecutionRef:   value.ExecutionRef,
-		ModelOptions:   toWireStruct(value.ModelOptions),
+		ModelOptions:   ToWireStruct(value.ModelOptions),
 		TimeoutSeconds: value.TimeoutSeconds,
 		Output:         ToWireAgentOutput(value.Output),
 		Context:        ToWireRequestContext(value.Context),
@@ -796,9 +796,9 @@ func FromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurn
 		SessionId:      value.SessionId,
 		IdempotencyKey: value.IdempotencyKey,
 		Model:          value.Model,
-		Metadata:       fromWireStruct(value.Metadata),
+		Metadata:       FromWireStruct(value.Metadata),
 		ExecutionRef:   value.ExecutionRef,
-		ModelOptions:   fromWireStruct(value.ModelOptions),
+		ModelOptions:   FromWireStruct(value.ModelOptions),
 		TimeoutSeconds: value.TimeoutSeconds,
 		Output:         FromWireAgentOutput(value.Output),
 		Context:        FromWireRequestContext(value.Context),
@@ -1168,7 +1168,7 @@ func ToWireResolveAgentProviderInteractionRequest(value *ResolveAgentProviderInt
 	}
 	out := &proto.ResolveAgentProviderInteractionRequest{
 		InteractionId: value.InteractionId,
-		Resolution:    toWireStruct(value.Resolution),
+		Resolution:    ToWireStruct(value.Resolution),
 		TurnId:        value.TurnId,
 		Context:       ToWireRequestContext(value.Context),
 		ProviderName:  value.ProviderName,
@@ -1182,7 +1182,7 @@ func FromWireResolveAgentProviderInteractionRequest(value *proto.ResolveAgentPro
 	}
 	out := &ResolveAgentProviderInteractionRequest{
 		InteractionId: value.InteractionId,
-		Resolution:    fromWireStruct(value.Resolution),
+		Resolution:    FromWireStruct(value.Resolution),
 		TurnId:        value.TurnId,
 		Context:       FromWireRequestContext(value.Context),
 		ProviderName:  value.ProviderName,
@@ -1198,7 +1198,7 @@ func ToWireUpdateAgentProviderSessionRequest(value *UpdateAgentProviderSessionRe
 		SessionId:    value.SessionId,
 		ClientRef:    value.ClientRef,
 		State:        proto.AgentSessionState(value.State),
-		Metadata:     toWireStruct(value.Metadata),
+		Metadata:     ToWireStruct(value.Metadata),
 		Context:      ToWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}
@@ -1213,7 +1213,7 @@ func FromWireUpdateAgentProviderSessionRequest(value *proto.UpdateAgentProviderS
 		SessionId:    value.SessionId,
 		ClientRef:    value.ClientRef,
 		State:        AgentSessionState(value.State),
-		Metadata:     fromWireStruct(value.Metadata),
+		Metadata:     FromWireStruct(value.Metadata),
 		Context:      FromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
 	}

@@ -16,21 +16,24 @@ use crate::generated::v1;
 use crate::rpc_support::GestaltError;
 
 /// Native message type for `gestalt.provider.v1.CreateExternalCredentialRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateExternalCredentialRequest {
     /// The `credential` field; None when unset.
     pub credential: Option<ExternalCredential>,
 }
 
 /// Native message type for `gestalt.provider.v1.DeleteExternalCredentialRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteExternalCredentialRequest {
     /// The `id` field.
     pub id: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ExchangeExternalCredentialRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExchangeExternalCredentialRequest {
     /// The `provider` field.
     pub provider: String,
@@ -53,7 +56,8 @@ pub struct ExchangeExternalCredentialRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ExchangeExternalCredentialResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExchangeExternalCredentialResponse {
     /// The `token_response` field; None when unset.
     pub token_response: Option<ExternalCredentialTokenResponse>,
@@ -61,7 +65,7 @@ pub struct ExchangeExternalCredentialResponse {
 
 /// Values of the `credential` oneof in `ExternalCredential`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ExternalCredentialCredential {
     /// The `grant` variant.
     Grant(ExternalCredentialGrant),
@@ -72,7 +76,8 @@ pub enum ExternalCredentialCredential {
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredential`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalCredential {
     /// The `id` field.
     pub id: String,
@@ -84,8 +89,10 @@ pub struct ExternalCredential {
     pub qualifier: String,
     /// The `metadata_json` field.
     pub metadata_json: String,
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::serde_time")]
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
     /// The `credential` oneof; None when unset.
@@ -93,7 +100,8 @@ pub struct ExternalCredential {
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialAuthConfig`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalCredentialAuthConfig {
     /// The `type` field.
     pub r#type: String,
@@ -134,18 +142,21 @@ pub struct ExternalCredentialAuthConfig {
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialClientInfo`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalCredentialClientInfo {
     /// The `client_id` field.
     pub client_id: String,
     /// The `client_secret` field.
     pub client_secret: String,
+    #[serde(with = "crate::serde_time")]
     /// The `client_secret_expires_at` field; None when unset.
     pub client_secret_expires_at: Option<std::time::SystemTime>,
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialGrant`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalCredentialGrant {
     /// The `access_token` field.
     pub access_token: String,
@@ -153,8 +164,10 @@ pub struct ExternalCredentialGrant {
     pub refresh_token: String,
     /// The `scope` field.
     pub scope: String,
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
+    #[serde(with = "crate::serde_time")]
     /// The `last_refreshed_at` field; None when unset.
     pub last_refreshed_at: Option<std::time::SystemTime>,
     /// The `refresh_error_count` field.
@@ -162,14 +175,16 @@ pub struct ExternalCredentialGrant {
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialOpaque`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalCredentialOpaque {
     /// The `fields` field.
     pub fields: std::collections::BTreeMap<String, String>,
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialTokenExchangeDriver`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalCredentialTokenExchangeDriver {
     /// The `type` field.
     pub r#type: String,
@@ -186,7 +201,8 @@ pub struct ExternalCredentialTokenExchangeDriver {
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialTokenResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalCredentialTokenResponse {
     /// The `access_token` field.
     pub access_token: String,
@@ -203,7 +219,8 @@ pub struct ExternalCredentialTokenResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.GetExternalCredentialRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetExternalCredentialRequest {
     /// The `subject` field.
     pub subject: String,
@@ -214,7 +231,8 @@ pub struct GetExternalCredentialRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListExternalCredentialsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListExternalCredentialsRequest {
     /// The `subject` field.
     pub subject: String,
@@ -223,14 +241,16 @@ pub struct ListExternalCredentialsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListExternalCredentialsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListExternalCredentialsResponse {
     /// The `credentials` field.
     pub credentials: Vec<ExternalCredential>,
 }
 
 /// Native message type for `gestalt.provider.v1.ResolveExternalCredentialRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveExternalCredentialRequest {
     /// The `provider` field.
     pub provider: String,
@@ -253,10 +273,12 @@ pub struct ResolveExternalCredentialRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ResolveExternalCredentialResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResolveExternalCredentialResponse {
     /// The `token` field.
     pub token: String,
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
     /// The `metadata_json` field.
@@ -268,14 +290,16 @@ pub struct ResolveExternalCredentialResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.UpsertExternalCredentialRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpsertExternalCredentialRequest {
     /// The `credential` field; None when unset.
     pub credential: Option<ExternalCredential>,
 }
 
 /// Native message type for `gestalt.provider.v1.ValidateExternalCredentialConfigRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ValidateExternalCredentialConfigRequest {
     /// The `provider` field.
     pub provider: String,

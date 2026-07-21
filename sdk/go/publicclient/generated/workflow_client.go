@@ -5,6 +5,7 @@ package generated
 import (
 	"context"
 
+	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -19,49 +20,49 @@ func NewWorkflowClient(transport Transport) *WorkflowClient {
 	return &WorkflowClient{transport: transport}
 }
 
-func (c *WorkflowClient) ApplyDefinition(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
+func (c *WorkflowClient) ApplyDefinition(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*gestaltclient.WorkflowDefinition, error) {
 	wire := ToWireApplyWorkflowProviderDefinitionRequest(request)
 	out := &proto.WorkflowDefinition{}
 	if err := c.transport.Unary(ctx, MethodWorkflowApplyDefinition, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireWorkflowDefinition(out), nil
+	return gestaltclient.FromWireWorkflowDefinition(out), nil
 }
 
-func (c *WorkflowClient) GetDefinition(ctx context.Context, request *GetWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
+func (c *WorkflowClient) GetDefinition(ctx context.Context, request *GetWorkflowProviderDefinitionRequest) (*gestaltclient.WorkflowDefinition, error) {
 	wire := ToWireGetWorkflowProviderDefinitionRequest(request)
 	out := &proto.WorkflowDefinition{}
 	if err := c.transport.Unary(ctx, MethodWorkflowGetDefinition, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireWorkflowDefinition(out), nil
+	return gestaltclient.FromWireWorkflowDefinition(out), nil
 }
 
-func (c *WorkflowClient) ListDefinitions(ctx context.Context, request *ListWorkflowProviderDefinitionsRequest) (*ListWorkflowProviderDefinitionsResponse, error) {
+func (c *WorkflowClient) ListDefinitions(ctx context.Context, request *ListWorkflowProviderDefinitionsRequest) (*gestaltclient.ListWorkflowProviderDefinitionsResponse, error) {
 	wire := ToWireListWorkflowProviderDefinitionsRequest(request)
 	out := &proto.ListWorkflowProviderDefinitionsResponse{}
 	if err := c.transport.Unary(ctx, MethodWorkflowListDefinitions, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListWorkflowProviderDefinitionsResponse(out), nil
+	return gestaltclient.FromWireListWorkflowProviderDefinitionsResponse(out), nil
 }
 
-func (c *WorkflowClient) SetDefinitionPaused(ctx context.Context, request *SetWorkflowProviderDefinitionPausedRequest) (*WorkflowDefinition, error) {
+func (c *WorkflowClient) SetDefinitionPaused(ctx context.Context, request *SetWorkflowProviderDefinitionPausedRequest) (*gestaltclient.WorkflowDefinition, error) {
 	wire := ToWireSetWorkflowProviderDefinitionPausedRequest(request)
 	out := &proto.WorkflowDefinition{}
 	if err := c.transport.Unary(ctx, MethodWorkflowSetDefinitionPaused, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireWorkflowDefinition(out), nil
+	return gestaltclient.FromWireWorkflowDefinition(out), nil
 }
 
-func (c *WorkflowClient) SetActivationPaused(ctx context.Context, request *SetWorkflowProviderActivationPausedRequest) (*WorkflowDefinition, error) {
+func (c *WorkflowClient) SetActivationPaused(ctx context.Context, request *SetWorkflowProviderActivationPausedRequest) (*gestaltclient.WorkflowDefinition, error) {
 	wire := ToWireSetWorkflowProviderActivationPausedRequest(request)
 	out := &proto.WorkflowDefinition{}
 	if err := c.transport.Unary(ctx, MethodWorkflowSetActivationPaused, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireWorkflowDefinition(out), nil
+	return gestaltclient.FromWireWorkflowDefinition(out), nil
 }
 
 func (c *WorkflowClient) DeleteDefinition(ctx context.Context, request *DeleteWorkflowProviderDefinitionRequest) error {
@@ -73,94 +74,94 @@ func (c *WorkflowClient) DeleteDefinition(ctx context.Context, request *DeleteWo
 	return nil
 }
 
-func (c *WorkflowClient) StartRun(ctx context.Context, request *StartWorkflowProviderRunRequest) (*WorkflowRun, error) {
+func (c *WorkflowClient) StartRun(ctx context.Context, request *StartWorkflowProviderRunRequest) (*gestaltclient.WorkflowRun, error) {
 	wire := ToWireStartWorkflowProviderRunRequest(request)
 	out := &proto.WorkflowRun{}
 	if err := c.transport.Unary(ctx, MethodWorkflowStartRun, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireWorkflowRun(out), nil
+	return gestaltclient.FromWireWorkflowRun(out), nil
 }
 
-func (c *WorkflowClient) ListRuns(ctx context.Context, request *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error) {
+func (c *WorkflowClient) ListRuns(ctx context.Context, request *ListWorkflowProviderRunsRequest) (*gestaltclient.ListWorkflowProviderRunsResponse, error) {
 	wire := ToWireListWorkflowProviderRunsRequest(request)
 	out := &proto.ListWorkflowProviderRunsResponse{}
 	if err := c.transport.Unary(ctx, MethodWorkflowListRuns, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListWorkflowProviderRunsResponse(out), nil
+	return gestaltclient.FromWireListWorkflowProviderRunsResponse(out), nil
 }
 
-func (c *WorkflowClient) GetRun(ctx context.Context, request *GetWorkflowProviderRunRequest) (*WorkflowRun, error) {
+func (c *WorkflowClient) GetRun(ctx context.Context, request *GetWorkflowProviderRunRequest) (*gestaltclient.WorkflowRun, error) {
 	wire := ToWireGetWorkflowProviderRunRequest(request)
 	out := &proto.WorkflowRun{}
 	if err := c.transport.Unary(ctx, MethodWorkflowGetRun, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireWorkflowRun(out), nil
+	return gestaltclient.FromWireWorkflowRun(out), nil
 }
 
-func (c *WorkflowClient) GetRunEvents(ctx context.Context, request *GetWorkflowProviderRunEventsRequest) (*GetWorkflowProviderRunEventsResponse, error) {
+func (c *WorkflowClient) GetRunEvents(ctx context.Context, request *GetWorkflowProviderRunEventsRequest) (*gestaltclient.GetWorkflowProviderRunEventsResponse, error) {
 	wire := ToWireGetWorkflowProviderRunEventsRequest(request)
 	out := &proto.GetWorkflowProviderRunEventsResponse{}
 	if err := c.transport.Unary(ctx, MethodWorkflowGetRunEvents, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireGetWorkflowProviderRunEventsResponse(out), nil
+	return gestaltclient.FromWireGetWorkflowProviderRunEventsResponse(out), nil
 }
 
-func (c *WorkflowClient) GetRunOutput(ctx context.Context, request *GetWorkflowProviderRunOutputRequest) (*GetWorkflowProviderRunOutputResponse, error) {
+func (c *WorkflowClient) GetRunOutput(ctx context.Context, request *GetWorkflowProviderRunOutputRequest) (*gestaltclient.GetWorkflowProviderRunOutputResponse, error) {
 	wire := ToWireGetWorkflowProviderRunOutputRequest(request)
 	out := &proto.GetWorkflowProviderRunOutputResponse{}
 	if err := c.transport.Unary(ctx, MethodWorkflowGetRunOutput, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireGetWorkflowProviderRunOutputResponse(out), nil
+	return gestaltclient.FromWireGetWorkflowProviderRunOutputResponse(out), nil
 }
 
-func (c *WorkflowClient) CancelRun(ctx context.Context, request *CancelWorkflowProviderRunRequest) (*WorkflowRun, error) {
+func (c *WorkflowClient) CancelRun(ctx context.Context, request *CancelWorkflowProviderRunRequest) (*gestaltclient.WorkflowRun, error) {
 	wire := ToWireCancelWorkflowProviderRunRequest(request)
 	out := &proto.WorkflowRun{}
 	if err := c.transport.Unary(ctx, MethodWorkflowCancelRun, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireWorkflowRun(out), nil
+	return gestaltclient.FromWireWorkflowRun(out), nil
 }
 
-func (c *WorkflowClient) SignalRun(ctx context.Context, request *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+func (c *WorkflowClient) SignalRun(ctx context.Context, request *SignalWorkflowProviderRunRequest) (*gestaltclient.SignalWorkflowRunResponse, error) {
 	wire := ToWireSignalWorkflowProviderRunRequest(request)
 	out := &proto.SignalWorkflowRunResponse{}
 	if err := c.transport.Unary(ctx, MethodWorkflowSignalRun, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireSignalWorkflowRunResponse(out), nil
+	return gestaltclient.FromWireSignalWorkflowRunResponse(out), nil
 }
 
-func (c *WorkflowClient) SignalOrStartRun(ctx context.Context, request *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+func (c *WorkflowClient) SignalOrStartRun(ctx context.Context, request *SignalOrStartWorkflowProviderRunRequest) (*gestaltclient.SignalWorkflowRunResponse, error) {
 	wire := ToWireSignalOrStartWorkflowProviderRunRequest(request)
 	out := &proto.SignalWorkflowRunResponse{}
 	if err := c.transport.Unary(ctx, MethodWorkflowSignalOrStartRun, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireSignalWorkflowRunResponse(out), nil
+	return gestaltclient.FromWireSignalWorkflowRunResponse(out), nil
 }
 
 // WorkflowClientREST exposes only REST-backed methods for Workflow.
 type WorkflowClientREST interface {
-	ApplyDefinition(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error)
-	GetDefinition(ctx context.Context, request *GetWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error)
-	ListDefinitions(ctx context.Context, request *ListWorkflowProviderDefinitionsRequest) (*ListWorkflowProviderDefinitionsResponse, error)
-	SetDefinitionPaused(ctx context.Context, request *SetWorkflowProviderDefinitionPausedRequest) (*WorkflowDefinition, error)
-	SetActivationPaused(ctx context.Context, request *SetWorkflowProviderActivationPausedRequest) (*WorkflowDefinition, error)
+	ApplyDefinition(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*gestaltclient.WorkflowDefinition, error)
+	GetDefinition(ctx context.Context, request *GetWorkflowProviderDefinitionRequest) (*gestaltclient.WorkflowDefinition, error)
+	ListDefinitions(ctx context.Context, request *ListWorkflowProviderDefinitionsRequest) (*gestaltclient.ListWorkflowProviderDefinitionsResponse, error)
+	SetDefinitionPaused(ctx context.Context, request *SetWorkflowProviderDefinitionPausedRequest) (*gestaltclient.WorkflowDefinition, error)
+	SetActivationPaused(ctx context.Context, request *SetWorkflowProviderActivationPausedRequest) (*gestaltclient.WorkflowDefinition, error)
 	DeleteDefinition(ctx context.Context, request *DeleteWorkflowProviderDefinitionRequest) error
-	StartRun(ctx context.Context, request *StartWorkflowProviderRunRequest) (*WorkflowRun, error)
-	ListRuns(ctx context.Context, request *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error)
-	GetRun(ctx context.Context, request *GetWorkflowProviderRunRequest) (*WorkflowRun, error)
-	GetRunEvents(ctx context.Context, request *GetWorkflowProviderRunEventsRequest) (*GetWorkflowProviderRunEventsResponse, error)
-	GetRunOutput(ctx context.Context, request *GetWorkflowProviderRunOutputRequest) (*GetWorkflowProviderRunOutputResponse, error)
-	CancelRun(ctx context.Context, request *CancelWorkflowProviderRunRequest) (*WorkflowRun, error)
-	SignalRun(ctx context.Context, request *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
-	SignalOrStartRun(ctx context.Context, request *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
+	StartRun(ctx context.Context, request *StartWorkflowProviderRunRequest) (*gestaltclient.WorkflowRun, error)
+	ListRuns(ctx context.Context, request *ListWorkflowProviderRunsRequest) (*gestaltclient.ListWorkflowProviderRunsResponse, error)
+	GetRun(ctx context.Context, request *GetWorkflowProviderRunRequest) (*gestaltclient.WorkflowRun, error)
+	GetRunEvents(ctx context.Context, request *GetWorkflowProviderRunEventsRequest) (*gestaltclient.GetWorkflowProviderRunEventsResponse, error)
+	GetRunOutput(ctx context.Context, request *GetWorkflowProviderRunOutputRequest) (*gestaltclient.GetWorkflowProviderRunOutputResponse, error)
+	CancelRun(ctx context.Context, request *CancelWorkflowProviderRunRequest) (*gestaltclient.WorkflowRun, error)
+	SignalRun(ctx context.Context, request *SignalWorkflowProviderRunRequest) (*gestaltclient.SignalWorkflowRunResponse, error)
+	SignalOrStartRun(ctx context.Context, request *SignalOrStartWorkflowProviderRunRequest) (*gestaltclient.SignalWorkflowRunResponse, error)
 }
 
 var _ WorkflowClientREST = (*WorkflowClient)(nil)

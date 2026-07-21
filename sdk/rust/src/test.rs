@@ -10,13 +10,15 @@ use crate::rpc_support::GestaltError;
 /// provider-kind-specific request/response path.
 ///
 /// Native message type for `gestalt.provider.v1.HelloWorldRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HelloWorldRequest {}
 
 /// HelloWorldResponse returns the fixed test-provider message.
 ///
 /// Native message type for `gestalt.provider.v1.HelloWorldResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HelloWorldResponse {
     /// The `message` field.
     pub message: String,

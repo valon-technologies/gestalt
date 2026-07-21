@@ -12,7 +12,7 @@ func ToWireAction(value *Action) *proto.Action {
 	}
 	out := &proto.Action{
 		Name:       value.Name,
-		Properties: toWireStruct(value.Properties),
+		Properties: ToWireStruct(value.Properties),
 	}
 	return out
 }
@@ -23,7 +23,7 @@ func FromWireAction(value *proto.Action) *Action {
 	}
 	out := &Action{
 		Name:       value.Name,
-		Properties: fromWireStruct(value.Properties),
+		Properties: FromWireStruct(value.Properties),
 	}
 	return out
 }
@@ -103,7 +103,7 @@ func ToWireAuthorizationModelRef(value *AuthorizationModelRef) *proto.Authorizat
 	out := &proto.AuthorizationModelRef{
 		Id:        value.Id,
 		Version:   value.Version,
-		CreatedAt: toWireTimestamp(value.CreatedAt),
+		CreatedAt: ToWireTimestamp(value.CreatedAt),
 	}
 	return out
 }
@@ -115,7 +115,7 @@ func FromWireAuthorizationModelRef(value *proto.AuthorizationModelRef) *Authoriz
 	out := &AuthorizationModelRef{
 		Id:        value.Id,
 		Version:   value.Version,
-		CreatedAt: fromWireTimestamp(value.CreatedAt),
+		CreatedAt: FromWireTimestamp(value.CreatedAt),
 	}
 	return out
 }
@@ -512,7 +512,7 @@ func ToWireRelationship(value *Relationship) *proto.Relationship {
 	}
 	out := &proto.Relationship{
 		Tuple:       ToWireRelationshipTuple(value.Tuple),
-		Properties:  toWireStruct(value.Properties),
+		Properties:  ToWireStruct(value.Properties),
 		SourceLayer: proto.SourceLayer(value.SourceLayer),
 	}
 	return out
@@ -524,7 +524,7 @@ func FromWireRelationship(value *proto.Relationship) *Relationship {
 	}
 	out := &Relationship{
 		Tuple:       FromWireRelationshipTuple(value.Tuple),
-		Properties:  fromWireStruct(value.Properties),
+		Properties:  FromWireStruct(value.Properties),
 		SourceLayer: SourceLayer(value.SourceLayer),
 	}
 	return out
@@ -625,7 +625,7 @@ func ToWireResource(value *Resource) *proto.Resource {
 	out := &proto.Resource{
 		Type:       value.Type,
 		Id:         value.Id,
-		Properties: toWireStruct(value.Properties),
+		Properties: ToWireStruct(value.Properties),
 	}
 	return out
 }
@@ -637,7 +637,7 @@ func FromWireResource(value *proto.Resource) *Resource {
 	out := &Resource{
 		Type:       value.Type,
 		Id:         value.Id,
-		Properties: fromWireStruct(value.Properties),
+		Properties: FromWireStruct(value.Properties),
 	}
 	return out
 }
@@ -735,7 +735,7 @@ func ToWireSubject(value *Subject) *proto.Subject {
 	out := &proto.Subject{
 		Type:       value.Type,
 		Id:         value.Id,
-		Properties: toWireStruct(value.Properties),
+		Properties: ToWireStruct(value.Properties),
 	}
 	return out
 }
@@ -747,7 +747,7 @@ func FromWireSubject(value *proto.Subject) *Subject {
 	out := &Subject{
 		Type:       value.Type,
 		Id:         value.Id,
-		Properties: fromWireStruct(value.Properties),
+		Properties: FromWireStruct(value.Properties),
 	}
 	return out
 }

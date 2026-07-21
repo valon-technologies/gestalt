@@ -43,7 +43,7 @@ func renderScalarShapesWireJSON(t *testing.T) string {
 		messages:     map[string]*model.Message{msg.FullName: msg},
 		wireMessages: map[string]*model.Message{msg.FullName: msg},
 	}
-	r := newRenderer(idx, "codec/scalar_shapes", "codec/scalar_shapes", moduleCodec, true)
+	r := newRenderer(idx, "codec/scalar_shapes", "codec/scalar_shapes", moduleCodec, true, nil, nil)
 	r.renderWireProtoJSON(msg, true, false)
 	return r.body.String()
 }

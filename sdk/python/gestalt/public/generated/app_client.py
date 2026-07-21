@@ -6,11 +6,13 @@ from __future__ import annotations
 
 from typing import Any, Protocol, cast
 
+from gestalt._codec import app as _app_provider_codec
+from gestalt.app import OperationResult
 from gestalt.invoke_support import decode_app_result, decode_graphql_result
 
 from ..._gen.v1 import app_pb2 as _app_pb2
 from ._codec import app as _app_codec
-from .app import AppInvokeGraphQLRequest, AppInvokeRequest, OperationResult
+from .app import AppInvokeGraphQLRequest, AppInvokeRequest
 from .metadata import (
     METHOD_APP_INVOKE,
     METHOD_APP_INVOKE_GRAPHQL,
@@ -38,7 +40,7 @@ class AppClient:
             wire,
             _app_pb2.OperationResult,
         )
-        return _app_codec.from_wire_operation_result(wire_response)
+        return _app_provider_codec.from_wire_operation_result(wire_response)
 
     def invoke(self, request: AppInvokeRequest) -> Any:
         """The result decodes with the standard JSON operation envelope semantics; envelope failures raise InvokeError."""
@@ -61,7 +63,7 @@ class AppClient:
             wire,
             _app_pb2.OperationResult,
         )
-        return _app_codec.from_wire_operation_result(wire_response)
+        return _app_provider_codec.from_wire_operation_result(wire_response)
 
     def invoke_graphql_raw(self, request: AppInvokeGraphQLRequest) -> OperationResult:
         """Alias for invoke_graphql."""
@@ -98,7 +100,7 @@ class AsyncAppClient:
             wire,
             _app_pb2.OperationResult,
         )
-        return _app_codec.from_wire_operation_result(wire_response)
+        return _app_provider_codec.from_wire_operation_result(wire_response)
 
     async def invoke(self, request: AppInvokeRequest) -> Any:
         """The result decodes with the standard JSON operation envelope semantics; envelope failures raise InvokeError."""
@@ -121,7 +123,7 @@ class AsyncAppClient:
             wire,
             _app_pb2.OperationResult,
         )
-        return _app_codec.from_wire_operation_result(wire_response)
+        return _app_provider_codec.from_wire_operation_result(wire_response)
 
     async def invoke_graphql_raw(
         self, request: AppInvokeGraphQLRequest

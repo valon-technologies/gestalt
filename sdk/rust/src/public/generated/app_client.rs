@@ -2,20 +2,13 @@
 
 //! Generated transport-neutral App client for the public gestaltd surface.
 
-use crate::public::generated::agent::{
-    AgentInteraction, AgentSession, AgentTurn, CancelAgentProviderTurnRequest,
-    CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest,
-    GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
-    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
-    ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
-    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
-    ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
-    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
+use crate::agent::{
+    AgentInteraction, AgentSession, AgentTurn, ListAgentProviderInteractionsResponse,
+    ListAgentProviderSessionsResponse, ListAgentProviderTurnEventsResponse,
+    ListAgentProviderTurnsResponse,
 };
-use crate::public::generated::app::{
-    AppInvokeGraphQLRequest, AppInvokeRequest, InvokeFrame, OperationResult,
-};
-use crate::public::generated::authorization::{
+use crate::app::{InvokeFrame, OperationResult};
+use crate::authorization::{
     AddRelationshipRequest, AddRelationshipResponse, CheckAccessManyRequest,
     CheckAccessManyResponse, CheckAccessRequest, CheckAccessResponse, DeleteRelationshipRequest,
     DeleteRelationshipResponse, GetActiveModelRefResponse, ListActiveModelResourceTypesRequest,
@@ -23,24 +16,15 @@ use crate::public::generated::authorization::{
     SetActiveModelRequest, SetActiveModelResponse, SetAuthorizationStateRequest,
     SetAuthorizationStateResponse,
 };
-use crate::public::generated::codec::agent::{
+use crate::codec::agent::{
     from_wire_agent_interaction, from_wire_agent_session, from_wire_agent_turn,
     from_wire_list_agent_provider_interactions_response,
     from_wire_list_agent_provider_sessions_response,
     from_wire_list_agent_provider_turn_events_response,
-    from_wire_list_agent_provider_turns_response, to_wire_cancel_agent_provider_turn_request,
-    to_wire_create_agent_provider_session_request, to_wire_create_agent_provider_turn_request,
-    to_wire_get_agent_provider_session_request, to_wire_get_agent_provider_turn_request,
-    to_wire_list_agent_provider_interactions_request, to_wire_list_agent_provider_sessions_request,
-    to_wire_list_agent_provider_turn_events_request, to_wire_list_agent_provider_turns_request,
-    to_wire_resolve_agent_provider_interaction_request,
-    to_wire_update_agent_provider_session_request,
+    from_wire_list_agent_provider_turns_response,
 };
-use crate::public::generated::codec::app::{
-    from_wire_invoke_frame, from_wire_operation_result, to_wire_app_invoke_graphql_request,
-    to_wire_app_invoke_request,
-};
-use crate::public::generated::codec::authorization::{
+use crate::codec::app::{from_wire_invoke_frame, from_wire_operation_result};
+use crate::codec::authorization::{
     from_wire_add_relationship_response, from_wire_check_access_many_response,
     from_wire_check_access_response, from_wire_delete_relationship_response,
     from_wire_get_active_model_ref_response, from_wire_list_active_model_resource_types_response,
@@ -51,7 +35,7 @@ use crate::public::generated::codec::authorization::{
     to_wire_list_relationships_request, to_wire_set_active_model_request,
     to_wire_set_authorization_state_request,
 };
-use crate::public::generated::codec::external_credential::{
+use crate::codec::external_credential::{
     from_wire_exchange_external_credential_response, from_wire_external_credential,
     from_wire_list_external_credentials_response, from_wire_resolve_external_credential_response,
     to_wire_create_external_credential_request, to_wire_delete_external_credential_request,
@@ -60,14 +44,14 @@ use crate::public::generated::codec::external_credential::{
     to_wire_upsert_external_credential_request,
     to_wire_validate_external_credential_config_request,
 };
-use crate::public::generated::codec::identity::{
+use crate::codec::identity::{
     from_wire_authorize_response, from_wire_get_grant_response, from_wire_introspect_response,
     from_wire_list_grants_response, from_wire_revoke_grant_response, from_wire_token_response,
     from_wire_user_info_response, to_wire_authorize_request, to_wire_get_grant_request,
     to_wire_introspect_request, to_wire_list_grants_request, to_wire_revoke_grant_request,
     to_wire_token_request, to_wire_user_info_request,
 };
-use crate::public::generated::codec::indexeddb::{
+use crate::codec::indexeddb::{
     from_wire_count_response, from_wire_delete_response, from_wire_key_response,
     from_wire_keys_response, from_wire_record_response, from_wire_records_response,
     to_wire_create_index_request, to_wire_create_object_store_request,
@@ -75,12 +59,51 @@ use crate::public::generated::codec::indexeddb::{
     to_wire_object_store_name_request, to_wire_object_store_range_request,
     to_wire_object_store_request, to_wire_record_request,
 };
-use crate::public::generated::codec::workflow::{
+use crate::codec::workflow::{
     from_wire_get_workflow_provider_run_events_response,
     from_wire_get_workflow_provider_run_output_response,
     from_wire_list_workflow_provider_definitions_response,
     from_wire_list_workflow_provider_runs_response, from_wire_signal_workflow_run_response,
     from_wire_workflow_definition, from_wire_workflow_run,
+};
+use crate::external_credential::{
+    CreateExternalCredentialRequest, DeleteExternalCredentialRequest,
+    ExchangeExternalCredentialRequest, ExchangeExternalCredentialResponse, ExternalCredential,
+    GetExternalCredentialRequest, ListExternalCredentialsRequest, ListExternalCredentialsResponse,
+    ResolveExternalCredentialRequest, ResolveExternalCredentialResponse,
+    UpsertExternalCredentialRequest, ValidateExternalCredentialConfigRequest,
+};
+use crate::identity::{
+    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
+    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
+    RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
+};
+use crate::indexeddb::{
+    CountResponse, CreateIndexRequest, CreateObjectStoreRequest, DeleteIndexRequest,
+    DeleteObjectStoreRequest, DeleteResponse, IndexQueryRequest, KeyResponse, KeysResponse,
+    ObjectStoreNameRequest, ObjectStoreRangeRequest, ObjectStoreRequest, RecordRequest,
+    RecordResponse, RecordsResponse,
+};
+use crate::public::generated::agent::{
+    CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
+    CreateAgentProviderTurnRequest, GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    ListAgentProviderInteractionsRequest, ListAgentProviderSessionsRequest,
+    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnsRequest,
+    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
+};
+use crate::public::generated::app::{AppInvokeGraphQLRequest, AppInvokeRequest};
+use crate::public::generated::codec::agent::{
+    to_wire_cancel_agent_provider_turn_request, to_wire_create_agent_provider_session_request,
+    to_wire_create_agent_provider_turn_request, to_wire_get_agent_provider_session_request,
+    to_wire_get_agent_provider_turn_request, to_wire_list_agent_provider_interactions_request,
+    to_wire_list_agent_provider_sessions_request, to_wire_list_agent_provider_turn_events_request,
+    to_wire_list_agent_provider_turns_request, to_wire_resolve_agent_provider_interaction_request,
+    to_wire_update_agent_provider_session_request,
+};
+use crate::public::generated::codec::app::{
+    to_wire_app_invoke_graphql_request, to_wire_app_invoke_request,
+};
+use crate::public::generated::codec::workflow::{
     to_wire_apply_workflow_provider_definition_request,
     to_wire_cancel_workflow_provider_run_request,
     to_wire_delete_workflow_provider_definition_request,
@@ -94,24 +117,6 @@ use crate::public::generated::codec::workflow::{
     to_wire_signal_or_start_workflow_provider_run_request,
     to_wire_signal_workflow_provider_run_request, to_wire_start_workflow_provider_run_request,
 };
-use crate::public::generated::external_credential::{
-    CreateExternalCredentialRequest, DeleteExternalCredentialRequest,
-    ExchangeExternalCredentialRequest, ExchangeExternalCredentialResponse, ExternalCredential,
-    GetExternalCredentialRequest, ListExternalCredentialsRequest, ListExternalCredentialsResponse,
-    ResolveExternalCredentialRequest, ResolveExternalCredentialResponse,
-    UpsertExternalCredentialRequest, ValidateExternalCredentialConfigRequest,
-};
-use crate::public::generated::identity::{
-    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
-    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
-    RevokeGrantResponse, TokenRequest, TokenResponse, UserInfoRequest, UserInfoResponse,
-};
-use crate::public::generated::indexeddb::{
-    CountResponse, CreateIndexRequest, CreateObjectStoreRequest, DeleteIndexRequest,
-    DeleteObjectStoreRequest, DeleteResponse, IndexQueryRequest, KeyResponse, KeysResponse,
-    ObjectStoreNameRequest, ObjectStoreRangeRequest, ObjectStoreRequest, RecordRequest,
-    RecordResponse, RecordsResponse,
-};
 use crate::public::generated::invoke_support::{
     InvokeError, decode_app_result, decode_graphql_result,
 };
@@ -122,14 +127,16 @@ use crate::public::generated::unary_transport::UnaryTransport;
 use crate::public::generated::workflow::{
     ApplyWorkflowProviderDefinitionRequest, CancelWorkflowProviderRunRequest,
     DeleteWorkflowProviderDefinitionRequest, GetWorkflowProviderDefinitionRequest,
-    GetWorkflowProviderRunEventsRequest, GetWorkflowProviderRunEventsResponse,
-    GetWorkflowProviderRunOutputRequest, GetWorkflowProviderRunOutputResponse,
+    GetWorkflowProviderRunEventsRequest, GetWorkflowProviderRunOutputRequest,
     GetWorkflowProviderRunRequest, ListWorkflowProviderDefinitionsRequest,
-    ListWorkflowProviderDefinitionsResponse, ListWorkflowProviderRunsRequest,
-    ListWorkflowProviderRunsResponse, SetWorkflowProviderActivationPausedRequest,
+    ListWorkflowProviderRunsRequest, SetWorkflowProviderActivationPausedRequest,
     SetWorkflowProviderDefinitionPausedRequest, SignalOrStartWorkflowProviderRunRequest,
-    SignalWorkflowProviderRunRequest, SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
-    WorkflowDefinition, WorkflowRun,
+    SignalWorkflowProviderRunRequest, StartWorkflowProviderRunRequest,
+};
+use crate::workflow::{
+    GetWorkflowProviderRunEventsResponse, GetWorkflowProviderRunOutputResponse,
+    ListWorkflowProviderDefinitionsResponse, ListWorkflowProviderRunsResponse,
+    SignalWorkflowRunResponse, WorkflowDefinition, WorkflowRun,
 };
 
 /// Transport-neutral client for the public gestaltd App surface.

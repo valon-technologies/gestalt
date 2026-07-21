@@ -5,6 +5,7 @@ package generated
 import (
 	"context"
 
+	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -19,44 +20,44 @@ func NewExternalCredentialsClient(transport Transport) *ExternalCredentialsClien
 	return &ExternalCredentialsClient{transport: transport}
 }
 
-func (c *ExternalCredentialsClient) CreateCredential(ctx context.Context, request *CreateExternalCredentialRequest) (*ExternalCredential, error) {
-	wire := ToWireCreateExternalCredentialRequest(request)
+func (c *ExternalCredentialsClient) CreateCredential(ctx context.Context, request *gestaltclient.CreateExternalCredentialRequest) (*gestaltclient.ExternalCredential, error) {
+	wire := gestaltclient.ToWireCreateExternalCredentialRequest(request)
 	out := &proto.ExternalCredential{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsCreateCredential, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireExternalCredential(out), nil
+	return gestaltclient.FromWireExternalCredential(out), nil
 }
 
-func (c *ExternalCredentialsClient) UpsertCredential(ctx context.Context, request *UpsertExternalCredentialRequest) (*ExternalCredential, error) {
-	wire := ToWireUpsertExternalCredentialRequest(request)
+func (c *ExternalCredentialsClient) UpsertCredential(ctx context.Context, request *gestaltclient.UpsertExternalCredentialRequest) (*gestaltclient.ExternalCredential, error) {
+	wire := gestaltclient.ToWireUpsertExternalCredentialRequest(request)
 	out := &proto.ExternalCredential{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsUpsertCredential, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireExternalCredential(out), nil
+	return gestaltclient.FromWireExternalCredential(out), nil
 }
 
-func (c *ExternalCredentialsClient) GetCredential(ctx context.Context, request *GetExternalCredentialRequest) (*ExternalCredential, error) {
-	wire := ToWireGetExternalCredentialRequest(request)
+func (c *ExternalCredentialsClient) GetCredential(ctx context.Context, request *gestaltclient.GetExternalCredentialRequest) (*gestaltclient.ExternalCredential, error) {
+	wire := gestaltclient.ToWireGetExternalCredentialRequest(request)
 	out := &proto.ExternalCredential{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsGetCredential, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireExternalCredential(out), nil
+	return gestaltclient.FromWireExternalCredential(out), nil
 }
 
-func (c *ExternalCredentialsClient) ListCredentials(ctx context.Context, request *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error) {
-	wire := ToWireListExternalCredentialsRequest(request)
+func (c *ExternalCredentialsClient) ListCredentials(ctx context.Context, request *gestaltclient.ListExternalCredentialsRequest) (*gestaltclient.ListExternalCredentialsResponse, error) {
+	wire := gestaltclient.ToWireListExternalCredentialsRequest(request)
 	out := &proto.ListExternalCredentialsResponse{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsListCredentials, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListExternalCredentialsResponse(out), nil
+	return gestaltclient.FromWireListExternalCredentialsResponse(out), nil
 }
 
-func (c *ExternalCredentialsClient) DeleteCredential(ctx context.Context, request *DeleteExternalCredentialRequest) error {
-	wire := ToWireDeleteExternalCredentialRequest(request)
+func (c *ExternalCredentialsClient) DeleteCredential(ctx context.Context, request *gestaltclient.DeleteExternalCredentialRequest) error {
+	wire := gestaltclient.ToWireDeleteExternalCredentialRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsDeleteCredential, wire, out); err != nil {
 		return toGestaltError(err)
@@ -64,8 +65,8 @@ func (c *ExternalCredentialsClient) DeleteCredential(ctx context.Context, reques
 	return nil
 }
 
-func (c *ExternalCredentialsClient) ValidateCredentialConfig(ctx context.Context, request *ValidateExternalCredentialConfigRequest) error {
-	wire := ToWireValidateExternalCredentialConfigRequest(request)
+func (c *ExternalCredentialsClient) ValidateCredentialConfig(ctx context.Context, request *gestaltclient.ValidateExternalCredentialConfigRequest) error {
+	wire := gestaltclient.ToWireValidateExternalCredentialConfigRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsValidateCredentialConfig, wire, out); err != nil {
 		return toGestaltError(err)
@@ -73,20 +74,20 @@ func (c *ExternalCredentialsClient) ValidateCredentialConfig(ctx context.Context
 	return nil
 }
 
-func (c *ExternalCredentialsClient) ResolveCredential(ctx context.Context, request *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
-	wire := ToWireResolveExternalCredentialRequest(request)
+func (c *ExternalCredentialsClient) ResolveCredential(ctx context.Context, request *gestaltclient.ResolveExternalCredentialRequest) (*gestaltclient.ResolveExternalCredentialResponse, error) {
+	wire := gestaltclient.ToWireResolveExternalCredentialRequest(request)
 	out := &proto.ResolveExternalCredentialResponse{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsResolveCredential, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireResolveExternalCredentialResponse(out), nil
+	return gestaltclient.FromWireResolveExternalCredentialResponse(out), nil
 }
 
-func (c *ExternalCredentialsClient) ExchangeCredential(ctx context.Context, request *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
-	wire := ToWireExchangeExternalCredentialRequest(request)
+func (c *ExternalCredentialsClient) ExchangeCredential(ctx context.Context, request *gestaltclient.ExchangeExternalCredentialRequest) (*gestaltclient.ExchangeExternalCredentialResponse, error) {
+	wire := gestaltclient.ToWireExchangeExternalCredentialRequest(request)
 	out := &proto.ExchangeExternalCredentialResponse{}
 	if err := c.transport.Unary(ctx, MethodExternalCredentialsExchangeCredential, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireExchangeExternalCredentialResponse(out), nil
+	return gestaltclient.FromWireExchangeExternalCredentialResponse(out), nil
 }

@@ -4,310 +4,19 @@
 
 from __future__ import annotations
 
-import datetime
 from dataclasses import dataclass, field
 
+from gestalt.agent import (
+    AgentExecutionStatus,
+    AgentMessage,
+    AgentOutput,
+    AgentSessionStartConfig,
+    AgentSessionState,
+    AgentToolConfig,
+    AgentWorkspace,
+    PreparedAgentWorkspace,
+)
 from gestalt.rpc_support import JsonValue
-
-from .app import AgentToolRef, OperationAnnotations
-
-# Open enum: unknown numeric values are preserved, so the type is int.
-AgentExecutionStatus = int
-
-
-class AgentExecutionStatusValues:
-    """Named values for the open AgentExecutionStatus enum."""
-
-    UNSPECIFIED: AgentExecutionStatus = 0
-    PENDING: AgentExecutionStatus = 1
-    RUNNING: AgentExecutionStatus = 2
-    SUCCEEDED: AgentExecutionStatus = 3
-    FAILED: AgentExecutionStatus = 4
-    CANCELED: AgentExecutionStatus = 5
-    WAITING_FOR_INPUT: AgentExecutionStatus = 6
-
-
-# Open enum: unknown numeric values are preserved, so the type is int.
-AgentInteractionState = int
-
-
-class AgentInteractionStateValues:
-    """Named values for the open AgentInteractionState enum."""
-
-    UNSPECIFIED: AgentInteractionState = 0
-    PENDING: AgentInteractionState = 1
-    RESOLVED: AgentInteractionState = 2
-    CANCELED: AgentInteractionState = 3
-
-
-# Open enum: unknown numeric values are preserved, so the type is int.
-AgentInteractionType = int
-
-
-class AgentInteractionTypeValues:
-    """Named values for the open AgentInteractionType enum."""
-
-    UNSPECIFIED: AgentInteractionType = 0
-    APPROVAL: AgentInteractionType = 1
-    CLARIFICATION: AgentInteractionType = 2
-    INPUT: AgentInteractionType = 3
-
-
-# Open enum: unknown numeric values are preserved, so the type is int.
-AgentMessagePartType = int
-
-
-class AgentMessagePartTypeValues:
-    """Named values for the open AgentMessagePartType enum."""
-
-    UNSPECIFIED: AgentMessagePartType = 0
-    TEXT: AgentMessagePartType = 1
-    JSON: AgentMessagePartType = 2
-    TOOL_CALL: AgentMessagePartType = 3
-    TOOL_RESULT: AgentMessagePartType = 4
-    IMAGE_REF: AgentMessagePartType = 5
-
-
-# Open enum: unknown numeric values are preserved, so the type is int.
-AgentSessionState = int
-
-
-class AgentSessionStateValues:
-    """Named values for the open AgentSessionState enum."""
-
-    UNSPECIFIED: AgentSessionState = 0
-    ACTIVE: AgentSessionState = 1
-    ARCHIVED: AgentSessionState = 2
-
-
-@dataclass(frozen=True, slots=True)
-class AgentCatalogToolConfig:
-    refs: list[AgentToolRef] = field(default_factory=list)
-    tools: list[ListedAgentTool] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class AgentInteraction:
-    id: str = ""
-    type: AgentInteractionType = 0
-    state: AgentInteractionState = 0
-    title: str = ""
-    prompt: str = ""
-    request: dict[str, JsonValue] | None = None
-    resolution: dict[str, JsonValue] | None = None
-    created_at: datetime.datetime | None = None
-    resolved_at: datetime.datetime | None = None
-    turn_id: str = ""
-    session_id: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class AgentMessage:
-    role: str = ""
-    text: str = ""
-    parts: list[AgentMessagePart] = field(default_factory=list)
-    metadata: dict[str, JsonValue] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentMessagePart:
-    type: AgentMessagePartType = 0
-    text: str = ""
-    json: dict[str, JsonValue] | None = None
-    tool_call: AgentMessagePartToolCall | None = None
-    tool_result: AgentMessagePartToolResult | None = None
-    image_ref: AgentMessagePartImageRef | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentMessagePartImageRef:
-    uri: str = ""
-    mime_type: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class AgentMessagePartToolCall:
-    id: str = ""
-    tool_id: str = ""
-    arguments: dict[str, JsonValue] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentMessagePartToolResult:
-    tool_call_id: str = ""
-    status: int = 0
-    content: str = ""
-    output: dict[str, JsonValue] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentNoTools:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class AgentOutputText:
-    value: AgentTextOutput
-
-
-@dataclass(frozen=True, slots=True)
-class AgentOutputStructured:
-    value: AgentStructuredOutput
-
-
-AgentOutputKind = AgentOutputText | AgentOutputStructured | None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentOutput:
-    kind: AgentOutputKind = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentSession:
-    id: str = ""
-    provider_name: str = ""
-    model: str = ""
-    client_ref: str = ""
-    state: AgentSessionState = 0
-    metadata: dict[str, JsonValue] | None = None
-    created_by_subject_id: str = ""
-    created_at: datetime.datetime | None = None
-    updated_at: datetime.datetime | None = None
-    last_turn_at: datetime.datetime | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentSessionStartConfig:
-    hooks: list[AgentSessionStartHook] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class AgentSessionStartHook:
-    id: str = ""
-    type: str = ""
-    command: list[str] = field(default_factory=list)
-    cwd: str = ""
-    timeout: str = ""
-    env: dict[str, str] = field(default_factory=dict)
-    output: AgentSessionStartHookOutput | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentSessionStartHookOutput:
-    additional_context: bool = False
-    metadata: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class AgentStructuredOutput:
-    schema: dict[str, JsonValue] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTextOutput:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class AgentToolConfigNone:
-    value: AgentNoTools
-
-
-@dataclass(frozen=True, slots=True)
-class AgentToolConfigCatalog:
-    value: AgentCatalogToolConfig
-
-
-AgentToolConfigSource = AgentToolConfigNone | AgentToolConfigCatalog | None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentToolConfig:
-    source: AgentToolConfigSource = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTurnText:
-    value: AgentTurnTextOutput
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTurnStructured:
-    value: AgentTurnStructuredOutput
-
-
-AgentTurnOutput = AgentTurnText | AgentTurnStructured | None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTurn:
-    id: str = ""
-    session_id: str = ""
-    provider_name: str = ""
-    model: str = ""
-    status: AgentExecutionStatus = 0
-    messages: list[AgentMessage] = field(default_factory=list)
-    status_message: str = ""
-    created_by_subject_id: str = ""
-    created_at: datetime.datetime | None = None
-    started_at: datetime.datetime | None = None
-    completed_at: datetime.datetime | None = None
-    execution_ref: str = ""
-    output: AgentTurnOutput = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTurnDisplay:
-    kind: str = ""
-    phase: str = ""
-    text: str = ""
-    label: str = ""
-    ref: str = ""
-    parent_ref: str = ""
-    input: JsonValue | None = None
-    output: JsonValue | None = None
-    error: JsonValue | None = None
-    action: str = ""
-    format: str = ""
-    language: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTurnEvent:
-    id: str = ""
-    turn_id: str = ""
-    seq: int = 0
-    type: str = ""
-    source: str = ""
-    visibility: str = ""
-    data: dict[str, JsonValue] | None = None
-    created_at: datetime.datetime | None = None
-    display: AgentTurnDisplay | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTurnStructuredOutput:
-    text: str = ""
-    value: dict[str, JsonValue] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class AgentTurnTextOutput:
-    text: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class AgentWorkspace:
-    checkouts: list[AgentWorkspaceGitCheckout] = field(default_factory=list)
-    cwd: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class AgentWorkspaceGitCheckout:
-    url: str = ""
-    ref: str = ""
-    path: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,11 +82,6 @@ class ListAgentProviderInteractionsRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class ListAgentProviderInteractionsResponse:
-    interactions: list[AgentInteraction] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
 class ListAgentProviderSessionsRequest:
     session_ids: list[str] = field(default_factory=list)
     state: AgentSessionState = 0
@@ -391,22 +95,12 @@ class ListAgentProviderSessionsRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class ListAgentProviderSessionsResponse:
-    sessions: list[AgentSession] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
 class ListAgentProviderTurnEventsRequest:
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
     provider_name: str = ""
     session_id: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class ListAgentProviderTurnEventsResponse:
-    events: list[AgentTurnEvent] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -422,31 +116,6 @@ class ListAgentProviderTurnsRequest:
     #: direct lookup.
     summary_only: bool = False
     provider_name: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class ListAgentProviderTurnsResponse:
-    turns: list[AgentTurn] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class ListedAgentTool:
-    id: str = ""
-    mcp_name: str = ""
-    title: str = ""
-    description: str = ""
-    input_schema: str = ""
-    output_schema: str = ""
-    annotations: OperationAnnotations | None = None
-    ref: AgentToolRef | None = None
-    tags: list[str] = field(default_factory=list)
-    search_text: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class PreparedAgentWorkspace:
-    root: str = ""
-    cwd: str = ""
 
 
 @dataclass(frozen=True, slots=True)

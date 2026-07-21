@@ -20,13 +20,13 @@ func NewAppClient(transport Transport) *AppClient {
 	return &AppClient{transport: transport}
 }
 
-func (c *AppClient) InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*OperationResult, error) {
+func (c *AppClient) InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*gestaltclient.OperationResult, error) {
 	wire := ToWireAppInvokeRequest(request)
 	out := &proto.OperationResult{}
 	if err := c.transport.Unary(ctx, MethodAppInvoke, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireOperationResult(out), nil
+	return gestaltclient.FromWireOperationResult(out), nil
 }
 
 func (c *AppClient) Invoke(ctx context.Context, request *AppInvokeRequest) (any, error) {
@@ -51,8 +51,8 @@ type InvokeStreamStream struct {
 	recv ServerStreamRecvCloser
 }
 
-// Recv decodes the next InvokeFrame frame. It returns io.EOF when the stream is exhausted.
-func (s *InvokeStreamStream) Recv() (*InvokeFrame, error) {
+// Recv decodes the next gestaltclient.InvokeFrame frame. It returns io.EOF when the stream is exhausted.
+func (s *InvokeStreamStream) Recv() (*gestaltclient.InvokeFrame, error) {
 	out := &proto.InvokeFrame{}
 	if err := s.recv.Recv(out); err != nil {
 		if err == io.EOF {
@@ -60,7 +60,7 @@ func (s *InvokeStreamStream) Recv() (*InvokeFrame, error) {
 		}
 		return nil, toGestaltError(err)
 	}
-	return FromWireInvokeFrame(out), nil
+	return gestaltclient.FromWireInvokeFrame(out), nil
 }
 
 // Close releases the underlying stream. It is safe to call after Recv returns io.EOF.
@@ -68,17 +68,17 @@ func (s *InvokeStreamStream) Close() error {
 	return s.recv.Close()
 }
 
-func (c *AppClient) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {
+func (c *AppClient) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*gestaltclient.OperationResult, error) {
 	wire := ToWireAppInvokeGraphQLRequest(request)
 	out := &proto.OperationResult{}
 	if err := c.transport.Unary(ctx, MethodAppInvokeGraphQL, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireOperationResult(out), nil
+	return gestaltclient.FromWireOperationResult(out), nil
 }
 
 // InvokeGraphQLRaw is an alias for InvokeGraphQL.
-func (c *AppClient) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {
+func (c *AppClient) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*gestaltclient.OperationResult, error) {
 	return c.InvokeGraphQL(ctx, request)
 }
 
@@ -92,10 +92,10 @@ func (c *AppClient) InvokeGraphQLDecoded(ctx context.Context, request *AppInvoke
 
 // AppClientREST exposes only REST-backed methods for App.
 type AppClientREST interface {
-	InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*OperationResult, error)
+	InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*gestaltclient.OperationResult, error)
 	Invoke(ctx context.Context, request *AppInvokeRequest) (any, error)
-	InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error)
-	InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error)
+	InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*gestaltclient.OperationResult, error)
+	InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*gestaltclient.OperationResult, error)
 	InvokeGraphQLDecoded(ctx context.Context, request *AppInvokeGraphQLRequest) (any, error)
 }
 

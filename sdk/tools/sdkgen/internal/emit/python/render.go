@@ -47,8 +47,10 @@ type features struct {
 	invokeNames map[string]bool            // public: names from invoke_support
 	support     map[string]bool            // codec: converter names from _codec.support
 	crossNative map[string]map[string]bool // public: generated module base -> imported type names
+ 	crossShared map[string]map[string]bool
 	codecBases  map[string]bool            // public: codec module bases referenced by the client
 	crossCodec  map[string]bool            // codec: sibling codec module bases referenced
+ 	crossSharedCodec map[string]bool
 	metadataMethods map[string]bool        // public client: METHOD_* constants from metadata
 	unaryTransport  bool                   // public client: UnaryTransport from unary_transport
 	asyncTransport  bool                   // public client: AsyncUnaryTransport from unary_transport
@@ -63,6 +65,8 @@ type renderer struct {
 	wireBase     string
 	kind         moduleKind
 	publicClient bool
+	shared       map[string]bool
+	sharedCodec  map[string]bool
 	docIntro     string
 	features     features
 	body         strings.Builder
@@ -82,8 +86,10 @@ func newRenderer(idx *index, base, wireBase string, kind moduleKind) *renderer {
 			invokeNames:     map[string]bool{},
 			support:         map[string]bool{},
 			crossNative:     map[string]map[string]bool{},
+ 			crossShared:     map[string]map[string]bool{},
 			codecBases:      map[string]bool{},
 			crossCodec:      map[string]bool{},
+ 			crossSharedCodec: map[string]bool{},
 			metadataMethods: map[string]bool{},
 		},
 	}
@@ -142,11 +148,18 @@ func (r *renderer) wireGrpcModule() string {
 // the current file are not imports.
 func (r *renderer) crossRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
-	if base != r.base {
-		if r.features.crossNative[base] == nil {
-			r.features.crossNative[base] = map[string]bool{}
+ 	if r.publicClient && r.shared != nil && r.shared[name] {
+ 		if r.features.crossShared[base] == nil {
+ 			r.features.crossShared[base] = map[string]bool{}
 		}
-		r.features.crossNative[base][name] = true
+ 		r.features.crossShared[base][name] = true
+ 		return name
+ 	}
+ 	if base != r.base {
+ 		if r.features.crossNative[base] == nil {
+ 			r.features.crossNative[base] = map[string]bool{}
+ 		}
+ 		r.features.crossNative[base][name] = true
 	}
 	return name
 }
@@ -176,6 +189,10 @@ func (r *renderer) codecAlias(base string) string {
 // object, which keeps the circular import resolvable.
 func (r *renderer) codecRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
+ 	if r.publicClient && r.sharedCodec != nil && r.sharedCodec[name] {
+ 		r.features.crossSharedCodec[base] = true
+ 		return "_" + base + "_provider_codec." + name
+ 	}
 	if r.kind == moduleCodec {
 		if base == r.base {
 			return name
@@ -493,6 +510,9 @@ func (r *renderer) renderMessage(m *model.Message) {
 }
 
 func (r *renderer) renderConversions(m *model.Message) {
+ 	if r.publicClient && r.shared != nil && r.shared[localName(m.FullName)] {
+ 		return
+ 	}
 	name := localName(m.FullName)
 	nativeName := r.nativeRef(name)
 	r.features.anyType = true
@@ -531,6 +551,13 @@ func (r *renderer) renderConversions(m *model.Message) {
 		}
 		r.body.WriteString("    )\n\n\n")
 	}
+
+ 	if r.publicClient {
+ 		for _, o := range m.Oneofs {
+ 			r.renderOneofConverters(m, o)
+ 		}
+ 		return
+ 	}
 
 	fmt.Fprintf(&r.body, "def %s(%s: Any) -> %s:\n", fromWireFunc(m.FullName), param, nativeName)
 	if len(m.Fields) == 0 {
@@ -1167,8 +1194,15 @@ func (r *renderer) localImports() string {
 		if len(r.features.crossCodec) > 0 {
 			fmt.Fprintf(&b, "from . import %s\n", strings.Join(sortedKeys(r.features.crossCodec), ", "))
 		}
+ 		for _, base := range sortedKeys(r.features.crossSharedCodec) {
+ 			fmt.Fprintf(&b, "from gestalt._codec import %s as _%s_provider_codec\n", base, base)
+ 		}
 		if len(r.features.support) > 0 {
-			b.WriteString(fromImport(".support", sortedKeys(r.features.support)))
+ 			if r.publicClient {
+ 				b.WriteString(fromImport("gestalt._codec.support", sortedKeys(r.features.support)))
+ 			} else {
+ 				b.WriteString(fromImport(".support", sortedKeys(r.features.support)))
+ 			}
 		}
 		return b.String()
 	}
@@ -1180,8 +1214,15 @@ func (r *renderer) localImports() string {
 		codecModules[base] = r.codecAlias(base)
 	}
 	if r.features.helpers {
-		codecModules["support"] = "_support"
+		if r.publicClient {
+			b.WriteString("from gestalt._codec import support as _support\n")
+		} else {
+			codecModules["support"] = "_support"
+		}
 	}
+ 	for _, base := range sortedKeys(r.features.crossSharedCodec) {
+ 		fmt.Fprintf(&b, "from gestalt._codec import %s as _%s_provider_codec\n", base, base)
+ 	}
 	type localImport struct {
 		module string
 		lines  string
@@ -1219,6 +1260,9 @@ func (r *renderer) localImports() string {
 	for base, names := range r.features.crossNative {
 		locals = append(locals, localImport{module: "." + base, lines: fromImport("."+base, sortedKeys(names))})
 	}
+ 	for base, names := range r.features.crossShared {
+ 		locals = append(locals, localImport{module: "gestalt." + base, lines: fromImport("gestalt."+base, sortedKeys(names))})
+ 	}
 	if len(r.features.invokeNames) > 0 {
 		locals = append(locals, localImport{module: r.invokeImportModule(), lines: fromImport(r.invokeImportModule(), sortedKeys(r.features.invokeNames))})
 	}

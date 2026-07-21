@@ -82,7 +82,7 @@ pub fn http_status_to_gestalt_code(status: i32) -> i32 {
 
 /// Native representation of google.rpc.Status carried in response payloads,
 /// mirroring the canonical error model.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RpcStatus {
     /// Numeric gRPC status code, one of the gestalt_error_code constants.
     pub code: i32,

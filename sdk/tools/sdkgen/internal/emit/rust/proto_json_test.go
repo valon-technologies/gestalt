@@ -10,7 +10,7 @@ import (
 func TestWireJSONContainerUsesWKTHelpers(t *testing.T) {
 	t.Parallel()
 
-	r := newRenderer(&index{}, "codec/app", "codec/app", modulePublic, true)
+	r := newRenderer(&index{}, "codec/app", "codec/app", modulePublic, true, nil, nil)
 	cases := []struct {
 		name    string
 		ref     *model.TypeRef
@@ -58,7 +58,7 @@ func TestWireJSONEncodeEnumUsesNumericFallback(t *testing.T) {
 				Values:   []model.EnumValue{{Name: "OK", Number: 1}},
 			},
 		},
-	}, "codec/app", "codec/app", modulePublic, true)
+	}, "codec/app", "codec/app", modulePublic, true, nil, nil)
 	ref := &model.TypeRef{Kind: model.KindEnum, Enum: "test.v1.Status"}
 
 	encode := r.wireJSONEncodeValue(ref, "item", wireJSONScalarBorrowed)

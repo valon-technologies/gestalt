@@ -38,7 +38,8 @@ pub mod presign_method {
 /// ByteRange requests a half-open slice of an object's bytes.
 ///
 /// Native message type for `gestalt.provider.v1.ByteRange`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ByteRange {
     /// The `start` field; None when unset.
     pub start: Option<i64>,
@@ -49,7 +50,8 @@ pub struct ByteRange {
 /// CopyObjectRequest copies one object to another location.
 ///
 /// Native message type for `gestalt.provider.v1.CopyObjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CopyObjectRequest {
     /// The `source` field; None when unset.
     pub source: Option<S3ObjectRef>,
@@ -64,7 +66,8 @@ pub struct CopyObjectRequest {
 /// CopyObjectResponse returns metadata for the copied object.
 ///
 /// Native message type for `gestalt.provider.v1.CopyObjectResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CopyObjectResponse {
     /// The `meta` field; None when unset.
     pub meta: Option<S3ObjectMeta>,
@@ -75,7 +78,8 @@ pub struct CopyObjectResponse {
 /// streams object bytes through the backing S3 provider.
 ///
 /// Native message type for `gestalt.provider.v1.CreateObjectAccessURLRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateObjectAccessURLRequest {
     /// The `ref` field; None when unset.
     pub r#ref: Option<S3ObjectRef>,
@@ -95,12 +99,14 @@ pub struct CreateObjectAccessURLRequest {
 /// headers the caller must include when using it.
 ///
 /// Native message type for `gestalt.provider.v1.CreateObjectAccessURLResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateObjectAccessURLResponse {
     /// The `url` field.
     pub url: String,
     /// The `method` field.
     pub method: PresignMethod,
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
     /// The `headers` field.
@@ -110,7 +116,8 @@ pub struct CreateObjectAccessURLResponse {
 /// DeleteObjectRequest removes one object.
 ///
 /// Native message type for `gestalt.provider.v1.DeleteObjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteObjectRequest {
     /// The `ref` field; None when unset.
     pub r#ref: Option<S3ObjectRef>,
@@ -119,7 +126,8 @@ pub struct DeleteObjectRequest {
 /// HeadObjectRequest fetches metadata for one object.
 ///
 /// Native message type for `gestalt.provider.v1.HeadObjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HeadObjectRequest {
     /// The `ref` field; None when unset.
     pub r#ref: Option<S3ObjectRef>,
@@ -128,7 +136,8 @@ pub struct HeadObjectRequest {
 /// HeadObjectResponse returns object metadata.
 ///
 /// Native message type for `gestalt.provider.v1.HeadObjectResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HeadObjectResponse {
     /// The `meta` field; None when unset.
     pub meta: Option<S3ObjectMeta>,
@@ -137,7 +146,8 @@ pub struct HeadObjectResponse {
 /// ListObjectsRequest lists objects in the provider's configured bucket.
 ///
 /// Native message type for `gestalt.provider.v1.ListObjectsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListObjectsRequest {
     /// The `prefix` field.
     pub prefix: String,
@@ -154,7 +164,8 @@ pub struct ListObjectsRequest {
 /// ListObjectsResponse is one page of list-objects results.
 ///
 /// Native message type for `gestalt.provider.v1.ListObjectsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListObjectsResponse {
     /// The `objects` field.
     pub objects: Vec<S3ObjectMeta>,
@@ -169,7 +180,8 @@ pub struct ListObjectsResponse {
 /// PresignObjectRequest asks the provider to mint a presigned URL.
 ///
 /// Native message type for `gestalt.provider.v1.PresignObjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PresignObjectRequest {
     /// The `ref` field; None when unset.
     pub r#ref: Option<S3ObjectRef>,
@@ -188,12 +200,14 @@ pub struct PresignObjectRequest {
 /// PresignObjectResponse returns a presigned URL plus any required headers.
 ///
 /// Native message type for `gestalt.provider.v1.PresignObjectResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PresignObjectResponse {
     /// The `url` field.
     pub url: String,
     /// The `method` field.
     pub method: PresignMethod,
+    #[serde(with = "crate::serde_time")]
     /// The `expires_at` field; None when unset.
     pub expires_at: Option<std::time::SystemTime>,
     /// The `headers` field.
@@ -202,7 +216,7 @@ pub struct PresignObjectResponse {
 
 /// Values of the `result` oneof in `ReadObjectChunk`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ReadObjectChunkResult {
     /// The `meta` variant.
     Meta(S3ObjectMeta),
@@ -213,7 +227,8 @@ pub enum ReadObjectChunkResult {
 /// ReadObjectChunk is one frame in a streaming object read.
 ///
 /// Native message type for `gestalt.provider.v1.ReadObjectChunk`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadObjectChunk {
     /// The `result` oneof; None when unset.
     pub result: Option<ReadObjectChunkResult>,
@@ -222,7 +237,8 @@ pub struct ReadObjectChunk {
 /// ReadObjectRequest opens a streaming object read.
 ///
 /// Native message type for `gestalt.provider.v1.ReadObjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadObjectRequest {
     /// The `ref` field; None when unset.
     pub r#ref: Option<S3ObjectRef>,
@@ -232,8 +248,10 @@ pub struct ReadObjectRequest {
     pub if_match: String,
     /// The `if_none_match` field.
     pub if_none_match: String,
+    #[serde(with = "crate::serde_time")]
     /// The `if_modified_since` field; None when unset.
     pub if_modified_since: Option<std::time::SystemTime>,
+    #[serde(with = "crate::serde_time")]
     /// The `if_unmodified_since` field; None when unset.
     pub if_unmodified_since: Option<std::time::SystemTime>,
 }
@@ -241,7 +259,8 @@ pub struct ReadObjectRequest {
 /// S3ObjectMeta describes one object returned by the provider.
 ///
 /// Native message type for `gestalt.provider.v1.S3ObjectMeta`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct S3ObjectMeta {
     /// The `ref` field; None when unset.
     pub r#ref: Option<S3ObjectRef>,
@@ -251,6 +270,7 @@ pub struct S3ObjectMeta {
     pub size: i64,
     /// The `content_type` field.
     pub content_type: String,
+    #[serde(with = "crate::serde_time")]
     /// The `last_modified` field; None when unset.
     pub last_modified: Option<std::time::SystemTime>,
     /// The `metadata` field.
@@ -262,7 +282,8 @@ pub struct S3ObjectMeta {
 /// S3ObjectRef identifies one object or object version.
 ///
 /// Native message type for `gestalt.provider.v1.S3ObjectRef`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct S3ObjectRef {
     /// The `key` field.
     pub key: String,
@@ -274,7 +295,8 @@ pub struct S3ObjectRef {
 /// write-object stream.
 ///
 /// Native message type for `gestalt.provider.v1.WriteObjectOpen`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteObjectOpen {
     /// The `ref` field; None when unset.
     pub r#ref: Option<S3ObjectRef>,
@@ -298,7 +320,7 @@ pub struct WriteObjectOpen {
 
 /// Values of the `msg` oneof in `WriteObjectRequest`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WriteObjectRequestMsg {
     /// The `open` variant.
     Open(WriteObjectOpen),
@@ -309,7 +331,8 @@ pub enum WriteObjectRequestMsg {
 /// WriteObjectRequest is one frame in a write-object stream.
 ///
 /// Native message type for `gestalt.provider.v1.WriteObjectRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteObjectRequest {
     /// The `msg` oneof; None when unset.
     pub msg: Option<WriteObjectRequestMsg>,
@@ -318,7 +341,8 @@ pub struct WriteObjectRequest {
 /// WriteObjectResponse returns metadata for the committed object.
 ///
 /// Native message type for `gestalt.provider.v1.WriteObjectResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteObjectResponse {
     /// The `meta` field; None when unset.
     pub meta: Option<S3ObjectMeta>,

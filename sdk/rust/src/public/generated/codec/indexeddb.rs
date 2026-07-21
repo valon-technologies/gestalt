@@ -5,29 +5,6 @@
 #![allow(clippy::all, unused_variables, unused_mut, dead_code)]
 
 use crate::generated::v1;
-use crate::public::generated::codec::support::{
-    from_wire_timestamp, from_wire_value, to_wire_timestamp, to_wire_value,
-};
-use crate::public::generated::indexeddb::{
-    ColumnDef, CountResponse, CreateIndexRequest, CreateObjectStoreRequest, DeleteIndexRequest,
-    DeleteObjectStoreRequest, DeleteResponse, IndexQueryRequest, IndexSchema, IndexedDBQuery,
-    IndexedDBQueryQuery, KeyRange, KeyResponse, KeyValue, KeyValueArray, KeyValueKind,
-    KeysResponse, ObjectStoreNameRequest, ObjectStoreRangeRequest, ObjectStoreRequest,
-    ObjectStoreSchema, Record, RecordRequest, RecordResponse, RecordsResponse, TypedValue,
-    TypedValueKind,
-};
-
-/// Converts a native `ColumnDef` to its wire message.
-pub(crate) fn to_wire_column_def(value: ColumnDef) -> v1::ColumnDef {
-    v1::ColumnDef {
-        name: value.name,
-        r#type: value.r#type,
-        primary_key: value.primary_key,
-        not_null: value.not_null,
-        unique: value.unique,
-        ..Default::default()
-    }
-}
 
 /// Encodes a wire `ColumnDef` as protobuf JSON.
 pub(crate) fn encode_wire_column_def_json(value: &v1::ColumnDef) -> serde_json::Value {
@@ -91,11 +68,6 @@ pub(crate) fn decode_wire_column_def_json(
     })
 }
 
-/// Converts a wire `CountResponse` to its native message.
-pub(crate) fn from_wire_count_response(value: v1::CountResponse) -> CountResponse {
-    CountResponse { count: value.count }
-}
-
 /// Encodes a wire `CountResponse` as protobuf JSON.
 pub(crate) fn encode_wire_count_response_json(value: &v1::CountResponse) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -125,17 +97,6 @@ pub(crate) fn decode_wire_count_response_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `CreateIndexRequest` to its wire message.
-pub(crate) fn to_wire_create_index_request(value: CreateIndexRequest) -> v1::CreateIndexRequest {
-    v1::CreateIndexRequest {
-        store: value.store,
-        name: value.name,
-        key_path: value.key_path,
-        unique: value.unique,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `CreateIndexRequest` as protobuf JSON.
@@ -213,17 +174,6 @@ pub(crate) fn decode_wire_create_index_request_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `CreateObjectStoreRequest` to its wire message.
-pub(crate) fn to_wire_create_object_store_request(
-    value: CreateObjectStoreRequest,
-) -> v1::CreateObjectStoreRequest {
-    v1::CreateObjectStoreRequest {
-        name: value.name,
-        schema: value.schema.map(to_wire_object_store_schema),
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `IndexSchema` as protobuf JSON.
@@ -400,15 +350,6 @@ pub(crate) fn decode_wire_create_object_store_request_json(
     })
 }
 
-/// Converts a native `DeleteIndexRequest` to its wire message.
-pub(crate) fn to_wire_delete_index_request(value: DeleteIndexRequest) -> v1::DeleteIndexRequest {
-    v1::DeleteIndexRequest {
-        store: value.store,
-        name: value.name,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `DeleteIndexRequest` as protobuf JSON.
 pub(crate) fn encode_wire_delete_index_request_json(
     value: &v1::DeleteIndexRequest,
@@ -452,16 +393,6 @@ pub(crate) fn decode_wire_delete_index_request_json(
     })
 }
 
-/// Converts a native `DeleteObjectStoreRequest` to its wire message.
-pub(crate) fn to_wire_delete_object_store_request(
-    value: DeleteObjectStoreRequest,
-) -> v1::DeleteObjectStoreRequest {
-    v1::DeleteObjectStoreRequest {
-        name: value.name,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `DeleteObjectStoreRequest` as protobuf JSON.
 pub(crate) fn encode_wire_delete_object_store_request_json(
     value: &v1::DeleteObjectStoreRequest,
@@ -495,13 +426,6 @@ pub(crate) fn decode_wire_delete_object_store_request_json(
     })
 }
 
-/// Converts a wire `DeleteResponse` to its native message.
-pub(crate) fn from_wire_delete_response(value: v1::DeleteResponse) -> DeleteResponse {
-    DeleteResponse {
-        deleted: value.deleted,
-    }
-}
-
 /// Encodes a wire `DeleteResponse` as protobuf JSON.
 pub(crate) fn encode_wire_delete_response_json(value: &v1::DeleteResponse) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -531,17 +455,6 @@ pub(crate) fn decode_wire_delete_response_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `IndexQueryRequest` to its wire message.
-pub(crate) fn to_wire_index_query_request(value: IndexQueryRequest) -> v1::IndexQueryRequest {
-    v1::IndexQueryRequest {
-        store: value.store,
-        index: value.index,
-        query: value.query.map(to_wire_indexed_db_query),
-        count: value.count,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `TypedValue` as protobuf JSON.
@@ -903,53 +816,6 @@ pub(crate) fn decode_wire_index_query_request_json(
     })
 }
 
-/// Converts a native `IndexSchema` to its wire message.
-pub(crate) fn to_wire_index_schema(value: IndexSchema) -> v1::IndexSchema {
-    v1::IndexSchema {
-        name: value.name,
-        key_path: value.key_path,
-        unique: value.unique,
-        ..Default::default()
-    }
-}
-
-/// Converts a native `IndexedDBQuery` to its wire message.
-pub(crate) fn to_wire_indexed_db_query(value: IndexedDBQuery) -> v1::IndexedDbQuery {
-    v1::IndexedDbQuery {
-        query: value.query.map(to_wire_indexed_db_query_query),
-        ..Default::default()
-    }
-}
-
-pub(crate) fn to_wire_indexed_db_query_query(
-    value: IndexedDBQueryQuery,
-) -> v1::indexed_db_query::Query {
-    match value {
-        IndexedDBQueryQuery::Key(value) => {
-            v1::indexed_db_query::Query::Key(to_wire_key_value(value))
-        }
-        IndexedDBQueryQuery::Range(value) => {
-            v1::indexed_db_query::Query::Range(to_wire_key_range(value))
-        }
-    }
-}
-
-/// Converts a native `KeyRange` to its wire message.
-pub(crate) fn to_wire_key_range(value: KeyRange) -> v1::KeyRange {
-    v1::KeyRange {
-        lower: value.lower.map(to_wire_key_value),
-        upper: value.upper.map(to_wire_key_value),
-        lower_open: value.lower_open,
-        upper_open: value.upper_open,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `KeyResponse` to its native message.
-pub(crate) fn from_wire_key_response(value: v1::KeyResponse) -> KeyResponse {
-    KeyResponse { key: value.key }
-}
-
 /// Encodes a wire `KeyResponse` as protobuf JSON.
 pub(crate) fn encode_wire_key_response_json(value: &v1::KeyResponse) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -979,34 +845,6 @@ pub(crate) fn decode_wire_key_response_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `KeyValue` to its wire message.
-pub(crate) fn to_wire_key_value(value: KeyValue) -> v1::KeyValue {
-    v1::KeyValue {
-        kind: value.kind.map(to_wire_key_value_kind),
-        ..Default::default()
-    }
-}
-
-pub(crate) fn to_wire_key_value_kind(value: KeyValueKind) -> v1::key_value::Kind {
-    match value {
-        KeyValueKind::Scalar(value) => v1::key_value::Kind::Scalar(to_wire_typed_value(value)),
-        KeyValueKind::Array(value) => v1::key_value::Kind::Array(to_wire_key_value_array(value)),
-    }
-}
-
-/// Converts a native `KeyValueArray` to its wire message.
-pub(crate) fn to_wire_key_value_array(value: KeyValueArray) -> v1::KeyValueArray {
-    v1::KeyValueArray {
-        elements: value.elements.into_iter().map(to_wire_key_value).collect(),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `KeysResponse` to its native message.
-pub(crate) fn from_wire_keys_response(value: v1::KeysResponse) -> KeysResponse {
-    KeysResponse { keys: value.keys }
 }
 
 /// Encodes a wire `KeysResponse` as protobuf JSON.
@@ -1057,16 +895,6 @@ pub(crate) fn decode_wire_keys_response_json(
     })
 }
 
-/// Converts a native `ObjectStoreNameRequest` to its wire message.
-pub(crate) fn to_wire_object_store_name_request(
-    value: ObjectStoreNameRequest,
-) -> v1::ObjectStoreNameRequest {
-    v1::ObjectStoreNameRequest {
-        store: value.store,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `ObjectStoreNameRequest` as protobuf JSON.
 pub(crate) fn encode_wire_object_store_name_request_json(
     value: &v1::ObjectStoreNameRequest,
@@ -1098,18 +926,6 @@ pub(crate) fn decode_wire_object_store_name_request_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `ObjectStoreRangeRequest` to its wire message.
-pub(crate) fn to_wire_object_store_range_request(
-    value: ObjectStoreRangeRequest,
-) -> v1::ObjectStoreRangeRequest {
-    v1::ObjectStoreRangeRequest {
-        store: value.store,
-        query: value.query.map(to_wire_indexed_db_query),
-        count: value.count,
-        ..Default::default()
-    }
 }
 
 /// Encodes a wire `ObjectStoreRangeRequest` as protobuf JSON.
@@ -1161,15 +977,6 @@ pub(crate) fn decode_wire_object_store_range_request_json(
     })
 }
 
-/// Converts a native `ObjectStoreRequest` to its wire message.
-pub(crate) fn to_wire_object_store_request(value: ObjectStoreRequest) -> v1::ObjectStoreRequest {
-    v1::ObjectStoreRequest {
-        store: value.store,
-        id: value.id,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `ObjectStoreRequest` as protobuf JSON.
 pub(crate) fn encode_wire_object_store_request_json(
     value: &v1::ObjectStoreRequest,
@@ -1208,42 +1015,6 @@ pub(crate) fn decode_wire_object_store_request_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `ObjectStoreSchema` to its wire message.
-pub(crate) fn to_wire_object_store_schema(value: ObjectStoreSchema) -> v1::ObjectStoreSchema {
-    v1::ObjectStoreSchema {
-        indexes: value
-            .indexes
-            .into_iter()
-            .map(to_wire_index_schema)
-            .collect(),
-        columns: value.columns.into_iter().map(to_wire_column_def).collect(),
-        ..Default::default()
-    }
-}
-
-/// Converts a native `Record` to its wire message.
-pub(crate) fn to_wire_record(value: Record) -> v1::Record {
-    v1::Record {
-        fields: value
-            .fields
-            .into_iter()
-            .map(|(key, item)| (key, to_wire_typed_value(item)))
-            .collect(),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `Record` to its native message.
-pub(crate) fn from_wire_record(value: v1::Record) -> Record {
-    Record {
-        fields: value
-            .fields
-            .into_iter()
-            .map(|(key, item)| (key, from_wire_typed_value(item)))
-            .collect(),
-    }
 }
 
 /// Encodes a wire `Record` as protobuf JSON.
@@ -1294,15 +1065,6 @@ pub(crate) fn decode_wire_record_json(
     })
 }
 
-/// Converts a native `RecordRequest` to its wire message.
-pub(crate) fn to_wire_record_request(value: RecordRequest) -> v1::RecordRequest {
-    v1::RecordRequest {
-        store: value.store,
-        record: value.record.map(to_wire_record),
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `RecordRequest` as protobuf JSON.
 pub(crate) fn encode_wire_record_request_json(value: &v1::RecordRequest) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -1341,13 +1103,6 @@ pub(crate) fn decode_wire_record_request_json(
     })
 }
 
-/// Converts a wire `RecordResponse` to its native message.
-pub(crate) fn from_wire_record_response(value: v1::RecordResponse) -> RecordResponse {
-    RecordResponse {
-        record: value.record.map(from_wire_record),
-    }
-}
-
 /// Encodes a wire `RecordResponse` as protobuf JSON.
 pub(crate) fn encode_wire_record_response_json(value: &v1::RecordResponse) -> serde_json::Value {
     let mut object = serde_json::Map::new();
@@ -1374,13 +1129,6 @@ pub(crate) fn decode_wire_record_response_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a wire `RecordsResponse` to its native message.
-pub(crate) fn from_wire_records_response(value: v1::RecordsResponse) -> RecordsResponse {
-    RecordsResponse {
-        records: value.records.into_iter().map(from_wire_record).collect(),
-    }
 }
 
 /// Encodes a wire `RecordsResponse` as protobuf JSON.
@@ -1425,53 +1173,4 @@ pub(crate) fn decode_wire_records_response_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a native `TypedValue` to its wire message.
-pub(crate) fn to_wire_typed_value(value: TypedValue) -> v1::TypedValue {
-    v1::TypedValue {
-        kind: value.kind.map(to_wire_typed_value_kind),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `TypedValue` to its native message.
-pub(crate) fn from_wire_typed_value(value: v1::TypedValue) -> TypedValue {
-    TypedValue {
-        kind: value.kind.map(from_wire_typed_value_kind),
-    }
-}
-
-pub(crate) fn to_wire_typed_value_kind(value: TypedValueKind) -> v1::typed_value::Kind {
-    match value {
-        TypedValueKind::NullValue => {
-            v1::typed_value::Kind::NullValue(prost_types::NullValue::NullValue as i32)
-        }
-        TypedValueKind::StringValue(value) => v1::typed_value::Kind::StringValue(value),
-        TypedValueKind::IntValue(value) => v1::typed_value::Kind::IntValue(value),
-        TypedValueKind::FloatValue(value) => v1::typed_value::Kind::FloatValue(value),
-        TypedValueKind::BoolValue(value) => v1::typed_value::Kind::BoolValue(value),
-        TypedValueKind::TimeValue(value) => {
-            v1::typed_value::Kind::TimeValue(to_wire_timestamp(value))
-        }
-        TypedValueKind::BytesValue(value) => v1::typed_value::Kind::BytesValue(value),
-        TypedValueKind::JsonValue(value) => v1::typed_value::Kind::JsonValue(to_wire_value(value)),
-    }
-}
-
-pub(crate) fn from_wire_typed_value_kind(value: v1::typed_value::Kind) -> TypedValueKind {
-    match value {
-        v1::typed_value::Kind::NullValue(_) => TypedValueKind::NullValue,
-        v1::typed_value::Kind::StringValue(value) => TypedValueKind::StringValue(value),
-        v1::typed_value::Kind::IntValue(value) => TypedValueKind::IntValue(value),
-        v1::typed_value::Kind::FloatValue(value) => TypedValueKind::FloatValue(value),
-        v1::typed_value::Kind::BoolValue(value) => TypedValueKind::BoolValue(value),
-        v1::typed_value::Kind::TimeValue(value) => {
-            TypedValueKind::TimeValue(from_wire_timestamp(value))
-        }
-        v1::typed_value::Kind::BytesValue(value) => TypedValueKind::BytesValue(value),
-        v1::typed_value::Kind::JsonValue(value) => {
-            TypedValueKind::JsonValue(from_wire_value(value))
-        }
-    }
 }

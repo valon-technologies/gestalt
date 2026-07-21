@@ -5,6 +5,7 @@ package generated
 import (
 	"context"
 
+	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -19,8 +20,8 @@ func NewIndexedDBClient(transport Transport) *IndexedDBClient {
 	return &IndexedDBClient{transport: transport}
 }
 
-func (c *IndexedDBClient) CreateObjectStore(ctx context.Context, request *CreateObjectStoreRequest) error {
-	wire := ToWireCreateObjectStoreRequest(request)
+func (c *IndexedDBClient) CreateObjectStore(ctx context.Context, request *gestaltclient.CreateObjectStoreRequest) error {
+	wire := gestaltclient.ToWireCreateObjectStoreRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBCreateObjectStore, wire, out); err != nil {
 		return toGestaltError(err)
@@ -28,8 +29,8 @@ func (c *IndexedDBClient) CreateObjectStore(ctx context.Context, request *Create
 	return nil
 }
 
-func (c *IndexedDBClient) DeleteObjectStore(ctx context.Context, request *DeleteObjectStoreRequest) error {
-	wire := ToWireDeleteObjectStoreRequest(request)
+func (c *IndexedDBClient) DeleteObjectStore(ctx context.Context, request *gestaltclient.DeleteObjectStoreRequest) error {
+	wire := gestaltclient.ToWireDeleteObjectStoreRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBDeleteObjectStore, wire, out); err != nil {
 		return toGestaltError(err)
@@ -37,8 +38,8 @@ func (c *IndexedDBClient) DeleteObjectStore(ctx context.Context, request *Delete
 	return nil
 }
 
-func (c *IndexedDBClient) CreateIndex(ctx context.Context, request *CreateIndexRequest) error {
-	wire := ToWireCreateIndexRequest(request)
+func (c *IndexedDBClient) CreateIndex(ctx context.Context, request *gestaltclient.CreateIndexRequest) error {
+	wire := gestaltclient.ToWireCreateIndexRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBCreateIndex, wire, out); err != nil {
 		return toGestaltError(err)
@@ -46,8 +47,8 @@ func (c *IndexedDBClient) CreateIndex(ctx context.Context, request *CreateIndexR
 	return nil
 }
 
-func (c *IndexedDBClient) DeleteIndex(ctx context.Context, request *DeleteIndexRequest) error {
-	wire := ToWireDeleteIndexRequest(request)
+func (c *IndexedDBClient) DeleteIndex(ctx context.Context, request *gestaltclient.DeleteIndexRequest) error {
+	wire := gestaltclient.ToWireDeleteIndexRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBDeleteIndex, wire, out); err != nil {
 		return toGestaltError(err)
@@ -55,26 +56,26 @@ func (c *IndexedDBClient) DeleteIndex(ctx context.Context, request *DeleteIndexR
 	return nil
 }
 
-func (c *IndexedDBClient) Get(ctx context.Context, request *ObjectStoreRequest) (*RecordResponse, error) {
-	wire := ToWireObjectStoreRequest(request)
+func (c *IndexedDBClient) Get(ctx context.Context, request *gestaltclient.ObjectStoreRequest) (*gestaltclient.RecordResponse, error) {
+	wire := gestaltclient.ToWireObjectStoreRequest(request)
 	out := &proto.RecordResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBGet, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireRecordResponse(out), nil
+	return gestaltclient.FromWireRecordResponse(out), nil
 }
 
-func (c *IndexedDBClient) GetKey(ctx context.Context, request *ObjectStoreRequest) (*KeyResponse, error) {
-	wire := ToWireObjectStoreRequest(request)
+func (c *IndexedDBClient) GetKey(ctx context.Context, request *gestaltclient.ObjectStoreRequest) (*gestaltclient.KeyResponse, error) {
+	wire := gestaltclient.ToWireObjectStoreRequest(request)
 	out := &proto.KeyResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBGetKey, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireKeyResponse(out), nil
+	return gestaltclient.FromWireKeyResponse(out), nil
 }
 
-func (c *IndexedDBClient) Add(ctx context.Context, request *RecordRequest) error {
-	wire := ToWireRecordRequest(request)
+func (c *IndexedDBClient) Add(ctx context.Context, request *gestaltclient.RecordRequest) error {
+	wire := gestaltclient.ToWireRecordRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBAdd, wire, out); err != nil {
 		return toGestaltError(err)
@@ -82,8 +83,8 @@ func (c *IndexedDBClient) Add(ctx context.Context, request *RecordRequest) error
 	return nil
 }
 
-func (c *IndexedDBClient) Put(ctx context.Context, request *RecordRequest) error {
-	wire := ToWireRecordRequest(request)
+func (c *IndexedDBClient) Put(ctx context.Context, request *gestaltclient.RecordRequest) error {
+	wire := gestaltclient.ToWireRecordRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBPut, wire, out); err != nil {
 		return toGestaltError(err)
@@ -91,8 +92,8 @@ func (c *IndexedDBClient) Put(ctx context.Context, request *RecordRequest) error
 	return nil
 }
 
-func (c *IndexedDBClient) Delete(ctx context.Context, request *ObjectStoreRequest) error {
-	wire := ToWireObjectStoreRequest(request)
+func (c *IndexedDBClient) Delete(ctx context.Context, request *gestaltclient.ObjectStoreRequest) error {
+	wire := gestaltclient.ToWireObjectStoreRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBDelete, wire, out); err != nil {
 		return toGestaltError(err)
@@ -100,8 +101,8 @@ func (c *IndexedDBClient) Delete(ctx context.Context, request *ObjectStoreReques
 	return nil
 }
 
-func (c *IndexedDBClient) Clear(ctx context.Context, request *ObjectStoreNameRequest) error {
-	wire := ToWireObjectStoreNameRequest(request)
+func (c *IndexedDBClient) Clear(ctx context.Context, request *gestaltclient.ObjectStoreNameRequest) error {
+	wire := gestaltclient.ToWireObjectStoreNameRequest(request)
 	out := &emptypb.Empty{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBClear, wire, out); err != nil {
 		return toGestaltError(err)
@@ -109,92 +110,92 @@ func (c *IndexedDBClient) Clear(ctx context.Context, request *ObjectStoreNameReq
 	return nil
 }
 
-func (c *IndexedDBClient) GetAll(ctx context.Context, request *ObjectStoreRangeRequest) (*RecordsResponse, error) {
-	wire := ToWireObjectStoreRangeRequest(request)
+func (c *IndexedDBClient) GetAll(ctx context.Context, request *gestaltclient.ObjectStoreRangeRequest) (*gestaltclient.RecordsResponse, error) {
+	wire := gestaltclient.ToWireObjectStoreRangeRequest(request)
 	out := &proto.RecordsResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBGetAll, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireRecordsResponse(out), nil
+	return gestaltclient.FromWireRecordsResponse(out), nil
 }
 
-func (c *IndexedDBClient) GetAllKeys(ctx context.Context, request *ObjectStoreRangeRequest) (*KeysResponse, error) {
-	wire := ToWireObjectStoreRangeRequest(request)
+func (c *IndexedDBClient) GetAllKeys(ctx context.Context, request *gestaltclient.ObjectStoreRangeRequest) (*gestaltclient.KeysResponse, error) {
+	wire := gestaltclient.ToWireObjectStoreRangeRequest(request)
 	out := &proto.KeysResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBGetAllKeys, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireKeysResponse(out), nil
+	return gestaltclient.FromWireKeysResponse(out), nil
 }
 
-func (c *IndexedDBClient) Count(ctx context.Context, request *ObjectStoreRangeRequest) (*CountResponse, error) {
-	wire := ToWireObjectStoreRangeRequest(request)
+func (c *IndexedDBClient) Count(ctx context.Context, request *gestaltclient.ObjectStoreRangeRequest) (*gestaltclient.CountResponse, error) {
+	wire := gestaltclient.ToWireObjectStoreRangeRequest(request)
 	out := &proto.CountResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBCount, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireCountResponse(out), nil
+	return gestaltclient.FromWireCountResponse(out), nil
 }
 
-func (c *IndexedDBClient) DeleteRange(ctx context.Context, request *ObjectStoreRangeRequest) (*DeleteResponse, error) {
-	wire := ToWireObjectStoreRangeRequest(request)
+func (c *IndexedDBClient) DeleteRange(ctx context.Context, request *gestaltclient.ObjectStoreRangeRequest) (*gestaltclient.DeleteResponse, error) {
+	wire := gestaltclient.ToWireObjectStoreRangeRequest(request)
 	out := &proto.DeleteResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBDeleteRange, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireDeleteResponse(out), nil
+	return gestaltclient.FromWireDeleteResponse(out), nil
 }
 
-func (c *IndexedDBClient) IndexGet(ctx context.Context, request *IndexQueryRequest) (*RecordResponse, error) {
-	wire := ToWireIndexQueryRequest(request)
+func (c *IndexedDBClient) IndexGet(ctx context.Context, request *gestaltclient.IndexQueryRequest) (*gestaltclient.RecordResponse, error) {
+	wire := gestaltclient.ToWireIndexQueryRequest(request)
 	out := &proto.RecordResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBIndexGet, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireRecordResponse(out), nil
+	return gestaltclient.FromWireRecordResponse(out), nil
 }
 
-func (c *IndexedDBClient) IndexGetKey(ctx context.Context, request *IndexQueryRequest) (*KeyResponse, error) {
-	wire := ToWireIndexQueryRequest(request)
+func (c *IndexedDBClient) IndexGetKey(ctx context.Context, request *gestaltclient.IndexQueryRequest) (*gestaltclient.KeyResponse, error) {
+	wire := gestaltclient.ToWireIndexQueryRequest(request)
 	out := &proto.KeyResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBIndexGetKey, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireKeyResponse(out), nil
+	return gestaltclient.FromWireKeyResponse(out), nil
 }
 
-func (c *IndexedDBClient) IndexGetAll(ctx context.Context, request *IndexQueryRequest) (*RecordsResponse, error) {
-	wire := ToWireIndexQueryRequest(request)
+func (c *IndexedDBClient) IndexGetAll(ctx context.Context, request *gestaltclient.IndexQueryRequest) (*gestaltclient.RecordsResponse, error) {
+	wire := gestaltclient.ToWireIndexQueryRequest(request)
 	out := &proto.RecordsResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBIndexGetAll, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireRecordsResponse(out), nil
+	return gestaltclient.FromWireRecordsResponse(out), nil
 }
 
-func (c *IndexedDBClient) IndexGetAllKeys(ctx context.Context, request *IndexQueryRequest) (*KeysResponse, error) {
-	wire := ToWireIndexQueryRequest(request)
+func (c *IndexedDBClient) IndexGetAllKeys(ctx context.Context, request *gestaltclient.IndexQueryRequest) (*gestaltclient.KeysResponse, error) {
+	wire := gestaltclient.ToWireIndexQueryRequest(request)
 	out := &proto.KeysResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBIndexGetAllKeys, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireKeysResponse(out), nil
+	return gestaltclient.FromWireKeysResponse(out), nil
 }
 
-func (c *IndexedDBClient) IndexCount(ctx context.Context, request *IndexQueryRequest) (*CountResponse, error) {
-	wire := ToWireIndexQueryRequest(request)
+func (c *IndexedDBClient) IndexCount(ctx context.Context, request *gestaltclient.IndexQueryRequest) (*gestaltclient.CountResponse, error) {
+	wire := gestaltclient.ToWireIndexQueryRequest(request)
 	out := &proto.CountResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBIndexCount, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireCountResponse(out), nil
+	return gestaltclient.FromWireCountResponse(out), nil
 }
 
-func (c *IndexedDBClient) IndexDelete(ctx context.Context, request *IndexQueryRequest) (*DeleteResponse, error) {
-	wire := ToWireIndexQueryRequest(request)
+func (c *IndexedDBClient) IndexDelete(ctx context.Context, request *gestaltclient.IndexQueryRequest) (*gestaltclient.DeleteResponse, error) {
+	wire := gestaltclient.ToWireIndexQueryRequest(request)
 	out := &proto.DeleteResponse{}
 	if err := c.transport.Unary(ctx, MethodIndexedDBIndexDelete, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireDeleteResponse(out), nil
+	return gestaltclient.FromWireDeleteResponse(out), nil
 }

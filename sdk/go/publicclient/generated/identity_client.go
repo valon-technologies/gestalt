@@ -5,6 +5,7 @@ package generated
 import (
 	"context"
 
+	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -18,78 +19,78 @@ func NewIdentityClient(transport Transport) *IdentityClient {
 	return &IdentityClient{transport: transport}
 }
 
-func (c *IdentityClient) Authorize(ctx context.Context, request *AuthorizeRequest) (*AuthorizeResponse, error) {
-	wire := ToWireAuthorizeRequest(request)
+func (c *IdentityClient) Authorize(ctx context.Context, request *gestaltclient.AuthorizeRequest) (*gestaltclient.AuthorizeResponse, error) {
+	wire := gestaltclient.ToWireAuthorizeRequest(request)
 	out := &proto.AuthorizeResponse{}
 	if err := c.transport.Unary(ctx, MethodIdentityAuthorize, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAuthorizeResponse(out), nil
+	return gestaltclient.FromWireAuthorizeResponse(out), nil
 }
 
-func (c *IdentityClient) Token(ctx context.Context, request *TokenRequest) (*TokenResponse, error) {
-	wire := ToWireTokenRequest(request)
+func (c *IdentityClient) Token(ctx context.Context, request *gestaltclient.TokenRequest) (*gestaltclient.TokenResponse, error) {
+	wire := gestaltclient.ToWireTokenRequest(request)
 	out := &proto.TokenResponse{}
 	if err := c.transport.Unary(ctx, MethodIdentityToken, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireTokenResponse(out), nil
+	return gestaltclient.FromWireTokenResponse(out), nil
 }
 
-func (c *IdentityClient) Introspect(ctx context.Context, request *IntrospectRequest) (*IntrospectResponse, error) {
-	wire := ToWireIntrospectRequest(request)
+func (c *IdentityClient) Introspect(ctx context.Context, request *gestaltclient.IntrospectRequest) (*gestaltclient.IntrospectResponse, error) {
+	wire := gestaltclient.ToWireIntrospectRequest(request)
 	out := &proto.IntrospectResponse{}
 	if err := c.transport.Unary(ctx, MethodIdentityIntrospect, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireIntrospectResponse(out), nil
+	return gestaltclient.FromWireIntrospectResponse(out), nil
 }
 
-func (c *IdentityClient) UserInfo(ctx context.Context, request *UserInfoRequest) (*UserInfoResponse, error) {
-	wire := ToWireUserInfoRequest(request)
+func (c *IdentityClient) UserInfo(ctx context.Context, request *gestaltclient.UserInfoRequest) (*gestaltclient.UserInfoResponse, error) {
+	wire := gestaltclient.ToWireUserInfoRequest(request)
 	out := &proto.UserInfoResponse{}
 	if err := c.transport.Unary(ctx, MethodIdentityUserInfo, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireUserInfoResponse(out), nil
+	return gestaltclient.FromWireUserInfoResponse(out), nil
 }
 
-func (c *IdentityClient) ListGrants(ctx context.Context, request *ListGrantsRequest) (*ListGrantsResponse, error) {
-	wire := ToWireListGrantsRequest(request)
+func (c *IdentityClient) ListGrants(ctx context.Context, request *gestaltclient.ListGrantsRequest) (*gestaltclient.ListGrantsResponse, error) {
+	wire := gestaltclient.ToWireListGrantsRequest(request)
 	out := &proto.ListGrantsResponse{}
 	if err := c.transport.Unary(ctx, MethodIdentityListGrants, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListGrantsResponse(out), nil
+	return gestaltclient.FromWireListGrantsResponse(out), nil
 }
 
-func (c *IdentityClient) GetGrant(ctx context.Context, request *GetGrantRequest) (*GetGrantResponse, error) {
-	wire := ToWireGetGrantRequest(request)
+func (c *IdentityClient) GetGrant(ctx context.Context, request *gestaltclient.GetGrantRequest) (*gestaltclient.GetGrantResponse, error) {
+	wire := gestaltclient.ToWireGetGrantRequest(request)
 	out := &proto.GetGrantResponse{}
 	if err := c.transport.Unary(ctx, MethodIdentityGetGrant, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireGetGrantResponse(out), nil
+	return gestaltclient.FromWireGetGrantResponse(out), nil
 }
 
-func (c *IdentityClient) RevokeGrant(ctx context.Context, request *RevokeGrantRequest) (*RevokeGrantResponse, error) {
-	wire := ToWireRevokeGrantRequest(request)
+func (c *IdentityClient) RevokeGrant(ctx context.Context, request *gestaltclient.RevokeGrantRequest) (*gestaltclient.RevokeGrantResponse, error) {
+	wire := gestaltclient.ToWireRevokeGrantRequest(request)
 	out := &proto.RevokeGrantResponse{}
 	if err := c.transport.Unary(ctx, MethodIdentityRevokeGrant, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireRevokeGrantResponse(out), nil
+	return gestaltclient.FromWireRevokeGrantResponse(out), nil
 }
 
 // IdentityClientREST exposes only REST-backed methods for Identity.
 type IdentityClientREST interface {
-	Authorize(ctx context.Context, request *AuthorizeRequest) (*AuthorizeResponse, error)
-	Token(ctx context.Context, request *TokenRequest) (*TokenResponse, error)
-	Introspect(ctx context.Context, request *IntrospectRequest) (*IntrospectResponse, error)
-	UserInfo(ctx context.Context, request *UserInfoRequest) (*UserInfoResponse, error)
-	ListGrants(ctx context.Context, request *ListGrantsRequest) (*ListGrantsResponse, error)
-	GetGrant(ctx context.Context, request *GetGrantRequest) (*GetGrantResponse, error)
-	RevokeGrant(ctx context.Context, request *RevokeGrantRequest) (*RevokeGrantResponse, error)
+	Authorize(ctx context.Context, request *gestaltclient.AuthorizeRequest) (*gestaltclient.AuthorizeResponse, error)
+	Token(ctx context.Context, request *gestaltclient.TokenRequest) (*gestaltclient.TokenResponse, error)
+	Introspect(ctx context.Context, request *gestaltclient.IntrospectRequest) (*gestaltclient.IntrospectResponse, error)
+	UserInfo(ctx context.Context, request *gestaltclient.UserInfoRequest) (*gestaltclient.UserInfoResponse, error)
+	ListGrants(ctx context.Context, request *gestaltclient.ListGrantsRequest) (*gestaltclient.ListGrantsResponse, error)
+	GetGrant(ctx context.Context, request *gestaltclient.GetGrantRequest) (*gestaltclient.GetGrantResponse, error)
+	RevokeGrant(ctx context.Context, request *gestaltclient.RevokeGrantRequest) (*gestaltclient.RevokeGrantResponse, error)
 }
 
 var _ IdentityClientREST = (*IdentityClient)(nil)

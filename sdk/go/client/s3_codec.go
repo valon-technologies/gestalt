@@ -111,7 +111,7 @@ func ToWireCreateObjectAccessURLResponse(value *CreateObjectAccessURLResponse) *
 	out := &proto.CreateObjectAccessURLResponse{
 		Url:       value.Url,
 		Method:    proto.PresignMethod(value.Method),
-		ExpiresAt: toWireTimestamp(value.ExpiresAt),
+		ExpiresAt: ToWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
 	}
 	return out
@@ -124,7 +124,7 @@ func FromWireCreateObjectAccessURLResponse(value *proto.CreateObjectAccessURLRes
 	out := &CreateObjectAccessURLResponse{
 		Url:       value.Url,
 		Method:    PresignMethod(value.Method),
-		ExpiresAt: fromWireTimestamp(value.ExpiresAt),
+		ExpiresAt: FromWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
 	}
 	return out
@@ -285,7 +285,7 @@ func ToWirePresignObjectResponse(value *PresignObjectResponse) *proto.PresignObj
 	out := &proto.PresignObjectResponse{
 		Url:       value.Url,
 		Method:    proto.PresignMethod(value.Method),
-		ExpiresAt: toWireTimestamp(value.ExpiresAt),
+		ExpiresAt: ToWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
 	}
 	return out
@@ -298,7 +298,7 @@ func FromWirePresignObjectResponse(value *proto.PresignObjectResponse) *PresignO
 	out := &PresignObjectResponse{
 		Url:       value.Url,
 		Method:    PresignMethod(value.Method),
-		ExpiresAt: fromWireTimestamp(value.ExpiresAt),
+		ExpiresAt: FromWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
 	}
 	return out
@@ -341,8 +341,8 @@ func ToWireReadObjectRequest(value *ReadObjectRequest) *proto.ReadObjectRequest 
 		Range:             ToWireByteRange(value.Range),
 		IfMatch:           value.IfMatch,
 		IfNoneMatch:       value.IfNoneMatch,
-		IfModifiedSince:   toWireTimestamp(value.IfModifiedSince),
-		IfUnmodifiedSince: toWireTimestamp(value.IfUnmodifiedSince),
+		IfModifiedSince:   ToWireTimestamp(value.IfModifiedSince),
+		IfUnmodifiedSince: ToWireTimestamp(value.IfUnmodifiedSince),
 	}
 	return out
 }
@@ -356,8 +356,8 @@ func FromWireReadObjectRequest(value *proto.ReadObjectRequest) *ReadObjectReques
 		Range:             FromWireByteRange(value.Range),
 		IfMatch:           value.IfMatch,
 		IfNoneMatch:       value.IfNoneMatch,
-		IfModifiedSince:   fromWireTimestamp(value.IfModifiedSince),
-		IfUnmodifiedSince: fromWireTimestamp(value.IfUnmodifiedSince),
+		IfModifiedSince:   FromWireTimestamp(value.IfModifiedSince),
+		IfUnmodifiedSince: FromWireTimestamp(value.IfUnmodifiedSince),
 	}
 	return out
 }
@@ -371,7 +371,7 @@ func ToWireS3ObjectMeta(value *S3ObjectMeta) *proto.S3ObjectMeta {
 		Etag:         value.Etag,
 		Size:         value.Size,
 		ContentType:  value.ContentType,
-		LastModified: toWireTimestamp(value.LastModified),
+		LastModified: ToWireTimestamp(value.LastModified),
 		Metadata:     value.Metadata,
 		StorageClass: value.StorageClass,
 	}
@@ -387,7 +387,7 @@ func FromWireS3ObjectMeta(value *proto.S3ObjectMeta) *S3ObjectMeta {
 		Etag:         value.Etag,
 		Size:         value.Size,
 		ContentType:  value.ContentType,
-		LastModified: fromWireTimestamp(value.LastModified),
+		LastModified: FromWireTimestamp(value.LastModified),
 		Metadata:     value.Metadata,
 		StorageClass: value.StorageClass,
 	}

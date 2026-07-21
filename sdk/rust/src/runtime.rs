@@ -49,7 +49,8 @@ pub mod provider_kind {
 /// runtime session.
 ///
 /// Native message type for `gestalt.provider.v1.ConfigureProviderRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigureProviderRequest {
     /// The `name` field.
     pub name: String,
@@ -63,7 +64,8 @@ pub struct ConfigureProviderRequest {
 /// serving.
 ///
 /// Native message type for `gestalt.provider.v1.ConfigureProviderResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigureProviderResponse {
     /// The `protocol_version` field.
     pub protocol_version: i32,
@@ -72,7 +74,8 @@ pub struct ConfigureProviderResponse {
 /// HealthCheckResponse reports runtime readiness for a provider surface.
 ///
 /// Native message type for `gestalt.provider.v1.HealthCheckResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HealthCheckResponse {
     /// The `ready` field.
     pub ready: bool,
@@ -84,7 +87,8 @@ pub struct HealthCheckResponse {
 /// supports.
 ///
 /// Native message type for `gestalt.provider.v1.ProviderIdentity`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderIdentity {
     /// The `kind` field.
     pub kind: ProviderKind,
@@ -108,7 +112,8 @@ pub struct ProviderIdentity {
 /// serving after the optional runtime start phase.
 ///
 /// Native message type for `gestalt.provider.v1.StartRuntimeProviderResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartRuntimeProviderResponse {
     /// The `protocol_version` field.
     pub protocol_version: i32,

@@ -46,7 +46,8 @@ pub mod source_layer {
 }
 
 /// Native message type for `gestalt.provider.v1.Action`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Action {
     /// The `name` field.
     pub name: String,
@@ -55,21 +56,24 @@ pub struct Action {
 }
 
 /// Native message type for `gestalt.provider.v1.AddRelationshipRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddRelationshipRequest {
     /// The `relationship` field; None when unset.
     pub relationship: Option<Relationship>,
 }
 
 /// Native message type for `gestalt.provider.v1.AddRelationshipResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddRelationshipResponse {
     /// The `relationship` field; None when unset.
     pub relationship: Option<Relationship>,
 }
 
 /// Native message type for `gestalt.provider.v1.AuthorizationModel`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthorizationModel {
     /// The `id` field.
     pub id: String,
@@ -80,18 +84,21 @@ pub struct AuthorizationModel {
 }
 
 /// Native message type for `gestalt.provider.v1.AuthorizationModelRef`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthorizationModelRef {
     /// The `id` field.
     pub id: String,
     /// The `version` field.
     pub version: String,
+    #[serde(with = "crate::serde_time")]
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
 }
 
 /// Native message type for `gestalt.provider.v1.AuthorizationModelResourceType`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthorizationModelResourceType {
     /// The `name` field.
     pub name: String,
@@ -106,7 +113,8 @@ pub struct AuthorizationModelResourceType {
 }
 
 /// Native message type for `gestalt.provider.v1.AuthorizationModelResourceTypeFilter`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthorizationModelResourceTypeFilter {
     /// The `name` field.
     pub name: String,
@@ -115,21 +123,24 @@ pub struct AuthorizationModelResourceTypeFilter {
 }
 
 /// Native message type for `gestalt.provider.v1.CheckAccessManyRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CheckAccessManyRequest {
     /// The `requests` field.
     pub requests: Vec<CheckAccessRequest>,
 }
 
 /// Native message type for `gestalt.provider.v1.CheckAccessManyResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CheckAccessManyResponse {
     /// The `decisions` field.
     pub decisions: Vec<CheckAccessResponse>,
 }
 
 /// Native message type for `gestalt.provider.v1.CheckAccessRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CheckAccessRequest {
     /// The `subject` field; None when unset.
     pub subject: Option<Subject>,
@@ -140,7 +151,8 @@ pub struct CheckAccessRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.CheckAccessResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CheckAccessResponse {
     /// The `allowed` field.
     pub allowed: bool,
@@ -149,25 +161,29 @@ pub struct CheckAccessResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.DeleteRelationshipRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteRelationshipRequest {
     /// The `relationship_tuple` field; None when unset.
     pub relationship_tuple: Option<RelationshipTuple>,
 }
 
 /// Native message type for `gestalt.provider.v1.DeleteRelationshipResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteRelationshipResponse {}
 
 /// Native message type for `gestalt.provider.v1.GetActiveModelRefResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetActiveModelRefResponse {
     /// The `model` field; None when unset.
     pub model: Option<AuthorizationModelRef>,
 }
 
 /// Native message type for `gestalt.provider.v1.ListActiveModelResourceTypesRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListActiveModelResourceTypesRequest {
     /// The `filter` field; None when unset.
     pub filter: Option<AuthorizationModelResourceTypeFilter>,
@@ -178,7 +194,8 @@ pub struct ListActiveModelResourceTypesRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListActiveModelResourceTypesResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListActiveModelResourceTypesResponse {
     /// The `resource_types` field.
     pub resource_types: Vec<AuthorizationModelResourceType>,
@@ -189,7 +206,8 @@ pub struct ListActiveModelResourceTypesResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.ListRelationshipsRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListRelationshipsRequest {
     /// The `filter` field; None when unset.
     pub filter: Option<RelationshipFilter>,
@@ -200,7 +218,8 @@ pub struct ListRelationshipsRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.ListRelationshipsResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListRelationshipsResponse {
     /// The `relationships` field.
     pub relationships: Vec<Relationship>,
@@ -209,7 +228,8 @@ pub struct ListRelationshipsResponse {
 }
 
 /// Native message type for `gestalt.provider.v1.ModelAction`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelAction {
     /// The `name` field.
     pub name: String,
@@ -219,7 +239,7 @@ pub struct ModelAction {
 
 /// Values of the `kind` oneof in `ModelAllowedTarget`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ModelAllowedTargetKind {
     /// The `subject_type` variant.
     SubjectType(String),
@@ -230,14 +250,16 @@ pub enum ModelAllowedTargetKind {
 }
 
 /// Native message type for `gestalt.provider.v1.ModelAllowedTarget`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelAllowedTarget {
     /// The `kind` oneof; None when unset.
     pub kind: Option<ModelAllowedTargetKind>,
 }
 
 /// Native message type for `gestalt.provider.v1.ModelRelation`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelRelation {
     /// The `name` field.
     pub name: String,
@@ -246,7 +268,8 @@ pub struct ModelRelation {
 }
 
 /// Native message type for `gestalt.provider.v1.Relationship`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Relationship {
     /// The `tuple` field; None when unset.
     pub tuple: Option<RelationshipTuple>,
@@ -257,7 +280,8 @@ pub struct Relationship {
 }
 
 /// Native message type for `gestalt.provider.v1.RelationshipFilter`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RelationshipFilter {
     /// The `target` field; None when unset.
     pub target: Option<RelationshipTarget>,
@@ -277,7 +301,7 @@ pub struct RelationshipFilter {
 
 /// Values of the `kind` oneof in `RelationshipTarget`; the message field is None when unset.
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum RelationshipTargetKind {
     /// The `subject` variant.
     Subject(Subject),
@@ -288,14 +312,16 @@ pub enum RelationshipTargetKind {
 }
 
 /// Native message type for `gestalt.provider.v1.RelationshipTarget`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RelationshipTarget {
     /// The `kind` oneof; None when unset.
     pub kind: Option<RelationshipTargetKind>,
 }
 
 /// Native message type for `gestalt.provider.v1.RelationshipTuple`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RelationshipTuple {
     /// The `target` field; None when unset.
     pub target: Option<RelationshipTarget>,
@@ -306,7 +332,8 @@ pub struct RelationshipTuple {
 }
 
 /// Native message type for `gestalt.provider.v1.Resource`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Resource {
     /// The `type` field.
     pub r#type: String,
@@ -317,21 +344,24 @@ pub struct Resource {
 }
 
 /// Native message type for `gestalt.provider.v1.SetActiveModelRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetActiveModelRequest {
     /// The `model` field; None when unset.
     pub model: Option<AuthorizationModel>,
 }
 
 /// Native message type for `gestalt.provider.v1.SetActiveModelResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetActiveModelResponse {
     /// The `model` field; None when unset.
     pub model: Option<AuthorizationModelRef>,
 }
 
 /// Native message type for `gestalt.provider.v1.SetAuthorizationStateRequest`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetAuthorizationStateRequest {
     /// The `model` field; None when unset.
     pub model: Option<AuthorizationModel>,
@@ -340,14 +370,16 @@ pub struct SetAuthorizationStateRequest {
 }
 
 /// Native message type for `gestalt.provider.v1.SetAuthorizationStateResponse`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetAuthorizationStateResponse {
     /// The `active_model` field; None when unset.
     pub active_model: Option<AuthorizationModelRef>,
 }
 
 /// Native message type for `gestalt.provider.v1.Subject`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Subject {
     /// The `type` field.
     pub r#type: String,
@@ -358,7 +390,8 @@ pub struct Subject {
 }
 
 /// Native message type for `gestalt.provider.v1.SubjectSet`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubjectSet {
     /// The `resource` field; None when unset.
     pub resource: Option<Resource>,
@@ -367,7 +400,8 @@ pub struct SubjectSet {
 }
 
 /// Native message type for `gestalt.provider.v1.SubjectSetType`.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubjectSetType {
     /// The `resource_type` field.
     pub resource_type: String,

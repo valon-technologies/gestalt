@@ -12,7 +12,7 @@ func ToWireConfigureProviderRequest(value *ConfigureProviderRequest) *proto.Conf
 	}
 	out := &proto.ConfigureProviderRequest{
 		Name:            value.Name,
-		Config:          toWireStruct(value.Config),
+		Config:          ToWireStruct(value.Config),
 		ProtocolVersion: value.ProtocolVersion,
 	}
 	return out
@@ -24,7 +24,7 @@ func FromWireConfigureProviderRequest(value *proto.ConfigureProviderRequest) *Co
 	}
 	out := &ConfigureProviderRequest{
 		Name:            value.Name,
-		Config:          fromWireStruct(value.Config),
+		Config:          FromWireStruct(value.Config),
 		ProtocolVersion: value.ProtocolVersion,
 	}
 	return out

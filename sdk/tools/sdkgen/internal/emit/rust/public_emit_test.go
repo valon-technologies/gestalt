@@ -46,7 +46,7 @@ func TestRenderPublicMetadataWireJSONCallbacks(t *testing.T) {
 		},
 	}}
 
-	meta := newRenderer(&index{}, "metadata", "metadata", modulePublic, true)
+	meta := newRenderer(&index{}, "metadata", "metadata", modulePublic, true, nil, nil)
 	meta.renderPublicMetadata(methods)
 	out := meta.assembleGenerated()
 

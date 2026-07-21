@@ -14,14 +14,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func toWireTimestamp(value *time.Time) *timestamppb.Timestamp {
+func ToWireTimestamp(value *time.Time) *timestamppb.Timestamp {
 	if value == nil {
 		return nil
 	}
 	return timestamppb.New(*value)
 }
 
-func fromWireTimestamp(value *timestamppb.Timestamp) *time.Time {
+func FromWireTimestamp(value *timestamppb.Timestamp) *time.Time {
 	if value == nil {
 		return nil
 	}
@@ -29,14 +29,14 @@ func fromWireTimestamp(value *timestamppb.Timestamp) *time.Time {
 	return &t
 }
 
-func toWireDuration(value *time.Duration) *durationpb.Duration {
+func ToWireDuration(value *time.Duration) *durationpb.Duration {
 	if value == nil {
 		return nil
 	}
 	return durationpb.New(*value)
 }
 
-func fromWireDuration(value *durationpb.Duration) *time.Duration {
+func FromWireDuration(value *durationpb.Duration) *time.Duration {
 	if value == nil {
 		return nil
 	}
@@ -46,20 +46,20 @@ func fromWireDuration(value *durationpb.Duration) *time.Duration {
 
 // toWireStruct converts a native JSON object to its wire form. A nil map
 // means absent.
-func toWireStruct(value map[string]any) *structpb.Struct {
+func ToWireStruct(value map[string]any) *structpb.Struct {
 	if value == nil {
 		return nil
 	}
 	fields := make(map[string]*structpb.Value, len(value))
 	for key, item := range value {
-		fields[key] = toWireValue(item)
+		fields[key] = ToWireValue(item)
 	}
 	return &structpb.Struct{Fields: fields}
 }
 
 // fromWireStruct converts a wire Struct to its native form. Absence maps to
 // a nil map.
-func fromWireStruct(value *structpb.Struct) map[string]any {
+func FromWireStruct(value *structpb.Struct) map[string]any {
 	if value == nil {
 		return nil
 	}
@@ -71,7 +71,7 @@ func fromWireStruct(value *structpb.Struct) map[string]any {
 // []map[string]any) normalize through JSON before conversion. Values with no
 // JSON representation are caller bugs and panic rather than silently
 // corrupting the payload.
-func toWireValue(value any) *structpb.Value {
+func ToWireValue(value any) *structpb.Value {
 	v, err := structpb.NewValue(value)
 	if err == nil {
 		return v
@@ -93,21 +93,21 @@ func toWireValue(value any) *structpb.Value {
 
 // fromWireValue converts a wire Value to its native form. Absent and JSON
 // null conflate: both become nil.
-func fromWireValue(value *structpb.Value) any {
+func FromWireValue(value *structpb.Value) any {
 	if value == nil {
 		return nil
 	}
 	return value.AsInterface()
 }
 
-func toWireStatus(value *RpcStatus) *rpcstatus.Status {
+func ToWireStatus(value *RpcStatus) *rpcstatus.Status {
 	if value == nil {
 		return nil
 	}
 	return &rpcstatus.Status{Code: int32(value.Code), Message: value.Message}
 }
 
-func fromWireStatus(value *rpcstatus.Status) *RpcStatus {
+func FromWireStatus(value *rpcstatus.Status) *RpcStatus {
 	if value == nil {
 		return nil
 	}

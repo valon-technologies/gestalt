@@ -4,44 +4,9 @@
 
 #![allow(clippy::all, unused_variables, unused_mut, dead_code)]
 
+use crate::codec::support::to_wire_struct;
 use crate::generated::v1;
-use crate::public::generated::app::{
-    AgentToolRef, AppInvokeGraphQLRequest, AppInvokeRequest, InvokeFrame, InvokeFrameValue,
-    InvokeMetadata, OperationAnnotations, OperationResult, StringList, SubjectContext,
-    SubjectPermissionContext,
-};
-use crate::public::generated::codec::support::to_wire_struct;
-
-/// Converts a native `AgentToolRef` to its wire message.
-pub(crate) fn to_wire_agent_tool_ref(value: AgentToolRef) -> v1::AgentToolRef {
-    v1::AgentToolRef {
-        app: value.app,
-        operation: value.operation,
-        connection: value.connection,
-        instance: value.instance,
-        title: value.title,
-        description: value.description,
-        credential_mode: value.credential_mode,
-        system: value.system,
-        run_as: value.run_as.map(to_wire_subject_context),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `AgentToolRef` to its native message.
-pub(crate) fn from_wire_agent_tool_ref(value: v1::AgentToolRef) -> AgentToolRef {
-    AgentToolRef {
-        app: value.app,
-        operation: value.operation,
-        connection: value.connection,
-        instance: value.instance,
-        title: value.title,
-        description: value.description,
-        credential_mode: value.credential_mode,
-        system: value.system,
-        run_as: value.run_as.map(from_wire_subject_context),
-    }
-}
+use crate::public::generated::app::{AppInvokeGraphQLRequest, AppInvokeRequest};
 
 /// Encodes a wire `SubjectPermissionContext` as protobuf JSON.
 pub(crate) fn encode_wire_subject_permission_context_json(
@@ -330,8 +295,530 @@ pub(crate) fn to_wire_app_invoke_graphql_request(
         connection: value.connection,
         instance: value.instance,
         idempotency_key: value.idempotency_key,
+        context: None,
         ..Default::default()
     }
+}
+
+/// Encodes a wire `CredentialContext` as protobuf JSON.
+pub(crate) fn encode_wire_credential_context_json(
+    value: &v1::CredentialContext,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.mode.is_empty() {
+        object.insert(
+            "mode".into(),
+            serde_json::Value::String(value.mode.to_string()),
+        );
+    }
+    if !value.subject_id.is_empty() {
+        object.insert(
+            "subjectId".into(),
+            serde_json::Value::String(value.subject_id.to_string()),
+        );
+    }
+    if !value.connection.is_empty() {
+        object.insert(
+            "connection".into(),
+            serde_json::Value::String(value.connection.to_string()),
+        );
+    }
+    if !value.instance.is_empty() {
+        object.insert(
+            "instance".into(),
+            serde_json::Value::String(value.instance.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `CredentialContext`.
+pub(crate) fn decode_wire_credential_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::CredentialContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::CredentialContext {
+        mode: match object.get("mode") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        subject_id: match object.get("subjectId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        connection: match object.get("connection") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        instance: match object.get("instance") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `AccessContext` as protobuf JSON.
+pub(crate) fn encode_wire_access_context_json(value: &v1::AccessContext) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.policy.is_empty() {
+        object.insert(
+            "policy".into(),
+            serde_json::Value::String(value.policy.to_string()),
+        );
+    }
+    if !value.role.is_empty() {
+        object.insert(
+            "role".into(),
+            serde_json::Value::String(value.role.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `AccessContext`.
+pub(crate) fn decode_wire_access_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::AccessContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::AccessContext {
+        policy: match object.get("policy") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        role: match object.get("role") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `HostContext` as protobuf JSON.
+pub(crate) fn encode_wire_host_context_json(value: &v1::HostContext) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.public_base_url.is_empty() {
+        object.insert(
+            "publicBaseUrl".into(),
+            serde_json::Value::String(value.public_base_url.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `HostContext`.
+pub(crate) fn decode_wire_host_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::HostContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::HostContext {
+        public_base_url: match object.get("publicBaseUrl") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `ProviderContext` as protobuf JSON.
+pub(crate) fn encode_wire_provider_context_json(value: &v1::ProviderContext) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.kind.is_empty() {
+        object.insert(
+            "kind".into(),
+            serde_json::Value::String(value.kind.to_string()),
+        );
+    }
+    if !value.name.is_empty() {
+        object.insert(
+            "name".into(),
+            serde_json::Value::String(value.name.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `ProviderContext`.
+pub(crate) fn decode_wire_provider_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::ProviderContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::ProviderContext {
+        kind: match object.get("kind") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        name: match object.get("name") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `InvocationContext` as protobuf JSON.
+pub(crate) fn encode_wire_invocation_context_json(
+    value: &v1::InvocationContext,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.request_id.is_empty() {
+        object.insert(
+            "requestId".into(),
+            serde_json::Value::String(value.request_id.to_string()),
+        );
+    }
+    if value.depth != 0 {
+        object.insert("depth".into(), serde_json::json!(value.depth));
+    }
+    if !value.call_chain.is_empty() {
+        object.insert(
+            "callChain".into(),
+            serde_json::Value::Array(
+                value
+                    .call_chain
+                    .iter()
+                    .map(|item| serde_json::Value::String(item.to_string()))
+                    .collect(),
+            ),
+        );
+    }
+    if !value.surface.is_empty() {
+        object.insert(
+            "surface".into(),
+            serde_json::Value::String(value.surface.to_string()),
+        );
+    }
+    if value.internal_connection_access {
+        object.insert(
+            "internalConnectionAccess".into(),
+            serde_json::Value::Bool(value.internal_connection_access),
+        );
+    }
+    if !value.connection.is_empty() {
+        object.insert(
+            "connection".into(),
+            serde_json::Value::String(value.connection.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `InvocationContext`.
+pub(crate) fn decode_wire_invocation_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::InvocationContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::InvocationContext {
+        request_id: match object.get("requestId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        depth: match object.get("depth") {
+            Some(value) => crate::public::proto_json::decode_i32(value)?,
+            None => 0,
+        },
+        call_chain: match object.get("callChain") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for callChain")
+                })?
+                .iter()
+                .map(|item| {
+                    Ok::<String, crate::public::generated::rpc_support::GestaltError>(
+                        crate::public::proto_json::decode_string(item)?,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        surface: match object.get("surface") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        internal_connection_access: match object.get("internalConnectionAccess") {
+            Some(value) => crate::public::proto_json::decode_bool(value)?,
+            None => false,
+        },
+        connection: match object.get("connection") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `RequestMetaContext` as protobuf JSON.
+pub(crate) fn encode_wire_request_meta_context_json(
+    value: &v1::RequestMetaContext,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.client_ip.is_empty() {
+        object.insert(
+            "clientIp".into(),
+            serde_json::Value::String(value.client_ip.to_string()),
+        );
+    }
+    if !value.remote_addr.is_empty() {
+        object.insert(
+            "remoteAddr".into(),
+            serde_json::Value::String(value.remote_addr.to_string()),
+        );
+    }
+    if !value.user_agent.is_empty() {
+        object.insert(
+            "userAgent".into(),
+            serde_json::Value::String(value.user_agent.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `RequestMetaContext`.
+pub(crate) fn decode_wire_request_meta_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::RequestMetaContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::RequestMetaContext {
+        client_ip: match object.get("clientIp") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        remote_addr: match object.get("remoteAddr") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        user_agent: match object.get("userAgent") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `AgentInvocationContext` as protobuf JSON.
+pub(crate) fn encode_wire_agent_invocation_context_json(
+    value: &v1::AgentInvocationContext,
+) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if !value.provider_name.is_empty() {
+        object.insert(
+            "providerName".into(),
+            serde_json::Value::String(value.provider_name.to_string()),
+        );
+    }
+    if !value.session_id.is_empty() {
+        object.insert(
+            "sessionId".into(),
+            serde_json::Value::String(value.session_id.to_string()),
+        );
+    }
+    if !value.turn_id.is_empty() {
+        object.insert(
+            "turnId".into(),
+            serde_json::Value::String(value.turn_id.to_string()),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `AgentInvocationContext`.
+pub(crate) fn decode_wire_agent_invocation_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::AgentInvocationContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::AgentInvocationContext {
+        provider_name: match object.get("providerName") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        session_id: match object.get("sessionId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        turn_id: match object.get("turnId") {
+            Some(value) => crate::public::proto_json::decode_string(value)?,
+            None => String::new(),
+        },
+        ..Default::default()
+    })
+}
+
+/// Encodes a wire `RequestContext` as protobuf JSON.
+pub(crate) fn encode_wire_request_context_json(value: &v1::RequestContext) -> serde_json::Value {
+    let mut object = serde_json::Map::new();
+    if let Some(inner) = &value.subject {
+        object.insert("subject".into(), encode_wire_subject_context_json(inner));
+    }
+    if let Some(inner) = &value.credential {
+        object.insert(
+            "credential".into(),
+            encode_wire_credential_context_json(inner),
+        );
+    }
+    if let Some(inner) = &value.access {
+        object.insert("access".into(), encode_wire_access_context_json(inner));
+    }
+    if let Some(inner) = &value.workflow {
+        object.insert(
+            "workflow".into(),
+            crate::public::proto_json::encode_struct(inner),
+        );
+    }
+    if let Some(inner) = &value.host {
+        object.insert("host".into(), encode_wire_host_context_json(inner));
+    }
+    if let Some(inner) = &value.agent_subject {
+        object.insert(
+            "agentSubject".into(),
+            encode_wire_subject_context_json(inner),
+        );
+    }
+    if let Some(inner) = &value.caller {
+        object.insert("caller".into(), encode_wire_provider_context_json(inner));
+    }
+    if let Some(inner) = &value.invocation {
+        object.insert(
+            "invocation".into(),
+            encode_wire_invocation_context_json(inner),
+        );
+    }
+    if !value.tool_refs.is_empty() {
+        object.insert(
+            "toolRefs".into(),
+            serde_json::Value::Array(
+                value
+                    .tool_refs
+                    .iter()
+                    .map(|item| encode_wire_agent_tool_ref_json(item))
+                    .collect(),
+            ),
+        );
+    }
+    if value.tool_refs_set {
+        object.insert(
+            "toolRefsSet".into(),
+            serde_json::Value::Bool(value.tool_refs_set),
+        );
+    }
+    if let Some(inner) = &value.request_meta {
+        object.insert(
+            "requestMeta".into(),
+            encode_wire_request_meta_context_json(inner),
+        );
+    }
+    if let Some(inner) = &value.agent {
+        object.insert(
+            "agent".into(),
+            encode_wire_agent_invocation_context_json(inner),
+        );
+    }
+    serde_json::Value::Object(object)
+}
+
+/// Decodes protobuf JSON into a wire `RequestContext`.
+pub(crate) fn decode_wire_request_context_json(
+    value: &serde_json::Value,
+) -> Result<v1::RequestContext, crate::public::generated::rpc_support::GestaltError> {
+    let Some(object) = value.as_object() else {
+        return Err(crate::public::generated::rpc_support::GestaltError::new(
+            crate::public::generated::rpc_support::gestalt_error_code::INVALID_ARGUMENT,
+            "expected JSON object",
+        ));
+    };
+    Ok(v1::RequestContext {
+        subject: object
+            .get("subject")
+            .map(|value| decode_wire_subject_context_json(value))
+            .transpose()?,
+        credential: object
+            .get("credential")
+            .map(|value| decode_wire_credential_context_json(value))
+            .transpose()?,
+        access: object
+            .get("access")
+            .map(|value| decode_wire_access_context_json(value))
+            .transpose()?,
+        workflow: object
+            .get("workflow")
+            .map(|value| crate::public::proto_json::decode_struct(value))
+            .transpose()?,
+        host: object
+            .get("host")
+            .map(|value| decode_wire_host_context_json(value))
+            .transpose()?,
+        agent_subject: object
+            .get("agentSubject")
+            .map(|value| decode_wire_subject_context_json(value))
+            .transpose()?,
+        caller: object
+            .get("caller")
+            .map(|value| decode_wire_provider_context_json(value))
+            .transpose()?,
+        invocation: object
+            .get("invocation")
+            .map(|value| decode_wire_invocation_context_json(value))
+            .transpose()?,
+        tool_refs: match object.get("toolRefs") {
+            Some(value) => value
+                .as_array()
+                .ok_or_else(|| {
+                    crate::public::proto_json::invalid_proto_json("expected array for toolRefs")
+                })?
+                .iter()
+                .map(|item| decode_wire_agent_tool_ref_json(item))
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        },
+        tool_refs_set: match object.get("toolRefsSet") {
+            Some(value) => crate::public::proto_json::decode_bool(value)?,
+            None => false,
+        },
+        request_meta: object
+            .get("requestMeta")
+            .map(|value| decode_wire_request_meta_context_json(value))
+            .transpose()?,
+        agent: object
+            .get("agent")
+            .map(|value| decode_wire_agent_invocation_context_json(value))
+            .transpose()?,
+        ..Default::default()
+    })
 }
 
 /// Encodes a wire `AppInvokeGraphQlRequest` as protobuf JSON.
@@ -375,6 +862,9 @@ pub(crate) fn encode_wire_app_invoke_graphql_request_json(
             serde_json::Value::String(value.idempotency_key.to_string()),
         );
     }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -413,6 +903,10 @@ pub(crate) fn decode_wire_app_invoke_graphql_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
         ..Default::default()
     })
 }
@@ -427,6 +921,8 @@ pub(crate) fn to_wire_app_invoke_request(value: AppInvokeRequest) -> v1::AppInvo
         instance: value.instance,
         idempotency_key: value.idempotency_key,
         credential_mode: value.credential_mode,
+        context: None,
+        run_as: None,
         ..Default::default()
     }
 }
@@ -478,6 +974,12 @@ pub(crate) fn encode_wire_app_invoke_request_json(
             serde_json::Value::String(value.credential_mode.to_string()),
         );
     }
+    if let Some(inner) = &value.context {
+        object.insert("context".into(), encode_wire_request_context_json(inner));
+    }
+    if let Some(inner) = &value.run_as {
+        object.insert("runAs".into(), encode_wire_subject_context_json(inner));
+    }
     serde_json::Value::Object(object)
 }
 
@@ -520,24 +1022,16 @@ pub(crate) fn decode_wire_app_invoke_request_json(
             Some(value) => crate::public::proto_json::decode_string(value)?,
             None => String::new(),
         },
+        context: object
+            .get("context")
+            .map(|value| decode_wire_request_context_json(value))
+            .transpose()?,
+        run_as: object
+            .get("runAs")
+            .map(|value| decode_wire_subject_context_json(value))
+            .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a wire `InvokeFrame` to its native message.
-pub(crate) fn from_wire_invoke_frame(value: v1::InvokeFrame) -> InvokeFrame {
-    InvokeFrame {
-        value: value.value.map(from_wire_invoke_frame_value),
-    }
-}
-
-pub(crate) fn from_wire_invoke_frame_value(value: v1::invoke_frame::Value) -> InvokeFrameValue {
-    match value {
-        v1::invoke_frame::Value::Metadata(value) => {
-            InvokeFrameValue::Metadata(from_wire_invoke_metadata(value))
-        }
-        v1::invoke_frame::Value::Data(value) => InvokeFrameValue::Data(value),
-    }
 }
 
 /// Encodes a wire `StringList` as protobuf JSON.
@@ -701,32 +1195,6 @@ pub(crate) fn decode_wire_invoke_frame_json(
     })
 }
 
-/// Converts a wire `InvokeMetadata` to its native message.
-pub(crate) fn from_wire_invoke_metadata(value: v1::InvokeMetadata) -> InvokeMetadata {
-    InvokeMetadata {
-        status: value.status,
-        headers: value
-            .headers
-            .into_iter()
-            .map(|(key, item)| (key, from_wire_string_list(item)))
-            .collect(),
-        media_type: value.media_type,
-    }
-}
-
-/// Converts a native `OperationAnnotations` to its wire message.
-pub(crate) fn to_wire_operation_annotations(
-    value: OperationAnnotations,
-) -> v1::OperationAnnotations {
-    v1::OperationAnnotations {
-        read_only_hint: value.read_only_hint,
-        idempotent_hint: value.idempotent_hint,
-        destructive_hint: value.destructive_hint,
-        open_world_hint: value.open_world_hint,
-        ..Default::default()
-    }
-}
-
 /// Encodes a wire `OperationAnnotations` as protobuf JSON.
 pub(crate) fn encode_wire_operation_annotations_json(
     value: &v1::OperationAnnotations,
@@ -784,19 +1252,6 @@ pub(crate) fn decode_wire_operation_annotations_json(
             .transpose()?,
         ..Default::default()
     })
-}
-
-/// Converts a wire `OperationResult` to its native message.
-pub(crate) fn from_wire_operation_result(value: v1::OperationResult) -> OperationResult {
-    OperationResult {
-        status: value.status,
-        body: value.body,
-        headers: value
-            .headers
-            .into_iter()
-            .map(|(key, item)| (key, from_wire_string_list(item)))
-            .collect(),
-    }
 }
 
 /// Encodes a wire `OperationResult` as protobuf JSON.
@@ -862,65 +1317,4 @@ pub(crate) fn decode_wire_operation_result_json(
         },
         ..Default::default()
     })
-}
-
-/// Converts a wire `StringList` to its native message.
-pub(crate) fn from_wire_string_list(value: v1::StringList) -> StringList {
-    StringList {
-        values: value.values,
-    }
-}
-
-/// Converts a native `SubjectContext` to its wire message.
-pub(crate) fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectContext {
-    v1::SubjectContext {
-        id: value.id,
-        email: value.email,
-        display_name: value.display_name,
-        scopes: value.scopes,
-        permissions: value
-            .permissions
-            .into_iter()
-            .map(to_wire_subject_permission_context)
-            .collect(),
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `SubjectContext` to its native message.
-pub(crate) fn from_wire_subject_context(value: v1::SubjectContext) -> SubjectContext {
-    SubjectContext {
-        id: value.id,
-        email: value.email,
-        display_name: value.display_name,
-        scopes: value.scopes,
-        permissions: value
-            .permissions
-            .into_iter()
-            .map(from_wire_subject_permission_context)
-            .collect(),
-    }
-}
-
-/// Converts a native `SubjectPermissionContext` to its wire message.
-pub(crate) fn to_wire_subject_permission_context(
-    value: SubjectPermissionContext,
-) -> v1::SubjectPermissionContext {
-    v1::SubjectPermissionContext {
-        app: value.app,
-        operations: value.operations,
-        all_operations: value.all_operations,
-        ..Default::default()
-    }
-}
-
-/// Converts a wire `SubjectPermissionContext` to its native message.
-pub(crate) fn from_wire_subject_permission_context(
-    value: v1::SubjectPermissionContext,
-) -> SubjectPermissionContext {
-    SubjectPermissionContext {
-        app: value.app,
-        operations: value.operations,
-        all_operations: value.all_operations,
-    }
 }

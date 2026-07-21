@@ -5,6 +5,7 @@ package generated
 import (
 	"context"
 
+	gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -18,116 +19,116 @@ func NewAgentClient(transport Transport) *AgentClient {
 	return &AgentClient{transport: transport}
 }
 
-func (c *AgentClient) CreateSession(ctx context.Context, request *CreateAgentProviderSessionRequest) (*AgentSession, error) {
+func (c *AgentClient) CreateSession(ctx context.Context, request *CreateAgentProviderSessionRequest) (*gestaltclient.AgentSession, error) {
 	wire := ToWireCreateAgentProviderSessionRequest(request)
 	out := &proto.AgentSession{}
 	if err := c.transport.Unary(ctx, MethodAgentCreateSession, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAgentSession(out), nil
+	return gestaltclient.FromWireAgentSession(out), nil
 }
 
-func (c *AgentClient) GetSession(ctx context.Context, request *GetAgentProviderSessionRequest) (*AgentSession, error) {
+func (c *AgentClient) GetSession(ctx context.Context, request *GetAgentProviderSessionRequest) (*gestaltclient.AgentSession, error) {
 	wire := ToWireGetAgentProviderSessionRequest(request)
 	out := &proto.AgentSession{}
 	if err := c.transport.Unary(ctx, MethodAgentGetSession, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAgentSession(out), nil
+	return gestaltclient.FromWireAgentSession(out), nil
 }
 
-func (c *AgentClient) ListSessions(ctx context.Context, request *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error) {
+func (c *AgentClient) ListSessions(ctx context.Context, request *ListAgentProviderSessionsRequest) (*gestaltclient.ListAgentProviderSessionsResponse, error) {
 	wire := ToWireListAgentProviderSessionsRequest(request)
 	out := &proto.ListAgentProviderSessionsResponse{}
 	if err := c.transport.Unary(ctx, MethodAgentListSessions, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListAgentProviderSessionsResponse(out), nil
+	return gestaltclient.FromWireListAgentProviderSessionsResponse(out), nil
 }
 
-func (c *AgentClient) UpdateSession(ctx context.Context, request *UpdateAgentProviderSessionRequest) (*AgentSession, error) {
+func (c *AgentClient) UpdateSession(ctx context.Context, request *UpdateAgentProviderSessionRequest) (*gestaltclient.AgentSession, error) {
 	wire := ToWireUpdateAgentProviderSessionRequest(request)
 	out := &proto.AgentSession{}
 	if err := c.transport.Unary(ctx, MethodAgentUpdateSession, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAgentSession(out), nil
+	return gestaltclient.FromWireAgentSession(out), nil
 }
 
-func (c *AgentClient) CreateTurn(ctx context.Context, request *CreateAgentProviderTurnRequest) (*AgentTurn, error) {
+func (c *AgentClient) CreateTurn(ctx context.Context, request *CreateAgentProviderTurnRequest) (*gestaltclient.AgentTurn, error) {
 	wire := ToWireCreateAgentProviderTurnRequest(request)
 	out := &proto.AgentTurn{}
 	if err := c.transport.Unary(ctx, MethodAgentCreateTurn, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAgentTurn(out), nil
+	return gestaltclient.FromWireAgentTurn(out), nil
 }
 
-func (c *AgentClient) GetTurn(ctx context.Context, request *GetAgentProviderTurnRequest) (*AgentTurn, error) {
+func (c *AgentClient) GetTurn(ctx context.Context, request *GetAgentProviderTurnRequest) (*gestaltclient.AgentTurn, error) {
 	wire := ToWireGetAgentProviderTurnRequest(request)
 	out := &proto.AgentTurn{}
 	if err := c.transport.Unary(ctx, MethodAgentGetTurn, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAgentTurn(out), nil
+	return gestaltclient.FromWireAgentTurn(out), nil
 }
 
-func (c *AgentClient) ListTurns(ctx context.Context, request *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error) {
+func (c *AgentClient) ListTurns(ctx context.Context, request *ListAgentProviderTurnsRequest) (*gestaltclient.ListAgentProviderTurnsResponse, error) {
 	wire := ToWireListAgentProviderTurnsRequest(request)
 	out := &proto.ListAgentProviderTurnsResponse{}
 	if err := c.transport.Unary(ctx, MethodAgentListTurns, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListAgentProviderTurnsResponse(out), nil
+	return gestaltclient.FromWireListAgentProviderTurnsResponse(out), nil
 }
 
-func (c *AgentClient) CancelTurn(ctx context.Context, request *CancelAgentProviderTurnRequest) (*AgentTurn, error) {
+func (c *AgentClient) CancelTurn(ctx context.Context, request *CancelAgentProviderTurnRequest) (*gestaltclient.AgentTurn, error) {
 	wire := ToWireCancelAgentProviderTurnRequest(request)
 	out := &proto.AgentTurn{}
 	if err := c.transport.Unary(ctx, MethodAgentCancelTurn, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAgentTurn(out), nil
+	return gestaltclient.FromWireAgentTurn(out), nil
 }
 
-func (c *AgentClient) ListTurnEvents(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error) {
+func (c *AgentClient) ListTurnEvents(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*gestaltclient.ListAgentProviderTurnEventsResponse, error) {
 	wire := ToWireListAgentProviderTurnEventsRequest(request)
 	out := &proto.ListAgentProviderTurnEventsResponse{}
 	if err := c.transport.Unary(ctx, MethodAgentListTurnEvents, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListAgentProviderTurnEventsResponse(out), nil
+	return gestaltclient.FromWireListAgentProviderTurnEventsResponse(out), nil
 }
 
-func (c *AgentClient) ListInteractions(ctx context.Context, request *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error) {
+func (c *AgentClient) ListInteractions(ctx context.Context, request *ListAgentProviderInteractionsRequest) (*gestaltclient.ListAgentProviderInteractionsResponse, error) {
 	wire := ToWireListAgentProviderInteractionsRequest(request)
 	out := &proto.ListAgentProviderInteractionsResponse{}
 	if err := c.transport.Unary(ctx, MethodAgentListInteractions, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireListAgentProviderInteractionsResponse(out), nil
+	return gestaltclient.FromWireListAgentProviderInteractionsResponse(out), nil
 }
 
-func (c *AgentClient) ResolveInteraction(ctx context.Context, request *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error) {
+func (c *AgentClient) ResolveInteraction(ctx context.Context, request *ResolveAgentProviderInteractionRequest) (*gestaltclient.AgentInteraction, error) {
 	wire := ToWireResolveAgentProviderInteractionRequest(request)
 	out := &proto.AgentInteraction{}
 	if err := c.transport.Unary(ctx, MethodAgentResolveInteraction, wire, out); err != nil {
 		return nil, toGestaltError(err)
 	}
-	return FromWireAgentInteraction(out), nil
+	return gestaltclient.FromWireAgentInteraction(out), nil
 }
 
 // AgentClientREST exposes only REST-backed methods for Agent.
 type AgentClientREST interface {
-	CreateSession(ctx context.Context, request *CreateAgentProviderSessionRequest) (*AgentSession, error)
-	GetSession(ctx context.Context, request *GetAgentProviderSessionRequest) (*AgentSession, error)
-	ListSessions(ctx context.Context, request *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error)
-	UpdateSession(ctx context.Context, request *UpdateAgentProviderSessionRequest) (*AgentSession, error)
-	CreateTurn(ctx context.Context, request *CreateAgentProviderTurnRequest) (*AgentTurn, error)
-	GetTurn(ctx context.Context, request *GetAgentProviderTurnRequest) (*AgentTurn, error)
-	ListTurns(ctx context.Context, request *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error)
-	CancelTurn(ctx context.Context, request *CancelAgentProviderTurnRequest) (*AgentTurn, error)
-	ListTurnEvents(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error)
+	CreateSession(ctx context.Context, request *CreateAgentProviderSessionRequest) (*gestaltclient.AgentSession, error)
+	GetSession(ctx context.Context, request *GetAgentProviderSessionRequest) (*gestaltclient.AgentSession, error)
+	ListSessions(ctx context.Context, request *ListAgentProviderSessionsRequest) (*gestaltclient.ListAgentProviderSessionsResponse, error)
+	UpdateSession(ctx context.Context, request *UpdateAgentProviderSessionRequest) (*gestaltclient.AgentSession, error)
+	CreateTurn(ctx context.Context, request *CreateAgentProviderTurnRequest) (*gestaltclient.AgentTurn, error)
+	GetTurn(ctx context.Context, request *GetAgentProviderTurnRequest) (*gestaltclient.AgentTurn, error)
+	ListTurns(ctx context.Context, request *ListAgentProviderTurnsRequest) (*gestaltclient.ListAgentProviderTurnsResponse, error)
+	CancelTurn(ctx context.Context, request *CancelAgentProviderTurnRequest) (*gestaltclient.AgentTurn, error)
+	ListTurnEvents(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*gestaltclient.ListAgentProviderTurnEventsResponse, error)
 }
 
 var _ AgentClientREST = (*AgentClient)(nil)

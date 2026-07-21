@@ -221,9 +221,9 @@ func ToWireRuntimeSessionLifecycle(value *RuntimeSessionLifecycle) *proto.Runtim
 		return nil
 	}
 	out := &proto.RuntimeSessionLifecycle{
-		StartedAt:          toWireTimestamp(value.StartedAt),
-		RecommendedDrainAt: toWireTimestamp(value.RecommendedDrainAt),
-		ExpiresAt:          toWireTimestamp(value.ExpiresAt),
+		StartedAt:          ToWireTimestamp(value.StartedAt),
+		RecommendedDrainAt: ToWireTimestamp(value.RecommendedDrainAt),
+		ExpiresAt:          ToWireTimestamp(value.ExpiresAt),
 	}
 	return out
 }
@@ -233,9 +233,9 @@ func FromWireRuntimeSessionLifecycle(value *proto.RuntimeSessionLifecycle) *Runt
 		return nil
 	}
 	out := &RuntimeSessionLifecycle{
-		StartedAt:          fromWireTimestamp(value.StartedAt),
-		RecommendedDrainAt: fromWireTimestamp(value.RecommendedDrainAt),
-		ExpiresAt:          fromWireTimestamp(value.ExpiresAt),
+		StartedAt:          FromWireTimestamp(value.StartedAt),
+		RecommendedDrainAt: FromWireTimestamp(value.RecommendedDrainAt),
+		ExpiresAt:          FromWireTimestamp(value.ExpiresAt),
 	}
 	return out
 }

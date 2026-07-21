@@ -4,22 +4,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from gestalt.rpc_support import JsonValue
-
-
-@dataclass(frozen=True, slots=True)
-class AgentToolRef:
-    app: str = ""
-    operation: str = ""
-    connection: str = ""
-    instance: str = ""
-    title: str = ""
-    description: str = ""
-    credential_mode: str = ""
-    system: str = ""
-    run_as: SubjectContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,87 +34,3 @@ class AppInvokeRequest:
     instance: str = ""
     idempotency_key: str = ""
     credential_mode: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class InvokeFrameMetadata:
-    value: InvokeMetadata
-
-
-@dataclass(frozen=True, slots=True)
-class InvokeFrameData:
-    value: bytes
-
-
-InvokeFrameValue = InvokeFrameMetadata | InvokeFrameData | None
-
-
-@dataclass(frozen=True, slots=True)
-class InvokeFrame:
-    """InvokeFrame is one frame in a streaming invocation. The first frame is always
-    metadata; subsequent frames carry data bytes produced by the operation
-    handler (after encoding, for typed item streams). A mid-stream error (for
-    example, a validation failure or a recovered panic) may emit a trailing
-    metadata frame with a non-2xx status followed by a data frame carrying a
-    JSON error body, after which the stream ends.
-    """
-
-    value: InvokeFrameValue = None
-
-
-@dataclass(frozen=True, slots=True)
-class InvokeMetadata:
-    """InvokeMetadata is the first frame of a streaming invocation. It carries the
-    HTTP-shaped status, headers, and the response media type (from the
-    operation's StreamResponseSpec).
-    """
-
-    status: int = 0
-    headers: dict[str, StringList] = field(default_factory=dict)
-    media_type: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class OperationAnnotations:
-    """OperationAnnotations carries optional host hints about how an operation
-    behaves.
-    """
-
-    read_only_hint: bool | None = None
-    idempotent_hint: bool | None = None
-    destructive_hint: bool | None = None
-    open_world_hint: bool | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class OperationResult:
-    """OperationResult is the serialized result returned from an Execute call."""
-
-    status: int = 0
-    body: bytes = b""
-    headers: dict[str, StringList] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class StringList:
-    """StringList is a helper map value for repeated HTTP header and query values."""
-
-    values: list[str] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class SubjectContext:
-    """SubjectContext identifies the caller that initiated an operation."""
-
-    id: str = ""
-    email: str = ""
-    display_name: str = ""
-    scopes: list[str] = field(default_factory=list)
-    permissions: list[SubjectPermissionContext] = field(default_factory=list)
-
-
-@dataclass(frozen=True, slots=True)
-class SubjectPermissionContext:
-    app: str = ""
-    operations: list[str] = field(default_factory=list)
-    all_operations: bool = False

@@ -106,7 +106,7 @@ func (r *renderer) renderServiceClientUnaryMethod(
 		r.features.emptypb = true
 	}
 	if !m.InputIsEmpty {
-		fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWireFunc(r.messageType(m.Input.FullName)))
+ 		fmt.Fprintf(&r.body, "\twire := %s(request)\n", r.toWireFuncName(m.Input.FullName))
 	} else {
 		r.body.WriteString("\twire := &emptypb.Empty{}\n")
 	}
@@ -120,7 +120,7 @@ func (r *renderer) renderServiceClientUnaryMethod(
 	fmt.Fprintf(&r.body, "\tout := &%s{}\n", wireMessage(m.Output.FullName))
 	fmt.Fprintf(&r.body, "\tif err := c.transport.Unary(ctx, %s, wire, out); err != nil {\n", constName)
 	r.body.WriteString("\t\treturn nil, toGestaltError(err)\n\t}\n")
-	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n}\n\n", fromWireFunc(r.messageType(m.Output.FullName)))
+ 	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n}\n\n", r.fromWireFuncName(m.Output.FullName))
 }
 
 func (r *renderer) renderServiceClientDecodedMethod(clientName string, m *model.Method) {
@@ -154,7 +154,7 @@ func (r *renderer) renderServiceClientStreamMethod(clientName string, m *model.M
 	r.features.io = true
 	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context, request *%s) (*%sStream, error) {\n",
 		clientName, m.Name, requestType, m.Name)
-	fmt.Fprintf(&r.body, "\twire := %s(request)\n", toWireFunc(requestType))
+ 	fmt.Fprintf(&r.body, "\twire := %s(request)\n", r.toWireFuncName(m.Input.FullName))
 	fmt.Fprintf(&r.body, "\trecv, err := c.transport.ServerStream(ctx, %s, wire)\n", constName)
 	r.body.WriteString("\tif err != nil {\n")
 	r.body.WriteString("\t\treturn nil, toGestaltError(err)\n")
@@ -174,7 +174,7 @@ func (r *renderer) renderServiceClientStreamMethod(clientName string, m *model.M
 	r.body.WriteString("\t\t}\n")
 	r.body.WriteString("\t\treturn nil, toGestaltError(err)\n")
 	r.body.WriteString("\t}\n")
-	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n", fromWireFunc(outputType))
+ 	fmt.Fprintf(&r.body, "\treturn %s(out), nil\n", r.fromWireFuncName(m.Output.FullName))
 	r.body.WriteString("}\n\n")
 	fmt.Fprintf(&r.body, "// Close releases the underlying stream. It is safe to call after Recv returns io.EOF.\n")
 	fmt.Fprintf(&r.body, "func (s *%sStream) Close() error {\n", m.Name)
