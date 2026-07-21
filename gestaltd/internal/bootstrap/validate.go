@@ -155,6 +155,9 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	var errs []error
 	for _, name := range names {
 		entry := cfg.Apps[name]
+		if entry != nil && entry.Source.IsRegistry() {
+			continue
+		}
 		result, err := buildProviderForValidation(ctx, name, entry, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))

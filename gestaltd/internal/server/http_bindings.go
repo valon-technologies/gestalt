@@ -3,13 +3,16 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"os"
 	stdpath "path"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/httpbinding"
@@ -61,9 +64,13 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			}
 		}
 
-		operationIDs, err := providerOperationIDs(providers, pluginName)
-		if err != nil {
-			return nil, fmt.Errorf("resolve http bindings for %s: %w", pluginName, err)
+		var operationIDs map[string]struct{}
+		if !entry.Source.IsRegistry() {
+			var err error
+			operationIDs, err = providerOperationIDs(providers, pluginName)
+			if err != nil {
+				return nil, fmt.Errorf("resolve http bindings for %s: %w", pluginName, err)
+			}
 		}
 
 		bindingNames := make([]string, 0, len(bindings))
@@ -266,15 +273,44 @@ func (s *Server) mountHTTPBindingRoutes(r chi.Router) {
 	for i := range s.mountedHTTPBindings {
 		binding := &s.mountedHTTPBindings[i]
 		r.MethodFunc(binding.Method, binding.Path, func(w http.ResponseWriter, r *http.Request) {
-			metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-				ProviderName:    binding.AppName,
-				OperationName:   binding.Target,
-				HTTPBindingName: binding.Name,
-				Surface:         metricutil.InvocationSurfaceHTTPBinding,
-			})
-			s.handleHTTPBinding(*binding, w, r)
+			if !s.withRegistryAppRuntime(binding.AppName, func() {
+				metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
+					ProviderName:    binding.AppName,
+					OperationName:   binding.Target,
+					HTTPBindingName: binding.Name,
+					Surface:         metricutil.InvocationSurfaceHTTPBinding,
+				})
+				s.handleHTTPBinding(*binding, w, r)
+			}) {
+				writeError(w, http.StatusServiceUnavailable, "app is unavailable")
+			}
 		})
 	}
+}
+
+func (s *Server) withRegistryAppRuntime(app string, invoke func()) bool {
+	entry := s.pluginDefs[strings.TrimSpace(app)]
+	if entry == nil || !entry.Source.IsRegistry() {
+		invoke()
+		return true
+	}
+	if s.providers == nil || s.appRuntimeState == nil || s.artifactsDir == "" {
+		return false
+	}
+	invoked := false
+	err := s.appRuntimeState.WithRunningVersion(app, func(version string) error {
+		if _, err := s.providers.Get(app); err != nil {
+			return err
+		}
+		raw, err := os.ReadFile(filepath.Join(s.artifactsDir, appregistry.RegistryInstallSubdir, app, "active-version"))
+		if err != nil || strings.TrimSpace(string(raw)) != version {
+			return fmt.Errorf("active version marker does not match running version")
+		}
+		invoked = true
+		invoke()
+		return nil
+	})
+	return err == nil && invoked
 }
 
 func stdpathClean(pathValue string) string {

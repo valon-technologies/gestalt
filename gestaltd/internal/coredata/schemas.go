@@ -121,6 +121,9 @@ var AppInstanceMaterializationsSchema = idb.ObjectStoreOptions{
 		{Name: "materialized_at", Type: idb.TypeTime},
 		{Name: "stopped_at", Type: idb.TypeTime},
 		{Name: "restarted_at", Type: idb.TypeTime},
+		{Name: "attempt_count", Type: idb.TypeInt},
+		{Name: "last_error_at", Type: idb.TypeTime},
+		{Name: "last_error_message", Type: idb.TypeString},
 	},
 }
 

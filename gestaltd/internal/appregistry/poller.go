@@ -22,17 +22,19 @@ const (
 )
 
 type CatalogPoller struct {
-	ChangeRequests      *coredata.AppVersionChangeRequestService
-	Materializations    *coredata.AppInstanceMaterializationService
-	Rollouts            *coredata.AppRolloutService
-	AppMaterializer     *Materializer
-	AppRestarter        AppRestarter
-	InstanceID          string
-	Interval            time.Duration
-	RestartDelay        time.Duration
-	DisableRestartDelay bool
-	RestartReady        <-chan struct{}
-	Now                 func() time.Time
+	ChangeRequests       *coredata.AppVersionChangeRequestService
+	Materializations     *coredata.AppInstanceMaterializationService
+	Rollouts             *coredata.AppRolloutService
+	AppMaterializer      *Materializer
+	AppRestarter         AppRestarter
+	InstanceID           string
+	Interval             time.Duration
+	RestartDelay         time.Duration
+	DisableRestartDelay  bool
+	RestartReady         <-chan struct{}
+	BootstrapReady       <-chan struct{}
+	MaxReconcileAttempts int
+	Now                  func() time.Time
 
 	startOnce sync.Once
 	startMu   sync.Mutex
@@ -45,34 +47,38 @@ type CatalogPoller struct {
 }
 
 type CatalogPollerConfig struct {
-	ChangeRequests      *coredata.AppVersionChangeRequestService
-	Materializations    *coredata.AppInstanceMaterializationService
-	Rollouts            *coredata.AppRolloutService
-	AppMaterializer     *Materializer
-	AppRestarter        AppRestarter
-	InstanceID          string
-	Interval            time.Duration
-	RestartDelay        time.Duration
-	DisableRestartDelay bool
-	RestartReady        <-chan struct{}
-	Now                 func() time.Time
+	ChangeRequests       *coredata.AppVersionChangeRequestService
+	Materializations     *coredata.AppInstanceMaterializationService
+	Rollouts             *coredata.AppRolloutService
+	AppMaterializer      *Materializer
+	AppRestarter         AppRestarter
+	InstanceID           string
+	Interval             time.Duration
+	RestartDelay         time.Duration
+	DisableRestartDelay  bool
+	RestartReady         <-chan struct{}
+	BootstrapReady       <-chan struct{}
+	MaxReconcileAttempts int
+	Now                  func() time.Time
 }
 
 func NewCatalogPoller(cfg CatalogPollerConfig) *CatalogPoller {
 	return &CatalogPoller{
-		ChangeRequests:      cfg.ChangeRequests,
-		Materializations:    cfg.Materializations,
-		Rollouts:            cfg.Rollouts,
-		AppMaterializer:     cfg.AppMaterializer,
-		AppRestarter:        cfg.AppRestarter,
-		InstanceID:          strings.TrimSpace(cfg.InstanceID),
-		Interval:            cfg.Interval,
-		RestartDelay:        cfg.RestartDelay,
-		DisableRestartDelay: cfg.DisableRestartDelay,
-		RestartReady:        cfg.RestartReady,
-		Now:                 cfg.Now,
-		inflight:            make(map[string]struct{}),
-		stoppedAt:           make(map[string]time.Time),
+		ChangeRequests:       cfg.ChangeRequests,
+		Materializations:     cfg.Materializations,
+		Rollouts:             cfg.Rollouts,
+		AppMaterializer:      cfg.AppMaterializer,
+		AppRestarter:         cfg.AppRestarter,
+		InstanceID:           strings.TrimSpace(cfg.InstanceID),
+		Interval:             cfg.Interval,
+		RestartDelay:         cfg.RestartDelay,
+		DisableRestartDelay:  cfg.DisableRestartDelay,
+		RestartReady:         cfg.RestartReady,
+		BootstrapReady:       cfg.BootstrapReady,
+		MaxReconcileAttempts: cfg.MaxReconcileAttempts,
+		Now:                  cfg.Now,
+		inflight:             make(map[string]struct{}),
+		stoppedAt:            make(map[string]time.Time),
 	}
 }
 
@@ -126,6 +132,13 @@ func (p *CatalogPoller) Stop() {
 }
 
 func (p *CatalogPoller) loop(ctx context.Context) {
+	if p.BootstrapReady != nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-p.BootstrapReady:
+		}
+	}
 	p.runOnce(ctx)
 	ticker := time.NewTicker(p.pollInterval())
 	defer ticker.Stop()
@@ -157,6 +170,9 @@ func (p *CatalogPoller) ReconcileOnce(ctx context.Context) error {
 	if p.ChangeRequests == nil || p.Materializations == nil || p.Rollouts == nil {
 		return fmt.Errorf("app registry catalog poller is not configured")
 	}
+	if !channelReady(p.BootstrapReady) {
+		return nil
+	}
 	instanceID := strings.TrimSpace(p.InstanceID)
 	if instanceID == "" {
 		return fmt.Errorf("app registry catalog poller: instance id is required")
@@ -182,7 +198,7 @@ func (p *CatalogPoller) ReconcileOnce(ctx context.Context) error {
 	byApp := groupInstallationsByApp(known)
 	for appName, installations := range byApp {
 		if err := p.reconcileApp(ctx, instanceID, appName, installations, activeByApp[appName]); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, p.recordFailure(ctx, instanceID, appName, installations, err))
 		}
 		delete(activeByApp, appName)
 	}
@@ -288,6 +304,26 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
+	driverVersion := coredata.LatestKnownVersion(installations)
+	if driverVersion == "" {
+		return fmt.Errorf("select desired version for app %s", appName)
+	}
+	desired := findInstallation(installations, driverVersion)
+	if desired == nil {
+		return fmt.Errorf("find desired installation for app %s@%s", appName, driverVersion)
+	}
+	if acceptor, ok := p.AppRestarter.(interface {
+		AcceptsRegistry(string, string) bool
+	}); ok {
+		if !acceptor.AcceptsRegistry(appName, desired.Registry) {
+			return fmt.Errorf("registry for %s@%s does not match configured source", appName, driverVersion)
+		}
+	}
+	retryLimitReached := false
+	if materialization, err := p.Materializations.Get(ctx, instanceID, appName, driverVersion); err == nil {
+		retryLimitReached = materialization.AttemptCount >= p.maxReconcileAttempts()
+	}
+
 	if p.AppRestarter == nil {
 		return nil
 	}
@@ -311,19 +347,55 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
-	if err := p.ensurePendingMaterialized(ctx, instanceID, pending); err != nil {
-		return fmt.Errorf("materialize pending versions for app %s: %w", appName, err)
+	if retryLimitReached {
+		if inspector, ok := p.AppRestarter.(interface {
+			RunningVersion(string) (string, bool)
+		}); ok {
+			running, found := inspector.RunningVersion(appName)
+			materialized, err := p.desiredVersionMaterialized(ctx, instanceID, desired)
+			if err != nil {
+				return err
+			}
+			pruned, err := p.supersededPruned(appName, driverVersion)
+			if err != nil {
+				return err
+			}
+			if found && running == driverVersion && materialized && pruned {
+				return p.markAllRestarted(ctx, instanceID, appName, pending, p.now())
+			}
+		}
+		return nil
+	}
+
+	if err := p.ensureDesiredMaterialized(ctx, instanceID, desired); err != nil {
+		return fmt.Errorf("materialize desired version for app %s: %w", appName, err)
+	}
+
+	if inspector, ok := p.AppRestarter.(interface {
+		RunningVersion(string) (string, bool)
+	}); ok {
+		if running, found := inspector.RunningVersion(appName); found && running == driverVersion {
+			if err := p.pruneSuperseded(appName, driverVersion); err != nil {
+				return err
+			}
+			return p.markAllRestarted(ctx, instanceID, appName, pending, p.now())
+		}
 	}
 
 	if !p.restartReady() {
 		return nil
 	}
 
-	driverVersion := strings.TrimSpace(pending[len(pending)-1].Version)
-
 	stoppedAt, alreadyStopped, err := p.earliestStoppedAt(ctx, instanceID, appName, pending)
 	if err != nil {
 		return err
+	}
+	if inspector, ok := p.AppRestarter.(interface {
+		RunningVersion(string) (string, bool)
+	}); ok {
+		if running, found := inspector.RunningVersion(appName); found && running != driverVersion {
+			alreadyStopped = false
+		}
 	}
 	if !alreadyStopped {
 		if err := p.AppRestarter.StopApp(ctx, appName); err != nil {
@@ -352,6 +424,9 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 	if err := p.AppRestarter.StartApp(ctx, appName, driverVersion); err != nil {
 		return fmt.Errorf("start app %s for %s@%s: %w", appName, appName, driverVersion, err)
 	}
+	if err := p.pruneSuperseded(appName, driverVersion); err != nil {
+		return err
+	}
 	restartedAt := p.now()
 	if err := p.markAllRestarted(ctx, instanceID, appName, pending, restartedAt); err != nil {
 		return err
@@ -371,6 +446,23 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		"restarted_at", restartedAt,
 	)
 	return nil
+}
+
+func (p *CatalogPoller) desiredVersionMaterialized(ctx context.Context, instanceID string, desired *core.AppInstallation) (bool, error) {
+	if desired == nil || strings.TrimSpace(desired.Registry) == "" {
+		return true, nil
+	}
+	appName := strings.TrimSpace(desired.AppName)
+	version := strings.TrimSpace(desired.Version)
+	materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
+	if err != nil {
+		return false, fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
+	}
+	if materialization.MaterializedAt.IsZero() || p.AppMaterializer == nil {
+		return false, nil
+	}
+	path := MaterializedPath(p.AppMaterializer.ArtifactsDir, appName, version)
+	return installedPackageReady(path, appName, version), nil
 }
 
 func findInstallation(installations []*core.AppInstallation, version string) *core.AppInstallation {
@@ -425,55 +517,75 @@ func (p *CatalogPoller) restartReady() bool {
 	}
 }
 
-func (p *CatalogPoller) ensurePendingMaterialized(ctx context.Context, instanceID string, pending []*core.AppInstallation) error {
-	if p == nil || len(pending) == 0 {
+func channelReady(ready <-chan struct{}) bool {
+	if ready == nil {
+		return true
+	}
+	select {
+	case <-ready:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *CatalogPoller) ensureDesiredMaterialized(ctx context.Context, instanceID string, desired *core.AppInstallation) error {
+	if p == nil || desired == nil {
+		return nil
+	}
+	appName := strings.TrimSpace(desired.AppName)
+	version := strings.TrimSpace(desired.Version)
+	if appName == "" || version == "" || strings.TrimSpace(desired.Registry) == "" {
 		return nil
 	}
 	if p.AppMaterializer == nil {
-		for _, installation := range pending {
-			if installation != nil && strings.TrimSpace(installation.Registry) != "" {
-				return fmt.Errorf("app registry materializer is required for %s@%s", installation.AppName, installation.Version)
-			}
-		}
+		return fmt.Errorf("app registry materializer is required for %s@%s", appName, version)
+	}
+	materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
+	if err != nil {
+		return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
+	}
+	result, err := p.AppMaterializer.Ensure(ctx, desired)
+	if err != nil {
+		return fmt.Errorf("materialize %s@%s: %w", appName, version, err)
+	}
+	if !result.Changed && !materialization.MaterializedAt.IsZero() {
 		return nil
 	}
-	for _, installation := range pending {
-		if installation == nil {
-			continue
-		}
-		appName := strings.TrimSpace(installation.AppName)
-		version := strings.TrimSpace(installation.Version)
-		if appName == "" || version == "" {
-			continue
-		}
-		if strings.TrimSpace(installation.Registry) == "" {
-			continue
-		}
-		materialization, err := p.Materializations.Get(ctx, instanceID, appName, version)
-		if err != nil {
-			return fmt.Errorf("load materialization for %s@%s: %w", appName, version, err)
-		}
-		result, err := p.AppMaterializer.Ensure(ctx, installation)
-		if err != nil {
-			return fmt.Errorf("materialize %s@%s: %w", appName, version, err)
-		}
-		if !result.Changed && !materialization.MaterializedAt.IsZero() {
-			continue
-		}
-		materializedAt := p.now()
-		if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, materializedAt); err != nil {
-			return fmt.Errorf("record materialization for %s@%s: %w", appName, version, err)
-		}
-		slog.Info(
-			"app registry catalog poller materialized app artifact",
-			"app", appName,
-			"version", version,
-			"instance_id", instanceID,
-			"materialized_path", result.Path,
-			"materialized_at", materializedAt,
-		)
+	materializedAt := p.now()
+	if _, err := p.Materializations.MarkMaterialized(ctx, instanceID, appName, version, materializedAt); err != nil {
+		return fmt.Errorf("record materialization for %s@%s: %w", appName, version, err)
+	}
+	slog.Info(
+		"app registry catalog poller materialized app artifact",
+		"app", appName,
+		"version", version,
+		"instance_id", instanceID,
+		"materialized_path", result.Path,
+		"materialized_at", materializedAt,
+	)
+	return nil
+}
+
+func (p *CatalogPoller) pruneSuperseded(appName, desiredVersion string) error {
+	if p == nil || p.AppMaterializer == nil {
+		return nil
+	}
+	if err := p.AppMaterializer.PruneSuperseded(appName, desiredVersion); err != nil {
+		return fmt.Errorf("prune superseded versions for app %s: %w", appName, err)
 	}
 	return nil
+}
+
+func (p *CatalogPoller) supersededPruned(appName, desiredVersion string) (bool, error) {
+	if p == nil || p.AppMaterializer == nil {
+		return true, nil
+	}
+	pruned, err := p.AppMaterializer.SupersededPruned(appName, desiredVersion)
+	if err != nil {
+		return false, fmt.Errorf("inspect superseded versions for app %s: %w", appName, err)
+	}
+	return pruned, nil
 }
 
 func (p *CatalogPoller) markCatalogConverged(ctx context.Context, instanceID, appName string, pending []*core.AppInstallation, convergedAt time.Time) error {
@@ -617,4 +729,22 @@ func (p *CatalogPoller) now() time.Time {
 		return p.Now().UTC().Truncate(time.Millisecond)
 	}
 	return time.Now().UTC().Truncate(time.Millisecond)
+}
+
+func (p *CatalogPoller) maxReconcileAttempts() int {
+	if p != nil && p.MaxReconcileAttempts > 0 {
+		return p.MaxReconcileAttempts
+	}
+	return 3
+}
+
+func (p *CatalogPoller) recordFailure(ctx context.Context, instanceID, appName string, installations []*core.AppInstallation, reconcileErr error) error {
+	version := coredata.LatestKnownVersion(installations)
+	if version == "" || p.Materializations == nil {
+		return reconcileErr
+	}
+	if _, err := p.Materializations.RecordFailure(ctx, instanceID, appName, version, p.now(), reconcileErr.Error()); err != nil {
+		return errors.Join(reconcileErr, fmt.Errorf("record reconciliation failure for %s@%s: %w", appName, version, err))
+	}
+	return reconcileErr
 }

@@ -136,7 +136,10 @@ func LatestKnownVersion(installations []*core.AppInstallation) string {
 		if installation == nil {
 			continue
 		}
-		if latest == nil || installation.UpdatedAt.After(latest.UpdatedAt) {
+		if latest == nil ||
+			installation.UpdatedAt.After(latest.UpdatedAt) ||
+			(installation.UpdatedAt.Equal(latest.UpdatedAt) &&
+				strings.TrimSpace(installation.Version) > strings.TrimSpace(latest.Version)) {
 			latest = installation
 		}
 	}

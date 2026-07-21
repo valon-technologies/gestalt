@@ -10,6 +10,9 @@ func AppValidationConfig(cfg *Config) *appservice.ValidationConfig {
 		Apps: make(map[string]*appservice.ValidationApp, len(cfg.Apps)),
 	}
 	for name, entry := range cfg.Apps {
+		if entry != nil && entry.Source.IsRegistry() {
+			continue
+		}
 		validation.Apps[name] = AppValidationEntry(entry)
 	}
 	return validation

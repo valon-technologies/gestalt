@@ -46,7 +46,27 @@ type InstallOutput struct {
 	Installation *core.AppInstallation
 }
 
+type installMode int
+
+const (
+	installModeLegacy installMode = iota
+	installModeAdd
+	installModeUpgrade
+)
+
 func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOutput, error) {
+	return i.install(ctx, input, installModeLegacy)
+}
+
+func (i *Installer) Add(ctx context.Context, input InstallInput) (*InstallOutput, error) {
+	return i.install(ctx, input, installModeAdd)
+}
+
+func (i *Installer) Upgrade(ctx context.Context, input InstallInput) (*InstallOutput, error) {
+	return i.install(ctx, input, installModeUpgrade)
+}
+
+func (i *Installer) install(ctx context.Context, input InstallInput, mode installMode) (*InstallOutput, error) {
 	if i == nil {
 		return nil, fmt.Errorf("app registry installer is not configured")
 	}
@@ -90,6 +110,39 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 	if i.Rollouts == nil {
 		return nil, fmt.Errorf("app rollout service is not configured")
 	}
+	knownVersions, err := i.ChangeRequests.ListKnownVersionsByApp(installCtx, appName)
+	if err != nil {
+		return nil, fmt.Errorf("list known app versions: %w", err)
+	}
+	var configEntry *config.ProviderEntry
+	if i.ConfigApps != nil {
+		configEntry = i.ConfigApps[appName]
+	}
+	if mode != installModeLegacy && (configEntry == nil || !configEntry.Source.IsRegistry()) {
+		return nil, fmt.Errorf("%w: app %q is not registry-managed in deploy config", ErrRegistrySourceMismatch, appName)
+	}
+	if configEntry != nil && configEntry.Source.IsRegistry() &&
+		strings.TrimSpace(configEntry.Source.Registry) != registryName {
+		return nil, ErrRegistrySourceMismatch
+	}
+	var fromVersion string
+	switch mode {
+	case installModeAdd:
+		if len(knownVersions) != 0 {
+			return nil, ErrAppAlreadyAdded
+		}
+		fromVersion = "registry:first-install"
+	case installModeUpgrade:
+		if len(knownVersions) == 0 {
+			return nil, ErrAppNotAdded
+		}
+		fromVersion = coredata.LatestKnownVersion(knownVersions)
+	default:
+		fromVersion = resolveFromVersion(knownVersions, configEntry)
+		if fromVersion == "" {
+			return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
+		}
+	}
 	alreadyKnown, err := i.ChangeRequests.HasKnownVersion(installCtx, appName, version)
 	if err != nil {
 		return nil, fmt.Errorf("check known app version: %w", err)
@@ -103,19 +156,6 @@ func (i *Installer) Install(ctx context.Context, input InstallInput) (*InstallOu
 		}
 	} else if !errors.Is(getErr, core.ErrNotFound) {
 		return nil, fmt.Errorf("check active app rollout: %w", getErr)
-	}
-
-	knownVersions, err := i.ChangeRequests.ListKnownVersionsByApp(installCtx, appName)
-	if err != nil {
-		return nil, fmt.Errorf("list known app versions: %w", err)
-	}
-	var configEntry *config.ProviderEntry
-	if i.ConfigApps != nil {
-		configEntry = i.ConfigApps[appName]
-	}
-	fromVersion := resolveFromVersion(knownVersions, configEntry)
-	if fromVersion == "" {
-		return nil, fmt.Errorf("resolve from_version: no known fleet version and app is not pinned in config")
 	}
 
 	reader := i.Reader

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -13,6 +14,94 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
+
+func TestMaterializer_serializes_same_app(t *testing.T) {
+	t.Parallel()
+	fixture := registrytest.NewInstallFixture(t)
+	materializer := &appregistry.Materializer{
+		Registries:   map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		Reader:       fixture.Reader,
+		ArtifactsDir: t.TempDir(),
+	}
+	installation := &core.AppInstallation{
+		AppName: "g-issues", Version: fixture.Version, Registry: "toolshed",
+	}
+
+	results := make(chan *appregistry.MaterializationResult, 2)
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := materializer.Ensure(context.Background(), installation)
+			results <- result
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+	close(errs)
+
+	changed := 0
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Ensure: %v", err)
+		}
+	}
+	for result := range results {
+		if result != nil && result.Changed {
+			changed++
+		}
+	}
+	if changed != 1 {
+		t.Fatalf("changed results = %d, want 1", changed)
+	}
+}
+
+func TestMaterializerPruneSupersededRetainsOnlyDesiredVersion(t *testing.T) {
+	t.Parallel()
+	artifactsDir := t.TempDir()
+	appDir := filepath.Join(artifactsDir, appregistry.RegistryInstallSubdir, "g-issues")
+	desiredDir := filepath.Join(appDir, "v2")
+	oldDir := filepath.Join(appDir, "v1")
+	for _, path := range []string{desiredDir, oldDir} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", path, err)
+		}
+	}
+	marker := filepath.Join(appDir, "active-version")
+	if err := os.WriteFile(marker, []byte("v2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(active-version): %v", err)
+	}
+	materializer := &appregistry.Materializer{ArtifactsDir: artifactsDir}
+
+	pruned, err := materializer.SupersededPruned("g-issues", "v2")
+	if err != nil {
+		t.Fatalf("SupersededPruned before cleanup: %v", err)
+	}
+	if pruned {
+		t.Fatal("SupersededPruned before cleanup = true, want false")
+	}
+	if err := materializer.PruneSuperseded("g-issues", "v2"); err != nil {
+		t.Fatalf("PruneSuperseded: %v", err)
+	}
+	for _, path := range []string{desiredDir, marker} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("retained path %s: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("old version stat error = %v, want not exist", err)
+	}
+	pruned, err = materializer.SupersededPruned("g-issues", "v2")
+	if err != nil {
+		t.Fatalf("SupersededPruned: %v", err)
+	}
+	if !pruned {
+		t.Fatal("SupersededPruned = false, want true")
+	}
+}
 
 func TestMaterializer_downloads_and_extracts_artifact(t *testing.T) {
 	t.Parallel()

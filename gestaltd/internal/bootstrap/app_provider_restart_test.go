@@ -169,6 +169,14 @@ func TestAppProviderRestarterStopQuarantinesProviderWhenCloseFails(t *testing.T)
 	if err := result.AppRestarter.StopApp(context.Background(), "restart-app"); !errors.Is(err, closeErr) {
 		t.Fatalf("StopApp error = %v, want %v", err, closeErr)
 	}
+	select {
+	case fatalErr := <-result.FatalAppProviderState:
+		if !errors.Is(fatalErr, closeErr) {
+			t.Fatalf("fatal error = %v, want %v", fatalErr, closeErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("unrecoverable provider state was not reported")
+	}
 	if _, err := result.Providers.Get("restart-app"); err == nil {
 		t.Fatal("partially closed provider was republished after failed StopApp")
 	}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -21,6 +22,8 @@ type Materializer struct {
 	Registries   map[string]config.AppRegistryConfig
 	Reader       *RegistryReader
 	ArtifactsDir string
+	mu           sync.Mutex
+	appLocks     map[string]*sync.Mutex
 }
 
 type MaterializationResult struct {
@@ -47,6 +50,9 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	if appName == "" || version == "" {
 		return nil, fmt.Errorf("installation app and version are required")
 	}
+	appLock := m.appLock(appName)
+	appLock.Lock()
+	defer appLock.Unlock()
 	if registryName == "" {
 		return nil, fmt.Errorf("installation registry is required")
 	}
@@ -95,6 +101,108 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 		return nil, fmt.Errorf("materialize app artifact: %w", err)
 	}
 	return &MaterializationResult{Path: destDir, Changed: true}, nil
+}
+
+// PruneSuperseded removes all locally materialized versions for an app except
+// keepVersion. An empty keepVersion removes every locally materialized version.
+func (m *Materializer) PruneSuperseded(app, keepVersion string) error {
+	if m == nil {
+		return fmt.Errorf("app registry materializer is not configured")
+	}
+	app = strings.TrimSpace(app)
+	keepVersion = strings.TrimSpace(keepVersion)
+	if app == "" {
+		return fmt.Errorf("app is required")
+	}
+	artifactsDir := strings.TrimSpace(m.ArtifactsDir)
+	if artifactsDir == "" {
+		return fmt.Errorf("artifacts directory is not configured")
+	}
+	appLock := m.appLock(app)
+	appLock.Lock()
+	defer appLock.Unlock()
+
+	appDir := filepath.Join(artifactsDir, RegistryInstallSubdir, app)
+	entries, err := readMaterializedAppDir(appDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == keepVersion || (keepVersion != "" && name == "active-version") {
+			continue
+		}
+		path := filepath.Join(appDir, name)
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("remove superseded materialized path %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
+// SupersededPruned reports whether no locally materialized package other than
+// keepVersion remains for app.
+func (m *Materializer) SupersededPruned(app, keepVersion string) (bool, error) {
+	if m == nil {
+		return false, fmt.Errorf("app registry materializer is not configured")
+	}
+	app = strings.TrimSpace(app)
+	keepVersion = strings.TrimSpace(keepVersion)
+	if app == "" {
+		return false, fmt.Errorf("app is required")
+	}
+	artifactsDir := strings.TrimSpace(m.ArtifactsDir)
+	if artifactsDir == "" {
+		return false, fmt.Errorf("artifacts directory is not configured")
+	}
+	appLock := m.appLock(app)
+	appLock.Lock()
+	defer appLock.Unlock()
+
+	appDir := filepath.Join(artifactsDir, RegistryInstallSubdir, app)
+	entries, err := readMaterializedAppDir(appDir)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if name != keepVersion && name != "active-version" {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func readMaterializedAppDir(appDir string) ([]os.DirEntry, error) {
+	info, err := os.Lstat(appDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat materialized app directory %s: %w", appDir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("materialized app path %s is not a directory", appDir)
+	}
+	entries, err := os.ReadDir(appDir)
+	if err != nil {
+		return nil, fmt.Errorf("read materialized app directory %s: %w", appDir, err)
+	}
+	return entries, nil
+}
+
+func (m *Materializer) appLock(app string) *sync.Mutex {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.appLocks == nil {
+		m.appLocks = make(map[string]*sync.Mutex)
+	}
+	if lock := m.appLocks[app]; lock != nil {
+		return lock
+	}
+	lock := &sync.Mutex{}
+	m.appLocks[app] = lock
+	return lock
 }
 
 func installedPackageReady(destDir, appName, version string) bool {

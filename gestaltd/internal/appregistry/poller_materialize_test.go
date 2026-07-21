@@ -2,6 +2,7 @@ package appregistry_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +18,11 @@ import (
 )
 
 type recordingAppRestarter struct {
-	stopCalls     []string
-	startCalls    []string
-	startVersions []string
+	stopCalls      []string
+	startCalls     []string
+	startVersions  []string
+	runningVersion string
+	startErr       error
 }
 
 func (r *recordingAppRestarter) Restartable(app string) (bool, error) {
@@ -34,10 +37,14 @@ func (r *recordingAppRestarter) StopApp(_ context.Context, app string) error {
 func (r *recordingAppRestarter) StartApp(_ context.Context, app, version string) error {
 	r.startCalls = append(r.startCalls, app)
 	r.startVersions = append(r.startVersions, version)
-	return nil
+	return r.startErr
 }
 
 func (r *recordingAppRestarter) AbortRestarts() {}
+
+func (r *recordingAppRestarter) RunningVersion(string) (string, bool) {
+	return r.runningVersion, r.runningVersion != ""
+}
 
 type pollerMaterializationHarness struct {
 	ctx          context.Context
@@ -209,5 +216,103 @@ func TestCatalogPollerStartAppPassesDriverVersion(t *testing.T) {
 	}
 	if got := h.restarter.startVersions; len(got) != 1 || got[0] != h.fixture.Version {
 		t.Fatalf("startVersions = %#v, want [%q]", got, h.fixture.Version)
+	}
+}
+
+func TestCatalogPollerRunningLatestSkipsSupersededMaterialization(t *testing.T) {
+	t.Parallel()
+	h := newPollerMaterializationHarness(t, "toolshed", true)
+	oldVersion := "0.0.0-snapshot.gold"
+	if _, err := h.services.AppVersionChangeRequests.AppendRequest(h.ctx, &core.AppVersionChangeRequest{
+		App:         "g-issues",
+		FromVersion: "previous",
+		ToVersion:   oldVersion,
+		Timestamp:   h.clock.Add(-time.Minute),
+		Metadata:    map[string]any{"registry": "toolshed"},
+	}); err != nil {
+		t.Fatalf("AppendRequest(old version): %v", err)
+	}
+	h.restarter.runningVersion = h.fixture.Version
+
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("ReconcileOnce: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(h.materializedPath(), "manifest.yaml")); err != nil {
+		t.Fatalf("stat materialized manifest: %v", err)
+	}
+	materialization := h.materialization(t)
+	if materialization.MaterializedAt.IsZero() {
+		t.Fatal("MaterializedAt is zero")
+	}
+	if materialization.RestartedAt.IsZero() {
+		t.Fatal("RestartedAt is zero")
+	}
+	oldMaterialization, err := h.services.AppInstanceMaterializations.Get(h.ctx, "replica-a", "g-issues", oldVersion)
+	if err != nil {
+		t.Fatalf("Get old materialization: %v", err)
+	}
+	if !oldMaterialization.MaterializedAt.IsZero() {
+		t.Fatalf("old MaterializedAt = %v, want zero", oldMaterialization.MaterializedAt)
+	}
+	if oldMaterialization.RestartedAt.IsZero() {
+		t.Fatal("old RestartedAt is zero")
+	}
+	oldPath := appregistry.MaterializedPath(h.artifactsDir, "g-issues", oldVersion)
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old version stat error = %v, want not exist", err)
+	}
+	if len(h.restarter.stopCalls) != 0 || len(h.restarter.startCalls) != 0 {
+		t.Fatalf("unexpected restart calls: stop=%v start=%v", h.restarter.stopCalls, h.restarter.startCalls)
+	}
+}
+
+func TestCatalogPollerAtRetryLimitRecordsMaterializedRunningVersion(t *testing.T) {
+	t.Parallel()
+	h := newPollerMaterializationHarness(t, "toolshed", true)
+	h.poller.MaxReconcileAttempts = 1
+
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("materialization pass: %v", err)
+	}
+	if _, err := h.services.AppInstanceMaterializations.RecordFailure(
+		h.ctx,
+		"replica-a",
+		"g-issues",
+		h.fixture.Version,
+		h.clock,
+		"prior start failure",
+	); err != nil {
+		t.Fatalf("RecordFailure: %v", err)
+	}
+	h.restarter.runningVersion = h.fixture.Version
+
+	if err := h.poller.ReconcileOnce(h.ctx); err != nil {
+		t.Fatalf("limited convergence pass: %v", err)
+	}
+	materialization := h.materialization(t)
+	if materialization.RestartedAt.IsZero() {
+		t.Fatal("RestartedAt is zero")
+	}
+	if len(h.restarter.stopCalls) != 0 || len(h.restarter.startCalls) != 0 {
+		t.Fatalf("unexpected restart calls: stop=%v start=%v", h.restarter.stopCalls, h.restarter.startCalls)
+	}
+}
+
+func TestCatalogPollerRetainsOldVersionUntilDesiredVersionStarts(t *testing.T) {
+	t.Parallel()
+	h := newPollerMaterializationHarness(t, "toolshed", true)
+	oldPath := appregistry.MaterializedPath(h.artifactsDir, "g-issues", "old")
+	if err := os.MkdirAll(oldPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll old version: %v", err)
+	}
+	h.restarter.startErr = errors.New("start failed")
+	close(h.restartReady)
+
+	err := h.poller.ReconcileOnce(h.ctx)
+	if err == nil || !strings.Contains(err.Error(), "start failed") {
+		t.Fatalf("ReconcileOnce error = %v, want start failure", err)
+	}
+	if _, err := os.Stat(oldPath); err != nil {
+		t.Fatalf("old version removed before desired start: %v", err)
 	}
 }
