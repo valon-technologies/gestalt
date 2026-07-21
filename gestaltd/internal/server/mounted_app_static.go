@@ -17,7 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/ui"
 )
 
-func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], artifactsDir string, devHandlerResolver func(string) http.Handler) ([]MountedUI, error) {
+func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], artifactsDir string, runtimeState AppRuntimeState, devHandlerResolver func(string) http.Handler) ([]MountedUI, error) {
 	names := make([]string, 0, len(apps))
 	for name, entry := range apps {
 		if entry == nil || entry.Static == nil {
@@ -58,7 +58,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				AppName:             name,
 				AuthorizationPolicy: entry.AuthorizationPolicy,
 				AppLevelAuth:        !entry.Static.Public,
-				Handler:             registryAppStaticHandler(name, mount, entry, providers, artifactsDir),
+				Handler:             registryAppStaticHandler(name, mount, entry, providers, artifactsDir, runtimeState),
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
 			})
@@ -93,44 +93,45 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 	return mounted, nil
 }
 
-func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], artifactsDir string) http.Handler {
+func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], artifactsDir string, runtimeState AppRuntimeState) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if providers == nil || strings.TrimSpace(artifactsDir) == "" {
+		if providers == nil || runtimeState == nil || strings.TrimSpace(artifactsDir) == "" {
 			http.Error(w, "app unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if _, err := providers.Get(app); err != nil {
-			http.Error(w, "app unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		marker := filepath.Join(artifactsDir, appregistry.RegistryInstallSubdir, app, "active-version")
-		raw, err := os.ReadFile(marker)
-		version := strings.TrimSpace(string(raw))
-		if err != nil || version == "" {
-			http.Error(w, "app unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		destDir := appregistry.MaterializedPath(artifactsDir, app, version)
-		resolved, err := appregistry.ResolveInstalledApp(app, entry, destDir, version)
-		if err != nil || strings.TrimSpace(resolved.ResolvedStaticRoot) == "" {
-			http.Error(w, "app unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		handler, err := ui.StaticHandler(ui.StaticConfig{
-			FS:           os.DirFS(resolved.ResolvedStaticRoot),
-			DynamicIndex: true,
-			RenderIndex:  injectBaseHref(mount),
+		served := false
+		err := runtimeState.WithRunningVersion(app, func(version string) error {
+			if _, err := providers.Get(app); err != nil {
+				return err
+			}
+			marker := filepath.Join(artifactsDir, appregistry.RegistryInstallSubdir, app, "active-version")
+			raw, err := os.ReadFile(marker)
+			if err != nil || strings.TrimSpace(string(raw)) != version {
+				return fmt.Errorf("active version marker does not match running version")
+			}
+			destDir := appregistry.MaterializedPath(artifactsDir, app, version)
+			resolved, err := appregistry.ResolveInstalledApp(app, entry, destDir, version)
+			if err != nil {
+				return fmt.Errorf("resolve installed app: %w", err)
+			}
+			if strings.TrimSpace(resolved.ResolvedStaticRoot) == "" {
+				return fmt.Errorf("installed app %q has no static root", app)
+			}
+			handler, err := ui.StaticHandler(ui.StaticConfig{
+				FS:           os.DirFS(resolved.ResolvedStaticRoot),
+				DynamicIndex: true,
+				RenderIndex:  injectBaseHref(mount),
+			})
+			if err != nil {
+				return err
+			}
+			served = true
+			handler.ServeHTTP(w, r)
+			return nil
 		})
-		if err != nil {
+		if err != nil && !served {
 			http.Error(w, "app unavailable", http.StatusServiceUnavailable)
-			return
 		}
-		again, err := os.ReadFile(marker)
-		if err != nil || strings.TrimSpace(string(again)) != version {
-			http.Error(w, "app unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		handler.ServeHTTP(w, r)
 	})
 }
 

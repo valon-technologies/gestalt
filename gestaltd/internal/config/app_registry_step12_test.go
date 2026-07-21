@@ -9,6 +9,7 @@ func TestRegistryOnlyAppSourceValidation(t *testing.T) {
 	t.Parallel()
 
 	t.Run("accepts configured registry and defaults retries", func(t *testing.T) {
+		t.Parallel()
 		path := mustWriteConfigFile(t, `
 appRegistries:
   toolshed:
@@ -43,6 +44,7 @@ server: {}
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			path := mustWriteConfigFile(t, `
 appRegistries:
   toolshed:
@@ -68,6 +70,7 @@ func TestAppRegistryMaxReconcileAttemptsValidation(t *testing.T) {
 	for _, value := range []string{"0", "-1"} {
 		value := value
 		t.Run(value, func(t *testing.T) {
+			t.Parallel()
 			path := mustWriteConfigFile(t, `
 server:
   appRegistry:

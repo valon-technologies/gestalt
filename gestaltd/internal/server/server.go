@@ -89,6 +89,10 @@ type BuiltinAdminUIOptions struct {
 	LoginBase string
 }
 
+type AppRuntimeState interface {
+	WithRunningVersion(app string, fn func(version string) error) error
+}
+
 type Server struct {
 	router                 chi.Router
 	handler                http.Handler
@@ -150,6 +154,7 @@ type Server struct {
 	appRegistryReader      *appregistry.RegistryReader
 	appRegistryInstaller   *appregistry.Installer
 	artifactsDir           string
+	appRuntimeState        AppRuntimeState
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
 }
@@ -204,6 +209,7 @@ type Config struct {
 	AppRegistries          map[string]config.AppRegistryConfig
 	AppRegistryReader      *appregistry.RegistryReader
 	ArtifactsDir           string
+	AppRuntimeState        AppRuntimeState
 	RouteProfile           RouteProfile
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
@@ -264,7 +270,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
 	mountedUIs := append([]MountedUI(nil), cfg.MountedUIs...)
-	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.Providers, cfg.ArtifactsDir, cfg.DevHandlerResolver)
+	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.Providers, cfg.ArtifactsDir, cfg.AppRuntimeState, cfg.DevHandlerResolver)
 	if err != nil {
 		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)
 	}
@@ -394,6 +400,7 @@ func New(cfg Config) (*Server, error) {
 		appRegistryReader:      cfg.AppRegistryReader,
 		appRegistryInstaller:   newAppRegistryInstaller(cfg),
 		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
+		appRuntimeState:        cfg.AppRuntimeState,
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,
 	}

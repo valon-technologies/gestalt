@@ -326,14 +326,6 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 		return nil
 	}
 
-	if inspector, ok := p.AppRestarter.(interface {
-		RunningVersion(string) (string, bool)
-	}); ok {
-		if running, found := inspector.RunningVersion(appName); found && running == driverVersion {
-			return p.markAllRestarted(ctx, instanceID, appName, pending, p.now())
-		}
-	}
-
 	restartable, err := p.AppRestarter.Restartable(appName)
 	if err != nil {
 		return fmt.Errorf("determine restart mode for app %s: %w", appName, err)
@@ -355,6 +347,14 @@ func (p *CatalogPoller) reconcileApp(ctx context.Context, instanceID, appName st
 
 	if err := p.ensurePendingMaterialized(ctx, instanceID, pending); err != nil {
 		return fmt.Errorf("materialize pending versions for app %s: %w", appName, err)
+	}
+
+	if inspector, ok := p.AppRestarter.(interface {
+		RunningVersion(string) (string, bool)
+	}); ok {
+		if running, found := inspector.RunningVersion(appName); found && running == driverVersion {
+			return p.markAllRestarted(ctx, instanceID, appName, pending, p.now())
+		}
 	}
 
 	if !p.restartReady() {
