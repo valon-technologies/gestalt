@@ -46,6 +46,8 @@ func (s *Server) mountAdminAppInstallReadRoutes(r chi.Router) {
 
 func (s *Server) mountAdminAppInstallWriteRoutes(r chi.Router) {
 	r.Post("/app-registries/{registry}/apps/{app}/install", s.installAdminAppRegistryApp)
+	r.Post("/app-registries/{registry}/apps/{app}/add", s.addAdminAppRegistryApp)
+	r.Post("/app-registries/{registry}/apps/{app}/upgrade", s.upgradeAdminAppRegistryApp)
 }
 
 func (s *Server) listAdminAppInstallations(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +98,18 @@ func (s *Server) getAdminAppInstallation(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Request) {
+	s.changeAdminAppRegistryApp(w, r, "install")
+}
+
+func (s *Server) addAdminAppRegistryApp(w http.ResponseWriter, r *http.Request) {
+	s.changeAdminAppRegistryApp(w, r, "add")
+}
+
+func (s *Server) upgradeAdminAppRegistryApp(w http.ResponseWriter, r *http.Request) {
+	s.changeAdminAppRegistryApp(w, r, "upgrade")
+}
+
+func (s *Server) changeAdminAppRegistryApp(w http.ResponseWriter, r *http.Request, mode string) {
 	if s.appRegistryInstaller == nil {
 		writeError(w, http.StatusServiceUnavailable, "app registry installer is unavailable")
 		return
@@ -134,12 +148,22 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	result, err := s.appRegistryInstaller.Install(r.Context(), appregistry.InstallInput{
+	input := appregistry.InstallInput{
 		Registry: registryName,
 		App:      appName,
 		Version:  version,
 		Actor:    strings.TrimSpace(req.Actor),
-	})
+	}
+	var result *appregistry.InstallOutput
+	var err error
+	switch mode {
+	case "add":
+		result, err = s.appRegistryInstaller.Add(r.Context(), input)
+	case "upgrade":
+		result, err = s.appRegistryInstaller.Upgrade(r.Context(), input)
+	default:
+		result, err = s.appRegistryInstaller.Install(r.Context(), input)
+	}
 	if err != nil {
 		status := http.StatusBadGateway
 		switch {
@@ -157,6 +181,11 @@ func (s *Server) installAdminAppRegistryApp(w http.ResponseWriter, r *http.Reque
 			status = http.StatusConflict
 		case errors.Is(err, appregistry.ErrAppRolloutActive):
 			status = http.StatusConflict
+		case errors.Is(err, appregistry.ErrAppAlreadyAdded):
+			status = http.StatusConflict
+		case errors.Is(err, appregistry.ErrAppNotAdded),
+			errors.Is(err, appregistry.ErrRegistrySourceMismatch):
+			status = http.StatusBadRequest
 		case errors.Is(err, appregistry.ErrAppVersionAlreadyInstalled):
 			status = http.StatusBadRequest
 		case errors.Is(err, context.DeadlineExceeded):

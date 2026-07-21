@@ -149,6 +149,7 @@ type Server struct {
 	appRegistries          map[string]config.AppRegistryConfig
 	appRegistryReader      *appregistry.RegistryReader
 	appRegistryInstaller   *appregistry.Installer
+	artifactsDir           string
 	routeProfile           RouteProfile
 	activateAppProviders   func(context.Context)
 }
@@ -263,7 +264,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
 	mountedUIs := append([]MountedUI(nil), cfg.MountedUIs...)
-	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.DevHandlerResolver)
+	appStatics, err := mountedAppStaticsFromEntries(cfg.AppDefs, cfg.Providers, cfg.ArtifactsDir, cfg.DevHandlerResolver)
 	if err != nil {
 		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)
 	}
@@ -392,6 +393,7 @@ func New(cfg Config) (*Server, error) {
 		appRegistries:          cloneAppRegistryConfig(cfg.AppRegistries),
 		appRegistryReader:      cfg.AppRegistryReader,
 		appRegistryInstaller:   newAppRegistryInstaller(cfg),
+		artifactsDir:           strings.TrimSpace(cfg.ArtifactsDir),
 		routeProfile:           cfg.RouteProfile,
 		activateAppProviders:   cfg.ActivateAppProviders,
 	}

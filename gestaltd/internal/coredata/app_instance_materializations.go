@@ -15,11 +15,12 @@ import (
 )
 
 type AppInstanceMaterializationService struct {
+	db    indexeddb.IndexedDB
 	store idb.ObjectStore
 }
 
 func NewAppInstanceMaterializationService(ds indexeddb.IndexedDB) *AppInstanceMaterializationService {
-	return &AppInstanceMaterializationService{store: ds.ObjectStore(StoreAppInstanceMaterializations)}
+	return &AppInstanceMaterializationService{db: ds, store: ds.ObjectStore(StoreAppInstanceMaterializations)}
 }
 
 func (s *AppInstanceMaterializationService) HasAcknowledged(ctx context.Context, instanceID, app, version string) (bool, error) {
@@ -99,6 +100,7 @@ func (s *AppInstanceMaterializationService) Acknowledge(ctx context.Context, mat
 		"app":             app,
 		"version":         version,
 		"acknowledged_at": acknowledgedAt,
+		"attempt_count":   0,
 	}
 	if err := s.store.Add(ctx, rec); err != nil {
 		if errors.Is(err, idb.ErrAlreadyExists) {
@@ -149,6 +151,46 @@ func (s *AppInstanceMaterializationService) MarkRestarted(ctx context.Context, i
 	})
 }
 
+func (s *AppInstanceMaterializationService) RecordFailure(ctx context.Context, instanceID, app, version string, failedAt time.Time, message string) (*core.AppInstanceMaterialization, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("record app instance materialization failure: service is not configured")
+	}
+	tx, err := s.db.Transaction(ctx, []string{StoreAppInstanceMaterializations}, idb.TransactionReadwrite, idb.TransactionOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("record app instance materialization failure: begin transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Abort(context.WithoutCancel(ctx))
+		}
+	}()
+	store := tx.ObjectStore(StoreAppInstanceMaterializations)
+	query := idb.Bound([]any{strings.TrimSpace(instanceID), strings.TrimSpace(app), strings.TrimSpace(version)}, []any{strings.TrimSpace(instanceID), strings.TrimSpace(app), strings.TrimSpace(version)}, false, false)
+	recs, err := store.Index("by_instance_app_version").GetAll(ctx, query)
+	if err != nil || len(recs) == 0 {
+		if err == nil {
+			err = idb.ErrNotFound
+		}
+		return nil, fmt.Errorf("record app instance materialization failure: load record: %w", err)
+	}
+	rec := recs[0]
+	rec["attempt_count"] = recordInt(rec, "attempt_count") + 1
+	if failedAt.IsZero() {
+		failedAt = time.Now()
+	}
+	rec["last_error_at"] = failedAt.UTC().Truncate(time.Millisecond)
+	rec["last_error_message"] = strings.TrimSpace(message)
+	if err := store.Put(ctx, rec); err != nil {
+		return nil, fmt.Errorf("record app instance materialization failure: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("record app instance materialization failure: commit: %w", err)
+	}
+	committed = true
+	return recordToAppInstanceMaterialization(rec), nil
+}
+
 func (s *AppInstanceMaterializationService) updateTimestamps(
 	ctx context.Context,
 	instanceID, app, version string,
@@ -193,12 +235,30 @@ func (s *AppInstanceMaterializationService) findByInstanceAppVersion(ctx context
 
 func recordToAppInstanceMaterialization(rec idb.Record) *core.AppInstanceMaterialization {
 	return &core.AppInstanceMaterialization{
-		InstanceID:     recString(rec, "instance_id"),
-		App:            recString(rec, "app"),
-		Version:        recString(rec, "version"),
-		AcknowledgedAt: recTime(rec, "acknowledged_at"),
-		MaterializedAt: recTime(rec, "materialized_at"),
-		StoppedAt:      recTime(rec, "stopped_at"),
-		RestartedAt:    recTime(rec, "restarted_at"),
+		InstanceID:       recString(rec, "instance_id"),
+		App:              recString(rec, "app"),
+		Version:          recString(rec, "version"),
+		AcknowledgedAt:   recTime(rec, "acknowledged_at"),
+		MaterializedAt:   recTime(rec, "materialized_at"),
+		StoppedAt:        recTime(rec, "stopped_at"),
+		RestartedAt:      recTime(rec, "restarted_at"),
+		AttemptCount:     recordInt(rec, "attempt_count"),
+		LastErrorAt:      recTime(rec, "last_error_at"),
+		LastErrorMessage: recString(rec, "last_error_message"),
+	}
+}
+
+func recordInt(rec idb.Record, key string) int {
+	switch value := rec[key].(type) {
+	case int:
+		return value
+	case int32:
+		return int(value)
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
 	}
 }

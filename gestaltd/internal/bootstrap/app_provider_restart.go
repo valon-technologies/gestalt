@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -36,9 +38,12 @@ type AppProviderRestarter struct {
 	authBuilds       []*preparedProviderBuilds
 	lifecycles       *appProviderLifecycles
 	registryResolver RegistryInstalledResolver
+	artifactsDir     string
+	fatal            func(error)
 	held             map[string]func()
 	closing          map[string]pendingProviderClose
 	closeFailures    map[string]error
+	runningVersions  map[string]string
 
 	lifecycleMu sync.Mutex
 }
@@ -50,6 +55,8 @@ type AppProviderRestarterConfig struct {
 	AuthBuilds       []*preparedProviderBuilds
 	Lifecycles       *appProviderLifecycles
 	RegistryResolver RegistryInstalledResolver
+	ArtifactsDir     string
+	Fatal            func(error)
 }
 
 func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestarter {
@@ -60,9 +67,12 @@ func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestart
 		authBuilds:       cfg.AuthBuilds,
 		lifecycles:       cfg.Lifecycles,
 		registryResolver: cfg.RegistryResolver,
+		artifactsDir:     strings.TrimSpace(cfg.ArtifactsDir),
+		fatal:            cfg.Fatal,
 		held:             make(map[string]func()),
 		closing:          make(map[string]pendingProviderClose),
 		closeFailures:    make(map[string]error),
+		runningVersions:  make(map[string]string),
 	}
 }
 
@@ -105,24 +115,35 @@ func (r *AppProviderRestarter) StopApp(ctx context.Context, app string) error {
 		return fmt.Errorf("stop app provider: wait for provider lifecycle: %w", err)
 	}
 	if pending, ok := r.closing[app]; ok {
-		return r.awaitProviderClose(ctx, app, pending)
+		err := r.awaitProviderClose(ctx, app, pending)
+		if err != nil {
+			r.releaseLifecycleLease(app)
+		}
+		return err
 	}
 	if closeErr, ok := r.closeFailures[app]; ok {
+		r.releaseLifecycleLease(app)
 		return fmt.Errorf("stop app provider %q: previous close failed: %w", app, closeErr)
 	}
 
 	provider, err := r.providers.Get(app)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
+			r.clearRunningVersion(app)
 			return nil
 		}
 		r.releaseLifecycleLease(app)
 		return fmt.Errorf("stop app provider: %w", err)
 	}
 	r.providers.Remove(app)
+	r.clearRunningVersion(app)
 	pending := pendingProviderClose{provider: provider, done: closeProviderForRestart(provider)}
 	r.closing[app] = pending
-	return r.awaitProviderClose(ctx, app, pending)
+	err = r.awaitProviderClose(ctx, app, pending)
+	if err != nil {
+		r.releaseLifecycleLease(app)
+	}
+	return err
 }
 
 func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string) error {
@@ -149,10 +170,26 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	if err := r.ensureLifecycleLease(ctx, app); err != nil {
 		return fmt.Errorf("start app provider: wait for provider lifecycle: %w", err)
 	}
+	defer r.releaseLifecycleLease(app)
 
-	if _, getErr := r.providers.Get(app); getErr == nil {
-		r.releaseLifecycleLease(app)
-		return nil
+	if provider, getErr := r.providers.Get(app); getErr == nil {
+		if runningVersion, ok := r.runningVersions[app]; ok && runningVersion == version {
+			r.releaseLifecycleLease(app)
+			return nil
+		}
+		if !entry.Source.IsRegistry() {
+			if _, tracked := r.runningVersions[app]; !tracked {
+				r.releaseLifecycleLease(app)
+				return nil
+			}
+		}
+		r.providers.Remove(app)
+		r.clearRunningVersion(app)
+		pending := pendingProviderClose{provider: provider, done: closeProviderForRestart(provider)}
+		r.closing[app] = pending
+		if err := r.awaitProviderClose(ctx, app, pending); err != nil {
+			return err
+		}
 	} else if !errors.Is(getErr, core.ErrNotFound) {
 		return fmt.Errorf("start app provider: %w", getErr)
 	}
@@ -182,6 +219,7 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	}
 	if err := r.providers.Register(app, result.Provider); err != nil {
 		closeIfPossible(result.Provider)
+		r.clearRunningVersion(app)
 		return fmt.Errorf("start app provider %q: %w", app, err)
 	}
 	r.storeConnectionAuth(app, result)
@@ -192,8 +230,70 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		}
 		r.deps.AppWorkflowDeclarations.Set(app, decls)
 	}
+	if version != "" {
+		if err := r.setRunningVersion(app, version); err != nil {
+			r.providers.Remove(app)
+			closeIfPossible(result.Provider)
+			r.clearRunningVersion(app)
+			return fmt.Errorf("start app provider %q: record running version: %w", app, err)
+		}
+	}
 	r.releaseLifecycleLease(app)
 	return nil
+}
+
+func (r *AppProviderRestarter) RunningVersion(app string) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	version, ok := r.runningVersions[strings.TrimSpace(app)]
+	return version, ok && version != ""
+}
+
+func (r *AppProviderRestarter) AcceptsRegistry(app, registryName string) bool {
+	if r == nil || r.cfg == nil {
+		return false
+	}
+	entry := r.cfg.Apps[strings.TrimSpace(app)]
+	if entry == nil || !entry.Source.IsRegistry() {
+		return true
+	}
+	return strings.TrimSpace(entry.Source.Registry) == strings.TrimSpace(registryName)
+}
+
+func (r *AppProviderRestarter) setRunningVersion(app, version string) error {
+	app = strings.TrimSpace(app)
+	version = strings.TrimSpace(version)
+	if app == "" || version == "" {
+		return fmt.Errorf("app and version are required")
+	}
+	if r.artifactsDir != "" {
+		dir := filepath.Join(r.artifactsDir, "registry-installed", app)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		marker := filepath.Join(dir, "active-version")
+		tmp := marker + ".tmp"
+		if err := os.WriteFile(tmp, []byte(version+"\n"), 0o644); err != nil {
+			return err
+		}
+		if err := os.Rename(tmp, marker); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+	}
+	r.runningVersions[app] = version
+	return nil
+}
+
+func (r *AppProviderRestarter) clearRunningVersion(app string) {
+	app = strings.TrimSpace(app)
+	delete(r.runningVersions, app)
+	if r.artifactsDir != "" && app != "" {
+		_ = os.Remove(filepath.Join(r.artifactsDir, "registry-installed", app, "active-version"))
+	}
 }
 
 func (r *AppProviderRestarter) AbortRestarts() {
@@ -253,9 +353,19 @@ func (r *AppProviderRestarter) awaitProviderClose(ctx context.Context, app strin
 			return nil
 		}
 		r.closeFailures[app] = err
-		return fmt.Errorf("stop app provider %q: %w", app, err)
+		closeErr := fmt.Errorf("stop app provider %q: %w", app, err)
+		r.reportFatal(closeErr)
+		return closeErr
 	case <-waitCtx.Done():
-		return fmt.Errorf("stop app provider %q: close did not finish: %w", app, waitCtx.Err())
+		closeErr := fmt.Errorf("stop app provider %q: close did not finish: %w", app, waitCtx.Err())
+		r.reportFatal(closeErr)
+		return closeErr
+	}
+}
+
+func (r *AppProviderRestarter) reportFatal(err error) {
+	if r != nil && r.fatal != nil && err != nil {
+		r.fatal(err)
 	}
 }
 
@@ -271,7 +381,13 @@ func (r *AppProviderRestarter) appEntry(app string) (*config.ProviderEntry, erro
 }
 
 func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.ProviderEntry, version string) (*config.ProviderEntry, error) {
-	if r == nil || r.registryResolver == nil {
+	if r == nil {
+		return entry, nil
+	}
+	if r.registryResolver == nil {
+		if entry != nil && entry.Source.IsRegistry() {
+			return nil, fmt.Errorf("mount registry installed app %q@%s: resolver is not configured", app, version)
+		}
 		return entry, nil
 	}
 	resolved, err := r.registryResolver.ResolveInstalledApp(app, entry, version)
@@ -280,6 +396,9 @@ func (r *AppProviderRestarter) resolveRegistryInstall(app string, entry *config.
 	}
 	if resolved == nil {
 		return nil, fmt.Errorf("mount registry installed app %q@%s: resolver returned nil provider entry", app, version)
+	}
+	if entry != nil && entry.Source.IsRegistry() && resolved.ResolvedManifest == nil {
+		return nil, fmt.Errorf("mount registry installed app %q@%s: materialized package is required", app, version)
 	}
 	return resolved, nil
 }

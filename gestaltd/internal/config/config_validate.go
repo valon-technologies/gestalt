@@ -82,6 +82,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateAppRegistries(cfg); err != nil {
 		return err
 	}
+	if err := validateServerAppRegistry(cfg); err != nil {
+		return err
+	}
 
 	for _, collection := range []struct {
 		kind    HostProviderKind
@@ -221,6 +224,21 @@ func validateAppRegistryLocation(prefix, name string, registry AppRegistryConfig
 	}
 	if _, err := registry.PublicURL(); err != nil {
 		return fmt.Errorf("config validation: %s.%s: %w", prefix, name, err)
+	}
+	return nil
+}
+
+func validateServerAppRegistry(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	attempts := cfg.Server.AppRegistry.MaxReconcileAttempts
+	if !cfg.Server.AppRegistry.maxReconcileAttemptsSet && attempts == 0 {
+		cfg.Server.AppRegistry.MaxReconcileAttempts = DefaultAppRegistryMaxReconcileAttempts
+		return nil
+	}
+	if attempts <= 0 {
+		return fmt.Errorf("config validation: server.appRegistry.maxReconcileAttempts must be a positive integer")
 	}
 	return nil
 }
@@ -567,6 +585,9 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsGit() {
 		modeCount++
 	}
+	if src.IsRegistry() {
+		modeCount++
+	}
 	if src.IsPackage() {
 		modeCount++
 	}
@@ -578,6 +599,9 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	}
 	if modeCount > 1 {
 		return fmt.Errorf("config validation: %s %q source.path and metadata URL sources are mutually exclusive", kind, name)
+	}
+	if src.IsRegistry() && kind != "app" {
+		return fmt.Errorf("config validation: %s %q source.registry is only supported on apps", kind, name)
 	}
 	if src.IsLocalMetadataPath() {
 		if path.Base(filepath.ToSlash(src.MetadataPath())) != "provider-release.yaml" {
@@ -945,6 +969,12 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	}
 	if err := validateProviderEntrySource("app", name, entry); err != nil {
 		return err
+	}
+	if entry.Source.IsRegistry() {
+		registryName := strings.TrimSpace(entry.Source.Registry)
+		if _, ok := cfg.AppRegistries[registryName]; !ok {
+			return fmt.Errorf("config validation: apps.%s.source.registry references unknown app registry %q", name, registryName)
+		}
 	}
 	if err := validateAppRouteAuth(cfg, name, entry); err != nil {
 		return err

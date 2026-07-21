@@ -47,13 +47,16 @@ type AppVersionChangeRequest struct {
 }
 
 type AppInstanceMaterialization struct {
-	InstanceID     string
-	App            string
-	Version        string
-	AcknowledgedAt time.Time
-	MaterializedAt time.Time
-	StoppedAt      time.Time
-	RestartedAt    time.Time
+	InstanceID       string
+	App              string
+	Version          string
+	AcknowledgedAt   time.Time
+	MaterializedAt   time.Time
+	StoppedAt        time.Time
+	RestartedAt      time.Time
+	AttemptCount     int
+	LastErrorAt      time.Time
+	LastErrorMessage string
 }
 
 type AppRolloutState string
