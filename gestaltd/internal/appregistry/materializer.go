@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -21,6 +22,8 @@ type Materializer struct {
 	Registries   map[string]config.AppRegistryConfig
 	Reader       *RegistryReader
 	ArtifactsDir string
+	mu           sync.Mutex
+	appLocks     map[string]*sync.Mutex
 }
 
 type MaterializationResult struct {
@@ -47,6 +50,9 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 	if appName == "" || version == "" {
 		return nil, fmt.Errorf("installation app and version are required")
 	}
+	appLock := m.appLock(appName)
+	appLock.Lock()
+	defer appLock.Unlock()
 	if registryName == "" {
 		return nil, fmt.Errorf("installation registry is required")
 	}
@@ -95,6 +101,20 @@ func (m *Materializer) Ensure(ctx context.Context, installation *core.AppInstall
 		return nil, fmt.Errorf("materialize app artifact: %w", err)
 	}
 	return &MaterializationResult{Path: destDir, Changed: true}, nil
+}
+
+func (m *Materializer) appLock(app string) *sync.Mutex {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.appLocks == nil {
+		m.appLocks = make(map[string]*sync.Mutex)
+	}
+	if lock := m.appLocks[app]; lock != nil {
+		return lock
+	}
+	lock := &sync.Mutex{}
+	m.appLocks[app] = lock
+	return lock
 }
 
 func installedPackageReady(destDir, appName, version string) bool {

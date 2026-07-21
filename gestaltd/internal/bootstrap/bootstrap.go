@@ -238,41 +238,44 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth                   core.IdentityProvider
-	SelectedAuthProvider   string
-	AuthProviders          map[string]core.IdentityProvider
-	Authorization          map[string]core.AuthorizationProvider
-	Services               *coredata.Services
-	ExtraIndexedDBs        []indexeddb.IndexedDB
-	ExtraCaches            []corecache.Cache
-	S3                     map[string]s3sdk.S3
-	ExtraS3s               []s3sdk.S3
-	ExtraWorkflows         []coreworkflow.Provider
-	ExtraAgents            []coreagent.Provider
-	Providers              *registry.ProviderMap[core.Provider]
-	WorkflowControl        WorkflowControl
-	AgentControl           AgentControl
-	AgentManager           agentmanager.Service
-	StartupProvidersReady  <-chan struct{}
-	ProvidersReady         <-chan struct{}
-	ConnectionAuth         func() map[string]map[string]OAuthHandler
-	ManualConnectionAuth   func() map[string]map[string]ManualTokenExchanger
-	Invoker                invocation.Invoker
-	AppInvocation          invocation.Invoker
-	CapabilityLister       invocation.CapabilityLister
-	AuditSink              core.AuditSink
-	SecretManager          core.SecretManager
-	Telemetry              core.TelemetryProvider
-	Runtimes               RuntimeInspector
-	PublicHostServices     *runtimehost.PublicHostServiceRegistry
-	PublicGatewayTransport *providergateway.ProviderGatewayTransport
-	DevSupervisor          *providerdev.Supervisor
-	AppRestarter           interface {
+	Auth                    core.IdentityProvider
+	SelectedAuthProvider    string
+	AuthProviders           map[string]core.IdentityProvider
+	Authorization           map[string]core.AuthorizationProvider
+	Services                *coredata.Services
+	ExtraIndexedDBs         []indexeddb.IndexedDB
+	ExtraCaches             []corecache.Cache
+	S3                      map[string]s3sdk.S3
+	ExtraS3s                []s3sdk.S3
+	ExtraWorkflows          []coreworkflow.Provider
+	ExtraAgents             []coreagent.Provider
+	Providers               *registry.ProviderMap[core.Provider]
+	WorkflowControl         WorkflowControl
+	AgentControl            AgentControl
+	AgentManager            agentmanager.Service
+	StartupProvidersReady   <-chan struct{}
+	AppProvidersInitialized <-chan struct{}
+	ProvidersReady          <-chan struct{}
+	FatalAppProviderState   <-chan error
+	ConnectionAuth          func() map[string]map[string]OAuthHandler
+	ManualConnectionAuth    func() map[string]map[string]ManualTokenExchanger
+	Invoker                 invocation.Invoker
+	AppInvocation           invocation.Invoker
+	CapabilityLister        invocation.CapabilityLister
+	AuditSink               core.AuditSink
+	SecretManager           core.SecretManager
+	Telemetry               core.TelemetryProvider
+	Runtimes                RuntimeInspector
+	PublicHostServices      *runtimehost.PublicHostServiceRegistry
+	PublicGatewayTransport  *providergateway.ProviderGatewayTransport
+	DevSupervisor           *providerdev.Supervisor
+	AppRestarter            interface {
 		Restartable(string) (bool, error)
 		StopApp(context.Context, string) error
 		StartApp(context.Context, string, string) error
 		AbortRestarts()
 	}
+	RegistryAppStartup func(context.Context)
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -284,6 +287,8 @@ type Result struct {
 	auditClose                          func(context.Context) error
 	appHostServiceCleanup               func()
 	startAppProviders                   func()
+	appProvidersInitialized             chan struct{}
+	appProvidersInitializedOnce         sync.Once
 	activateAppProviders                func(context.Context)
 	startup                             *deferredProviders
 	deferred                            *deferredProviders
@@ -319,6 +324,14 @@ func (r *Result) StartAppProviders(ctx context.Context) error {
 			return fmt.Errorf("app provider startup interrupted: %w", ctx.Err())
 		}
 	}
+	if r.RegistryAppStartup != nil {
+		r.RegistryAppStartup(ctx)
+	}
+	r.appProvidersInitializedOnce.Do(func() {
+		if r.appProvidersInitialized != nil {
+			close(r.appProvidersInitialized)
+		}
+	})
 	r.startupWorkflowConfigReconcileOnce.Do(func() {
 		if r.startupWorkflowConfigReconcile != nil {
 			r.startupWorkflowConfigReconcileErr = r.startupWorkflowConfigReconcile(ctx)
@@ -1468,50 +1481,63 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	closeAudit = false
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
+	fatalAppProviderState := make(chan error, 1)
+	var fatalAppProviderStateOnce sync.Once
+	appRestarter := NewAppProviderRestarter(AppProviderRestarterConfig{
+		Config:           cfg,
+		Deps:             prepared.Deps,
+		Providers:        providers,
+		AuthBuilds:       []*preparedProviderBuilds{noopBuilds, updateBuilds},
+		Lifecycles:       noopBuilds.lifecycles,
+		RegistryResolver: opts.RegistryResolver,
+		ArtifactsDir:     cfg.Server.ArtifactsDir,
+		Fatal: func(err error) {
+			fatalAppProviderStateOnce.Do(func() {
+				fatalAppProviderState <- err
+			})
+		},
+	})
+	appProvidersInitialized := make(chan struct{})
 	result := &Result{
-		Auth:                   prepared.Auth,
-		SelectedAuthProvider:   prepared.SelectedAuthProvider,
-		AuthProviders:          prepared.AuthProviders,
-		Authorization:          prepared.Authorization,
-		Services:               prepared.Services,
-		ExtraIndexedDBs:        prepared.ExtraIndexedDBs,
-		ExtraCaches:            prepared.ExtraCaches,
-		S3:                     prepared.Deps.S3,
-		ExtraS3s:               prepared.ExtraS3s,
-		ExtraWorkflows:         extraWorkflows,
-		ExtraAgents:            extraAgents,
-		Providers:              providers,
-		WorkflowControl:        prepared.Deps.WorkflowRuntime,
-		AgentControl:           prepared.Deps.AgentRuntime,
-		AgentManager:           prepared.Deps.AgentManager,
-		StartupProvidersReady:  startup.ready(),
-		ProvidersReady:         deferred.ready(),
-		ConnectionAuth:         connAuthResolver,
-		ManualConnectionAuth:   manualConnAuthResolver,
-		Invoker:                sharedInvoker,
-		AppInvocation:          pluginInvoker,
-		CapabilityLister:       sharedInvoker,
-		AuditSink:              audit,
-		SecretManager:          prepared.SecretManager,
-		Telemetry:              prepared.Telemetry,
-		Runtimes:               prepared.runtimeRegistry,
-		PublicHostServices:     publicHostServices,
-		PublicGatewayTransport: publicGatewayTransport,
-		DevSupervisor:          prepared.Deps.DevSupervisor,
-		AppRestarter: NewAppProviderRestarter(AppProviderRestarterConfig{
-			Config:           cfg,
-			Deps:             prepared.Deps,
-			Providers:        providers,
-			AuthBuilds:       []*preparedProviderBuilds{noopBuilds, updateBuilds},
-			Lifecycles:       noopBuilds.lifecycles,
-			RegistryResolver: opts.RegistryResolver,
-		}),
+		Auth:                           prepared.Auth,
+		SelectedAuthProvider:           prepared.SelectedAuthProvider,
+		AuthProviders:                  prepared.AuthProviders,
+		Authorization:                  prepared.Authorization,
+		Services:                       prepared.Services,
+		ExtraIndexedDBs:                prepared.ExtraIndexedDBs,
+		ExtraCaches:                    prepared.ExtraCaches,
+		S3:                             prepared.Deps.S3,
+		ExtraS3s:                       prepared.ExtraS3s,
+		ExtraWorkflows:                 extraWorkflows,
+		ExtraAgents:                    extraAgents,
+		Providers:                      providers,
+		WorkflowControl:                prepared.Deps.WorkflowRuntime,
+		AgentControl:                   prepared.Deps.AgentRuntime,
+		AgentManager:                   prepared.Deps.AgentManager,
+		StartupProvidersReady:          startup.ready(),
+		AppProvidersInitialized:        appProvidersInitialized,
+		ProvidersReady:                 deferred.ready(),
+		FatalAppProviderState:          fatalAppProviderState,
+		ConnectionAuth:                 connAuthResolver,
+		ManualConnectionAuth:           manualConnAuthResolver,
+		Invoker:                        sharedInvoker,
+		AppInvocation:                  pluginInvoker,
+		CapabilityLister:               sharedInvoker,
+		AuditSink:                      audit,
+		SecretManager:                  prepared.SecretManager,
+		Telemetry:                      prepared.Telemetry,
+		Runtimes:                       prepared.runtimeRegistry,
+		PublicHostServices:             publicHostServices,
+		PublicGatewayTransport:         publicGatewayTransport,
+		DevSupervisor:                  prepared.Deps.DevSupervisor,
+		AppRestarter:                   appRestarter,
 		runtimeRegistry:                prepared.runtimeRegistry,
 		workflowConfigReconcileTasks:   deferredWorkflowConfigReconcileTasks,
 		startupWorkflowConfigReconcile: startupWorkflowConfigReconcile,
 		auditClose:                     auditClose,
 		appHostServiceCleanup:          appHostServiceCleanup,
 		startAppProviders:              startAppProviders,
+		appProvidersInitialized:        appProvidersInitialized,
 		activateAppProviders:           activateAppProviders,
 		startup:                        startup,
 		deferred:                       deferred,

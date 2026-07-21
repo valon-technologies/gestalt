@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/appregistry"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -129,6 +130,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 		ArtifactsDir:  cfg.Server.ArtifactsDir,
 	}
 
+	result.RegistryAppStartup = registryAppStartup(cfg, result, nil)
 	if err := result.Start(ctx); err != nil {
 		return err
 	}
@@ -206,6 +208,62 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, onRe
 	}
 
 	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor, onReady)
+}
+
+func registryAppStartup(cfg *config.Config, result *bootstrap.Result, reader *appregistry.RegistryReader) func(context.Context) {
+	return func(ctx context.Context) {
+		if cfg == nil || result == nil || result.Services == nil ||
+			result.Services.AppVersionChangeRequests == nil || result.AppRestarter == nil {
+			return
+		}
+		materializer := &appregistry.Materializer{
+			Registries:   cfg.AppRegistries,
+			ArtifactsDir: cfg.Server.ArtifactsDir,
+			Reader:       reader,
+		}
+		names := make([]string, 0, len(cfg.Apps))
+		for name := range cfg.Apps {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		for _, appName := range names {
+			entry := cfg.Apps[appName]
+			if entry == nil || !entry.Source.IsRegistry() {
+				continue
+			}
+			known, err := result.Services.AppVersionChangeRequests.ListKnownVersionsByApp(ctx, appName)
+			if err != nil {
+				slog.Warn("registry app bootstrap could not list known versions", "app", appName, "error", err)
+				continue
+			}
+			version := coredata.LatestKnownVersion(known)
+			if version == "" {
+				if err := result.AppRestarter.StopApp(ctx, appName); err != nil {
+					slog.Warn("registry app bootstrap could not clear stopped app", "app", appName, "error", err)
+				}
+				result.AppRestarter.AbortRestarts()
+				continue
+			}
+			var desired *core.AppInstallation
+			for _, installation := range known {
+				if installation != nil && strings.TrimSpace(installation.Version) == version {
+					desired = installation
+					break
+				}
+			}
+			if desired == nil || strings.TrimSpace(desired.Registry) != strings.TrimSpace(entry.Source.Registry) {
+				slog.Warn("registry app bootstrap rejected catalog registry mismatch", "app", appName, "version", version)
+				continue
+			}
+			if _, err := materializer.Ensure(ctx, desired); err != nil {
+				slog.Warn("registry app bootstrap could not materialize app", "app", appName, "version", version, "error", err)
+				continue
+			}
+			if err := result.AppRestarter.StartApp(ctx, appName, version); err != nil {
+				slog.Warn("registry app bootstrap could not start app", "app", appName, "version", version, "error", err)
+			}
+		}
+	}
 }
 
 type indexedDBPinger interface {
@@ -318,6 +376,8 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
 	case err := <-workflowErr:
 		return err
+	case err := <-result.FatalAppProviderState:
+		return fmt.Errorf("unrecoverable app provider state: %w", err)
 	case <-ctx.Done():
 		return nil
 	}
@@ -442,15 +502,17 @@ func startAppRegistryCatalogPoller(ctx context.Context, cfg *config.Config, resu
 		}
 	}
 	poller := appregistry.NewCatalogPoller(appregistry.CatalogPollerConfig{
-		ChangeRequests:      changeRequests,
-		Materializations:    materializations,
-		Rollouts:            rollouts,
-		AppMaterializer:     materializer,
-		AppRestarter:        result.AppRestarter,
-		InstanceID:          appregistry.ResolveInstanceID(),
-		RestartDelay:        restartDelay,
-		DisableRestartDelay: disableRestartDelay,
-		RestartReady:        result.StartupProvidersReady,
+		ChangeRequests:       changeRequests,
+		Materializations:     materializations,
+		Rollouts:             rollouts,
+		AppMaterializer:      materializer,
+		AppRestarter:         result.AppRestarter,
+		InstanceID:           appregistry.ResolveInstanceID(),
+		RestartDelay:         restartDelay,
+		DisableRestartDelay:  disableRestartDelay,
+		RestartReady:         result.AppProvidersInitialized,
+		BootstrapReady:       result.AppProvidersInitialized,
+		MaxReconcileAttempts: cfg.Server.AppRegistry.MaxReconcileAttempts,
 	})
 	poller.Start(ctx)
 	return poller
