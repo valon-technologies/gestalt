@@ -23,6 +23,7 @@ Related docs:
 | `internal/appregistry` | `mount_test.go` | 4 | Unit | step 11 |
 | `internal/coredata` | `app_rollouts_test.go`, `app_version_install_locks_test.go` | 3 | Unit | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) |
 | `internal/bootstrap` | `app_provider_restart_test.go`, `app_provider_restart_mount_test.go`, `app_provider_lifecycle_test.go` | 8 | Unit/integration | [gestalt#2812](https://github.com/valon-technologies/gestalt/pull/2812) + step 11 |
+| `internal/config`, `internal/operator`, `internal/appregistry`, `internal/bootstrap` | registry-only source tests | — | Unit/integration | — |
 
 Test fixture for install HTTP tests: `internal/appregistry/registrytest/fixture.go`
 
@@ -66,26 +67,34 @@ Expected plan fields:
 
 ---
 
-## Install HTTP integration
+## Add and upgrade HTTP integration
 
-Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (registry app install via `app_version_change_requests`).
+Added in [gestalt#2730](https://github.com/valon-technologies/gestalt/pull/2730) (`POST …/install`). Registry-only apps use separate `add` and `upgrade` routes — see [lifecycle.md](./lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
 
 Run:
 
 ```bash
 cd gestaltd
-go test ./internal/server/... -run TestAdminAppRegistryInstall -count=1
+go test ./internal/server/... -run TestAdminAppRegistry -count=1
 ```
 
-All three subtests use `newTestServer` (`httptest.NewServer` on localhost), `testutil.NewStubServices` (in-memory IndexedDB stub), and `registrytest.NewInstallFixture` (local mock GCS). **No production instances are contacted.**
+All subtests use `newTestServer` (`httptest.NewServer` on localhost), `testutil.NewStubServices` (in-memory IndexedDB stub), and `registrytest.NewInstallFixture` (local mock GCS). **No production instances are contacted.**
 
 ### `handlers_admin_app_install_test.go`
 
-- **`TestAdminAppRegistryInstall/installs_and_lists_known_version`** — `POST …/install` returns 200 with known version; `GET …/app-installations` lists one known version.
+- **`TestAdminAppRegistryAdd/adds_and_lists_known_version`** — `POST …/add` returns 200 with known version; `GET …/app-installations` lists one known version.
 
-- **`TestAdminAppRegistryInstall/missing_version_returns_not_found`** — Unknown version returns HTTP 404.
+- **`TestAdminAppRegistryAdd/rejects_when_catalog_not_empty`** — `POST …/add` returns **409** when the app already has fleet-known versions.
 
-- **`TestAdminAppRegistryInstall/get_versions_by_app`** — `GET …/app-installations/{app}` returns an array of known versions after a successful install.
+- **`TestAdminAppRegistryUpgrade/upgrades_known_version`** — `POST …/upgrade` returns 200; change request `from_version` matches the previous fleet-known version.
+
+- **`TestAdminAppRegistryUpgrade/rejects_when_catalog_empty`** — `POST …/upgrade` returns **400** when the app has no fleet-known versions.
+
+- **`TestAdminAppRegistryAdd/missing_version_returns_not_found`** — Unknown version returns HTTP 404.
+
+- **`TestAdminAppRegistryUpgrade/already_installed_returns_bad_request`** — Re-installing a known `to_version` returns **400**.
+
+- **`TestAdminAppRegistryAdd/get_versions_by_app`** — `GET …/app-installations/{app}` returns an array of known versions after a successful add.
 
 ---
 
@@ -98,7 +107,7 @@ End-to-end test for fleet install convergence across replicas. Replaces isolated
 **Flow:**
 
 1. Start multiple `gestaltd` replicas against shared IndexedDB (or a test harness that simulates distinct `instance_id` values with the catalog poller enabled).
-2. `POST /admin/api/v1/app-registries/{registry}/apps/{app}/install` with a new version.
+2. `POST /admin/api/v1/app-registries/{registry}/apps/{app}/add` or `…/upgrade` with a new version.
 3. Assert `app_version_change_requests` contains the change request.
 4. Poll each replica's `app_instance_materializations` (or a future admin list endpoint) until every replica has an ack row for `(app, version)`.
 5. Assert ack timestamps are recent and `instance_id` values are distinct per replica.
@@ -211,6 +220,42 @@ go test ./internal/appregistry -run 'Test(Installer|CatalogPollerRollout)' -coun
 
 - Install admission and app-scoped lock tests allow one active rollout per app while allowing different apps concurrently.
 - Poller tests cover enrollment, cohort completion, missed deadlines, and late-replica convergence.
+
+---
+
+## Registry-only app tests
+
+Run:
+
+```bash
+cd gestaltd
+go test ./internal/config/... -run RegistryOnly -count=1
+go test ./internal/operator/... -run RegistryOnly -count=1
+go test ./internal/appregistry/... -run 'TestInstaller.*RegistryOnly|TestInstallerAdd|TestInstallerUpgrade' -count=1
+go test ./internal/bootstrap/... -run RegistryOnly -count=1
+```
+
+### Config validation
+
+- Accepts `source.registry` when the name matches a configured `appRegistries` entry.
+- Rejects an unknown registry name.
+- Rejects `source.registry` combined with `source.git`, `source.path`, or other source modes.
+
+### Add and upgrade
+
+- **`add`** — accepts the first fleet-known version when `ListKnownVersionsByApp` is empty; returns **409** when the app is already in the catalog.
+- **`upgrade`** — accepts a new version when the app has fleet-known versions; sets `from_version` to `LatestKnownVersion`; returns **400** when the catalog is empty.
+- **`add`** records `from_version: "registry:first-install"` server-side (audit only; not a runnable version). See [lifecycle.md](./lifecycle.md#post-adminapiv1app-registriesregistryappsappadd).
+
+### Bootstrap startup
+
+- Starts a registry-only app at `StartAppProviders` when `ListKnownVersionsByApp` returns a fleet-known version.
+- Skips the app when the projection is empty.
+
+### Lock and sync
+
+- `gestalt lock` and `gestalt sync` omit snapshot resolution and artifact download for registry-only apps.
+- Lockfile entries record the registry binding only — see [config.md](./config.md#lockfile).
 
 ---
 

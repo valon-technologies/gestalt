@@ -37,7 +37,16 @@ When `gestaltd serve` starts:
 
 Bootstrap does not fetch registry indexes or prefetch version metadata. The source of truth for registry configuration remains the config file on disk; gestaltd does not persist `appRegistries` elsewhere.
 
-Install is HTTP-triggered for fleet declaration. On startup, gestaltd does not bind installed apps into the provider graph.
+Apps with a deploy-time source pin (`source.git`, `source.path`, etc.) bind into the provider graph during the normal startup provider build. Registry-only apps (`source.registry`) are different — see [config.md](./config.md#registry-only-app-source). They have no resolved manifest or baked artifact at deploy time, so bootstrap excludes them from that build loop.
+
+At `StartAppProviders`, each registry-only app:
+
+1. Read fleet-known versions via `ListKnownVersionsByApp`. When the projection is empty, skip the app — nothing is running until the first `POST …/add`.
+2. Take the latest fleet-known version (`LatestKnownVersion`).
+3. Materialize the registry artifact to `{artifactsDir}/registry-installed/{app}/{version}` when the tree is missing or incomplete.
+4. Start the provider through `StartApp` with the registry-mounted binary — the same mount path used by catalog-driven restarts.
+
+The catalog poller still handles first install and upgrades on replicas that were skipped at boot or join after a rollout.
 
 ## Polling
 
@@ -47,7 +56,7 @@ The controller is **pull-based** and **local**: each replica reads `app_version_
 
 ### Rollout admission and completion
 
-Only one rollout per app may be active across the fleet. `POST …/install` holds the app-scoped install lock while it rejects an existing `enrolling` or `restarting` rollout, validates the candidate, creates the new rollout, and appends its change request. Different apps may roll out concurrently.
+Only one rollout per app may be active across the fleet. `POST …/add` and `POST …/upgrade` hold the app-scoped install lock while they reject an existing `enrolling` or `restarting` rollout, validate the candidate, create the new rollout, and append its change request. Different apps may roll out concurrently.
 
 Replica membership is discovered rather than configured:
 
@@ -104,12 +113,20 @@ List published versions for one app:
 curl -sS "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/versions" | jq .
 ```
 
-Install one published version:
+Add the app to the fleet catalog (first known version):
 
 ```bash
-curl -sS -X POST "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/install" \
+curl -sS -X POST "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/add" \
   -H 'Content-Type: application/json' \
   -d '{"version":"0.0.0-snapshot.gabc123","actor":"user:alice"}' | jq .
+```
+
+Upgrade to a newer published version:
+
+```bash
+curl -sS -X POST "$GESTALTD_URL/admin/api/v1/app-registries/toolshed/apps/g-issues/upgrade" \
+  -H 'Content-Type: application/json' \
+  -d '{"version":"0.0.0-snapshot.gdef456","actor":"user:alice"}' | jq .
 ```
 
 List known installed versions (fleet-wide):
@@ -149,11 +166,12 @@ List/get install endpoints project known versions from `app_version_change_reque
 |--------|------|-------------|
 | `GET` | `/admin/api/v1/app-registries` | List registries from config |
 | `GET` | `/admin/api/v1/app-registries/{registry}/apps/{app}/versions` | List published versions for one app |
-| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/install` | Validate version and record known version in catalog (catalog-only; per-replica convergence via polling) |
+| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/add` | Record the first fleet-known version for an app |
+| `POST` | `/admin/api/v1/app-registries/{registry}/apps/{app}/upgrade` | Record a new fleet-known version when the app is already in the catalog |
 | `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
 | `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
 
-List routes are read-only (`GET` only). Install uses `POST` on a separate route group with a longer request timeout (10 minutes).
+List routes are read-only (`GET` only). `add` and `upgrade` use `POST` on a separate route group with a longer request timeout (10 minutes).
 
 #### `GET /admin/api/v1/app-registries`
 
@@ -237,7 +255,9 @@ When the app has no index or no versions yet, `versions` is `[]` (not `null`). A
 
 No IndexedDB read or write. Lists **published** versions in the registry bucket, not fleet-installed versions from `app_version_change_requests`.
 
-#### `POST /admin/api/v1/app-registries/{registry}/apps/{app}/install`
+#### `POST /admin/api/v1/app-registries/{registry}/apps/{app}/add`
+
+Record the **first** fleet-known version for an app. Use when `ListKnownVersionsByApp` is empty.
 
 **Path parameters**
 
@@ -257,7 +277,36 @@ No IndexedDB read or write. Lists **published** versions in the registry bucket,
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `version` | string | yes | Published version to install |
+| `version` | string | yes | Published version to add |
+| `actor` | string | no | Actor recorded on catalog records |
+
+**Response `200`** — same shape as upgrade below.
+
+Returns **409 Conflict** when the app already has fleet-known versions (use `upgrade` instead).
+
+#### `POST /admin/api/v1/app-registries/{registry}/apps/{app}/upgrade`
+
+Record a new fleet-known version when the app is already in the catalog.
+
+**Path parameters**
+
+| Parameter | Description |
+|-----------|-------------|
+| `registry` | Name of a configured registry (`appRegistries` key) |
+| `app` | Published app name |
+
+**Request body**
+
+```json
+{
+  "version": "0.0.0-snapshot.gdef456",
+  "actor": "user:alice"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | string | yes | Published version to upgrade to |
 | `actor` | string | no | Actor recorded on catalog records |
 
 **Response `200`**
@@ -285,23 +334,24 @@ No IndexedDB read or write. Lists **published** versions in the registry bucket,
 |-------|------|-------------|
 | `registry` | string | Registry name from the path |
 | `app` | string | App name from the path |
-| `installation` | object | Known version after a successful install (from the `change request` record) |
+| `installation` | object | Known version after a successful add or upgrade (from the `change request` record) |
 
-Re-installing a version that is already in the catalog returns **400 Bad Request** (`app version is already installed`).
+Re-installing a version that is already in the catalog returns **400 Bad Request** (`app version is already installed`). Returns **400** when the app has no fleet-known versions yet (use `add` instead).
 
 Synchronous on the handling instance. The HTTP response is sent after the catalog write finishes or fails.
 
-1. `installAdminAppRegistryApp` reads `{registry}` and `{app}` from the URL and `{ version, actor }` from the JSON body.
+1. Handler reads `{registry}` and `{app}` from the URL and `{ version, actor }` from the JSON body.
 2. Validate path params and look up `{registry}` in `s.appRegistries`.
-3. `Installer.Install` on the handling instance:
+3. `Installer.Add` or `Installer.Upgrade` on the handling instance:
    1. Claim a fleet install lock in `app_version_install_locks` for `(app, version)` (`409` if another holder holds a non-expired lock).
-   2. If `(app, version)` is already known in `app_version_change_requests`, return `400`.
-   3. `RegistryReader.FetchEntry` — HTTP `GET` the published version document from the configured registry (validate the version exists; **no artifact download**).
-   4. Append `change request` to `app_version_change_requests` with the install contract in record metadata.
-   5. Release the install lock (always, via defer). On failure before step 4, return an HTTP error; no change request is written.
+   2. **`add`** — reject when `ListKnownVersionsByApp` is non-empty (`409`). **`upgrade`** — reject when the projection is empty (`400`).
+   3. If `(app, version)` is already known in `app_version_change_requests`, return `400`.
+   4. `RegistryReader.FetchEntry` — HTTP `GET` the published version document from the configured registry (validate the version exists; **no artifact download**).
+   5. Append `change request` to `app_version_change_requests`. Set `from_version` server-side: `registry:first-install` on `add`, `LatestKnownVersion` on `upgrade`. Callers never send `from_version`.
+   6. Release the install lock (always, via defer). On failure before step 5, return an HTTP error; no change request is written.
 4. Respond `200` with `{ registry, app, installation }`.
 
-Per-replica convergence is planned via the background catalog controller (see Polling). IndexedDB write on the handling instance for install.
+Per-replica convergence via the background catalog controller (see Polling). IndexedDB write on the handling instance for add/upgrade.
 
 #### `GET /admin/api/v1/app-installations`
 
@@ -357,9 +407,9 @@ Errors use the standard gestaltd admin API error envelope (`error` field).
 
 | Status | When |
 |--------|------|
-| `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed |
+| `400` | Missing path param; invalid `app` name; invalid JSON body; missing `version`; unsupported registry `kind` (non-`gcs`); app version already installed; `upgrade` called when the app has no fleet-known versions |
 | `404` | Unknown `registry` name; published version not found; no known versions for `{app}`; no `appRegistries` configured |
-| `409` | Another instance is already installing this `(app, version)` (install lock held and not expired) |
+| `409` | Another instance is already installing this `(app, version)` (install lock held and not expired); `add` called when the app already has fleet-known versions |
 | `502` | Published version fetch failed; failed to append `change request` record; upstream fetch of `apps/{app}/index.json` failed (network, non-2xx other than 404, invalid JSON) |
 | `500` | Registry `publicUrl` could not be derived from config; unexpected catalog projection failure |
 | `503` | Version catalog service or installer not configured |

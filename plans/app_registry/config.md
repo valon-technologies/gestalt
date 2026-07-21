@@ -104,3 +104,46 @@ gestaltd provider package \
 ```
 
 `gestaltd app publish` would then read `sourceRef` from the release archives and drop `--ref`. That binds version to commit at build time and removes the chance of a mismatched ref at upload.
+
+---
+
+## Registry-only app source
+
+Registry-managed apps declare the **app slot** in deploy config — authorization, indexeddb, static mount, MCP, and so on — without pinning a git ref or baking a snapshot into the gestaltd image. The running binary version comes from the app registry.
+
+```yaml
+apps:
+  g-issues:
+    authorizationPolicy: gIssues
+    indexeddb:
+      provider: main
+      db: g_issues
+    static:
+      mount: /g-issues
+    config:
+      appBasePath: /g-issues
+    mcp: true
+    source:
+      registry: toolshed
+```
+
+| Field | Meaning |
+|-------|---------|
+| `source.registry` | Registry name from `appRegistries`. Must name a configured entry. Mutually exclusive with `source.git`, `source.path`, and other source modes. |
+
+`gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](./lifecycle.md).
+
+### Lockfile
+
+Registry-only apps appear in `gestalt.lock.json` with a registry binding and no baked artifacts:
+
+```json
+{
+  "source": "registry",
+  "sourceRef": {
+    "type": "registry",
+    "resolvedGestaltRef": "toolshed"
+  }
+}
+```
+
