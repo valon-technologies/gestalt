@@ -259,10 +259,13 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 - Rejects a projected installation whose registry differs from deploy `source.registry`; it does not fall back to another source.
 - Does not gate startup on rollout or per-replica materialization rows.
 - Keeps core boot available when an individual registry app cannot materialize or start.
+- Does not start the catalog poller until all startup-provider initialization attempts finish.
+- Starts the poller's first reconciliation pass immediately after startup-provider initialization.
+- Allows a replica that missed rollout enrollment during bootstrap to converge locally without reopening the rollout.
 
 ### Provider lifecycle and concurrency
 
-- Bootstrap and polling serialize materialization of the same `(app, version)` while allowing unrelated versions to materialize concurrently.
+- Serializes materialization of the same `(app, version)` while allowing unrelated versions to materialize concurrently.
 - Starting an already-running exact version is idempotent; starting over a different or unknown recorded version does not relabel the existing provider.
 - A registry-only start requires the exact validated package and never falls back to a deploy-time provider build.
 - Build, registration, activation, and stop failures leave provider visibility, running-version state, and active-static state consistent.

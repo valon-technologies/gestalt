@@ -61,22 +61,25 @@ Bootstrap and the poller must both use `LatestKnownVersion` to select the same d
 
 `app_rollouts` and `app_instance_materializations` are not boot inputs. Bootstrap reads only deploy config and the fleet-known version projection. In particular, stale or missing convergence rows must not prevent a known registry app from starting.
 
-### Bootstrap-to-poller handoff
+### Bootstrap before polling
 
-Bootstrap and polling may observe the same fleet-known versions, so their handoff is explicit:
+Bootstrap finishes its registry-app startup attempts before the catalog poller begins:
 
-1. Bootstrap materializes and starts the selected driver without writing rollout or materialization convergence.
+1. Bootstrap materializes and starts the desired fleet-known version without writing rollout or materialization progress.
 2. A successful start publishes local running-version state only after the exact package has been validated and the provider is ready. A failed start must not advertise that version.
-3. The poller may acknowledge and materialize while startup is in progress, but it must not replace a startup provider until startup-provider readiness is closed.
-4. If the poller observes that the selected driver is already running, it records all pending rows as restarted without an avoidable stop/start.
-5. If persisted rows say the app was stopped but a different version is actually running, runtime state wins: the poller stops that provider before starting the driver.
-6. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
+3. After bootstrap has attempted every registry-only app, it marks startup-provider initialization complete. An individual registry app failure does not prevent this transition or block core server startup.
+4. The poller then starts and runs its first reconciliation pass immediately.
+5. If the desired version is already running, the poller records pending progress as converged without stopping and restarting the app.
+6. If progress rows say the app was stopped but a different version is actually running, runtime state wins: the poller stops that provider before starting the desired version.
+7. An empty fleet-known projection leaves the app stopped and clears stale local activation state.
+
+A replica does not acknowledge a rollout while it is bootstrapping. If rollout enrollment closes before that replica starts polling, the replica is not part of the rollout cohort. Its first poll still reads the persisted change request and converges locally without reopening the terminal rollout.
 
 The selected installation's registry must match deploy `source.registry` before materialization or start. A registry rename does not authorize an old catalog entry from the previous binding. Binding mismatch leaves the app unavailable and clears stale activation state; it does not fall back to a deploy-time source.
 
 ## Polling
 
-Every replica starts one background catalog controller during `gestaltd serve` startup: one reconcile pass immediately, then every **1 minute** on a single loop goroutine.
+After startup-provider initialization completes, every replica starts one background catalog controller: one reconcile pass immediately, then every **1 minute** on a single loop goroutine.
 
 The controller is **pull-based** and **local**: each replica reads `app_version_change_requests` (`ListAllKnownVersions`) and reconciles itself against fleet install state. No replica fans out install RPCs to peers.
 
@@ -104,7 +107,7 @@ Each pass:
 
 A provider is **restartable** when this replica builds it locally from the configured pin: `server.remote` is unset or the provider has `local: true`, and the provider is not running in dev mode. Remote and dev-mode providers are non-restartable.
 
-App bootstrapping when `gestaltd` starts and catalog-driven restarts share the same per-app lifecycle lease. `StopApp` holds the lease until `StartApp` completes, preventing concurrent builds or replacements. Materialization of the same `(app, version)` is also serialized so bootstrap and polling cannot write the same destination concurrently; unrelated app versions may materialize concurrently.
+`StopApp` holds the per-app lifecycle lease until `StartApp` completes, preventing overlapping builds or replacements. Materialization of the same `(app, version)` is serialized; unrelated app versions may materialize concurrently.
 
 `StartApp(app, version)` is strict for registry-only apps:
 
