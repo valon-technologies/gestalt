@@ -229,11 +229,11 @@ Run:
 
 ```bash
 cd gestaltd
-go test ./internal/config/... -run RegistryOnly -count=1
+go test ./internal/config/... -run 'RegistryOnly|AppRegistry' -count=1
 go test ./internal/operator/... -run RegistryOnly -count=1
-go test ./internal/appregistry/... -run 'TestInstaller.*RegistryOnly|TestInstallerAdd|TestInstallerUpgrade' -count=1
+go test ./internal/appregistry/... -run 'TestInstaller.*RegistryOnly|TestInstallerAdd|TestInstallerUpgrade|TestCatalogPoller|TestMaterializer' -count=1
 go test ./internal/bootstrap/... -run RegistryOnly -count=1
-go test ./internal/coredata/... -run LatestKnown -count=1
+go test ./internal/coredata/... -run 'LatestKnown|AppInstanceMaterialization' -count=1
 go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 ```
 
@@ -269,18 +269,20 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 - Serializes materialization per app on each replica, including different versions of the same app, while allowing different apps to materialize concurrently.
 - Starting an already-running exact version is idempotent; starting over a different or unknown recorded version does not relabel the existing provider.
 - A registry-only start requires the exact validated package and never falls back to a deploy-time provider build.
-- Build, registration, activation, and stop failures leave the provider registry, running-version map, and `active-version` marker consistent.
+- Failures while building or registering a provider, updating its running-version map entry or `active-version` marker, or stopping it leave those three local runtime records consistent.
 - A stale stopped row cannot cause the poller to overwrite a different running provider without stopping it.
 - A version already started by bootstrap is marked converged by the poller without an extra restart.
 - A failed app reconciliation atomically increments `attempt_count`, replaces `last_error_at` and `last_error_message`, releases its lifecycle lease, and does not prevent other apps from reconciling.
 - The next poll retries the failed app from the beginning; repeated materialize, stop, start-same-version, and rollout-progress operations are idempotent.
 - Stops retrying one desired version when its `attempt_count` reaches `server.appRegistry.maxReconcileAttempts`, which defaults to `3`.
 - A new desired-version row starts with zero attempts; increasing the configured limit resumes rows whose count is below the new limit.
+- Successful convergence retains the row's previous `attempt_count`, `last_error_at`, and `last_error_message` for diagnosis.
 - Logs the error when `RecordFailure` itself cannot write to IndexedDB.
 - Unrecoverable local provider state marks Gestalt unhealthy and terminates the process.
 
 ### Runtime surfaces
 
+- Accepts a registry-only app with none of the optional static UI, HTTP, or MCP surfaces configured.
 - Server construction accepts a registry app with configured static and HTTP mounts before any package or provider exists.
 - Static requests return **503** while the provider is absent or changing, then serve the bundle for the exact running version.
 - A concurrent version change cannot combine a static bundle from one version with a provider from another.
