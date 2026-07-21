@@ -279,7 +279,7 @@ go test ./internal/server/... -run 'RegistryApp|RegistryOnly' -count=1
 
 ## Install-time validation tests
 
-Planned. Rules: [validation.md](./validation.md). Pipeline: [lifecycle.md](./lifecycle.md#install-time-validation).
+Planned. Rules: [validation.md](./validation.md). Pipeline: [validation.md](./validation.md#validation-pipeline).
 
 Run (once implemented):
 

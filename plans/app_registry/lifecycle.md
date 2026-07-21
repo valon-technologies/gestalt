@@ -466,19 +466,6 @@ Returns **known versions** for one app.
 
 IndexedDB read only. No GCS fetch.
 
-### Install-time validation
-
-Before `Rollouts.Create` and `AppendRequest`, the install handler runs `InstallValidator.Validate` on the fetched `PublishedVersion` entry. Failure returns **400** (or **404** when the registry entry is missing) and writes no rollout or change request.
-
-| Check | Source | Failure |
-|-------|--------|---------|
-| Platform artifact present | `entry.Artifacts` for server OS/arch | **400** |
-| `minGestaltdVersion` | `entry.compatibility` vs running `gestaltd` | **400** |
-| Declared `requires.apps` | Fleet-known dependency versions + published `interface` | **400** |
-| Reverse dependents (optional) | Other known apps' `requires` on this app | **400** |
-
-Replica materialization and package validation remain unchanged; install-time validation is an early reject on the handling instance only.
-
 ### Errors
 
 Errors use the standard gestaltd admin API error envelope (`error` field).

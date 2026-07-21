@@ -5,7 +5,7 @@ Validate registry app candidates on `POST …/add` and `POST …/upgrade` **befo
 Related docs:
 
 - [plan.md](./plan.md) — implementation path
-- [lifecycle.md](./lifecycle.md#install-time-validation) — where validation runs in the install handler
+- [lifecycle.md](./lifecycle.md) — `POST …/add` and `POST …/upgrade` handler pipeline
 - [models.md](./models.md) — `requires` and `compatibility` on published version JSON
 - [tests.md](./tests.md#install-time-validation-tests) — planned handler and installer tests
 
