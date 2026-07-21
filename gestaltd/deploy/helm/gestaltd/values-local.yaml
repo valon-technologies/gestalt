@@ -1,0 +1,17 @@
+# Local development profile for the gestaltd Helm chart.
+#
+# The base values.yaml intentionally omits dev-only scalar defaults for fields
+# that production overrides supply as structured maps (encryptionKey, indexeddb
+# source/dsn). Use this file for local or disposable single-node installs:
+#
+#   helm upgrade --install gestaltd ./gestaltd/deploy/helm/gestaltd \
+#     -f gestaltd/deploy/helm/gestaltd/values-local.yaml
+config:
+  server:
+    encryptionKey: "dev-only-insecure-key-change-me"
+  providers:
+    indexeddb:
+      main:
+        source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml
+        config:
+          dsn: "sqlite:///data/gestalt.db"
