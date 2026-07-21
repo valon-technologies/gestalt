@@ -131,6 +131,7 @@ func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, pr
 		})
 		if err != nil && !served {
 			http.Error(w, "app unavailable", http.StatusServiceUnavailable)
+			return
 		}
 	})
 }
