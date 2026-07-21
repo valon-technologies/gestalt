@@ -235,7 +235,7 @@ List/get install endpoints project known versions from `app_version_change_reque
 | `GET` | `/admin/api/v1/app-installations` | List all **known versions** across apps |
 | `GET` | `/admin/api/v1/app-installations/{app}` | List **known versions** for one app |
 
-Planned read routes for rollout observability (step 14): see [Admin observability API](#admin-observability-api) and [admin.md](./admin.md).
+Planned read routes for rollout observability: see [Admin observability API](#admin-observability-api) and [admin.md](./admin.md).
 
 List routes are read-only (`GET` only). `add` and `upgrade` use `POST` on a separate route group with a longer request timeout (10 minutes).
 

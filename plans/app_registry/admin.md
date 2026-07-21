@@ -4,7 +4,7 @@ Operator-facing visibility for registry-managed apps: fleet-accepted versions, r
 
 Related docs:
 
-- [plan.md](./plan.md) — implementation path (step 14)
+- [plan.md](./plan.md) — implementation path
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, existing admin HTTP API
 - [indexeddb.md](./indexeddb.md) — `app_rollouts`, `app_instance_materializations`, change-request projections
 - [tests.md](./tests.md#admin-observability-tests) — planned HTTP and UI tests
@@ -31,7 +31,7 @@ Operators installing registry apps should answer these questions without reading
 
 ---
 
-## Current state (after step 12)
+## Current state
 
 ### Admin HTTP API
 
@@ -64,7 +64,7 @@ Use the same names as [lifecycle.md](./lifecycle.md#runtime-version-invariants):
 
 ---
 
-## Planned admin HTTP API (step 14)
+## Planned admin HTTP API
 
 All routes live under `/admin/api/v1`, reuse existing admin auth (`gestaltAdmin`), and are read-only except where install actions are triggered from the UI.
 
@@ -220,7 +220,7 @@ Until then, the UI shows:
 
 ---
 
-## Admin UI (step 14)
+## Admin UI
 
 Extend the embedded `/admin` shell. Keep the existing metrics page; add an **App Registry** section.
 
@@ -303,9 +303,9 @@ Reuse the standard admin error envelope. New cases:
 
 ---
 
-## Out of scope (step 14)
+## Out of scope
 
-- Install-time validation (step 13; [validation.md](./validation.md))
+- Install-time validation ([validation.md](./validation.md))
 - Dedicated rollback route (revert via `upgrade` to an older published version)
 - Mutating rollouts from the UI (cancel, force-complete)
 - Publishing to GCS from the UI

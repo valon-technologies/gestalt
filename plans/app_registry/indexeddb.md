@@ -8,8 +8,8 @@ Related docs:
 
 - [plan.md](./plan.md) — install flow, multi-instance convergence, planned `app_instance_materializations`
 - [lifecycle.md](./lifecycle.md) — replica startup, background controller, admin HTTP API
-- [validation.md](./validation.md) — install-time validation (step 13)
-- [admin.md](./admin.md) — admin read APIs and UI for rollouts (step 14)
+- [validation.md](./validation.md) — install-time validation
+- [admin.md](./admin.md) — admin read APIs and UI for rollouts
 - [models.md](./models.md) — GCS registry entry JSON that change requests reference
 
 Implementation:
@@ -256,7 +256,7 @@ A terminal record may be replaced when the next version is admitted. A non-termi
 | `MarkComplete(ctx, app, version, completedAt)` | Record successful cohort convergence. |
 | `MarkFailed(ctx, app, version, failedAt)` | Record that the rollout missed its deadline. |
 
-**Admin exposure (step 14):** `Get` and `ListActive` back `GET /admin/api/v1/app-rollouts` and rollout summaries on `GET /admin/api/v1/registry-apps`. See [admin.md](./admin.md).
+**Admin exposure:** `Get` and `ListActive` back `GET /admin/api/v1/app-rollouts` and rollout summaries on `GET /admin/api/v1/registry-apps`. See [admin.md](./admin.md).
 
 ---
 
@@ -316,4 +316,4 @@ Written by the background catalog poller (`gestaltd/internal/appregistry/poller.
 
 `app_instance_materializations` rows are rollout-progress records; they do not decide which version a replica starts during boot. Bootstrap may start the latest fleet-known version without waiting for the poller to create or update one of these rows. When the poller runs later, it checks the version that is actually running. If the replica is already running that latest version, the poller validates and records materialization for that desired version, marks superseded pending rows converged without downloading them, and does not restart the app again.
 
-**Admin exposure (step 14):** `ListByAppVersion` backs `GET /admin/api/v1/app-rollouts/{app}/materializations`. See [admin.md](./admin.md).
+**Admin exposure:** `ListByAppVersion` backs `GET /admin/api/v1/app-rollouts/{app}/materializations`. See [admin.md](./admin.md).
