@@ -1,10 +1,14 @@
-# The default chart profile is for local development or trusted internal
-# clusters. It disables platform auth, uses the first-party relationaldb
-# provider with a SQLite DSN, and keeps a single replica so the chart boots
-# without extra secrets.
+# Base chart values for Kubernetes deployments.
 #
-# Configure OAuth/OIDC, server.encryptionKey, and a networked datastore
-# before using this chart in production.
+# This file intentionally omits dev-only scalar defaults for config fields that
+# production overrides usually supply as structured maps (for example
+# server.encryptionKey and indexeddb.main source/dsn). That avoids Helm
+# coalesce warnings when layering full production values on top of the chart.
+#
+# For local development with SQLite and a static encryption key, also pass
+# values-local.yaml. Configure OAuth/OIDC, server.encryptionKey, and a
+# networked datastore before using this chart in shared or production
+# environments.
 replicaCount: 1
 
 image:
@@ -89,24 +93,15 @@ config:
     # management:
     #   host: 0.0.0.0
     #   port: 9090
-    # Dev-only default so the default chart profile can boot. Override this with
-    # a secret value before production use.
-    encryptionKey: "dev-only-insecure-key-change-me"
+    # Set encryptionKey here or via values-local.yaml / production overrides.
     # baseUrl is optional for the default local/dev profile.
     # Set it to your public HTTPS URL when auth callbacks or external
     # integrations need it.
     # baseUrl: "${GESTALT_BASE_URL}"
     providers:
       indexeddb: main
-  providers:
-    indexeddb:
-      main:
-        # SQLite is appropriate for local development or single-instance
-        # deployments with mounted persistent storage at /data.
-        source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml
-        config:
-          dsn: "sqlite:///data/gestalt.db"
-    # Add apps.<name>.static mounts when you want to serve public static bundles.
+  # Configure indexeddb.main in values-local.yaml or production overrides.
+  providers: {}
 
 # Extra environment variables for the container. These are only required
 # when your config uses ${VAR} placeholders for auth, baseUrl, or

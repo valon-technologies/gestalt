@@ -349,11 +349,18 @@ jobs:
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: helm lint gestaltd/deploy/helm/gestaltd
 
-      - name: Helm template (default chart profile)
+      - name: Helm template (local chart profile)
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           helm template test-release gestaltd/deploy/helm/gestaltd \
+            -f gestaltd/deploy/helm/gestaltd/values-local.yaml \
             > /tmp/rendered-default.yaml
+
+      - name: Helm template (base chart profile)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        run: |
+          helm template test-release gestaltd/deploy/helm/gestaltd \
+            > /tmp/rendered-base.yaml
 
       - name: Helm template (ingress)
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
@@ -397,9 +404,13 @@ jobs:
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered.yaml
 
-      - name: Validate Kubernetes schemas (default chart profile)
+      - name: Validate Kubernetes schemas (local chart profile)
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered-default.yaml
+
+      - name: Validate Kubernetes schemas (base chart profile)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        run: kubeconform -strict -summary /tmp/rendered-base.yaml
 
       - name: Validate Kubernetes schemas (ingress)
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}

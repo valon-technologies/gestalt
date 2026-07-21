@@ -9,16 +9,31 @@ helm upgrade --install gestaltd \
   oci://ghcr.io/valon-technologies/charts/gestaltd \
   --namespace gestalt \
   --set image.tag=<version> \
-  -f values.yaml
+  -f values-local.yaml
 ```
 
-The default chart profile is for local or disposable testing only:
+The default chart profile is for local or disposable testing only. Pass
+`values-local.yaml` for the SQLite + static encryption key profile:
+
+```sh
+helm upgrade --install gestaltd \
+  oci://ghcr.io/valon-technologies/charts/gestaltd \
+  --namespace gestalt \
+  --set image.tag=<version> \
+  -f values-local.yaml
+```
+
+That local profile:
 
 - platform identity is omitted
 - SQLite uses a PVC mounted at `/data`
 - `server.encryptionKey` is a static dev-only value
 - one replica
 - no ingress
+
+The base chart `values.yaml` omits those dev-only scalar defaults so
+production overrides can supply structured values without Helm coalesce
+warnings.
 
 Before any shared or production deployment, set a real encryption key,
 configure identity, use a networked datastore, and set `server.baseUrl`
