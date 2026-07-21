@@ -133,11 +133,11 @@ apps:
 
 `source.registry` is valid only for entries under `apps`; runtime-provider entries cannot use it. Across upgrades, the app's entry in the Gestalt YAML deploy configuration remains authoritative for how the app integrates with Gestalt. The registry package supplies the version-specific executable and static assets:
 
-| Deploy-time slot field | Registry package responsibility |
-|------------------------|---------------------------------|
-| `authorizationPolicy`, `indexeddb`, `mcp`, `http`, and `config` | The package runs within these configured capabilities; installing a package does not rewrite them. |
-| `static.mount`, visibility, and theme | The mount and policy are fixed at server construction. The selected package supplies the version-specific static bundle. |
-| `source.registry` | Every selected installation must name this same registry. Catalog history from another binding is not eligible to run. |
+| Gestalt YAML fields | Gestalt YAML responsibility | Registry package responsibility |
+|---------------------|----------------------------|---------------------------------|
+| `authorizationPolicy`, `indexeddb`, `mcp`, `http`, and `config` | Defines the app's capabilities and integration settings. These remain unchanged across package upgrades. | Runs within the configured capabilities and cannot override these settings. |
+| `static.mount`, visibility, and theme | Defines the URL, access policy, and theme for the app's UI. These remain unchanged across package upgrades. | Supplies the version-specific HTML, JavaScript, CSS, and other static assets served at that URL. |
+| `source.registry` | Defines the registry from which this app may be installed. | Must come from that registry. Catalog history associated with a different registry is not eligible to run. |
 
 Because no package exists during config loading, validation must not require a resolved provider manifest, operation catalog, or static root for a registry-only app. `server.artifactsDir` is resolved from config defaults and CLI overrides before materialization; registry source validation does not require that the raw YAML contain an explicit path.
 
